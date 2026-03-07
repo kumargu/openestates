@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "openestates"
+version = "0.1.0"
+description = "A CLI tool"
+requires-python = ">=3.9"
+dependencies = [
+    "click>=8.0",
+    "textual>=0.47.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+openestates = "openestates.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
