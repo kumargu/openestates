@@ -50,3 +50,4 @@ openestates/
 
 - **Day 1**: Project skeleton, TUI shell, placeholder modules
 - **Day 2**: Synthetic market generator — Property, Seller, Buyer schemas with visible + hidden attributes; seedable; outputs `data/synthetic_market.json`; TUI wired
+- **Day 3**: OpenFang integration — signal extractor (live + stub), change narrator, context graph with apply/reinforce/weaken, graph store with file persistence, event logging, chat-first TUI with `/buyer`, `/extract`, `/context` commands

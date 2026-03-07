@@ -295,6 +295,14 @@ class OpenEstatesApp(App):
         self.graph_store.save(self.context_graph)
         context_after = self.context_graph.snapshot()
 
+        # Log event
+        self.graph_store.log_event("conversation_ingested", {
+            "buyer_id": self.active_buyer_id,
+            "turns_count": len(turns),
+            "updates_count": len(updates),
+            "signals": [u.signal_key for u in updates],
+        })
+
         # Print extracted signals
         chat.write(f"\n[green]Signals extracted ({len(updates)}):[/green]")
         for u in updates:

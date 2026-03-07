@@ -34,6 +34,8 @@ Learnings files are as important as day specs. They contain architectural decisi
 
 Day files are guides, not prison walls. A small architectural improvement that prevents a future rewrite is always worth a brief explanation.
 
+**After completing a day's work:** Always create a git commit as a checkpoint. Include all changed/new files for that day. This is non-negotiable — each day must end with a commit.
+
 ---
 
 ## Coding Rules

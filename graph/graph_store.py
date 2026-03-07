@@ -1,11 +1,14 @@
 """
-Graph Store — file-based persistence for context graphs.
+Graph Store — file-based persistence for context graphs and event log.
 
 Stores one JSON file per buyer at data/contexts/<buyer_id>.json.
+Appends events to data/events.jsonl.
 """
 
+import datetime
 import json
 import os
+from typing import List
 
 from graph.context_graph import ContextGraph
 
@@ -15,6 +18,7 @@ class GraphStore:
 
     def __init__(self, data_dir: str):
         self.contexts_dir = os.path.join(data_dir, "contexts")
+        self.events_path = os.path.join(data_dir, "events.jsonl")
         os.makedirs(self.contexts_dir, exist_ok=True)
 
     def _path(self, buyer_id: str) -> str:
@@ -36,3 +40,13 @@ class GraphStore:
 
     def exists(self, buyer_id: str) -> bool:
         return os.path.exists(self._path(buyer_id))
+
+    def log_event(self, event_type: str, data: dict):
+        """Append a structured event to the JSONL event log."""
+        event = {
+            "event": event_type,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            **data,
+        }
+        with open(self.events_path, "a") as f:
+            f.write(json.dumps(event) + "\n")
