@@ -51,3 +51,4 @@ openestates/
 - **Day 1**: Project skeleton, TUI shell, placeholder modules
 - **Day 2**: Synthetic market generator — Property, Seller, Buyer schemas with visible + hidden attributes; seedable; outputs `data/synthetic_market.json`; TUI wired
 - **Day 3**: OpenFang integration — signal extractor (live + stub), change narrator, context graph with apply/reinforce/weaken, graph store with file persistence, event logging, chat-first TUI with `/buyer`, `/extract`, `/context` commands
+- **Day 4**: Ground truth evaluation + Reddit research — truth compatibility model (`simulation/truth_model.py`) with 9-component scoring, `/truth` debug command for top-K matches, Reddit sentiment researcher (`research/`) with safe small-sample fetching, `/research reddit` command producing structured reports and rolling taxonomy

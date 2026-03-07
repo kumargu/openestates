@@ -1,0 +1,170 @@
+{
+  "meta": {
+    "merged_at": "2026-03-07T18:29:42.550330Z",
+    "source_files": [
+      "2026-03-07_reddit_report.json",
+      "2026-03-07_reddit_report_1.json",
+      "2026-03-07_reddit_report_2.json",
+      "2026-03-07_reddit_report_3.json",
+      "2026-03-07_reddit_report_4.json"
+    ],
+    "total_posts": 144
+  },
+  "price_signals_merged": {
+    "rr nagar": {
+      "price_mentions": 1,
+      "median_price": "2.00 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "electronic city": {
+      "price_mentions": 0,
+      "median_price": null,
+      "price_range": null,
+      "sqft_rate_mentions": 1,
+      "median_sqft_rate": "\u20b97,000/sqft"
+    },
+    "unknown": {
+      "price_mentions": 2,
+      "median_price": "4.12 Cr",
+      "price_range": [
+        "4.00 Cr",
+        "4.25 Cr"
+      ],
+      "sqft_rate_mentions": 2,
+      "median_sqft_rate": "\u20b910,875/sqft"
+    },
+    "yelahanka": {
+      "price_mentions": 2,
+      "median_price": "1.25 Cr",
+      "price_range": [
+        "1.10 Cr",
+        "1.40 Cr"
+      ],
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "kr puram": {
+      "price_mentions": 1,
+      "median_price": "1.45 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "central bangalore": {
+      "price_mentions": 2,
+      "median_price": "30 L",
+      "price_range": [
+        "30 L",
+        "30 L"
+      ],
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "chandrapura": {
+      "price_mentions": 1,
+      "median_price": "1.13 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "hsr": {
+      "price_mentions": 1,
+      "median_price": "14.28 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "chandapura": {
+      "price_mentions": 1,
+      "median_price": "1.55 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "hal": {
+      "price_mentions": 5,
+      "median_price": "1.60 Cr",
+      "price_range": [
+        "10 L",
+        "2.50 Cr"
+      ],
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    }
+  },
+  "decision_drivers": [
+    "area_flexibility \u2014 willingness to consider adjacent areas",
+    "legal_risk_tolerance \u2014 comfort with documentation gaps",
+    "budget_sensitivity \u2014 how price-conscious is the buyer",
+    "resale_preference \u2014 preference for ready vs under-construction",
+    "purpose \u2014 investment vs self-use vs rental",
+    "area_preference \u2014 specific locality matters",
+    "budget_sensitivity \u2014 price consciousness in decisions",
+    "environment_sensitivity \u2014 noise, pollution, surroundings",
+    "property_type_preference \u2014 flat vs villa vs plot",
+    "size_requirement \u2014 BHK and area preference",
+    "vastu_preference \u2014 directional and cultural preferences",
+    "builder_trust \u2014 concern about builder reliability",
+    "construction_stage_preference \u2014 ready-to-move vs under-construction",
+    "negotiation_mindset \u2014 willingness to negotiate"
+  ],
+  "coach_prompt_suggestions": [
+    "Are you open to areas adjacent to your preferred ones if the property is better?",
+    "Would you consider a property with minor documentation delays if the price is right?",
+    "What's your comfortable EMI range? Is there flexibility above your stated budget?",
+    "Is this property for self-use, investment, or rental income?",
+    "Which specific areas are you targeting? Open to adjacent localities?",
+    "What's your hard budget limit? Is there flexibility if the property is right?",
+    "Any specific environmental concerns \u2014 noise, road proximity, dump yards?",
+    "Are you looking for a flat, villa, or plot?",
+    "What's your minimum BHK and carpet area requirement?",
+    "Does vastu/facing matter to you? Any hard requirements?",
+    "How important is builder reputation vs price? Any builders you'd avoid?",
+    "Ready-to-move or open to under-construction? What's your timeline?",
+    "Are you comfortable negotiating hard, or do you prefer transparent pricing?"
+  ],
+  "sample_titles": [
+    "Good Apartment Society in east bangalore",
+    "Bangalore - Godrej Avelin - should I go for their pre launch offer?",
+    "Looking for 2BHK Rental Flat",
+    "Plot for sale in Ozone kns Oasis - Sarjapur, Near to Prestige City , 10kms to Wipro cirlce",
+    "Plot for sale in Ozone KNS Oasis - Sarjapur",
+    "What are the chances of getting a flat in Prestige Lavender Fields for \u20b913k per sq ft?",
+    "Want to buy a Commercial Property upto 30Lakhs",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Dog pees in public walking area, 7\u20138 seniors start a WWE-level confrontation. Who\u2019s at fault here?",
+    "Good Apartment Society in east bangalore",
+    "Bangalore - Godrej Avelin - should I go for their pre launch offer?",
+    "Looking for 2BHK Rental Flat",
+    "Plot for sale in Ozone kns Oasis - Sarjapur, Near to Prestige City , 10kms to Wipro cirlce",
+    "Plot for sale in Ozone KNS Oasis - Sarjapur",
+    "What are the chances of getting a flat in Prestige Lavender Fields for \u20b913k per sq ft?",
+    "Want to buy a Commercial Property upto 30Lakhs",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Dog pees in public walking area, 7\u20138 seniors start a WWE-level confrontation. Who\u2019s at fault here?",
+    "Good Apartment Society in east bangalore",
+    "Bangalore - Godrej Avelin - should I go for their pre launch offer?",
+    "Looking for 2BHK Rental Flat",
+    "Plot for sale in Ozone kns Oasis - Sarjapur, Near to Prestige City , 10kms to Wipro cirlce",
+    "Plot for sale in Ozone KNS Oasis - Sarjapur",
+    "What are the chances of getting a flat in Prestige Lavender Fields for \u20b913k per sq ft?",
+    "Want to buy a Commercial Property upto 30Lakhs",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Dog pees in public walking area, 7\u20138 seniors start a WWE-level confrontation. Who\u2019s at fault here?",
+    "Good Apartment Society in east bangalore",
+    "Bangalore - Godrej Avelin - should I go for their pre launch offer?",
+    "Looking for 2BHK Rental Flat",
+    "Plot for sale in Ozone kns Oasis - Sarjapur, Near to Prestige City , 10kms to Wipro cirlce",
+    "Plot for sale in Ozone KNS Oasis - Sarjapur",
+    "What are the chances of getting a flat in Prestige Lavender Fields for \u20b913k per sq ft?",
+    "Want to buy a Commercial Property upto 30Lakhs",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Buying a Plot Near an Upcoming Sewage Treatment Plant in Banashankari 6th Stage \u2014 Worth It?",
+    "Dog pees in public walking area, 7\u20138 seniors start a WWE-level confrontation. Who\u2019s at fault here?"
+  ]
+}

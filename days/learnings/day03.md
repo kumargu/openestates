@@ -1,81 +1,52 @@
-# Day 03 — Learnings and Decisions
+# Day 03 Contract (What Day 4 Assumes)
 
-Key decisions and observations from Day 3 implementation. Read this before starting Day 4.
+This is the minimal set of learnings/decisions from Day 3 that remain relevant for Day 4 onward. Anything not listed here should be treated as implementation detail and can change.
 
----
+## 1) Working Chat-First TUI Exists
+The TUI is chat-first and supports at minimum:
+- `/generate` to generate/load synthetic market
+- `/buyer <id>` to select a buyer (or random if blank)
+- `/context` to inspect the buyer context graph
+- `/extract` to run signal extraction and apply updates
+- `/clear`, `/quit`
 
-## What Was Built
+Day 4 should extend the same TUI with new commands (e.g., `/truth`, `/research`).
 
-Day 3 integrated OpenFang as the agent layer for signal extraction from buyer conversations.
+## 2) Signal Extraction Contract Is Strict and Structured
+We have a strict structured output contract for extraction results, validated before applying updates. The system must not mutate context if extraction output is invalid.
 
-### Modules implemented:
-- `agents/schemas.py` — `SignalUpdate` dataclass, strict JSON contract, `parse_updates_response()`
-- `agents/openfang_client.py` — thin REST client for OpenFang `/v1/chat/completions`
-- `agents/signal_extractor.py` — `OpenFangExtractor` (live) + `StubExtractor` (offline keyword-based)
-- `agents/change_narrator.py` — `OpenFangNarrator` (live) + `StubNarrator` (template-based)
-- `graph/context_graph.py` — `ContextGraph` with `Signal` model, `apply_updates()`, `snapshot()`
-- `graph/graph_store.py` — file-based persistence + event logging (`events.jsonl`)
-- `app/tui.py` — chat-first TUI with `/buyer`, `/extract`, `/context`, `/generate`, `/clear`, `/quit`
+Signal updates contain:
+- `signal_key`, `signal_value`
+- `weight`, `confidence`
+- `action` = add/update/weaken/remove
+- provenance (`turn_indices`) at minimum
 
----
+OpenFang can be used if available; otherwise the system must degrade to stub mode.
 
-## OpenFang Invocation Pattern
+## 3) Context Graph Storage Is Owned by the App
+The app owns durable user context. Context signals store:
+- value, weight, confidence, repetition_count
+- updated_at timestamp
+- sources/provenance
 
-Used `/v1/chat/completions` (OpenAI-compatible endpoint at `localhost:4200`). Stateless, one-shot per `/extract` call. Our app owns all state.
+Updates apply deterministically (reinforce/weaken/remove) even if extraction is LLM-based.
 
-System prompt enforces strict JSON-only response with the `SignalUpdate` schema. `response_format: {"type": "json_object"}` is set in the request payload.
+## 4) Graceful Degradation Works
+When OpenFang is offline:
+- Stub extractor + narrator are used
+- The rest of the flow still works (context updates, diffs, logging)
 
----
+Day 4 must preserve this property (truth model + reddit research must also fail gracefully).
 
-## Graceful Degradation
+## 5) Event Logging Exists
+Conversation ingestion events are written to `data/events.jsonl` as one JSON object per line. This provides auditability without coupling.
 
-When OpenFang is offline (the common case during development):
-- `StubExtractor` uses keyword matching against a fixed dictionary (metro, budget, document, etc.)
-- `StubNarrator` uses template strings
-- The TUI prints `[OpenFang offline — using stub extractor]` on mount
-- All functionality works identically — context graph updates, diffs, narration
+Day 4 may add new event types (truth inspections, research runs) but should keep logging simple and append-only.
 
-This was critical: the prototype is fully functional without any external LLM running.
-
----
-
-## Context Graph Design
-
-Signals carry: `value`, `weight`, `confidence`, `updated_at`, `sources` (provenance list), `repetition_count`.
-
-Update mechanics:
-- **add**: creates new signal with provided weight/confidence
-- **update** (reinforce): blends weight/confidence upward (`(old + new) / 2 + 0.05`), increments repetition_count
-- **weaken**: reduces weight by 0.15, confidence by 0.10
-- **remove**: deletes signal entirely
-
-This is deliberately simple. The reinforcement formula may need tuning, but the structure supports it.
+## 6) What Day 3 Did NOT Build
+There is no ground truth model, baseline search, matching engine evaluation, watcher/nurture agents, or seller coaching yet. Day 4 should not assume they exist.
 
 ---
 
-## Event Logging
-
-`conversation_ingested` events are logged to `data/events.jsonl` (one JSON object per line) with: buyer_id, turns_count, updates_count, signal keys, timestamp.
-
-This provides an audit trail without complicating the main flow.
-
----
-
-## What Was NOT Built (intentionally)
-
-- Hidden compatibility model (deferred — needed before evaluation is meaningful)
-- Baseline search
-- Full matching engine
-- Conversation simulator (automated)
-- Watcher/nurture agents
-- Seller signal extraction
-
----
-
-## Open Questions for Day 4
-
-1. **Hidden compatibility model** is the biggest gap. Without it, we can't evaluate whether extracted signals improve match quality. Strong candidate for Day 4.
-2. **Auto-extract**: Should `/extract` run automatically after N messages? Kept manual for now — gives user control during prototyping.
-3. **Signal decay**: Signals don't age or decay yet. If a buyer's preferences change over multiple conversations, old signals stay at full strength. May need a decay mechanism.
-4. **Reinforcement formula**: The `(old + new) / 2 + 0.05` blend is arbitrary. Works for demo but needs calibration against real extraction outputs.
-5. **OpenFang LLM provider**: No model/provider was configured since stub mode was sufficient. Must configure before live extraction testing.
+## Day 4 Direction Reminder
+OpenEstates is testing context-based search and matching over traditional filter-based search. The system must remain inspectable and must avoid leaking hidden truth to the matching engine.

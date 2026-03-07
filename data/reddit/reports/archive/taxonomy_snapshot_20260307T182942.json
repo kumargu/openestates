@@ -1,0 +1,158 @@
+{
+  "term_counts": {
+    "plot": 29,
+    "bangalore": 21,
+    "sale": 18,
+    "property": 17,
+    "flat": 16,
+    "road": 14,
+    "east": 13,
+    "apartment": 11,
+    "facing": 11,
+    "land": 10,
+    "area": 10,
+    "floor": 10,
+    "ready": 10,
+    "project": 10,
+    "sft": 10,
+    "oasis": 9,
+    "buy": 9,
+    "owner": 9,
+    "purchase": 9,
+    "rera": 9,
+    "amp": 9,
+    "community": 8,
+    "bhk": 8,
+    "location": 8,
+    "available": 8,
+    "ozone": 8,
+    "kns": 8,
+    "price": 8,
+    "unit": 8,
+    "3bhk": 7,
+    "around": 7,
+    "prime": 7,
+    "site": 7,
+    "house": 7,
+    "size": 6,
+    "prestige": 6,
+    "residential": 6,
+    "commercial": 6,
+    "corner": 6,
+    "details": 6,
+    "long": 6,
+    "premium": 6,
+    "society": 5,
+    "years": 5,
+    "budget": 5,
+    "2bhk": 5,
+    "semi": 5,
+    "furnished": 5,
+    "sarjapur": 5,
+    "maintained": 5
+  },
+  "phrase_counts": {
+    "plot sale": 8,
+    "ozone kns": 8,
+    "kns oasis": 8,
+    "sale ozone": 6,
+    "gated community": 5,
+    "corner plot": 5,
+    "built area": 5,
+    "semi furnished": 4,
+    "99acres residential": 4,
+    "residential land": 4,
+    "land plot": 4,
+    "oasis kuthaganahalli": 4,
+    "kuthaganahalli bangalore": 4,
+    "bangalore east": 4,
+    "east yard": 4,
+    "yard spid": 4,
+    "spid b89049070": 4,
+    "banashankari 6th": 4,
+    "6th stage": 4,
+    "long term": 4,
+    "hsr layout": 4,
+    "east bangalore": 3,
+    "oasis sarjapur": 3,
+    "east facing": 3,
+    "plot available": 3,
+    "upcoming sewage": 3,
+    "sewage treatment": 3,
+    "treatment plant": 3,
+    "plot details": 3,
+    "kodagu coorg": 3
+  },
+  "decision_drivers": [
+    "area_preference \u2014 specific locality matters",
+    "budget_sensitivity \u2014 price consciousness in decisions",
+    "builder_trust \u2014 concern about builder reliability",
+    "construction_stage_preference \u2014 ready-to-move vs under-construction",
+    "environment_sensitivity \u2014 noise, pollution, surroundings",
+    "negotiation_mindset \u2014 willingness to negotiate",
+    "property_type_preference \u2014 flat vs villa vs plot",
+    "size_requirement \u2014 BHK and area preference",
+    "vastu_preference \u2014 directional and cultural preferences"
+  ],
+  "coach_prompts": [
+    "Which specific areas are you targeting? Open to adjacent localities?",
+    "What's your hard budget limit? Is there flexibility if the property is right?",
+    "How important is builder reputation vs price? Any builders you'd avoid?",
+    "Ready-to-move or open to under-construction? What's your timeline?",
+    "Any specific environmental concerns \u2014 noise, road proximity, dump yards?",
+    "Are you comfortable negotiating hard, or do you prefer transparent pricing?",
+    "Are you looking for a flat, villa, or plot?",
+    "What's your minimum BHK and carpet area requirement?",
+    "Does vastu/facing matter to you? Any hard requirements?"
+  ],
+  "area_prices": {
+    "hal": [
+      25000000,
+      17000000,
+      16000000,
+      1000000,
+      1000000
+    ],
+    "central bangalore": [
+      3000000,
+      3000000
+    ],
+    "chandrapura": [
+      11299999
+    ],
+    "kr puram": [
+      14500000
+    ],
+    "rr nagar": [
+      20000000
+    ],
+    "yelahanka": [
+      11000000,
+      14000000
+    ],
+    "unknown": [
+      40000000,
+      42500000
+    ],
+    "chandapura": [
+      15500000
+    ],
+    "hsr": [
+      142800000
+    ]
+  },
+  "area_sqft_rates": {
+    "unknown": [
+      13000,
+      8750
+    ],
+    "electronic city": [
+      7000
+    ]
+  },
+  "run_count": 1,
+  "subreddits_crawled": [
+    "BangaloreRealEstates"
+  ],
+  "last_updated": "2026-03-07T18:26:05.937061Z"
+}

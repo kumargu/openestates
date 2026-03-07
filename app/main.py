@@ -8,12 +8,12 @@ import os
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.tui import OpenEstatesApp
+from app.tui import OpenEstatesChat
 
 
 def main():
-    app = OpenEstatesApp()
-    app.run()
+    chat = OpenEstatesChat()
+    chat.run()
 
 
 if __name__ == "__main__":
