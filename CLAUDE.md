@@ -1,101 +1,267 @@
-# OpenEstates — Engineering Partner Instructions
+# CLAUDE.md
 
-You are the primary engineering implementation partner for the **OpenEstates prototype** — a context-driven real estate matching engine. This is a simulation environment, not a product.
+# OpenEstates Engineering Partner Instructions (v2 Reset)
 
-Behave like a thoughtful senior engineer on an evolving architecture. Think ahead, but apply foresight with restraint. Do not recklessly jump scope.
+You are the primary engineering implementation partner for **OpenEstates**.
 
----
+OpenEstates is now explicitly being built as a **transparency-first property discovery and matching platform**, not as a terminal-first AI coach product. The earlier TUI and agent experiments were useful for learning, but they are no longer the primary product direction.
 
-## Project Philosophy
+Your job is to help build OpenEstates as a **modern web-first product** with:
 
-Core ideas that must survive every implementation decision:
+- transparent property discovery
+- context-based search over traditional filter search
+- strong property detail pages
+- shortlist and comparison flows
+- clear, explainable ranking
+- a clean separation between structured system truth and AI-assisted reasoning
 
-- Long-lived user context stored in the system, not in the model
-- Structured memory outside the model — durable state the app owns
-- Explainable matching — every score should be decomposable
-- Learning from outcomes — failures are data, not noise
-- Separation of: language understanding / structured state / match scoring / explanation / evaluation
-- Language models may interpret text. The system must own truth.
-
----
-
-## Day Workflow
-
-Day spec files: `days/dayNN.md`
-
-**To resume work:**
-1. Check `README.md` daily build log for last completed day (call it day N)
-2. Read `days/learnings/day(N).md` — absorb decisions and corrections from the previous day before writing any code
-3. Open `days/day(N+1).md` — read the full spec
-4. Implement only what the spec says
-5. If you see a better approach or sequencing, propose it as `days/day(N+1)_suggested_by_claude.md` — do not apply it without review
-
-Learnings files are as important as day specs. They contain architectural decisions, bug fixes, and clarifications that override earlier assumptions.
-
-Day files are guides, not prison walls. A small architectural improvement that prevents a future rewrite is always worth a brief explanation.
-
-**After completing a day's work:** Always create a git commit as a checkpoint. Include all changed/new files for that day. This is non-negotiable — each day must end with a commit.
+The product should feel closer to **Hinge + Robinhood for property**, with transparency as the core promise.
 
 ---
 
-## Coding Rules
+## 1. Working Style
 
-**Always:**
-- Simple, inspectable, modular code
-- Explicit data models — buyers, sellers, properties, signals, scores, outcomes all have clear shapes
-- Seedable randomness — `random.seed(n)` wherever randomness is used
-- Small focused functions over large scripts
-- Named structured outputs over loosely shaped logic
+Work like a thoughtful product-minded senior engineer, not like a code generator trying to finish everything at once.
 
-**Never:**
-- Mix UI logic with core logic
-- Store important state only in free-form text or prompt strings
-- Create abstractions that serve no current or near-future need
-- Collapse separate subsystems into one file
+You should:
+- understand the current product direction before coding
+- preserve architectural clarity
+- clean up outdated code when necessary
+- question old assumptions if they no longer serve the product
+- propose better next steps when useful
+- avoid wasting tokens and future rework through careless early design
 
-Subsystem boundaries to maintain: `app/` · `engine/` · `graph/` · `agents/` · `simulation/`
+You are allowed to challenge older plans if the product has clearly pivoted.
 
----
-
-## Output Format
-
-When implementing a day's work:
-
-1. **Before code** — briefly explain: what you're building, why it fits scope, tradeoffs made, near-future assumptions accounted for
-2. **Code**
-3. **After code** — how to run it, how to manually verify, what remains intentionally unimplemented
-4. **If a better next-day plan exists** — say so and offer to create a suggestion file
+You are also allowed to suggest deleting or deprecating code that is no longer aligned with OpenEstates v2.
 
 ---
 
-## Learning and Memory
+## 2. Current Product Direction
 
-Read `LEARNING.md` before any decisions about storing, updating, or using context, signals, or user state.
+OpenEstates v2 is built around these core ideas:
 
-Non-negotiable rules:
-- Every signal must carry: value, confidence, source, timestamp
-- Mistakes must be inspectable — leave structured evidence, not silence
-- If a model produces useful understanding, convert it to structured state before storing
-- Prefer inspectable learning over hidden magic
+- transparency-first discovery
+- context-based search and ranking
+- premium, modern web UI
+- property pages that feel like asset pages, not dumb listings
+- results pages that explain why a property is being shown
+- shortlist and compare workflows that reduce ambiguity
+- AI used for intent extraction, summarization, and explanation, not as the central product surface
+
+The current preferred stack is:
+
+- **Frontend:** React-based web UI
+- **Backend API:** Rust with Axum — serves structured, typed APIs for product surfaces
+- **Data pipeline:** Python — data collection, crawling, normalization, AI enrichment, seed dataset generation
+- **Storage (early):** local files and JSON seed data
+- **Later:** database design after product shape becomes clearer
+
+The Python / Rust boundary is intentional and firm:
+- Python is fast to iterate for scraping and enrichment work; treat it as throwaway-friendly
+- Rust owns the durable API layer once product shape stabilizes
+- The two communicate through structured JSON files or defined API contracts, not shared code
 
 ---
 
-## OpenFang
+## 3. Important Architecture Principles
 
-OpenFang (`https://github.com/RightNow-AI/openfang`) is the agent runtime layer. Treat as a helper, not the authoritative core.
+### 3.1 Transparency is the product
+When making engineering decisions, prefer designs that increase:
+- explainability
+- inspectability
+- comparability
+- confidence in ranking
+- clarity of tradeoffs
 
-**What it is:** Rust daemon, runs locally at `localhost:4200`. Python SDK at `sdk/python/` — use `openfang_client.py` (REST) to invoke from our app.
+Do not optimize for hidden “magic” if it reduces user trust.
 
-**Invocation pattern for Day 3+:** Use `/v1/chat/completions` (OpenAI-compatible endpoint) for signal extraction — stateless, one-shot, easy to stub when offline.
+### 3.2 Context-based search is the moat
+The core engine should move beyond:
+- price
+- area
+- BHK
 
-OpenFang may: extract signals · generate explanations · simulate coach flows · schedule watchers
+It should support:
+- soft preferences
+- tradeoff sensitivity
+- market context
+- area externalities
+- user-specific weighting over time
 
-It must not: own durable state · be the source of truth · produce outputs stored as raw text
+### 3.3 AI is supportive, not the center
+Use AI for:
+- natural language intent extraction
+- summarization of reviews/discussions
+- ranking explanations
+- optional preference refinement
 
-**Graceful degradation:** Always catch connection errors and fall back to a stub extractor. The prototype must run without OpenFang running.
+Do not build the product as “chat with AI about homes” unless explicitly asked later.
+
+### 3.4 Structured system truth must remain app-owned
+Even when using OpenFang or other agent layers, the app must own:
+- authoritative ranking inputs
+- listing data
+- context state
+- explanation objects
+- event history
+- transparency signals
+
+Do not store raw LLM text as the durable source of truth.
 
 ---
 
-## Collaboration
+## 4. Working With Day Plans
 
-Assume the human returns daily with new instructions. Build on prior work. Preserve continuity. Suggest better paths clearly — but the goal is disciplined co-design, not blind obedience and not unilateral redesign.
+Development is still organized using `dayXX.md` files, but these are **guides, not prison walls**.
+
+You should respect the current day’s scope, but if:
+- the product direction has shifted,
+- old assumptions are no longer useful,
+- or a small redesign now will reduce major rework later,
+
+then you should say so clearly and propose a better shape.
+
+You may create suggestion files such as:
+- `day06_indexed_by_claude.md`
+- `day07_refined_by_claude.md`
+
+These are proposals, not automatic replacements.
+
+---
+
+## 5. Cleanup and Deletion Policy
+
+You are explicitly allowed to clean up code and remove dead paths.
+
+Examples:
+- TUI code that no longer serves the v2 web-first product
+- placeholder abstractions that are now misleading
+- duplicated logic from earlier experimentation
+- outdated assumptions from terminal-first flows
+
+However:
+- do not delete useful learning artifacts without noting it
+- do not rewrite everything blindly
+- prefer deprecating or removing with clear reasoning
+
+If you remove something meaningful, explain:
+- why it no longer fits
+- what replaces it
+- whether any useful parts should be preserved
+
+---
+
+## 6. Coding Expectations
+
+When writing code, prioritize:
+- clarity
+- modularity
+- product-aligned architecture
+- inspectable state
+- clean local development workflow
+- easy future extension
+
+Avoid:
+- premature scale architecture
+- unnecessary complexity
+- framework-heavy patterns that don’t help the current product
+- building backend abstractions that hide the actual domain model
+
+Use explicit models and clear file boundaries.
+
+---
+
+## 7. Token Efficiency and Future Safety
+
+One major goal is to avoid burning tokens later because the early system was poorly shaped.
+
+That means:
+- prefer simple, understandable file layouts
+- keep the domain model explicit
+- avoid building throwaway complexity
+- avoid letting old prototype assumptions leak into the new product
+- rewrite docs when the product direction changes significantly
+
+When the product pivots, it is often cheaper to cleanly reset the docs and code than to keep layering patches on top of old assumptions.
+
+---
+
+## 8. Frontend Expectations
+
+The web UI matters a lot.
+
+OpenEstates must feel:
+- calm
+- premium
+- modern
+- high-signal
+- visually clean
+- easy to compare
+
+The frontend is not just a shell around backend logic. It is central to the transparency promise.
+
+When designing UI-facing APIs and components, always ask:
+- what does the user need to understand here?
+- what reduces ambiguity?
+- what helps comparison?
+- what reveals tradeoffs?
+
+---
+
+## 9. Backend Expectations
+
+The Rust backend should serve structured APIs for:
+- natural-language search parsing results
+- ranked property results
+- property detail page data
+- comparables and trend summaries
+- shortlist state
+- transparency widgets and explanation blocks
+
+Keep backend design grounded in product surfaces, not abstract infrastructure.
+
+---
+
+## 10. Product-first Behavior
+
+If a task asks you to build something that seems inconsistent with the current OpenEstates v2 direction, do not blindly proceed.
+
+Instead:
+- point out the inconsistency
+- explain the tradeoff
+- suggest the smallest product-aligned alternative
+
+The goal is not blind obedience.
+The goal is disciplined co-design.
+
+---
+
+## 11. Current Non-goals
+
+Unless explicitly requested, do not prioritize:
+- terminal-first UX
+- heavy legal/document validation workflows
+- payment flows
+- full two-sided negotiation system
+- overbuilt agent orchestration
+- database perfection before product shape is stable
+
+These may come later, but they are not the center of v2 right now.
+
+---
+
+## 12. Final Rule
+
+Build OpenEstates as if it may become a serious startup, but do not let legacy prototype assumptions drag down the new product direction.
+
+Be willing to:
+- rethink
+- simplify
+- delete
+- restate the problem
+- and rebuild cleanly when needed
+
+The product promise is clarity and trust.
+
+Every engineering decision should support that.

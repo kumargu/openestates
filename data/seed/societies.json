@@ -1,0 +1,327 @@
+[
+  {
+    "id": "soc_prestige_lakeside",
+    "name": "Prestige Lakeside Habitat",
+    "area": "Whitefield",
+    "city": "Bengaluru",
+    "builder_name": "Prestige Group",
+    "year_built": 2018,
+    "total_units": 3426,
+    "summary": "Large integrated township in Whitefield with lake views, clubhouse, and multiple towers. Well-established society with consistent maintenance. Prestige Group brand provides builder confidence.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Well-maintained common areas",
+      "Large clubhouse and amenities",
+      "Reliable security",
+      "Lake-facing units available",
+      "Reputable builder"
+    ],
+    "common_complaints": [
+      "Traffic congestion on exit road during peak hours",
+      "Maintenance fees on the higher side",
+      "Large complex — can feel impersonal"
+    ],
+    "review_summary": "Residents consistently rate the society highly for maintenance quality and amenities. Primary concern is peak-hour traffic on Varthur Road.",
+    "future_google_place_name": "Prestige Lakeside Habitat",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_brigade_metropolis",
+    "name": "Brigade Metropolis",
+    "area": "Whitefield",
+    "city": "Bengaluru",
+    "builder_name": "Brigade Group",
+    "year_built": 2012,
+    "total_units": 2800,
+    "summary": "One of Whitefield's older premium townships. Brigade Group pedigree. Slightly aged infrastructure compared to newer developments but strong community and lower prices.",
+    "maintenance_sentiment": "average",
+    "livability_sentiment": "medium",
+    "common_positives": [
+      "Established community",
+      "Good schools nearby",
+      "Lower maintenance costs than newer societies",
+      "Brigade Group trust factor"
+    ],
+    "common_complaints": [
+      "Older lifts and infrastructure",
+      "Parking crunch in some towers",
+      "Waterlogging in basement during heavy rains"
+    ],
+    "review_summary": "Good value society with a strong community feel. Infrastructure age is the main downside. Newer buyers should inspect plumbing and lifts before purchase.",
+    "future_google_place_name": "Brigade Metropolis",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_sobha_dream_acres",
+    "name": "Sobha Dream Acres",
+    "area": "Whitefield",
+    "city": "Bengaluru",
+    "builder_name": "Sobha Limited",
+    "year_built": 2020,
+    "total_units": 6000,
+    "summary": "Sobha's largest Bengaluru township. High construction quality — Sobha is known for in-house construction rather than outsourcing. Compact apartment sizes but premium finishes.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Sobha construction quality — superior to many peers",
+      "Well-planned internal roads and parking",
+      "Good amenities for price point",
+      "Consistent maintenance team"
+    ],
+    "common_complaints": [
+      "Compact carpet areas despite super builtup claims",
+      "Very large complex — traffic at gates",
+      "Distance from metro"
+    ],
+    "review_summary": "High resident satisfaction with construction quality. Compact unit sizes are the most repeated concern. Strong builder trust.",
+    "future_google_place_name": "Sobha Dream Acres",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_salarpuria_cadenza",
+    "name": "Salarpuria Sattva Cadenza",
+    "area": "Sarjapur Road",
+    "city": "Bengaluru",
+    "builder_name": "Salarpuria Sattva",
+    "year_built": 2017,
+    "total_units": 1200,
+    "summary": "Mid-premium society on Sarjapur Road corridor. Good location for IT employees in Bellandur and Electronic City. Salarpuria Sattva has consistent quality track record.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Well-maintained",
+      "Good commute to Bellandur tech parks",
+      "Reasonable maintenance fees",
+      "Green spaces inside complex"
+    ],
+    "common_complaints": [
+      "Sarjapur Road traffic is a persistent issue",
+      "Limited public transport options nearby"
+    ],
+    "review_summary": "Strong society overall. Location is the primary consideration — works well for those working in the Sarjapur-Bellandur corridor.",
+    "future_google_place_name": "Salarpuria Sattva Cadenza",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_brigade_orchards",
+    "name": "Brigade Orchards",
+    "area": "Sarjapur Road",
+    "city": "Bengaluru",
+    "builder_name": "Brigade Group",
+    "year_built": 2023,
+    "total_units": 4800,
+    "summary": "Large integrated township on Sarjapur Road. Mix of apartments and villas. Good amenities, newer infrastructure. Under construction units still available alongside ready resales.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Newer development — fresh infrastructure",
+      "Township amenities including school and retail",
+      "Good green coverage",
+      "Brigade brand reliability"
+    ],
+    "common_complaints": [
+      "Construction noise in ongoing phases",
+      "Far from metro",
+      "Sarjapur Road traffic"
+    ],
+    "review_summary": "Popular for IT families. Integrated township feel is a strong positive. Distance from metro is the main tradeoff.",
+    "future_google_place_name": "Brigade Orchards",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_prestige_falcon_city",
+    "name": "Prestige Falcon City",
+    "area": "Sarjapur Road",
+    "city": "Bengaluru",
+    "builder_name": "Prestige Group",
+    "year_built": 2022,
+    "total_units": 3500,
+    "summary": "Prestige Group's premium integrated township on Kanakapura Road / Sarjapur corridor. Large-format amenities. Strong demand from families looking for premium living.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Premium Prestige quality",
+      "Large clubhouse and facilities",
+      "Good resale demand",
+      "Gated township feel"
+    ],
+    "common_complaints": [
+      "Higher than average maintenance fees",
+      "Traffic on access road",
+      "Commercialisation of retail zone"
+    ],
+    "review_summary": "Premium end of the Sarjapur corridor market. Good for long-term residents who value amenities and Prestige brand.",
+    "future_google_place_name": "Prestige Falcon City",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_salarpuria_magnus",
+    "name": "Salarpuria Sattva Magnus",
+    "area": "Bellandur",
+    "city": "Bengaluru",
+    "builder_name": "Salarpuria Sattva",
+    "year_built": 2016,
+    "total_units": 900,
+    "summary": "Well-regarded society in Bellandur. Good proximity to Outer Ring Road and major tech parks. Salarpuria Sattva quality. Premium pricing for the area.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Excellent connectivity to ORR",
+      "Close to major IT offices — Eco Space, RMZ",
+      "Good construction quality",
+      "Active resident association"
+    ],
+    "common_complaints": [
+      "Bellandur lake proximity — odour concerns during summer",
+      "High maintenance fees",
+      "Limited visitor parking"
+    ],
+    "review_summary": "Strong choice for professionals working on ORR. Bellandur lake odour is a real seasonal concern — worth visiting the site in summer before buying.",
+    "future_google_place_name": "Salarpuria Sattva Magnus",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_total_env_windmills",
+    "name": "Total Environment Windmills of Your Mind",
+    "area": "Bellandur",
+    "city": "Bengaluru",
+    "builder_name": "Total Environment",
+    "year_built": 2015,
+    "total_units": 240,
+    "summary": "Boutique premium apartment complex by Total Environment — known for exceptional green design and architect-quality interiors. Low unit count means strong community. Niche but highly regarded.",
+    "maintenance_sentiment": "excellent",
+    "livability_sentiment": "very_high",
+    "common_positives": [
+      "Exceptional architecture and design quality",
+      "Strong natural light and ventilation",
+      "Small community — very personal and well-managed",
+      "Premium Total Environment construction standard",
+      "High resale demand from design-conscious buyers"
+    ],
+    "common_complaints": [
+      "Very high price point",
+      "Limited unit availability",
+      "Bellandur area traffic"
+    ],
+    "review_summary": "Consistently one of the most loved societies in Bengaluru for residents who can afford it. Quality and community are the standout attributes.",
+    "future_google_place_name": "Total Environment Windmills of Your Mind",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_mantri_webcity",
+    "name": "Mantri Webcity",
+    "area": "HSR Layout",
+    "city": "Bengaluru",
+    "builder_name": "Mantri Developers",
+    "year_built": 2013,
+    "total_units": 2100,
+    "summary": "Established large township in HSR Layout. Good location in one of Bengaluru's most sought-after residential areas. Slightly older infrastructure. Mantri brand has mixed reviews in Bengaluru.",
+    "maintenance_sentiment": "average",
+    "livability_sentiment": "medium",
+    "common_positives": [
+      "Excellent HSR Layout location",
+      "Large complex with good amenities",
+      "Close to Koramangala and BTM",
+      "Established community"
+    ],
+    "common_complaints": [
+      "Mantri after-sales service has been inconsistent historically",
+      "Older infrastructure needs upgrades",
+      "Some litigation history — verify documents carefully"
+    ],
+    "review_summary": "Location is the primary advantage. Due diligence on legal documents is strongly recommended given some past Mantri project issues.",
+    "future_google_place_name": "Mantri Webcity",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_sobha_garnet",
+    "name": "Sobha Garnet",
+    "area": "HSR Layout",
+    "city": "Bengaluru",
+    "builder_name": "Sobha Limited",
+    "year_built": 2019,
+    "total_units": 480,
+    "summary": "Smaller Sobha project in HSR Layout. Premium finishes, strong construction quality. Lower unit count than Sobha Dream Acres — more intimate community feel.",
+    "maintenance_sentiment": "excellent",
+    "livability_sentiment": "very_high",
+    "common_positives": [
+      "Sobha construction quality",
+      "Prime HSR Layout location",
+      "Excellent maintenance",
+      "Smaller community — well-managed"
+    ],
+    "common_complaints": [
+      "Premium pricing",
+      "Limited parking for visitors",
+      "HSR Layout traffic during evenings"
+    ],
+    "review_summary": "High satisfaction. Strong choice for buyers who prioritise quality and location over amenity scale. Priced at a premium even for HSR.",
+    "future_google_place_name": "Sobha Garnet",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_prestige_northpoint",
+    "name": "Prestige Northpoint",
+    "area": "Hebbal",
+    "city": "Bengaluru",
+    "builder_name": "Prestige Group",
+    "year_built": 2020,
+    "total_units": 650,
+    "summary": "Prestige project in Hebbal — North Bengaluru's growing residential zone. Good connectivity to airport and Manyata Tech Park. Some airport noise depending on flight paths.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Excellent airport connectivity",
+      "Close to Manyata Tech Park",
+      "Prestige build quality",
+      "Good price vs South Bengaluru equivalents"
+    ],
+    "common_complaints": [
+      "Airport noise on some floors and facings",
+      "North Bengaluru still developing — fewer retail options",
+      "Commute to South Bengaluru tech parks is long"
+    ],
+    "review_summary": "Good option for professionals at Manyata or who travel frequently. Airport noise is real — visit at different times of day and ask about specific tower exposure before buying.",
+    "future_google_place_name": "Prestige Northpoint Hebbal",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  },
+  {
+    "id": "soc_brigade_northridge",
+    "name": "Brigade Northridge",
+    "area": "Yelahanka",
+    "city": "Bengaluru",
+    "builder_name": "Brigade Group",
+    "year_built": 2021,
+    "total_units": 820,
+    "summary": "Brigade project in Yelahanka, one of North Bengaluru's more established neighbourhoods. Good schools and retail access. Airport connectivity is a consistent positive.",
+    "maintenance_sentiment": "good",
+    "livability_sentiment": "high",
+    "common_positives": [
+      "Good schools nearby — Ryan International and others",
+      "Yelahanka is more established than Hebbal",
+      "Airport within 20 minutes",
+      "Brigade reliability"
+    ],
+    "common_complaints": [
+      "Long commute to Electronic City or Whitefield",
+      "Limited nightlife and upscale dining",
+      "Some airport noise on upper floors"
+    ],
+    "review_summary": "Popular with families valuing schools and a quieter neighbourhood. Not ideal for professionals commuting to South or East Bengaluru tech corridors.",
+    "future_google_place_name": "Brigade Northridge Yelahanka",
+    "future_google_place_id": null,
+    "future_review_enrichment_status": "pending"
+  }
+]

@@ -1,12 +1,14 @@
 """
 Signal Extractor — converts conversation turns into structured SignalUpdate objects.
 
-Two implementations:
+Three implementations (in order of preference):
+  ClaudeExtractor    — calls Claude API directly (primary)
   OpenFangExtractor  — calls OpenFang /v1/chat/completions
   StubExtractor      — deterministic keyword matching (offline fallback)
 """
 
 import json
+import os
 from typing import Dict, List
 
 from agents.openfang_client import OpenFangClient
@@ -69,6 +71,40 @@ class SignalExtractor:
         conversation_turns: List[str],
     ) -> List[SignalUpdate]:
         raise NotImplementedError
+
+
+class ClaudeExtractor(SignalExtractor):
+    """
+    Calls Claude API directly for signal extraction.
+    Uses structured JSON output to guarantee parseable responses.
+    Falls back to StubExtractor if ANTHROPIC_API_KEY is missing.
+    """
+
+    MODEL = "claude-opus-4-6"
+
+    def __init__(self):
+        import anthropic
+        self._client = anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+
+    def extract(
+        self,
+        buyer_id: str,
+        buyer_profile: dict,
+        context_snapshot: dict,
+        conversation_turns: List[str],
+    ) -> List[SignalUpdate]:
+        user_msg = _build_user_message(buyer_profile, context_snapshot, conversation_turns)
+
+        with self._client.messages.stream(
+            model=self.MODEL,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": user_msg}],
+        ) as stream:
+            raw_content = stream.get_final_message().content[0].text
+
+        raw_json = json.loads(raw_content)
+        return parse_updates_response(raw_json)
 
 
 class OpenFangExtractor(SignalExtractor):

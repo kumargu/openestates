@@ -1,0 +1,211 @@
+{
+  "meta": {
+    "subreddit": "BangaloreRealEstates",
+    "post_count": 26,
+    "analyzed_at": "2026-03-09T01:43:33.158946Z"
+  },
+  "top_terms": [
+    "road",
+    "plot",
+    "property",
+    "airport",
+    "bangalore",
+    "available",
+    "around",
+    "rent",
+    "sale",
+    "years",
+    "building",
+    "area",
+    "apartments",
+    "south",
+    "budget"
+  ],
+  "phrases": [
+    "road widening haralur",
+    "widening haralur road",
+    "haralur road rmp2015",
+    "cards stuck endless",
+    "stuck endless loop",
+    "endless loop litigations",
+    "bengaluru airport belt",
+    "airport belt around",
+    "belt around airport",
+    "around airport belt",
+    "airport belt check",
+    "belt check things"
+  ],
+  "decision_drivers": [
+    "budget_sensitivity \u2014 price consciousness in decisions",
+    "builder_trust \u2014 concern about builder reliability",
+    "commute_sensitivity \u2014 proximity to metro/office is a factor",
+    "environment_sensitivity \u2014 noise, pollution, surroundings",
+    "property_type_preference \u2014 flat vs villa vs plot",
+    "size_requirement \u2014 BHK and area preference"
+  ],
+  "coach_prompt_suggestions": [
+    "What's your hard budget limit? Is there flexibility if the property is right?",
+    "How important is builder reputation vs price? Any builders you'd avoid?",
+    "How important is commute time? Do you need to be near a metro station?",
+    "Any specific environmental concerns \u2014 noise, road proximity, dump yards?",
+    "Are you looking for a flat, villa, or plot?",
+    "What's your minimum BHK and carpet area requirement?"
+  ],
+  "price_signals": {
+    "devanahalli": {
+      "price_mentions": 1,
+      "median_price": "4.00 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "hal": {
+      "price_mentions": 1,
+      "median_price": "2.50 Cr",
+      "price_range": null,
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "unknown": {
+      "price_mentions": 8,
+      "median_price": "80 L",
+      "price_range": [
+        "10 L",
+        "6.50 Cr"
+      ],
+      "sqft_rate_mentions": 1,
+      "median_sqft_rate": "\u20b913,000/sqft"
+    },
+    "south bangalore": {
+      "price_mentions": 3,
+      "median_price": "1.20 Cr",
+      "price_range": [
+        "1.00 Cr",
+        "1.50 Cr"
+      ],
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    },
+    "central bangalore": {
+      "price_mentions": 2,
+      "median_price": "30 L",
+      "price_range": [
+        "30 L",
+        "30 L"
+      ],
+      "sqft_rate_mentions": 0,
+      "median_sqft_rate": null
+    }
+  },
+  "price_mentions_raw": [
+    {
+      "price_str": "1 Cr",
+      "price_inr": 10000000,
+      "area": "south bangalore",
+      "title": "Are apartments still affordable in Bangalore South??"
+    },
+    {
+      "price_str": "1.2cr",
+      "price_inr": 12000000,
+      "area": "south bangalore",
+      "title": "Are apartments still affordable in Bangalore South??"
+    },
+    {
+      "price_str": "1.5cr",
+      "price_inr": 15000000,
+      "area": "south bangalore",
+      "title": "Are apartments still affordable in Bangalore South??"
+    },
+    {
+      "price_str": "1Cr",
+      "price_inr": 10000000,
+      "area": "unknown",
+      "title": "Investing in standalone building"
+    },
+    {
+      "price_str": "4Cr",
+      "price_inr": 40000000,
+      "area": "unknown",
+      "title": "Investing in standalone building"
+    },
+    {
+      "price_str": "6.5cr",
+      "price_inr": 65000000,
+      "area": "unknown",
+      "title": "PG building for sale Reva university"
+    },
+    {
+      "price_str": "4CR",
+      "price_inr": 40000000,
+      "area": "devanahalli",
+      "title": "Plot for sale in ADARSH SAVANA Chapparakallu road Devanahalli"
+    },
+    {
+      "price_str": "1.3 Cr",
+      "price_inr": 13000000,
+      "area": "unknown",
+      "title": "27yr with \u20b91.6L salary, 2 home loans, \u20b944L investments \u2014 Should I focus on loan "
+    },
+    {
+      "price_str": "44L",
+      "price_inr": 4400000,
+      "area": "unknown",
+      "title": "27yr with \u20b91.6L salary, 2 home loans, \u20b944L investments \u2014 Should I focus on loan "
+    },
+    {
+      "price_str": "60L",
+      "price_inr": 6000000,
+      "area": "unknown",
+      "title": "27yr with \u20b91.6L salary, 2 home loans, \u20b944L investments \u2014 Should I focus on loan "
+    },
+    {
+      "price_str": "50L",
+      "price_inr": 5000000,
+      "area": "unknown",
+      "title": "27yr with \u20b91.6L salary, 2 home loans, \u20b944L investments \u2014 Should I focus on loan "
+    },
+    {
+      "price_str": "10l",
+      "price_inr": 1000000,
+      "area": "unknown",
+      "title": "27yr with \u20b91.6L salary, 2 home loans, \u20b944L investments \u2014 Should I focus on loan "
+    },
+    {
+      "price_str": "2.5 cr",
+      "price_inr": 25000000,
+      "area": "hal",
+      "title": "Good Apartment Society in east bangalore"
+    },
+    {
+      "price_str": "\u20b913k per sq ft",
+      "price_inr": 13000,
+      "area": "unknown",
+      "title": "What are the chances of getting a flat in Prestige Lavender Fields for \u20b913k per ",
+      "type": "per_sqft"
+    },
+    {
+      "price_str": "30Lakhs",
+      "price_inr": 3000000,
+      "area": "central bangalore",
+      "title": "Want to buy a Commercial Property upto 30Lakhs"
+    },
+    {
+      "price_str": "30 Lakhs",
+      "price_inr": 3000000,
+      "area": "central bangalore",
+      "title": "Want to buy a Commercial Property upto 30Lakhs"
+    }
+  ],
+  "sample_titles": [
+    "Is there a WhatsApp group for Nambiar District 25 buyers/investors ?",
+    "Is road widening of Haralur road as per RMP2015 on cards or its stuck in endless loop of litigations",
+    "Negotiation advice needed for BDA plot",
+    "Ask me how to upload properties in RERA SQUARE",
+    "Snn Raj Azaleas Project in Haralur, Bengaluru",
+    "The Bengaluru Airport Belt",
+    "The Bengaluru Airport Belt",
+    "Are apartments still affordable in Bangalore South??",
+    "Investing in standalone building",
+    "Is my price expectation unrealistic as first time home buyer."
+  ]
+}

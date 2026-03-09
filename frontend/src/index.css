@@ -1,0 +1,467 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  /* Design tokens */
+  --color-bg: #fdf9f7;
+  --color-bg-soft: #f9f5f2;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #f7f3f0;
+  --color-text: #1a1a1a;
+  --color-text-secondary: #666666;
+  --color-text-muted: #999999;
+  --color-text-faint: #bbbbbb;
+  --color-border: rgba(0, 0, 0, 0.06);
+  --color-border-hover: rgba(0, 0, 0, 0.12);
+  --color-accent: #c96b4f;
+  --color-positive: #2a7a2a;
+  --color-positive-bg: #f0f7f0;
+  --color-positive-border: #c8e6c8;
+  --color-warning: #b88b00;
+  --color-negative: #b33333;
+  --color-negative-bg: #fdf5f5;
+  --color-negative-border: #f0d0d0;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --page-max: 960px;
+  --page-pad: clamp(1.5rem, 4vw, 4rem);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  color: var(--color-text);
+  background: var(--color-bg);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(201,107,79,0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(100,140,200,0.03) 0%, transparent 60%);
+  background-attachment: fixed;
+  min-height: 100vh;
+  line-height: 1.6;
+}
+
+/* Page layout wrapper — used by all child pages */
+.page-container {
+  max-width: var(--page-max);
+  margin: 0 auto;
+  padding: 2rem var(--page-pad);
+}
+
+.page-container-wide {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 2rem var(--page-pad);
+}
+
+/* Page header */
+.page-header {
+  margin-bottom: 2rem;
+}
+
+.page-header h1 {
+  font-size: clamp(1.5rem, 1.2rem + 1vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 0 0 0.25rem;
+}
+
+.page-header p {
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+/* Card system — Anthropic-inspired clean cards */
+.card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  transition: transform 0.3s var(--ease-out),
+              box-shadow 0.3s var(--ease-out),
+              border-color 0.3s var(--ease-out);
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-hover);
+}
+
+.card-flat {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.card-elevated {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* Section card — used for grouped content blocks on detail pages */
+.section-card {
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 1.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.section-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.section-card-header h2 {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* Tag / pill system */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-xl);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.tag-positive {
+  background: var(--color-positive-bg);
+  color: var(--color-positive);
+  border: 1px solid var(--color-positive-border);
+}
+
+.tag-negative {
+  background: var(--color-negative-bg);
+  color: var(--color-negative);
+  border: 1px solid var(--color-negative-border);
+}
+
+.tag-neutral {
+  background: #f5f5f0;
+  color: #555;
+  border: 1px solid #e8e8e0;
+}
+
+/* Score bar */
+.score-bar {
+  margin-bottom: 0.75rem;
+}
+
+.score-bar-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 0.35rem;
+  color: var(--color-text-secondary);
+}
+
+.score-bar-track {
+  height: 6px;
+  background: #eee;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.8s var(--ease-out);
+}
+
+/* Pros/cons list */
+.insight-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.insight-list li {
+  position: relative;
+  padding: 0.6rem 0 0.6rem 1.5rem;
+  font-size: 0.9rem;
+  color: var(--color-text);
+  line-height: 1.5;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.insight-list li:last-child {
+  border-bottom: none;
+}
+
+.insight-list li::before {
+  position: absolute;
+  left: 0;
+  top: 0.7rem;
+  font-size: 0.85rem;
+}
+
+.insight-list-positive li::before {
+  content: "+";
+  color: var(--color-positive);
+  font-weight: 700;
+}
+
+.insight-list-negative li::before {
+  content: "\2013";
+  color: var(--color-negative);
+  font-weight: 700;
+}
+
+/* Fact grid */
+.fact-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 1.25rem;
+}
+
+.fact-item-label {
+  font-size: 0.7rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.15rem;
+}
+
+.fact-item-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+/* Breadcrumb / back link */
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: color 0.2s ease;
+  margin-bottom: 1.5rem;
+}
+
+.back-link:hover {
+  color: var(--color-text);
+}
+
+/* Property card in grid */
+.property-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  transition: transform 0.3s var(--ease-out),
+              box-shadow 0.3s var(--ease-out),
+              border-color 0.3s var(--ease-out);
+}
+
+.property-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--color-border-hover);
+}
+
+/* Image placeholder */
+.image-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f0eeeb 0%, #e8e6e3 50%, #f0eeeb 100%);
+  color: var(--color-text-faint);
+  font-size: 0.8rem;
+  letter-spacing: 0.03em;
+}
+
+/* Fade-up animation for scroll reveals */
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-up {
+  opacity: 0;
+  animation: fadeUp 0.8s var(--ease-out) forwards;
+}
+
+.fade-up-delay-1 { animation-delay: 0.1s; }
+.fade-up-delay-2 { animation-delay: 0.25s; }
+.fade-up-delay-3 { animation-delay: 0.4s; }
+.fade-up-delay-4 { animation-delay: 0.55s; }
+
+/* Stagger children on scroll */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeUp 0.6s var(--ease-out) forwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
+.stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
+.stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
+.stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
+.stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
+
+/* Subtle gradient shimmer for hero */
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+/* Search input styling */
+.search-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  font-size: clamp(1rem, 0.9rem + 0.5vw, 1.25rem);
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+}
+
+.search-input::placeholder {
+  color: #aaa;
+  transition: color 0.3s ease;
+}
+
+.search-input:focus::placeholder {
+  color: #ccc;
+}
+
+.search-container {
+  transition: box-shadow 0.3s var(--ease-out),
+              transform 0.3s var(--ease-out);
+}
+
+.search-container:focus-within {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.12);
+  transform: translateY(-2px);
+}
+
+/* Area card hover */
+.area-card {
+  transition: transform 0.3s var(--ease-out),
+              box-shadow 0.3s var(--ease-out);
+  cursor: default;
+}
+
+.area-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-lg);
+}
+
+/* Feature card hover */
+.feature-card {
+  transition: transform 0.3s var(--ease-out),
+              box-shadow 0.3s var(--ease-out);
+}
+
+.feature-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
+/* Two-column layout for detail pages */
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.25rem;
+}
+
+@media (min-width: 720px) {
+  .detail-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+/* Button system */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: var(--color-text);
+  color: #fff;
+  padding: 0.65rem 1.75rem;
+}
+
+.btn-primary:hover {
+  background: #333;
+}
+
+.btn-outline {
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border-hover);
+  padding: 0.55rem 1.25rem;
+}
+
+.btn-outline:hover {
+  background: var(--color-text);
+  color: #fff;
+  border-color: var(--color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fade-up,
+  .stagger-children > * {
+    animation: none;
+    opacity: 1;
+  }
+
+  .search-container:focus-within {
+    transform: none;
+  }
+
+  .area-card:hover,
+  .feature-card:hover,
+  .property-card:hover,
+  .card:hover {
+    transform: none;
+  }
+}

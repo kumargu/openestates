@@ -23,5 +23,27 @@ data/context_graphs/
 # Environment
 .env
 
+# ChatGPT browser session (Playwright)
+pipeline/.chatgpt_session/
+pipeline/.firefox_profile_copy/
+pipeline/transcripts/
+pipeline/feedback/
+
+# Rust build artifacts
+backend/target/
+
+# Node
+node_modules/
+
+# Frontend build output
+frontend/dist/
+
+# Reddit cache (generated)
+data/reddit_cache/
+
+# Pipeline checkpoints and learnings
+pipeline/checkpoints/
+pipeline/learnings/
+
 # Claude Code local settings
 .claude/
