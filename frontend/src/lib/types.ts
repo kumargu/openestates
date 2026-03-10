@@ -94,6 +94,10 @@ export type PropertyDetailResponse = {
     infrastructure_tags: string[];
     community_notes: string;
   } | null;
+  themes: CompareThemes;
+  tradeoffs: TradeoffsResponse;
+  market_activity: MarketActivityResponse;
+  similar_properties: PropertyCard[];
 };
 
 export type ThemeLabel = "strong" | "good" | "mixed" | "weak";
@@ -113,12 +117,33 @@ export type CompareThemes = {
   market: ThemeResult;
 };
 
-export type MarketActivity = {
-  interest_level: "high" | "moderate" | "low";
+export type ThemeComponent = {
+  label: string;
+  level: ThemeLabel;
+};
+
+export type TradeoffsResponse = {
+  headline: string;
+  strengths: string[];
+  cautions: string[];
+  components: ThemeComponent[];
+};
+
+export type PriceVsMedian = {
+  pct_diff: number;
+  verdict: string;
+  verdict_class: string;
+};
+
+export type MarketActivityResponse = {
+  interest_level: string;
   saves_last_7d: number | null;
   offers_last_7d: number | null;
   days_on_market: number;
+  days_on_market_label: string;
+  interest_label: string;
   area_trend_summary: string;
+  price_vs_median: PriceVsMedian | null;
 };
 
 export type AreaListItem = {
@@ -178,6 +203,7 @@ export type SearchResultItem = PropertyCard & {
   match_score: number;
   match_label: string;
   match_reason: string;
+  semantic_score?: number;
 };
 
 export type SearchAreaContext = {

@@ -21,38 +21,34 @@ if TYPE_CHECKING:
 
 from engine.scorer import PropertyScorer
 from engine.types import RankingResult, ScoredProperty, ScoringContext
-from engine.vector_search import VectorSearch
 
 logger = logging.getLogger(__name__)
 
 
 class Ranker:
     """
-    Combines PropertyScorer (dimensional scores) with optional
-    VectorSearch (semantic similarity) for final ranking.
+    Combines PropertyScorer (dimensional scores) for final ranking.
+
+    Vector search has moved to Rust (backend/src/search/semantic.rs).
+    This ranker now does dimensional scoring only.
 
     The ranker:
     1. Scores all properties across dimensions
-    2. Optionally boosts with vector similarity (for NL search)
-    3. Computes final score = (1 - vector_weight) * composite + vector_weight * similarity
-    4. Sorts and explains rankings
+    2. Sorts and explains rankings
     """
 
     def __init__(
         self,
         scorer: PropertyScorer,
-        vector_search: Optional[VectorSearch] = None,
         vector_weight: float = 0.3,
     ):
         """
         Args:
             scorer: PropertyScorer instance for dimensional scoring.
-            vector_search: Optional VectorSearch for semantic boosting.
             vector_weight: Weight of vector similarity in final score (0-1).
                            Only applied when a query vector is provided.
         """
         self.scorer = scorer
-        self.vector_search = vector_search
         self.vector_weight = vector_weight
 
     def rank(
@@ -79,23 +75,10 @@ class Ranker:
         # Step 1: Score all properties across dimensions
         scored = self.scorer.score_batch(properties, ctx)
 
-        # Step 2: Optionally apply vector similarity
-        if query_vector is not None and self.vector_search and self.vector_search.is_loaded:
-            sim_results = self.vector_search.search(query_vector, top_k=len(properties))
-            sim_map = {eid: sim for eid, sim in sim_results}
-
-            for sp in scored:
-                sim = sim_map.get(sp.property_id, 0.0)
-                sp.vector_similarity = sim
-                # Blend: dimensional score + vector similarity
-                sp.final_score = (
-                    (1 - self.vector_weight) * sp.composite_score
-                    + self.vector_weight * sim
-                )
-        else:
-            # No vector search: final = composite
-            for sp in scored:
-                sp.final_score = sp.composite_score
+        # Vector search now handled by Rust backend (semantic.rs).
+        # Python ranker scores dimensionally only.
+        for sp in scored:
+            sp.final_score = sp.composite_score
 
         # Step 3: Sort by final score descending
         scored.sort(key=lambda s: s.final_score, reverse=True)

@@ -4,7 +4,6 @@ import type { PropertyCard as PropertyCardType, PropertyDetailResponse, CompareT
 import { getProperties, getProperty } from "../lib/api.ts";
 import { PropertyCard } from "../components/PropertyCard.tsx";
 import { getShortlistedIds, toggleShortlist } from "../lib/shortlist-store.ts";
-import { computeThemes, computeBestFor } from "../lib/compare.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -55,8 +54,7 @@ export function ShortlistPage() {
 
     Promise.all(savedCards.map((card) =>
       getProperty(card.id).then((detail) => {
-        const themes = computeThemes(detail.property, detail.area, detail.society);
-        return { card, detail, themes } as DetailedProperty;
+        return { card, detail, themes: detail.themes } as DetailedProperty;
       }).catch(() => null)
     )).then((results) => {
       setDetailedProps(results.filter(Boolean) as DetailedProperty[]);
@@ -131,9 +129,30 @@ export function ShortlistPage() {
     );
   }
 
-  const bestFor = detailedProps.length >= 2
-    ? computeBestFor(detailedProps.map((dp) => ({ id: dp.card.id, title: dp.card.title, themes: dp.themes })))
-    : [];
+  const bestFor = (() => {
+    if (detailedProps.length < 2) return [];
+    const themeOrder: ThemeLabel[] = ["strong", "good", "mixed", "weak"];
+    const themeKeys: { key: keyof CompareThemes; display: string }[] = [
+      { key: "value", display: "Best for value" },
+      { key: "commute", display: "Best for commute" },
+      { key: "greenery", display: "Best for greenery" },
+      { key: "society", display: "Best for society quality" },
+      { key: "resale", display: "Best for resale" },
+    ];
+    const results: { theme: string; propertyTitle: string; propertyId: string }[] = [];
+    for (const { key, display } of themeKeys) {
+      let best = detailedProps[0];
+      for (const dp of detailedProps.slice(1)) {
+        if (themeOrder.indexOf(dp.themes[key].label) < themeOrder.indexOf(best.themes[key].label)) {
+          best = dp;
+        }
+      }
+      if (best.themes[key].label === "strong" || best.themes[key].label === "good") {
+        results.push({ theme: display, propertyTitle: best.card.title, propertyId: best.card.id });
+      }
+    }
+    return results;
+  })();
 
   return (
     <div className="page-container-wide" data-testid="shortlist-page">

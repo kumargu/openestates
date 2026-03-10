@@ -143,6 +143,7 @@ impl TextSearch {
                     match_score: (normalized * 100.0).round() / 100.0,
                     match_label,
                     match_reason,
+                    semantic_score: None,
                 })
             })
             .collect();

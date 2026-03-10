@@ -67,23 +67,97 @@ pub async fn search_properties(
             .cloned()
     });
 
-    // Acquire graph + properties read locks.
-    let graph = state.knowledge.read().await;
-    let properties = state.properties.read().await;
+    // Run text search and query embedding in parallel for minimal latency.
+    let (mut results, semantic_scores) = {
+        let text_search_fut = async {
+            let graph = state.knowledge.read().await;
+            let properties = state.properties.read().await;
+            TextSearch::search_with_intent(
+                &properties,
+                &society_names,
+                &state.societies,
+                &query,
+                &parsed_intent,
+                Some(&graph),
+            )
+        };
 
-    // Run intent-based search, passing graph for preference scoring.
-    let mut results = TextSearch::search_with_intent(
-        &properties,
-        &society_names,
-        &state.societies,
-        &query,
-        &parsed_intent,
-        Some(&graph),
-    );
+        let semantic_fut = async {
+            if let Some(ref ec) = state.embed_client {
+                let graph = state.knowledge.read().await;
+                crate::search::semantic::semantic_society_scores(ec, &graph, &query, 20).await
+            } else {
+                HashMap::new()
+            }
+        };
 
-    // Drop read locks before potentially doing discovery (which needs write locks).
-    drop(properties);
-    drop(graph);
+        tokio::join!(text_search_fut, semantic_fut)
+    };
+
+    // --- Apply semantic boost to text search results ---
+    if !semantic_scores.is_empty() {
+        let properties = state.properties.read().await;
+
+        // Boost existing results that have high semantic similarity
+        for result in &mut results {
+            if let Some(prop) = properties.iter().find(|p| p.id == result.card.id) {
+                let node_id = society_node_id(&prop.society_id);
+                if let Some(&sim) = semantic_scores.get(&node_id) {
+                    // Boost: add up to 0.15 to normalized score (max 15% boost)
+                    let boost = (sim - 0.3) * 0.2; // Maps 0.3-1.0 → 0.0-0.14
+                    result.match_score = (result.match_score + boost).min(1.0);
+                    result.match_reason = format!("{} + semantically relevant", result.match_reason);
+                    result.semantic_score = Some((sim * 100.0).round() / 100.0);
+                }
+            }
+        }
+
+        // Inject semantic-only matches: high similarity but not in text results
+        let existing_ids: Vec<String> = results.iter().map(|r| r.card.id.clone()).collect();
+        for (node_id, sim) in &semantic_scores {
+            if *sim <= 0.5 {
+                continue; // Only inject high-confidence semantic matches
+            }
+            // Find properties in this society that aren't already in results
+            for prop in properties.iter() {
+                let prop_node_id = society_node_id(&prop.society_id);
+                if prop_node_id != *node_id || existing_ids.contains(&prop.id) {
+                    continue;
+                }
+                // Check hard constraints still apply
+                if let Some(bhk) = parsed_intent.bhk {
+                    if prop.bhk != bhk { continue; }
+                }
+                if let Some(budget) = parsed_intent.budget_max {
+                    if prop.price > budget { continue; }
+                }
+
+                let graph = state.knowledge.read().await;
+                let card = crate::routes::enrichment::enrich_property_card(
+                    prop, &state.societies, &graph,
+                );
+                drop(graph);
+
+                results.push(crate::search::SearchResultCard {
+                    card,
+                    match_score: (*sim * 0.5).min(0.6), // Semantic-only gets moderate score
+                    match_label: "Semantic match".to_string(),
+                    match_reason: "Semantically similar to your search".to_string(),
+                    semantic_score: Some((*sim * 100.0).round() / 100.0),
+                });
+                break; // One property per society for injection
+            }
+        }
+
+        drop(properties);
+
+        // Re-sort by updated scores
+        results.sort_by(|a, b| {
+            b.match_score
+                .partial_cmp(&a.match_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+    }
 
     // --- Live Discovery: if results are poor, discover on-the-fly ---
     let mut discovery_status: Option<String> = None;

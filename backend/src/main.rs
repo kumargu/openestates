@@ -4,6 +4,7 @@ mod discovery;
 mod knowledge;
 mod models;
 mod routes;
+mod scoring;
 mod search;
 mod state;
 mod storage;

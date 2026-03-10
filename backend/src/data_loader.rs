@@ -7,6 +7,7 @@ use tokio::sync::{Mutex, RwLock};
 use crate::cache::{Cache, InMemoryCache};
 use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge;
+use crate::knowledge::embed_client::EmbedClient;
 use crate::models::{AreaProfile, Property, Society};
 use crate::state::AppState;
 use crate::storage::{LocalFsBackend, StorageBackend};
@@ -100,13 +101,18 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         }
     }
 
-    // --- Live Discovery ---
-    let gemini = std::env::var("GOOGLE_AI_API_KEY").ok().map(|key| {
+    // --- Live Discovery + Semantic Search ---
+    let api_key = std::env::var("GOOGLE_AI_API_KEY").ok();
+    let gemini = api_key.as_ref().map(|key| {
         println!("Live discovery enabled (GOOGLE_AI_API_KEY found)");
-        GeminiClient::new(key)
+        GeminiClient::new(key.clone())
+    });
+    let embed_client = api_key.map(|key| {
+        println!("Semantic search enabled (embedding client initialized)");
+        EmbedClient::new(key)
     });
     if gemini.is_none() {
-        println!("Live discovery disabled (set GOOGLE_AI_API_KEY to enable)");
+        println!("Live discovery + semantic search disabled (set GOOGLE_AI_API_KEY to enable)");
     }
 
     let max_per_hour: u32 = std::env::var("MAX_DISCOVERIES_PER_HOUR")
@@ -125,6 +131,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         project_root: project_root.to_path_buf(),
         gemini,
         discovery_cache,
+        embed_client,
     }
 }
 
@@ -176,6 +183,7 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
         project_root: data_dir.parent().unwrap_or(data_dir).to_path_buf(),
         gemini: None,
         discovery_cache: Mutex::new(DiscoveryCache::new(24, 10)),
+        embed_client: None,
     }
 }
 

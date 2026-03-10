@@ -1,4 +1,5 @@
 pub mod intent;
+pub mod semantic;
 mod text;
 
 pub use intent::SearchIntent;
@@ -17,6 +18,9 @@ pub struct SearchResultCard {
     pub match_score: f64,
     pub match_label: String,
     pub match_reason: String,
+    /// Cosine similarity score if this result was semantically boosted, None otherwise.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub semantic_score: Option<f64>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.

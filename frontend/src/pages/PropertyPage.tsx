@@ -4,8 +4,6 @@ import type { PropertyDetailResponse, ThemeLabel } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { generateMatchSummary, generateTradeoffs } from "../lib/compare.ts";
-import { computeMarketActivity, interestLabel, daysOnMarketLabel, priceVsMedian } from "../lib/market.ts";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 
 function formatPrice(price: number): string {
@@ -79,11 +77,8 @@ export function PropertyPage() {
   if (status === "error") return <PageState variant="error" context="property" />;
   if (!data) return null;
 
-  const { property: p, society, area } = data;
-  const match = generateMatchSummary(p, area);
-  const tradeoffs = generateTradeoffs(p, area);
-  const market = computeMarketActivity(p, area);
-  const pvm = area ? priceVsMedian(p.price_per_sqft, area.median_price_per_sqft) : null;
+  const { property: p, society, area, tradeoffs, market_activity } = data;
+  const pvm = market_activity.price_vs_median;
 
   const handleSave = () => {
     if (!id) return;
@@ -160,10 +155,10 @@ export function PropertyPage() {
           <h2>Why this property for you</h2>
         </div>
         <p style={{ margin: "0 0 1.25rem", fontSize: "1.05rem", lineHeight: 1.6, color: "var(--color-text)", fontWeight: 500 }}>
-          {match.headline}
+          {tradeoffs.headline}
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.75rem" }}>
-          {match.components.map((c) => (
+          {tradeoffs.components.map((c) => (
             <div key={c.label} style={{
               display: "flex",
               justifyContent: "space-between",
@@ -183,7 +178,11 @@ export function PropertyPage() {
       {/* === C. Price vs Area Median + D. Market Activity — side by side === */}
       <div className="detail-grid">
         {/* Price vs Area Median */}
-        {pvm && area && (
+        {pvm && area && (() => {
+          const verdictColor = pvm.verdict_class === "positive" ? "var(--color-positive)"
+            : pvm.verdict_class === "warning" ? "var(--color-warning)"
+            : "var(--color-text-secondary)";
+          return (
           <div className="section-card" data-testid="price-vs-median-section">
             <div className="section-card-header">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
@@ -232,7 +231,7 @@ export function PropertyPage() {
                 height: "100%",
                 width: `${Math.min(Math.max((p.price_per_sqft / area.median_price_per_sqft) * 50, 10), 90)}%`,
                 borderRadius: "4px",
-                backgroundColor: pvm.verdictColor,
+                backgroundColor: verdictColor,
                 transition: "width 0.8s var(--ease-out)",
               }} />
             </div>
@@ -240,16 +239,17 @@ export function PropertyPage() {
               <span style={{
                 fontSize: "0.85rem",
                 fontWeight: 600,
-                color: pvm.verdictColor,
+                color: verdictColor,
               }}>
                 {pvm.verdict}
               </span>
               <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                {pvm.pctDiff > 0 ? "+" : ""}{pvm.pctDiff}% vs median
+                {pvm.pct_diff > 0 ? "+" : ""}{pvm.pct_diff}% vs median
               </span>
             </div>
           </div>
-        )}
+          );
+        })()}
 
         {/* Market Activity */}
         <div className="section-card" data-testid="market-activity-section">
@@ -261,29 +261,29 @@ export function PropertyPage() {
           </div>
           <div style={{ display: "grid", gap: "0.75rem" }}>
             <MarketRow
-              icon={<InterestDot level={market.interest_level} />}
-              label={interestLabel(market.interest_level)}
+              icon={<InterestDot level={market_activity.interest_level as "high" | "moderate" | "low"} />}
+              label={market_activity.interest_label}
             />
-            {market.saves_last_7d != null && (
+            {market_activity.saves_last_7d != null && (
               <MarketRow
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
-                label={`Saved by ${market.saves_last_7d} users this week`}
+                label={`Saved by ${market_activity.saves_last_7d} users this week`}
               />
             )}
-            {market.offers_last_7d != null && market.offers_last_7d > 0 && (
+            {market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0 && (
               <MarketRow
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>}
-                label={`${market.offers_last_7d} mock offer${market.offers_last_7d > 1 ? "s" : ""} in last 7 days`}
+                label={`${market_activity.offers_last_7d} mock offer${market_activity.offers_last_7d > 1 ? "s" : ""} in last 7 days`}
               />
             )}
             <MarketRow
               icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
-              label={`Listed ${market.days_on_market} days ago \u00B7 ${daysOnMarketLabel(market.days_on_market)}`}
+              label={`Listed ${market_activity.days_on_market} days ago \u00B7 ${market_activity.days_on_market_label}`}
             />
-            {area && (
+            {market_activity.area_trend_summary && (
               <MarketRow
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
-                label={`Area prices ${area.trend_direction === "up" ? "\u2197 trending up" : area.trend_direction === "down" ? "\u2198 trending down" : "\u2192 stable"}`}
+                label={market_activity.area_trend_summary}
               />
             )}
           </div>
@@ -508,17 +508,10 @@ export function PropertyPage() {
             {area.traffic_summary && <AreaInsight icon="car" text={area.traffic_summary} />}
             {area.waterlogging_summary && <AreaInsight icon="water" text={area.waterlogging_summary} />}
 
-            {/* Greenery / Openness — new first-class signal */}
+            {/* Greenery / Openness — from backend themes */}
             <AreaInsight
               icon="tree"
-              text={(() => {
-                const g = p.greenery_score ?? 0.5;
-                const o = p.open_space_score ?? 0.5;
-                const avg = (g + o) / 2;
-                if (avg >= 0.75) return "Greener surroundings with spacious open areas. Lower density than most developments in this corridor.";
-                if (avg >= 0.55) return "Moderate greenery and open space. Typical density for this area.";
-                return "Denser built environment with limited green cover. Urban feel.";
-              })()}
+              text={data.themes.greenery.summary}
             />
 
             {area.livability_summary && <AreaInsight icon="home" text={area.livability_summary} />}
@@ -552,6 +545,68 @@ export function PropertyPage() {
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Similar properties — embedding-based */}
+      {data.similar_properties.length > 0 && (
+        <div className="card" style={{ marginTop: "1.5rem" }}>
+          <h2 className="section-title">You might also like</h2>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            gap: "1rem",
+            marginTop: "1rem",
+          }}>
+            {data.similar_properties.map((sp) => (
+              <Link
+                key={sp.id}
+                to={`/property/${sp.id}`}
+                style={{ textDecoration: "none", color: "inherit" }}
+              >
+                <div style={{
+                  borderRadius: "var(--radius-md)",
+                  border: "1px solid var(--color-border)",
+                  overflow: "hidden",
+                  backgroundColor: "var(--color-bg-elevated)",
+                  transition: "border-color 0.15s",
+                }}>
+                  <ImageWithFallback
+                    src={sp.hero_image || ""}
+                    alt={sp.title}
+                    style={{ width: "100%", height: "140px", objectFit: "cover" }}
+                  />
+                  <div style={{ padding: "0.75rem" }}>
+                    <p style={{
+                      margin: 0,
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                    }}>
+                      {sp.title}
+                    </p>
+                    <p style={{
+                      margin: "0.25rem 0 0",
+                      fontSize: "0.8rem",
+                      color: "var(--color-text-muted)",
+                    }}>
+                      {sp.society_name} · {sp.area}
+                    </p>
+                    <p style={{
+                      margin: "0.25rem 0 0",
+                      fontWeight: 600,
+                      fontSize: "0.85rem",
+                      color: "var(--color-primary)",
+                    }}>
+                      {formatPrice(sp.price)}
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
         </div>
       )}
     </div>

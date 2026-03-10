@@ -10,6 +10,7 @@
 
 pub mod bootstrap;
 pub mod edge;
+pub mod embed_client;
 pub mod embeddings;
 pub mod fact;
 pub mod graph;

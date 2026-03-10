@@ -11,7 +11,7 @@
 use serde::Serialize;
 
 use super::graph::KnowledgeGraph;
-use super::node::{Node, NodeType};
+use super::node::NodeType;
 
 /// Result of a similarity search.
 #[derive(Debug, Clone, Serialize)]
