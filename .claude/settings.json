@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add .gitignore CLAUDE.md LEARNING.md README.md agents/ app/ data/sample_market.json days/ engine/ graph/ pyproject.toml requirements.txt simulation/ src/)",
+      "Read(//Users/gulshan.kumar/.claude/**)",
+      "Bash(git -C:*)",
+      "Bash(python3 -m json.tool)",
+      "Skill(claude-api)",
+      "Skill(claude-api:*)"
+    ],
+    "additionalDirectories": [
+      "/Users/gulshan.kumar/.claude"
+    ]
+  }
+}

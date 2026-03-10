@@ -50,6 +50,6 @@ data/lake/
 pipeline/checkpoints/
 pipeline/learnings/
 
-# Claude Code local settings
-.claude/
+# Claude Code — track skills, settings, and memory; ignore local settings
+.claude/settings.local.json
 .vercel
