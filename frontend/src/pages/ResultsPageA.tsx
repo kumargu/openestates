@@ -2,14 +2,17 @@
  * Results page with inline subscribe actions and backend search integration.
  * All data comes from the backend API — no client-side fallbacks.
  */
-import { useEffect, useState, useMemo, useRef, useCallback } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
-import type { PropertyCard as PropertyCardType, PropertyDetailResponse, SearchResponse, SearchAreaContext } from "../lib/types.ts";
-import { getProperties, getProperty, searchProperties } from "../lib/api.ts";
+import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
+import { getProperties, searchProperties } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
+import { PreferencePill } from "../components/PreferencePill.tsx";
+import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
+import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 
 function formatPrice(price: number): string {
@@ -226,13 +229,8 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match }: { property: PropertyCardType; match?: MatchResult }) {
+function CardA({ property, match, explanation, onQuickView }: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; onQuickView?: (id: string) => void }) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
-  const [preview, setPreview] = useState<PropertyDetailResponse | null>(null);
-  const [previewLoading, setPreviewLoading] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const fetchedRef = useRef(false);
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -240,24 +238,11 @@ function CardA({ property, match }: { property: PropertyCardType; match?: MatchR
     setSaved(toggleShortlist(property.id));
   };
 
-  const handlePreviewEnter = useCallback(() => {
-    hoverTimeout.current = setTimeout(() => {
-      setShowPreview(true);
-      if (!fetchedRef.current && !previewLoading) {
-        fetchedRef.current = true;
-        setPreviewLoading(true);
-        getProperty(property.id)
-          .then(setPreview)
-          .catch(() => {})
-          .finally(() => setPreviewLoading(false));
-      }
-    }, 300);
-  }, [property.id, previewLoading]);
-
-  const handlePreviewLeave = useCallback(() => {
-    if (hoverTimeout.current) clearTimeout(hoverTimeout.current);
-    setShowPreview(false);
-  }, []);
+  const handleQuickView = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onQuickView?.(property.id);
+  };
 
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
 
@@ -302,6 +287,11 @@ function CardA({ property, match }: { property: PropertyCardType; match?: MatchR
           </div>
 
           {match && <p className="card-a-reason">{match.reason}</p>}
+
+          {/* Structured match explanation — preference pills + reason badges */}
+          {explanation && explanation.preference_coverage.length > 0 && (
+            <MatchExplanationBlock explanation={explanation} />
+          )}
 
           <div className="card-a-signals">
             {property.google_rating && (
@@ -356,96 +346,78 @@ function CardA({ property, match }: { property: PropertyCardType; match?: MatchR
           </svg>
           {saved ? "Subscribed" : "Subscribe"}
         </button>
-        <div
-          className="card-a-detail-wrap"
-          onMouseEnter={handlePreviewEnter}
-          onMouseLeave={handlePreviewLeave}
-        >
-          <Link to={`/property/${property.id}`} className="card-a-detail-btn">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-            </svg>
-            View details
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </Link>
+        <button className="card-a-detail-btn" onClick={handleQuickView}>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
+          </svg>
+          Quick view
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="9 18 15 12 9 6" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+}
 
-          {/* Hover preview popover */}
-          {showPreview && (
-            <div className="card-a-preview" onClick={(e) => e.stopPropagation()}>
-              {previewLoading && (
-                <p className="card-a-preview-loading">Loading insights...</p>
-              )}
-              {!previewLoading && !preview && (
-                <p className="card-a-preview-loading">
-                  {property.description_summary}
-                </p>
-              )}
-              {preview && (
-                <>
-                  <p className="card-a-preview-summary">{preview.property.description_summary}</p>
+/* ---------- Match Explanation Block ---------- */
 
-                  {/* Key signals grid */}
-                  <div className="card-a-preview-grid">
-                    <div className="card-a-preview-stat">
-                      <span className="card-a-preview-stat-label">Society</span>
-                      <span className="card-a-preview-stat-value">
-                        {preview.property.society_quality_score >= 0.7 ? "Strong" : preview.property.society_quality_score >= 0.5 ? "Decent" : "Weak"}
-                      </span>
-                    </div>
-                    <div className="card-a-preview-stat">
-                      <span className="card-a-preview-stat-label">Docs</span>
-                      <span className="card-a-preview-stat-value">
-                        {preview.property.document_completeness_score >= 0.8 ? "Complete" : "Partial"}
-                      </span>
-                    </div>
-                    <div className="card-a-preview-stat">
-                      <span className="card-a-preview-stat-label">Risk</span>
-                      <span className="card-a-preview-stat-value" style={{
-                        color: preview.property.litigation_risk <= 0.1 ? "var(--color-positive)" : "var(--color-warning)",
-                      }}>
-                        {preview.property.litigation_risk <= 0.1 ? "Low" : preview.property.litigation_risk <= 0.3 ? "Moderate" : "High"}
-                      </span>
-                    </div>
-                    <div className="card-a-preview-stat">
-                      <span className="card-a-preview-stat-label">Market</span>
-                      <span className="card-a-preview-stat-value">
-                        {preview.property.interest_level || "\u2014"}
-                      </span>
-                    </div>
-                  </div>
+function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation }) {
+  const [expanded, setExpanded] = useState(false);
+  const allNoData = explanation.preference_coverage.every(pc => pc.status === "no_data");
 
-                  {/* Price context */}
-                  {preview.area && (
-                    <div className="card-a-preview-price-ctx">
-                      <span>vs area median:</span>
-                      <strong style={{
-                        color: property.price_per_sqft <= preview.area.median_price_per_sqft
-                          ? "var(--color-positive)" : "var(--color-text)",
-                      }}>
-                        {property.price_per_sqft <= preview.area.median_price_per_sqft
-                          ? `${Math.round((1 - property.price_per_sqft / preview.area.median_price_per_sqft) * 100)}% below`
-                          : `${Math.round((property.price_per_sqft / preview.area.median_price_per_sqft - 1) * 100)}% above`
-                        }
-                      </strong>
-                    </div>
-                  )}
+  if (allNoData) {
+    return (
+      <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.35rem 0 0", lineHeight: 1.5 }}>
+        Not enough data to evaluate your preferences for this property yet. Matched on location and specs.
+      </p>
+    );
+  }
 
-                  {/* Area / society one-liners */}
-                  {preview.society && (
-                    <p className="card-a-preview-note">{preview.society.review_summary}</p>
-                  )}
+  const visibleReasons = expanded ? explanation.reasons : explanation.reasons.slice(0, 3);
+  const hiddenCount = explanation.reasons.length - 3;
 
-                  <Link to={`/property/${property.id}`} className="card-a-preview-cta">
-                    Full details
-                  </Link>
-                </>
-              )}
-            </div>
+  return (
+    <div style={{ marginTop: "0.35rem" }}>
+      {/* Preference coverage pills */}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginBottom: "0.35rem" }}>
+        {explanation.preference_coverage.map(pc => (
+          <PreferencePill key={pc.preference} coverage={pc} />
+        ))}
+      </div>
+
+      {/* Match reasons */}
+      {visibleReasons.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+          {visibleReasons.map(r => (
+            <MatchReasonBadge key={`${r.fact_key}-${r.preference}`} reason={r} />
+          ))}
+          {!expanded && hiddenCount > 0 && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(true); }}
+              style={{
+                background: "none",
+                border: "none",
+                color: "#3b5998",
+                fontSize: "0.72rem",
+                cursor: "pointer",
+                padding: "0.15rem 0",
+                textAlign: "left",
+                fontFamily: "inherit",
+              }}
+            >
+              +{hiddenCount} more {hiddenCount === 1 ? "reason" : "reasons"}
+            </button>
           )}
         </div>
-      </div>
+      )}
+
+      {/* Graph vs legacy indicator */}
+      {explanation.graph_driven_pct > 0 && (
+        <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", margin: "0.3rem 0 0" }}>
+          {Math.round(explanation.graph_driven_pct)}% scored from verified data
+        </p>
+      )}
     </div>
   );
 }
@@ -457,6 +429,7 @@ export function ResultsPageA() {
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
+  const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const query = searchParams.get("q") || "";
@@ -521,7 +494,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -529,6 +502,7 @@ export function ResultsPageA() {
           label: r.match_label as MatchResult["label"],
           reason: r.match_reason,
         },
+        explanation: r.match_explanation,
       }));
     }
     // No query — show all properties without match labels
@@ -696,11 +670,27 @@ export function ResultsPageA() {
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem" }}>
-        {matchResults.map(({ property, match }) => (
-          <CardA key={property.id} property={property} match={match} />
+      <div
+        className={panelPropertyId ? "results-grid--panel-open" : ""}
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", transition: "margin-right 0.3s var(--ease-out)" }}
+      >
+        {matchResults.map(({ property, match, explanation }) => (
+          <CardA key={property.id} property={property} match={match} explanation={explanation} onQuickView={setPanelPropertyId} />
         ))}
       </div>
+
+      {/* Side panel */}
+      {panelPropertyId && (() => {
+        const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property;
+        if (!panelCard) return null;
+        return (
+          <PropertySidePanel
+            propertyId={panelPropertyId}
+            card={panelCard}
+            onClose={() => setPanelPropertyId(null)}
+          />
+        );
+      })()}
     </div>
   );
 }
