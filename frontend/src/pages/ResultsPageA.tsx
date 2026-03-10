@@ -13,7 +13,11 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { PreferencePill } from "../components/PreferencePill.tsx";
 import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
+import { CompareBar } from "../components/CompareBar.tsx";
+import { ComparePanel } from "../components/ComparePanel.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+
+const MAX_COMPARE = 3;
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -229,7 +233,14 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, onQuickView }: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; onQuickView?: (id: string) => void }) {
+function CardA({ property, match, explanation, onQuickView, isComparing, onToggleCompare }: {
+  property: PropertyCardType;
+  match?: MatchResult;
+  explanation?: MatchExplanation;
+  onQuickView?: (id: string) => void;
+  isComparing?: boolean;
+  onToggleCompare?: (id: string) => void;
+}) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
 
   const handleSave = (e: React.MouseEvent) => {
@@ -244,12 +255,30 @@ function CardA({ property, match, explanation, onQuickView }: { property: Proper
     onQuickView?.(property.id);
   };
 
+  const handleCompare = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    onToggleCompare?.(property.id);
+  };
+
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
 
   return (
     <div className="card-a">
       <Link to={`/property/${property.id}`} className="card-a-link">
         <div className="card-a-image">
+          {/* Compare toggle button */}
+          <button
+            className={`card-a-compare-btn ${isComparing ? "card-a-compare-btn--active" : ""}`}
+            onClick={handleCompare}
+            title={isComparing ? "Remove from compare" : "Add to compare"}
+          >
+            {isComparing ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+            )}
+          </button>
           <ImageWithFallback
             src={property.hero_image}
             alt={property.title}
@@ -430,6 +459,8 @@ export function ResultsPageA() {
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [showCompare, setShowCompare] = useState(false);
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const query = searchParams.get("q") || "";
@@ -672,15 +703,29 @@ export function ResultsPageA() {
 
       <div
         className={panelPropertyId ? "results-grid--panel-open" : ""}
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", transition: "margin-right 0.3s var(--ease-out)" }}
+        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
         {matchResults.map(({ property, match, explanation }) => (
-          <CardA key={property.id} property={property} match={match} explanation={explanation} onQuickView={setPanelPropertyId} />
+          <CardA
+            key={property.id}
+            property={property}
+            match={match}
+            explanation={explanation}
+            onQuickView={setPanelPropertyId}
+            isComparing={compareIds.includes(property.id)}
+            onToggleCompare={(id) => {
+              setCompareIds(prev =>
+                prev.includes(id)
+                  ? prev.filter(x => x !== id)
+                  : prev.length < MAX_COMPARE ? [...prev, id] : prev
+              );
+            }}
+          />
         ))}
       </div>
 
-      {/* Side panel */}
-      {panelPropertyId && (() => {
+      {/* Side panel — quick view */}
+      {panelPropertyId && !showCompare && (() => {
         const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property;
         if (!panelCard) return null;
         return (
@@ -688,9 +733,36 @@ export function ResultsPageA() {
             propertyId={panelPropertyId}
             card={panelCard}
             onClose={() => setPanelPropertyId(null)}
+            onAddCompare={(id) => {
+              setCompareIds(prev =>
+                prev.includes(id) ? prev : prev.length < MAX_COMPARE ? [...prev, id] : prev
+              );
+            }}
+            isComparing={compareIds.includes(panelPropertyId)}
           />
         );
       })()}
+
+      {/* Compare bar — floating tray */}
+      <CompareBar
+        items={compareIds.map(id => matchResults.find(r => r.property.id === id)?.property).filter(Boolean) as PropertyCardType[]}
+        onRemove={(id) => setCompareIds(prev => prev.filter(x => x !== id))}
+        onCompare={() => setShowCompare(true)}
+        onClear={() => { setCompareIds([]); setShowCompare(false); }}
+      />
+
+      {/* Compare panel — side-by-side */}
+      {showCompare && compareIds.length >= 2 && (
+        <ComparePanel
+          cards={compareIds.map(id => matchResults.find(r => r.property.id === id)?.property).filter(Boolean) as PropertyCardType[]}
+          onClose={() => setShowCompare(false)}
+          onRemove={(id) => {
+            const next = compareIds.filter(x => x !== id);
+            setCompareIds(next);
+            if (next.length < 2) setShowCompare(false);
+          }}
+        />
+      )}
     </div>
   );
 }

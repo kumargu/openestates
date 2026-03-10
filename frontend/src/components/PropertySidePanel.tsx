@@ -45,9 +45,11 @@ type Props = {
   propertyId: string;
   card: PropertyCardType;
   onClose: () => void;
+  onAddCompare?: (id: string) => void;
+  isComparing?: boolean;
 };
 
-export function PropertySidePanel({ propertyId, card, onClose }: Props) {
+export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isComparing }: Props) {
   const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(() => isShortlisted(propertyId));
@@ -319,6 +321,19 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
             </svg>
             {saved ? "Subscribed" : "Subscribe"}
           </button>
+          {onAddCompare && (
+            <button
+              className={`side-panel-compare-btn ${isComparing ? "side-panel-compare-btn--active" : ""}`}
+              onClick={() => onAddCompare(propertyId)}
+            >
+              {isComparing ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+              )}
+              {isComparing ? "In compare" : "Compare"}
+            </button>
+          )}
           <Link to={`/property/${propertyId}`} className="side-panel-full-btn">
             Full details
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
