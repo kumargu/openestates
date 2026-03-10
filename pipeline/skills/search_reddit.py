@@ -57,6 +57,7 @@ class SearchRedditSkill(BaseSkill):
     skill_id = "search_reddit"
     description = "Search Reddit for threads mentioning a society, area, or topic"
     version = "1.0"
+    output_keys = ["reddit_thread_count", "reddit_total_score", "reddit_total_comments", "reddit_threads"]
 
     def execute(self, input_data: dict) -> SkillResult:
         query = input_data.get("query", "")

@@ -1,0 +1,558 @@
+{
+  "society:abhee-celestial-city": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:37.329125+00:00"
+    },
+    "rera": {
+      "fact_count": 36,
+      "last_fetched": "2026-03-10T11:30:37.344670+00:00"
+    }
+  },
+  "society:adarsh-tropica": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:39.781144+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:39.786234+00:00"
+    }
+  },
+  "society:alembic-urban-forest": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:42.329691+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:42.332792+00:00"
+    }
+  },
+  "society:arvind-sarjapur-road": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:45.214320+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:45.219369+00:00"
+    }
+  },
+  "society:assetz-marq-3-0": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:47.029190+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:47.032852+00:00"
+    }
+  },
+  "society:brigade-altair-apartments": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:49.693924+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:49.698807+00:00"
+    }
+  },
+  "society:brigade-caladium": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:51.425179+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:51.430946+00:00"
+    }
+  },
+  "society:brigade-cornerstone-utopia": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:53.594165+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:53.599312+00:00"
+    }
+  },
+  "society:brigade-woods": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:30:55.378968+00:00"
+    },
+    "rera": {
+      "fact_count": 16,
+      "last_fetched": "2026-03-10T11:30:55.384732+00:00"
+    }
+  },
+  "society:casagrand-flamingo": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:57.090885+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:30:57.099973+00:00"
+    }
+  },
+  "society:century-ethos": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:30:58.915103+00:00"
+    },
+    "rera": {
+      "fact_count": 16,
+      "last_fetched": "2026-03-10T11:30:58.921764+00:00"
+    }
+  },
+  "society:century-mirai": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:00.704587+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:00.710268+00:00"
+    }
+  },
+  "society:dnr-arista-phase-2": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:02.603318+00:00"
+    },
+    "rera": {
+      "fact_count": 16,
+      "last_fetched": "2026-03-10T11:31:02.609578+00:00"
+    }
+  },
+  "society:dnr-spring-leaf": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:04.347340+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:04.352963+00:00"
+    }
+  },
+  "society:godrej-park-retreat": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:06.905129+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:06.913421+00:00"
+    }
+  },
+  "society:godrej-reflections-phase-2": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:09.262875+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:09.268549+00:00"
+    }
+  },
+  "society:godrej-splendour": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:11.006148+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:11.012922+00:00"
+    }
+  },
+  "society:k-raheja-vivarea": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:12.741856+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:12.747430+00:00"
+    }
+  },
+  "society:kolte-patil-24k-grazio": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:14.459677+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:14.465056+00:00"
+    }
+  },
+  "society:lt-elara-celestia": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:16.257227+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:16.262894+00:00"
+    }
+  },
+  "society:mizumi-reserve": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:17.933098+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:17.938341+00:00"
+    }
+  },
+  "society:nbr-group-apartments-near-wipro-sarjapur-road": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:20.869507+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:20.874722+00:00"
+    }
+  },
+  "society:nikoo-homes": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:23.499844+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:23.504491+00:00"
+    }
+  },
+  "society:olivia-at-lt-realty-raintree-boulevard": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:25.340924+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:25.346419+00:00"
+    }
+  },
+  "society:prestige-glenbrook": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:27.056594+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:27.065598+00:00"
+    }
+  },
+  "society:prestige-lakeside-habitat": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:30.215925+00:00"
+    },
+    "rera": {
+      "fact_count": 15,
+      "last_fetched": "2026-03-10T11:31:30.221888+00:00"
+    }
+  },
+  "society:prestige-lavender-fields": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:32.071713+00:00"
+    },
+    "rera": {
+      "fact_count": 37,
+      "last_fetched": "2026-03-10T11:31:32.079244+00:00"
+    }
+  },
+  "society:prestige-park-grove": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:34.614386+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:34.621566+00:00"
+    }
+  },
+  "society:prestige-pine-wood": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:36.446831+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:36.452513+00:00"
+    }
+  },
+  "society:prestige-raintree-park": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:38.999597+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:39.007726+00:00"
+    }
+  },
+  "society:prestige-somerville": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:40.860031+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:40.870256+00:00"
+    }
+  },
+  "society:prestige-waterford": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:42.785053+00:00"
+    },
+    "rera": {
+      "fact_count": 16,
+      "last_fetched": "2026-03-10T11:31:42.791733+00:00"
+    }
+  },
+  "society:purva-meraki": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:44.504624+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:44.512955+00:00"
+    }
+  },
+  "society:radiance-platinum": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:46.316715+00:00"
+    },
+    "rera": {
+      "fact_count": 37,
+      "last_fetched": "2026-03-10T11:31:46.324758+00:00"
+    }
+  },
+  "society:sarang-by-sumadhura-phase-2": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:48.503054+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:48.508706+00:00"
+    }
+  },
+  "society:shriram-esquire": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:50.192984+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:31:50.200705+00:00"
+    }
+  },
+  "society:sobha-dream-gardens": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:53.133067+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:53.138455+00:00"
+    }
+  },
+  "society:sobha-infina": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:54.864101+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:54.868710+00:00"
+    }
+  },
+  "society:sobha-infinia": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:31:56.615330+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:56.618227+00:00"
+    }
+  },
+  "society:sobha-insignia": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:35:30.693370+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:35:30.760703+00:00"
+    }
+  },
+  "society:sobha-marvella": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:58.409365+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:31:58.414992+00:00"
+    }
+  },
+  "society:sobha-neopolis": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:00.150981+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:00.156876+00:00"
+    }
+  },
+  "society:sobha-windsor": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:02.016869+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:02.020840+00:00"
+    }
+  },
+  "society:sterling-ascentia": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:04.981468+00:00"
+    },
+    "rera": {
+      "fact_count": 17,
+      "last_fetched": "2026-03-10T11:32:04.987879+00:00"
+    }
+  },
+  "society:sumadhura-capitol-residences": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:07.275578+00:00"
+    },
+    "rera": {
+      "fact_count": 38,
+      "last_fetched": "2026-03-10T11:32:07.283003+00:00"
+    }
+  },
+  "society:sumadhura-eden-garden": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:09.146460+00:00"
+    },
+    "rera": {
+      "fact_count": 17,
+      "last_fetched": "2026-03-10T11:32:09.151815+00:00"
+    }
+  },
+  "society:sumadhura-epitome-1": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:11.244828+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:11.250121+00:00"
+    }
+  },
+  "society:sumadhura-solace": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:12.953959+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:12.959304+00:00"
+    }
+  },
+  "society:svamitva-soul-spring": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:14.759008+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:14.764910+00:00"
+    }
+  },
+  "society:test": {
+    "rera": {
+      "last_fetched": "2026-03-10T09:28:13.722231+00:00",
+      "thread_count": 5
+    }
+  },
+  "society:the-prestige-city": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:17.724341+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:17.729830+00:00"
+    }
+  },
+  "society:total-environment-pursuit-of-a-radical-rhapsody": {
+    "reddit": {
+      "fact_count": 4,
+      "last_fetched": "2026-03-10T11:32:20.261513+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:20.266957+00:00"
+    }
+  },
+  "society:trendsquares-akino": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:22.038147+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:22.044065+00:00"
+    }
+  },
+  "society:vajram-esteva": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:23.740358+00:00"
+    },
+    "rera": {
+      "fact_count": 14,
+      "last_fetched": "2026-03-10T11:32:23.747454+00:00"
+    }
+  },
+  "society:vaswani-starlight": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:25.439484+00:00"
+    },
+    "rera": {
+      "fact_count": 37,
+      "last_fetched": "2026-03-10T11:32:25.446542+00:00"
+    }
+  },
+  "society:vkc-royale-gardenia": {
+    "reddit": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:27.162568+00:00"
+    },
+    "rera": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-10T11:32:27.167814+00:00"
+    }
+  }
+}

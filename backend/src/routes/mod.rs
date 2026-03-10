@@ -1,3 +1,4 @@
+pub mod admin;
 pub mod areas;
 pub mod enrichment;
 pub mod knowledge;

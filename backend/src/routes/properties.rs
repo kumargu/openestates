@@ -13,7 +13,10 @@ use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
 
-use super::enrichment::{enrich_area, enrich_property_card, enrich_society, society_node_id};
+use super::enrichment::{
+    enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
+    extract_rera_info, society_node_id, AreaIntelligence, ReraInfo,
+};
 
 /// GET /api/properties — returns UI-ready property cards.
 pub async fn list_properties(
@@ -40,6 +43,12 @@ pub struct PropertyDetail {
     pub market_activity: MarketActivityResponse,
     /// Similar properties from semantically related societies (embedding-based).
     pub similar_properties: Vec<PropertyCard>,
+    /// RERA regulatory data from the knowledge graph (None if not yet enriched).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rera: Option<ReraInfo>,
+    /// Area intelligence from Reddit and other sources (None if not yet enriched).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub area_intelligence: Option<AreaIntelligence>,
 }
 
 #[derive(Serialize)]
@@ -127,6 +136,12 @@ pub async fn get_property(
         similar
     };
 
+    // Extract RERA info from the society's KG node
+    let rera = extract_rera_info(&graph, &property.society_id);
+
+    // Extract area intelligence from the area's KG node
+    let area_intelligence = extract_area_intelligence(&graph, &property.area_id);
+
     Ok(Json(PropertyDetail {
         property,
         society,
@@ -135,5 +150,7 @@ pub async fn get_property(
         tradeoffs,
         market_activity,
         similar_properties,
+        rera,
+        area_intelligence,
     }))
 }

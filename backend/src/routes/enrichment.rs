@@ -1,8 +1,231 @@
 //! Shared enrichment functions used by all routes that return property/society/area data.
 //! Single source of truth: every route that returns these types calls these functions.
 
-use crate::knowledge::{FactValue, KnowledgeGraph};
+use serde::Serialize;
+
+use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact};
 use crate::models::{AreaProfile, Property, PropertyCard, Society};
+
+// ---------------------------------------------------------------------------
+// RERA and Area Intelligence response structs
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ReraInfo {
+    pub registered: bool,
+    pub registration_number: Option<String>,
+    pub status: Option<String>,
+    pub completion_date: Option<String>,
+    pub original_completion_date: Option<String>,
+    pub delay_months: Option<i32>,
+    pub total_units: Option<i32>,
+    pub total_project_cost_inr: Option<f64>,
+    pub land_cost_inr: Option<f64>,
+    pub construction_cost_inr: Option<f64>,
+    pub cost_per_unit_inr: Option<f64>,
+    pub complaints_count: Option<i32>,
+    pub complaints_resolved_pct: Option<f64>,
+    pub builder_total_projects: Option<i32>,
+    pub builder_revocations: Option<i32>,
+    pub builder_states: Vec<String>,
+    pub land_litigation: Option<bool>,
+    pub escrow_bank: Option<String>,
+    pub has_borrowing: Option<bool>,
+    pub has_mortgage: Option<bool>,
+    pub lat_lng: Option<String>,
+    pub rera_portal_url: Option<String>,
+    pub last_verified: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct AreaIntelligence {
+    pub safety: Option<String>,
+    pub commute_reality: Option<String>,
+    pub water_supply: Option<String>,
+    pub noise_level: Option<String>,
+    pub green_cover: Option<String>,
+    pub community_vibe: Option<String>,
+    pub walkability: Option<String>,
+    pub school_quality: Option<String>,
+    pub grocery_shopping: Option<String>,
+    pub healthcare_access: Option<String>,
+    pub recurring_complaints: Vec<String>,
+    pub hidden_gems: Vec<String>,
+    pub deal_breakers: Vec<String>,
+    pub overall_sentiment: Option<String>,
+    pub source_count: Option<i32>,
+    pub last_updated: Option<String>,
+}
+
+// ---------------------------------------------------------------------------
+// Fact extraction helpers — work on a node's facts slice
+// ---------------------------------------------------------------------------
+
+fn get_text_fact(facts: &[SourcedFact], key: &str) -> Option<String> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
+        FactValue::Text(s) => Some(s.clone()),
+        _ => None,
+    })
+}
+
+fn get_numeric_fact(facts: &[SourcedFact], key: &str) -> Option<f64> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
+        FactValue::Numeric(n) => Some(*n),
+        _ => None,
+    })
+}
+
+fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
+        FactValue::Bool(b) => Some(*b),
+        _ => None,
+    })
+}
+
+fn get_tags_fact(facts: &[SourcedFact], key: &str) -> Vec<String> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
+        FactValue::Tags(tags) => Some(tags.clone()),
+        _ => None,
+    }).unwrap_or_default()
+}
+
+/// Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
+fn get_fact_timestamp(facts: &[SourcedFact], key: &str) -> Option<String> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).map(|f| f.learned_at.to_rfc3339())
+}
+
+// ---------------------------------------------------------------------------
+// RERA extraction — reads rera_* facts from a society KG node
+// ---------------------------------------------------------------------------
+
+/// Extract RERA information from the knowledge graph for a given society.
+/// Returns None if no "rera_registered" fact exists (meaning no RERA data has been ingested).
+pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<ReraInfo> {
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id)?;
+    let facts = &node.facts;
+
+    // Only return ReraInfo if we have RERA data
+    let has_rera = facts.iter().any(|f| f.key == "rera_registered");
+    if !has_rera {
+        return None;
+    }
+
+    let registered = get_bool_fact(facts, "rera_registered").unwrap_or(false);
+
+    let total_units = get_numeric_fact(facts, "rera_total_units").map(|n| n as i32);
+
+    // Get last_verified from the rera_registered fact's learned_at timestamp
+    let last_verified = get_fact_timestamp(facts, "rera_registered");
+
+    // Map fact keys: try both Python skill naming conventions
+    // Skills use: rera_number, rera_total_project_cost, rera_land_cost, rera_construction_cost
+    // Also try: rera_registration_number, rera_total_project_cost_inr (alt naming)
+    let registration_number = get_text_fact(facts, "rera_number")
+        .or_else(|| get_text_fact(facts, "rera_registration_number"));
+    let total_cost_val = get_numeric_fact(facts, "rera_total_project_cost")
+        .or_else(|| get_numeric_fact(facts, "rera_total_project_cost_inr"));
+    let land_cost = get_numeric_fact(facts, "rera_land_cost")
+        .or_else(|| get_numeric_fact(facts, "rera_land_cost_inr"));
+    let construction_cost = get_numeric_fact(facts, "rera_construction_cost")
+        .or_else(|| get_numeric_fact(facts, "rera_construction_cost_inr"));
+    let builder_projects = get_numeric_fact(facts, "rera_builder_projects_count")
+        .or_else(|| get_numeric_fact(facts, "rera_builder_total_projects"))
+        .map(|n| n as i32);
+
+    // Recompute cost_per_unit with the correct total_cost
+    let cost_per_unit = match (total_cost_val, total_units) {
+        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
+        _ => get_numeric_fact(facts, "rera_cost_per_unit"),
+    };
+
+    // builder_states might be stored as Text (comma-separated) instead of Tags
+    let builder_states = {
+        let tags = get_tags_fact(facts, "rera_builder_states");
+        if tags.is_empty() {
+            // Try text version (comma-separated)
+            get_text_fact(facts, "rera_builder_states")
+                .map(|s| s.split(',').map(|t| t.trim().to_string()).collect())
+                .unwrap_or_default()
+        } else {
+            tags
+        }
+    };
+
+    Some(ReraInfo {
+        registered,
+        registration_number,
+        status: get_text_fact(facts, "rera_status"),
+        completion_date: get_text_fact(facts, "rera_completion_date"),
+        original_completion_date: get_text_fact(facts, "rera_original_completion_date"),
+        delay_months: get_numeric_fact(facts, "rera_delay_months").map(|n| n as i32),
+        total_units,
+        total_project_cost_inr: total_cost_val,
+        land_cost_inr: land_cost,
+        construction_cost_inr: construction_cost,
+        cost_per_unit_inr: cost_per_unit,
+        complaints_count: get_numeric_fact(facts, "rera_complaints_count").map(|n| n as i32),
+        complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
+        builder_total_projects: builder_projects,
+        builder_revocations: get_numeric_fact(facts, "rera_builder_revocations").map(|n| n as i32),
+        builder_states,
+        land_litigation: get_bool_fact(facts, "rera_land_litigation"),
+        escrow_bank: get_text_fact(facts, "rera_escrow_bank"),
+        has_borrowing: get_bool_fact(facts, "rera_has_borrowing"),
+        has_mortgage: get_bool_fact(facts, "rera_has_mortgage"),
+        lat_lng: get_text_fact(facts, "rera_lat_lng"),
+        rera_portal_url: get_text_fact(facts, "rera_portal_url"),
+        last_verified,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Area Intelligence extraction — reads area intelligence facts from KG
+// ---------------------------------------------------------------------------
+
+/// Extract area intelligence from the knowledge graph for a given area.
+/// Returns None if no Reddit-sourced area intelligence facts exist.
+pub fn extract_area_intelligence(graph: &KnowledgeGraph, area_id: &str) -> Option<AreaIntelligence> {
+    let node_id = area_node_id(area_id);
+    let node = graph.get_node(&node_id)?;
+    let facts = &node.facts;
+
+    // Check if we have any area intelligence facts (Reddit-sourced or LLM-sourced)
+    let intelligence_keys = [
+        "safety", "commute_reality", "water_supply", "noise_level",
+        "green_cover", "community_vibe", "walkability", "school_quality",
+        "grocery_shopping", "healthcare_access", "recurring_complaints",
+        "hidden_gems", "deal_breakers", "overall_sentiment",
+    ];
+    let has_intelligence = facts.iter().any(|f| intelligence_keys.contains(&f.key.as_str()));
+    if !has_intelligence {
+        return None;
+    }
+
+    // Count source threads (look for source_count fact or count Reddit-sourced facts)
+    let source_count = get_numeric_fact(facts, "source_count").map(|n| n as i32);
+    let last_updated = get_fact_timestamp(facts, "safety")
+        .or_else(|| get_fact_timestamp(facts, "overall_sentiment"));
+
+    Some(AreaIntelligence {
+        safety: get_text_fact(facts, "safety"),
+        commute_reality: get_text_fact(facts, "commute_reality"),
+        water_supply: get_text_fact(facts, "water_supply"),
+        noise_level: get_text_fact(facts, "noise_level"),
+        green_cover: get_text_fact(facts, "green_cover"),
+        community_vibe: get_text_fact(facts, "community_vibe"),
+        walkability: get_text_fact(facts, "walkability"),
+        school_quality: get_text_fact(facts, "school_quality"),
+        grocery_shopping: get_text_fact(facts, "grocery_shopping"),
+        healthcare_access: get_text_fact(facts, "healthcare_access"),
+        recurring_complaints: get_tags_fact(facts, "recurring_complaints"),
+        hidden_gems: get_tags_fact(facts, "hidden_gems"),
+        deal_breakers: get_tags_fact(facts, "deal_breakers"),
+        overall_sentiment: get_text_fact(facts, "overall_sentiment"),
+        source_count,
+        last_updated,
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Slug normalization — single canonical implementation

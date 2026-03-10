@@ -337,6 +337,11 @@ class ScoreSocietySkill(BaseSkill):
     skill_id = "score_society"
     description = "Score a society on 6 dimensions using all available knowledge"
     version = "1.0"
+    output_keys = [
+        "score_maintenance_quality", "score_family_friendly", "score_builder_trust",
+        "score_value_for_money", "score_calm_environment", "score_community_vibe",
+        "overall_score", "best_for_label", "one_line_verdict",
+    ]
 
     def execute(self, input_data: dict) -> SkillResult:
         society_id = input_data.get("society_id", "")

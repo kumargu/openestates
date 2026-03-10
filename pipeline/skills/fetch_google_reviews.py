@@ -135,6 +135,10 @@ class FetchGoogleReviewsSkill(BaseSkill):
     skill_id = "fetch_google_reviews"
     description = "Fetch Google review intelligence for a society using Gemini with grounded search"
     version = "1.2"  # v1.2: verify photo URLs before storing
+    output_keys = [
+        "google_rating", "google_review_count", "google_sentiment",
+        "google_top_positives", "google_top_negatives", "google_common_themes", "photo_url",
+    ]
 
     def execute(self, input_data: dict) -> SkillResult:
         society_name = input_data.get("society_name", "")

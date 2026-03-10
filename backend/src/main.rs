@@ -101,6 +101,11 @@ async fn main() {
             "/api/knowledge/coverage",
             get(routes::knowledge::fact_coverage),
         )
+        // Admin endpoints
+        .route(
+            "/api/admin/reload-knowledge",
+            post(routes::admin::reload_knowledge),
+        )
         // Embedding / similarity endpoints
         .route(
             "/api/knowledge/nodes/{id}/similar",
@@ -131,6 +136,7 @@ async fn main() {
     println!("  GET /api/knowledge/coverage?type=society");
     println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
     println!("  GET /api/knowledge/embeddings/stats");
+    println!("  POST /api/admin/reload-knowledge");
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
         .await

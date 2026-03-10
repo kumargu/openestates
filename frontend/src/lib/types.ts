@@ -98,6 +98,8 @@ export type PropertyDetailResponse = {
   tradeoffs: TradeoffsResponse;
   market_activity: MarketActivityResponse;
   similar_properties: PropertyCard[];
+  rera?: ReraInfo;
+  area_intelligence?: AreaIntelligence;
 };
 
 export type ThemeLabel = "strong" | "good" | "mixed" | "weak";
@@ -244,6 +246,51 @@ export type SearchResponse = {
   knowledge_context: KnowledgeContext | null;
   discovery_status?: string;
   discovery_count?: number;
+};
+
+export type ReraInfo = {
+  registered: boolean;
+  registration_number?: string;
+  status?: string;
+  completion_date?: string;
+  original_completion_date?: string;
+  delay_months?: number;
+  total_units?: number;
+  total_project_cost_inr?: number;
+  land_cost_inr?: number;
+  construction_cost_inr?: number;
+  cost_per_unit_inr?: number;
+  complaints_count?: number;
+  complaints_resolved_pct?: number;
+  builder_total_projects?: number;
+  builder_revocations?: number;
+  builder_states?: string[];
+  land_litigation?: boolean;
+  escrow_bank?: string;
+  has_borrowing?: boolean;
+  has_mortgage?: boolean;
+  lat_lng?: string;
+  rera_portal_url?: string;
+  last_verified?: string;
+};
+
+export type AreaIntelligence = {
+  safety?: string;
+  commute_reality?: string;
+  water_supply?: string;
+  noise_level?: string;
+  green_cover?: string;
+  community_vibe?: string;
+  walkability?: string;
+  school_quality?: string;
+  grocery_shopping?: string;
+  healthcare_access?: string;
+  recurring_complaints?: string[];
+  hidden_gems?: string[];
+  deal_breakers?: string[];
+  overall_sentiment?: string;
+  source_count?: number;
+  last_updated?: string;
 };
 
 export type ApiError = {

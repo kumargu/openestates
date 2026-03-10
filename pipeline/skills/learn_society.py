@@ -109,6 +109,11 @@ class LearnSocietySkill(BaseSkill):
     skill_id = "learn_society"
     description = "Enrich a society node by synthesizing Reddit discussions via Claude"
     version = "1.0"
+    output_keys = [
+        "maintenance_quality", "family_suitability", "noise_level", "security_quality",
+        "resident_sentiment", "sentiment_summary", "best_quote",
+        "common_positives", "common_complaints", "signals", "cautions",
+    ]
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)

@@ -120,6 +120,7 @@ class BaseSkill(ABC):
     skill_id: str = ""
     description: str = ""
     version: str = "1.0"
+    output_keys: list = []  # Fact keys this skill produces (for cheap gap detection)
 
     def __init__(self, cache_dir: Optional[Path] = None):
         self.cache_dir = cache_dir or Path("data/cache/skills")

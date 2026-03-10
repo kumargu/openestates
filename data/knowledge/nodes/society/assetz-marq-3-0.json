@@ -88,8 +88,132 @@
         "ready to move",
         "new construction"
       ]
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:28:11.331434Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 3.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "url": "https://reddit.com/r/bangalore/comments/wbfj7z/assetz_builder_and_marq_project_gathering_feedback/",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:47.021462Z",
+      "version": 1,
+      "display_template": "{value} Reddit discussions found",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback",
+        "reddit"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          5.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "key": "reddit_total_score",
+      "value": {
+        "type": "Numeric",
+        "data": 12.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:47.021511Z",
+      "version": 1,
+      "display_template": "Reddit community score: {value}"
+    },
+    {
+      "key": "reddit_total_comments",
+      "value": {
+        "type": "Numeric",
+        "data": 28.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:47.021527Z",
+      "version": 1,
+      "display_template": "{value} comments across Reddit threads"
+    },
+    {
+      "key": "reddit_threads",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Assetz Builder and Marq Project - Gathering feedback",
+          "Review of Assetz Marq, Whitefield?",
+          "Anyone living in Assetz Marq here?"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:47.021550Z",
+      "version": 1,
+      "display_template": "Discussed on Reddit: {value}"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:28:11.329985Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "created_at": "2026-03-09T20:23:48.188853Z",
-  "updated_at": "2026-03-09T20:23:48.188868Z"
+  "updated_at": "2026-03-10T11:30:47.031021Z"
 }

@@ -1,0 +1,637 @@
+"""
+Unified Enrichment Engine — one command to enrich everything.
+
+Replaces orchestrate.py with a registry-driven engine that:
+- Scans all KG nodes for missing/stale facts
+- Plans work in dependency + priority order
+- Executes with budget caps and failure backoff
+- Prints structured output
+
+Usage:
+    python3 -m pipeline.enrich                              # fill all gaps
+    python3 -m pipeline.enrich --plan                       # show what would run
+    python3 -m pipeline.enrich --node society:sobha-insignia # one entity
+    python3 -m pipeline.enrich --cost-tier free              # only free skills
+    python3 -m pipeline.enrich --budget 1.00                 # cost cap
+    python3 -m pipeline.enrich --type society                # one entity type
+    python3 -m pipeline.enrich --force                       # ignore freshness
+    python3 -m pipeline.enrich --reload                      # notify backend after
+"""
+
+import argparse
+import json
+import logging
+import os
+import time
+import urllib.request
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Dict, List, Optional
+
+from pipeline.entity_resolver import EntityResolver, FreshnessTracker
+
+logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Skill Registry
+# ---------------------------------------------------------------------------
+
+SKILL_REGISTRY: Dict[str, dict] = {
+    "search_reddit": {
+        "node_types": ["society"],
+        "pool": "reddit",
+        "max_age_days": 14,
+        "cost_tier": "free",
+        "priority": 1,
+        "depends_on": [],
+    },
+    "fetch_rera": {
+        "node_types": ["society"],
+        "pool": "rera",
+        "max_age_days": 30,
+        "cost_tier": "free",
+        "priority": 1,
+        "depends_on": [],
+    },
+    "fetch_google_reviews": {
+        "node_types": ["society"],
+        "pool": "google",
+        "max_age_days": 30,
+        "cost_tier": "cheap",
+        "priority": 2,
+        "depends_on": [],
+    },
+    "learn_society": {
+        "node_types": ["society"],
+        "pool": "llm",
+        "max_age_days": 30,
+        "cost_tier": "cheap",
+        "priority": 2,
+        "depends_on": ["search_reddit"],
+    },
+    "learn_area": {
+        "node_types": ["area"],
+        "pool": "llm",
+        "max_age_days": 30,
+        "cost_tier": "cheap",
+        "priority": 2,
+        "depends_on": [],
+    },
+    "score_society": {
+        "node_types": ["society"],
+        "pool": "llm",
+        "max_age_days": 7,
+        "cost_tier": "moderate",
+        "priority": 3,
+        "depends_on": ["learn_society", "fetch_rera"],
+    },
+    "embed_entity": {
+        "node_types": ["society", "area", "property"],
+        "pool": "embedding",
+        "max_age_days": 30,
+        "cost_tier": "cheap",
+        "priority": 3,
+        "depends_on": [],
+    },
+}
+
+# Map skill_id -> freshness tracker source name
+# (orchestrate.py used different names for some sources)
+FRESHNESS_SOURCE_MAP = {
+    "search_reddit": "reddit",
+    "fetch_rera": "rera",
+    "fetch_google_reviews": "google_reviews",
+    "learn_society": "learn_society",
+    "learn_area": "reddit_area",
+    "score_society": "score_society",
+    "embed_entity": "embed_entity",
+}
+
+COST_TIER_ORDER = {"free": 0, "cheap": 1, "moderate": 2, "expensive": 3}
+
+FAILURES_PATH = Path("data/cache/enrich_failures.json")
+
+
+# ---------------------------------------------------------------------------
+# Data structures
+# ---------------------------------------------------------------------------
+
+@dataclass
+class WorkItem:
+    node_id: str
+    skill_id: str
+    reason: str  # "missing" or "stale (N days)"
+    priority: int = 0
+    cost_tier: str = "free"
+
+
+@dataclass
+class ExecutionStats:
+    executed: int = 0
+    succeeded: int = 0
+    cached: int = 0
+    failed: int = 0
+    skipped_backoff: int = 0
+    skipped_budget: int = 0
+    facts_written: int = 0
+    total_cost: float = 0.0
+    start_time: float = 0.0
+    errors: List[str] = field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Failure tracking
+# ---------------------------------------------------------------------------
+
+def load_failures() -> dict:
+    if FAILURES_PATH.exists():
+        try:
+            return json.loads(FAILURES_PATH.read_text())
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+def save_failures(failures: dict):
+    FAILURES_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = FAILURES_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(failures, indent=2, default=str))
+    tmp.rename(FAILURES_PATH)
+
+
+def is_backed_off(failures: dict, pool: str) -> bool:
+    entry = failures.get(pool, {})
+    if entry.get("consecutive_failures", 0) < 3:
+        return False
+    backoff_until = entry.get("backoff_until")
+    if not backoff_until:
+        return False
+    try:
+        return datetime.now(timezone.utc) < datetime.fromisoformat(backoff_until)
+    except (ValueError, TypeError):
+        return False
+
+
+def record_failure(failures: dict, pool: str):
+    entry = failures.setdefault(pool, {"consecutive_failures": 0})
+    entry["consecutive_failures"] = entry.get("consecutive_failures", 0) + 1
+    entry["last_failure"] = datetime.now(timezone.utc).isoformat()
+    # Exponential backoff: 1h, 4h, 16h, capped at 24h
+    hours = min(24, 4 ** (entry["consecutive_failures"] - 1))
+    from datetime import timedelta
+    entry["backoff_until"] = (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+
+
+def record_success(failures: dict, pool: str):
+    if pool in failures:
+        failures[pool] = {"consecutive_failures": 0}
+
+
+# ---------------------------------------------------------------------------
+# Gap detection
+# ---------------------------------------------------------------------------
+
+def detect_gaps(
+    resolver: EntityResolver,
+    tracker: FreshnessTracker,
+    node_filter: Optional[str] = None,
+    type_filter: Optional[str] = None,
+    cost_tier_max: Optional[str] = None,
+    force: bool = False,
+) -> List[WorkItem]:
+    """Scan all nodes for missing/stale facts. Zero LLM calls."""
+
+    work: List[WorkItem] = []
+    max_tier = COST_TIER_ORDER.get(cost_tier_max, 99) if cost_tier_max else 99
+
+    # Collect all entities
+    entities_by_type: Dict[str, List[str]] = {}
+    for etype in ["society", "area", "property"]:
+        if type_filter and etype != type_filter:
+            continue
+        entities = resolver.get_all_entities(etype)
+        if entities:
+            entities_by_type[etype] = entities
+
+    for skill_id, config in SKILL_REGISTRY.items():
+        if COST_TIER_ORDER.get(config["cost_tier"], 99) > max_tier:
+            continue
+
+        freshness_source = FRESHNESS_SOURCE_MAP.get(skill_id, skill_id)
+
+        for node_type in config["node_types"]:
+            entities = entities_by_type.get(node_type, [])
+            for entity_id in entities:
+                if node_filter and entity_id != node_filter:
+                    continue
+
+                if force:
+                    reason = "forced"
+                elif tracker.is_stale(entity_id, freshness_source, ttl_days=config["max_age_days"]):
+                    # Distinguish missing vs stale
+                    entry = tracker.data.get(entity_id, {}).get(freshness_source)
+                    if not entry or not entry.get("last_fetched"):
+                        reason = "missing"
+                    else:
+                        try:
+                            fetched = datetime.fromisoformat(entry["last_fetched"])
+                            age = (datetime.now(timezone.utc) - fetched).days
+                            reason = f"stale ({age} days)"
+                        except (ValueError, TypeError):
+                            reason = "missing"
+                else:
+                    continue
+
+                work.append(WorkItem(
+                    node_id=entity_id,
+                    skill_id=skill_id,
+                    reason=reason,
+                    priority=config["priority"],
+                    cost_tier=config["cost_tier"],
+                ))
+
+    # Sort by priority, then by node_id for deterministic order
+    work.sort(key=lambda w: (w.priority, COST_TIER_ORDER.get(w.cost_tier, 99), w.node_id))
+    return work
+
+
+# ---------------------------------------------------------------------------
+# Skill instantiation & execution
+# ---------------------------------------------------------------------------
+
+def _make_skill(skill_id: str):
+    """Lazy-import and instantiate a skill by ID."""
+    if skill_id == "search_reddit":
+        from pipeline.skills.search_reddit import SearchRedditSkill
+        return SearchRedditSkill()
+    elif skill_id == "fetch_rera":
+        from pipeline.skills.fetch_rera import FetchReraSkill
+        return FetchReraSkill()
+    elif skill_id == "fetch_google_reviews":
+        from pipeline.skills.fetch_google_reviews import FetchGoogleReviewsSkill
+        return FetchGoogleReviewsSkill()
+    elif skill_id == "learn_society":
+        from pipeline.skills.learn_society import LearnSocietySkill
+        return LearnSocietySkill()
+    elif skill_id == "learn_area":
+        from pipeline.skills.learn_area import LearnAreaSkill
+        return LearnAreaSkill()
+    elif skill_id == "score_society":
+        from pipeline.skills.score_society import ScoreSocietySkill
+        return ScoreSocietySkill()
+    elif skill_id == "embed_entity":
+        from pipeline.skills.embed_entity import EmbedEntitySkill
+        return EmbedEntitySkill()
+    else:
+        raise ValueError(f"Unknown skill: {skill_id}")
+
+
+def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dict:
+    """Build the input dict a skill expects from an entity ID."""
+    name = resolver.get_name(entity_id) or entity_id.split(":", 1)[-1]
+
+    if skill_id == "search_reddit":
+        return {"query": name, "subreddit": "bangalore"}
+    elif skill_id == "fetch_rera":
+        return {"project_name": name, "entity_id": entity_id}
+    elif skill_id == "fetch_google_reviews":
+        return {"society_name": name, "area": "", "city": "Bengaluru"}
+    elif skill_id == "learn_society":
+        return {"society_name": name, "entity_id": entity_id}
+    elif skill_id == "learn_area":
+        return {"area_name": name, "entity_id": entity_id}
+    elif skill_id == "score_society":
+        return {"entity_id": entity_id}
+    elif skill_id == "embed_entity":
+        return {"entity_id": entity_id, "entity_type": entity_id.split(":")[0], "name": name}
+    else:
+        return {"entity_id": entity_id}
+
+
+def _push_facts(entity_id: str, result):
+    """Push skill result facts to the Rust backend (best-effort)."""
+    try:
+        from pipeline.skills.graph_client import GraphClient
+        client = GraphClient()
+        client.push_skill_result(entity_id, result)
+    except Exception as e:
+        logger.debug("Backend push skipped: %s", e)
+
+
+# ---------------------------------------------------------------------------
+# Execution engine
+# ---------------------------------------------------------------------------
+
+def execute(
+    work: List[WorkItem],
+    resolver: EntityResolver,
+    tracker: FreshnessTracker,
+    budget: Optional[float] = None,
+    force: bool = False,
+) -> ExecutionStats:
+    """Run skills in dependency + priority order."""
+
+    stats = ExecutionStats(start_time=time.time())
+    failures = load_failures()
+    completed: set = set()  # (node_id, skill_id) pairs that succeeded
+    attempted: set = set()  # (node_id, skill_id) pairs that were attempted (success or fail)
+    work_set: set = {(w.node_id, w.skill_id) for w in work}
+
+    for item in work:
+        # Check pool backoff
+        pool = SKILL_REGISTRY[item.skill_id]["pool"]
+        if is_backed_off(failures, pool):
+            logger.info("  [skip] %s %s — pool '%s' backed off", item.node_id, item.skill_id, pool)
+            stats.skipped_backoff += 1
+            continue
+
+        # Check dependencies: if a dependency is in the work queue but hasn't completed, skip
+        deps = SKILL_REGISTRY[item.skill_id]["depends_on"]
+        deps_satisfied = True
+        for dep in deps:
+            if (item.node_id, dep) in work_set and (item.node_id, dep) not in completed:
+                logger.info("  [defer] %s %s — waiting for %s", item.node_id, item.skill_id, dep)
+                deps_satisfied = False
+                break
+        if not deps_satisfied:
+            continue
+
+        # Check budget
+        if budget is not None and stats.total_cost >= budget:
+            logger.info("  Budget cap reached ($%.2f). Stopping.", budget)
+            stats.skipped_budget += len(work) - stats.executed - stats.skipped_backoff
+            break
+
+        # Run the skill
+        logger.info("  [run] %s %s (%s)", item.node_id, item.skill_id, item.reason)
+        try:
+            skill = _make_skill(item.skill_id)
+            input_data = _build_input(item.skill_id, item.node_id, resolver)
+            result = skill.run(input_data, force=force)
+
+            stats.executed += 1
+
+            if result.cached:
+                stats.cached += 1
+            else:
+                stats.succeeded += 1
+
+            stats.facts_written += len(result.facts)
+            stats.total_cost += result.cost.estimated_usd
+
+            if result.facts:
+                _push_facts(item.node_id, result)
+
+            # Mark fresh in tracker
+            freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
+            tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
+
+            completed.add((item.node_id, item.skill_id))
+            attempted.add((item.node_id, item.skill_id))
+            record_success(failures, pool)
+
+        except Exception as e:
+            stats.executed += 1
+            stats.failed += 1
+            stats.errors.append(f"{item.node_id}/{item.skill_id}: {e}")
+            logger.warning("  [fail] %s %s: %s", item.node_id, item.skill_id, e)
+            attempted.add((item.node_id, item.skill_id))
+            record_failure(failures, pool)
+
+    # Second pass: handle deferred items whose dependencies are now met
+    deferred = [
+        item for item in work
+        if (item.node_id, item.skill_id) not in attempted
+        and not is_backed_off(failures, SKILL_REGISTRY[item.skill_id]["pool"])
+        and all(
+            (item.node_id, dep) in completed or (item.node_id, dep) not in work_set
+            for dep in SKILL_REGISTRY[item.skill_id]["depends_on"]
+        )
+    ]
+
+    for item in deferred:
+        if budget is not None and stats.total_cost >= budget:
+            stats.skipped_budget += 1
+            continue
+
+        pool = SKILL_REGISTRY[item.skill_id]["pool"]
+        if is_backed_off(failures, pool):
+            stats.skipped_backoff += 1
+            continue
+
+        logger.info("  [run-deferred] %s %s (%s)", item.node_id, item.skill_id, item.reason)
+        try:
+            skill = _make_skill(item.skill_id)
+            input_data = _build_input(item.skill_id, item.node_id, resolver)
+            result = skill.run(input_data, force=force)
+
+            stats.executed += 1
+            if result.cached:
+                stats.cached += 1
+            else:
+                stats.succeeded += 1
+
+            stats.facts_written += len(result.facts)
+            stats.total_cost += result.cost.estimated_usd
+
+            if result.facts:
+                _push_facts(item.node_id, result)
+
+            freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
+            tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
+            completed.add((item.node_id, item.skill_id))
+            record_success(failures, pool)
+
+        except Exception as e:
+            stats.executed += 1
+            stats.failed += 1
+            stats.errors.append(f"{item.node_id}/{item.skill_id}: {e}")
+            logger.warning("  [fail] %s %s: %s", item.node_id, item.skill_id, e)
+            record_failure(failures, pool)
+
+    tracker.save()
+    save_failures(failures)
+
+    return stats
+
+
+# ---------------------------------------------------------------------------
+# Output formatting
+# ---------------------------------------------------------------------------
+
+def print_plan(work: List[WorkItem]):
+    """Print structured plan output."""
+    if not work:
+        print("\nENRICHMENT PLAN")
+        print("===============")
+        print("Nothing to do — all entities are fresh.")
+        return
+
+    # Group by priority + cost tier
+    by_priority: Dict[int, List[WorkItem]] = {}
+    for item in work:
+        by_priority.setdefault(item.priority, []).append(item)
+
+    # Count node types
+    node_types = {}
+    for item in work:
+        ntype = item.node_id.split(":")[0]
+        node_types[ntype] = node_types.get(ntype, 0) + 1
+
+    print("\nENRICHMENT PLAN")
+    print("===============")
+
+    type_parts = ", ".join(f"{c} {t}" for t, c in sorted(node_types.items()))
+    unique_nodes = len(set(w.node_id for w in work))
+    print(f"Nodes affected: {unique_nodes} ({type_parts})")
+    print(f"Work items: {len(work)}")
+
+    for priority in sorted(by_priority):
+        items = by_priority[priority]
+        tier = items[0].cost_tier if items else "?"
+        print(f"\n  Priority {priority} ({tier}):")
+        for item in items[:15]:
+            dep_info = ""
+            deps = SKILL_REGISTRY[item.skill_id]["depends_on"]
+            if deps:
+                dep_info = f"  (depends: {', '.join(deps)})"
+            print(f"    {item.node_id:<40s} {item.skill_id:<25s} {item.reason}{dep_info}")
+        if len(items) > 15:
+            print(f"    ... ({len(items) - 15} more)")
+
+    # Rough cost estimate based on tier
+    tier_costs = {"free": 0.0, "cheap": 0.002, "moderate": 0.01, "expensive": 0.05}
+    est_cost = sum(tier_costs.get(w.cost_tier, 0.01) for w in work)
+    print(f"\nEstimated cost: ${est_cost:.2f}")
+
+
+def print_summary(stats: ExecutionStats):
+    """Print structured execution summary."""
+    elapsed = time.time() - stats.start_time
+
+    print("\nENRICHMENT COMPLETE")
+    print("===================")
+    print(f"  Executed: {stats.executed} skills")
+    print(f"  Succeeded: {stats.succeeded}")
+    print(f"  Cached (skipped): {stats.cached}")
+    print(f"  Failed: {stats.failed}")
+    if stats.skipped_backoff:
+        print(f"  Skipped (backoff): {stats.skipped_backoff}")
+    if stats.skipped_budget:
+        print(f"  Skipped (budget): {stats.skipped_budget}")
+    print(f"  Facts written: {stats.facts_written}")
+    print(f"  Cost: ${stats.total_cost:.2f}")
+
+    if elapsed >= 60:
+        print(f"  Time: {int(elapsed // 60)}m {int(elapsed % 60)}s")
+    else:
+        print(f"  Time: {elapsed:.1f}s")
+
+    if stats.errors:
+        print(f"\n  Errors ({len(stats.errors)}):")
+        for err in stats.errors[:10]:
+            print(f"    - {err}")
+
+
+# ---------------------------------------------------------------------------
+# Backend notification
+# ---------------------------------------------------------------------------
+
+def notify_backend():
+    """Tell Rust backend to reload knowledge graph."""
+    try:
+        token = os.environ.get("ADMIN_TOKEN", "dev")
+        req = urllib.request.Request(
+            "http://localhost:4000/api/admin/reload-knowledge",
+            method="POST",
+            headers={"X-Admin-Token": token, "Content-Type": "application/json"},
+            data=b"{}",
+        )
+        resp = urllib.request.urlopen(req, timeout=5)
+        data = json.loads(resp.read().decode())
+        nodes = data.get("nodes_loaded", "?")
+        facts = data.get("facts_loaded", "?")
+        print(f"\n  Backend reloaded: {nodes} nodes, {facts} facts")
+    except Exception as e:
+        logger.info("Backend reload skipped (may not be running): %s", e)
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="OpenEstates Enrichment Engine — one command to enrich everything",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""Examples:
+  python3 -m pipeline.enrich                              # fill all gaps
+  python3 -m pipeline.enrich --plan                       # show what would run
+  python3 -m pipeline.enrich --node society:sobha-insignia # one entity
+  python3 -m pipeline.enrich --cost-tier free              # only free skills
+  python3 -m pipeline.enrich --budget 1.00                 # cost cap
+  python3 -m pipeline.enrich --type society                # one entity type
+  python3 -m pipeline.enrich --force                       # ignore freshness
+  python3 -m pipeline.enrich --reload                      # notify backend after
+""",
+    )
+    parser.add_argument("--plan", action="store_true", help="Show what would run, no execution")
+    parser.add_argument("--node", help="Enrich a specific node (e.g., society:sobha-insignia)")
+    parser.add_argument("--type", dest="entity_type", choices=["society", "area", "property"],
+                        help="Only enrich nodes of this type")
+    parser.add_argument("--cost-tier", choices=["free", "cheap", "moderate"],
+                        help="Only run skills at or below this cost tier")
+    parser.add_argument("--budget", type=float, help="Stop after spending this much ($)")
+    parser.add_argument("--force", action="store_true", help="Ignore freshness, re-run everything")
+    parser.add_argument("--reload", action="store_true", help="Notify backend to reload after enrichment")
+
+    args = parser.parse_args()
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(message)s",
+    )
+
+    resolver = EntityResolver()
+    tracker = FreshnessTracker()
+
+    # Detect gaps
+    work = detect_gaps(
+        resolver=resolver,
+        tracker=tracker,
+        node_filter=args.node,
+        type_filter=args.entity_type,
+        cost_tier_max=args.cost_tier,
+        force=args.force,
+    )
+
+    if args.plan:
+        print_plan(work)
+        return
+
+    if not work:
+        print("\nNothing to do — all entities are fresh.")
+        if args.reload:
+            notify_backend()
+        return
+
+    print_plan(work)
+    print("\nExecuting...\n")
+
+    stats = execute(
+        work=work,
+        resolver=resolver,
+        tracker=tracker,
+        budget=args.budget,
+        force=args.force,
+    )
+
+    print_summary(stats)
+
+    if args.reload and (stats.succeeded > 0 or stats.facts_written > 0):
+        notify_backend()
+
+
+if __name__ == "__main__":
+    main()

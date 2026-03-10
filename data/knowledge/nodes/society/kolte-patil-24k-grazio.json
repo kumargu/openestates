@@ -94,88 +94,6 @@
       "version": 1
     },
     {
-      "key": "rera_verified",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "verify_rera",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:26:33.880722Z",
-      "version": 1,
-      "display_template": "RERA Verified: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "Not Found"
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "verify_rera",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:26:33.880753Z",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 2.0
-      }
-    },
-    {
-      "key": "rera_verification_score",
-      "value": {
-        "type": "Numeric",
-        "data": 0.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "verify_rera",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:26:33.880761Z",
-      "version": 1,
-      "display_template": "Verification Score: {value}/100",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 3.0,
-        "thresholds": [
-          80.0,
-          50.0
-        ]
-      }
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -190,6 +108,66 @@
       "learned_at": "2026-03-09T17:28:29.850838Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:29:22.984335Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:31:14.449993Z",
+      "version": 1
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:29:22.982467Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "summary_embedding": [
@@ -3267,5 +3245,5 @@
     -0.0032451889
   ],
   "created_at": "2026-03-09T16:44:40.807674Z",
-  "updated_at": "2026-03-09T16:44:40.807674Z"
+  "updated_at": "2026-03-10T11:31:14.461715Z"
 }

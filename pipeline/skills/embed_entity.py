@@ -122,6 +122,7 @@ class EmbedEntitySkill(BaseSkill):
     skill_id = "embed_entity"
     description = "Generate embeddings for entities using Google text-embedding-004"
     version = "1.0"
+    output_keys = ["embedding_computed"]
 
     def execute(self, input_data: dict) -> SkillResult:
         entity_id = input_data.get("entity_id", "")

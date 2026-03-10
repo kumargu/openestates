@@ -65,9 +65,47 @@ body {
 }
 
 .page-container-wide {
-  max-width: 1100px;
+  max-width: 1300px;
   margin: 0 auto;
   padding: 2rem var(--page-pad);
+}
+
+/* Property detail two-column layout */
+.property-layout {
+  display: flex;
+  gap: 1.5rem;
+  align-items: flex-start;
+}
+
+.property-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.property-sidebar {
+  width: 320px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.property-sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .property-layout {
+    flex-direction: column;
+  }
+  .property-sidebar {
+    width: 100%;
+    position: static;
+    max-height: none;
+    overflow-y: visible;
+  }
 }
 
 /* Page header */

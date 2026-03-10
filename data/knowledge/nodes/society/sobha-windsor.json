@@ -89,8 +89,130 @@
         "ready to move",
         "new construction"
       ]
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:32:24.040837Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "url": "https://reddit.com/r/bangalore/comments/m482rb/prestige_waterford_vs_sobha_windsor_vs_brigade/",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009858Z",
+      "version": 1,
+      "display_template": "{value} Reddit discussions found",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback",
+        "reddit"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          5.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "key": "reddit_total_score",
+      "value": {
+        "type": "Numeric",
+        "data": 11.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009903Z",
+      "version": 1,
+      "display_template": "Reddit community score: {value}"
+    },
+    {
+      "key": "reddit_total_comments",
+      "value": {
+        "type": "Numeric",
+        "data": 19.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009915Z",
+      "version": 1,
+      "display_template": "{value} comments across Reddit threads"
+    },
+    {
+      "key": "reddit_threads",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Prestige Waterford vs Sobha Windsor vs Brigade Utopia"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009934Z",
+      "version": 1,
+      "display_template": "Discussed on Reddit: {value}"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:32:24.039434Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "created_at": "2026-03-09T20:23:48.188301Z",
-  "updated_at": "2026-03-09T20:23:48.188316Z"
+  "updated_at": "2026-03-10T11:32:02.018798Z"
 }

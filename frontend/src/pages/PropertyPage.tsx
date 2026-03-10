@@ -5,6 +5,8 @@ import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
+import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -104,28 +106,18 @@ export function PropertyPage() {
 
       {/* === A. Property Summary === */}
       <div style={{ marginTop: "1.5rem", marginBottom: "2rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "1rem", flexWrap: "wrap" }}>
-          <div style={{ flex: 1, minWidth: "280px" }}>
-            <h1 style={{
-              fontSize: "clamp(1.5rem, 1.2rem + 1vw, 2rem)",
-              fontWeight: 700,
-              letterSpacing: "-0.025em",
-              margin: "0 0 0.35rem",
-            }}>
-              {p.title}
-            </h1>
-            <p style={{ color: "var(--color-text-secondary)", margin: "0 0 1rem", fontSize: "0.95rem" }}>
-              {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
-            </p>
-          </div>
-          <button
-            onClick={handleSave}
-            data-testid="save-button"
-            className={`btn ${saved ? "btn-primary" : "btn-outline"}`}
-            style={{ flexShrink: 0 }}
-          >
-            {saved ? "\u2665 Saved" : "\u2661 Save to shortlist"}
-          </button>
+        <div>
+          <h1 style={{
+            fontSize: "clamp(1.5rem, 1.2rem + 1vw, 2rem)",
+            fontWeight: 700,
+            letterSpacing: "-0.025em",
+            margin: "0 0 0.35rem",
+          }}>
+            {p.title}
+          </h1>
+          <p style={{ color: "var(--color-text-secondary)", margin: "0 0 1rem", fontSize: "0.95rem" }}>
+            {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
+          </p>
         </div>
 
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -145,6 +137,14 @@ export function PropertyPage() {
           <span className="tag tag-neutral">{p.possession_status.replace(/_/g, " ")}</span>
         </div>
       </div>
+
+      {/* === Two-column layout: Main content + Sticky sidebar === */}
+      <div className="property-layout">
+        {/* === Main column === */}
+        <div className="property-main">
+
+      {/* === RERA Verification — high up for trust === */}
+      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
 
       {/* === B. Why This Property For You === */}
       <div className="section-card" data-testid="why-this-property-section">
@@ -172,121 +172,6 @@ export function PropertyPage() {
               <ThemeBadge level={c.level} />
             </div>
           ))}
-        </div>
-      </div>
-
-      {/* === C. Price vs Area Median + D. Market Activity — side by side === */}
-      <div className="detail-grid">
-        {/* Price vs Area Median */}
-        {pvm && area && (() => {
-          const verdictColor = pvm.verdict_class === "positive" ? "var(--color-positive)"
-            : pvm.verdict_class === "warning" ? "var(--color-warning)"
-            : "var(--color-text-secondary)";
-          return (
-          <div className="section-card" data-testid="price-vs-median-section">
-            <div className="section-card-header">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-                <line x1="12" y1="1" x2="12" y2="23" />
-                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-              <h2>Price vs area median</h2>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-              <div>
-                <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.15rem" }}>
-                  This property
-                </div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>
-                  {"\u20B9"}{p.price_per_sqft.toLocaleString("en-IN")}
-                  <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--color-text-muted)" }}> /sqft</span>
-                </div>
-              </div>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "0.15rem" }}>
-                  {area.name} median
-                </div>
-                <div style={{ fontSize: "1.3rem", fontWeight: 700 }}>
-                  {"\u20B9"}{area.median_price_per_sqft.toLocaleString("en-IN")}
-                  <span style={{ fontSize: "0.8rem", fontWeight: 400, color: "var(--color-text-muted)" }}> /sqft</span>
-                </div>
-              </div>
-            </div>
-            {/* Visual bar comparing */}
-            <div style={{
-              position: "relative",
-              height: "8px",
-              backgroundColor: "#eee",
-              borderRadius: "4px",
-              marginBottom: "0.75rem",
-            }}>
-              <div style={{
-                position: "absolute",
-                left: "50%",
-                top: "-2px",
-                width: "2px",
-                height: "12px",
-                backgroundColor: "var(--color-text-muted)",
-              }} />
-              <div style={{
-                height: "100%",
-                width: `${Math.min(Math.max((p.price_per_sqft / area.median_price_per_sqft) * 50, 10), 90)}%`,
-                borderRadius: "4px",
-                backgroundColor: verdictColor,
-                transition: "width 0.8s var(--ease-out)",
-              }} />
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{
-                fontSize: "0.85rem",
-                fontWeight: 600,
-                color: verdictColor,
-              }}>
-                {pvm.verdict}
-              </span>
-              <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)" }}>
-                {pvm.pct_diff > 0 ? "+" : ""}{pvm.pct_diff}% vs median
-              </span>
-            </div>
-          </div>
-          );
-        })()}
-
-        {/* Market Activity */}
-        <div className="section-card" data-testid="market-activity-section">
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-            </svg>
-            <h2>Market activity</h2>
-          </div>
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            <MarketRow
-              icon={<InterestDot level={market_activity.interest_level as "high" | "moderate" | "low"} />}
-              label={market_activity.interest_label}
-            />
-            {market_activity.saves_last_7d != null && (
-              <MarketRow
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
-                label={`Saved by ${market_activity.saves_last_7d} users this week`}
-              />
-            )}
-            {market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0 && (
-              <MarketRow
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>}
-                label={`${market_activity.offers_last_7d} mock offer${market_activity.offers_last_7d > 1 ? "s" : ""} in last 7 days`}
-              />
-            )}
-            <MarketRow
-              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
-              label={`Listed ${market_activity.days_on_market} days ago \u00B7 ${market_activity.days_on_market_label}`}
-            />
-            {market_activity.area_trend_summary && (
-              <MarketRow
-                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
-                label={market_activity.area_trend_summary}
-              />
-            )}
-          </div>
         </div>
       </div>
 
@@ -370,7 +255,6 @@ export function PropertyPage() {
           <Fact label="Possession" value={p.possession_status.replace(/_/g, " ")} />
           <Fact label="Metro distance" value={`${p.metro_distance_mins} min`} />
           <Fact label="Maintenance" value={`\u20B9${p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo`} />
-          <Fact label="Builder" value={p.builder_name} />
         </div>
       </div>
 
@@ -426,7 +310,6 @@ export function PropertyPage() {
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
             <SocietyMeta label="Builder" value={society.builder_name} />
             <SocietyMeta label="Year built" value={String(society.year_built)} />
-            <SocietyMeta label="Total units" value={String(society.total_units)} />
             <SocietyMeta label="Maintenance" value={society.maintenance_sentiment} />
             <SocietyMeta label="Livability" value={society.livability_sentiment} />
           </div>
@@ -548,6 +431,133 @@ export function PropertyPage() {
         </div>
       )}
 
+      {/* === Area Intelligence === */}
+      {data.area_intelligence && p.area && (
+        <AreaIntelligenceTile
+          area={p.area}
+          intelligence={data.area_intelligence}
+        />
+      )}
+
+        </div>{/* end property-main */}
+
+        {/* === Sticky sidebar === */}
+        <div className="property-sidebar">
+          {/* Price + Save */}
+          <div className="section-card" style={{ marginBottom: "1rem" }}>
+            <div style={{ marginBottom: "0.75rem" }}>
+              <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
+                {formatPrice(p.price)}
+              </div>
+              <div style={{ fontSize: "0.82rem", color: "var(--color-text-muted)" }}>
+                {p.price_per_sqft.toLocaleString("en-IN")} /sqft &middot; {p.bhk} BHK &middot; {p.carpet_area_sqft} sqft
+              </div>
+            </div>
+            <button
+              onClick={handleSave}
+              data-testid="sidebar-save-button"
+              className={`btn ${saved ? "btn-primary" : "btn-outline"}`}
+              style={{ width: "100%", justifyContent: "center" }}
+            >
+              {saved ? "\u2665 Saved to shortlist" : "\u2661 Save to shortlist"}
+            </button>
+          </div>
+
+          {/* Price vs Area Median — compact sidebar version */}
+          {pvm && area && (() => {
+            const verdictColor = pvm.verdict_class === "positive" ? "var(--color-positive)"
+              : pvm.verdict_class === "warning" ? "var(--color-warning)"
+              : "var(--color-text-secondary)";
+            return (
+            <div className="section-card" data-testid="price-vs-median-section" style={{ marginBottom: "1rem" }}>
+              <div style={{
+                fontSize: "0.62rem",
+                fontWeight: 600,
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "var(--color-text-muted)",
+                marginBottom: "0.5rem",
+              }}>
+                Price vs {area.name} median
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
+                <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
+                  {"\u20B9"}{p.price_per_sqft.toLocaleString("en-IN")}
+                </span>
+                <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
+                  vs {"\u20B9"}{area.median_price_per_sqft.toLocaleString("en-IN")}
+                </span>
+              </div>
+              <div style={{
+                position: "relative",
+                height: "6px",
+                backgroundColor: "#eee",
+                borderRadius: "3px",
+                marginBottom: "0.5rem",
+              }}>
+                <div style={{
+                  position: "absolute",
+                  left: "50%",
+                  top: "-1px",
+                  width: "2px",
+                  height: "8px",
+                  backgroundColor: "var(--color-text-muted)",
+                }} />
+                <div style={{
+                  height: "100%",
+                  width: `${Math.min(Math.max((p.price_per_sqft / area.median_price_per_sqft) * 50, 10), 90)}%`,
+                  borderRadius: "3px",
+                  backgroundColor: verdictColor,
+                  transition: "width 0.8s var(--ease-out)",
+                }} />
+              </div>
+              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: verdictColor }}>
+                {pvm.verdict} ({pvm.pct_diff > 0 ? "+" : ""}{pvm.pct_diff}%)
+              </div>
+            </div>
+            );
+          })()}
+
+          {/* Market Activity */}
+          <div className="section-card" data-testid="market-activity-section">
+            <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
+              </svg>
+              <h2 style={{ fontSize: "0.85rem" }}>Market activity</h2>
+            </div>
+            <div style={{ display: "grid", gap: "0.5rem" }}>
+              <MarketRow
+                icon={<InterestDot level={market_activity.interest_level as "high" | "moderate" | "low"} />}
+                label={market_activity.interest_label}
+              />
+              {market_activity.saves_last_7d != null && (
+                <MarketRow
+                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
+                  label={`${market_activity.saves_last_7d} saves this week`}
+                />
+              )}
+              {market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0 && (
+                <MarketRow
+                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>}
+                  label={`${market_activity.offers_last_7d} offer${market_activity.offers_last_7d > 1 ? "s" : ""} this week`}
+                />
+              )}
+              <MarketRow
+                icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
+                label={`Listed ${market_activity.days_on_market}d ago \u00B7 ${market_activity.days_on_market_label}`}
+              />
+              {market_activity.area_trend_summary && (
+                <MarketRow
+                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
+                  label={market_activity.area_trend_summary}
+                />
+              )}
+            </div>
+          </div>
+        </div>{/* end property-sidebar */}
+      </div>{/* end property-layout */}
+
       {/* Similar properties — embedding-based */}
       {data.similar_properties.length > 0 && (
         <div className="card" style={{ marginTop: "1.5rem" }}>
@@ -645,7 +655,7 @@ function MarketRow({ icon, label }: { icon: React.ReactNode; label: string }) {
       border: "1px solid var(--color-border)",
     }}>
       <span style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: "0.85rem", color: "var(--color-text)", lineHeight: 1.4 }}>{label}</span>
+      <span style={{ fontSize: "0.8rem", color: "var(--color-text)", lineHeight: 1.4 }}>{label}</span>
     </div>
   );
 }
