@@ -459,8 +459,23 @@ export function ResultsPageA() {
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
-  const [compareIds, setCompareIds] = useState<string[]>([]);
+  const [compareIds, setCompareIds] = useState<string[]>(() => {
+    try {
+      const stored = sessionStorage.getItem("oe_compare_ids");
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
   const [showCompare, setShowCompare] = useState(false);
+
+  // Persist compare selections across navigation
+  useEffect(() => {
+    if (compareIds.length > 0) {
+      sessionStorage.setItem("oe_compare_ids", JSON.stringify(compareIds));
+    } else {
+      sessionStorage.removeItem("oe_compare_ids");
+    }
+  }, [compareIds]);
+
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const query = searchParams.get("q") || "";
