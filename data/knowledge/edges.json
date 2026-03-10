@@ -1,0 +1,184 @@
+[
+  {
+    "from": "society:prestige-park-grove",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.commonfloor.com/prestige-park-grove-bangalore/overview",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:prestige-park-grove",
+    "to": "builder:prestige-group",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.commonfloor.com/prestige-park-grove-bangalore/overview",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:godrej-splendour",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.roofandfloor.com/godrej-splendour-whitefield-bengaluru-details",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:godrej-splendour",
+    "to": "builder:godrej-properties-ltd",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.roofandfloor.com/godrej-splendour-whitefield-bengaluru-details",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:sobha-windsor",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:sobha-windsor",
+    "to": "builder:sobha-ltd",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:assetz-marq-3-0",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-assetz-marq-3-0-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:assetz-marq-3-0",
+    "to": "builder:assetz-property-group",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-assetz-marq-3-0-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:sumadhura-eden-garden",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sumadhura-eden-garden-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:sumadhura-eden-garden",
+    "to": "builder:sumadhura-infracon-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sumadhura-eden-garden-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:brigade-woods",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:brigade-woods",
+    "to": "builder:brigade-group",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:alembic-urban-forest",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.alembicurbanforest.com/",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  },
+  {
+    "from": "society:alembic-urban-forest",
+    "to": "builder:alembic",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Google",
+      "url": "https://www.alembicurbanforest.com/",
+      "model": "gemini-2.5-flash",
+      "skill_id": "live_discovery",
+      "triggered_by": "3bhk Kadugodi"
+    }
+  }
+]

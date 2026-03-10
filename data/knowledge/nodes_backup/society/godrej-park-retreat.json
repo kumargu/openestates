@@ -1,0 +1,115 @@
+{
+  "id": "society:godrej-park-retreat",
+  "node_type": "Society",
+  "name": "Godrej Park Retreat",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Godrej Park Retreat"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Sarjapur Road"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Godrej Properties"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "total_units",
+      "value": {
+        "type": "Numeric",
+        "data": 976.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "year_built",
+      "value": {
+        "type": "Numeric",
+        "data": 2026.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    },
+    {
+      "key": "summary",
+      "value": {
+        "type": "Text",
+        "data": "A 12.85-acre gated community with 8 towers, offering a blend of urban lifestyle and a calm environment.. Features 85% open area, 5.7 acres of green spaces, and over 50 lavish amenities including a 28,000 sqft clubhouse.. Configurations: 1 BHK, 2 BHK, 3 BHK, 4 BHK"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.994706+00:00",
+      "version": 1
+    }
+  ],
+  "summary_embedding": null,
+  "created_at": "2026-03-09T16:34:12.994706+00:00",
+  "updated_at": "2026-03-09T16:34:12.994706+00:00"
+}

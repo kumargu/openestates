@@ -6,8 +6,8 @@ type AreaData = NonNullable<PropertyDetailResponse["area"]>;
 export function computeMarketActivity(p: PropData, area: AreaData | null): MarketActivity {
   return {
     interest_level: p.interest_level ?? "moderate",
-    saves_last_7d: p.saves_last_7d ?? Math.round(5 + Math.random() * 15),
-    offers_last_7d: p.offers_last_7d ?? 0,
+    saves_last_7d: p.saves_last_7d ?? null,
+    offers_last_7d: p.offers_last_7d ?? null,
     days_on_market: p.days_on_market,
     area_trend_summary: area?.trend_summary ?? "Trend data unavailable",
   };

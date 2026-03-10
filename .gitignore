@@ -41,9 +41,15 @@ frontend/dist/
 # Reddit cache (generated)
 data/reddit_cache/
 
+# Generated/cached data
+data/cache/
+data/lake/
+*.bak
+
 # Pipeline checkpoints and learnings
 pipeline/checkpoints/
 pipeline/learnings/
 
 # Claude Code local settings
 .claude/
+.vercel

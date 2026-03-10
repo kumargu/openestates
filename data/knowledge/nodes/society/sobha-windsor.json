@@ -1,0 +1,96 @@
+{
+  "id": "society:sobha-windsor",
+  "node_type": "Society",
+  "name": "Sobha Windsor",
+  "facts": [
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Sobha Ltd."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188304Z",
+      "version": 1,
+      "display_template": "Built by {value}",
+      "answers_preferences": [
+        "builder"
+      ]
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "2 BHK",
+          "3 BHK",
+          "4 BHK"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188307Z",
+      "version": 1,
+      "display_template": "Configurations: {value}"
+    },
+    {
+      "key": "price_range",
+      "value": {
+        "type": "Text",
+        "data": "₹215L - ₹322L"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188311Z",
+      "version": 1,
+      "display_template": "Price: {value}",
+      "answers_preferences": [
+        "value for money",
+        "budget"
+      ]
+    },
+    {
+      "key": "possession_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188314Z",
+      "version": 1,
+      "display_template": "Possession: {value}",
+      "answers_preferences": [
+        "ready to move",
+        "new construction"
+      ]
+    }
+  ],
+  "created_at": "2026-03-09T20:23:48.188301Z",
+  "updated_at": "2026-03-09T20:23:48.188316Z"
+}

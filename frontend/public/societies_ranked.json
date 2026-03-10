@@ -1,0 +1,543 @@
+{
+  "query_interpreted": {
+    "original": "family-friendly society in Whitefield",
+    "area": "Whitefield",
+    "city": "Bengaluru",
+    "intent": "family-friendly",
+    "weights_applied": {
+      "family_friendly": 0.3,
+      "maintenance_quality": 0.2,
+      "school_access": 0.15,
+      "calm_environment": 0.15,
+      "builder_trust": 0.1,
+      "value": 0.1
+    }
+  },
+  "results": [
+    {
+      "slug": "sobha-dream-acres",
+      "name": "Sobha Dream Acres",
+      "builder": "Sobha Limited",
+      "year_built": 2020,
+      "total_units": 6000,
+      "unit_types": "1, 2, 3 BHK",
+      "price_range": "Approx. \u20b970L \u2013 \u20b91.35Cr",
+      "summary": "Sobha's largest Bengaluru township. High construction quality \u2014 Sobha is known for in-house construction rather than outsourcing. Compact apartment sizes but premium finishes.",
+      "overall_score": 66.7,
+      "rank": 1,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 75,
+        "school_access": 65,
+        "calm_environment": 60,
+        "builder_trust": 85,
+        "value": 70
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Sobha Dream Acres is a solid Whitefield option with Sobha Limited brand backing. The large township scale means built-in convenience but also more density.",
+      "why_above_next": "Ranks above Brigade Metropolis primarily due to stronger maintenance quality signals.",
+      "signals": [
+        "Well-maintained",
+        "Trusted builder",
+        "Good value",
+        "Strong amenities",
+        "Township scale"
+      ],
+      "cautions": [
+        "Compact apartment sizes",
+        "Traffic congestion",
+        "Far from metro"
+      ],
+      "resident_quote": "[Rent] How much maximum rent you should be willing to pay, in Whitefield area.",
+      "confidence": "moderate",
+      "photos": [
+        "/societies/sobha-dream-acres/1.jpg",
+        "/societies/sobha-dream-acres/2.jpg",
+        "/societies/sobha-dream-acres/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 16,
+        "society_threads": 5,
+        "area_threads": 11,
+        "has_seed_data": true,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "brigade-metropolis",
+      "name": "Brigade Metropolis",
+      "builder": "Brigade Group",
+      "year_built": 2012,
+      "total_units": 2800,
+      "unit_types": "",
+      "price_range": "",
+      "summary": "One of Whitefield's older premium townships. Brigade Group pedigree. Slightly aged infrastructure compared to newer developments but strong community and lower prices.",
+      "overall_score": 65.8,
+      "rank": 2,
+      "dimension_scores": {
+        "family_friendly": 60,
+        "maintenance_quality": 55,
+        "school_access": 85,
+        "calm_environment": 70,
+        "builder_trust": 85,
+        "value": 50
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Brigade Metropolis is a solid Whitefield option with Brigade Group brand backing. The large township scale means built-in convenience but also more density.",
+      "why_above_next": "Ranks above Prestige Shantiniketan primarily due to stronger value signals.",
+      "signals": [
+        "Calm environment",
+        "Trusted builder",
+        "Schools nearby",
+        "Township scale"
+      ],
+      "cautions": [
+        "Aging infrastructure",
+        "Parking crunch",
+        "Waterlogging risk"
+      ],
+      "resident_quote": null,
+      "confidence": "moderate",
+      "photos": [
+        "/societies/brigade-metropolis/1.jpg",
+        "/societies/brigade-metropolis/2.jpg",
+        "/societies/brigade-metropolis/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 0,
+        "society_threads": 0,
+        "area_threads": 0,
+        "has_seed_data": true,
+        "reddit_confidence": "low"
+      }
+    },
+    {
+      "slug": "prestige-shantiniketan",
+      "name": "Prestige Shantiniketan",
+      "builder": "Prestige Group",
+      "year_built": 2011,
+      "total_units": 3000,
+      "unit_types": "2, 3, 3.5, 4 BHK",
+      "price_range": "Approx. \u20b91.6Cr \u2013 \u20b95.0Cr+",
+      "summary": "One of Whitefield\u2019s best-known integrated developments near ITPL, combining residences with large-format township infrastructure.",
+      "overall_score": 62.4,
+      "rank": 3,
+      "dimension_scores": {
+        "family_friendly": 80,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 54,
+        "builder_trust": 85,
+        "value": 20
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Prestige Shantiniketan is well-suited for families looking for a community with strong amenities and safety. The large township scale means built-in convenience but also more density.",
+      "why_above_next": "Ranks above Godrej Air NXT primarily due to stronger family-friendliness signals.",
+      "signals": [
+        "Family-friendly",
+        "Trusted builder",
+        "Metro connectivity",
+        "Open spaces",
+        "Township scale"
+      ],
+      "cautions": [
+        "Water supply issues",
+        "Traffic congestion",
+        "Safety concerns reported",
+        "Older construction"
+      ],
+      "resident_quote": "\u201cYeah metro is a lifeline...\u201d \u2014 from the Whitefield metro ride discussion, pointing to metro connectivity as a major plus for the area.",
+      "confidence": "moderate",
+      "photos": [
+        "/societies/prestige-shantiniketan/1.jpg",
+        "/societies/prestige-shantiniketan/2.jpg",
+        "/societies/prestige-shantiniketan/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 17,
+        "society_threads": 7,
+        "area_threads": 10,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "godrej-air-nxt",
+      "name": "Godrej Air NXT",
+      "builder": "Godrej Properties",
+      "year_built": 2025,
+      "total_units": 109,
+      "unit_types": "3 BHK",
+      "price_range": "Approx. \u20b91.8Cr \u2013 \u20b92.5Cr",
+      "summary": "A smaller, newer Godrej project near Hoodi/Whitefield, positioned as a cleaner premium lifestyle product.",
+      "overall_score": 60.6,
+      "rank": 4,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 80,
+        "builder_trust": 85,
+        "value": 30
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Godrej Air NXT suits those who prefer a quieter, less crowded living environment. The smaller scale offers a more intimate community feel.",
+      "why_above_next": "Ranks above Mahaveer Tranquil primarily due to stronger builder trust signals.",
+      "signals": [
+        "Calm environment",
+        "Trusted builder"
+      ],
+      "cautions": [],
+      "resident_quote": null,
+      "confidence": "moderate",
+      "photos": [
+        "/societies/godrej-air-nxt/1.jpg",
+        "/societies/godrej-air-nxt/2.jpg",
+        "/societies/godrej-air-nxt/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 9,
+        "society_threads": 0,
+        "area_threads": 9,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "mahaveer-tranquil",
+      "name": "Mahaveer Tranquil",
+      "builder": "Mahaveer Group",
+      "year_built": 2017,
+      "total_units": 177,
+      "unit_types": "2, 3 BHK",
+      "price_range": "Approx. \u20b91.2Cr \u2013 \u20b91.8Cr",
+      "summary": "A smaller ready community in the ITPL/Nallurahalli side of Whitefield, offering a more compact alternative to mega-projects.",
+      "overall_score": 59.6,
+      "rank": 5,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 80,
+        "builder_trust": 50,
+        "value": 55
+      },
+      "best_for_label": "Best for calm living",
+      "life_fit_reason": "Mahaveer Tranquil suits those who prefer a quieter, less crowded living environment. The smaller scale offers a more intimate community feel.",
+      "why_above_next": "Ranks above Prestige Waterford primarily due to stronger value signals.",
+      "signals": [
+        "Calm environment"
+      ],
+      "cautions": [],
+      "resident_quote": null,
+      "confidence": "moderate",
+      "photos": [
+        "/societies/mahaveer-tranquil/1.jpg",
+        "/societies/mahaveer-tranquil/2.jpg",
+        "/societies/mahaveer-tranquil/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 9,
+        "society_threads": 0,
+        "area_threads": 9,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "prestige-waterford",
+      "name": "Prestige Waterford",
+      "builder": "Prestige Group",
+      "year_built": 2024,
+      "total_units": 689,
+      "unit_types": "1, 2, 3, 4 BHK",
+      "price_range": "Approx. \u20b91.4Cr \u2013 \u20b93.5Cr+",
+      "summary": "A newer Prestige project in Whitefield with a more current product profile than older township stock.",
+      "overall_score": 59.1,
+      "rank": 6,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 70,
+        "builder_trust": 85,
+        "value": 30
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Prestige Waterford is a solid Whitefield option with Prestige Group brand backing.",
+      "why_above_next": "Ranks above Brigade Cosmopolis primarily due to stronger value signals.",
+      "signals": [
+        "Calm environment",
+        "Trusted builder"
+      ],
+      "cautions": [],
+      "resident_quote": "Prestige Waterford vs Sobha Windsor vs Brigade Utopia",
+      "confidence": "moderate",
+      "photos": [
+        "/societies/prestige-waterford/1.jpg",
+        "/societies/prestige-waterford/2.jpg",
+        "/societies/prestige-waterford/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 13,
+        "society_threads": 1,
+        "area_threads": 12,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "brigade-cosmopolis",
+      "name": "Brigade Cosmopolis",
+      "builder": "Brigade Group",
+      "year_built": 2017,
+      "total_units": 705,
+      "unit_types": "2, 3, 4 BHK",
+      "price_range": "Approx. \u20b91.5Cr \u2013 \u20b93.8Cr",
+      "summary": "A premium Whitefield residential complex known for larger homes, good finish quality, and Brigade\u2019s brand strength.",
+      "overall_score": 58.1,
+      "rank": 7,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 70,
+        "builder_trust": 85,
+        "value": 20
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Brigade Cosmopolis is a solid Whitefield option with Brigade Group brand backing.",
+      "why_above_next": "Ranks above Assetz Marq primarily due to stronger builder trust signals.",
+      "signals": [
+        "Calm environment",
+        "Trusted builder"
+      ],
+      "cautions": [],
+      "resident_quote": null,
+      "confidence": "moderate",
+      "photos": [
+        "/societies/brigade-cosmopolis/1.jpg",
+        "/societies/brigade-cosmopolis/2.jpg",
+        "/societies/brigade-cosmopolis/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 12,
+        "society_threads": 0,
+        "area_threads": 12,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "assetz-marq",
+      "name": "Assetz Marq",
+      "builder": "Assetz Property Group",
+      "year_built": 2019,
+      "total_units": 2000,
+      "unit_types": "2, 3, 4 BHK",
+      "price_range": "Approx. \u20b91.2Cr \u2013 \u20b92.6Cr",
+      "summary": "Large modern community on Whitefield\u2013Hoskote Road, known for strong open-space planning and a more contemporary project profile.",
+      "overall_score": 58.1,
+      "rank": 8,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 70,
+        "builder_trust": 65,
+        "value": 40
+      },
+      "best_for_label": "Best for calm living",
+      "life_fit_reason": "Assetz Marq is a solid Whitefield option with Assetz Property Group brand backing.",
+      "why_above_next": "Ranks above Sumadhura Folium primarily due to stronger value signals.",
+      "signals": [
+        "Calm environment",
+        "Township scale"
+      ],
+      "cautions": [],
+      "resident_quote": "Assetz Builder and Marq Project - Gathering feedback",
+      "confidence": "moderate",
+      "photos": [
+        "/societies/assetz-marq/1.jpg",
+        "/societies/assetz-marq/2.jpg",
+        "/societies/assetz-marq/3.png"
+      ],
+      "evidence": {
+        "reddit_threads": 15,
+        "society_threads": 3,
+        "area_threads": 12,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "sumadhura-folium",
+      "name": "Sumadhura Folium",
+      "builder": "Sumadhura Infracon",
+      "year_built": "estimated 2025",
+      "total_units": 760,
+      "unit_types": "2, 2.5, 3, 3.5, 4 BHK",
+      "price_range": "Approx. \u20b91.5Cr \u2013 \u20b93.2Cr",
+      "summary": "A newer nature-leaning project on Borewell Road/Whitefield, positioned around open space and family-oriented amenities.",
+      "overall_score": 57.9,
+      "rank": 9,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 75,
+        "builder_trust": 65,
+        "value": 30
+      },
+      "best_for_label": "Best for greenery",
+      "life_fit_reason": "Sumadhura Folium suits those who prefer a quieter, less crowded living environment.",
+      "why_above_next": "Ranks above Vaswani Exquisite primarily due to stronger value signals.",
+      "signals": [
+        "Calm environment"
+      ],
+      "cautions": [],
+      "resident_quote": "Need suggestion on buying property in Whitefield",
+      "confidence": "moderate",
+      "photos": [
+        "/societies/sumadhura-folium/1.jpg",
+        "/societies/sumadhura-folium/2.jpg",
+        "/societies/sumadhura-folium/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 13,
+        "society_threads": 1,
+        "area_threads": 12,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "vaswani-exquisite",
+      "name": "Vaswani Exquisite",
+      "builder": "Vaswani Group",
+      "year_built": 2020,
+      "total_units": 380,
+      "unit_types": "3, 3.5, 4 BHK",
+      "price_range": "Approx. \u20b93.0Cr \u2013 \u20b94.5Cr",
+      "summary": "A more exclusive premium residential complex in the Hoodi\u2013Whitefield belt, positioned toward larger luxury homes.",
+      "overall_score": 57.6,
+      "rank": 10,
+      "dimension_scores": {
+        "family_friendly": 58,
+        "maintenance_quality": 50,
+        "school_access": 65,
+        "calm_environment": 80,
+        "builder_trust": 65,
+        "value": 20
+      },
+      "best_for_label": "Best for calm living",
+      "life_fit_reason": "Vaswani Exquisite suits those who prefer a quieter, less crowded living environment. The smaller scale offers a more intimate community feel.",
+      "why_above_next": "Ranks above Prestige Lakeside Habitat primarily due to stronger calmness signals.",
+      "signals": [
+        "Calm environment"
+      ],
+      "cautions": [],
+      "resident_quote": null,
+      "confidence": "moderate",
+      "photos": [
+        "/societies/vaswani-exquisite/1.jpg",
+        "/societies/vaswani-exquisite/2.jpg",
+        "/societies/vaswani-exquisite/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 12,
+        "society_threads": 0,
+        "area_threads": 12,
+        "has_seed_data": false,
+        "reddit_confidence": "moderate"
+      }
+    },
+    {
+      "slug": "prestige-lakeside-habitat",
+      "name": "Prestige Lakeside Habitat",
+      "builder": "Prestige Group",
+      "year_built": 2018,
+      "total_units": 3426,
+      "unit_types": "1, 2, 2.5, 3, 4 BHK apartments; 3, 4 BHK villas",
+      "price_range": "Approx. \u20b91.5Cr \u2013 \u20b94.0Cr+",
+      "summary": "Large integrated township in Whitefield with lake views, clubhouse, and multiple towers. Well-established society with consistent maintenance. Prestige Group brand provides builder confidence.",
+      "overall_score": 42.6,
+      "rank": 11,
+      "dimension_scores": {
+        "family_friendly": 26,
+        "maintenance_quality": 45,
+        "school_access": 65,
+        "calm_environment": 37,
+        "builder_trust": 85,
+        "value": 20
+      },
+      "best_for_label": "Best premium option",
+      "life_fit_reason": "Prestige Lakeside Habitat is a solid Whitefield option with Prestige Group brand backing. The large township scale means built-in convenience but also more density.",
+      "why_above_next": "Top overall pick based on combined family-friendliness, maintenance, and value signals.",
+      "signals": [
+        "Trusted builder",
+        "Strong amenities",
+        "Good security",
+        "Lake views",
+        "Metro connectivity",
+        "Township scale"
+      ],
+      "cautions": [
+        "Safety concerns reported",
+        "Build quality concerns",
+        "Traffic congestion",
+        "Water supply issues"
+      ],
+      "resident_quote": "\u201cits one of the worst societies in bangalore considering how expensive the flats are.\u201d \u2014 from the electrocution discussion via a commenter citing a friend who stays there.",
+      "confidence": "high",
+      "photos": [
+        "/societies/prestige-lakeside-habitat/1.jpg",
+        "/societies/prestige-lakeside-habitat/2.jpg",
+        "/societies/prestige-lakeside-habitat/3.jpg"
+      ],
+      "evidence": {
+        "reddit_threads": 16,
+        "society_threads": 4,
+        "area_threads": 12,
+        "has_seed_data": true,
+        "reddit_confidence": "good"
+      }
+    }
+  ],
+  "result_count": 11,
+  "area_context": {
+    "name": "Whitefield",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 9500,
+    "price_range_per_sqft": {
+      "low": 7500,
+      "high": 12000
+    },
+    "trend_direction": "up",
+    "trend_summary": "Prices have risen ~9% over the past 12 months driven by IT sector hiring and ITPL/EPIP zone expansion. Demand remains strong in the 80L\u20131.5Cr segment.",
+    "metro_access_summary": "Purple Line (Baiyappanahalli\u2013Whitefield) now operational. Most societies are 10\u201325 minutes by auto or cab to the nearest metro station. Walking access is limited.",
+    "traffic_summary": "Significant peak-hour congestion on Varthur Road and ITPL Main Road. Residents typically budget 45\u201390 minutes for commutes to Central or South Bengaluru during peak hours.",
+    "livability_summary": "Strong IT-centric neighbourhood with good retail, hospitals, and schools. Weekend options have improved significantly. Best suited for IT professionals working in the Whitefield corridor.",
+    "infrastructure_tags": [
+      "hospitals_nearby",
+      "schools_nearby",
+      "malls_nearby",
+      "metro_operational"
+    ],
+    "externality_tags": [
+      "metro_nearby",
+      "waterlogging_risk_low_lying",
+      "heavy_traffic_peak_hours",
+      "it_corridor"
+    ],
+    "community_notes": "Varthur lake pollution is a long-standing concern. The lake restoration project is ongoing but buyers near the lake should verify flood history."
+  },
+  "enrichment_status": {
+    "societies_discovered": 11,
+    "societies_scored": 11,
+    "reddit_enriched": 10,
+    "seed_matched": 3,
+    "photos_available": 11,
+    "scored_at": "2026-03-09T16:09:31.117767"
+  }
+}

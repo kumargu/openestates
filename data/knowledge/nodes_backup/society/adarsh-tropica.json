@@ -1,0 +1,85 @@
+{
+  "id": "society:adarsh-tropica",
+  "node_type": "Society",
+  "name": "Adarsh Tropica",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Adarsh Tropica"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007830+00:00",
+      "version": 1
+    },
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Sarjapur Road"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007830+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007830+00:00",
+      "version": 1
+    },
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Adarsh Developers"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007830+00:00",
+      "version": 1
+    },
+    {
+      "key": "summary",
+      "value": {
+        "type": "Text",
+        "data": "Offers maximum open space and beautifully landscaped courtyards for 2 BHK flats.. Located within 5 km of major tech parks like RGA Tech Park, Wipro Limited, and Wipro SEZ.. Configurations: 2 BHK"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007830+00:00",
+      "version": 1
+    }
+  ],
+  "summary_embedding": null,
+  "created_at": "2026-03-09T16:34:13.007830+00:00",
+  "updated_at": "2026-03-09T16:34:13.007830+00:00"
+}

@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import type { AreaListItem } from "../lib/types.ts";
-import { getAreas } from "../lib/api.ts";
+import { useNavigate, Link } from "react-router-dom";
+import type { PropertyCard } from "../lib/types.ts";
+import { getProperties } from "../lib/api.ts";
 
 function useOnScreen(ref: React.RefObject<HTMLElement | null>) {
   const [visible, setVisible] = useState(false);
@@ -56,26 +56,166 @@ function RotatingText() {
   );
 }
 
+/* ---------- Popular search suggestions ---------- */
+const POPULAR_SEARCHES = [
+  "3BHK Whitefield under 2Cr",
+  "Family-friendly Sarjapur",
+  "Premium 4BHK Koramangala",
+  "Near metro Bellandur",
+  "Quiet 2BHK HSR Layout",
+  "New launch Hebbal",
+];
+
+function formatPrice(price: number): string {
+  if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
+  if (price >= 100_000) return `${(price / 100_000).toFixed(0)} L`;
+  return price.toLocaleString("en-IN");
+}
+
+/* ---------- Derived market stats ---------- */
+type TrendingHighlight = {
+  label: string;
+  value: string;
+  searchQuery: string;
+};
+
+type MarketSnapshot = {
+  totalProperties: number;
+  totalSocieties: number;
+  totalAreas: number;
+  priceMin: number;
+  priceMax: number;
+  topBuilders: { name: string; count: number }[];
+  bhkBreakdown: Record<number, number>;
+  areaPropertyCounts: Record<string, number>;
+  trending: TrendingHighlight[];
+};
+
+function deriveMarketSnapshot(props: PropertyCard[]): MarketSnapshot {
+  const prices = props.map((p) => p.price);
+  const builderMap = new Map<string, number>();
+  const bhkMap: Record<number, number> = {};
+  const areaMap: Record<string, number> = {};
+
+  for (const p of props) {
+    builderMap.set(p.builder_name, (builderMap.get(p.builder_name) ?? 0) + 1);
+    bhkMap[p.bhk] = (bhkMap[p.bhk] ?? 0) + 1;
+    areaMap[p.area] = (areaMap[p.area] ?? 0) + 1;
+  }
+
+  const topBuilders = [...builderMap.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => ({ name, count }));
+
+  // Derive trending highlights from real data
+  const trending: TrendingHighlight[] = [];
+
+  // Most listings area
+  const topArea = Object.entries(areaMap).sort(([, a], [, b]) => b - a)[0];
+  if (topArea) {
+    trending.push({
+      label: "Most active",
+      value: `${topArea[0]} — ${topArea[1]} listings`,
+      searchQuery: topArea[0],
+    });
+  }
+
+  // Best value area (lowest avg price/sqft)
+  const areaPrices: Record<string, number[]> = {};
+  for (const p of props) {
+    (areaPrices[p.area] ??= []).push(p.price_per_sqft);
+  }
+  const areaAvgs = Object.entries(areaPrices)
+    .map(([area, ps]) => ({ area, avg: ps.reduce((a, b) => a + b, 0) / ps.length }))
+    .filter((a) => (areaPrices[a.area]?.length ?? 0) >= 3)
+    .sort((a, b) => a.avg - b.avg);
+  if (areaAvgs.length > 0) {
+    trending.push({
+      label: "Best value",
+      value: `${areaAvgs[0].area} — ${Math.round(areaAvgs[0].avg).toLocaleString("en-IN")}/sqft avg`,
+      searchQuery: areaAvgs[0].area,
+    });
+  }
+
+  // Near metro count
+  const metroClose = props.filter((p) => p.metro_distance_mins <= 10).length;
+  if (metroClose > 0) {
+    trending.push({
+      label: "Near metro",
+      value: `${metroClose} properties within 10 min`,
+      searchQuery: "near metro",
+    });
+  }
+
+  // Ready to move count
+  const readyToMove = props.filter((p) => p.possession_status === "Ready to Move").length;
+  if (readyToMove > 0) {
+    trending.push({
+      label: "Ready to move",
+      value: `${readyToMove} available now`,
+      searchQuery: "ready to move",
+    });
+  }
+
+  // Premium segment
+  const premium = props.filter((p) => p.price >= 20_000_000).length;
+  if (premium > 0) {
+    trending.push({
+      label: "Premium",
+      value: `${premium} listings above 2 Cr`,
+      searchQuery: "premium 4BHK",
+    });
+  }
+
+  return {
+    totalProperties: props.length,
+    totalSocieties: new Set(props.map((p) => p.society_name)).size,
+    totalAreas: Object.keys(areaMap).length,
+    priceMin: Math.min(...prices),
+    priceMax: Math.max(...prices),
+    topBuilders,
+    bhkBreakdown: bhkMap,
+    areaPropertyCounts: areaMap,
+    trending,
+  };
+}
+
+/* ---------- Featured property (real data) ---------- */
+function pickFeatured(props: PropertyCard[]): PropertyCard | null {
+  // Pick a well-priced 3BHK with an image as the hero preview
+  const candidates = props.filter(
+    (p) => p.bhk === 3 && p.hero_image && p.transparency_tags.length > 0
+  );
+  if (candidates.length === 0) return props.find((p) => p.hero_image) ?? props[0] ?? null;
+  // Pick a stable one (middle-ish price)
+  candidates.sort((a, b) => a.price - b.price);
+  return candidates[Math.floor(candidates.length / 2)];
+}
+
 export function HomePage() {
-  const [areas, setAreas] = useState<AreaListItem[]>([]);
+  const [properties, setProperties] = useState<PropertyCard[]>([]);
+  const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const navigate = useNavigate();
-  const areasRef = useRef<HTMLElement | null>(null);
-  const featuresRef = useRef<HTMLElement | null>(null);
-  const areasVisible = useOnScreen(areasRef);
-  const featuresVisible = useOnScreen(featuresRef);
+  const pulseRef = useRef<HTMLElement | null>(null);
+  const pulseVisible = useOnScreen(pulseRef);
 
   useEffect(() => {
-    getAreas()
-      .then(setAreas)
-      .catch(() => {});
+    getProperties()
+      .then(setProperties)
+      .catch(() => setLoadError(true));
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const q = query.trim();
+    if (q) sessionStorage.setItem("oe_search_query", q);
     navigate(q ? `/results?q=${encodeURIComponent(q)}` : "/results");
   };
+
+  const snapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
+  const featured = properties.length > 0 ? pickFeatured(properties) : null;
 
   return (
     <div>
@@ -92,7 +232,6 @@ export function HomePage() {
           overflow: "hidden",
         }}
       >
-        {/* Subtle gradient background */}
         <div
           style={{
             position: "absolute",
@@ -196,343 +335,583 @@ export function HomePage() {
           </button>
         </form>
 
-        {/* Secondary action */}
+        {/* Inline stats — social proof */}
+        {snapshot && (
+          <div
+            className="fade-up fade-up-delay-3"
+            style={{
+              marginTop: "1.5rem",
+              display: "flex",
+              gap: "1.5rem",
+              alignItems: "center",
+              fontSize: "0.82rem",
+              color: "#999",
+            }}
+          >
+            <span><strong style={{ color: "#555" }}>{snapshot.totalProperties}</strong> properties</span>
+            <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
+            <span><strong style={{ color: "#555" }}>{snapshot.totalSocieties}</strong> societies</span>
+            <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
+            <span><strong style={{ color: "#555" }}>{snapshot.totalAreas}</strong> micro-markets</span>
+          </div>
+        )}
+
+        {/* Popular searches — clickable chips */}
         <div
           className="fade-up fade-up-delay-3"
-          style={{ marginTop: "1.25rem", display: "flex", gap: "0.75rem", alignItems: "center" }}
-        >
-          <button
-            onClick={() => navigate("/results")}
-            style={{
-              border: "1px solid rgba(0,0,0,0.12)",
-              background: "transparent",
-              color: "#555",
-              padding: "0.55rem 1.25rem",
-              borderRadius: "10px",
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              transition: "all 0.2s ease",
-            }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = "#1a1a1a"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = "#555"; }}
-          >
-            or browse all 20 listings
-          </button>
-        </div>
-
-        {/* Scroll hint */}
-        <div
-          className="fade-up fade-up-delay-4"
           style={{
-            position: "absolute",
-            bottom: "2.5rem",
+            marginTop: "1.25rem",
             display: "flex",
-            flexDirection: "column",
-            alignItems: "center",
             gap: "0.5rem",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            maxWidth: "600px",
           }}
         >
-          <span style={{ fontSize: "0.75rem", color: "#bbb", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-            Explore
-          </span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#bbb" strokeWidth="2" strokeLinecap="round">
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </div>
-      </section>
-
-      {/* Features section */}
-      <section
-        ref={featuresRef}
-        style={{
-          padding: "clamp(4rem, 8vw, 8rem) clamp(1.5rem, 4vw, 4rem)",
-          backgroundColor: "var(--color-bg-soft)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "960px",
-            margin: "0 auto",
-            opacity: featuresVisible ? 1 : 0,
-            transform: featuresVisible ? "translateY(0)" : "translateY(24px)",
-            transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)",
-              fontWeight: 600,
-              letterSpacing: "-0.02em",
-              textAlign: "center",
-              margin: "0 0 1rem",
-            }}
-          >
-            Built on transparency
-          </h2>
-          <p
-            style={{
-              textAlign: "center",
-              color: "#888",
-              maxWidth: "480px",
-              margin: "0 auto 3rem",
-              fontSize: "1.05rem",
-            }}
-          >
-            Every property shows the full picture, so you can compare with confidence.
-          </p>
-          <div
-            className={featuresVisible ? "stagger-children" : ""}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-              gap: "1.5rem",
-            }}
-          >
-            <FeatureCard
-              title="Price context"
-              description="See how every listing compares to the area median. No guessing if it's a fair price."
-            />
-            <FeatureCard
-              title="Society insights"
-              description="Maintenance quality, builder reputation, resident sentiment — all in one view."
-            />
-            <FeatureCard
-              title="Area signals"
-              description="Metro access, traffic, waterlogging, noise — real externalities that matter."
-            />
-          </div>
-
-          {/* Transparency widget preview */}
-          <div
-            style={{
-              marginTop: "3rem",
-              padding: "2rem",
-              borderRadius: "12px",
-              backgroundColor: "#fff",
-              border: "1px solid rgba(0,0,0,0.06)",
-              maxWidth: "480px",
-              marginLeft: "auto",
-              marginRight: "auto",
-            }}
-          >
-            <p style={{ fontSize: "0.7rem", textTransform: "uppercase", letterSpacing: "0.1em", color: "#999", margin: "0 0 1rem" }}>
-              Example transparency widget
-            </p>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.9rem", color: "#444" }}>Listed price</span>
-              <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>8,200 /sqft</span>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
-              <span style={{ fontSize: "0.9rem", color: "#444" }}>Whitefield median</span>
-              <span style={{ fontSize: "1.1rem", fontWeight: 600, color: "#888" }}>9,100 /sqft</span>
-            </div>
-            <div style={{ height: "6px", backgroundColor: "#eee", borderRadius: "3px", marginBottom: "0.5rem" }}>
-              <div style={{ height: "6px", width: "90%", backgroundColor: "#2a7a2a", borderRadius: "3px" }} />
-            </div>
-            <p style={{ fontSize: "0.8rem", color: "#2a7a2a", margin: 0, fontWeight: 500 }}>
-              10% below area median — good value signal
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Areas section */}
-      <section
-        ref={areasRef}
-        style={{
-          padding: "clamp(4rem, 8vw, 8rem) clamp(1.5rem, 4vw, 4rem)",
-        }}
-      >
-        <div
-          style={{
-            maxWidth: "960px",
-            margin: "0 auto",
-            opacity: areasVisible ? 1 : 0,
-            transform: areasVisible ? "translateY(0)" : "translateY(24px)",
-            transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
-          }}
-        >
-          <h2
-            style={{
-              fontSize: "clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)",
-              fontWeight: 600,
-              letterSpacing: "-0.02em",
-              margin: "0 0 0.75rem",
-            }}
-          >
-            Explore Bengaluru
-          </h2>
-          <p style={{ color: "#888", marginBottom: "2.5rem", fontSize: "1.05rem" }}>
-            Five micro-markets, each with a distinct character.
-          </p>
-
-          {areas.length > 0 && (
-            <div
-              className={areasVisible ? "stagger-children" : ""}
+          {POPULAR_SEARCHES.slice(0, 4).map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                sessionStorage.setItem("oe_search_query", s);
+                navigate(`/results?q=${encodeURIComponent(s)}`);
+              }}
               style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-                gap: "1.25rem",
+                border: "1px solid rgba(0,0,0,0.08)",
+                background: "rgba(255,255,255,0.7)",
+                color: "#666",
+                padding: "0.4rem 0.85rem",
+                borderRadius: "999px",
+                fontSize: "0.78rem",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                transition: "all 0.2s ease",
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)";
+                e.currentTarget.style.color = "#c96b4f";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = "rgba(0,0,0,0.08)";
+                e.currentTarget.style.color = "#666";
               }}
             >
-              {areas.map((area) => (
-                <AreaCardLanding key={area.id} area={area} />
-              ))}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* Footer CTA */}
-      <section
-        style={{
-          padding: "clamp(4rem, 8vw, 7rem) clamp(1.5rem, 4vw, 4rem)",
-          textAlign: "center",
-          backgroundColor: "#1a1a1a",
-          color: "#fff",
-        }}
-      >
-        <h2
-          style={{
-            fontSize: "clamp(1.5rem, 1.2rem + 1.5vw, 2.5rem)",
-            fontWeight: 600,
-            letterSpacing: "-0.02em",
-            margin: "0 0 1rem",
-          }}
-        >
-          Ready to see the difference?
-        </h2>
-        <p style={{ color: "#999", marginBottom: "2rem", fontSize: "1.05rem" }}>
-          Browse properties with full transparency. No hidden information.
-        </p>
-        <button
-          onClick={() => navigate("/results")}
-          style={{
-            border: "1px solid rgba(255,255,255,0.2)",
-            background: "transparent",
-            color: "#fff",
-            padding: "0.85rem 2.5rem",
-            borderRadius: "12px",
-            fontSize: "1rem",
-            cursor: "pointer",
-            fontFamily: "inherit",
-            transition: "all 0.3s ease",
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#fff";
-            e.currentTarget.style.color = "#1a1a1a";
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "transparent";
-            e.currentTarget.style.color = "#fff";
-          }}
-        >
-          Browse properties
-        </button>
-      </section>
-    </div>
-  );
-}
-
-function FeatureCard({ title, description }: { title: string; description: string }) {
-  return (
-    <div
-      className="feature-card"
-      style={{
-        padding: "2rem",
-        borderRadius: "12px",
-        backgroundColor: "#fff",
-        border: "1px solid rgba(0,0,0,0.06)",
-      }}
-    >
-      <h3
-        style={{
-          margin: "0 0 0.5rem",
-          fontSize: "1.1rem",
-          fontWeight: 600,
-          letterSpacing: "-0.01em",
-        }}
-      >
-        {title}
-      </h3>
-      <p style={{ margin: 0, color: "#777", fontSize: "0.95rem", lineHeight: 1.6 }}>
-        {description}
-      </p>
-    </div>
-  );
-}
-
-// Per-area concrete signals for the homepage cards
-const AREA_SIGNALS: Record<string, { signals: string[]; vibe: string }> = {
-  Whitefield: {
-    signals: ["Metro now live", "IT corridor", "Varthur lake risk"],
-    vibe: "Tech hub with new metro access",
-  },
-  "Sarjapur Road": {
-    signals: ["No metro yet", "Heavy traffic", "Rapid growth"],
-    vibe: "Fast-growing IT corridor, congestion trade-off",
-  },
-  Bellandur: {
-    signals: ["Premium zone", "Lake pollution", "ORR traffic"],
-    vibe: "Premium but lake concerns persist",
-  },
-  "HSR Layout": {
-    signals: ["Startup hub", "Walkable", "Stable prices"],
-    vibe: "Walkable neighbourhood, strong livability",
-  },
-  "Electronic City": {
-    signals: ["Value pricing", "Elevated expressway", "Growing infra"],
-    vibe: "Affordable tech zone with improving connectivity",
-  },
-};
-
-function AreaCardLanding({ area }: { area: AreaListItem }) {
-  const trendColor = area.trend_direction === "up" ? "var(--color-positive)" : "var(--color-text-muted)";
-  const trendIcon = area.trend_direction === "up" ? "\u2197" : "\u2192";
-  const extra = AREA_SIGNALS[area.name];
-
-  return (
-    <div
-      className="area-card"
-      style={{
-        padding: "1.75rem",
-        borderRadius: "12px",
-        backgroundColor: "#fff",
-        border: "1px solid rgba(0,0,0,0.06)",
-      }}
-    >
-      <h3 style={{ margin: "0 0 0.35rem", fontSize: "1.15rem", fontWeight: 600, letterSpacing: "-0.01em" }}>
-        {area.name}
-      </h3>
-      {extra && (
-        <p style={{ margin: "0 0 0.75rem", fontSize: "0.82rem", color: "var(--color-text-muted)", lineHeight: 1.4 }}>
-          {extra.vibe}
-        </p>
-      )}
-      <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        <span style={{ fontSize: "1.3rem", fontWeight: 700 }}>
-          {area.median_price_per_sqft.toLocaleString("en-IN")}
-        </span>
-        <span style={{ color: "#999", fontSize: "0.85rem" }}>/sqft</span>
-        <span style={{ color: trendColor, fontSize: "0.85rem", fontWeight: 500 }}>
-          {trendIcon} {area.trend_direction}
-        </span>
-      </div>
-      {extra && (
-        <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-          {extra.signals.map((s) => (
-            <span key={s} className="tag tag-neutral" style={{ fontSize: "0.72rem" }}>
               {s}
-            </span>
+            </button>
           ))}
         </div>
+
+        {/* Trending strip */}
+        {snapshot && snapshot.trending.length > 0 && (
+          <div
+            className="fade-up fade-up-delay-4"
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: "rgba(255,255,255,0.85)",
+              backdropFilter: "blur(12px)",
+              borderTop: "1px solid rgba(0,0,0,0.05)",
+              padding: "0.75rem clamp(1rem, 3vw, 3rem)",
+              display: "flex",
+              justifyContent: "center",
+              gap: "0.5rem",
+              flexWrap: "wrap",
+            }}
+          >
+            {snapshot.trending.slice(0, 4).map((t, i) => (
+              <button
+                key={t.label}
+                onClick={() => {
+                  sessionStorage.setItem("oe_search_query", t.searchQuery);
+                  navigate(`/results?q=${encodeURIComponent(t.searchQuery)}`);
+                }}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  padding: "0.4rem 0.75rem",
+                  borderRadius: "8px",
+                  transition: "background-color 0.2s",
+                  ...(i < snapshot.trending.slice(0, 4).length - 1
+                    ? { borderRight: "1px solid rgba(0,0,0,0.06)", borderRadius: "8px 0 0 8px", paddingRight: "1.25rem" }
+                    : {}),
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(201,107,79,0.06)"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
+              >
+                <span style={{
+                  fontSize: "0.7rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  color: "#c96b4f",
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                }}>
+                  {t.label}
+                </span>
+                <span style={{
+                  fontSize: "0.82rem",
+                  color: "#555",
+                  fontWeight: 500,
+                  whiteSpace: "nowrap",
+                }}>
+                  {t.value}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Micro-market intelligence cards */}
+      {snapshot && properties.length > 0 && (
+        <MicroMarketsSection properties={properties} navigate={navigate} />
       )}
-      {!extra && area.primary_signal && (
-        <span className="tag tag-neutral">
-          {area.primary_signal.replace(/_/g, " ")}
-        </span>
+
+      {/* Market Pulse — real data snapshot */}
+      {snapshot && (
+        <section
+          ref={pulseRef}
+          style={{
+            padding: "clamp(3rem, 6vw, 5rem) clamp(1.5rem, 4vw, 4rem)",
+            backgroundColor: "var(--color-bg-soft)",
+          }}
+        >
+          <div
+            style={{
+              maxWidth: "960px",
+              margin: "0 auto",
+              opacity: pulseVisible ? 1 : 0,
+              transform: pulseVisible ? "translateY(0)" : "translateY(24px)",
+              transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          >
+            <h2
+              style={{
+                fontSize: "clamp(1.3rem, 1rem + 1.2vw, 2rem)",
+                fontWeight: 600,
+                letterSpacing: "-0.02em",
+                margin: "0 0 0.5rem",
+              }}
+            >
+              Market pulse
+            </h2>
+            <p style={{ color: "#888", marginBottom: "2rem", fontSize: "0.95rem" }}>
+              Live snapshot across {snapshot.totalAreas} micro-markets in Bengaluru
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
+              {/* Price range + BHK breakdown */}
+              <div
+                style={{
+                  padding: "1.5rem",
+                  borderRadius: "12px",
+                  backgroundColor: "#fff",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                }}
+              >
+                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Price range
+                </p>
+                <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "1rem" }}>
+                  <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1a1a" }}>
+                    {formatPrice(snapshot.priceMin)}
+                  </span>
+                  <span style={{ color: "#ccc" }}>&mdash;</span>
+                  <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1a1a" }}>
+                    {formatPrice(snapshot.priceMax)}
+                  </span>
+                </div>
+                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                  {Object.entries(snapshot.bhkBreakdown)
+                    .sort(([a], [b]) => Number(a) - Number(b))
+                    .map(([bhk, count]) => (
+                      <button
+                        key={bhk}
+                        onClick={() => navigate(`/results?q=${encodeURIComponent(`${bhk}BHK`)}`)}
+                        style={{
+                          padding: "0.3rem 0.7rem",
+                          borderRadius: "8px",
+                          border: "1px solid rgba(0,0,0,0.06)",
+                          background: "rgba(201,107,79,0.04)",
+                          fontSize: "0.78rem",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          color: "#555",
+                          transition: "all 0.2s",
+                        }}
+                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)"; e.currentTarget.style.color = "#c96b4f"; }}
+                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)"; e.currentTarget.style.color = "#555"; }}
+                      >
+                        {bhk} BHK <span style={{ color: "#aaa", marginLeft: "0.25rem" }}>{count}</span>
+                      </button>
+                    ))}
+                </div>
+              </div>
+
+              {/* Top builders */}
+              <div
+                style={{
+                  padding: "1.5rem",
+                  borderRadius: "12px",
+                  backgroundColor: "#fff",
+                  border: "1px solid rgba(0,0,0,0.06)",
+                }}
+              >
+                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Top builders
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
+                  {snapshot.topBuilders.map((b) => (
+                    <button
+                      key={b.name}
+                      onClick={() => navigate(`/results?q=${encodeURIComponent(b.name)}`)}
+                      style={{
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        padding: "0.5rem 0.75rem",
+                        borderRadius: "8px",
+                        border: "1px solid rgba(0,0,0,0.04)",
+                        background: "transparent",
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                        fontSize: "0.88rem",
+                        color: "#333",
+                        transition: "all 0.2s",
+                        textAlign: "left",
+                        width: "100%",
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(201,107,79,0.04)"; e.currentTarget.style.borderColor = "rgba(201,107,79,0.15)"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.borderColor = "rgba(0,0,0,0.04)"; }}
+                    >
+                      <span style={{ fontWeight: 500 }}>{b.name}</span>
+                      <span style={{ fontSize: "0.75rem", color: "#999" }}>{b.count} listings</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Featured property preview — real data */}
+              {featured && (
+                <Link
+                  to={`/property/${featured.id}`}
+                  style={{ textDecoration: "none", color: "inherit" }}
+                >
+                  <div
+                    style={{
+                      padding: "1.5rem",
+                      borderRadius: "12px",
+                      backgroundColor: "#fff",
+                      border: "1px solid rgba(0,0,0,0.06)",
+                      cursor: "pointer",
+                      transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                      height: "100%",
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)";
+                      e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)";
+                      e.currentTarget.style.boxShadow = "none";
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
+                      <p style={{ margin: 0, fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                        Sample transparency report
+                      </p>
+                      <span style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#c96b4f" }}>
+                        Live
+                      </span>
+                    </div>
+                    <p style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.15rem", color: "#1a1a1a" }}>
+                      {featured.title}
+                    </p>
+                    <p style={{ fontSize: "0.78rem", color: "#999", margin: "0 0 0.75rem" }}>
+                      {featured.area}, Bengaluru
+                    </p>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
+                      <span style={{ fontSize: "0.85rem", color: "#444" }}>Price</span>
+                      <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>{formatPrice(featured.price)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
+                      <span style={{ fontSize: "0.85rem", color: "#444" }}>Per sqft</span>
+                      <span style={{ fontSize: "0.95rem", fontWeight: 600, color: "#888" }}>
+                        {featured.price_per_sqft.toLocaleString("en-IN")} /sqft
+                      </span>
+                    </div>
+                    {featured.transparency_tags.length > 0 && (
+                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "auto" }}>
+                        {featured.transparency_tags.slice(0, 3).map((tag) => (
+                          <span
+                            key={tag}
+                            style={{
+                              fontSize: "0.7rem",
+                              padding: "0.2rem 0.55rem",
+                              borderRadius: "999px",
+                              backgroundColor: "rgba(42,122,42,0.08)",
+                              color: "#2a7a2a",
+                              fontWeight: 500,
+                            }}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </Link>
+              )}
+            </div>
+          </div>
+        </section>
       )}
+
+      {/* Explore Bengaluru section removed — Area Price Strip covers this better */}
     </div>
+  );
+}
+
+/* ---------- Sub-components ---------- */
+
+/* ---------- Micro-Market Intelligence ---------- */
+
+const AREA_VIBES: Record<string, string> = {
+  Whitefield: "Tech hub with new metro access",
+  "Sarjapur Road": "Fast-growing IT corridor",
+  Bellandur: "Premium zone, lake concerns",
+  "HSR Layout": "Walkable startup neighbourhood",
+  Koramangala: "Bengaluru's most vibrant area",
+  Hebbal: "North Bengaluru premium corridor",
+  Marathahalli: "Affordable ORR hub",
+  Thanisandra: "Emerging north with IT access",
+  "Electronic City": "Affordable tech zone",
+  Hoodi: "Fast-developing metro hub",
+  Panathur: "Quiet residential pocket",
+  Varthur: "Emerging eastern suburb",
+};
+
+type MicroMarket = {
+  area: string;
+  vibe: string;
+  avgPriceSqft: number;
+  priceMin: number;
+  priceMax: number;
+  count: number;
+  bhks: number[];
+  readyToMove: number;
+  nearMetro: number;
+  topBuilder: string;
+  avgRating: number | null;
+  societies: number;
+};
+
+function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
+  const byArea: Record<string, PropertyCard[]> = {};
+  for (const p of properties) {
+    (byArea[p.area] ??= []).push(p);
+  }
+
+  return Object.entries(byArea)
+    .filter(([, ps]) => ps.length >= 2)
+    .map(([area, ps]) => {
+      const prices = ps.map((p) => p.price_per_sqft);
+      const bhkSet = new Set(ps.map((p) => p.bhk));
+      const builderCount: Record<string, number> = {};
+      for (const p of ps) {
+        builderCount[p.builder_name] = (builderCount[p.builder_name] ?? 0) + 1;
+      }
+      const topBuilder = Object.entries(builderCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
+      const ratings = ps.filter((p) => p.google_rating && p.google_rating > 0).map((p) => p.google_rating!);
+      const societies = new Set(ps.map((p) => p.society_name));
+
+      return {
+        area,
+        vibe: AREA_VIBES[area] ?? "",
+        avgPriceSqft: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
+        priceMin: Math.min(...ps.map((p) => p.price)),
+        priceMax: Math.max(...ps.map((p) => p.price)),
+        count: ps.length,
+        bhks: Array.from(bhkSet).sort(),
+        readyToMove: ps.filter((p) => p.possession_status === "ready").length,
+        nearMetro: ps.filter((p) => p.metro_distance_mins <= 15).length,
+        topBuilder,
+        avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
+        societies: societies.size,
+      };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+function MicroMarketCard({
+  m,
+  maxAvg,
+  navigate,
+}: {
+  m: MicroMarket;
+  maxAvg: number;
+  navigate: (path: string) => void;
+}) {
+  const pct = (m.avgPriceSqft / maxAvg) * 100;
+  const barColor =
+    pct > 85 ? "#c96b4f" : pct > 60 ? "#daa520" : "#4a9a6a";
+
+  return (
+    <button
+      onClick={() => navigate(`/results?q=${encodeURIComponent(m.area)}`)}
+      style={{
+        padding: "1.25rem 1.4rem",
+        borderRadius: "12px",
+        backgroundColor: "#fff",
+        border: "1px solid rgba(0,0,0,0.06)",
+        cursor: "pointer",
+        fontFamily: "inherit",
+        textAlign: "left",
+        width: "100%",
+        transition: "border-color 0.2s, box-shadow 0.2s",
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = "rgba(201,107,79,0.25)";
+        e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.05)";
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)";
+        e.currentTarget.style.boxShadow = "none";
+      }}
+    >
+      {/* Header */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.2rem" }}>
+        <span style={{ fontSize: "1.05rem", fontWeight: 600, color: "#1a1a1a", letterSpacing: "-0.01em" }}>
+          {m.area}
+        </span>
+        <span style={{ fontSize: "0.68rem", color: "#aaa", whiteSpace: "nowrap", marginLeft: "0.5rem" }}>
+          {m.count} listings
+        </span>
+      </div>
+      {m.vibe && (
+        <p style={{ margin: "0 0 0.85rem", fontSize: "0.78rem", color: "#999", lineHeight: 1.3 }}>
+          {m.vibe}
+        </p>
+      )}
+
+      {/* Price bar */}
+      <div style={{ marginBottom: "0.85rem" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.3rem" }}>
+          <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "#1a1a1a" }}>
+            {m.avgPriceSqft.toLocaleString("en-IN")}
+            <span style={{ fontSize: "0.7rem", color: "#999", fontWeight: 400, marginLeft: "0.2rem" }}>/sqft</span>
+          </span>
+          <span style={{ fontSize: "0.72rem", color: "#aaa" }}>
+            {formatPrice(m.priceMin)} – {formatPrice(m.priceMax)}
+          </span>
+        </div>
+        <div style={{ height: "4px", backgroundColor: "rgba(0,0,0,0.04)", borderRadius: "2px", overflow: "hidden" }}>
+          <div
+            style={{
+              height: "100%",
+              width: `${pct}%`,
+              borderRadius: "2px",
+              backgroundColor: barColor,
+              transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Signal chips */}
+      <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+        {m.bhks.length > 0 && (
+          <span style={chipStyle("#f0f0f0", "#555")}>
+            {m.bhks.join(", ")} BHK
+          </span>
+        )}
+        {m.societies > 1 && (
+          <span style={chipStyle("#f0f0f0", "#555")}>
+            {m.societies} societies
+          </span>
+        )}
+        {m.readyToMove > 0 && (
+          <span style={chipStyle("rgba(42,122,42,0.08)", "#2a7a2a")}>
+            {m.readyToMove} ready
+          </span>
+        )}
+        {m.nearMetro > 0 && (
+          <span style={chipStyle("rgba(42,80,180,0.08)", "#2a5ab4")}>
+            {m.nearMetro} near metro
+          </span>
+        )}
+        {m.avgRating !== null && (
+          <span style={chipStyle("rgba(218,165,32,0.1)", "#8a6d00")}>
+            ★ {m.avgRating}
+          </span>
+        )}
+      </div>
+
+      {/* Top builder */}
+      {m.topBuilder && (
+        <p style={{ margin: "0.6rem 0 0", fontSize: "0.72rem", color: "#aaa" }}>
+          Top builder: <span style={{ color: "#777", fontWeight: 500 }}>{m.topBuilder}</span>
+        </p>
+      )}
+    </button>
+  );
+}
+
+function chipStyle(bg: string, color: string): React.CSSProperties {
+  return {
+    fontSize: "0.68rem",
+    padding: "0.15rem 0.5rem",
+    borderRadius: "999px",
+    backgroundColor: bg,
+    color,
+    fontWeight: 500,
+    whiteSpace: "nowrap",
+  };
+}
+
+function MicroMarketsSection({
+  properties,
+  navigate,
+}: {
+  properties: PropertyCard[];
+  navigate: (path: string) => void;
+}) {
+  const markets = deriveMicroMarkets(properties);
+  if (markets.length < 2) return null;
+
+  const maxAvg = Math.max(...markets.map((m) => m.avgPriceSqft));
+
+  return (
+    <section
+      style={{
+        padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem",
+        backgroundColor: "#fff",
+        borderBottom: "1px solid rgba(0,0,0,0.04)",
+      }}
+    >
+      <div style={{ maxWidth: "960px", margin: "0 auto" }}>
+        <div style={{ marginBottom: "1.5rem" }}>
+          <h2 style={{ margin: "0 0 0.25rem", fontSize: "clamp(1.3rem, 1rem + 1vw, 1.8rem)", fontWeight: 600, letterSpacing: "-0.02em" }}>
+            Bengaluru micro-markets
+          </h2>
+          <p style={{ margin: 0, fontSize: "0.85rem", color: "#888" }}>
+            {markets.length} areas · {properties.length} listings · real-time intelligence
+          </p>
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "0.75rem" }}>
+          {markets.map((m) => (
+            <MicroMarketCard key={m.area} m={m} maxAvg={maxAvg} navigate={navigate} />
+          ))}
+        </div>
+      </div>
+    </section>
   );
 }

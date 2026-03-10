@@ -4,6 +4,8 @@ import type {
   AreaListItem,
   AreaDetail,
   ShortlistResponse,
+  SearchResponse,
+  SocietySearchResponse,
 } from "./types.ts";
 
 const API_BASE = "http://localhost:4000";
@@ -41,4 +43,31 @@ export function getArea(id: string): Promise<AreaDetail> {
 
 export function getShortlist(): Promise<ShortlistResponse> {
   return fetchJson("/api/shortlist");
+}
+
+export function searchProperties(query: string): Promise<SearchResponse> {
+  return fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
+}
+
+export function searchSocieties(query: string): Promise<SocietySearchResponse> {
+  return fetchJson(`/api/societies/search?q=${encodeURIComponent(query)}`);
+}
+
+export type PlatformStats = {
+  properties: number;
+  societies: number;
+  areas: number;
+};
+
+export async function getStats(): Promise<PlatformStats> {
+  // Derive stats from existing endpoints in parallel
+  const [props, areas] = await Promise.all([
+    getProperties(),
+    getAreas(),
+  ]);
+  return {
+    properties: props.length,
+    societies: new Set(props.map((p) => p.society_name)).size,
+    areas: areas.length,
+  };
 }

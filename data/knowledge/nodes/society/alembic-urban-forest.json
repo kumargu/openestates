@@ -1,0 +1,73 @@
+{
+  "id": "society:alembic-urban-forest",
+  "node_type": "Society",
+  "name": "Alembic Urban Forest",
+  "facts": [
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Alembic"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.alembicurbanforest.com/",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189214Z",
+      "version": 1,
+      "display_template": "Built by {value}",
+      "answers_preferences": [
+        "builder"
+      ]
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "2 BHK",
+          "3 BHK"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.alembicurbanforest.com/",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189218Z",
+      "version": 1,
+      "display_template": "Configurations: {value}"
+    },
+    {
+      "key": "possession_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.alembicurbanforest.com/",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189220Z",
+      "version": 1,
+      "display_template": "Possession: {value}",
+      "answers_preferences": [
+        "ready to move",
+        "new construction"
+      ]
+    }
+  ],
+  "created_at": "2026-03-09T20:23:48.189213Z",
+  "updated_at": "2026-03-09T20:23:48.189222Z"
+}

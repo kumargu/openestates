@@ -1,0 +1,115 @@
+{
+  "id": "society:abhee-celestial-city",
+  "node_type": "Society",
+  "name": "Abhee Celestial City",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Abhee Celestial City"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Sarjapur Road"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Abhee Developers"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "total_units",
+      "value": {
+        "type": "Numeric",
+        "data": 400.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "year_built",
+      "value": {
+        "type": "Numeric",
+        "data": 2029.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    },
+    {
+      "key": "summary",
+      "value": {
+        "type": "Text",
+        "data": "Strategically located on Sarjapur Road, in close proximity to Wipro SEZ and Greenwood High School.. Spread over 5 acres with 3 impressive towers, offering luxurious 2 BHK and 3 BHK apartments.. Configurations: 2 BHK, 3 BHK"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.998898+00:00",
+      "version": 1
+    }
+  ],
+  "summary_embedding": null,
+  "created_at": "2026-03-09T16:34:12.998898+00:00",
+  "updated_at": "2026-03-09T16:34:12.998898+00:00"
+}

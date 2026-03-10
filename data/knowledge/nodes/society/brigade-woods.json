@@ -1,0 +1,98 @@
+{
+  "id": "society:brigade-woods",
+  "node_type": "Society",
+  "name": "Brigade Woods",
+  "facts": [
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Brigade Group"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189117Z",
+      "version": 1,
+      "display_template": "Built by {value}",
+      "answers_preferences": [
+        "builder"
+      ]
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "1 BHK",
+          "2 BHK",
+          "2.5 BHK",
+          "3 BHK",
+          "3.5 BHK"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189121Z",
+      "version": 1,
+      "display_template": "Configurations: {value}"
+    },
+    {
+      "key": "price_range",
+      "value": {
+        "type": "Text",
+        "data": "₹233L - ₹326L"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189125Z",
+      "version": 1,
+      "display_template": "Price: {value}",
+      "answers_preferences": [
+        "value for money",
+        "budget"
+      ]
+    },
+    {
+      "key": "possession_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-brigade-woods-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.189133Z",
+      "version": 1,
+      "display_template": "Possession: {value}",
+      "answers_preferences": [
+        "ready to move",
+        "new construction"
+      ]
+    }
+  ],
+  "created_at": "2026-03-09T20:23:48.189114Z",
+  "updated_at": "2026-03-09T20:23:48.189135Z"
+}

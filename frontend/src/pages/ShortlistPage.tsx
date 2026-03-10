@@ -4,7 +4,6 @@ import type { PropertyCard as PropertyCardType, PropertyDetailResponse, CompareT
 import { getProperties, getProperty } from "../lib/api.ts";
 import { PropertyCard } from "../components/PropertyCard.tsx";
 import { getShortlistedIds, toggleShortlist } from "../lib/shortlist-store.ts";
-import { SAMPLE_PROPERTIES } from "../lib/sample-data.ts";
 import { computeThemes, computeBestFor } from "../lib/compare.ts";
 
 function formatPrice(price: number): string {
@@ -27,6 +26,8 @@ export function ShortlistPage() {
   const [detailsLoaded, setDetailsLoaded] = useState(false);
   const navigate = useNavigate();
 
+  const [loadError, setLoadError] = useState(false);
+
   useEffect(() => {
     getProperties()
       .then((data) => {
@@ -34,7 +35,7 @@ export function ShortlistPage() {
         setLoaded(true);
       })
       .catch(() => {
-        setAllProperties(SAMPLE_PROPERTIES);
+        setLoadError(true);
         setLoaded(true);
       });
   }, []);
@@ -78,6 +79,21 @@ export function ShortlistPage() {
     return (
       <div className="page-container" style={{ textAlign: "center", padding: "4rem 2rem", color: "var(--color-text-muted)" }}>
         Loading...
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="page-container" style={{ textAlign: "center", padding: "4rem 2rem" }}>
+        <h2 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "0.75rem" }}>Could not load data</h2>
+        <p style={{ color: "var(--color-text-secondary)", marginBottom: "1.5rem", lineHeight: 1.6 }}>
+          The backend is unavailable. Please try again later.
+        </p>
+        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
+          <button className="btn btn-primary" onClick={() => window.location.reload()}>Retry</button>
+          <button className="btn btn-outline" onClick={() => navigate("/")}>Return home</button>
+        </div>
       </div>
     );
   }

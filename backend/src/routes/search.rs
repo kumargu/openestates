@@ -1,0 +1,549 @@
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use axum::Json;
+use axum::extract::{Query, State};
+use serde::Deserialize;
+
+use crate::discovery;
+use crate::discovery::gemini::DiscoveryConstraints;
+use crate::knowledge::{KnowledgeGraph, SearchEvent, store as kg_store};
+use crate::knowledge::fact::ScoringDirection;
+use crate::knowledge::search_event::EnrichmentGap;
+use crate::search::{KnowledgeContext, SearchResponse, SourcedClaim, TextSearch, intent};
+use crate::state::AppState;
+
+use super::enrichment::society_node_id;
+
+/// Score threshold below which we trigger live discovery.
+const DISCOVERY_THRESHOLD: f64 = 0.15;
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: Option<String>,
+}
+
+/// GET /api/search?q=... — intent-based search with live discovery fallback.
+pub async fn search_properties(
+    State(state): State<Arc<AppState>>,
+    Query(params): Query<SearchQuery>,
+) -> Json<SearchResponse> {
+    let query = params.q.unwrap_or_default();
+
+    if query.trim().is_empty() {
+        return Json(SearchResponse {
+            query,
+            intent: intent::SearchIntent {
+                area: None,
+                bhk: None,
+                budget_max: None,
+                preferences: Vec::new(),
+            },
+            results: Vec::new(),
+            area_context: None,
+            total_results: 0,
+            knowledge_context: None,
+            discovery_status: None,
+            discovery_count: None,
+        });
+    }
+
+    // Parse structured intent from the natural-language query.
+    let parsed_intent = intent::parse_intent(&query);
+
+    // Build society name lookup map.
+    let society_names: HashMap<String, String> = state
+        .societies
+        .iter()
+        .map(|s| (s.id.clone(), s.name.clone()))
+        .collect();
+
+    // Look up area context if the intent identified an area.
+    let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
+        state
+            .areas
+            .iter()
+            .find(|a| a.name.eq_ignore_ascii_case(area_name))
+            .cloned()
+    });
+
+    // Acquire graph + properties read locks.
+    let graph = state.knowledge.read().await;
+    let properties = state.properties.read().await;
+
+    // Run intent-based search, passing graph for preference scoring.
+    let mut results = TextSearch::search_with_intent(
+        &properties,
+        &society_names,
+        &state.societies,
+        &query,
+        &parsed_intent,
+        Some(&graph),
+    );
+
+    // Drop read locks before potentially doing discovery (which needs write locks).
+    drop(properties);
+    drop(graph);
+
+    // --- Live Discovery: if results are poor, discover on-the-fly ---
+    let mut discovery_status: Option<String> = None;
+    let mut discovery_count: Option<usize> = None;
+
+    let max_score = results.iter().map(|r| r.match_score).fold(0.0f64, f64::max);
+    let should_discover = (results.is_empty() || max_score < DISCOVERY_THRESHOLD)
+        && parsed_intent.area.is_some()
+        && state.gemini.is_some();
+
+    if should_discover {
+        let area = parsed_intent.area.as_ref().unwrap();
+        let cache_key = discovery::DiscoveryCache::cache_key(
+            area,
+            parsed_intent.bhk,
+            parsed_intent.budget_max,
+        );
+
+        // Check discovery cache first
+        let mut dc = state.discovery_cache.lock().await;
+        if let Some(cached) = dc.get(&cache_key) {
+            // We have cached discoveries but they might not be in the property list yet.
+            // The properties were already ingested on the first discovery call.
+            discovery_status = Some("from_cache".to_string());
+            discovery_count = Some(cached.len());
+            drop(dc);
+        } else if dc.can_discover() {
+            drop(dc); // Release lock before async Gemini call
+
+            let gemini = state.gemini.as_ref().unwrap();
+            let constraints = DiscoveryConstraints {
+                bhk: parsed_intent.bhk,
+                budget_max: parsed_intent.budget_max,
+            };
+
+            match gemini.discover_properties(area, "Bangalore", &constraints).await {
+                Ok((discoveries, area_identified)) => {
+                    let area_canonical = area_identified.as_deref().unwrap_or(area);
+                    let disc_count = discoveries.len();
+
+                    // Cache the raw discoveries
+                    {
+                        let mut dc = state.discovery_cache.lock().await;
+                        dc.put(cache_key, discoveries.clone());
+                    }
+
+                    // Ingest into knowledge graph
+                    let new_properties = {
+                        let mut graph = state.knowledge.write().await;
+                        discovery::ingest::ingest_discoveries(
+                            &discoveries,
+                            &mut graph,
+                            area_canonical,
+                            &query,
+                        )
+                    };
+
+                    if !new_properties.is_empty() {
+                        // Persist to seed data
+                        let existing_props = state.properties.read().await;
+                        if let Err(e) = discovery::ingest::persist_to_seed(
+                            &state.project_root,
+                            &existing_props,
+                            &new_properties,
+                        ) {
+                            eprintln!("WARN: Failed to persist discovered properties: {}", e);
+                        }
+                        drop(existing_props);
+
+                        // Add to in-memory property list
+                        {
+                            let mut props = state.properties.write().await;
+                            for p in &new_properties {
+                                if !props.iter().any(|ep| ep.id == p.id) {
+                                    props.push(p.clone());
+                                }
+                            }
+                        }
+
+                        // Persist knowledge graph
+                        {
+                            let graph = state.knowledge.read().await;
+                            let kg_dir = kg_store::knowledge_dir(&state.project_root);
+                            if let Err(e) = kg_store::save_graph(&kg_dir, &graph) {
+                                eprintln!("WARN: Failed to persist knowledge graph: {}", e);
+                            }
+                        }
+
+                        // Re-run search with expanded corpus
+                        let graph = state.knowledge.read().await;
+                        let properties = state.properties.read().await;
+                        results = TextSearch::search_with_intent(
+                            &properties,
+                            &society_names,
+                            &state.societies,
+                            &query,
+                            &parsed_intent,
+                            Some(&graph),
+                        );
+                        drop(properties);
+                        drop(graph);
+                    }
+
+                    discovery_status = Some("discovered_new".to_string());
+                    discovery_count = Some(disc_count);
+                }
+                Err(e) => {
+                    eprintln!("WARN: Live discovery failed: {}", e);
+                    discovery_status = Some("discovery_failed".to_string());
+                }
+            }
+        } else {
+            drop(dc);
+            discovery_status = Some("rate_limited".to_string());
+        }
+    }
+
+    let total_results = results.len();
+
+    // --- Extract knowledge context from the graph ---
+    let graph = state.knowledge.read().await;
+    let properties = state.properties.read().await;
+    let (knowledge_context, graph_nodes_hit, enrichment_gaps) = {
+        let matched_society_ids: Vec<String> = results
+            .iter()
+            .filter_map(|r| {
+                properties
+                    .iter()
+                    .find(|p| p.id == r.card.id)
+                    .map(|p| p.society_id.clone())
+            })
+            .collect();
+
+        build_knowledge_context(&graph, &matched_society_ids, &parsed_intent)
+    };
+    drop(properties);
+    drop(graph);
+
+    // --- Log search event ---
+    let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
+    event.graph_nodes_hit = graph_nodes_hit;
+    event.enrichment_gaps = enrichment_gaps;
+
+    let kg_dir = kg_store::knowledge_dir(&state.project_root);
+    if let Err(e) = kg_store::append_search_log(&kg_dir, &event) {
+        eprintln!("WARN: Failed to append search log: {}", e);
+    }
+
+    {
+        let mut graph = state.knowledge.write().await;
+        graph.log_search(event);
+    }
+
+    Json(SearchResponse {
+        query,
+        intent: parsed_intent,
+        results,
+        area_context,
+        total_results,
+        knowledge_context: Some(knowledge_context),
+        discovery_status,
+        discovery_count,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Legacy fallback maps — used only for seed facts without self-describing metadata.
+// As skills populate display_template + answers_preferences, these shrink to nothing.
+// ---------------------------------------------------------------------------
+
+/// Legacy: maps a fact key to display format (for facts without display_template).
+fn claim_format(fact_key: &str) -> Option<ClaimFormat> {
+    match fact_key {
+        "maintenance_sentiment" | "maintenance_quality" => {
+            Some(ClaimFormat::Text("Maintenance is"))
+        }
+        "reddit_thread_count" => Some(ClaimFormat::NumericInt("{} Reddit discussions found")),
+        "livability_sentiment" | "family_suitability" => {
+            Some(ClaimFormat::Text("Family suitability:"))
+        }
+        "resident_sentiment" => Some(ClaimFormat::Text("Resident sentiment:")),
+        _ => None,
+    }
+}
+
+enum ClaimFormat {
+    Text(&'static str),
+    NumericInt(&'static str),
+}
+
+/// Legacy: maps a preference to a fact key (for nodes without answers_preferences).
+fn legacy_preference_to_fact_key(preference: &str) -> Option<&'static str> {
+    match preference {
+        "metro access" | "metro" | "near metro" => Some("metro_distance"),
+        "quiet neighborhood" | "quiet" | "peaceful" => Some("noise_level"),
+        "greenery" | "green" | "parks" => Some("greenery_score"),
+        "good society" | "well maintained" | "maintenance" => Some("maintenance_quality"),
+        "safe" | "safety" | "secure" => Some("safety_rating"),
+        "water supply" | "water" => Some("water_supply"),
+        _ => None,
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge context builder — graph-first, legacy fallback
+// ---------------------------------------------------------------------------
+
+/// Build knowledge context from the graph for matched results.
+/// Returns (KnowledgeContext, graph_nodes_hit, enrichment_gaps).
+fn build_knowledge_context(
+    graph: &KnowledgeGraph,
+    society_ids: &[String],
+    intent: &intent::SearchIntent,
+) -> (KnowledgeContext, Vec<String>, Vec<EnrichmentGap>) {
+    let mut claims = Vec::new();
+    let mut nodes_consulted = 0;
+    let mut learning_gaps = Vec::new();
+    let mut graph_nodes_hit = Vec::new();
+    let mut enrichment_gaps = Vec::new();
+
+    for society_id in society_ids {
+        let node_id = society_node_id(society_id);
+
+        if let Some(node) = graph.get_node(&node_id) {
+            nodes_consulted += 1;
+            graph_nodes_hit.push(node_id.clone());
+
+            // --- Extract claims ---
+            // Priority: fact's own display_template > legacy fallback map.
+            for fact in &node.facts {
+                let claim_text = if let Some(ref template) = fact.display_template {
+                    let rendered = render_template(template, &fact.value);
+                    if rendered.is_empty() { None } else { Some(rendered) }
+                } else {
+                    match claim_format(&fact.key) {
+                        Some(ClaimFormat::Text(prefix)) => {
+                            extract_text_value(&fact.value)
+                                .map(|val| format!("{} {}", prefix, val))
+                        }
+                        Some(ClaimFormat::NumericInt(template)) => {
+                            extract_numeric_value(&fact.value)
+                                .map(|val| template.replace("{}", &(val as u32).to_string()))
+                        }
+                        None => None,
+                    }
+                };
+
+                if let Some(claim) = claim_text {
+                    claims.push(SourcedClaim {
+                        entity_name: node.name.clone(),
+                        claim,
+                        confidence: fact.confidence,
+                        source_type: format!("{:?}", fact.source.source_type),
+                    });
+                }
+            }
+
+            // --- Detect learning gaps ---
+            // For each user preference, check if ANY fact on this node answers it.
+            // Graph-first: scan facts' answers_preferences fields.
+            // Legacy fallback: hardcoded preference→fact_key map.
+            for pref in &intent.preferences {
+                let pref_lower = pref.to_lowercase();
+
+                // Graph-first: does any fact on this node declare it answers this preference?
+                let answered_by_graph = node.facts.iter().any(|f| {
+                    f.answers_preferences
+                        .iter()
+                        .any(|ap| ap.to_lowercase() == pref_lower)
+                });
+
+                if answered_by_graph {
+                    continue; // Graph knows this — no gap
+                }
+
+                // Legacy fallback: check hardcoded map
+                if let Some(needed_fact) = legacy_preference_to_fact_key(pref) {
+                    if node.facts.iter().any(|f| f.key == needed_fact) {
+                        continue; // Old-style fact exists — no gap
+                    }
+                    // Gap: neither graph-declared nor legacy fact found
+                    learning_gaps.push(format!(
+                        "{}: missing {} data",
+                        node.name, needed_fact
+                    ));
+                    enrichment_gaps.push(EnrichmentGap {
+                        entity_id: node_id.clone(),
+                        missing_fact: needed_fact.to_string(),
+                        reason: format!("User preference: {}", pref),
+                    });
+                } else {
+                    // Completely unknown preference — still a gap, but we don't know
+                    // which fact key to ask for. Log it as a generic gap.
+                    learning_gaps.push(format!(
+                        "{}: no knowledge about '{}'",
+                        node.name, pref
+                    ));
+                    enrichment_gaps.push(EnrichmentGap {
+                        entity_id: node_id.clone(),
+                        missing_fact: format!("unknown:{}", pref_lower.replace(' ', "_")),
+                        reason: format!("Unknown preference: {}", pref),
+                    });
+                }
+            }
+        }
+    }
+
+    claims.dedup_by(|a, b| a.entity_name == b.entity_name && a.claim == b.claim);
+
+    let context = KnowledgeContext {
+        claims,
+        nodes_consulted,
+        learning_gaps,
+    };
+
+    (context, graph_nodes_hit, enrichment_gaps)
+}
+
+// ---------------------------------------------------------------------------
+// Graph-driven preference scoring (used by text.rs)
+// ---------------------------------------------------------------------------
+
+/// Score how well a node's facts match a user preference, using the graph's own
+/// scoring_hint metadata. Returns a score 0.0-2.0 (same scale as the old hardcoded fn).
+///
+/// Called from text.rs as a graph-aware alternative to the hardcoded preference_score.
+pub fn graph_preference_score(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    preference: &str,
+) -> Option<f64> {
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id)?;
+    let pref_lower = preference.to_lowercase();
+
+    // Find any fact that declares it answers this preference AND has a scoring_hint
+    for fact in &node.facts {
+        let answers = fact
+            .answers_preferences
+            .iter()
+            .any(|ap| ap.to_lowercase() == pref_lower);
+
+        if !answers {
+            continue;
+        }
+
+        if let Some(ref hint) = fact.scoring_hint {
+            return Some(score_fact_with_hint(&fact.value, hint));
+        }
+
+        // Has answers_preferences but no scoring_hint — give a base score
+        // (the fact exists and is relevant, we just don't know the direction)
+        return Some(1.0);
+    }
+
+    None // No fact answers this preference
+}
+
+/// Apply a scoring hint to a fact value. Returns 0.0 - weight (typically 0-2).
+fn score_fact_with_hint(
+    value: &crate::knowledge::FactValue,
+    hint: &crate::knowledge::ScoringHint,
+) -> f64 {
+    let weight = hint.weight as f64;
+
+    match &hint.direction {
+        ScoringDirection::HigherIsBetter => {
+            let num = fact_to_numeric(value).unwrap_or(0.0);
+            if hint.thresholds.len() >= 2 {
+                // thresholds: [good, ok] e.g. [0.8, 0.5]
+                if num >= hint.thresholds[0] {
+                    weight // full score
+                } else if num >= hint.thresholds[1] {
+                    weight * 0.5 // partial
+                } else {
+                    0.0
+                }
+            } else {
+                // No thresholds: linear scale assuming 0-1 range
+                num.clamp(0.0, 1.0) * weight
+            }
+        }
+        ScoringDirection::LowerIsBetter => {
+            let num = fact_to_numeric(value).unwrap_or(f64::MAX);
+            if hint.thresholds.len() >= 2 {
+                // thresholds: [good, ok] e.g. [10.0, 20.0] for metro_distance
+                if num <= hint.thresholds[0] {
+                    weight
+                } else if num <= hint.thresholds[1] {
+                    weight * 0.5
+                } else {
+                    0.0
+                }
+            } else {
+                // No thresholds: inverse scale
+                let score = (1.0 - num.clamp(0.0, 1.0)) * weight;
+                score.max(0.0)
+            }
+        }
+        ScoringDirection::TextMatch => {
+            // For text facts: positive values score full, negative score zero
+            let text = fact_to_text(value).unwrap_or_default().to_lowercase();
+            let positive = ["good", "high", "positive", "quiet", "safe", "yes", "excellent"];
+            let partial = ["average", "moderate", "mixed", "ok"];
+            if positive.iter().any(|p| text.contains(p)) {
+                weight
+            } else if partial.iter().any(|p| text.contains(p)) {
+                weight * 0.5
+            } else {
+                0.0
+            }
+        }
+    }
+}
+
+fn fact_to_numeric(value: &crate::knowledge::FactValue) -> Option<f64> {
+    match value {
+        crate::knowledge::FactValue::Numeric(n) => Some(*n),
+        crate::knowledge::FactValue::Score { value: v, .. } => Some(*v),
+        _ => None,
+    }
+}
+
+fn fact_to_text(value: &crate::knowledge::FactValue) -> Option<&str> {
+    match value {
+        crate::knowledge::FactValue::Text(s) => Some(s.as_str()),
+        _ => None,
+    }
+}
+
+/// Render a display template by replacing `{value}` with the fact's value.
+fn render_template(template: &str, value: &crate::knowledge::FactValue) -> String {
+    let value_str = match value {
+        crate::knowledge::FactValue::Text(s) => s.clone(),
+        crate::knowledge::FactValue::Numeric(n) => {
+            if *n == (*n as i64) as f64 {
+                format!("{}", *n as i64)
+            } else {
+                format!("{:.1}", n)
+            }
+        }
+        crate::knowledge::FactValue::Bool(b) => {
+            if *b { "yes".to_string() } else { "no".to_string() }
+        }
+        crate::knowledge::FactValue::Tags(tags) => tags.join(", "),
+        crate::knowledge::FactValue::Score { value: v, explanation: _ } => format!("{:.1}", v),
+    };
+    template.replace("{value}", &value_str)
+}
+
+fn extract_text_value(value: &crate::knowledge::FactValue) -> Option<&str> {
+    match value {
+        crate::knowledge::FactValue::Text(s) => Some(s.as_str()),
+        _ => None,
+    }
+}
+
+fn extract_numeric_value(value: &crate::knowledge::FactValue) -> Option<f64> {
+    match value {
+        crate::knowledge::FactValue::Numeric(n) => Some(*n),
+        _ => None,
+    }
+}

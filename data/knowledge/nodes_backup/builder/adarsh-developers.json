@@ -1,0 +1,24 @@
+{
+  "id": "builder:adarsh-developers",
+  "node_type": "Builder",
+  "name": "Adarsh Developers",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Adarsh Developers"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:13.007347+00:00",
+      "version": 1
+    }
+  ],
+  "summary_embedding": null,
+  "created_at": "2026-03-09T16:34:13.007347+00:00",
+  "updated_at": "2026-03-09T16:34:13.007347+00:00"
+}

@@ -1,12 +1,17 @@
+mod cache;
 mod data_loader;
+mod discovery;
+mod knowledge;
 mod models;
 mod routes;
+mod search;
 mod state;
+mod storage;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::routing::get;
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
@@ -26,13 +31,12 @@ async fn health() -> Json<HealthResponse> {
 
 #[tokio::main]
 async fn main() {
-    let data_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+    let project_root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("backend must be inside project root")
-        .join("data")
-        .join("seed");
+        .to_path_buf();
 
-    let state = Arc::new(data_loader::load_seed_data(&data_dir));
+    let state = Arc::new(data_loader::load_app_state(&project_root).await);
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -50,18 +54,82 @@ async fn main() {
         .route("/api/areas", get(routes::areas::list_areas))
         .route("/api/areas/{id}", get(routes::areas::get_area))
         .route("/api/shortlist", get(routes::shortlist::get_shortlist))
+        .route("/api/search", get(routes::search::search_properties))
+        .route(
+            "/api/societies/search",
+            get(routes::societies::search_societies),
+        )
+        .route(
+            "/api/societies/{slug}",
+            get(routes::societies::get_society),
+        )
+        // Knowledge graph endpoints
+        .route("/api/knowledge/stats", get(routes::knowledge::graph_stats))
+        .route("/api/knowledge/nodes", get(routes::knowledge::list_nodes))
+        .route(
+            "/api/knowledge/nodes/{id}",
+            get(routes::knowledge::get_node),
+        )
+        .route(
+            "/api/knowledge/nodes/{id}/neighbors",
+            get(routes::knowledge::get_neighbors),
+        )
+        .route(
+            "/api/knowledge/nodes/{id}/facts",
+            post(routes::knowledge::add_facts),
+        )
+        .route(
+            "/api/knowledge/enrichment/queue",
+            get(routes::knowledge::enrichment_queue),
+        )
+        .route(
+            "/api/knowledge/search-log",
+            get(routes::knowledge::search_log),
+        )
+        // Graph query endpoints
+        .route("/api/knowledge/path", get(routes::knowledge::find_path))
+        .route(
+            "/api/knowledge/nodes/{id}/subgraph",
+            get(routes::knowledge::get_subgraph),
+        )
+        .route(
+            "/api/knowledge/compare",
+            get(routes::knowledge::compare_nodes),
+        )
+        .route(
+            "/api/knowledge/coverage",
+            get(routes::knowledge::fact_coverage),
+        )
+        // Embedding / similarity endpoints
+        .route(
+            "/api/knowledge/nodes/{id}/similar",
+            get(routes::knowledge::similar_nodes),
+        )
+        .route(
+            "/api/knowledge/embeddings/stats",
+            get(routes::knowledge::embedding_stats),
+        )
         .layer(cors)
         .with_state(state);
 
     println!("OpenEstates API listening on http://localhost:4000");
     println!("Routes:");
-    println!("  GET /");
     println!("  GET /api/health");
-    println!("  GET /api/properties");
-    println!("  GET /api/properties/{{id}}");
-    println!("  GET /api/areas");
-    println!("  GET /api/areas/{{id}}");
-    println!("  GET /api/shortlist");
+    println!("  GET /api/properties | /api/properties/{{id}}");
+    println!("  GET /api/areas | /api/areas/{{id}}");
+    println!("  GET /api/search?q=...");
+    println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
+    println!("  GET /api/knowledge/stats");
+    println!("  GET /api/knowledge/nodes?type=... | /api/knowledge/nodes/{{id}}");
+    println!("  GET /api/knowledge/nodes/{{id}}/neighbors");
+    println!("  GET /api/knowledge/enrichment/queue");
+    println!("  GET /api/knowledge/search-log");
+    println!("  GET /api/knowledge/path?from=...&to=...");
+    println!("  GET /api/knowledge/nodes/{{id}}/subgraph?depth=2");
+    println!("  GET /api/knowledge/compare?a=...&b=...");
+    println!("  GET /api/knowledge/coverage?type=society");
+    println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
+    println!("  GET /api/knowledge/embeddings/stats");
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
         .await

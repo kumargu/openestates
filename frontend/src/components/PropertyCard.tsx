@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import type { PropertyCard as PropertyCardType } from "../lib/types.ts";
+import type { PropertyCard as PropertyCardType, PropertyDetailResponse } from "../lib/types.ts";
 import type { MatchResult } from "../lib/search.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { getProperty } from "../lib/api.ts";
 
 function formatPrice(price: number): string {
-  if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `${(price / 100_000).toFixed(1)} L`;
-  return price.toLocaleString("en-IN");
+  if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
+  if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
+  return `\u20B9${price.toLocaleString("en-IN")}`;
 }
 
 const LABEL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -28,6 +29,9 @@ export function PropertyCard({
   onShortlistChange?: () => void;
 }) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
+  const [expanded, setExpanded] = useState(false);
+  const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -37,112 +41,221 @@ export function PropertyCard({
     onShortlistChange?.();
   };
 
+  const handleExpand = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setExpanded(!expanded);
+  };
+
+  // Fetch detail when expanding for the first time
+  useEffect(() => {
+    if (expanded && !detail && !detailLoading) {
+      setDetailLoading(true);
+      getProperty(property.id)
+        .then(setDetail)
+        .catch(() => {})
+        .finally(() => setDetailLoading(false));
+    }
+  }, [expanded, detail, detailLoading, property.id]);
+
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
 
   return (
-    <Link to={`/property/${property.id}`} className="property-card" data-testid="property-card-link" style={{ position: "relative" }}>
-      <ImageWithFallback
-        src={property.hero_image}
-        alt={property.title}
-        style={{ width: "100%", height: "180px" }}
-      />
+    <div className={`property-card-v2 ${expanded ? "property-card-v2--expanded" : ""}`}>
+      {/* === Layer A: Always visible === */}
+      <Link to={`/property/${property.id}`} className="property-card-v2-link">
+        <div className="property-card-v2-image">
+          <ImageWithFallback
+            src={property.hero_image}
+            alt={property.title}
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
 
-      {/* Save button */}
-      <button
-        onClick={handleSave}
-        style={{
-          position: "absolute",
-          top: "0.75rem",
-          right: "0.75rem",
-          width: "32px",
-          height: "32px",
-          borderRadius: "50%",
-          border: "none",
-          background: saved ? "var(--color-accent)" : "rgba(255,255,255,0.9)",
-          color: saved ? "#fff" : "var(--color-text-muted)",
-          cursor: "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          backdropFilter: "blur(8px)",
-          transition: "all 0.2s ease",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.1)",
-        }}
-        title={saved ? "Remove from shortlist" : "Save to shortlist"}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-        </svg>
-      </button>
+          {/* Save button */}
+          <button
+            onClick={handleSave}
+            className={`property-card-save ${saved ? "property-card-save--saved" : ""}`}
+            title={saved ? "Remove from shortlist" : "Save to shortlist"}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+            </svg>
+            <span className="property-card-save-label">
+              {saved ? "Saved" : "Save"}
+            </span>
+          </button>
 
-      <div style={{ padding: "1.25rem" }}>
-        {/* Match label */}
-        {match && labelStyle && (
-          <div style={{ marginBottom: "0.6rem" }}>
-            <span style={{
-              fontSize: "0.7rem",
-              fontWeight: 600,
-              padding: "0.2rem 0.6rem",
-              borderRadius: "var(--radius-xl)",
-              background: labelStyle.bg,
-              color: labelStyle.color,
-              border: `1px solid ${labelStyle.border}`,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-            }}>
+          {/* Match label overlay */}
+          {match && labelStyle && (
+            <span
+              className="property-card-match"
+              style={{
+                background: labelStyle.bg,
+                color: labelStyle.color,
+                border: `1px solid ${labelStyle.border}`,
+              }}
+            >
               {match.label}
             </span>
-          </div>
-        )}
-
-        <h3 style={{
-          margin: "0 0 0.25rem",
-          fontSize: "1rem",
-          fontWeight: 600,
-          letterSpacing: "-0.01em",
-        }}>
-          {property.title}
-        </h3>
-        <p style={{ margin: "0 0 0.6rem", color: "var(--color-text-secondary)", fontSize: "0.85rem" }}>
-          {property.society_name} &middot; {property.area}
-        </p>
-
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "0.4rem" }}>
-          <span style={{ fontSize: "1.2rem", fontWeight: 700 }}>
-            {formatPrice(property.price)}
-          </span>
-          <span style={{ color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
-            {property.price_per_sqft.toLocaleString("en-IN")} /sqft
-          </span>
+          )}
         </div>
 
-        <p style={{ margin: "0 0 0.6rem", color: "var(--color-text-muted)", fontSize: "0.8rem" }}>
-          {property.bhk} BHK &middot; {property.sqft} sqft
-        </p>
-
-        {/* Why this property */}
-        {match && (
-          <p style={{
-            margin: "0 0 0.6rem",
-            fontSize: "0.8rem",
-            color: "var(--color-text-secondary)",
-            lineHeight: 1.4,
-            fontStyle: "italic",
-          }}>
-            {match.reason}
+        <div className="property-card-v2-body">
+          <h3 className="property-card-v2-title">{property.title}</h3>
+          <p className="property-card-v2-location">
+            {property.society_name} &middot; {property.area}
           </p>
-        )}
 
-        {property.transparency_tags.length > 0 && (
-          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-            {property.transparency_tags.map((tag) => (
-              <span key={tag} className="tag tag-positive">
-                {tag.replace(/_/g, " ")}
-              </span>
-            ))}
+          <div className="property-card-v2-price-row">
+            <span className="property-card-v2-price">{formatPrice(property.price)}</span>
+            <span className="property-card-v2-ppsqft">
+              {property.price_per_sqft.toLocaleString("en-IN")} /sqft
+            </span>
           </div>
-        )}
-      </div>
-    </Link>
+
+          <div className="property-card-v2-specs">
+            <span>{property.bhk} BHK</span>
+            <span>&middot;</span>
+            <span>{property.sqft} sqft</span>
+            <span>&middot;</span>
+            <span>{property.facing}</span>
+            <span>&middot;</span>
+            <span>Floor {property.floor}/{property.total_floors}</span>
+          </div>
+
+          {/* Why this property */}
+          {match && (
+            <p className="property-card-v2-reason">{match.reason}</p>
+          )}
+
+          {/* Compact signals row */}
+          <div className="property-card-v2-signals">
+            <span className="property-signal">
+              {property.possession_status === "ready" ? "Ready to move" : "Under construction"}
+            </span>
+            <span className="property-signal">
+              {property.metro_distance_mins} min to metro
+            </span>
+            <span className="property-signal">
+              {property.builder_name}
+            </span>
+          </div>
+
+          {/* Tags */}
+          {property.transparency_tags.length > 0 && (
+            <div className="property-card-v2-tags">
+              {property.transparency_tags.map((tag) => (
+                <span key={tag} className="tag tag-positive">
+                  {tag.replace(/_/g, " ")}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      </Link>
+
+      {/* Quick-view toggle */}
+      <button onClick={handleExpand} className="property-card-expand">
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+          style={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 0.2s ease" }}
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+        {expanded ? "Less" : "Quick view"}
+      </button>
+
+      {/* === Layer B: Expandable quick-view === */}
+      {expanded && (
+        <div className="property-card-quickview">
+          {detailLoading && (
+            <p style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>Loading details...</p>
+          )}
+
+          {!detailLoading && !detail && (
+            <p className="quickview-summary">{property.description_summary}</p>
+          )}
+
+          {detail && (
+            <>
+              <p className="quickview-summary">{detail.property.description_summary}</p>
+
+              {/* Price context */}
+              {detail.area && (
+                <div className="quickview-row">
+                  <span className="quickview-label">Price vs area median</span>
+                  <span className="quickview-value" style={{
+                    color: property.price_per_sqft <= detail.area.median_price_per_sqft
+                      ? "var(--color-positive)" : "var(--color-text)",
+                    fontWeight: 600,
+                  }}>
+                    {property.price_per_sqft <= detail.area.median_price_per_sqft
+                      ? `${Math.round((1 - property.price_per_sqft / detail.area.median_price_per_sqft) * 100)}% below median`
+                      : `${Math.round((property.price_per_sqft / detail.area.median_price_per_sqft - 1) * 100)}% above median`
+                    }
+                  </span>
+                </div>
+              )}
+
+              {/* Key signals grid */}
+              <div className="quickview-grid">
+                <div className="quickview-stat">
+                  <span className="quickview-stat-label">Society</span>
+                  <span className="quickview-stat-value">
+                    {detail.property.society_quality_score >= 0.7 ? "Strong" : detail.property.society_quality_score >= 0.5 ? "Decent" : "Weak"}
+                  </span>
+                </div>
+                <div className="quickview-stat">
+                  <span className="quickview-stat-label">Docs</span>
+                  <span className="quickview-stat-value">
+                    {detail.property.document_completeness_score >= 0.8 ? "Complete" : "Partial"}
+                  </span>
+                </div>
+                <div className="quickview-stat">
+                  <span className="quickview-stat-label">Risk</span>
+                  <span className="quickview-stat-value" style={{
+                    color: detail.property.litigation_risk <= 0.1 ? "var(--color-positive)" : "var(--color-warning)",
+                  }}>
+                    {detail.property.litigation_risk <= 0.1 ? "Low" : detail.property.litigation_risk <= 0.3 ? "Moderate" : "High"}
+                  </span>
+                </div>
+                <div className="quickview-stat">
+                  <span className="quickview-stat-label">Market</span>
+                  <span className="quickview-stat-value">
+                    {detail.property.interest_level || "\u2014"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Society summary */}
+              {detail.society && (
+                <div className="quickview-section">
+                  <span className="quickview-section-title">Society</span>
+                  <p className="quickview-section-text">{detail.society.review_summary}</p>
+                </div>
+              )}
+
+              {/* Area summary */}
+              {detail.area && (
+                <div className="quickview-section">
+                  <span className="quickview-section-title">Area</span>
+                  <p className="quickview-section-text">{detail.area.livability_summary}</p>
+                </div>
+              )}
+            </>
+          )}
+
+          <div className="quickview-actions">
+            <button onClick={handleSave} className={`btn ${saved ? "btn-outline" : "btn-primary"}`} style={{ fontSize: "0.82rem" }}>
+              {saved ? "Saved to shortlist" : "Save to shortlist"}
+            </button>
+            <Link to={`/property/${property.id}`} className="btn btn-outline" style={{ fontSize: "0.82rem", textDecoration: "none" }}>
+              Full details
+            </Link>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

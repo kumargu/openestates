@@ -5,37 +5,21 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::Serialize;
 
-use crate::models::{AreaProfile, PropertyCard, Society};
+use crate::models::PropertyCard;
 use crate::state::AppState;
+
+use super::enrichment::{enrich_area, enrich_property_card, enrich_society};
 
 /// GET /api/properties — returns UI-ready property cards.
 pub async fn list_properties(
     State(state): State<Arc<AppState>>,
 ) -> Json<Vec<PropertyCard>> {
-    let cards: Vec<PropertyCard> = state
-        .properties
-        .iter()
-        .map(|p| {
-            let society_name = state
-                .societies
-                .iter()
-                .find(|s| s.id == p.society_id)
-                .map(|s| s.name.clone())
-                .unwrap_or_default();
+    let graph = state.knowledge.read().await;
+    let properties = state.properties.read().await;
 
-            PropertyCard {
-                id: p.id.clone(),
-                title: p.title.clone(),
-                area: p.area.clone(),
-                price: p.price,
-                price_per_sqft: p.price_per_sqft,
-                bhk: p.bhk,
-                sqft: p.carpet_area_sqft,
-                society_name,
-                hero_image: p.hero_image.clone(),
-                transparency_tags: p.transparency_tags.iter().take(3).cloned().collect(),
-            }
-        })
+    let cards: Vec<PropertyCard> = properties
+        .iter()
+        .map(|p| enrich_property_card(p, &state.societies, &graph))
         .collect();
 
     Json(cards)
@@ -44,8 +28,8 @@ pub async fn list_properties(
 #[derive(Serialize)]
 pub struct PropertyDetail {
     pub property: crate::models::Property,
-    pub society: Option<Society>,
-    pub area: Option<AreaProfile>,
+    pub society: Option<crate::models::Society>,
+    pub area: Option<crate::models::AreaProfile>,
 }
 
 #[derive(Serialize)]
@@ -53,13 +37,14 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
-/// GET /api/properties/:id — returns joined property + society + area.
+/// GET /api/properties/:id — returns joined property + society + area,
+/// enriched from the knowledge graph.
 pub async fn get_property(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
-    let property = state
-        .properties
+    let properties = state.properties.read().await;
+    let property = properties
         .iter()
         .find(|p| p.id == id)
         .cloned()
@@ -72,17 +57,27 @@ pub async fn get_property(
             )
         })?;
 
-    let society = state
+    let graph = state.knowledge.read().await;
+
+    // Enrich society from KG
+    let mut society = state
         .societies
         .iter()
         .find(|s| s.id == property.society_id)
         .cloned();
+    if let Some(ref mut soc) = society {
+        enrich_society(soc, &graph);
+    }
 
-    let area = state
+    // Enrich area from KG
+    let mut area = state
         .areas
         .iter()
         .find(|a| a.id == property.area_id)
         .cloned();
+    if let Some(ref mut ap) = area {
+        enrich_area(ap, &graph);
+    }
 
     Ok(Json(PropertyDetail {
         property,

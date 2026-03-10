@@ -62,6 +62,17 @@ pub struct PropertyCard {
     pub bhk: u32,
     pub sqft: u32,
     pub society_name: String,
+    pub builder_name: String,
     pub hero_image: String,
     pub transparency_tags: Vec<String>,
+    pub description_summary: String,
+    pub possession_status: String,
+    pub metro_distance_mins: u32,
+    pub floor: u32,
+    pub total_floors: u32,
+    pub facing: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_rating: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_review_count: Option<u32>,
 }

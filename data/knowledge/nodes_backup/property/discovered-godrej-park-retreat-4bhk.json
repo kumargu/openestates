@@ -1,0 +1,115 @@
+{
+  "id": "property:discovered-godrej-park-retreat-4bhk",
+  "node_type": "Property",
+  "name": "4 BHK in Godrej Park Retreat",
+  "facts": [
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Sarjapur Road"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "bhk",
+      "value": {
+        "type": "Numeric",
+        "data": 4.0
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "price",
+      "value": {
+        "type": "Numeric",
+        "data": 14400000.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "carpet_area_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 2150.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Godrej Properties"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    },
+    {
+      "key": "title",
+      "value": {
+        "type": "Text",
+        "data": "4 BHK in Godrej Park Retreat"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "discover_properties"
+      },
+      "learned_at": "2026-03-09T16:34:12.997801+00:00",
+      "version": 1
+    }
+  ],
+  "summary_embedding": null,
+  "created_at": "2026-03-09T16:34:12.997801+00:00",
+  "updated_at": "2026-03-09T16:34:12.997801+00:00"
+}

@@ -264,11 +264,13 @@ export function PropertyPage() {
               icon={<InterestDot level={market.interest_level} />}
               label={interestLabel(market.interest_level)}
             />
-            <MarketRow
-              icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
-              label={`Saved by ${market.saves_last_7d} users this week`}
-            />
-            {market.offers_last_7d > 0 && (
+            {market.saves_last_7d != null && (
+              <MarketRow
+                icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
+                label={`Saved by ${market.saves_last_7d} users this week`}
+              />
+            )}
+            {market.offers_last_7d != null && market.offers_last_7d > 0 && (
               <MarketRow
                 icon={<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>}
                 label={`${market.offers_last_7d} mock offer${market.offers_last_7d > 1 ? "s" : ""} in last 7 days`}

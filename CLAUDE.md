@@ -237,7 +237,67 @@ The goal is disciplined co-design.
 
 ---
 
-## 11. Current Non-goals
+## 11. Live Discovery — The System Learns by Being Used
+
+Static search over pre-indexed data is not enough. When a user searches for something and the system has no good matches (zero results, or all scores below a confidence threshold), the backend should **discover on the fly** using Gemini Flash + Google Search grounding.
+
+### 11.1 The Flow
+
+```
+User query → Intent parse → Search existing corpus
+  ├── Good matches (score > threshold) → return immediately
+  └── Poor/no matches → trigger Live Discovery
+       → Gemini 2.5 Flash + Google Search grounding
+       → Parse response → discovered properties/societies
+       → Ingest into knowledge graph (in-memory + persist to disk)
+       → Score & rank against user intent
+       → Return results tagged "Just discovered — verification pending"
+       → Queue background enrichment (Reddit, RERA, photos, embeddings)
+```
+
+### 11.2 Rules
+
+- **Live discovery runs in Rust** — it's just an HTTP call to Gemini. Don't shell out to Python for real-time queries.
+- **Python pipeline is for batch enrichment** — Reddit, RERA, embeddings, photos. Things that don't need to be real-time.
+- **Cache discovery results** — same area + intent hash within TTL = skip Gemini call.
+- **Rate limit** — max N live discoveries per hour. Cost control.
+- **Trust badges** — freshly discovered data gets lower confidence scores and "verification pending" tags. Background enrichment upgrades them.
+- **Feed back into pipeline** — every live discovery persists to `data/knowledge/` and `data/seed/`. The next search for that area is instant.
+- **Don't fire on gibberish** — only trigger when the query has a recognizable area/location.
+
+### 11.3 The Flywheel
+
+Every search either returns good data OR triggers discovery that makes the next search better. The system gets smarter by being used. This is the moat.
+
+---
+
+## 12. Script Discipline
+
+Do not proliferate scripts. Keep things tight.
+
+- **Prefer extending existing modules** over creating new standalone scripts.
+- **One entry point per concern** — don't have 5 scripts that each do a piece of enrichment. Have one enrichment runner that composes skills.
+- **Custom Python scripts only when truly needed** — for data pipeline work, LLM calls, scraping. Not for glue code that could be a function call.
+- **Skills are the abstraction** — new data sources become skills in `pipeline/skills/`, not new top-level scripts.
+- **Delete scripts that are superseded** — if a new module replaces an old script, remove the old one. Don't accumulate dead scripts.
+
+---
+
+## 13. Day Continuity & Checkpoint Discipline
+
+At the start of each new day of work:
+
+1. **Review the previous day's output** — read the code that was written, check if it compiles/runs, verify it matches the day plan's intent.
+2. **Accept or fix** — if the existing work is solid and tested, build on it. If it's broken or half-done, fix it first before adding new scope.
+3. **Don't redo working code** — if day N produced working, tested code, day N+1 should not rewrite it from scratch. Build forward.
+4. **Checkpoint before moving on** — after completing a meaningful unit of work, verify it works (compile, test, manual check). Don't stack 5 unverified changes.
+5. **If the previous day left a mess** — acknowledge it, clean it up as step 1 of the new day, then proceed. Don't pretend it doesn't exist.
+
+This prevents the pattern where each day starts fresh, ignores what was built, and produces code that conflicts with or duplicates previous work.
+
+---
+
+## 14. Current Non-goals
 
 Unless explicitly requested, do not prioritize:
 - terminal-first UX
@@ -251,7 +311,7 @@ These may come later, but they are not the center of v2 right now.
 
 ---
 
-## 12. Final Rule
+## 15. Final Rule
 
 Build OpenEstates as if it may become a serious startup, but do not let legacy prototype assumptions drag down the new product direction.
 
@@ -265,3 +325,130 @@ Be willing to:
 The product promise is clarity and trust.
 
 Every engineering decision should support that.
+
+---
+
+## 16. Architecture Reference
+
+The v2 architecture is documented in `docs/architecture_v2.md`. Key decisions:
+
+- **Storage**: S3-ready local filesystem at `data/`. Seed data in `data/seed/`, knowledge graph in `data/knowledge/nodes/{type}/{slug}.json` (per-entity files, atomic writes). See architecture doc for the full prefix scheme.
+- **Pipeline**: Python scripts in `pipeline/`. Skills in `pipeline/skills/` produce self-describing SourcedFacts. Execution: discover -> enrich (skills) -> score.
+- **Backend**: Rust+Axum loads seed data + knowledge graph into memory at startup. Graph is behind `RwLock` for concurrent reads.
+- **Knowledge Graph**: `backend/src/knowledge/` — typed nodes, edges, SourcedFacts with provenance. The graph powers search ranking, claim display, and gap detection.
+- **Embeddings**: Future. Google `text-embedding-004` for entities/queries, numpy brute-force (FAISS later).
+- **Caching**: Pipeline caches skill results in `data/cache/skills/`. Backend caches seed data + graph in memory. Search logs in daily JSONL files.
+
+### Cleanup status
+
+- **DELETED (Day 21):** `agents/`, `simulation/`, `research/`, brainstorm scripts (`pipeline/brainstorm_day19.py`, `pipeline/brainstorm_search.py`, `pipeline/migrate_to_lake.py`)
+- **Active code (not dead):** `engine/` — has real scoring modules (dimensions.py, ranker.py, scorer.py, vector_search.py)
+- **Live Discovery (Day 21):** `backend/src/discovery/` — Gemini client, discovery cache, ingestion pipeline. Properties list is now `RwLock<Vec<Property>>` for runtime mutation.
+- See `docs/cleanup_plan.md` for the full plan.
+
+---
+
+## 17. Knowledge Graph & Self-Describing Skills
+
+The knowledge graph is the core intelligence layer. Every search builds the graph. The graph makes every future search better.
+
+### 17.1 The Self-Describing Fact
+
+The `SourcedFact` is the atomic unit of knowledge. Every fact carries its own metadata so the Rust backend never needs hardcoded domain knowledge:
+
+```
+SourcedFact:
+  key: "maintenance_quality"
+  value: Text("good")
+  confidence: 0.6
+  source: { source_type: Llm, skill_id: "learn_society", ... }
+  display_template: "Maintenance is {value}"           # how to show it
+  answers_preferences: ["good society", "maintenance"]  # which user searches it satisfies
+  scoring_hint: { direction: TextMatch, weight: 2.0 }  # how it affects ranking
+```
+
+**Why this matters:** Adding a new fact type (e.g. "ev_charging", "pet_friendly", "water_supply") requires ZERO Rust code changes. The skill that produces the fact also declares how to display it, which preferences it answers, and how it affects ranking. The system learns new dimensions as skills run.
+
+### 17.2 Skills Framework
+
+Skills are Python modules in `pipeline/skills/` that produce SourcedFacts with full provenance. They are the bridge between the messy external world and the typed knowledge graph.
+
+```
+pipeline/skills/
+  base.py              # BaseSkill ABC, SourcedFact, SkillResult, SkillCost
+  search_reddit.py     # Fetch Reddit threads (no LLM, free)
+  learn_society.py     # Reddit + Claude synthesis → structured facts
+  graph_client.py      # HTTP client to push facts to Rust graph
+  run_skill.py         # CLI runner: python3 -m pipeline.skills.run_skill
+```
+
+**Skill contract:** A skill takes input → calls external sources → produces `SourcedFact` entries with:
+- `display_template` — how to render the fact for users
+- `answers_preferences` — which search preferences this fact satisfies
+- `scoring_hint` — how this fact should influence ranking (direction + weight + thresholds)
+
+Skills are cacheable (same input + version = skip), auditable (every fact traces to its skill), and composable (learn_society calls search_reddit internally).
+
+### 17.3 The Learning Loop
+
+```
+User searches "quiet family apartment Whitefield"
+  → Intent: { area: Whitefield, preferences: ["quiet", "family friendly"] }
+  → Graph checks each society's facts for answers_preferences matching those terms
+  → Facts WITH scoring_hint → graph-driven ranking (no hardcoded logic)
+  → Facts WITHOUT → legacy fallback scoring (shrinks over time)
+  → Missing preferences → logged as enrichment_gaps
+  → Next skill run fills gaps with self-describing facts
+  → Next search uses graph-driven scoring — the system learned
+```
+
+### 17.4 Design Principle: Skills Own the Domain, Rust Owns the Runtime
+
+When adding new knowledge dimensions, capabilities, or data sources:
+- **DO**: Create a new skill that produces self-describing SourcedFacts
+- **DO**: Set display_template, answers_preferences, and scoring_hint on every fact
+- **DO NOT**: Add hardcoded match arms in Rust for new fact keys
+- **DO NOT**: Add preference→fact mappings in Rust code
+- **DO NOT**: Add scoring logic in Rust for new dimensions
+
+Legacy hardcoded maps exist in `routes/search.rs` and `search/text.rs` for seed data that predates the self-describing system. These are fallbacks that shrink to nothing as skills enrich more entities.
+
+### 17.5 Knowledge Graph Storage
+
+```
+data/knowledge/
+  nodes/{type}/{slug}.json     # One file per entity (atomic writes via .tmp+rename)
+  edges.json                   # All edges in one file
+  search_log/{YYYY}/{MM}/{DD}.jsonl  # Daily append-only search event logs
+```
+
+Per-entity files mean: adding a fact to one society doesn't rewrite the entire graph. The layout mirrors S3 prefix structure for zero-change migration later.
+
+### 17.6 Knowledge API
+
+```
+GET  /api/knowledge/stats              # Graph overview
+GET  /api/knowledge/nodes?type=society  # List nodes by type
+GET  /api/knowledge/nodes/{id}          # Full node with facts + edges
+GET  /api/knowledge/nodes/{id}/neighbors
+GET  /api/knowledge/enrichment/queue    # Pending enrichment tasks
+GET  /api/knowledge/search-log          # Recent search events
+POST /api/knowledge/nodes/{id}/facts    # Push facts from Python skills
+```
+
+---
+
+## 18. Claude Code Skills
+
+Reusable workflow guides live in `.claude/skills/`. These teach Claude how to perform common tasks:
+
+| Skill | File | Purpose |
+|-------|------|---------|
+| Add Crawler | `.claude/skills/add-crawler.md` | Add a new data source to the pipeline |
+| Add API Endpoint | `.claude/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
+| Data Enrichment | `.claude/skills/data-enrichment.md` | Run AI enrichment on entities |
+| Debug Pipeline | `.claude/skills/debug-pipeline.md` | Debug pipeline failures |
+| Run Scoring | `.claude/skills/run-scoring.md` | Run and modify the scoring engine |
+| Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, design philosophy, and long-term vision for all code |
+
+When working on a task that matches a skill, read the skill file first for step-by-step guidance.
