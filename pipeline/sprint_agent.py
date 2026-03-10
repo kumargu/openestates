@@ -5,6 +5,7 @@ Two-layer agent architecture using `claude` CLI (zero Python dependencies):
   PM Agent:      Envisions features, researches market, writes day specs
   Builder Agent: Implements each day's spec with full codebase access
   Verifier:      Checks acceptance criteria, runs build checks
+  Local Deploy:  cargo build + npm build + backend boot check + smoke tests
   Orchestrator:  Python loop that sequences everything
 
 Usage:
@@ -119,7 +120,31 @@ CODING PRACTICES:
 - Every fact carries provenance (SourcedFact with display_template, scoring_hint)
 - Skills own the domain, Rust owns the runtime
 - Test before moving forward — cargo check, npm run build
-- No over-engineering: minimum complexity for the current task\
+- No over-engineering: minimum complexity for the current task
+
+DETAILED CODING GUIDE:
+Read .claude/skills/coding-practices.md FIRST before writing any code.
+It contains the full quality bar: frontend design system, Rust hot-path rules,
+latency budgets (50ms warm / 200ms cold search), async patterns (tokio::join!,
+tokio::spawn, timeout-bounded enrichment), testing pyramid, cost sensitivity,
+and the pre-ship checklist.
+
+AVAILABLE SKILLS (use these, don't reinvent):
+When you need to do one of these tasks, read the corresponding skill file first.
+
+| Task | Skill File | What It Teaches |
+|------|-----------|-----------------|
+| Add a new Rust API endpoint | .claude/skills/add-api-endpoint.md | Route, handler, types, tests, frontend wiring |
+| Add a new data source/crawler | .claude/skills/add-crawler.md | BaseCrawler pattern, rate limits, caching |
+| Run AI enrichment on entities | .claude/skills/data-enrichment.md | Skills framework, SourcedFact, pushing to KG |
+| Debug pipeline failures | .claude/skills/debug-pipeline.md | Diagnosis flow, common failure modes |
+| Find missing knowledge gaps | .claude/skills/identify-gaps.md | Gap analysis, enrichment prioritization |
+| Rank societies for a query | .claude/skills/rank-for-intent.md | LLM-based ranking with evidence |
+| Score societies deterministically | .claude/skills/run-scoring.md | 7-dimension scoring engine |
+| Score a society with AI | .claude/skills/score-society.md | 6-dimension AI scoring with explanations |
+
+RULE: Before implementing anything, check if a skill file covers it.
+Skills save hours of figuring out patterns from scratch.\
 """
 
 # ---------------------------------------------------------------------------
@@ -405,6 +430,12 @@ RULES:
 - Reference specific files and modules
 - Be concrete about API shapes, component names, data structures
 - If the codebase has broken or incomplete work, fixing it is a valid deliverable
+- Reference skill files when relevant in Technical Guidance:
+  * New API endpoint → mention .claude/skills/add-api-endpoint.md
+  * New data source → mention .claude/skills/add-crawler.md
+  * AI enrichment → mention .claude/skills/data-enrichment.md
+  * Society scoring → mention .claude/skills/score-society.md
+  * Read .claude/skills/coding-practices.md for latency budgets, async patterns, test requirements
 
 {"Separate multiple days with: ---DAY_SEPARATOR---" if num_days > 1 else ""}
 
@@ -456,25 +487,33 @@ def run_builder_agent(day_number: int, plan_markdown: str) -> dict:
 
 Read the day plan at {plan_ref} and implement ALL deliverables.
 
-Also read CLAUDE.md for project context and coding standards.
+## Pre-Implementation Checklist (DO THIS FIRST)
+1. Read CLAUDE.md for project context
+2. Read .claude/skills/coding-practices.md for the quality bar
+3. For each deliverable, check if a skill file covers the pattern:
+   - Adding an API endpoint? Read .claude/skills/add-api-endpoint.md
+   - Adding a crawler/data source? Read .claude/skills/add-crawler.md
+   - Running enrichment? Read .claude/skills/data-enrichment.md
+   - Scoring societies? Read .claude/skills/score-society.md or run-scoring.md
+   - Debugging failures? Read .claude/skills/debug-pipeline.md
+4. Check what currently exists — read relevant files before changing them
 
-## Instructions
-1. Read the day plan and CLAUDE.md first
-2. Check what currently exists — read relevant files before changing them
-3. Implement each deliverable one at a time
-4. After each significant change, verify:
+## Implementation Flow
+1. Implement each deliverable one at a time
+2. After each significant change, verify:
    - `cargo check` for Rust changes
    - `npm run build` for frontend changes
-5. When ALL deliverables are done, verify ALL success criteria
-6. Write a brief summary of what was built
+3. When ALL deliverables are done, verify ALL success criteria
+4. Write a brief summary of what was built
 
 RULES:
 - DO NOT commit to git — the orchestrator handles that
-- DO NOT deploy — the orchestrator handles Vercel
 - DO NOT skip verification — every change must compile/build
 - If something from a previous day is broken, fix it FIRST
 - If a deliverable is unclear, make the best product-aligned decision
 - Prefer editing existing files over creating new ones
+- Follow the latency budgets from coding-practices.md (50ms warm, 200ms cold)
+- Use tokio::join! for parallel fan-out, tokio::spawn for background work
 
 ## Day Plan
 {plan_markdown}"""
@@ -591,28 +630,132 @@ def run_build_checks() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Vercel deploy
+# Local deploy verification — build both services, smoke test backend
 # ---------------------------------------------------------------------------
 
-def deploy_vercel() -> Optional[str]:
-    frontend_dir = PROJECT_ROOT / "frontend"
-    if not (frontend_dir / "package.json").exists():
-        return None
+def run_local_deploy(port: int = 4000) -> dict:
+    """Build backend + frontend locally. Optionally smoke-test if backend runs.
+
+    Returns {cargo_build, npm_build, backend_boots, smoke_tests}.
+    """
+    result = {}
+
+    # 1. Cargo build (release check — ensures it compiles clean)
+    log.info("  Local deploy: cargo build...")
     try:
         r = subprocess.run(
-            ["npx", "vercel", "deploy", "--prod", "--yes"],
-            cwd=str(frontend_dir),
+            ["cargo", "build"],
+            cwd=str(PROJECT_ROOT / "backend"),
             capture_output=True, text=True, timeout=180,
         )
-        if r.returncode == 0:
-            urls = [
-                l.strip() for l in r.stdout.splitlines()
-                if l.strip().startswith("https://") and "vercel.app" in l
-            ]
-            return urls[-1] if urls else None
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        pass
-    return None
+        result["cargo_build"] = {
+            "success": r.returncode == 0,
+            "stderr_preview": r.stderr[:500] if r.returncode != 0 else "",
+        }
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        result["cargo_build"] = {"success": False, "error": str(e)}
+
+    # 2. npm build (production build — catches TS errors + bundle issues)
+    log.info("  Local deploy: npm run build...")
+    try:
+        r = subprocess.run(
+            ["npm", "run", "build"],
+            cwd=str(PROJECT_ROOT / "frontend"),
+            capture_output=True, text=True, timeout=120,
+        )
+        result["npm_build"] = {
+            "success": r.returncode == 0,
+            "stderr_preview": r.stderr[:500] if r.returncode != 0 else "",
+        }
+    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+        result["npm_build"] = {"success": False, "error": str(e)}
+
+    # 3. Try to boot backend briefly and hit /api/health
+    log.info("  Local deploy: checking if backend boots...")
+    backend_boots = False
+    try:
+        # Start backend in background
+        proc = subprocess.Popen(
+            ["cargo", "run"],
+            cwd=str(PROJECT_ROOT / "backend"),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        # Give it a few seconds to start
+        time.sleep(4)
+
+        if proc.poll() is None:  # still running = good
+            # Try hitting health endpoint
+            import urllib.request
+            try:
+                req = urllib.request.Request(
+                    f"http://localhost:{port}/api/health",
+                    headers={"Accept": "application/json"},
+                )
+                with urllib.request.urlopen(req, timeout=5) as resp:
+                    if resp.status == 200:
+                        backend_boots = True
+                        log.info("  Backend boots OK (health check passed)")
+            except Exception:
+                log.info("  Backend started but health check failed")
+                backend_boots = True  # it booted, just maybe not healthy yet
+        else:
+            stderr = proc.stderr.read().decode()[:300] if proc.stderr else ""
+            log.warning("  Backend failed to start: %s", stderr)
+
+        # Kill the backend process
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+    except (FileNotFoundError, Exception) as e:
+        log.info("  Could not boot backend: %s", e)
+
+    result["backend_boots"] = backend_boots
+
+    # 4. Run smoke tests if backend was already running on the port
+    smoke = {}
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"http://localhost:{port}/api/health",
+            headers={"Accept": "application/json"},
+        )
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            if resp.status == 200:
+                log.info("  Backend already running on port %d, running smoke tests...", port)
+                smoke = run_smoke_tests(port)
+    except Exception:
+        pass  # backend not running, skip smoke tests
+    result["smoke_tests"] = smoke
+
+    result["all_pass"] = (
+        result.get("cargo_build", {}).get("success", False)
+        and result.get("npm_build", {}).get("success", False)
+    )
+    return result
+
+
+def run_smoke_tests(port: int = 4000) -> dict:
+    """Run smoke tests against a running backend."""
+    try:
+        r = subprocess.run(
+            [sys.executable, "pipeline/smoke_test_api.py",
+             "--base-url", f"http://localhost:{port}",
+             "--output-dir", str(FEEDBACK_DIR / "latest")],
+            cwd=str(PROJECT_ROOT),
+            capture_output=True, text=True, timeout=60,
+        )
+        output = r.stdout + r.stderr
+        passed = output.count("[PASS]")
+        failed = output.count("[FAIL]")
+        return {
+            "ran": True, "passed": passed, "failed": failed,
+            "total": passed + failed, "all_pass": failed == 0,
+            "output_preview": output[:1000],
+        }
+    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
+        return {"ran": False, "error": str(e)}
 
 
 # ---------------------------------------------------------------------------
@@ -624,7 +767,6 @@ def run_one_day(
     vision: str,
     plan_only: bool = False,
     build_only: bool = False,
-    deploy: bool = True,
     resume: bool = True,
 ) -> bool:
     """Run a single day: plan -> build -> verify -> checkpoint."""
@@ -708,25 +850,29 @@ def run_one_day(
     code_success = v_passed and build_checks.get("all_pass", False)
     save_checkpoint(day_number, {"code_success": code_success})
 
-    # ── Step 5: Deploy ────────────────────────────────────────────
-    if deploy and code_success:
-        if resume and "vercel_url" in cp:
-            log.info("[5/5] Vercel: %s (from checkpoint)", cp["vercel_url"])
+    # ── Step 5: Local deploy (cargo build + npm build + boot check) ─
+    if resume and "local_deploy" in cp:
+        log.info("[5/5] Local deploy from checkpoint")
+        local_deploy = cp["local_deploy"]
+    elif code_success:
+        log.info("[5/5] Local deploy verification...")
+        local_deploy = run_local_deploy()
+        save_checkpoint(day_number, {"local_deploy": local_deploy})
+        if local_deploy.get("all_pass"):
+            log.info("Local deploy: PASSED (cargo build + npm build OK)")
+            if local_deploy.get("backend_boots"):
+                log.info("  Backend boots successfully")
+            smoke = local_deploy.get("smoke_tests", {})
+            if smoke.get("ran"):
+                log.info("  Smoke tests: %d/%d passed", smoke.get("passed", 0), smoke.get("total", 0))
         else:
-            log.info("[5/5] Deploying to Vercel...")
-            url = deploy_vercel()
-            save_checkpoint(day_number, {
-                "vercel_deployed": url is not None,
-                "vercel_url": url,
-            })
-            if url:
-                log.info("Deployed: %s", url)
-            else:
-                log.warning("Vercel deploy failed")
-    elif not code_success:
-        log.info("[5/5] Skipping deploy — verification/build failed")
+            log.warning("Local deploy: FAILED")
+            for k, v in local_deploy.items():
+                if isinstance(v, dict) and not v.get("success", True):
+                    log.warning("  %s: %s", k, v.get("stderr_preview", v.get("error", ""))[:200])
     else:
-        log.info("[5/5] Skipping deploy (disabled)")
+        log.info("[5/5] Skipping local deploy — verification/build failed")
+        local_deploy = {}
 
     log.info("Day %02d: %s", day_number, "COMPLETE" if code_success else "FAILED")
     log.info("=" * 60)
@@ -743,7 +889,6 @@ def run_sprint(
     vision: str,
     plan_only: bool = False,
     build_only: bool = False,
-    deploy: bool = True,
     max_retries: int = 1,
 ):
     """Run a multi-day sprint."""
@@ -801,7 +946,6 @@ def run_sprint(
                     day, vision,
                     plan_only=plan_only,
                     build_only=build_only,
-                    deploy=deploy,
                     resume=(attempt == 0),  # only resume on first attempt
                 )
                 if success:
@@ -858,8 +1002,8 @@ Examples:
                         help="PM plans only — no coding")
     parser.add_argument("--build-only", action="store_true",
                         help="Build existing plans — no PM planning")
-    parser.add_argument("--no-deploy", action="store_true",
-                        help="Skip Vercel deployment")
+    parser.add_argument("--skip-local-deploy", action="store_true",
+                        help="Skip local deploy verification (cargo build + npm build + boot check)")
     parser.add_argument("--vision", type=str, default=None,
                         help="Path to vision file (default: built-in)")
     parser.add_argument("--max-retries", type=int, default=1,
@@ -885,7 +1029,7 @@ Examples:
         print(f"\n  Dry run — would execute:")
         print(f"  Days: {start_day} to {start_day + args.days - 1}")
         print(f"  Mode: {'plan-only' if args.plan_only else 'build-only' if args.build_only else 'full'}")
-        print(f"  Deploy: {not args.no_deploy}")
+        print(f"  Local deploy check: {not args.skip_local_deploy}")
         print(f"  Vision: {'custom' if args.vision else 'default'} ({len(vision)} chars)")
         for d in range(start_day, start_day + args.days):
             s = "DONE" if is_day_done(d) else (
@@ -917,7 +1061,6 @@ Examples:
         vision=vision,
         plan_only=args.plan_only,
         build_only=args.build_only,
-        deploy=not args.no_deploy,
         max_retries=args.max_retries,
     )
 

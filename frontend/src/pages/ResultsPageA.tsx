@@ -255,9 +255,7 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
     onQuickView?.(property.id);
   };
 
-  const handleCompare = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleCompare = () => {
     onToggleCompare?.(property.id);
   };
 
@@ -265,20 +263,20 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
 
   return (
     <div className="card-a">
+      {/* Compare toggle button — outside Link to avoid invalid <button> inside <a> */}
+      <button
+        className={`card-a-compare-btn ${isComparing ? "card-a-compare-btn--active" : ""}`}
+        onClick={handleCompare}
+        title={isComparing ? "Remove from compare" : "Add to compare"}
+      >
+        {isComparing ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+        )}
+      </button>
       <Link to={`/property/${property.id}`} className="card-a-link">
         <div className="card-a-image">
-          {/* Compare toggle button */}
-          <button
-            className={`card-a-compare-btn ${isComparing ? "card-a-compare-btn--active" : ""}`}
-            onClick={handleCompare}
-            title={isComparing ? "Remove from compare" : "Add to compare"}
-          >
-            {isComparing ? (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-            ) : (
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-            )}
-          </button>
           <ImageWithFallback
             src={property.hero_image}
             alt={property.title}

@@ -778,6 +778,7 @@ body {
    ══════════════════════════════════════════════════════ */
 
 .card-a {
+  position: relative;
   border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--color-bg-card);
@@ -2258,9 +2259,10 @@ body {
   position: absolute;
   top: 0.5rem;
   right: 0.5rem;
-  z-index: 5;
+  z-index: 10;
   transition: all 0.2s ease;
   opacity: 0;
+  pointer-events: auto;
 }
 
 .card-a:hover .card-a-compare-btn {
