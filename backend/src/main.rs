@@ -1,6 +1,7 @@
 mod cache;
 mod data_loader;
 mod discovery;
+mod enrichment_queue;
 mod knowledge;
 mod models;
 mod routes;

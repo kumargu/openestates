@@ -1,10 +1,10 @@
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{Property, Society};
 use crate::routes::enrichment::enrich_property_card;
-use crate::routes::search::graph_preference_score;
+use crate::routes::search::graph_preference_score_detailed;
 
 use super::intent::SearchIntent;
-use super::SearchResultCard;
+use super::{MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard};
 
 /// Simple text-matching search engine.
 ///
@@ -74,21 +74,91 @@ impl TextSearch {
                 };
                 score += area_penalty;
 
-                // Boost for preference alignment
+                // Boost for preference alignment — collect structured reasons
+                let mut match_reasons: Vec<MatchReason> = Vec::new();
+                let mut pref_coverage: Vec<PreferenceCoverage> = Vec::new();
+                let mut graph_count: usize = 0;
+                let mut legacy_count: usize = 0;
+                let mut total_facts_consulted: usize = 0;
+
                 for pref in &intent.preferences {
                     // Graph-first: check if the society's facts declare scoring for this preference
-                    let bonus = if let Some(g) = graph {
-                        graph_preference_score(g, &p.society_id, pref)
-                            .unwrap_or_else(|| legacy_preference_score(p, pref))
-                    } else {
-                        legacy_preference_score(p, pref)
-                    };
+                    if let Some(g) = graph {
+                        if let Some((gs, detail)) = graph_preference_score_detailed(g, &p.society_id, pref) {
+                            total_facts_consulted += 1;
+                            score += gs;
+                            reasons.push(format!("matches preference: {}", pref));
 
-                    if bonus > 0.0 {
-                        score += bonus;
+                            // Normalize score to 0-1 range (graph scores are 0-2)
+                            let norm_score = (gs / 2.0).min(1.0);
+                            match_reasons.push(MatchReason {
+                                preference: pref.clone(),
+                                fact_key: detail.fact_key.clone(),
+                                display: detail.display,
+                                score: norm_score,
+                                confidence: detail.confidence,
+                                source_type: detail.source_type,
+                                scoring_method: "graph".into(),
+                            });
+                            pref_coverage.push(PreferenceCoverage {
+                                preference: pref.clone(),
+                                status: if norm_score > 0.5 { "matched" } else { "partial" }.into(),
+                                fact_key: Some(detail.fact_key),
+                            });
+                            graph_count += 1;
+                            continue;
+                        }
+                    }
+
+                    // Legacy fallback
+                    let legacy = legacy_preference_score(p, pref);
+                    if legacy > 0.0 {
+                        score += legacy;
                         reasons.push(format!("matches preference: {}", pref));
+
+                        let norm_score = (legacy / 2.0).min(1.0);
+                        let fact_key = legacy_fact_key_for_preference(pref);
+                        match_reasons.push(MatchReason {
+                            preference: pref.clone(),
+                            fact_key: fact_key.clone(),
+                            display: format_legacy_display(pref, p),
+                            score: norm_score,
+                            confidence: 0.5,
+                            source_type: "Seed".into(),
+                            scoring_method: "legacy".into(),
+                        });
+                        pref_coverage.push(PreferenceCoverage {
+                            preference: pref.clone(),
+                            status: if norm_score > 0.5 { "matched" } else { "partial" }.into(),
+                            fact_key: Some(fact_key),
+                        });
+                        legacy_count += 1;
+                    } else {
+                        pref_coverage.push(PreferenceCoverage {
+                            preference: pref.clone(),
+                            status: "no_data".into(),
+                            fact_key: None,
+                        });
                     }
                 }
+
+                // Build explanation only when there are preferences
+                let match_explanation = if !intent.preferences.is_empty() {
+                    let total = graph_count + legacy_count;
+                    let graph_pct = if total > 0 {
+                        (graph_count as f32 / total as f32) * 100.0
+                    } else {
+                        0.0
+                    };
+                    Some(MatchExplanation {
+                        reasons: match_reasons,
+                        preference_coverage: pref_coverage,
+                        graph_driven_pct: graph_pct,
+                        total_facts_consulted,
+                    })
+                } else {
+                    None
+                };
 
                 // If we had hard constraints that passed, give a base score even if
                 // text matching scored zero.
@@ -143,6 +213,7 @@ impl TextSearch {
                     match_score: (normalized * 100.0).round() / 100.0,
                     match_label,
                     match_reason,
+                    match_explanation,
                     semantic_score: None,
                 })
             })
@@ -344,6 +415,45 @@ fn match_label_from_score(normalized: f64) -> String {
         "Partial match".to_string()
     } else {
         "Weak match".to_string()
+    }
+}
+
+/// Map a preference to its corresponding legacy fact key.
+fn legacy_fact_key_for_preference(preference: &str) -> String {
+    match preference {
+        "metro access" => "metro_distance_mins",
+        "quiet neighborhood" => "noise_score",
+        "value for money" => "price_per_sqft",
+        "premium" => "price_per_sqft",
+        "good society" => "society_quality_score",
+        "greenery" => "greenery_score",
+        "new construction" | "ready to move" => "possession_status",
+        "high floor" => "floor",
+        "east facing" => "facing",
+        _ => "unknown",
+    }.to_string()
+}
+
+/// Build a human-readable display string for a legacy preference match.
+fn format_legacy_display(preference: &str, property: &Property) -> String {
+    match preference {
+        "metro access" => format!("{} min to metro", property.metro_distance_mins),
+        "quiet neighborhood" => {
+            if property.noise_score < 0.3 { "Quiet neighborhood".into() }
+            else { "Moderately quiet area".into() }
+        }
+        "value for money" => format!("{}/sqft — good value", property.price_per_sqft),
+        "premium" => format!("{}/sqft — premium segment", property.price_per_sqft),
+        "good society" => {
+            if property.society_quality_score >= 0.8 { "Strong society quality".into() }
+            else { "Decent society quality".into() }
+        }
+        "greenery" => "Green surroundings".into(),
+        "new construction" => format!("Status: {}", property.possession_status),
+        "ready to move" => format!("Status: {}", property.possession_status),
+        "high floor" => format!("Floor {}/{}", property.floor, property.total_floors),
+        "east facing" => format!("Facing: {}", property.facing),
+        _ => format!("Matches {}", preference),
     }
 }
 

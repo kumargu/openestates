@@ -540,21 +540,12 @@ def print_summary(stats: ExecutionStats):
 
 def notify_backend():
     """Tell Rust backend to reload knowledge graph."""
-    try:
-        token = os.environ.get("ADMIN_TOKEN", "dev")
-        req = urllib.request.Request(
-            "http://localhost:4000/api/admin/reload-knowledge",
-            method="POST",
-            headers={"X-Admin-Token": token, "Content-Type": "application/json"},
-            data=b"{}",
-        )
-        resp = urllib.request.urlopen(req, timeout=5)
-        data = json.loads(resp.read().decode())
-        nodes = data.get("nodes_loaded", "?")
-        facts = data.get("facts_loaded", "?")
-        print(f"\n  Backend reloaded: {nodes} nodes, {facts} facts")
-    except Exception as e:
-        logger.info("Backend reload skipped (may not be running): %s", e)
+    from pipeline.utils import reload_backend as _reload
+    if _reload():
+        # Print for CLI output (reload_backend logs internally)
+        pass
+    else:
+        pass  # Already logged by reload_backend
 
 
 # ---------------------------------------------------------------------------

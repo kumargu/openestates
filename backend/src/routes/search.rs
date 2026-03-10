@@ -143,6 +143,7 @@ pub async fn search_properties(
                     match_score: (*sim * 0.5).min(0.6), // Semantic-only gets moderate score
                     match_label: "Semantic match".to_string(),
                     match_reason: "Semantically similar to your search".to_string(),
+                    match_explanation: None,
                     semantic_score: Some((*sim * 100.0).round() / 100.0),
                 });
                 break; // One property per society for injection
@@ -309,6 +310,30 @@ pub async fn search_properties(
     {
         let mut graph = state.knowledge.write().await;
         graph.log_search(event);
+    }
+
+    // --- Fire-and-forget: queue enrichment request for the searched area ---
+    if let Some(ref area) = parsed_intent.area {
+        let entity_ids: Vec<String> = results
+            .iter()
+            .filter_map(|r| {
+                // Extract society node IDs from matched results
+                let properties = state.properties.try_read().ok()?;
+                properties
+                    .iter()
+                    .find(|p| p.id == r.card.id)
+                    .map(|p| society_node_id(&p.society_id))
+            })
+            .collect();
+        let root = state.project_root.clone();
+        let area = area.clone();
+        let prefs = parsed_intent.preferences.clone();
+        let q = query.clone();
+        tokio::spawn(async move {
+            crate::enrichment_queue::append_enrichment_request(
+                &root, &area, entity_ids, prefs, &q,
+            );
+        });
     }
 
     Json(SearchResponse {
@@ -489,6 +514,16 @@ pub fn graph_preference_score(
     society_id: &str,
     preference: &str,
 ) -> Option<f64> {
+    graph_preference_score_detailed(graph, society_id, preference).map(|(score, _)| score)
+}
+
+/// Like `graph_preference_score`, but also returns the matching fact's metadata
+/// so the caller can build a structured MatchReason.
+pub fn graph_preference_score_detailed(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    preference: &str,
+) -> Option<(f64, GraphFactDetail)> {
     let node_id = society_node_id(society_id);
     let node = graph.get_node(&node_id)?;
     let pref_lower = preference.to_lowercase();
@@ -504,16 +539,36 @@ pub fn graph_preference_score(
             continue;
         }
 
-        if let Some(ref hint) = fact.scoring_hint {
-            return Some(score_fact_with_hint(&fact.value, hint));
-        }
+        let score = if let Some(ref hint) = fact.scoring_hint {
+            score_fact_with_hint(&fact.value, hint)
+        } else {
+            1.0
+        };
 
-        // Has answers_preferences but no scoring_hint — give a base score
-        // (the fact exists and is relevant, we just don't know the direction)
-        return Some(1.0);
+        let display = render_template(
+            fact.display_template.as_deref().unwrap_or("{value}"),
+            &fact.value,
+        );
+
+        let detail = GraphFactDetail {
+            fact_key: fact.key.clone(),
+            display,
+            confidence: fact.confidence,
+            source_type: format!("{:?}", fact.source.source_type),
+        };
+
+        return Some((score, detail));
     }
 
     None // No fact answers this preference
+}
+
+/// Metadata from a graph fact, used to build MatchReason.
+pub struct GraphFactDetail {
+    pub fact_key: String,
+    pub display: String,
+    pub confidence: f32,
+    pub source_type: String,
 }
 
 /// Apply a scoring hint to a fact value. Returns 0.0 - weight (typically 0-2).

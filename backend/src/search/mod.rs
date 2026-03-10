@@ -9,6 +9,50 @@ use serde::Serialize;
 
 use crate::models::{AreaProfile, PropertyCard};
 
+/// One structured reason why a result matched a user preference.
+#[derive(Debug, Clone, Serialize)]
+pub struct MatchReason {
+    /// The user preference this reason addresses, e.g. "quiet neighborhood"
+    pub preference: String,
+    /// The fact key that provided the answer, e.g. "noise_level"
+    pub fact_key: String,
+    /// Human-readable display from display_template, e.g. "Noise level is low"
+    pub display: String,
+    /// Score contribution (0.0-1.0 normalized)
+    pub score: f64,
+    /// Fact confidence (1.0 for RERA, 0.6 for Reddit, etc.)
+    pub confidence: f32,
+    /// Source type: "Reddit", "Rera", "Llm", "Seed", etc.
+    pub source_type: String,
+    /// "graph" or "legacy"
+    pub scoring_method: String,
+}
+
+/// How a user preference was handled during scoring.
+#[derive(Debug, Clone, Serialize)]
+pub struct PreferenceCoverage {
+    /// The user preference, e.g. "metro access"
+    pub preference: String,
+    /// "matched" (score > 0.5), "partial" (score > 0), "no_data"
+    pub status: String,
+    /// The fact key used, if any
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fact_key: Option<String>,
+}
+
+/// Full explanation of why a result was ranked where it is.
+#[derive(Debug, Clone, Serialize)]
+pub struct MatchExplanation {
+    /// Per-fact reasons contributing to the score
+    pub reasons: Vec<MatchReason>,
+    /// Per-preference coverage status
+    pub preference_coverage: Vec<PreferenceCoverage>,
+    /// Percentage of score derived from graph facts vs legacy scoring (0-100)
+    pub graph_driven_pct: f32,
+    /// Total number of facts the scorer examined
+    pub total_facts_consulted: usize,
+}
+
 /// A search result that includes full PropertyCard data plus match info.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResultCard {
@@ -18,6 +62,9 @@ pub struct SearchResultCard {
     pub match_score: f64,
     pub match_label: String,
     pub match_reason: String,
+    /// Structured match explanation — present when query has preferences.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub match_explanation: Option<MatchExplanation>,
     /// Cosine similarity score if this result was semantically boosted, None otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_score: Option<f64>,

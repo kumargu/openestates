@@ -201,10 +201,34 @@ export type SearchIntent = {
   preferences: string[];
 };
 
+export type MatchReason = {
+  preference: string;
+  fact_key: string;
+  display: string;
+  score: number;
+  confidence: number;
+  source_type: string;
+  scoring_method: "graph" | "legacy";
+};
+
+export type PreferenceCoverage = {
+  preference: string;
+  status: "matched" | "partial" | "no_data";
+  fact_key: string | null;
+};
+
+export type MatchExplanation = {
+  reasons: MatchReason[];
+  preference_coverage: PreferenceCoverage[];
+  graph_driven_pct: number;
+  total_facts_consulted: number;
+};
+
 export type SearchResultItem = PropertyCard & {
   match_score: number;
   match_label: string;
   match_reason: string;
+  match_explanation?: MatchExplanation;
   semantic_score?: number;
 };
 
