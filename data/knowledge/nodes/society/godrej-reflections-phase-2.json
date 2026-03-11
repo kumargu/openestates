@@ -234,36 +234,6 @@
       "display_template": "Review themes: {value}"
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 15.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/1q84859/im_starting_a_campaign_to_bring_south_bengalurus/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:23:12.017565Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
       "key": "reddit_total_score",
       "value": {
         "type": "Numeric",
@@ -299,7 +269,7 @@
         "type": "Tags",
         "data": [
           "I'm starting a campaign to bring South Bengaluru's parks to their glory and I need support",
-          "Fortis – Worst Hospital Experience, and Honestly Feels Like All Bangalore Hospitals Are the Same Now",
+          "Fortis \u2013 Worst Hospital Experience, and Honestly Feels Like All Bangalore Hospitals Are the Same Now",
           "What can we do to stop this tunnel road nonsense?",
           "Swiggy to move HQ from Bengaluru's Bellandur to Whitefield; cites better infra, affordable housing",
           "Is there anything we can do to stop the Tunnel Project?"
@@ -329,29 +299,6 @@
       "learned_at": "2026-03-09T17:28:27.237528Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:29:03.182749Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -796,7 +743,7 @@
     0.014586113,
     -0.0030899465,
     -0.0016609126,
-    -0.000020194744,
+    -2.0194744e-05,
     -0.006143426,
     0.020167109,
     0.008617601,
@@ -1064,7 +1011,7 @@
     -0.022116732,
     -0.01950737,
     -0.032350283,
-    0.00007706986,
+    7.706986e-05,
     0.0915397,
     -0.028202368,
     -0.01267306,
@@ -1175,7 +1122,7 @@
     -0.011563242,
     0.010303009,
     -0.0014591655,
-    0.000031222906,
+    3.1222906e-05,
     -0.0021153444,
     0.016259503,
     0.0027279647,
@@ -1394,7 +1341,7 @@
     -0.005704462,
     0.0123259155,
     -0.015384997,
-    -0.000038348422,
+    -3.8348422e-05,
     -0.002154537,
     -0.0048770322,
     0.013252741,
@@ -1703,7 +1650,7 @@
     -0.008299358,
     -0.0048839436,
     -0.0001546444,
-    -0.000042795233,
+    -4.2795233e-05,
     -0.0057360106,
     -0.00872213,
     0.008880152,
@@ -1728,7 +1675,7 @@
     -0.01717399,
     -0.00078228896,
     0.0009341866,
-    -0.00009666647,
+    -9.666647e-05,
     -0.008035777,
     -0.0063953833,
     0.0010569337,
@@ -1815,7 +1762,7 @@
     0.012708087,
     0.0103426,
     0.014296084,
-    -0.000065741755,
+    -6.5741755e-05,
     0.0004451509,
     -0.010852455,
     0.0071638124,
@@ -2068,7 +2015,7 @@
     0.010148368,
     -0.009896194,
     0.0042063347,
-    0.000016065876,
+    1.6065876e-05,
     0.010551617,
     -0.023436045,
     0.015124193,
@@ -2091,7 +2038,7 @@
     -0.011778275,
     -0.007986238,
     0.011290338,
-    0.00009936327,
+    9.936327e-05,
     -0.021773787,
     -0.014928708,
     0.0018157703,
@@ -2149,7 +2096,7 @@
     0.004069055,
     0.017596954,
     -0.0049988115,
-    -0.00001726957,
+    -1.726957e-05,
     0.01686399,
     -0.0044723535,
     0.0062082782,
@@ -2289,7 +2236,7 @@
     0.0053739324,
     -0.0035339473,
     0.0078026345,
-    -0.00008133631,
+    -8.133631e-05,
     0.020661628,
     0.0258182,
     -0.004024353,
@@ -2300,7 +2247,7 @@
     0.019089699,
     0.01724018,
     0.006466203,
-    0.00009291478,
+    9.291478e-05,
     0.009438653,
     -0.020003993,
     -0.026207415,
@@ -2767,7 +2714,7 @@
     -0.0055949874,
     -0.0044123023,
     -0.019475056,
-    -0.000030075327,
+    -3.0075327e-05,
     0.005067927,
     0.00012355052,
     0.0017171967,
@@ -2940,7 +2887,7 @@
     -0.04467679,
     -0.019469215,
     -0.009033801,
-    0.000018577164,
+    1.8577164e-05,
     -0.0161122,
     0.011560787,
     0.008376774,
@@ -3413,7 +3360,7 @@
     -0.005946201,
     0.008283762,
     -0.005265538,
-    -0.0000773832,
+    -7.73832e-05,
     0.01093629,
     0.013774303,
     0.010990228,

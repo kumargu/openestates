@@ -94,87 +94,6 @@
       "version": 1
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 9.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/1owlvpf/swiggy_to_move_hq_from_bengalurus_bellandur_to/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:24:28.007636Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 959.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:28.007688Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 325.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:28.007697Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Swiggy to move HQ from Bengaluru's Bellandur to Whitefield; cites better infra, affordable housing",
-          "[Rent] How much maximum rent you should be willing to pay, in Whitefield area.",
-          "Bengaluru suburban railway project updates....",
-          "Understanding Bangalore demographics- what keeps you where you are",
-          "Bangalore's Longest 42.85km Whitefield to Challaghatta Direct Metro from Oct 9, 2023"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:28.007714Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -189,29 +108,6 @@
       "learned_at": "2026-03-09T17:28:49.513820Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:31:41.447273Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -427,7 +323,7 @@
     -0.029577222,
     0.016844273,
     -0.010772661,
-    0.000071518065,
+    7.1518065e-05,
     -0.024840496,
     -0.14773889,
     0.019340646,
@@ -539,7 +435,7 @@
     -0.0044774404,
     0.009331004,
     0.029374689,
-    -0.00008775678,
+    -8.775678e-05,
     -0.0091936365,
     0.0074009714,
     0.011462569,
@@ -674,7 +570,7 @@
     -0.0025442098,
     0.004672889,
     -0.005627081,
-    -0.000059084505,
+    -5.9084505e-05,
     0.014580331,
     -0.009077554,
     -0.018180525,
@@ -703,7 +599,7 @@
     -0.0022402133,
     0.00038080057,
     0.0029869676,
-    0.000047953654,
+    4.7953654e-05,
     -0.030796437,
     0.005652542,
     0.012367249,
@@ -755,7 +651,7 @@
     0.003398947,
     -0.005412088,
     -0.003004647,
-    -0.000040909017,
+    -4.0909017e-05,
     -0.013679657,
     -0.0039620167,
     -0.009316206,
@@ -1349,7 +1245,7 @@
     -0.004061583,
     0.0023106157,
     -0.003962083,
-    -0.000025524789,
+    -2.5524789e-05,
     0.017036,
     0.0026247455,
     0.012606285,
@@ -1466,7 +1362,7 @@
     -0.01069043,
     -0.014768008,
     0.014052651,
-    0.000053717875,
+    5.3717875e-05,
     -0.008043267,
     -0.009231281,
     0.011774047,
@@ -1508,7 +1404,7 @@
     -0.012931852,
     0.012463606,
     -0.008601191,
-    -0.00005775612,
+    -5.775612e-05,
     -0.019242123,
     -0.00572056,
     -0.0013363987,
@@ -2000,7 +1896,7 @@
     0.016339906,
     -0.0008043774,
     0.019593198,
-    -0.000016540738,
+    -1.6540738e-05,
     -0.013139562,
     0.018027395,
     -0.022672648,
@@ -2406,7 +2302,7 @@
     0.0073556597,
     -0.011106938,
     -0.0004930883,
-    0.000030615087,
+    3.0615087e-05,
     -0.027885556,
     -0.0028331948,
     0.017725663,
@@ -2477,7 +2373,7 @@
     0.0209642,
     0.0072766086,
     -0.016554842,
-    0.000012847768,
+    1.2847768e-05,
     -0.016619157,
     -0.0096250465,
     -0.0058706123,
@@ -2489,12 +2385,12 @@
     -0.011369287,
     -0.007980862,
     0.0371051,
-    -0.000081841456,
+    -8.1841456e-05,
     -0.008991623,
     -0.0014338185,
     -0.0083686905,
     0.015888564,
-    0.000058384896,
+    5.8384896e-05,
     0.011137745,
     -0.017665472,
     0.0040115663,
@@ -2546,7 +2442,7 @@
     0.002440267,
     -0.0066543347,
     0.021306612,
-    0.000015673593,
+    1.5673593e-05,
     0.014929231,
     0.005766104,
     0.017466862,
@@ -2587,7 +2483,7 @@
     -0.020493308,
     -0.028380696,
     0.01816157,
-    -0.000008580415,
+    -8.580415e-06,
     -0.006043559,
     -0.0029720934,
     -0.02553291,
@@ -3006,12 +2902,12 @@
     0.020994313,
     0.0004967801,
     -0.0054726456,
-    0.00002497666,
+    2.497666e-05,
     -0.0007906406,
     0.0020445134,
     0.015982922,
     0.008834241,
-    -0.00008641045,
+    -8.641045e-05,
     -0.008346672,
     0.0031852901,
     0.012183072,
@@ -3151,7 +3047,7 @@
     -0.0077362694,
     0.029154819,
     -0.0055952747,
-    -0.00009445822,
+    -9.445822e-05,
     -0.0030507015,
     0.012902672,
     0.009574785,
@@ -3196,7 +3092,7 @@
     -0.014967703,
     0.011086122,
     0.015201719,
-    0.00007414094,
+    7.414094e-05,
     -0.0031823176,
     0.018211057,
     -0.0051330137,

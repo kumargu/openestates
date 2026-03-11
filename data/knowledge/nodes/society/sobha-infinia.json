@@ -94,83 +94,6 @@
       "version": 1
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 1.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/1gtxo8k/sobha_builders_have_started_advertising_sobha/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:24:45.677993Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 512.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:45.678090Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 52.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:45.678112Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Sobha builders have started advertising Sobha Infinia allegedly built on storm water drains"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:24:45.678133Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -185,29 +108,6 @@
       "learned_at": "2026-03-09T17:28:54.724937Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:32:06.651028Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -1123,7 +1023,7 @@
     0.011624203,
     -0.010792804,
     0.016127435,
-    -0.000023938901,
+    -2.3938901e-05,
     -0.008391814,
     0.01190458,
     -0.004600992,
@@ -1186,7 +1086,7 @@
     -0.004168809,
     -0.0078033544,
     -0.010364077,
-    0.000045033725,
+    4.5033725e-05,
     0.0068328255,
     0.0030079242,
     0.006783296,
@@ -1302,7 +1202,7 @@
     -0.0063875546,
     -0.011216519,
     0.014428656,
-    -5.8206894e-7,
+    -5.8206894e-07,
     -0.009155369,
     0.020335456,
     0.0040909573,
@@ -1485,7 +1385,7 @@
     -0.010686574,
     0.001969415,
     0.012417767,
-    -0.000009101771,
+    -9.101771e-06,
     -0.0026101992,
     -0.0021284067,
     -0.0009005657,
@@ -1763,7 +1663,7 @@
     0.009303072,
     -0.009780577,
     -0.010827022,
-    0.00009256457,
+    9.256457e-05,
     0.002199464,
     -0.0031079117,
     -0.006706901,
@@ -1896,7 +1796,7 @@
     -0.0032005627,
     -0.010067188,
     -0.0013235823,
-    -0.00007153093,
+    -7.153093e-05,
     0.010259457,
     0.024964739,
     -0.013457596,
@@ -2488,7 +2388,7 @@
     -0.01967109,
     0.0007232705,
     0.00931577,
-    0.00009799872,
+    9.799872e-05,
     0.013542471,
     -0.025268385,
     0.0010635942,
@@ -2686,7 +2586,7 @@
     0.021661647,
     -0.020227818,
     0.0035315026,
-    -0.000017015076,
+    -1.7015076e-05,
     -0.005689905,
     -0.001387328,
     0.0026368448,
@@ -3357,10 +3257,10 @@
     0.009124104,
     0.010137164,
     -0.014238649,
-    0.0000072920197,
+    7.2920197e-06,
     0.01768613,
     0.001980693,
-    -0.000052280535,
+    -5.2280535e-05,
     -0.0036983998,
     -0.0018101664,
     0.009965838,

@@ -49,7 +49,7 @@
       "key": "price_range",
       "value": {
         "type": "Text",
-        "data": "₹200L - ₹327L"
+        "data": "\u20b9200L - \u20b9327L"
       },
       "confidence": 0.6,
       "source": {
@@ -88,29 +88,6 @@
         "ready to move",
         "new construction"
       ]
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:11.331434Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",

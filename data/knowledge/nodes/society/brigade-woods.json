@@ -52,7 +52,7 @@
       "key": "price_range",
       "value": {
         "type": "Text",
-        "data": "₹233L - ₹326L"
+        "data": "\u20b9233L - \u20b9326L"
       },
       "confidence": 0.6,
       "source": {
@@ -91,370 +91,6 @@
         "ready to move",
         "new construction"
       ]
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA Registered: Yes",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_number",
-      "value": {
-        "type": "Text",
-        "data": "PRM/KA/RERA/1251/446/PR/180611/001895"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA No: {value}"
-    },
-    {
-      "key": "rera_ack_number",
-      "value": {
-        "type": "Text",
-        "data": "ACK/KA/RERA/1251/446/PR/180605/002316"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA ACK: {value}"
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "APPROVED"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
-      ]
-    },
-    {
-      "key": "rera_promoter_name",
-      "value": {
-        "type": "Text",
-        "data": "Brigade Enterprises Ltd"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA Promoter: {value}"
-    },
-    {
-      "key": "rera_approved_on",
-      "value": {
-        "type": "Text",
-        "data": "11/06/2018"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "RERA Approved: {value}"
-    },
-    {
-      "key": "rera_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "30/09/2022"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Expected Completion: {value}",
-      "answers_preferences": [
-        "possession date",
-        "completion",
-        "ready to move",
-        "when ready"
-      ]
-    },
-    {
-      "key": "rera_original_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31-12-2020"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Original Completion Date: {value}"
-    },
-    {
-      "key": "rera_delay_months",
-      "value": {
-        "type": "Numeric",
-        "data": 20.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Project delayed by {value} months",
-      "answers_preferences": [
-        "delayed",
-        "on time",
-        "possession delay",
-        "risk"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 2.5,
-        "thresholds": [
-          0.0,
-          12.0
-        ]
-      }
-    },
-    {
-      "key": "rera_project_type",
-      "value": {
-        "type": "Text",
-        "data": "Residential/Group Housing"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Project Type: {value}",
-      "answers_preferences": [
-        "apartment",
-        "villa",
-        "plotted",
-        "project type"
-      ]
-    },
-    {
-      "key": "rera_land_litigation",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Land Litigation: No",
-      "answers_preferences": [
-        "legal issues",
-        "litigation",
-        "safe",
-        "clear title"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_complaints_count",
-      "value": {
-        "type": "Numeric",
-        "data": 12.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "{value} complaints filed",
-      "answers_preferences": [
-        "complaints",
-        "legal issues",
-        "problems",
-        "safe"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 2.0,
-        "thresholds": [
-          0.0,
-          3.0
-        ]
-      }
-    },
-    {
-      "key": "rera_complaints_resolved_pct",
-      "value": {
-        "type": "Numeric",
-        "data": 150.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "{value}% complaints resolved",
-      "answers_preferences": [
-        "complaints resolved"
-      ]
-    },
-    {
-      "key": "rera_builder_revocations",
-      "value": {
-        "type": "Numeric",
-        "data": 2.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "{value} revocations",
-      "answers_preferences": [
-        "safe builder",
-        "trusted builder"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_builder_states",
-      "value": {
-        "type": "Text",
-        "data": "Karnataka"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "Builder active in: {value}",
-      "answers_preferences": [
-        "multi-state builder",
-        "national builder"
-      ]
-    },
-    {
-      "key": "rera_portal_url",
-      "value": {
-        "type": "Text",
-        "data": "https://rera.karnataka.gov.in/projectViewDetails"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:33.156466Z",
-      "version": 1,
-      "display_template": "View on RERA Portal"
-    },
-    {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 1.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/10amdy9/1_day_itinerary_for_tourists_bangalore_city_centre/",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:30:55.371316Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
     },
     {
       "key": "reddit_total_score",
@@ -504,6 +140,140 @@
       "display_template": "Discussed on Reddit: {value}"
     },
     {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 4.1
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T04:52:20.079824Z",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate the natural surroundings, spaciousness, and convenient location of Brigade Woods, though some have experienced delays in project completion and issues with builder communication."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T04:52:20.079868Z",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good location and connectivity",
+          "spacious apartments",
+          "peaceful environment with green spaces",
+          "good construction quality",
+          "reputable builder"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T04:52:20.079876Z",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "project delivery delays",
+          "poor customer service from the builder",
+          "traffic congestion in the surrounding area"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T04:52:20.079882Z",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "location",
+          "construction quality",
+          "builder reputation",
+          "project delivery",
+          "customer service",
+          "green spaces",
+          "amenities"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T04:52:20.079887Z",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-11T04:54:28.067606Z",
+      "version": 1
+    },
+    {
       "key": "rera_registered",
       "value": {
         "type": "Bool",
@@ -515,7 +285,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154842Z",
+      "learned_at": "2026-03-11T04:54:32.170407Z",
       "version": 1,
       "display_template": "RERA Registered: Yes",
       "answers_preferences": [
@@ -541,7 +311,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154861Z",
+      "learned_at": "2026-03-11T04:54:32.170429Z",
       "version": 1,
       "display_template": "RERA No: {value}"
     },
@@ -557,7 +327,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154865Z",
+      "learned_at": "2026-03-11T04:54:32.170433Z",
       "version": 1,
       "display_template": "RERA ACK: {value}"
     },
@@ -573,7 +343,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154868Z",
+      "learned_at": "2026-03-11T04:54:32.170436Z",
       "version": 1,
       "display_template": "RERA Status: {value}",
       "answers_preferences": [
@@ -593,7 +363,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154870Z",
+      "learned_at": "2026-03-11T04:54:32.170439Z",
       "version": 1,
       "display_template": "RERA Promoter: {value}"
     },
@@ -609,7 +379,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154873Z",
+      "learned_at": "2026-03-11T04:54:32.170442Z",
       "version": 1,
       "display_template": "RERA Approved: {value}"
     },
@@ -625,7 +395,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154876Z",
+      "learned_at": "2026-03-11T04:54:32.170446Z",
       "version": 1,
       "display_template": "Expected Completion: {value}",
       "answers_preferences": [
@@ -647,7 +417,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154879Z",
+      "learned_at": "2026-03-11T04:54:32.170449Z",
       "version": 1,
       "display_template": "Original Completion Date: {value}"
     },
@@ -663,7 +433,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154942Z",
+      "learned_at": "2026-03-11T04:54:32.172369Z",
       "version": 1,
       "display_template": "Project delayed by {value} months",
       "answers_preferences": [
@@ -693,7 +463,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154947Z",
+      "learned_at": "2026-03-11T04:54:32.172379Z",
       "version": 1,
       "display_template": "Project Type: {value}",
       "answers_preferences": [
@@ -715,7 +485,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154953Z",
+      "learned_at": "2026-03-11T04:54:32.172387Z",
       "version": 1,
       "display_template": "Land Litigation: No",
       "answers_preferences": [
@@ -741,7 +511,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154956Z",
+      "learned_at": "2026-03-11T04:54:32.172391Z",
       "version": 1,
       "display_template": "{value} complaints filed",
       "answers_preferences": [
@@ -771,7 +541,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154965Z",
+      "learned_at": "2026-03-11T04:54:32.172400Z",
       "version": 1,
       "display_template": "{value}% complaints resolved",
       "answers_preferences": [
@@ -790,7 +560,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154968Z",
+      "learned_at": "2026-03-11T04:54:32.172403Z",
       "version": 1,
       "display_template": "{value} revocations",
       "answers_preferences": [
@@ -814,7 +584,7 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154972Z",
+      "learned_at": "2026-03-11T04:54:32.172407Z",
       "version": 1,
       "display_template": "Builder active in: {value}",
       "answers_preferences": [
@@ -834,11 +604,645 @@
         "url": "https://rera.karnataka.gov.in/projectViewDetails",
         "skill_id": "fetch_rera"
       },
-      "learned_at": "2026-03-10T10:28:33.154974Z",
+      "learned_at": "2026-03-11T04:54:32.172410Z",
       "version": 1,
       "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "maintenance_quality",
+      "value": {
+        "type": "Text",
+        "data": "average"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998539Z",
+      "version": 1,
+      "display_template": "Maintenance is {value}",
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998567Z",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "quiet"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998573Z",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998577Z",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998582Z",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate Brigade Woods for its prime location, extensive amenities, and peaceful, green environment. However, there are notable complaints regarding project delivery delays, unresponsive customer service, and concerns over a mandatory water tracking system."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998586Z",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Good location in Whitefield, with proximity to ITPL, metro station, schools and hospitals. High construction quality with premium materials used. Delay in project delivery, some customers have faced repeated extensions without proper compensation or transparency from the builder. Poor customer service, including difficulty in getting in touch with sales personnel and lack of response to customer requests or complaints."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998592Z",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Excellent location with proximity to IT hubs, schools, hospitals, and shopping malls.",
+          "Wide range of amenities including clubhouse, swimming pool, gym, and children's play areas.",
+          "Lush green surroundings and nature-inspired design providing a peaceful environment.",
+          "Reputable builder (Brigade Group) known for quality construction.",
+          "Good security with 24/7 surveillance, CCTV, and intercom facilities."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998602Z",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Delays in project delivery and lack of transparency regarding extensions.",
+          "Poor customer service, including unresponsiveness and difficulty in reaching personnel.",
+          "Concerns about a mandatory water tracking system ('Wegot') being forced on residents.",
+          "Overcrowded metro and buses, and chaotic streets in the wider Whitefield area during weekends.",
+          "Lack of pedestrian tracks in some surrounding areas of Whitefield."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998608Z",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-location",
+          "family-friendly",
+          "green-environment",
+          "rich-amenities",
+          "reputable-builder",
+          "good-security"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998614Z",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "project-delays",
+          "customer-service-issues",
+          "water-tracking-concerns",
+          "whitefield-traffic"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T04:55:17.998622Z",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "skill_id": "embed_entity"
+      },
+      "learned_at": "2026-03-11T04:55:18.605287Z",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "score_maintenance_quality",
+      "value": {
+        "type": "Numeric",
+        "data": 60.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335848Z",
+      "version": 1,
+      "display_template": "Maintenance: {value}/100",
+      "answers_preferences": [
+        "well maintained",
+        "good society",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_maintenance_quality_reason",
+      "value": {
+        "type": "Text",
+        "data": "Google reviews mention \"average\" maintenance, but \"good construction quality\" and \"green spaces\" suggest decent upkeep."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335888Z",
+      "version": 1,
+      "display_template": "Maintenance: {value}"
+    },
+    {
+      "key": "score_family_friendly",
+      "value": {
+        "type": "Numeric",
+        "data": 75.0
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335901Z",
+      "version": 1,
+      "display_template": "Family Friendly: {value}/100",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids",
+        "children"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_family_friendly_reason",
+      "value": {
+        "type": "Text",
+        "data": "High suitability noted, with \"children's play areas,\" \"green surroundings,\" and proximity to \"schools\" and \"hospitals.\""
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335909Z",
+      "version": 1,
+      "display_template": "Family Friendly: {value}"
+    },
+    {
+      "key": "score_builder_trust",
+      "value": {
+        "type": "Numeric",
+        "data": 68.0
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335926Z",
+      "version": 1,
+      "display_template": "Builder Trust: {value}/100",
+      "answers_preferences": [
+        "trusted builder",
+        "reputed builder",
+        "reliable"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_builder_trust_reason",
+      "value": {
+        "type": "Text",
+        "data": "RERA registered with high complaint resolution, but the project faced significant 20-month delays and the builder has 2 revocations."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335935Z",
+      "version": 1,
+      "display_template": "Builder Trust: {value}"
+    },
+    {
+      "key": "score_value_for_money",
+      "value": {
+        "type": "Numeric",
+        "data": 58.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335946Z",
+      "version": 1,
+      "display_template": "Value: {value}/100",
+      "answers_preferences": [
+        "good value",
+        "affordable",
+        "worth it",
+        "value for money"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_value_for_money_reason",
+      "value": {
+        "type": "Text",
+        "data": "The price range is high; however, the excellent location, extensive amenities, and quality construction add value."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335958Z",
+      "version": 1,
+      "display_template": "Value: {value}"
+    },
+    {
+      "key": "score_calm_environment",
+      "value": {
+        "type": "Numeric",
+        "data": 72.0
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335969Z",
+      "version": 1,
+      "display_template": "Calm & Green: {value}/100",
+      "answers_preferences": [
+        "quiet",
+        "peaceful",
+        "calm",
+        "green",
+        "serene"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_calm_environment_reason",
+      "value": {
+        "type": "Text",
+        "data": "Explicitly described as \"quiet\" and having a \"peaceful environment with green spaces,\" despite surrounding area traffic."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335977Z",
+      "version": 1,
+      "display_template": "Calm & Green: {value}"
+    },
+    {
+      "key": "score_community_vibe",
+      "value": {
+        "type": "Numeric",
+        "data": 55.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.335992Z",
+      "version": 1,
+      "display_template": "Community: {value}/100",
+      "answers_preferences": [
+        "good community",
+        "friendly neighbors",
+        "social"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_community_vibe_reason",
+      "value": {
+        "type": "Text",
+        "data": "Resident sentiment is \"mixed,\" with notable complaints about builder unresponsiveness affecting satisfaction, despite good environment."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336001Z",
+      "version": 1,
+      "display_template": "Community: {value}"
+    },
+    {
+      "key": "overall_score",
+      "value": {
+        "type": "Numeric",
+        "data": 65.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336015Z",
+      "version": 1,
+      "display_template": "Overall Score: {value}/100",
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 3.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "best_for_label",
+      "value": {
+        "type": "Text",
+        "data": "Families and those seeking a ready-to-move home"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336024Z",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "one_line_verdict",
+      "value": {
+        "type": "Text",
+        "data": "Brigade Woods offers ready-to-move homes from a RERA-compliant builder with good amenities and a peaceful environment, but homebuyers should be aware of past project delays and premium pricing."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336029Z",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "top_signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "reputable-builder",
+          "rera-approved",
+          "ready-to-move",
+          "good-location",
+          "family-friendly"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336044Z",
+      "version": 1,
+      "display_template": "Top Signals: {value}"
+    },
+    {
+      "key": "top_cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "significant-project-delay",
+          "builder-revocations",
+          "high-price-range",
+          "customer-service-issues"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:55:34.336051Z",
+      "version": 1,
+      "display_template": "Top Cautions: {value}"
     }
   ],
   "created_at": "2026-03-09T20:23:48.189114Z",
-  "updated_at": "2026-03-10T11:30:55.381961Z"
+  "updated_at": "2026-03-11T04:55:34.342050Z"
 }

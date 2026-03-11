@@ -80,13 +80,25 @@
     }
   },
   "society:brigade-woods": {
+    "embed_entity": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-11T04:55:18.616123+00:00"
+    },
+    "learn_society": {
+      "fact_count": 11,
+      "last_fetched": "2026-03-11T04:55:18.010957+00:00"
+    },
     "reddit": {
-      "fact_count": 4,
-      "last_fetched": "2026-03-10T11:30:55.378968+00:00"
+      "fact_count": 1,
+      "last_fetched": "2026-03-11T04:54:28.079600+00:00"
     },
     "rera": {
       "fact_count": 16,
-      "last_fetched": "2026-03-10T11:30:55.384732+00:00"
+      "last_fetched": "2026-03-11T04:54:32.179723+00:00"
+    },
+    "score_society": {
+      "fact_count": 17,
+      "last_fetched": "2026-03-11T04:55:34.350216+00:00"
     }
   },
   "society:casagrand-flamingo": {
@@ -250,13 +262,29 @@
     }
   },
   "society:prestige-lakeside-habitat": {
+    "embed_entity": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-11T05:10:54.768676+00:00"
+    },
+    "google_reviews": {
+      "fact_count": 6,
+      "last_fetched": "2026-03-11T05:10:32.370695+00:00"
+    },
+    "learn_society": {
+      "fact_count": 11,
+      "last_fetched": "2026-03-11T05:10:54.125067+00:00"
+    },
     "reddit": {
       "fact_count": 4,
-      "last_fetched": "2026-03-10T11:31:30.215925+00:00"
+      "last_fetched": "2026-03-11T05:10:06.194471+00:00"
     },
     "rera": {
       "fact_count": 15,
-      "last_fetched": "2026-03-10T11:31:30.221888+00:00"
+      "last_fetched": "2026-03-11T05:10:09.846083+00:00"
+    },
+    "score_society": {
+      "fact_count": 6,
+      "last_fetched": "2026-03-11T05:11:15.415870+00:00"
     }
   },
   "society:prestige-lavender-fields": {
@@ -390,13 +418,25 @@
     }
   },
   "society:sobha-insignia": {
+    "embed_entity": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-11T04:48:06.660945+00:00"
+    },
+    "learn_society": {
+      "fact_count": 1,
+      "last_fetched": "2026-03-11T04:48:05.935426+00:00"
+    },
     "reddit": {
       "fact_count": 1,
-      "last_fetched": "2026-03-10T12:45:56.132788+00:00"
+      "last_fetched": "2026-03-11T04:47:46.920124+00:00"
     },
     "rera": {
       "fact_count": 38,
-      "last_fetched": "2026-03-10T12:45:56.201196+00:00"
+      "last_fetched": "2026-03-11T04:47:53.573298+00:00"
+    },
+    "score_society": {
+      "fact_count": 6,
+      "last_fetched": "2026-03-11T04:48:26.213099+00:00"
     }
   },
   "society:sobha-marvella": {
@@ -487,12 +527,6 @@
     "rera": {
       "fact_count": 1,
       "last_fetched": "2026-03-10T11:32:14.764910+00:00"
-    }
-  },
-  "society:test": {
-    "rera": {
-      "last_fetched": "2026-03-10T09:28:13.722231+00:00",
-      "thread_count": 5
     }
   },
   "society:the-prestige-city": {

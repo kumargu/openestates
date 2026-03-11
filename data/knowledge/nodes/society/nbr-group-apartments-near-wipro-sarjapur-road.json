@@ -79,87 +79,6 @@
       "version": 1
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 15.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/1nq5r8m/no_entry_wipro_turns_down_siddaramaiahs_request/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:23:32.927613Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 16795.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:32.927658Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 1529.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:32.927669Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "No Entry: Wipro turns down Siddaramaiah's request to open campus roads for public traffic.",
-          "Alert: My dog ran away from Springfields Society, Sarjapur road; Responds to his name Pax and is wearing a olive green harness",
-          "Is it just me or is the Varthur - Sarjapur road always very dusty?",
-          "Potholes took another life in Bengaluru",
-          "Sarjapur Road is hell!"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:32.927685Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -174,29 +93,6 @@
       "learned_at": "2026-03-09T17:28:33.745342Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:29:40.402530Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -462,7 +358,7 @@
     -0.0040681316,
     0.040228173,
     0.0045229765,
-    0.00009983222,
+    9.983222e-05,
     0.02463925,
     -0.010664566,
     -0.010866756,
@@ -537,7 +433,7 @@
     0.0022006757,
     -0.021622464,
     0.050500955,
-    -0.000026100242,
+    -2.6100242e-05,
     -0.014728952,
     -0.015446517,
     0.017873736,
@@ -601,7 +497,7 @@
     -0.029224226,
     0.0070738387,
     0.022423206,
-    -0.00008144583,
+    -8.144583e-05,
     -0.0005359406,
     0.0367283,
     -0.013649373,
@@ -634,7 +530,7 @@
     0.013037397,
     -0.0035471944,
     0.033370335,
-    0.000097628,
+    9.7628e-05,
     -0.027164517,
     -0.018094765,
     0.044194218,
@@ -856,7 +752,7 @@
     0.026883358,
     -0.0034651512,
     -0.0070749447,
-    0.00007054459,
+    7.054459e-05,
     -0.02378991,
     -0.0005780358,
     0.01743883,
@@ -1052,7 +948,7 @@
     0.001616333,
     -0.0346891,
     -0.00893585,
-    -0.000075067015,
+    -7.5067015e-05,
     -0.0076741395,
     0.02131126,
     0.00037518522,
@@ -1097,7 +993,7 @@
     0.0056262882,
     -0.016367579,
     0.007335333,
-    0.00000557618,
+    5.57618e-06,
     -0.000743742,
     0.012339068,
     -0.01374331,
@@ -1225,7 +1121,7 @@
     -0.009676885,
     -0.021070115,
     0.0015934242,
-    0.000058029716,
+    5.8029716e-05,
     0.005510745,
     0.0046650697,
     -0.0038165634,
@@ -1350,7 +1246,7 @@
     -0.008334557,
     -0.006582786,
     -0.009411219,
-    0.000017121953,
+    1.7121953e-05,
     -0.0166657,
     0.007822275,
     -0.010593928,
@@ -1604,7 +1500,7 @@
     0.013139991,
     -0.00520765,
     -0.0019157556,
-    0.00004565364,
+    4.565364e-05,
     0.005571716,
     0.0063206083,
     0.01866512,
@@ -1810,7 +1706,7 @@
     0.01792275,
     -0.006154843,
     0.009791461,
-    -0.00008180082,
+    -8.180082e-05,
     -0.0032181274,
     0.014393373,
     -0.004168555,
@@ -1835,7 +1731,7 @@
     0.018499315,
     -0.0016368713,
     0.012167894,
-    -0.000071799106,
+    -7.1799106e-05,
     0.0037122646,
     0.014654465,
     -0.021576885,
@@ -1981,7 +1877,7 @@
     -0.026544213,
     -0.00967519,
     0.009669706,
-    -0.000016128492,
+    -1.6128492e-05,
     0.014911271,
     -0.00046534702,
     -0.026187034,
@@ -2163,8 +2059,8 @@
     0.027253779,
     0.026525203,
     -0.00026610357,
-    -0.0000905881,
-    -0.000057028075,
+    -9.05881e-05,
+    -5.7028075e-05,
     -0.0029758255,
     0.011127967,
     -0.03955924,
@@ -2639,7 +2535,7 @@
     0.0036684412,
     0.005481176,
     -0.014324461,
-    -0.00006771348,
+    -6.771348e-05,
     -0.017612848,
     0.0035281533,
     0.010548966,
@@ -2757,7 +2653,7 @@
     -0.016639948,
     0.004962429,
     -0.0075745652,
-    0.00008238212,
+    8.238212e-05,
     -0.01423519,
     0.016679464,
     0.015817564,
@@ -2887,7 +2783,7 @@
     -0.0044716652,
     -0.019890852,
     0.009421212,
-    -0.00002038986,
+    -2.038986e-05,
     -0.02216929,
     -0.0090907235,
     -0.0073728347,
@@ -2905,7 +2801,7 @@
     -0.02045468,
     0.00613523,
     -0.0010447175,
-    0.000014035126,
+    1.4035126e-05,
     -0.0047595287,
     0.011621413,
     -0.001769476,

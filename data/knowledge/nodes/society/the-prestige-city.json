@@ -249,87 +249,6 @@
       "display_template": "Review themes: {value}"
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 15.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/wlxanp/prestige_city_sarjapur_road_opinions/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:25:28.636085Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 8520.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:25:28.636143Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 1450.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:25:28.636159Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Prestige City, Sarjapur Road opinions?",
-          "Getting married - Stuggle ends or begins",
-          "Does urban infrastructure in areas like Marathahalli, Bellandur, and Sarjapur Road and other surrounding IT hub areas feel like living in tier 3 city? Are these areas even Considered as Bangalore?",
-          "Is it just me or is the Varthur - Sarjapur road always very dusty?",
-          "No Entry: Wipro turns down Siddaramaiah's request to open campus roads for public traffic."
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:25:28.636186Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -344,29 +263,6 @@
       "learned_at": "2026-03-09T17:29:06.365938Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:32:49.367454Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -621,7 +517,7 @@
     -0.004747485,
     -0.030434024,
     0.007886514,
-    -0.00005622266,
+    -5.622266e-05,
     0.026047945,
     0.019004742,
     0.017563215,
@@ -632,14 +528,14 @@
     0.015563475,
     0.015478833,
     0.03479405,
-    0.00008039445,
+    8.039445e-05,
     0.026525399,
     -0.015696818,
     -0.011511354,
     0.036789604,
     0.013868452,
     -0.0057771723,
-    -0.00006103995,
+    -6.103995e-05,
     -0.016715432,
     -0.006539429,
     -0.012518744,
@@ -892,7 +788,7 @@
     0.018006684,
     0.0012985793,
     -0.001660369,
-    0.00006524003,
+    6.524003e-05,
     -0.016822845,
     0.038798813,
     -0.0012522951,
@@ -1255,7 +1151,7 @@
     -0.00821531,
     -0.011111264,
     0.0017539238,
-    -0.00009447194,
+    -9.447194e-05,
     0.011095937,
     0.0032854318,
     0.018198874,
@@ -1547,7 +1443,7 @@
     0.010468178,
     0.011440973,
     -0.0001907921,
-    -0.000012860219,
+    -1.2860219e-05,
     0.0044618235,
     -0.0037297592,
     0.0039672153,
@@ -1721,12 +1617,12 @@
     -0.008630371,
     -0.004313372,
     0.014007594,
-    -0.000058847516,
+    -5.8847516e-05,
     0.0066813226,
     0.015536494,
     -0.014927147,
     -0.00270977,
-    0.000030515233,
+    3.0515233e-05,
     0.007234141,
     -0.005722334,
     -0.006718521,
@@ -1944,7 +1840,7 @@
     -0.14138518,
     0.0044210255,
     0.01731412,
-    -0.000026596748,
+    -2.6596748e-05,
     -0.017061826,
     0.0033196714,
     0.0114718955,
@@ -1998,7 +1894,7 @@
     -0.011103202,
     0.008245291,
     0.008948956,
-    0.000013213477,
+    1.3213477e-05,
     0.012106853,
     0.018602746,
     0.0059170853,
@@ -2085,7 +1981,7 @@
     -0.010852526,
     -0.0033779184,
     0.006005467,
-    0.000050709215,
+    5.0709215e-05,
     0.017822523,
     0.00915502,
     -0.005240469,
@@ -2756,7 +2652,7 @@
     0.0006348584,
     0.0007079213,
     0.011548195,
-    0.000047843947,
+    4.7843947e-05,
     -0.014209561,
     0.025781333,
     0.019722505,

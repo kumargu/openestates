@@ -193,87 +193,6 @@
       "display_template": "Review themes: {value}"
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 14.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/ts7887/tenant_verification_mandated_by_a_gated_society/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:23:38.396342Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 1191.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:38.396451Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 407.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:38.396480Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Tenant verification mandated by a gated society in Bangalore, thoughts?",
-          "Will BBMP Cancel Nikoo Homes / Bhartiya City's Approvals? 10K Apartments at stake!",
-          "Destroyed an amazing ecosystem",
-          "Anyone that has bought house in Nikoo homes 2 - Bhartiya City and waiting for Registration?",
-          "Adoption appeal—neutered, vaccinated tomcat. Help us take Nikoo off the street"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:23:38.396508Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -288,29 +207,6 @@
       "learned_at": "2026-03-09T17:28:35.071981Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:29:58.556975Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -379,7 +275,7 @@
           "Will BBMP Cancel Nikoo Homes / Bhartiya City's Approvals? 10K Apartments at stake!",
           "Destroyed an amazing ecosystem",
           "Anyone that has bought house in Nikoo homes 2 - Bhartiya City and waiting for Registration?",
-          "Adoption appeal—neutered, vaccinated tomcat. Help us take Nikoo off the street",
+          "Adoption appeal\u2014neutered, vaccinated tomcat. Help us take Nikoo off the street",
           "Shady Haunted Bungalow Outside Our Society in Bhartiya City"
         ]
       },
@@ -530,7 +426,7 @@
     -0.010766482,
     -0.01669495,
     -0.038339283,
-    0.00007368086,
+    7.368086e-05,
     -0.0036955634,
     -0.14818211,
     0.0034443603,
@@ -663,7 +559,7 @@
     -0.0062411707,
     0.02294164,
     -0.0030171892,
-    -0.0000873822,
+    -8.73822e-05,
     -0.022077233,
     -0.014309919,
     0.028054541,
@@ -1331,7 +1227,7 @@
     0.027835237,
     0.011004343,
     0.00096555904,
-    -0.000059800856,
+    -5.9800856e-05,
     0.010740068,
     0.012005534,
     -0.0030675877,
@@ -1417,7 +1313,7 @@
     -0.007676549,
     0.0060503758,
     0.0086960895,
-    -0.000010480806,
+    -1.0480806e-05,
     -0.008641322,
     0.0024957457,
     -0.0026499757,
@@ -1451,7 +1347,7 @@
     0.003490762,
     -0.012172022,
     -0.007366491,
-    -0.000069368354,
+    -6.9368354e-05,
     -0.0036274819,
     0.006574269,
     0.004601195,
@@ -1568,7 +1464,7 @@
     0.0047561275,
     -0.012897662,
     0.013878052,
-    0.000015631596,
+    1.5631596e-05,
     -0.021482555,
     -0.0022350408,
     -0.0041164625,
@@ -1595,7 +1491,7 @@
     0.0036038638,
     -0.02521694,
     -0.0037438902,
-    -0.0000652152,
+    -6.52152e-05,
     -0.01295826,
     -0.00057233433,
     -0.0027532668,
@@ -1721,7 +1617,7 @@
     0.006690852,
     0.0133407945,
     0.016609251,
-    0.000041551302,
+    4.1551302e-05,
     -0.01235632,
     0.014302645,
     0.003766401,
@@ -1784,7 +1680,7 @@
     0.026051056,
     0.0025498418,
     -0.006673605,
-    -0.00009648783,
+    -9.648783e-05,
     -0.023604356,
     -0.0047440636,
     0.009887819,
@@ -1904,7 +1800,7 @@
     -0.015259077,
     0.011000945,
     -0.0030030871,
-    0.000044218777,
+    4.4218777e-05,
     0.013774784,
     0.012520475,
     0.03553442,
@@ -2046,7 +1942,7 @@
     -0.013179418,
     -0.0052893143,
     -0.025052562,
-    -0.000076946984,
+    -7.6946984e-05,
     0.008563839,
     0.0068413946,
     -0.018176077,
@@ -2659,7 +2555,7 @@
     -0.0070881443,
     -0.00019300217,
     0.0025222793,
-    -0.00009522697,
+    -9.522697e-05,
     -0.0023817706,
     -0.009038725,
     -0.013084074,
@@ -2680,7 +2576,7 @@
     -0.0064106374,
     0.0059340093,
     -0.0013747817,
-    -0.000069732196,
+    -6.9732196e-05,
     0.0015715355,
     0.013777342,
     -0.009179347,
@@ -3386,7 +3282,7 @@
     0.007243723,
     0.01059486,
     0.025232118,
-    -0.000014688087,
+    -1.4688087e-05,
     -0.011275877,
     0.01046313,
     0.0075203157,

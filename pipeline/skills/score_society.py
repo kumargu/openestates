@@ -132,7 +132,7 @@ def _call_gemini(prompt: str, api_key: str) -> Optional[dict]:
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
             "responseMimeType": "application/json",
-            "maxOutputTokens": 4096,
+            "maxOutputTokens": 8192,
         },
     }).encode()
 

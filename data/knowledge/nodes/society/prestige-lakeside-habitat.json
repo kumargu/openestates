@@ -94,19 +94,611 @@
       "version": 1
     },
     {
-      "key": "google_sentiment",
+      "key": "score_builder_trust_reason",
       "value": {
         "type": "Text",
-        "data": "Residents generally appreciate Prestige Lakeside Habitat for its comprehensive amenities, lush environment, and robust security. However, there are notable criticisms concerning safety, particularly for children, and dissatisfaction with the builder's handling of financial matters and safety concerns."
+        "data": "The builder is RERA registered, completed the project on time with no revocations and resolved complaints, though some residents express dissatisfaction with financial transparency."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845384Z",
+      "version": 1,
+      "display_template": "Builder Trust: {value}"
+    },
+    {
+      "key": "score_value_for_money",
+      "value": {
+        "type": "Numeric",
+        "data": 55.0
+      },
+      "confidence": 0.4,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845389Z",
+      "version": 1,
+      "display_template": "Value: {value}/100",
+      "answers_preferences": [
+        "good value",
+        "affordable",
+        "worth it",
+        "value for money"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_value_for_money_reason",
+      "value": {
+        "type": "Text",
+        "data": "Offers extensive amenities and a good location, but concerns about build quality (seepage, wall chips) and alleged builder profiteering temper the value."
+      },
+      "confidence": 0.4,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845394Z",
+      "version": 1,
+      "display_template": "Value: {value}"
+    },
+    {
+      "key": "score_calm_environment",
+      "value": {
+        "type": "Numeric",
+        "data": 60.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845401Z",
+      "version": 1,
+      "display_template": "Calm & Green: {value}/100",
+      "answers_preferences": [
+        "quiet",
+        "peaceful",
+        "calm",
+        "green",
+        "serene"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_calm_environment_reason",
+      "value": {
+        "type": "Text",
+        "data": "Features abundant green spaces; however, its large scale (3699 units) and potential for future traffic congestion suggest a less tranquil setting."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845405Z",
+      "version": 1,
+      "display_template": "Calm & Green: {value}"
+    },
+    {
+      "key": "score_community_vibe",
+      "value": {
+        "type": "Numeric",
+        "data": 72.0
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845412Z",
+      "version": 1,
+      "display_template": "Community: {value}/100",
+      "answers_preferences": [
+        "good community",
+        "friendly neighbors",
+        "social"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "score_community_vibe_reason",
+      "value": {
+        "type": "Text",
+        "data": "Described as having a vibrant community and active social life, with residents demonstrating strong engagement, even through protests, to address issues."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T04:47:38.845417Z",
+      "version": 1,
+      "display_template": "Community: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "url": "",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-11T05:10:06.180994Z",
+      "version": 1,
+      "display_template": "{value} Reddit discussions found",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback",
+        "reddit"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          5.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "key": "reddit_total_score",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-11T05:10:06.181033Z",
+      "version": 1,
+      "display_template": "Reddit community score: {value}"
+    },
+    {
+      "key": "reddit_total_comments",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-11T05:10:06.181044Z",
+      "version": 1,
+      "display_template": "{value} comments across Reddit threads"
+    },
+    {
+      "key": "reddit_threads",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Prestige Lakeside Habitat - opinions"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-11T05:10:06.181058Z",
+      "version": 1,
+      "display_template": "Discussed on Reddit: {value}"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836631Z",
+      "version": 1,
+      "display_template": "RERA Registered: Yes",
+      "answers_preferences": [
+        "rera verified",
+        "legally verified",
+        "safe investment",
+        "verified project"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_number",
+      "value": {
+        "type": "Text",
+        "data": "PRM/KA/RERA/1251/446/PR/170915/000176"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836653Z",
+      "version": 1,
+      "display_template": "RERA No: {value}"
+    },
+    {
+      "key": "rera_ack_number",
+      "value": {
+        "type": "Text",
+        "data": "PR/KN/170728/000176"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836658Z",
+      "version": 1,
+      "display_template": "RERA ACK: {value}"
+    },
+    {
+      "key": "rera_status",
+      "value": {
+        "type": "Text",
+        "data": "APPROVED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836662Z",
+      "version": 1,
+      "display_template": "RERA Status: {value}",
+      "answers_preferences": [
+        "rera verified",
+        "safe investment"
+      ]
+    },
+    {
+      "key": "rera_promoter_name",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Habitat Ventures"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836667Z",
+      "version": 1,
+      "display_template": "RERA Promoter: {value}"
+    },
+    {
+      "key": "rera_approved_on",
+      "value": {
+        "type": "Text",
+        "data": "15/09/2017"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836670Z",
+      "version": 1,
+      "display_template": "RERA Approved: {value}"
+    },
+    {
+      "key": "rera_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "31/01/2020"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836674Z",
+      "version": 1,
+      "display_template": "Expected Completion: {value}",
+      "answers_preferences": [
+        "possession date",
+        "completion",
+        "ready to move",
+        "when ready"
+      ]
+    },
+    {
+      "key": "rera_original_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "31-01-2020"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.836677Z",
+      "version": 1,
+      "display_template": "Original Completion Date: {value}"
+    },
+    {
+      "key": "rera_project_type",
+      "value": {
+        "type": "Text",
+        "data": "Residential/Group Housing"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838514Z",
+      "version": 1,
+      "display_template": "Project Type: {value}",
+      "answers_preferences": [
+        "apartment",
+        "villa",
+        "plotted",
+        "project type"
+      ]
+    },
+    {
+      "key": "rera_land_litigation",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838525Z",
+      "version": 1,
+      "display_template": "Land Litigation: No",
+      "answers_preferences": [
+        "legal issues",
+        "litigation",
+        "safe",
+        "clear title"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_complaints_count",
+      "value": {
+        "type": "Numeric",
+        "data": 2.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838529Z",
+      "version": 1,
+      "display_template": "{value} complaints filed",
+      "answers_preferences": [
+        "complaints",
+        "legal issues",
+        "problems",
+        "safe"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          0.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "key": "rera_complaints_resolved_pct",
+      "value": {
+        "type": "Numeric",
+        "data": 200.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838538Z",
+      "version": 1,
+      "display_template": "{value}% complaints resolved",
+      "answers_preferences": [
+        "complaints resolved"
+      ]
+    },
+    {
+      "key": "rera_builder_revocations",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838542Z",
+      "version": 1,
+      "display_template": "{value} revocations",
+      "answers_preferences": [
+        "safe builder",
+        "trusted builder"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_builder_states",
+      "value": {
+        "type": "Text",
+        "data": "Karnataka"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838546Z",
+      "version": 1,
+      "display_template": "Builder active in: {value}",
+      "answers_preferences": [
+        "multi-state builder",
+        "national builder"
+      ]
+    },
+    {
+      "key": "rera_portal_url",
+      "value": {
+        "type": "Text",
+        "data": "https://rera.karnataka.gov.in/projectViewDetails"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-11T05:10:09.838549Z",
+      "version": 1,
+      "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 3.9
       },
       "confidence": 0.8,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "fetch_google_reviews"
       },
-      "learned_at": "2026-03-09T15:58:12.007829Z",
+      "learned_at": "2026-03-11T05:10:32.361161Z",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 374.0
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T05:10:32.361199Z",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate Prestige Lakeside Habitat for its extensive amenities, abundant green spaces, and luxurious Disney-themed design, offering a premium and family-friendly living experience. However, there are notable concerns regarding builder communication, hidden charges, and safety aspects like fencing and overall maintenance."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews"
+      },
+      "learned_at": "2026-03-11T05:10:32.361211Z",
       "version": 1,
       "display_template": "Google Reviews: {value}",
       "answers_preferences": [
@@ -123,23 +715,21 @@
       "value": {
         "type": "Tags",
         "data": [
-          "Extensive amenities and facilities including multiple clubhouses, swimming pools, gyms, and sports courts",
-          "Abundant green spaces, well-maintained common areas, and Disney-themed landscaping",
-          "Strong security measures with round-the-clock surveillance",
-          "Good construction quality, high-quality materials, and spacious apartment designs",
-          "Convenient location with excellent connectivity to IT parks, essential services, and public transport",
-          "Responsive maintenance staff",
-          "Vibrant community and social life"
+          "prime location and connectivity",
+          "modern and extensive amenities including clubhouses, pools, and sports facilities",
+          "vast green areas and open spaces (80 acres)",
+          "luxurious and Disney-themed design and atmosphere",
+          "high construction quality and spacious apartments/villas",
+          "good proximity to IT hubs, schools, hospitals, and shopping centers"
         ]
       },
       "confidence": 0.8,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "fetch_google_reviews"
       },
-      "learned_at": "2026-03-09T15:58:12.007862Z",
+      "learned_at": "2026-03-11T05:10:32.361223Z",
       "version": 1,
       "display_template": "Praised for: {value}"
     },
@@ -148,19 +738,19 @@
       "value": {
         "type": "Tags",
         "data": [
-          "Significant safety concerns, including issues with high wattage wires, lack of fencing around swimming pools, and concerns for child safety",
-          "Dissatisfaction with builder/management regarding financial transparency, forcing payments not in documents, and failure to address safety lapses like fencing",
-          "Perception of ongoing construction or incompleteness"
+          "safety concerns such as high wattage wires and lack of fencing around swimming pools",
+          "issues with builder communication and transparency regarding unmentioned charges for registration",
+          "perceived poor location by some residents compared to other projects",
+          "complaints about ongoing construction nearby"
         ]
       },
       "confidence": 0.8,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "fetch_google_reviews"
       },
-      "learned_at": "2026-03-09T15:58:12.007868Z",
+      "learned_at": "2026-03-11T05:10:32.361233Z",
       "version": 1,
       "display_template": "Criticized for: {value}"
     },
@@ -169,106 +759,270 @@
       "value": {
         "type": "Tags",
         "data": [
-          "Amenities",
-          "Security",
-          "Location",
-          "Maintenance",
-          "Construction Quality",
-          "Safety",
-          "Builder/Management"
+          "amenities",
+          "security",
+          "location",
+          "connectivity",
+          "green spaces",
+          "builder practices",
+          "safety",
+          "design"
         ]
       },
       "confidence": 0.8,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "fetch_google_reviews"
       },
-      "learned_at": "2026-03-09T15:58:12.007872Z",
+      "learned_at": "2026-03-11T05:10:32.361243Z",
       "version": 1,
       "display_template": "Review themes: {value}"
     },
     {
-      "key": "reddit_thread_count",
+      "key": "maintenance_quality",
       "value": {
-        "type": "Numeric",
-        "data": 6.0
+        "type": "Text",
+        "data": "average"
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/1nnezwa/prestige_lakeside_habitat_protests/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
       },
-      "learned_at": "2026-03-09T17:23:52.441006Z",
+      "learned_at": "2026-03-11T05:10:54.114639Z",
       "version": 1,
-      "display_template": "{value} Reddit discussions found",
+      "display_template": "Maintenance is {value}",
       "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
+        "good society",
+        "well maintained",
+        "maintenance"
       ],
       "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
+        "direction": "TextMatch",
+        "weight": 2.0
       }
     },
     {
-      "key": "reddit_total_score",
+      "key": "family_suitability",
       "value": {
-        "type": "Numeric",
-        "data": 1960.0
+        "type": "Text",
+        "data": "high"
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
       },
-      "learned_at": "2026-03-09T17:23:52.441066Z",
+      "learned_at": "2026-03-11T05:10:54.114690Z",
       "version": 1,
-      "display_template": "Reddit community score: {value}"
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
     },
     {
-      "key": "reddit_total_comments",
+      "key": "noise_level",
       "value": {
-        "type": "Numeric",
-        "data": 475.0
+        "type": "Text",
+        "data": "quiet"
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
       },
-      "learned_at": "2026-03-09T17:23:52.441083Z",
+      "learned_at": "2026-03-11T05:10:54.114701Z",
       "version": 1,
-      "display_template": "{value} comments across Reddit threads"
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
     },
     {
-      "key": "reddit_threads",
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114709Z",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114716Z",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally praise Prestige Lakeside Habitat for its extensive amenities, lush green spaces, and family-friendly, Disney-themed environment. However, significant concerns are raised about high maintenance charges, severe external traffic congestion, and past issues with management responsiveness, including a tragic safety incident."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114724Z",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Lakeside Habitat offers a very peaceful and clean environment with beautiful lake views, abundant greenery, and excellent facilities like the clubhouse, gym, and swimming pool. While security is strong and it's a great place for families, the primary issues are heavy traffic on Varthur Road and high monthly maintenance charges."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114732Z",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
       "value": {
         "type": "Tags",
         "data": [
-          "Prestige lakeside habitat protests",
-          "9 year old girl found dead in Prestige Lakeside Habitat Apartment : Who is accountable",
-          "I have understood why Bangalore real estate prices are increasing ",
-          "Prestige Lakeside Habitat - opinions",
-          "Anybody knows what's the update with the case regarding the electrocution of a lady and the nine month old baby from last year?"
+          "Lush greenery, open spaces, and lakeside views",
+          "Extensive and top-class amenities including clubhouses, gyms, swimming pools, and sports facilities",
+          "Family-friendly environment with a Disney-inspired theme and dedicated kids' play areas",
+          "Strong security with guards, cameras, and round-the-clock surveillance",
+          "Good construction quality and well-designed apartments/villas"
         ]
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
       },
-      "learned_at": "2026-03-09T17:23:52.441105Z",
+      "learned_at": "2026-03-11T05:10:54.114744Z",
       "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "High monthly maintenance charges",
+          "Heavy traffic congestion on Varthur Road, especially during peak hours, affecting connectivity",
+          "Customer service issues and difficulties in getting problems corrected by management",
+          "Infrequent public transport options",
+          "A serious incident involving the electrocution and death of a child near the swimming pool due to alleged negligence"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114753Z",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "greenery-rich",
+          "amenity-rich",
+          "family-friendly",
+          "secure-community",
+          "resort-style-living"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114762Z",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "high-maintenance-costs",
+          "traffic-congestion-external",
+          "customer-service-issues",
+          "safety-concerns"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society"
+      },
+      "learned_at": "2026-03-11T05:10:54.114770Z",
+      "version": 1,
+      "display_template": "Cautions: {value}"
     },
     {
       "key": "embedding_computed",
@@ -279,702 +1033,155 @@
       "confidence": 1.0,
       "source": {
         "source_type": "Computed",
-        "skill_id": "embed_entity",
-        "triggered_by": "batch_enrich"
+        "skill_id": "embed_entity"
       },
-      "learned_at": "2026-03-09T17:28:39.118034Z",
+      "learned_at": "2026-03-11T05:10:54.755257Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
     },
     {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA Registered: Yes",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_number",
-      "value": {
-        "type": "Text",
-        "data": "PRM/KA/RERA/1251/446/PR/170915/000176"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA No: {value}"
-    },
-    {
-      "key": "rera_ack_number",
-      "value": {
-        "type": "Text",
-        "data": "PR/KN/170728/000176"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA ACK: {value}"
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "APPROVED"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
-      ]
-    },
-    {
-      "key": "rera_promoter_name",
-      "value": {
-        "type": "Text",
-        "data": "Prestige Habitat Ventures"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA Promoter: {value}"
-    },
-    {
-      "key": "rera_approved_on",
-      "value": {
-        "type": "Text",
-        "data": "15/09/2017"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "RERA Approved: {value}"
-    },
-    {
-      "key": "rera_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31/01/2020"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "Expected Completion: {value}",
-      "answers_preferences": [
-        "possession date",
-        "completion",
-        "ready to move",
-        "when ready"
-      ]
-    },
-    {
-      "key": "rera_original_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31-01-2020"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "Original Completion Date: {value}"
-    },
-    {
-      "key": "rera_project_type",
-      "value": {
-        "type": "Text",
-        "data": "Residential/Group Housing"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "Project Type: {value}",
-      "answers_preferences": [
-        "apartment",
-        "villa",
-        "plotted",
-        "project type"
-      ]
-    },
-    {
-      "key": "rera_land_litigation",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "Land Litigation: No",
-      "answers_preferences": [
-        "legal issues",
-        "litigation",
-        "safe",
-        "clear title"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_complaints_count",
+      "key": "score_maintenance_quality",
       "value": {
         "type": "Numeric",
-        "data": 2.0
+        "data": 70.0
       },
-      "confidence": 1.0,
+      "confidence": 0.6,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
       },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
+      "learned_at": "2026-03-11T05:11:15.405314Z",
       "version": 1,
-      "display_template": "{value} complaints filed",
+      "display_template": "Maintenance: {value}/100",
       "answers_preferences": [
-        "complaints",
-        "legal issues",
-        "problems",
-        "safe"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 2.0,
-        "thresholds": [
-          0.0,
-          3.0
-        ]
-      }
-    },
-    {
-      "key": "rera_complaints_resolved_pct",
-      "value": {
-        "type": "Numeric",
-        "data": 200.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "{value}% complaints resolved",
-      "answers_preferences": [
-        "complaints resolved"
-      ]
-    },
-    {
-      "key": "rera_builder_revocations",
-      "value": {
-        "type": "Numeric",
-        "data": 0.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "{value} revocations",
-      "answers_preferences": [
-        "safe builder",
-        "trusted builder"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_builder_states",
-      "value": {
-        "type": "Text",
-        "data": "Karnataka"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "Builder active in: {value}",
-      "answers_preferences": [
-        "multi-state builder",
-        "national builder"
-      ]
-    },
-    {
-      "key": "rera_portal_url",
-      "value": {
-        "type": "Text",
-        "data": "https://rera.karnataka.gov.in/projectViewDetails"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.568606Z",
-      "version": 1,
-      "display_template": "View on RERA Portal"
-    },
-    {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 9.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/jqvvhr/prestige_lakeside_habitat_opinions/",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:31:30.205195Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
+        "well maintained",
+        "good society",
+        "maintenance"
       ],
       "scoring_hint": {
         "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 2708.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:31:30.205256Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 651.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:31:30.205270Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Prestige Lakeside Habitat - opinions",
-          "Prestige lakeside habitat protests",
-          "9 year old girl found dead in Prestige Lakeside Habitat Apartment : Who is accountable",
-          "I have understood why Bangalore real estate prices are increasing ",
-          "Anybody knows what's the update with the case regarding the electrocution of a lady and the nine month old baby from last year?"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:31:30.205293Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566740Z",
-      "version": 1,
-      "display_template": "RERA Registered: Yes",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_number",
-      "value": {
-        "type": "Text",
-        "data": "PRM/KA/RERA/1251/446/PR/170915/000176"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566759Z",
-      "version": 1,
-      "display_template": "RERA No: {value}"
-    },
-    {
-      "key": "rera_ack_number",
-      "value": {
-        "type": "Text",
-        "data": "PR/KN/170728/000176"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566763Z",
-      "version": 1,
-      "display_template": "RERA ACK: {value}"
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "APPROVED"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566766Z",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
-      ]
-    },
-    {
-      "key": "rera_promoter_name",
-      "value": {
-        "type": "Text",
-        "data": "Prestige Habitat Ventures"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566769Z",
-      "version": 1,
-      "display_template": "RERA Promoter: {value}"
-    },
-    {
-      "key": "rera_approved_on",
-      "value": {
-        "type": "Text",
-        "data": "15/09/2017"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566772Z",
-      "version": 1,
-      "display_template": "RERA Approved: {value}"
-    },
-    {
-      "key": "rera_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31/01/2020"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566775Z",
-      "version": 1,
-      "display_template": "Expected Completion: {value}",
-      "answers_preferences": [
-        "possession date",
-        "completion",
-        "ready to move",
-        "when ready"
-      ]
-    },
-    {
-      "key": "rera_original_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31-01-2020"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566778Z",
-      "version": 1,
-      "display_template": "Original Completion Date: {value}"
-    },
-    {
-      "key": "rera_project_type",
-      "value": {
-        "type": "Text",
-        "data": "Residential/Group Housing"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566847Z",
-      "version": 1,
-      "display_template": "Project Type: {value}",
-      "answers_preferences": [
-        "apartment",
-        "villa",
-        "plotted",
-        "project type"
-      ]
-    },
-    {
-      "key": "rera_land_litigation",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566853Z",
-      "version": 1,
-      "display_template": "Land Litigation: No",
-      "answers_preferences": [
-        "legal issues",
-        "litigation",
-        "safe",
-        "clear title"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_complaints_count",
-      "value": {
-        "type": "Numeric",
-        "data": 2.0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:30:45.566857Z",
-      "version": 1,
-      "display_template": "{value} complaints filed",
-      "answers_preferences": [
-        "complaints",
-        "legal issues",
-        "problems",
-        "safe"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
         "weight": 2.0,
         "thresholds": [
-          0.0,
-          3.0
+          70.0,
+          40.0
         ]
       }
     },
     {
-      "key": "rera_complaints_resolved_pct",
+      "key": "score_maintenance_quality_reason",
       "value": {
-        "type": "Numeric",
-        "data": 200.0
+        "type": "Text",
+        "data": "Residents praise responsive maintenance and well-maintained common areas, but some report difficulty with builder-related issues and management responsiveness."
       },
-      "confidence": 1.0,
+      "confidence": 0.6,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
       },
-      "learned_at": "2026-03-10T10:30:45.566865Z",
+      "learned_at": "2026-03-11T05:11:15.405336Z",
       "version": 1,
-      "display_template": "{value}% complaints resolved",
-      "answers_preferences": [
-        "complaints resolved"
-      ]
+      "display_template": "Maintenance: {value}"
     },
     {
-      "key": "rera_builder_revocations",
+      "key": "score_family_friendly",
       "value": {
         "type": "Numeric",
-        "data": 0.0
+        "data": 30.0
       },
-      "confidence": 1.0,
+      "confidence": 0.8,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
       },
-      "learned_at": "2026-03-10T10:30:45.566868Z",
+      "learned_at": "2026-03-11T05:11:15.405341Z",
       "version": 1,
-      "display_template": "{value} revocations",
+      "display_template": "Family Friendly: {value}/100",
       "answers_preferences": [
-        "safe builder",
-        "trusted builder"
+        "family friendly",
+        "families",
+        "kids",
+        "children"
       ],
       "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
       }
     },
     {
-      "key": "rera_builder_states",
+      "key": "score_family_friendly_reason",
       "value": {
         "type": "Text",
-        "data": "Karnataka"
+        "data": "Despite amenities, severe safety concerns, including high wattage wires, unfenced pools, and reported child fatalities, make it problematic for families."
       },
-      "confidence": 1.0,
+      "confidence": 0.8,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
       },
-      "learned_at": "2026-03-10T10:30:45.566872Z",
+      "learned_at": "2026-03-11T05:11:15.405344Z",
       "version": 1,
-      "display_template": "Builder active in: {value}",
-      "answers_preferences": [
-        "multi-state builder",
-        "national builder"
-      ]
+      "display_template": "Family Friendly: {value}"
     },
     {
-      "key": "rera_portal_url",
+      "key": "score_builder_trust",
       "value": {
-        "type": "Text",
-        "data": "https://rera.karnataka.gov.in/projectViewDetails"
+        "type": "Numeric",
+        "data": 80.0
       },
-      "confidence": 1.0,
+      "confidence": 0.6,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
       },
-      "learned_at": "2026-03-10T10:30:45.566875Z",
+      "learned_at": "2026-03-11T05:11:15.405348Z",
       "version": 1,
-      "display_template": "View on RERA Portal"
+      "display_template": "Builder Trust: {value}/100",
+      "answers_preferences": [
+        "trusted builder",
+        "reputed builder",
+        "reliable"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
+    },
+    {
+      "key": "overall_score",
+      "value": {
+        "type": "Numeric",
+        "data": 50.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Llm",
+        "model": "gemini-2.5-flash",
+        "skill_id": "score_society"
+      },
+      "learned_at": "2026-03-11T05:11:15.405352Z",
+      "version": 1,
+      "display_template": "Overall Score: {value}/100",
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 3.0,
+        "thresholds": [
+          70.0,
+          40.0
+        ]
+      }
     }
   ],
   "summary_embedding": [
@@ -4052,5 +4259,5 @@
     -0.006703923
   ],
   "created_at": "2026-03-09T16:38:04.931900Z",
-  "updated_at": "2026-03-10T11:31:30.218560Z"
+  "updated_at": "2026-03-11T05:11:15.409395Z"
 }

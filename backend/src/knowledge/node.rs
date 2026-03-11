@@ -78,17 +78,35 @@ impl Node {
         }
     }
 
-    /// Add a fact, updating `updated_at` timestamp.
+    /// Add a fact, replacing any existing fact with the same key and source skill.
+    /// This prevents duplicate facts from accumulating on re-enrichment.
     pub fn add_fact(&mut self, fact: SourcedFact) {
         self.updated_at = Utc::now();
+        let skill_id = fact.source.skill_id.as_deref().unwrap_or("");
+        // Remove existing facts with same key from same skill
+        if !skill_id.is_empty() {
+            self.facts.retain(|f| {
+                !(f.key == fact.key
+                    && f.source.skill_id.as_deref().unwrap_or("") == skill_id)
+            });
+        }
         self.facts.push(fact);
     }
 
-    /// Add multiple facts at once.
+    /// Add multiple facts at once, deduplicating by key+skill.
     pub fn add_facts(&mut self, facts: Vec<SourcedFact>) {
         if !facts.is_empty() {
             self.updated_at = Utc::now();
-            self.facts.extend(facts);
+            for fact in facts {
+                let skill_id = fact.source.skill_id.as_deref().unwrap_or("");
+                if !skill_id.is_empty() {
+                    self.facts.retain(|f| {
+                        !(f.key == fact.key
+                            && f.source.skill_id.as_deref().unwrap_or("") == skill_id)
+                    });
+                }
+                self.facts.push(fact);
+            }
         }
     }
 

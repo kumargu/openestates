@@ -94,36 +94,6 @@
       "version": 1
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 2.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/vonzg0/any_good_place_to_service_royal_enfield_bikes/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:25:50.444730Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
       "key": "reddit_total_score",
       "value": {
         "type": "Numeric",
@@ -186,29 +156,6 @@
       "learned_at": "2026-03-09T17:29:12.861353Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:33:09.956886Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -448,7 +395,7 @@
     0.024648072,
     0.024576858,
     -0.00080603076,
-    -0.0000092444225,
+    -9.2444225e-06,
     0.012343023,
     0.030554056,
     -0.005186555,
@@ -1219,7 +1166,7 @@
     0.0027065421,
     0.09974801,
     -0.01446613,
-    0.00006929516,
+    6.929516e-05,
     0.01188565,
     -0.01631949,
     0.010281149,
@@ -1323,7 +1270,7 @@
     -0.0007322988,
     0.012333646,
     -0.0067673163,
-    -0.0000012337374,
+    -1.2337374e-06,
     -0.008612101,
     0.001750641,
     0.005814991,
@@ -1944,7 +1891,7 @@
     0.0028588192,
     -0.034832526,
     0.008263004,
-    0.000020650037,
+    2.0650037e-05,
     -0.023576325,
     -0.022731861,
     0.007747279,
@@ -2559,7 +2506,7 @@
     0.016697014,
     -0.02310047,
     -0.016147206,
-    -0.000008707891,
+    -8.707891e-06,
     0.0010769244,
     -0.0007146038,
     0.004370076,
@@ -2805,7 +2752,7 @@
     0.023946403,
     -0.0022785023,
     0.019445654,
-    -0.000046933666,
+    -4.6933666e-05,
     -0.011774591,
     0.008242594,
     -0.017605092,
@@ -2889,7 +2836,7 @@
     -0.03666052,
     0.028495627,
     0.019384388,
-    -0.000014361474,
+    -1.4361474e-05,
     0.01300655,
     -0.011979266,
     -0.013171234,
@@ -3181,7 +3128,7 @@
     -0.0034469787,
     0.014969496,
     -0.0033325814,
-    -0.00009923122,
+    -9.923122e-05,
     -0.0096989535,
     0.0019185705,
     0.0022425107,
@@ -3289,7 +3236,7 @@
     0.0025488208,
     -0.015468807,
     0.00091523066,
-    0.00004771372,
+    4.771372e-05,
     0.0154353455,
     -0.0045798663,
     -0.008744117,

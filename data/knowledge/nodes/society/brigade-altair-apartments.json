@@ -79,21 +79,6 @@
       "version": 1
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 0.0
-      },
-      "confidence": 0.5,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:22:31.482629Z",
-      "version": 1
-    },
-    {
       "key": "embedding_computed",
       "value": {
         "type": "Bool",
@@ -108,29 +93,6 @@
       "learned_at": "2026-03-09T17:28:15.418573Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:17.051302Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",
@@ -198,7 +160,7 @@
         "data": [
           "What are some good builders in Bangalore apart from Sobha, Prestige, Brigade.",
           "Apartment in Brigade Panorama Mysore road",
-          "70% of Bangalore’s traffic can be solved if we just enforced “No Parking/No Stopping” properly",
+          "70% of Bangalore\u2019s traffic can be solved if we just enforced \u201cNo Parking/No Stopping\u201d properly",
           "1000+ flat apartments getting planned without borewells",
           "People staying in big apartment complexes like Brigade, Mantri, Prestige etc. for more than 5 years, what's the experience like? More questions in comments."
         ]
@@ -256,7 +218,7 @@
     0.026024248,
     -0.01128461,
     -0.001093713,
-    0.000022052309,
+    2.2052309e-05,
     -0.021177717,
     0.03371036,
     0.034876924,
@@ -438,7 +400,7 @@
     -0.013378867,
     0.02188278,
     0.005514463,
-    -0.000028270531,
+    -2.8270531e-05,
     -0.0022366962,
     -0.015573628,
     -0.0319387,
@@ -459,7 +421,7 @@
     0.0053852927,
     0.050989255,
     -0.0014534364,
-    -0.000002219869,
+    -2.219869e-06,
     0.009867657,
     0.014622761,
     0.00041339203,
@@ -535,7 +497,7 @@
     -0.05264867,
     0.03526696,
     -0.0025638477,
-    0.00007944344,
+    7.944344e-05,
     0.008423939,
     0.03201917,
     -0.008861102,
@@ -1515,7 +1477,7 @@
     0.0064843176,
     0.0027839215,
     -0.025451269,
-    0.00008383101,
+    8.383101e-05,
     -0.00938266,
     -0.0076774317,
     -0.009132253,
@@ -1625,7 +1587,7 @@
     0.019709498,
     0.009209187,
     0.0032264676,
-    -0.000041413095,
+    -4.1413095e-05,
     0.0030721566,
     0.0054823374,
     -0.021515537,
@@ -1664,7 +1626,7 @@
     0.009256441,
     0.0039370935,
     -0.0025179952,
-    0.000053919226,
+    5.3919226e-05,
     0.0006151961,
     0.014118741,
     -0.081259064,
@@ -2177,7 +2139,7 @@
     0.009311223,
     -0.00013218498,
     0.002185073,
-    0.00006086011,
+    6.086011e-05,
     0.019005945,
     0.0013897325,
     0.009683857,
@@ -2220,7 +2182,7 @@
     -0.009460132,
     0.0070830346,
     -0.019866973,
-    -0.000063437175,
+    -6.3437175e-05,
     -0.00367165,
     0.0034536568,
     -0.05755334,
@@ -2536,7 +2498,7 @@
     -0.006677129,
     0.022727737,
     -0.016504427,
-    -0.000026659842,
+    -2.6659842e-05,
     0.01867212,
     0.00898309,
     0.0010366136,
@@ -2834,7 +2796,7 @@
     -0.023272589,
     -0.007931284,
     -0.0013154016,
-    -0.00003926116,
+    -3.926116e-05,
     -0.0036348973,
     -0.010097793,
     -0.01334553,
@@ -3045,7 +3007,7 @@
     -0.0057888264,
     -0.0056339083,
     -0.026809642,
-    0.00005712951,
+    5.712951e-05,
     0.0033960259,
     0.005395304,
     -0.00058678724,
