@@ -615,6 +615,136 @@ def notify_backend():
 # CLI
 # ---------------------------------------------------------------------------
 
+CHECKPOINT_PATH = Path("data/cache/enrich_checkpoint.json")
+
+
+def save_checkpoint(completed_keys: set, cycle: int, total_cost: float):
+    """Save progress so we can resume after crash."""
+    CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    data = {
+        "completed": list(completed_keys),
+        "cycle": cycle,
+        "total_cost": total_cost,
+        "saved_at": datetime.now(timezone.utc).isoformat(),
+    }
+    tmp = CHECKPOINT_PATH.with_suffix(".tmp")
+    tmp.write_text(json.dumps(data, indent=2))
+    tmp.rename(CHECKPOINT_PATH)
+
+
+def load_checkpoint() -> tuple:
+    """Load previous checkpoint. Returns (completed_set, cycle, total_cost)."""
+    if CHECKPOINT_PATH.exists():
+        try:
+            data = json.loads(CHECKPOINT_PATH.read_text())
+            return set(data.get("completed", [])), data.get("cycle", 0), data.get("total_cost", 0.0)
+        except (json.JSONDecodeError, OSError):
+            pass
+    return set(), 0, 0.0
+
+
+def clear_checkpoint():
+    """Remove checkpoint after successful cycle completion."""
+    if CHECKPOINT_PATH.exists():
+        CHECKPOINT_PATH.unlink()
+
+
+# ---------------------------------------------------------------------------
+# Continuous mode
+# ---------------------------------------------------------------------------
+
+def run_continuous(
+    cost_tier_max: Optional[str] = None,
+    budget_per_cycle: Optional[float] = None,
+    interval_minutes: int = 10,
+    reload: bool = True,
+):
+    """Run enrichment in an infinite loop. Never crashes — logs errors and continues.
+
+    Each cycle:
+    1. Re-scan for gaps (entities may have been added since last cycle)
+    2. Execute available work (cheapest first)
+    3. Checkpoint progress
+    4. Sleep before next cycle
+    """
+    cycle_num = 0
+    total_cost = 0.0
+
+    # Load checkpoint from previous run (crash recovery)
+    prev_completed, prev_cycle, prev_cost = load_checkpoint()
+    if prev_completed:
+        logger.info("Resuming from checkpoint: cycle %d, %d items completed, $%.2f spent",
+                     prev_cycle, len(prev_completed), prev_cost)
+        cycle_num = prev_cycle
+        total_cost = prev_cost
+
+    while True:
+        cycle_num += 1
+        logger.info("=" * 60)
+        logger.info("CONTINUOUS ENRICHMENT — Cycle %d (total cost: $%.2f)", cycle_num, total_cost)
+        logger.info("=" * 60)
+
+        try:
+            # Re-create resolver and tracker each cycle to pick up new entities
+            resolver = EntityResolver()
+            tracker = FreshnessTracker()
+
+            work = detect_gaps(
+                resolver=resolver,
+                tracker=tracker,
+                cost_tier_max=cost_tier_max,
+            )
+
+            if not work:
+                logger.info("Nothing to do — all entities fresh. Sleeping %d min.", interval_minutes)
+            else:
+                logger.info("Found %d work items for cycle %d", len(work), cycle_num)
+
+                stats = execute(
+                    work=work,
+                    resolver=resolver,
+                    tracker=tracker,
+                    budget=budget_per_cycle,
+                )
+                total_cost += stats.total_cost
+
+                # Save checkpoint
+                completed_keys = {f"{w.node_id}/{w.skill_id}" for w in work[:stats.executed]}
+                save_checkpoint(completed_keys, cycle_num, total_cost)
+
+                print_summary(stats)
+
+                if reload and (stats.succeeded > 0 or stats.facts_written > 0):
+                    try:
+                        notify_backend()
+                    except Exception as e:
+                        logger.warning("Backend reload failed (non-fatal): %s", e)
+
+            # Clear checkpoint after successful cycle
+            clear_checkpoint()
+
+        except KeyboardInterrupt:
+            logger.info("Interrupted by user. Saving checkpoint...")
+            save_checkpoint(set(), cycle_num, total_cost)
+            break
+        except Exception as e:
+            # Never crash — log the error and continue next cycle
+            logger.error("Cycle %d failed with unexpected error: %s", cycle_num, e, exc_info=True)
+            save_checkpoint(set(), cycle_num, total_cost)
+
+        # Sleep between cycles
+        logger.info("Sleeping %d minutes before next cycle...", interval_minutes)
+        try:
+            time.sleep(interval_minutes * 60)
+        except KeyboardInterrupt:
+            logger.info("Interrupted during sleep. Exiting.")
+            break
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
 def main():
     parser = argparse.ArgumentParser(
         description="OpenEstates Enrichment Engine — one command to enrich everything",
@@ -628,6 +758,8 @@ def main():
   python3 -m pipeline.enrich --type society                # one entity type
   python3 -m pipeline.enrich --force                       # ignore freshness
   python3 -m pipeline.enrich --reload                      # notify backend after
+  python3 -m pipeline.enrich --continuous                  # run forever
+  python3 -m pipeline.enrich --continuous --interval 5     # every 5 min
 """,
     )
     parser.add_argument("--plan", action="store_true", help="Show what would run, no execution")
@@ -639,6 +771,10 @@ def main():
     parser.add_argument("--budget", type=float, help="Stop after spending this much ($)")
     parser.add_argument("--force", action="store_true", help="Ignore freshness, re-run everything")
     parser.add_argument("--reload", action="store_true", help="Notify backend to reload after enrichment")
+    parser.add_argument("--continuous", action="store_true",
+                        help="Run in continuous mode — loop forever, checkpoint, never crash")
+    parser.add_argument("--interval", type=int, default=10,
+                        help="Minutes between continuous cycles (default: 10)")
 
     args = parser.parse_args()
 
@@ -646,6 +782,15 @@ def main():
         level=logging.INFO,
         format="%(asctime)s %(levelname)s %(message)s",
     )
+
+    if args.continuous:
+        run_continuous(
+            cost_tier_max=args.cost_tier,
+            budget_per_cycle=args.budget,
+            interval_minutes=args.interval,
+            reload=args.reload,
+        )
+        return
 
     resolver = EntityResolver()
     tracker = FreshnessTracker()
