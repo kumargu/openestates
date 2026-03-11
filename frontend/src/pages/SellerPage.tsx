@@ -9,8 +9,15 @@
  */
 import { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import type { Seller, SellerListingsResponse } from "../lib/types.ts";
-import { registerSeller, getSellerListings, updateBidStatus } from "../lib/api.ts";
+import type { SellerListingsResponse } from "../lib/types.ts";
+import {
+  registerSeller,
+  getSellerListings,
+  updateBidStatus,
+  createListing,
+  getSellerBids,
+} from "../lib/api.ts";
+import type { SellerBid } from "../lib/api.ts";
 
 const STORAGE_KEY = "openestates_seller_id";
 
@@ -193,15 +200,23 @@ export function SellerDashboardPage() {
   const sellerId = getSellerId();
   const [data, setData] = useState<SellerListingsResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [updatingBid, setUpdatingBid] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadDashboard = () => {
     if (!sellerId) { navigate("/sell", { replace: true }); return; }
+    setLoading(true);
+    setError("");
     getSellerListings(sellerId)
       .then(setData)
-      .catch(() => setData(null))
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Failed to load dashboard.");
+        setData(null);
+      })
       .finally(() => setLoading(false));
-  }, [sellerId, navigate]);
+  };
+
+  useEffect(() => { loadDashboard(); }, [sellerId, navigate]);
 
   const handleBidAction = async (
     propertyId: string,
@@ -212,11 +227,10 @@ export function SellerDashboardPage() {
     setUpdatingBid(bidId);
     try {
       await updateBidStatus(propertyId, bidId, action);
-      // Refresh
       const fresh = await getSellerListings(sellerId);
       setData(fresh);
-    } catch {
-      // swallow
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update bid.");
     } finally {
       setUpdatingBid(null);
     }
@@ -233,8 +247,10 @@ export function SellerDashboardPage() {
   if (!data) {
     return (
       <div style={{ padding: "4rem 2rem", textAlign: "center" }}>
-        <p style={{ color: "var(--color-text-muted)" }}>Could not load dashboard. Please try again.</p>
-        <button className="btn btn-outline" style={{ marginTop: "1rem" }} onClick={() => window.location.reload()}>
+        <p style={{ color: "var(--color-text-muted)" }}>
+          {error || "Could not load dashboard. Please try again."}
+        </p>
+        <button className="btn btn-outline" style={{ marginTop: "1rem" }} onClick={loadDashboard}>
           Retry
         </button>
       </div>
@@ -249,6 +265,9 @@ export function SellerDashboardPage() {
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2rem", flexWrap: "wrap", gap: "1rem" }}>
         <div>
+          <Link to="/" style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", textDecoration: "none", marginBottom: "0.5rem", display: "inline-block" }}>
+            ← OpenEstates
+          </Link>
           <h1 style={{ fontSize: "1.4rem", fontWeight: 700, letterSpacing: "-0.02em", margin: "0 0 0.35rem" }}>
             {seller.name}
           </h1>
@@ -267,6 +286,12 @@ export function SellerDashboardPage() {
           + List a property
         </Link>
       </div>
+
+      {error && (
+        <div style={{ padding: "0.75rem", borderRadius: "var(--radius-sm)", backgroundColor: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", fontSize: "0.82rem", marginBottom: "1rem" }}>
+          {error}
+        </div>
+      )}
 
       {listings.length === 0 ? (
         <div style={{
@@ -287,6 +312,7 @@ export function SellerDashboardPage() {
             <ListingCard
               key={listing.propertyId}
               listing={listing}
+              sellerId={sellerId!}
               onBidAction={handleBidAction}
               updatingBid={updatingBid}
             />
@@ -299,19 +325,40 @@ export function SellerDashboardPage() {
 
 function ListingCard({
   listing,
+  sellerId,
   onBidAction,
   updatingBid,
 }: {
   listing: SellerListingsResponse["listings"][0];
+  sellerId: string;
   onBidAction: (pid: string, bid: string, action: "accepted" | "rejected") => void;
   updatingBid: string | null;
 }) {
   const { propertyId, listingStatus, bidStats } = listing;
   const [showBids, setShowBids] = useState(false);
+  const [bids, setBids] = useState<SellerBid[]>([]);
+  const [bidsLoading, setBidsLoading] = useState(false);
+  const [bidsError, setBidsError] = useState("");
+
+  const loadBids = () => {
+    setBidsLoading(true);
+    setBidsError("");
+    getSellerBids(sellerId, propertyId)
+      .then((r) => {
+        setBids(r.bids);
+        setShowBids(true);
+      })
+      .catch((err) => {
+        setBidsError(err instanceof Error ? err.message : "Failed to load bids.");
+      })
+      .finally(() => setBidsLoading(false));
+  };
 
   const statusColor = listingStatus === "under_offer"
     ? { bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" }
     : listingStatus === "matched"
+    ? { bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" }
+    : listingStatus === "sold"
     ? { bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" }
     : { bg: "var(--color-bg-elevated)", color: "var(--color-text-secondary)", border: "var(--color-border)" };
 
@@ -323,7 +370,7 @@ function ListingCard({
             to={`/property/${propertyId}`}
             style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--color-text)", textDecoration: "none" }}
           >
-            {propertyId.replace(/^discovered-/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+            {propertyId.replace(/^(discovered|seller-listing)-/, "").replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
           </Link>
           <p style={{ margin: "0.15rem 0 0", fontSize: "0.78rem", color: "var(--color-text-muted)" }}>
             ID: {propertyId}
@@ -371,11 +418,12 @@ function ListingCard({
       {/* Bid list toggle */}
       {bidStats.count > 0 && (
         <button
-          onClick={() => setShowBids(!showBids)}
+          onClick={showBids ? () => setShowBids(false) : loadBids}
+          disabled={bidsLoading}
           style={{
             background: "none",
             border: "none",
-            cursor: "pointer",
+            cursor: bidsLoading ? "wait" : "pointer",
             fontSize: "0.78rem",
             color: "var(--color-text-muted)",
             padding: "0.5rem 0 0",
@@ -383,54 +431,68 @@ function ListingCard({
             textUnderlineOffset: "2px",
           }}
         >
-          {showBids ? "Hide bids" : `Manage bids (${bidStats.count})`}
+          {bidsLoading ? "Loading bids…" : showBids ? "Hide bids" : `Manage bids (${bidStats.count})`}
         </button>
       )}
 
-      {showBids && (
+      {bidsError && (
+        <div style={{ fontSize: "0.75rem", color: "var(--color-negative)", marginTop: "0.5rem" }}>
+          {bidsError}
+        </div>
+      )}
+
+      {showBids && bids.length > 0 && (
         <div style={{ marginTop: "0.75rem", display: "grid", gap: "0.5rem" }}>
           <p style={{ fontSize: "0.78rem", color: "var(--color-text-muted)", margin: 0 }}>
             Accept a bid to mark this listing as Under Offer. Pass on bids you don't want.
           </p>
-          {/* We show placeholder bids from stats; real list needs /bids endpoint */}
-          {Array.from({ length: bidStats.count }, (_, i) => (
+          {bids
+            .filter((b) => b.status !== "rejected")
+            .sort((a, b) => b.amount - a.amount)
+            .map((bid) => (
             <div
-              key={i}
+              key={bid.id}
               style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: "0.6rem 0.75rem",
                 borderRadius: "var(--radius-sm)",
-                backgroundColor: "var(--color-bg-elevated)",
-                border: "1px solid var(--color-border)",
+                backgroundColor: bid.status === "accepted" ? "#f0fdf4" : "var(--color-bg-elevated)",
+                border: bid.status === "accepted" ? "1px solid #bbf7d0" : "1px solid var(--color-border)",
               }}
             >
               <div>
                 <span style={{ fontSize: "0.9rem", fontWeight: 600 }}>
-                  {formatPrice(bidStats.p100 - i * Math.floor((bidStats.p100 - (bidStats.average * 0.9)) / Math.max(bidStats.count - 1, 1)))}
+                  {formatPrice(bid.amount)}
                 </span>
                 <span style={{ marginLeft: "0.5rem", fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
-                  Bid #{i + 1}
+                  {bid.bidderName} &middot; {timeAgo(bid.createdAt)}
                 </span>
               </div>
-              <div style={{ display: "flex", gap: "0.4rem" }}>
-                <button
-                  className="btn btn-primary"
-                  style={{ fontSize: "0.78rem", padding: "0.3rem 0.7rem" }}
-                  disabled={updatingBid !== null}
-                  onClick={() => onBidAction(propertyId, `bid-placeholder-${i}`, "accepted")}
-                >
-                  Accept
-                </button>
-                <button
-                  className="btn btn-outline"
-                  style={{ fontSize: "0.78rem", padding: "0.3rem 0.7rem" }}
-                  disabled={updatingBid !== null}
-                  onClick={() => onBidAction(propertyId, `bid-placeholder-${i}`, "rejected")}
-                >
-                  Pass
-                </button>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
+                {bid.status === "accepted" ? (
+                  <span style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 600 }}>ACCEPTED</span>
+                ) : (
+                  <>
+                    <button
+                      className="btn btn-primary"
+                      style={{ fontSize: "0.78rem", padding: "0.3rem 0.7rem" }}
+                      disabled={updatingBid !== null}
+                      onClick={() => onBidAction(propertyId, bid.id, "accepted")}
+                    >
+                      {updatingBid === bid.id ? "…" : "Accept"}
+                    </button>
+                    <button
+                      className="btn btn-outline"
+                      style={{ fontSize: "0.78rem", padding: "0.3rem 0.7rem" }}
+                      disabled={updatingBid !== null}
+                      onClick={() => onBidAction(propertyId, bid.id, "rejected")}
+                    >
+                      Pass
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ))}
@@ -464,16 +526,28 @@ export function SellerListingFormPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim() || !area.trim() || !price.trim()) {
-      setError("Title, area, and asking price are required.");
+    if (!title.trim() || !area.trim() || !price.trim() || !bhk) {
+      setError("Title, area, BHK, and asking price are required.");
       return;
     }
+    if (!sellerId) { setError("Not logged in as seller."); return; }
     setError("");
     setSubmitting(true);
-    // TODO: POST /api/sellers/{id}/listings when backend endpoint is ready
-    // For now, show a success state with the entered data
-    await new Promise((r) => setTimeout(r, 600));
-    navigate("/sell/dashboard");
+    try {
+      await createListing(sellerId, {
+        title: title.trim(),
+        area: area.trim(),
+        bhk: Number(bhk),
+        sqft: sqft ? Number(sqft) : undefined,
+        societyName: society.trim() || undefined,
+        description: description.trim() || undefined,
+        price: Number(price),
+      });
+      navigate("/sell/dashboard");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create listing.");
+      setSubmitting(false);
+    }
   };
 
   const BANGALORE_AREAS = ["Whitefield", "Koramangala", "HSR Layout", "Indiranagar", "Sarjapur Road", "Hebbal", "Yelahanka", "Electronic City", "Bannerghatta Road", "JP Nagar"];

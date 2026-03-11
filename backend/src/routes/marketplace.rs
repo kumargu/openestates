@@ -5,7 +5,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Bid, BidStats, BidStatus, ListingStatus, Seller, SellerVerificationTier};
+use crate::models::{Bid, BidStats, BidStatus, ListingStatus, Property, PropertySource, Seller, SellerVerificationTier};
 use crate::state::AppState;
 
 // ---------------------------------------------------------------------------
@@ -181,6 +181,187 @@ pub async fn get_seller_listings(
         .collect();
 
     Ok(Json(SellerListingsResponse { seller, listings }))
+}
+
+// ---------------------------------------------------------------------------
+// Create listing
+// ---------------------------------------------------------------------------
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateListingRequest {
+    pub title: String,
+    pub area: String,
+    pub bhk: u32,
+    #[serde(default)]
+    pub sqft: Option<u32>,
+    #[serde(default)]
+    pub society_name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub price: u64,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateListingResponse {
+    pub property_id: String,
+    pub listing_status: ListingStatus,
+}
+
+/// POST /api/sellers/{id}/listings
+pub async fn create_listing(
+    State(state): State<Arc<AppState>>,
+    Path(seller_id): Path<String>,
+    Json(body): Json<CreateListingRequest>,
+) -> Result<Json<CreateListingResponse>, (StatusCode, Json<serde_json::Value>)> {
+    // Validate seller exists
+    {
+        let sellers = state.sellers.read().await;
+        if !sellers.contains_key(&seller_id) {
+            return Err((
+                StatusCode::NOT_FOUND,
+                Json(serde_json::json!({ "error": "Seller not found" })),
+            ));
+        }
+    }
+
+    if body.title.trim().is_empty() || body.area.trim().is_empty() || body.price == 0 {
+        return Err((
+            StatusCode::BAD_REQUEST,
+            Json(serde_json::json!({ "error": "title, area, and price are required" })),
+        ));
+    }
+
+    let area_slug = body.area.to_lowercase().replace(' ', "-");
+    let property_id = new_id("seller-listing");
+    let sqft = body.sqft.unwrap_or(0);
+    let price_per_sqft = if sqft > 0 { body.price / sqft as u64 } else { 0 };
+    let society_name = body.society_name.clone().unwrap_or_default();
+    let society_slug = society_name.to_lowercase().replace(' ', "-");
+
+    let property = Property {
+        id: property_id.clone(),
+        title: body.title.trim().to_string(),
+        area: body.area.trim().to_string(),
+        area_id: area_slug,
+        city: "Bangalore".to_string(),
+        society_id: if society_slug.is_empty() { "unknown".to_string() } else { society_slug },
+        builder_name: String::new(),
+        property_type: "Apartment".to_string(),
+        listing_type: "Resale".to_string(),
+        bhk: body.bhk,
+        price: body.price,
+        price_per_sqft,
+        carpet_area_sqft: sqft,
+        super_builtup_sqft: 0,
+        floor: 0,
+        total_floors: 0,
+        facing: String::new(),
+        possession_status: "Ready".to_string(),
+        metro_distance_mins: 0,
+        maintenance_cost_monthly: 0,
+        society_quality_score: 0.0,
+        builder_quality_score: 0.0,
+        document_completeness_score: 0.0,
+        litigation_risk: 0.0,
+        noise_score: 0.0,
+        sunlight_score: 0.0,
+        airport_noise_score: 0.0,
+        waterlogging_risk_score: 0.0,
+        traffic_score: 0.0,
+        days_on_market: 0,
+        greenery_score: None,
+        open_space_score: None,
+        resale_strength_score: None,
+        interest_level: None,
+        saves_last_7d: None,
+        offers_last_7d: None,
+        images: Vec::new(),
+        hero_image: String::new(),
+        description_summary: body.description.clone().unwrap_or_default(),
+        transparency_tags: vec!["seller-listed".to_string()],
+        source_reference: format!("seller:{}", seller_id),
+        source: PropertySource::SellerListed,
+        seller_id: Some(seller_id.clone()),
+        listing_status: ListingStatus::Active,
+    };
+
+    // Add to in-memory properties
+    {
+        let mut props = state.properties.write().await;
+        props.push(property.clone());
+    }
+
+    // Update seller's listing_ids
+    {
+        let mut sellers = state.sellers.write().await;
+        if let Some(seller) = sellers.get_mut(&seller_id) {
+            seller.listing_ids.push(property_id.clone());
+            // Persist updated seller
+            if let Err(e) = save_seller(&state.marketplace_root, seller) {
+                eprintln!("WARN: Failed to persist seller update: {}", e);
+            }
+        }
+    }
+
+    // Persist property to marketplace listings dir
+    let listings_dir = state.marketplace_root.join("listings");
+    if let Err(e) = std::fs::create_dir_all(&listings_dir) {
+        eprintln!("WARN: Failed to create listings dir: {}", e);
+    }
+    let tmp = listings_dir.join(format!("{}.json.tmp", property_id));
+    let dst = listings_dir.join(format!("{}.json", property_id));
+    if let Ok(json) = serde_json::to_vec_pretty(&property) {
+        if let Err(e) = std::fs::write(&tmp, json).and_then(|_| std::fs::rename(&tmp, &dst)) {
+            eprintln!("WARN: Failed to persist listing {}: {}", property_id, e);
+        }
+    }
+
+    Ok(Json(CreateListingResponse {
+        property_id,
+        listing_status: ListingStatus::Active,
+    }))
+}
+
+// ---------------------------------------------------------------------------
+// Seller bid list (with full bid details for the seller)
+// ---------------------------------------------------------------------------
+
+/// GET /api/sellers/{seller_id}/properties/{property_id}/bids
+/// Returns full bid list for a seller (includes bidder names, not phone).
+pub async fn seller_list_bids(
+    State(state): State<Arc<AppState>>,
+    Path((seller_id, property_id)): Path<(String, String)>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Verify seller owns this property
+    let seller = {
+        let sellers = state.sellers.read().await;
+        sellers.get(&seller_id).cloned().ok_or(StatusCode::NOT_FOUND)?
+    };
+    if !seller.listing_ids.contains(&property_id) {
+        return Err(StatusCode::FORBIDDEN);
+    }
+
+    let bids_map = state.bids.read().await;
+    let bids: Vec<serde_json::Value> = bids_map
+        .get(&property_id)
+        .map(|bids| {
+            bids.iter()
+                .map(|b| {
+                    serde_json::json!({
+                        "id": b.id,
+                        "bidderName": b.bidder_name,
+                        "amount": b.amount,
+                        "createdAt": b.created_at,
+                        "status": b.status,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    Ok(Json(serde_json::json!({ "bids": bids, "count": bids.len() })))
 }
 
 // ---------------------------------------------------------------------------

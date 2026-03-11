@@ -123,6 +123,37 @@ export function updateBidStatus(
   return putJson(`/api/properties/${encodeURIComponent(propertyId)}/bids/${encodeURIComponent(bidId)}/status`, { status });
 }
 
+export type CreateListingRequest = {
+  title: string;
+  area: string;
+  bhk: number;
+  sqft?: number;
+  societyName?: string;
+  description?: string;
+  price: number;
+};
+
+export type CreateListingResponse = {
+  propertyId: string;
+  listingStatus: string;
+};
+
+export function createListing(sellerId: string, body: CreateListingRequest): Promise<CreateListingResponse> {
+  return postJson(`/api/sellers/${encodeURIComponent(sellerId)}/listings`, body);
+}
+
+export type SellerBid = {
+  id: string;
+  bidderName: string;
+  amount: number;
+  createdAt: string;
+  status: "pending" | "accepted" | "rejected";
+};
+
+export function getSellerBids(sellerId: string, propertyId: string): Promise<{ bids: SellerBid[]; count: number }> {
+  return fetchJson(`/api/sellers/${encodeURIComponent(sellerId)}/properties/${encodeURIComponent(propertyId)}/bids`);
+}
+
 export type PlatformStats = {
   properties: number;
   societies: number;
