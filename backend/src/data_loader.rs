@@ -23,7 +23,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     let cache: Arc<dyn Cache> = Arc::new(InMemoryCache::new());
 
     // Load data through the storage abstraction, falling back to seed files.
-    let properties = load_via_storage::<Vec<Property>>(&storage, "seed/properties.json")
+    let mut properties = load_via_storage::<Vec<Property>>(&storage, "seed/properties.json")
         .await
         .unwrap_or_else(|| {
             println!("WARN: Could not load properties via storage, trying direct file read");
@@ -125,6 +125,24 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     // --- Marketplace ---
     let marketplace_root = project_root.join("data").join("marketplace");
     let (sellers, bids, bid_stats) = load_marketplace(&marketplace_root);
+
+    // Load seller-listed properties and merge into main property list
+    let seller_listings = load_seller_listings(&marketplace_root);
+    if !seller_listings.is_empty() {
+        let existing_ids: std::collections::HashSet<String> =
+            properties.iter().map(|p| p.id.clone()).collect();
+        let mut new_count = 0;
+        for listing in seller_listings {
+            if !existing_ids.contains(&listing.id) {
+                properties.push(listing);
+                new_count += 1;
+            }
+        }
+        if new_count > 0 {
+            println!("Loaded {} seller-listed properties from marketplace", new_count);
+        }
+    }
+
     println!(
         "Marketplace loaded: {} sellers, {} properties with bids",
         sellers.len(),
@@ -227,6 +245,29 @@ fn load_marketplace(
     }
 
     (sellers, bids, bid_stats)
+}
+
+/// Load seller-listed properties from data/marketplace/listings/*.json.
+fn load_seller_listings(root: &Path) -> Vec<Property> {
+    let listings_dir = root.join("listings");
+    let mut listings = Vec::new();
+    if !listings_dir.exists() {
+        return listings;
+    }
+    if let Ok(entries) = std::fs::read_dir(&listings_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                if let Ok(content) = std::fs::read_to_string(&path) {
+                    match serde_json::from_str::<Property>(&content) {
+                        Ok(prop) => listings.push(prop),
+                        Err(e) => eprintln!("WARN: Failed to parse listing {}: {}", path.display(), e),
+                    }
+                }
+            }
+        }
+    }
+    listings
 }
 
 /// Load and deserialize JSON through the storage backend.
