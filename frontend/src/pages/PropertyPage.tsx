@@ -7,6 +7,7 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
 import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
+import { BidWidget } from "../components/BidWidget.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -555,6 +556,9 @@ export function PropertyPage() {
               )}
             </div>
           </div>
+          {/* Bid Widget — place a bid, see market price discovery */}
+          <BidWidget propertyId={p.id} askingPrice={p.price} />
+
         </div>{/* end property-sidebar */}
       </div>{/* end property-layout */}
 

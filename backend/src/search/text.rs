@@ -220,6 +220,7 @@ impl TextSearch {
                     concerns: Vec::new(),
                     unmatched_preferences: Vec::new(),
                     explanation_card: None,
+                    active_seller_count: None,
                 })
             })
             .collect();

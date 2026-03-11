@@ -74,6 +74,9 @@ pub struct SearchResultCard {
     /// Present when query has structured preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub explanation_card: Option<ExplanationCard>,
+    /// Number of registered sellers actively listing this property.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub active_seller_count: Option<u32>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.

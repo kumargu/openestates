@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use super::marketplace::{ListingStatus, PropertySource};
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
     pub id: String,
@@ -49,6 +51,15 @@ pub struct Property {
     pub description_summary: String,
     pub transparency_tags: Vec<String>,
     pub source_reference: String,
+    /// Where this listing came from. Defaults to Seed for existing data.
+    #[serde(default)]
+    pub source: PropertySource,
+    /// Set when source == SellerListed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller_id: Option<String>,
+    /// Current lifecycle state of this listing.
+    #[serde(default)]
+    pub listing_status: ListingStatus,
 }
 
 /// UI-ready property card for the results page.

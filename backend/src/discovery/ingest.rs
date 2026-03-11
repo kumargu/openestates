@@ -150,6 +150,9 @@ pub fn ingest_discoveries(
                     .source_url
                     .clone()
                     .unwrap_or_else(|| "Gemini Discovery".to_string()),
+                source: crate::models::PropertySource::Discovered,
+                seller_id: None,
+                listing_status: crate::models::ListingStatus::Active,
             };
 
             new_properties.push(prop);

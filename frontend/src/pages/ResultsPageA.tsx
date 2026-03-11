@@ -233,7 +233,7 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, explanationCard, onQuickView, isComparing, onToggleCompare }: {
+function CardA({ property, match, explanation, explanationCard, onQuickView, isComparing, onToggleCompare, activeSelllerCount }: {
   property: PropertyCardType;
   match?: MatchResult;
   explanation?: MatchExplanation;
@@ -241,6 +241,7 @@ function CardA({ property, match, explanation, explanationCard, onQuickView, isC
   onQuickView?: (id: string) => void;
   isComparing?: boolean;
   onToggleCompare?: (id: string) => void;
+  activeSelllerCount?: number;
 }) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
 
@@ -345,6 +346,16 @@ function CardA({ property, match, explanation, explanationCard, onQuickView, isC
             </span>
             <span className="property-signal">{property.metro_distance_mins} min to metro</span>
             <span className="property-signal">{property.builder_name}</span>
+            {activeSelllerCount && activeSelllerCount > 0 && (
+              <span className="property-signal" style={{
+                background: "#f0fdf4",
+                color: "#15803d",
+                border: "1px solid #bbf7d0",
+                fontWeight: 600,
+              }}>
+                {activeSelllerCount} seller{activeSelllerCount > 1 ? "s" : ""} listing
+              </span>
+            )}
           </div>
 
           {property.transparency_tags.length > 0 && (
@@ -729,7 +740,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; explanationCard?: ExplanationCard }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; explanationCard?: ExplanationCard; activeSelllerCount?: number }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -739,6 +750,7 @@ export function ResultsPageA() {
         },
         explanation: r.match_explanation,
         explanationCard: r.explanationCard,
+        activeSelllerCount: r.active_seller_count,
       }));
     }
     // No query — show all properties without match labels
@@ -914,7 +926,7 @@ export function ResultsPageA() {
         className={panelPropertyId ? "results-grid--panel-open" : ""}
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
-        {matchResults.map(({ property, match, explanation, explanationCard }) => (
+        {matchResults.map(({ property, match, explanation, explanationCard, activeSelllerCount }) => (
           <CardA
             key={property.id}
             property={property}
@@ -923,6 +935,7 @@ export function ResultsPageA() {
             explanationCard={explanationCard}
             onQuickView={setPanelPropertyId}
             isComparing={compareIds.includes(property.id)}
+            activeSelllerCount={activeSelllerCount}
             onToggleCompare={(id) => {
               setCompareIds(prev =>
                 prev.includes(id)

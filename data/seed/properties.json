@@ -10,7 +10,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 20800000,
+    "price": 20500000,
     "price_per_sqft": 9563,
     "carpet_area_sqft": 1740,
     "super_builtup_sqft": 2175,
@@ -48,7 +48,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQElxJ-nt-9rfXuwKEUJYohwb0x9BMw992htgcTr_vzgnTuQfKKMhUgDZ89JrC98biDZnKcopcsvndytcIIkAiisxj_eg8LpqgaeCIbNbuSPSgLY4-E8luXn-HQWU7SgpzxhyzEyR2IfN7vG-u4"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQElxJ-nt-9rfXuwKEUJYohwb0x9BMw992htgcTr_vzgnTuQfKKMhUgDZ89JrC98biDZnKcopcsvndytcIIkAiisxj_eg8LpqgaeCIbNbuSPSgLY4-E8luXn-HQWU7SgpzxhyzEyR2IfN7vG-u4",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-sarang-by-sumadhura-phase-2-4bhk",
@@ -61,7 +63,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 4,
-    "price": 31200000,
+    "price": 30800000,
     "price_per_sqft": 9674,
     "carpet_area_sqft": 2580,
     "super_builtup_sqft": 3225,
@@ -99,7 +101,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQElxJ-nt-9rfXuwKEUJYohwb0x9BMw992htgcTr_vzgnTuQfKKMhUgDZ89JrC98biDZnKcopcsvndytcIIkAiisxj_eg8LpqgaeCIbNbuSPSgLY4-E8luXn-HQWU7SgpzxhyzEyR2IfN7vG-u4"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQElxJ-nt-9rfXuwKEUJYohwb0x9BMw992htgcTr_vzgnTuQfKKMhUgDZ89JrC98biDZnKcopcsvndytcIIkAiisxj_eg8LpqgaeCIbNbuSPSgLY4-E8luXn-HQWU7SgpzxhyzEyR2IfN7vG-u4",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-total-environment-pursuit-of-a-radical-rhapsody-3bhk",
@@ -112,7 +116,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 43800000,
+    "price": 43000000,
     "price_per_sqft": 12728,
     "carpet_area_sqft": 2753,
     "super_builtup_sqft": 3441,
@@ -150,7 +154,9 @@
     "transparency_tags": [
       "RERA Verified"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEl6lD6nGp6FFgcqsK2MvZywcXsInLpeV1y5sni96joudydJTJcV11zIwlxcV066uUzX6ga8D6rWiqaPzR97Sst6Wh5i8-Zh3qsRWwzLm1JaiH02oLbBDiL7ESdd3g3PLIbEpefDxNmZ8iYlGrRSrRNof-OPSLLctyTnDLo4w"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEl6lD6nGp6FFgcqsK2MvZywcXsInLpeV1y5sni96joudydJTJcV11zIwlxcV066uUzX6ga8D6rWiqaPzR97Sst6Wh5i8-Zh3qsRWwzLm1JaiH02oLbBDiL7ESdd3g3PLIbEpefDxNmZ8iYlGrRSrRNof-OPSLLctyTnDLo4w",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-total-environment-pursuit-of-a-radical-rhapsody-4bhk",
@@ -265,7 +271,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 26300000,
+    "price": 25900000,
     "price_per_sqft": 16184,
     "carpet_area_sqft": 1300,
     "super_builtup_sqft": 1625,
@@ -303,7 +309,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF3-6QOQdw87dICN__k4OX4sfCIZt1-KAbvtN4kwFBRdKtW7Ds6_F6XWu2QOSNAawAMVRTzEW9E_fOuxnZHrYVkQJZbVAYdB1Nfci3WR3kWgqhZex69n7H-gmPnTq7cgj7Y60M7BvwWFoMt2xQ0loDDih-SnlaN8JqEc-ldRlVkP3qZM6wvWWA6"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF3-6QOQdw87dICN__k4OX4sfCIZt1-KAbvtN4kwFBRdKtW7Ds6_F6XWu2QOSNAawAMVRTzEW9E_fOuxnZHrYVkQJZbVAYdB1Nfci3WR3kWgqhZex69n7H-gmPnTq7cgj7Y60M7BvwWFoMt2xQ0loDDih-SnlaN8JqEc-ldRlVkP3qZM6wvWWA6",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-vaswani-starlight-5bhk",
@@ -367,7 +375,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 4,
-    "price": 37800000,
+    "price": 37200000,
     "price_per_sqft": 17355,
     "carpet_area_sqft": 1743,
     "super_builtup_sqft": 2178,
@@ -405,7 +413,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF3-6QOQdw87dICN__k4OX4sfCIZt1-KAbvtN4kwFBRdKtW7Ds6_F6XWu2QOSNAawAMVRTzEW9E_fOuxnZHrYVkQJZbVAYdB1Nfci3WR3kWgqhZex69n7H-gmPnTq7cgj7Y60M7BvwWFoMt2xQ0loDDih-SnlaN8JqEc-ldRlVkP3qZM6wvWWA6"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQF3-6QOQdw87dICN__k4OX4sfCIZt1-KAbvtN4kwFBRdKtW7Ds6_F6XWu2QOSNAawAMVRTzEW9E_fOuxnZHrYVkQJZbVAYdB1Nfci3WR3kWgqhZex69n7H-gmPnTq7cgj7Y60M7BvwWFoMt2xQ0loDDih-SnlaN8JqEc-ldRlVkP3qZM6wvWWA6",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-sumadhura-capitol-residences-3bhk",
@@ -418,7 +428,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 26800000,
+    "price": 26500000,
     "price_per_sqft": 13117,
     "carpet_area_sqft": 1635,
     "super_builtup_sqft": 2043,
@@ -456,7 +466,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE75niY6CfzgKG0kV263544ajVjLe4ae5NsB3J8AaQ8B0D_H9o5Yc-VrzeujzRwHDLKagw4VEFRzwnKdVp8RZSBfRGXfN9hwhCryZ9T7kT58mrlOIpMUajuQkoLGiBhZDm7G-ylxvCOznvl4avUuAB7ms_y74KXKq-rf1JhEOz6MQiAcj6J2YeX1L_GDFSWptW1FKEOZ4WFMEMcOLoDHhP6yIU34Q=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE75niY6CfzgKG0kV263544ajVjLe4ae5NsB3J8AaQ8B0D_H9o5Yc-VrzeujzRwHDLKagw4VEFRzwnKdVp8RZSBfRGXfN9hwhCryZ9T7kT58mrlOIpMUajuQkoLGiBhZDm7G-ylxvCOznvl4avUuAB7ms_y74KXKq-rf1JhEOz6MQiAcj6J2YeX1L_GDFSWptW1FKEOZ4WFMEMcOLoDHhP6yIU34Q==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-sumadhura-capitol-residences-4bhk",
@@ -469,7 +481,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 4,
-    "price": 34700000,
+    "price": 34000000,
     "price_per_sqft": 13129,
     "carpet_area_sqft": 2115,
     "super_builtup_sqft": 2643,
@@ -507,7 +519,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE75niY6CfzgKG0kV263544ajVjLe4ae5NsB3J8AaQ8B0D_H9o5Yc-VrzeujzRwHDLKagw4VEFRzwnKdVp8RZSBfRGXfN9hwhCryZ9T7kT58mrlOIpMUajuQkoLGiBhZDm7G-ylxvCOznvl4avUuAB7ms_y74KXKq-rf1JhEOz6MQiAcj6J2YeX1L_GDFSWptW1FKEOZ4WFMEMcOLoDHhP6yIU34Q=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE75niY6CfzgKG0kV263544ajVjLe4ae5NsB3J8AaQ8B0D_H9o5Yc-VrzeujzRwHDLKagw4VEFRzwnKdVp8RZSBfRGXfN9hwhCryZ9T7kT58mrlOIpMUajuQkoLGiBhZDm7G-ylxvCOznvl4avUuAB7ms_y74KXKq-rf1JhEOz6MQiAcj6J2YeX1L_GDFSWptW1FKEOZ4WFMEMcOLoDHhP6yIU34Q==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-lakeside-habitat-1bhk",
@@ -571,7 +585,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 2,
-    "price": 13333333,
+    "price": 13000000,
     "price_per_sqft": 9151,
     "carpet_area_sqft": 1166,
     "super_builtup_sqft": 1457,
@@ -609,7 +623,9 @@
     "transparency_tags": [
       "Ready to Move"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-lakeside-habitat-3bhk",
@@ -622,7 +638,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 3,
-    "price": 14166666,
+    "price": 14500000,
     "price_per_sqft": 8503,
     "carpet_area_sqft": 1333,
     "super_builtup_sqft": 1666,
@@ -660,7 +676,9 @@
     "transparency_tags": [
       "Ready to Move"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-lakeside-habitat-4bhk",
@@ -673,7 +691,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 4,
-    "price": 15000000,
+    "price": 14800000,
     "price_per_sqft": 8000,
     "carpet_area_sqft": 1500,
     "super_builtup_sqft": 1875,
@@ -711,12 +729,14 @@
     "transparency_tags": [
       "Ready to Move"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFYFKCGJ6dHDah-2lcDivhJmgYD1429gXG6G8IUrebjD-jatizXwVt6NgrtnWJKpZIlZaHdEk3-zDMzihmWaPsyh_fvQi5hPntCcwxA-wcqp8mnFyKHmDbxBBa1LWkt-lhKp5LQWzrtXasrEiJGecArVjOS43_iNWFzMVrrDjMRSDVTDFg=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-somerville-2bhk",
     "title": "2 BHK in Prestige Somerville",
-    "area": "Marathahalli\u2014Whitefield Road",
+    "area": "Marathahalli—Whitefield Road",
     "area_id": "area-marathahalliwhitefield-road",
     "city": "Bengaluru",
     "society_id": "soc-prestige-somerville",
@@ -724,7 +744,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 17000000,
+    "price": 16800000,
     "price_per_sqft": 11310,
     "carpet_area_sqft": 1203,
     "super_builtup_sqft": 1503,
@@ -758,16 +778,18 @@
       "/societies/prestige-somerville/5.jpg"
     ],
     "hero_image": "/societies/prestige-somerville/1.webp",
-    "description_summary": "2 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli\u2014Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
+    "description_summary": "2 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli—Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-somerville-3bhk",
     "title": "3 BHK in Prestige Somerville",
-    "area": "Marathahalli\u2014Whitefield Road",
+    "area": "Marathahalli—Whitefield Road",
     "area_id": "area-marathahalliwhitefield-road",
     "city": "Bengaluru",
     "society_id": "soc-prestige-somerville",
@@ -775,7 +797,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 24233333,
+    "price": 23800000,
     "price_per_sqft": 9830,
     "carpet_area_sqft": 1972,
     "super_builtup_sqft": 2465,
@@ -809,16 +831,18 @@
       "/societies/prestige-somerville/5.jpg"
     ],
     "hero_image": "/societies/prestige-somerville/1.webp",
-    "description_summary": "3 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli\u2014Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
+    "description_summary": "3 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli—Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-somerville-5bhk",
     "title": "5 BHK in Prestige Somerville",
-    "area": "Marathahalli\u2014Whitefield Road",
+    "area": "Marathahalli—Whitefield Road",
     "area_id": "area-marathahalliwhitefield-road",
     "city": "Bengaluru",
     "society_id": "soc-prestige-somerville",
@@ -860,7 +884,7 @@
       "/societies/prestige-somerville/5.jpg"
     ],
     "hero_image": "/societies/prestige-somerville/1.webp",
-    "description_summary": "5 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli\u2014Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
+    "description_summary": "5 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli—Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
     "transparency_tags": [
       "Discovered via Search"
     ],
@@ -869,7 +893,7 @@
   {
     "id": "discovered-prestige-somerville-4bhk",
     "title": "4 BHK in Prestige Somerville",
-    "area": "Marathahalli\u2014Whitefield Road",
+    "area": "Marathahalli—Whitefield Road",
     "area_id": "area-marathahalliwhitefield-road",
     "city": "Bengaluru",
     "society_id": "soc-prestige-somerville",
@@ -877,7 +901,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 4,
-    "price": 38700000,
+    "price": 38200000,
     "price_per_sqft": 8821,
     "carpet_area_sqft": 3510,
     "super_builtup_sqft": 4387,
@@ -911,11 +935,13 @@
       "/societies/prestige-somerville/5.jpg"
     ],
     "hero_image": "/societies/prestige-somerville/1.webp",
-    "description_summary": "4 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli\u2014Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
+    "description_summary": "4 BHK apartment in Prestige Somerville by Prestige Group, Marathahalli—Whitefield Road. This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.",
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQE5AsQLJ-uxRYyNQ7arxsfKXf9aT5TxQ6eKtQdNozOwE4YE1wqd7kWhpmHUjRtR9PTr3JkQ9Uq-_QGv2ilrZ9zWTkCHGIJ6eyIlZPAaPGHQspC_TPaiLY3_8WPYFmeNcXEOuAYjFf3v3u4gg3fY37Esu3ER9ai_hoMgkCfKhKXkLFOf6fzLa60EPhg-PzOubtmTsPdC3RqOSmviTW1Jmdd1",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-raintree-park-2bhk",
@@ -928,7 +954,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 8000000,
+    "price": 7800000,
     "price_per_sqft": 4000000,
     "carpet_area_sqft": 2,
     "super_builtup_sqft": 2,
@@ -966,7 +992,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFE2MA9jRG5sWBX64qeg6LcF3S716xzDnLq70Ni1IOAaMysaJ_-v_B9sgUG5d36KgW-4FQCm_owy0M1jkUEPtjr92ybmImmNFxsLhh4qFlvcSQpJFwVBp_n25P2rjT6QA2A5H0FlE14ZkEUWFwx52sibtt6WwbyUZRdkQboZ0kooGQej_5pWSzf9BSErV6iMBLJbg=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFE2MA9jRG5sWBX64qeg6LcF3S716xzDnLq70Ni1IOAaMysaJ_-v_B9sgUG5d36KgW-4FQCm_owy0M1jkUEPtjr92ybmImmNFxsLhh4qFlvcSQpJFwVBp_n25P2rjT6QA2A5H0FlE14ZkEUWFwx52sibtt6WwbyUZRdkQboZ0kooGQej_5pWSzf9BSErV6iMBLJbg==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-raintree-park-3bhk",
@@ -979,7 +1007,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 11500000,
+    "price": 11200000,
     "price_per_sqft": 17665,
     "carpet_area_sqft": 521,
     "super_builtup_sqft": 651,
@@ -1017,7 +1045,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFE2MA9jRG5sWBX64qeg6LcF3S716xzDnLq70Ni1IOAaMysaJ_-v_B9sgUG5d36KgW-4FQCm_owy0M1jkUEPtjr92ybmImmNFxsLhh4qFlvcSQpJFwVBp_n25P2rjT6QA2A5H0FlE14ZkEUWFwx52sibtt6WwbyUZRdkQboZ0kooGQej_5pWSzf9BSErV6iMBLJbg=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFE2MA9jRG5sWBX64qeg6LcF3S716xzDnLq70Ni1IOAaMysaJ_-v_B9sgUG5d36KgW-4FQCm_owy0M1jkUEPtjr92ybmImmNFxsLhh4qFlvcSQpJFwVBp_n25P2rjT6QA2A5H0FlE14ZkEUWFwx52sibtt6WwbyUZRdkQboZ0kooGQej_5pWSzf9BSErV6iMBLJbg==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-raintree-park-4bhk",
@@ -1907,7 +1937,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 15000000,
+    "price": 15300000,
     "price_per_sqft": 10526,
     "carpet_area_sqft": 1140,
     "super_builtup_sqft": 1425,
@@ -1945,7 +1975,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGY9iCyFIDDPRNvfb7x7nw3f6DSB96DRJgTNq2YNhIxHy9CzLjFhgzsv7Ja60Z83rFd2COUDlorpcQSYQHcNruxs9g6PksodtRkmIBgVji2JEN6y0zRFK4Fghv-zO_wy1yBhldt5Yj49LlS4OcqHFpX2tYnGEFsU0_bJPkTKc2uqjyuGlO6xUoP_uHkLKuypwLu"
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGY9iCyFIDDPRNvfb7x7nw3f6DSB96DRJgTNq2YNhIxHy9CzLjFhgzsv7Ja60Z83rFd2COUDlorpcQSYQHcNruxs9g6PksodtRkmIBgVji2JEN6y0zRFK4Fghv-zO_wy1yBhldt5Yj49LlS4OcqHFpX2tYnGEFsU0_bJPkTKc2uqjyuGlO6xUoP_uHkLKuypwLu",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-arvind-sarjapur-road-2bhk",
@@ -3037,7 +3069,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 6179333,
+    "price": 6400000,
     "price_per_sqft": 4276,
     "carpet_area_sqft": 1156,
     "super_builtup_sqft": 1445,
@@ -3075,7 +3107,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQETQFb0t6aN3zsjHiqwTetrYZzFjbZjOh2PFOA7ybiBKLiyiDjq447rIJo2EpryaFdyVu6x3wVVvgOEQ-ZXpHpqXoCDM0IHs9Cw6CTkyF8ANj_P8G4pwumagziqbJcuaWUoWpoXTSnk3gNz8LG2JwJX4n2mVO1rwocHntbEqIem14mmXXFmsA=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQETQFb0t6aN3zsjHiqwTetrYZzFjbZjOh2PFOA7ybiBKLiyiDjq447rIJo2EpryaFdyVu6x3wVVvgOEQ-ZXpHpqXoCDM0IHs9Cw6CTkyF8ANj_P8G4pwumagziqbJcuaWUoWpoXTSnk3gNz8LG2JwJX4n2mVO1rwocHntbEqIem14mmXXFmsA==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-brigade-altair-apartments-3bhk",
@@ -3496,7 +3530,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 40600000,
+    "price": 41500000,
     "price_per_sqft": 26159,
     "carpet_area_sqft": 1242,
     "super_builtup_sqft": 1552,
@@ -3535,7 +3569,9 @@
       "RERA Verified",
       "Prime Location"
     ],
-    "source_reference": "https://www.99acres.com/sobha-infinia-agara-village-bangalore-south-new-project-ppid-66526847"
+    "source_reference": "https://www.99acres.com/sobha-infinia-agara-village-bangalore-south-new-project-ppid-66526847",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-sobha-infinia-4bhk",
@@ -3600,7 +3636,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 14100000,
+    "price": 14500000,
     "price_per_sqft": 6635,
     "carpet_area_sqft": 1700,
     "super_builtup_sqft": 2125,
@@ -3638,7 +3674,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://www.casagrand.co.in/apartments/hsr-layout-bangalore/casagrand-flamingo/"
+    "source_reference": "https://www.casagrand.co.in/apartments/hsr-layout-bangalore/casagrand-flamingo/",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-casagrand-flamingo-3bhk",
@@ -4008,7 +4046,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 13500000,
+    "price": 14200000,
     "price_per_sqft": 10211,
     "carpet_area_sqft": 1058,
     "super_builtup_sqft": 1322,
@@ -4046,7 +4084,9 @@
     "transparency_tags": [
       "RERA Verified"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGf8Y8n6FhGpT6GA5gjgqcAxDgwSNOuxMNGTtMJYPqizEp3bDyrtKPiW2WQdNvsXBEASitXBC05Cnt46SMLz_UY7ZaPRE9-kcAXOZI1cq3bjgpDsj-gV7PtoxBjW9r-vB0aHri_-1BCR1_VNOZgW7VDI_zbApe-0KtGKA_SUbJW0cQ="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQGf8Y8n6FhGpT6GA5gjgqcAxDgwSNOuxMNGTtMJYPqizEp3bDyrtKPiW2WQdNvsXBEASitXBC05Cnt46SMLz_UY7ZaPRE9-kcAXOZI1cq3bjgpDsj-gV7PtoxBjW9r-vB0aHri_-1BCR1_VNOZgW7VDI_zbApe-0KtGKA_SUbJW0cQ=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-lt-elara-celestia-3bhk",
@@ -4059,7 +4099,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 25800000,
+    "price": 26500000,
     "price_per_sqft": 13738,
     "carpet_area_sqft": 1503,
     "super_builtup_sqft": 1878,
@@ -4097,7 +4137,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFfQdlX5jvEewQ86SI3J-kSoUGcbduSW0Cc-kSrSJ9RoJ8bnPpAwJAk8jAjnv6wAOtYhMqok8sgG4HRRNePewuJGfaP3CMAPJU54G1nRPUcgYUEFqINGaI5ww="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFfQdlX5jvEewQ86SI3J-kSoUGcbduSW0Cc-kSrSJ9RoJ8bnPpAwJAk8jAjnv6wAOtYhMqok8sgG4HRRNePewuJGfaP3CMAPJU54G1nRPUcgYUEFqINGaI5ww=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-lt-elara-celestia-4bhk",
@@ -4212,7 +4254,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 14600000,
+    "price": 15200000,
     "price_per_sqft": 11680,
     "carpet_area_sqft": 1000,
     "super_builtup_sqft": 1250,
@@ -4250,7 +4292,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFfQdlX5jvEewQ86SI3J-kSoUGcbduSW0Cc-kSrSJ9RoJ8bnPpAwJAk8jAjnv6wAOtYhMqok8sgG4HRRNePewuJGfaP3CMAPJU54G1nRPUcgYUEFqINGaI5ww="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFfQdlX5jvEewQ86SI3J-kSoUGcbduSW0Cc-kSrSJ9RoJ8bnPpAwJAk8jAjnv6wAOtYhMqok8sgG4HRRNePewuJGfaP3CMAPJU54G1nRPUcgYUEFqINGaI5ww=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-sumadhura-epitome-1-4bhk",
@@ -4314,7 +4358,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 3,
-    "price": 34500000,
+    "price": 35000000,
     "price_per_sqft": 9685,
     "carpet_area_sqft": 2850,
     "super_builtup_sqft": 3562,
@@ -4353,7 +4397,9 @@
       "RERA Verified",
       "Ready to Move"
     ],
-    "source_reference": "https://vertexaisearch.cloud.com/grounding-api-redirect/AUZIYQEzBe44zeU-mtL6xA-wSwDxLyou81m3D9YbEe34SMp-xXgREvAPMKhRG5FBbSTZwOajGe_GqDCkZdvC7JSE3zagJ65NrKnpk-P0lzJW0-XOxm8lio_2FmfMnGMXUCCYv89k2lZD8_YarLc-OnenoKjjg1seMNyG3OKAzvd6Ok5JNPhuul3J6g807z9pxrT5bmpCg-NMwzbYZmtm2-eibZVI1TYM46w1nBJfcqm21YASCs4TMI7KirqHmOmjD-E5_wxRLtRQ1ujCevShcl8="
+    "source_reference": "https://vertexaisearch.cloud.com/grounding-api-redirect/AUZIYQEzBe44zeU-mtL6xA-wSwDxLyou81m3D9YbEe34SMp-xXgREvAPMKhRG5FBbSTZwOajGe_GqDCkZdvC7JSE3zagJ65NrKnpk-P0lzJW0-XOxm8lio_2FmfMnGMXUCCYv89k2lZD8_YarLc-OnenoKjjg1seMNyG3OKAzvd6Ok5JNPhuul3J6g807z9pxrT5bmpCg-NMwzbYZmtm2-eibZVI1TYM46w1nBJfcqm21YASCs4TMI7KirqHmOmjD-E5_wxRLtRQ1ujCevShcl8=",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-century-ethos-4bhk",
@@ -5037,7 +5083,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 30100000,
+    "price": 31200000,
     "price_per_sqft": 10727,
     "carpet_area_sqft": 2245,
     "super_builtup_sqft": 2806,
@@ -5075,7 +5121,9 @@
     "transparency_tags": [
       "Prime Location"
     ],
-    "source_reference": "https://housing.com/in/buy/flats-in-marathahalli_bangalore-east-bangalore-p410493645d410493645d"
+    "source_reference": "https://housing.com/in/buy/flats-in-marathahalli_bangalore-east-bangalore-p410493645d410493645d",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-century-mirai-4bhk",
@@ -5704,7 +5752,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 24566666,
+    "price": 25200000,
     "price_per_sqft": 11810,
     "carpet_area_sqft": 1664,
     "super_builtup_sqft": 2080,
@@ -5742,7 +5790,9 @@
     "transparency_tags": [
       "RERA Verified"
     ],
-    "source_reference": "https://www.magicbricks.com/flats-in-varthur-bangalore-for-sale-pppfs"
+    "source_reference": "https://www.magicbricks.com/flats-in-varthur-bangalore-for-sale-pppfs",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-lavender-fields-3bhk",
@@ -5755,7 +5805,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 3,
-    "price": 34933333,
+    "price": 36000000,
     "price_per_sqft": 10506,
     "carpet_area_sqft": 2660,
     "super_builtup_sqft": 3325,
@@ -5793,7 +5843,9 @@
     "transparency_tags": [
       "RERA Verified"
     ],
-    "source_reference": "https://www.magicbricks.com/flats-in-varthur-bangalore-for-sale-pppfs"
+    "source_reference": "https://www.magicbricks.com/flats-in-varthur-bangalore-for-sale-pppfs",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-lavender-fields-4bhk",
@@ -6371,7 +6423,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 35600000,
+    "price": 36500000,
     "price_per_sqft": 17223,
     "carpet_area_sqft": 1654,
     "super_builtup_sqft": 2067,
@@ -6410,7 +6462,9 @@
       "RERA Verified",
       "Prime Location"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFLALs8rrDuOg6ir1SJZpbxbbA0vpIh09wxOwt11rGH-zK_P0m19EC3P2_wL6w5wx7vWfgpz7qA5yljp1eBFLl7M6m4IF-NATeG30vNBq9NTdvLY9DMVY_zfSocPerfT4vEyOpv7lz3Nc_zOW8I-KQdT3Ic3TzDbfmNefskj183H70nwg=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQFLALs8rrDuOg6ir1SJZpbxbbA0vpIh09wxOwt11rGH-zK_P0m19EC3P2_wL6w5wx7vWfgpz7qA5yljp1eBFLl7M6m4IF-NATeG30vNBq9NTdvLY9DMVY_zfSocPerfT4vEyOpv7lz3Nc_zOW8I-KQdT3Ic3TzDbfmNefskj183H70nwg==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-k-raheja-vivarea-3bhk",
@@ -6613,7 +6667,7 @@
       "/societies/kolte-patil-24k-grazio/5.webp"
     ],
     "hero_image": "/societies/kolte-patil-24k-grazio/1.jpg",
-    "description_summary": "3 BHK apartment in Kolte Patil 24K Grazio by Kolte Patil Developers, Koramangala. Offers 3 and 4 BHK apartments. Starting from \u20b998 Lac.",
+    "description_summary": "3 BHK apartment in Kolte Patil 24K Grazio by Kolte Patil Developers, Koramangala. Offers 3 and 4 BHK apartments. Starting from ₹98 Lac.",
     "transparency_tags": [
       "Ready to Move",
       "Prime Location"
@@ -6665,7 +6719,7 @@
       "/societies/kolte-patil-24k-grazio/5.webp"
     ],
     "hero_image": "/societies/kolte-patil-24k-grazio/1.jpg",
-    "description_summary": "4 BHK apartment in Kolte Patil 24K Grazio by Kolte Patil Developers, Koramangala. Offers 3 and 4 BHK apartments. Starting from \u20b998 Lac.",
+    "description_summary": "4 BHK apartment in Kolte Patil 24K Grazio by Kolte Patil Developers, Koramangala. Offers 3 and 4 BHK apartments. Starting from ₹98 Lac.",
     "transparency_tags": [
       "Ready to Move",
       "Prime Location"
@@ -6683,7 +6737,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 2,
-    "price": 17500000,
+    "price": 17800000,
     "price_per_sqft": 14000,
     "carpet_area_sqft": 1000,
     "super_builtup_sqft": 1250,
@@ -6722,7 +6776,9 @@
       "Ready to Move",
       "Prime Location"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEsBZTVEyzNHLYARCrPBw0ESwFA7efDAIwAdg4qJmqa6AobD55Y8jGRnwvG3w__ukaIn7kjh1WYxBWc0oowIBD9xr_hFqXbdI2G4BStu3N3m3qgF5zTUADUpOuNiTielGBzSrOmMdDypMAxdLWFanNoqT61KtVJdS2pik0zdGMusx-6QP5OHHfxnJ2_9goVZuZ3yQ=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEsBZTVEyzNHLYARCrPBw0ESwFA7efDAIwAdg4qJmqa6AobD55Y8jGRnwvG3w__ukaIn7kjh1WYxBWc0oowIBD9xr_hFqXbdI2G4BStu3N3m3qgF5zTUADUpOuNiTielGBzSrOmMdDypMAxdLWFanNoqT61KtVJdS2pik0zdGMusx-6QP5OHHfxnJ2_9goVZuZ3yQ==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-pine-wood-3bhk",
@@ -6787,7 +6843,7 @@
     "property_type": "Apartment",
     "listing_type": "New",
     "bhk": 2,
-    "price": 18000000,
+    "price": 14500000,
     "price_per_sqft": 14400,
     "carpet_area_sqft": 1000,
     "super_builtup_sqft": 1250,
@@ -6825,7 +6881,9 @@
     "transparency_tags": [
       "Discovered via Search"
     ],
-    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEqrtFe-jPt4d3HIj29gVYU0nqjQmPCJXEXrdyv67lj9vqsZxfMo6ger9lf7gOK_S9dX57W05tpvvgm56xmfZrgmu2SdTZe3tPI03cSd9j2l9MvNM9A_8EpqbD7oZCNqIS2PXYe9maLHYZT5pfOSyNPzd7ZAYGd97vS6glSLcgiOStHVSQ3E4OmcQbS-QtPOQYHvisJMA=="
+    "source_reference": "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AUZIYQEqrtFe-jPt4d3HIj29gVYU0nqjQmPCJXEXrdyv67lj9vqsZxfMo6ger9lf7gOK_S9dX57W05tpvvgm56xmfZrgmu2SdTZe3tPI03cSd9j2l9MvNM9A_8EpqbD7oZCNqIS2PXYe9maLHYZT5pfOSyNPzd7ZAYGd97vS6glSLcgiOStHVSQ3E4OmcQbS-QtPOQYHvisJMA==",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-casagrand-flamingo-3bhk",
@@ -7036,7 +7094,7 @@
     "property_type": "Apartment",
     "listing_type": "Resale",
     "bhk": 3,
-    "price": 22000000,
+    "price": 22500000,
     "price_per_sqft": 13793,
     "carpet_area_sqft": 0,
     "super_builtup_sqft": 0,
@@ -7071,7 +7129,9 @@
       "RERA Number Available",
       "Under Construction"
     ],
-    "source_reference": "https://www.commonfloor.com/prestige-park-grove-bangalore/overview"
+    "source_reference": "https://www.commonfloor.com/prestige-park-grove-bangalore/overview",
+    "source": "seller_listed",
+    "listing_status": "active"
   },
   {
     "id": "discovered-prestige-park-grove-4bhk",

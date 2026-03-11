@@ -269,6 +269,7 @@ pub async fn search_properties(
                 concerns,
                 unmatched_preferences: unmatched,
                 explanation_card,
+                active_seller_count: None,
             });
         }
 
@@ -393,6 +394,20 @@ pub async fn search_properties(
     }
 
     let total_results = results.len();
+
+    // --- Attach seller counts to results ---
+    {
+        let sellers = state.sellers.read().await;
+        for result in &mut results {
+            let count = sellers
+                .values()
+                .filter(|s| s.listing_ids.contains(&result.card.id))
+                .count() as u32;
+            if count > 0 {
+                result.active_seller_count = Some(count);
+            }
+        }
+    }
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;

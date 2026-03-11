@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -7,7 +8,7 @@ use crate::cache::Cache;
 use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::embed_client::EmbedClient;
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{AreaProfile, Bid, BidStats, Property, Seller, Society};
 use crate::storage::StorageBackend;
 
 #[allow(dead_code)]
@@ -29,4 +30,14 @@ pub struct AppState {
     pub discovery_cache: Mutex<DiscoveryCache>,
     /// Embedding client for semantic search (None if GOOGLE_AI_API_KEY not set).
     pub embed_client: Option<EmbedClient>,
+
+    // --- Marketplace ---
+    /// Registered sellers: seller_id → Seller.
+    pub sellers: RwLock<HashMap<String, Seller>>,
+    /// Bids per property: property_id → bids (append-only).
+    pub bids: RwLock<HashMap<String, Vec<Bid>>>,
+    /// Computed bid stats per property: property_id → BidStats.
+    pub bid_stats: RwLock<HashMap<String, BidStats>>,
+    /// Root path for marketplace data files.
+    pub marketplace_root: PathBuf,
 }

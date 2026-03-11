@@ -3,6 +3,7 @@ pub mod areas;
 pub mod debug;
 pub mod enrichment;
 pub mod knowledge;
+pub mod marketplace;
 pub mod properties;
 pub mod search;
 pub mod shortlist;

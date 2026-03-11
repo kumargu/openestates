@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
@@ -8,7 +9,7 @@ use crate::cache::{Cache, InMemoryCache};
 use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge;
 use crate::knowledge::embed_client::EmbedClient;
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{AreaProfile, Bid, BidStats, Property, Seller, Society};
 use crate::state::AppState;
 use crate::storage::{LocalFsBackend, StorageBackend};
 
@@ -121,6 +122,15 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         .unwrap_or(10);
     let discovery_cache = Mutex::new(DiscoveryCache::new(24, max_per_hour));
 
+    // --- Marketplace ---
+    let marketplace_root = project_root.join("data").join("marketplace");
+    let (sellers, bids, bid_stats) = load_marketplace(&marketplace_root);
+    println!(
+        "Marketplace loaded: {} sellers, {} properties with bids",
+        sellers.len(),
+        bids.len()
+    );
+
     AppState {
         storage,
         cache,
@@ -132,7 +142,91 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         gemini,
         discovery_cache,
         embed_client,
+        sellers: RwLock::new(sellers),
+        bids: RwLock::new(bids),
+        bid_stats: RwLock::new(bid_stats),
+        marketplace_root,
     }
+}
+
+/// Load all marketplace data from disk.
+/// Returns (sellers, bids_by_property, bid_stats_by_property).
+/// Gracefully returns empty maps if the marketplace directory doesn't exist yet.
+fn load_marketplace(
+    root: &Path,
+) -> (HashMap<String, Seller>, HashMap<String, Vec<Bid>>, HashMap<String, BidStats>) {
+    let mut sellers = HashMap::new();
+    let mut bids: HashMap<String, Vec<Bid>> = HashMap::new();
+    let mut bid_stats = HashMap::new();
+
+    // sellers/
+    let sellers_dir = root.join("sellers");
+    if sellers_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&sellers_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(seller) = serde_json::from_str::<Seller>(&content) {
+                            sellers.insert(seller.id.clone(), seller);
+                        } else {
+                            eprintln!("WARN: Failed to parse seller: {}", path.display());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // bids/{property_id}.jsonl — append-only bid logs
+    let bids_dir = root.join("bids");
+    if bids_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&bids_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("jsonl") {
+                    let property_id = path
+                        .file_stem()
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("")
+                        .to_string();
+                    if property_id.is_empty() { continue; }
+
+                    let mut property_bids = Vec::new();
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        for line in content.lines() {
+                            let line = line.trim();
+                            if line.is_empty() { continue; }
+                            match serde_json::from_str::<Bid>(line) {
+                                Ok(bid) => property_bids.push(bid),
+                                Err(e) => eprintln!("WARN: Bad bid line in {}: {}", path.display(), e),
+                            }
+                        }
+                    }
+                    bids.insert(property_id, property_bids);
+                }
+            }
+        }
+    }
+
+    // bid_stats/{property_id}.json — computed stats
+    let stats_dir = root.join("bid_stats");
+    if stats_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&stats_dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("json") {
+                    if let Ok(content) = std::fs::read_to_string(&path) {
+                        if let Ok(stats) = serde_json::from_str::<BidStats>(&content) {
+                            bid_stats.insert(stats.property_id.clone(), stats);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    (sellers, bids, bid_stats)
 }
 
 /// Load and deserialize JSON through the storage backend.
@@ -173,6 +267,9 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
     let cache: Arc<dyn Cache> = Arc::new(InMemoryCache::new());
     let graph = knowledge::bootstrap::bootstrap_from_seed(&properties, &societies, &areas);
 
+    let project_root = data_dir.parent().unwrap_or(data_dir).to_path_buf();
+    let marketplace_root = project_root.join("data").join("marketplace");
+
     AppState {
         storage,
         cache,
@@ -180,10 +277,14 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
         areas,
         societies,
         knowledge: Arc::new(RwLock::new(graph)),
-        project_root: data_dir.parent().unwrap_or(data_dir).to_path_buf(),
+        project_root,
         gemini: None,
         discovery_cache: Mutex::new(DiscoveryCache::new(24, 10)),
         embed_client: None,
+        sellers: RwLock::new(HashMap::new()),
+        bids: RwLock::new(HashMap::new()),
+        bid_stats: RwLock::new(HashMap::new()),
+        marketplace_root,
     }
 }
 

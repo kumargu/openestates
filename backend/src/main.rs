@@ -13,7 +13,7 @@ mod storage;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
@@ -115,6 +115,17 @@ async fn main() {
         .route(
             "/api/knowledge/embeddings/stats",
             get(routes::knowledge::embedding_stats),
+        )
+        // Marketplace — sellers + bids
+        .route("/api/sellers/register", post(routes::marketplace::register_seller))
+        .route("/api/sellers/{id}", get(routes::marketplace::get_seller))
+        .route("/api/sellers/{id}/listings", get(routes::marketplace::get_seller_listings))
+        .route("/api/properties/{id}/bids", post(routes::marketplace::place_bid))
+        .route("/api/properties/{id}/bids", get(routes::marketplace::list_bids))
+        .route("/api/properties/{id}/bid-stats", get(routes::marketplace::get_bid_stats))
+        .route(
+            "/api/properties/{id}/bids/{bid_id}/status",
+            put(routes::marketplace::update_bid_status),
         )
         // Debug endpoints — gated by ENABLE_DEBUG_API=true
         .route("/api/debug/score", get(routes::debug::score_debug))

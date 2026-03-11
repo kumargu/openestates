@@ -294,6 +294,70 @@ export type SearchResultItem = PropertyCard & {
   concerns?: Concern[];
   unmatchedPreferences?: string[];
   explanationCard?: ExplanationCard;
+  active_seller_count?: number;
+};
+
+// ---------------------------------------------------------------------------
+// Marketplace — sellers + bids
+// ---------------------------------------------------------------------------
+
+export type SellerVerificationTier = "identity_verified" | "rera_verified";
+
+export type ListingStatus = "active" | "under_offer" | "matched" | "sold";
+
+export type Seller = {
+  id: string;
+  name: string;
+  phone: string;
+  verificationTier: SellerVerificationTier;
+  reraNumber?: string;
+  listingIds: string[];
+  registeredAt: string;
+};
+
+export type BidStatus = "pending" | "accepted" | "rejected";
+
+export type Bid = {
+  id: string;
+  amount: number;
+  createdAt: string;
+  status: BidStatus;
+};
+
+export type BidStats = {
+  propertyId: string;
+  count: number;
+  average: number;
+  p100: number;
+  lastBidAt?: string;
+};
+
+export type PlaceBidRequest = {
+  bidderName: string;
+  bidderPhone: string;
+  amount: number;
+};
+
+export type PlaceBidResponse = {
+  bid: Bid;
+  bidStats: BidStats;
+};
+
+export type RegisterSellerRequest = {
+  name: string;
+  phone: string;
+  reraNumber?: string;
+};
+
+export type SellerListingItem = {
+  propertyId: string;
+  listingStatus: ListingStatus;
+  bidStats: BidStats;
+};
+
+export type SellerListingsResponse = {
+  seller: Seller;
+  listings: SellerListingItem[];
 };
 
 export type SearchAreaContext = {
