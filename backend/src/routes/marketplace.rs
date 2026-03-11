@@ -191,7 +191,8 @@ pub async fn get_seller_listings(
 #[serde(rename_all = "camelCase")]
 pub struct PlaceBidRequest {
     pub bidder_name: String,
-    pub bidder_phone: String,
+    /// Optional — sellers can contact via other means if not provided.
+    pub bidder_phone: Option<String>,
     /// Bid amount in rupees.
     pub amount: u64,
 }
@@ -220,10 +221,10 @@ pub async fn place_bid(
         }
     }
 
-    if body.bidder_name.trim().is_empty() || body.bidder_phone.trim().is_empty() {
+    if body.bidder_name.trim().is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({ "error": "bidderName and bidderPhone are required" })),
+            Json(serde_json::json!({ "error": "bidderName is required" })),
         ));
     }
     if body.amount == 0 {
@@ -237,7 +238,7 @@ pub async fn place_bid(
         id: new_id("bid"),
         property_id: property_id.clone(),
         bidder_name: body.bidder_name.trim().to_string(),
-        bidder_phone: body.bidder_phone.trim().to_string(),
+        bidder_phone: body.bidder_phone.map(|p| p.trim().to_string()).filter(|p| !p.is_empty()),
         amount: body.amount,
         created_at: now_iso(),
         status: BidStatus::Pending,

@@ -70,8 +70,9 @@ pub struct Bid {
     pub id: String,
     pub property_id: String,
     pub bidder_name: String,
-    /// Stored for seller contact; not exposed in public listing.
-    pub bidder_phone: String,
+    /// Stored for seller contact; not exposed in public listing. Optional.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bidder_phone: Option<String>,
     /// Bid amount in rupees (consistent with Property.price).
     pub amount: u64,
     pub created_at: String,

@@ -270,6 +270,7 @@ pub async fn search_properties(
                 unmatched_preferences: unmatched,
                 explanation_card,
                 active_seller_count: None,
+                bid_stats: None,
             });
         }
 
@@ -405,6 +406,19 @@ pub async fn search_properties(
                 .count() as u32;
             if count > 0 {
                 result.active_seller_count = Some(count);
+            }
+        }
+        drop(sellers);
+    }
+
+    // --- Attach bid stats to results that have active bids ---
+    {
+        let bid_stats_map = state.bid_stats.read().await;
+        for result in &mut results {
+            if let Some(stats) = bid_stats_map.get(&result.card.id) {
+                if stats.count > 0 {
+                    result.bid_stats = Some(stats.clone());
+                }
             }
         }
     }

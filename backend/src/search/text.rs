@@ -221,6 +221,7 @@ impl TextSearch {
                     unmatched_preferences: Vec::new(),
                     explanation_card: None,
                     active_seller_count: None,
+                    bid_stats: None,
                 })
             })
             .collect();

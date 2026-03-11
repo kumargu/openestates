@@ -60,8 +60,8 @@ export function BidWidget({ propertyId, askingPrice }: BidWidgetProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const amountNum = parseInt(amount.replace(/[^0-9]/g, ""), 10);
-    if (!name.trim() || !phone.trim() || !amountNum) {
-      setFormError("Please fill all fields.");
+    if (!name.trim() || !amountNum) {
+      setFormError("Please enter your name and bid amount.");
       return;
     }
     if (amountNum < 100_000) {
@@ -73,7 +73,7 @@ export function BidWidget({ propertyId, askingPrice }: BidWidgetProps) {
     try {
       const result = await placeBid(propertyId, {
         bidderName: name.trim(),
-        bidderPhone: phone.trim(),
+        bidderPhone: phone.trim() || undefined,
         amount: amountNum,
       });
       setStats(result.bidStats);
@@ -94,7 +94,7 @@ export function BidWidget({ propertyId, askingPrice }: BidWidgetProps) {
   const hasBids = stats && stats.count > 0;
 
   return (
-    <div className="section-card" style={{ marginTop: "1rem" }}>
+    <div id="bid" className="section-card" style={{ marginTop: "1rem" }}>
       {/* Header */}
       <div style={{
         fontSize: "0.62rem",
@@ -191,10 +191,9 @@ export function BidWidget({ propertyId, askingPrice }: BidWidgetProps) {
           />
           <input
             className="input"
-            placeholder="Phone number"
+            placeholder="Phone number (optional)"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            required
           />
           <input
             className="input"

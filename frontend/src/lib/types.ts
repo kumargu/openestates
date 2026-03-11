@@ -295,6 +295,7 @@ export type SearchResultItem = PropertyCard & {
   unmatchedPreferences?: string[];
   explanationCard?: ExplanationCard;
   active_seller_count?: number;
+  bid_stats?: BidStats;
 };
 
 // ---------------------------------------------------------------------------
@@ -334,7 +335,7 @@ export type BidStats = {
 
 export type PlaceBidRequest = {
   bidderName: string;
-  bidderPhone: string;
+  bidderPhone?: string;
   amount: number;
 };
 

@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
-import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, ExplanationCard, SearchDebugTrace } from "../lib/types.ts";
+import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, ExplanationCard, SearchDebugTrace, BidStats } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { formatSearchSummary } from "../lib/search.ts";
@@ -233,7 +233,7 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, explanationCard, onQuickView, isComparing, onToggleCompare, activeSelllerCount }: {
+function CardA({ property, match, explanation, explanationCard, onQuickView, isComparing, onToggleCompare, activeSelllerCount, bidStats }: {
   property: PropertyCardType;
   match?: MatchResult;
   explanation?: MatchExplanation;
@@ -242,6 +242,7 @@ function CardA({ property, match, explanation, explanationCard, onQuickView, isC
   isComparing?: boolean;
   onToggleCompare?: (id: string) => void;
   activeSelllerCount?: number;
+  bidStats?: BidStats;
 }) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
 
@@ -357,6 +358,50 @@ function CardA({ property, match, explanation, explanationCard, onQuickView, isC
               </span>
             )}
           </div>
+
+          {/* Bid pulse — shows when active bids exist, drives urgency */}
+          {bidStats && bidStats.count > 0 && (
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              marginTop: "0.5rem",
+              padding: "0.45rem 0.65rem",
+              borderRadius: "8px",
+              backgroundColor: "rgba(201,107,79,0.05)",
+              border: "1px solid rgba(201,107,79,0.15)",
+            }}>
+              <span style={{ fontSize: "0.75rem", color: "#7a4a3a" }}>
+                <strong style={{ color: "#c96b4f" }}>{bidStats.count} bid{bidStats.count > 1 ? "s" : ""}</strong>
+                {" · Avg "}
+                <strong>{bidStats.average >= 10_000_000
+                  ? `₹${(bidStats.average / 10_000_000).toFixed(1)}Cr`
+                  : `₹${(bidStats.average / 100_000).toFixed(0)}L`}</strong>
+                {bidStats.lastBidAt && (() => {
+                  const diff = Date.now() - new Date(bidStats.lastBidAt).getTime();
+                  const h = Math.floor(diff / 3_600_000);
+                  const d = Math.floor(h / 24);
+                  return <span style={{ color: "#9a6a5a" }}>{" · "}{d > 0 ? `${d}d ago` : h > 0 ? `${h}h ago` : "just now"}</span>;
+                })()}
+              </span>
+              <Link
+                to={`/property/${property.id}#bid`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: "0.72rem",
+                  fontWeight: 600,
+                  color: "#c96b4f",
+                  textDecoration: "none",
+                  padding: "0.2rem 0.5rem",
+                  borderRadius: "5px",
+                  border: "1px solid rgba(201,107,79,0.3)",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                Place bid →
+              </Link>
+            </div>
+          )}
 
           {property.transparency_tags.length > 0 && (
             <div className="card-a-tags">
@@ -740,7 +785,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; explanationCard?: ExplanationCard; activeSelllerCount?: number }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; explanationCard?: ExplanationCard; activeSelllerCount?: number; bidStats?: BidStats }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -751,6 +796,7 @@ export function ResultsPageA() {
         explanation: r.match_explanation,
         explanationCard: r.explanationCard,
         activeSelllerCount: r.active_seller_count,
+        bidStats: r.bid_stats,
       }));
     }
     // No query — show all properties without match labels
@@ -926,7 +972,7 @@ export function ResultsPageA() {
         className={panelPropertyId ? "results-grid--panel-open" : ""}
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
-        {matchResults.map(({ property, match, explanation, explanationCard, activeSelllerCount }) => (
+        {matchResults.map(({ property, match, explanation, explanationCard, activeSelllerCount, bidStats }) => (
           <CardA
             key={property.id}
             property={property}
@@ -936,6 +982,7 @@ export function ResultsPageA() {
             onQuickView={setPanelPropertyId}
             isComparing={compareIds.includes(property.id)}
             activeSelllerCount={activeSelllerCount}
+            bidStats={bidStats}
             onToggleCompare={(id) => {
               setCompareIds(prev =>
                 prev.includes(id)

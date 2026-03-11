@@ -12,7 +12,7 @@ pub use text::TextSearch;
 
 use serde::Serialize;
 
-use crate::models::{AreaProfile, PropertyCard};
+use crate::models::{AreaProfile, BidStats, PropertyCard};
 
 /// One structured reason why a result matched a user preference.
 #[derive(Debug, Clone, Serialize)]
@@ -77,6 +77,9 @@ pub struct SearchResultCard {
     /// Number of registered sellers actively listing this property.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub active_seller_count: Option<u32>,
+    /// Bid stats if any bids exist — drives urgency on results cards.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bid_stats: Option<BidStats>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.
