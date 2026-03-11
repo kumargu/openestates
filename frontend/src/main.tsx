@@ -79,6 +79,7 @@ function Nav() {
       </Link>
       <div style={{ flex: 1 }} />
       <NavLink to="/results" label="Properties" active={path === "/results" || path.startsWith("/property/")} />
+      <NavLink to="/societies" label="Societies" active={path === "/societies"} />
       <NavLink to="/shortlist" label="Shortlist" active={path === "/shortlist"} />
       <Link
         to="/sell"
