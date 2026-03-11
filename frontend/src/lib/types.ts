@@ -194,11 +194,33 @@ export type UpcomingLaunchCard = {
   sponsored: boolean;
 };
 
+export type Polarity = "positive" | "negative";
+
+export type BuyerArchetype =
+  | "family"
+  | "investor"
+  | "endUser"
+  | "riskAverse"
+  | "valueBuyer"
+  | "luxuryBuyer";
+
+export type PreferenceSignal = {
+  rawText: string;
+  canonicalKey: string;
+  expandedKeys: string[];
+  polarity: Polarity;
+  weight: number;
+};
+
 export type SearchIntent = {
   area: string | null;
   bhk: number | null;
   budget_max: number | null;
+  /** Flat list for backward compat */
   preferences: string[];
+  positivePreferences: PreferenceSignal[];
+  negativePreferences: PreferenceSignal[];
+  buyerArchetype: BuyerArchetype | null;
 };
 
 export type MatchReason = {
@@ -224,12 +246,54 @@ export type MatchExplanation = {
   total_facts_consulted: number;
 };
 
+export type ExplanationReason = {
+  text: string;
+  preference: string;
+  evidenceStrength: "strong" | "moderate" | "limited";
+  sources: string[];
+};
+
+export type ExplanationConcern = {
+  text: string;
+  preference: string;
+  severity: "caution" | "warning";
+  sourceLevel: "society-specific" | "area-level";
+  note?: string;
+};
+
+export type EvidenceSummary = {
+  factsConsulted: number;
+  sources: string[];
+  graphDrivenPct: number;
+};
+
+export type ExplanationCard = {
+  whyMatches: ExplanationReason[];
+  concerns: ExplanationConcern[];
+  unmatched: string[];
+  confidenceLabel: "high" | "medium" | "low";
+  evidenceSummary: EvidenceSummary;
+};
+
+export type Concern = {
+  preference: string;
+  display: string;
+  confidence: number;
+  sourceLevel: string;
+  severity: "caution" | "warning";
+};
+
 export type SearchResultItem = PropertyCard & {
   match_score: number;
   match_label: string;
   match_reason: string;
   match_explanation?: MatchExplanation;
   semantic_score?: number;
+  societyScore?: number;
+  societyConfidence?: "high" | "medium" | "low";
+  concerns?: Concern[];
+  unmatchedPreferences?: string[];
+  explanationCard?: ExplanationCard;
 };
 
 export type SearchAreaContext = {
@@ -261,6 +325,42 @@ export type KnowledgeContext = {
   learning_gaps: string[];
 };
 
+export type PreferenceDebugScore = {
+  preference: string;
+  polarity: string;
+  matched_fact_key: string | null;
+  matched_fact_value: string | null;
+  raw_score: number;
+  weighted_score: number;
+  source: string | null;
+  confidence: number;
+};
+
+export type SocietyDebugScore = {
+  society_id: string;
+  society_name: string;
+  final_score: number;
+  confidence: number;
+  archetype_modifier: number;
+  area_signals_used: string[];
+  facts_consulted: number;
+  preference_scores: PreferenceDebugScore[];
+};
+
+export type SearchDebugTrace = {
+  timestamp: string;
+  query: string;
+  candidate_count: number;
+  also_consider_triggered: boolean;
+  also_consider_reason: string | null;
+  discovery_triggered: boolean;
+  total_latency_ms: number;
+  intent_parse_ms: number;
+  scoring_ms: number;
+  embedding_ms: number;
+  societies_scored: SocietyDebugScore[];
+};
+
 export type SearchResponse = {
   query: string;
   intent: SearchIntent;
@@ -270,6 +370,8 @@ export type SearchResponse = {
   knowledge_context: KnowledgeContext | null;
   discovery_status?: string;
   discovery_count?: number;
+  also_consider?: SearchResultItem[];
+  debug?: SearchDebugTrace;
 };
 
 export type ReraInfo = {

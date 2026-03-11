@@ -10,7 +10,10 @@ use crate::discovery::gemini::DiscoveryConstraints;
 use crate::knowledge::{KnowledgeGraph, SearchEvent, store as kg_store};
 use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
-use crate::search::{KnowledgeContext, SearchResponse, SourcedClaim, TextSearch, intent};
+use crate::search::{
+    KnowledgeContext, SearchDebugTrace, SearchResponse, SocietyDebugScore,
+    PreferenceDebugScore, SourcedClaim, TextSearch, intent, score_all_societies, synthesize_explanation,
+};
 use crate::state::AppState;
 
 use super::enrichment::society_node_id;
@@ -21,6 +24,7 @@ const DISCOVERY_THRESHOLD: f64 = 0.15;
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
+    pub debug: Option<bool>,
 }
 
 /// GET /api/search?q=... — intent-based search with live discovery fallback.
@@ -29,6 +33,8 @@ pub async fn search_properties(
     Query(params): Query<SearchQuery>,
 ) -> Json<SearchResponse> {
     let query = params.q.unwrap_or_default();
+    let debug_mode = params.debug.unwrap_or(false);
+    let request_start = std::time::Instant::now();
 
     if query.trim().is_empty() {
         return Json(SearchResponse {
@@ -38,6 +44,9 @@ pub async fn search_properties(
                 bhk: None,
                 budget_max: None,
                 preferences: Vec::new(),
+                positive_preferences: Vec::new(),
+                negative_preferences: Vec::new(),
+                buyer_archetype: None,
             },
             results: Vec::new(),
             area_context: None,
@@ -45,11 +54,15 @@ pub async fn search_properties(
             knowledge_context: None,
             discovery_status: None,
             discovery_count: None,
+            also_consider: Vec::new(),
+            debug: None,
         });
     }
 
     // Parse structured intent from the natural-language query.
+    let intent_start = std::time::Instant::now();
     let parsed_intent = intent::parse_intent(&query);
+    let intent_parse_ms = intent_start.elapsed().as_millis() as u64;
 
     // Build society name lookup map.
     let society_names: HashMap<String, String> = state
@@ -68,6 +81,7 @@ pub async fn search_properties(
     });
 
     // Run text search and query embedding in parallel for minimal latency.
+    let embedding_start = std::time::Instant::now();
     let (mut results, semantic_scores) = {
         let text_search_fut = async {
             let graph = state.knowledge.read().await;
@@ -85,7 +99,7 @@ pub async fn search_properties(
         let semantic_fut = async {
             if let Some(ref ec) = state.embed_client {
                 let graph = state.knowledge.read().await;
-                crate::search::semantic::semantic_society_scores(ec, &graph, &query, 20).await
+                crate::search::semantic::semantic_society_scores(ec, &graph, &query, &parsed_intent, 20).await
             } else {
                 HashMap::new()
             }
@@ -93,71 +107,173 @@ pub async fn search_properties(
 
         tokio::join!(text_search_fut, semantic_fut)
     };
+    let embedding_ms = embedding_start.elapsed().as_millis() as u64;
 
-    // --- Apply semantic boost to text search results ---
-    if !semantic_scores.is_empty() {
+    // --- Society-first scoring: re-rank using KG graph facts ---
+    // Score all unique societies from candidates, then blend into match_score.
+    // This runs in-memory (<1ms) and is always applied.
+    let scoring_start = std::time::Instant::now();
+    {
         let properties = state.properties.read().await;
+        let graph = state.knowledge.read().await;
 
-        // Boost existing results that have high semantic similarity
-        for result in &mut results {
-            if let Some(prop) = properties.iter().find(|p| p.id == result.card.id) {
+        // Collect unique society IDs from candidate results
+        let society_ids: Vec<String> = {
+            let mut seen = std::collections::HashSet::new();
+            results.iter().filter_map(|r| {
+                properties.iter()
+                    .find(|p| p.id == r.card.id)
+                    .map(|p| p.society_id.clone())
+            })
+            .filter(|id| seen.insert(id.clone()))
+            .collect()
+        };
+
+        if !society_ids.is_empty() && (!parsed_intent.positive_preferences.is_empty()
+            || !parsed_intent.negative_preferences.is_empty()
+            || parsed_intent.buyer_archetype.is_some())
+        {
+            let society_scores = score_all_societies(&graph, &society_ids, &parsed_intent);
+
+            // Attach society scores to results
+            for result in &mut results {
+                let Some(prop) = properties.iter().find(|p| p.id == result.card.id) else { continue };
                 let node_id = society_node_id(&prop.society_id);
-                if let Some(&sim) = semantic_scores.get(&node_id) {
-                    // Boost: add up to 0.15 to normalized score (max 15% boost)
-                    let boost = (sim - 0.3) * 0.2; // Maps 0.3-1.0 → 0.0-0.14
-                    result.match_score = (result.match_score + boost).min(1.0);
-                    result.match_reason = format!("{} + semantically relevant", result.match_reason);
-                    result.semantic_score = Some((sim * 100.0).round() / 100.0);
-                }
-            }
-        }
+                let Some(ss) = society_scores.get(&node_id) else { continue };
 
-        // Inject semantic-only matches: high similarity but not in text results
-        let existing_ids: Vec<String> = results.iter().map(|r| r.card.id.clone()).collect();
-        for (node_id, sim) in &semantic_scores {
-            if *sim <= 0.5 {
-                continue; // Only inject high-confidence semantic matches
+                // Normalize society score (0–5 range typically) to 0–1
+                let normalized = (ss.score / 5.0).min(1.0);
+
+                // Blend: 60% society score + 40% existing text score
+                result.match_score = (normalized as f64 * 0.6 + result.match_score * 0.4).min(1.0);
+                result.match_label = match_label_from_score(result.match_score);
+                result.society_score = Some(normalized);
+                result.society_confidence = Some(confidence_label(ss.confidence));
+                result.concerns = ss.concerns.clone();
+                result.unmatched_preferences = ss.unmatched_preferences.clone();
+
+                // Synthesize explanation card from society score
+                let facts_consulted = graph
+                    .get_node(&node_id)
+                    .map(|n| n.facts.len())
+                    .unwrap_or(0);
+                let source_types: Vec<String> = graph
+                    .get_node(&node_id)
+                    .map(|n| {
+                        n.facts.iter()
+                            .map(|f| format!("{:?}", f.source.source_type))
+                            .collect::<std::collections::HashSet<_>>()
+                            .into_iter()
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                result.explanation_card = Some(synthesize_explanation(ss, facts_consulted, &source_types));
             }
-            // Find properties in this society that aren't already in results
-            for prop in properties.iter() {
-                let prop_node_id = society_node_id(&prop.society_id);
-                if prop_node_id != *node_id || existing_ids.contains(&prop.id) {
-                    continue;
-                }
-                // Check hard constraints still apply
+
+            // Re-sort by updated scores
+            results.sort_by(|a, b| {
+                b.match_score
+                    .partial_cmp(&a.match_score)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            });
+        }
+        drop(graph);
+        drop(properties);
+    }
+    let scoring_ms = scoring_start.elapsed().as_millis() as u64;
+
+    // --- Semantic recall → also_consider ---
+    // Embeddings serve recall only; primary ranking is pure graph-fact scoring.
+    // Trigger when results are sparse or weak (not when query has strong matches).
+    let mut also_consider: Vec<crate::search::SearchResultCard> = Vec::new();
+
+    let primary_strong = results.len() >= 5
+        && results.iter().map(|r| r.match_score).fold(0.0f64, f64::max) >= 0.6;
+
+    if !primary_strong && !semantic_scores.is_empty() {
+        let properties = state.properties.read().await;
+        let graph = state.knowledge.read().await;
+
+        let already_shown: std::collections::HashSet<String> = results
+            .iter()
+            .filter_map(|r| {
+                properties.iter()
+                    .find(|p| p.id == r.card.id)
+                    .map(|p| society_node_id(&p.society_id))
+            })
+            .collect();
+
+        // Sort by similarity score descending, take top candidates
+        let mut sim_candidates: Vec<(&String, f64)> = semantic_scores
+            .iter()
+            .filter(|(node_id, _)| !already_shown.contains(*node_id))
+            .map(|(id, &sim)| (id, sim))
+            .collect();
+        sim_candidates.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        for (node_id, sim) in sim_candidates.iter().take(10) {
+            if also_consider.len() >= 5 { break; }
+
+            // Find a representative property for this society that passes hard constraints
+            let Some(prop) = properties.iter().find(|p| {
+                let prop_node_id = society_node_id(&p.society_id);
+                if prop_node_id != **node_id { return false; }
                 if let Some(bhk) = parsed_intent.bhk {
-                    if prop.bhk != bhk { continue; }
+                    if p.bhk != bhk { return false; }
                 }
                 if let Some(budget) = parsed_intent.budget_max {
-                    if prop.price > budget { continue; }
+                    if p.price > budget { return false; }
                 }
+                true
+            }) else { continue };
 
-                let graph = state.knowledge.read().await;
-                let card = crate::routes::enrichment::enrich_property_card(
-                    prop, &state.societies, &graph,
-                );
-                drop(graph);
+            let card = crate::routes::enrichment::enrich_property_card(prop, &state.societies, &graph);
 
-                results.push(crate::search::SearchResultCard {
-                    card,
-                    match_score: (*sim * 0.5).min(0.6), // Semantic-only gets moderate score
-                    match_label: "Semantic match".to_string(),
-                    match_reason: "Semantically similar to your search".to_string(),
-                    match_explanation: None,
-                    semantic_score: Some((*sim * 100.0).round() / 100.0),
-                });
-                break; // One property per society for injection
-            }
+            // Score via graph facts so the result has proper explanation
+            let society_id_str = prop.society_id.clone();
+            let society_ids_slice = vec![society_id_str];
+            let ss_map = score_all_societies(&graph, &society_ids_slice, &parsed_intent);
+            let ss = ss_map.get(node_id.as_str());
+
+            let (society_score, society_confidence, concerns, unmatched, explanation_card) = if let Some(ss) = ss {
+                let normalized = (ss.score / 5.0).min(1.0);
+                let facts_consulted = graph.get_node(node_id).map(|n| n.facts.len()).unwrap_or(0);
+                let source_types: Vec<String> = graph.get_node(node_id)
+                    .map(|n| n.facts.iter()
+                        .map(|f| format!("{:?}", f.source.source_type))
+                        .collect::<std::collections::HashSet<_>>()
+                        .into_iter().collect())
+                    .unwrap_or_default();
+                let exp = synthesize_explanation(ss, facts_consulted, &source_types);
+                (
+                    Some(normalized as f32),
+                    Some(confidence_label(ss.confidence)),
+                    ss.concerns.clone(),
+                    ss.unmatched_preferences.clone(),
+                    Some(exp),
+                )
+            } else {
+                (None, None, Vec::new(), Vec::new(), None)
+            };
+
+            let score = (sim * 0.5) as f64; // Recall score, not ranking signal
+            also_consider.push(crate::search::SearchResultCard {
+                card,
+                match_score: score,
+                match_label: "Similar profile".to_string(),
+                match_reason: "Semantically similar to your search preferences".to_string(),
+                match_explanation: None,
+                semantic_score: Some((*sim * 100.0).round() / 100.0),
+                society_score,
+                society_confidence,
+                concerns,
+                unmatched_preferences: unmatched,
+                explanation_card,
+            });
         }
 
+        drop(graph);
         drop(properties);
-
-        // Re-sort by updated scores
-        results.sort_by(|a, b| {
-            b.match_score
-                .partial_cmp(&a.match_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
     }
 
     // --- Live Discovery: if results are poor, discover on-the-fly ---
@@ -336,6 +452,65 @@ pub async fn search_properties(
         });
     }
 
+    let total_latency_ms = request_start.elapsed().as_millis() as u64;
+
+    // Build debug trace if requested
+    let debug = if debug_mode {
+        let societies_debug: Vec<SocietyDebugScore> = results.iter().take(10).map(|r| {
+            let preference_scores: Vec<PreferenceDebugScore> = parsed_intent
+                .positive_preferences.iter()
+                .chain(parsed_intent.negative_preferences.iter())
+                .map(|pref| {
+                    let matched = r.explanation_card.as_ref()
+                        .and_then(|ec| ec.why_matches.iter().find(|wm| wm.preference == pref.raw_text));
+                    PreferenceDebugScore {
+                        preference: pref.raw_text.clone(),
+                        polarity: format!("{:?}", pref.polarity),
+                        matched_fact_key: matched.map(|_| pref.canonical_key.clone()),
+                        matched_fact_value: matched.map(|wm| wm.text.clone()),
+                        raw_score: r.society_score.unwrap_or(0.0),
+                        weighted_score: r.society_score.unwrap_or(0.0) * pref.weight,
+                        source: r.society_confidence.clone(),
+                        confidence: r.society_score.unwrap_or(0.0),
+                    }
+                })
+                .collect();
+
+            SocietyDebugScore {
+                society_id: r.card.id.clone(),
+                society_name: r.card.title.clone(),
+                final_score: r.society_score.unwrap_or(0.0),
+                confidence: r.society_score.unwrap_or(0.0),
+                archetype_modifier: if parsed_intent.buyer_archetype.is_some() { 1.0 } else { 0.0 },
+                area_signals_used: Vec::new(),
+                facts_consulted: r.explanation_card.as_ref()
+                    .map(|ec| ec.evidence_summary.facts_consulted)
+                    .unwrap_or(0),
+                preference_scores,
+            }
+        }).collect();
+
+        Some(SearchDebugTrace {
+            timestamp: chrono::Utc::now().to_rfc3339(),
+            query: query.clone(),
+            candidate_count: total_results,
+            also_consider_triggered: !also_consider.is_empty(),
+            also_consider_reason: if !also_consider.is_empty() {
+                Some("Sparse or weak primary results".to_string())
+            } else {
+                None
+            },
+            discovery_triggered: discovery_status.as_deref() == Some("discovered_new"),
+            total_latency_ms,
+            intent_parse_ms,
+            scoring_ms,
+            embedding_ms,
+            societies_scored: societies_debug,
+        })
+    } else {
+        None
+    };
+
     Json(SearchResponse {
         query,
         intent: parsed_intent,
@@ -345,6 +520,8 @@ pub async fn search_properties(
         knowledge_context: Some(knowledge_context),
         discovery_status,
         discovery_count,
+        also_consider,
+        debug,
     })
 }
 
@@ -675,4 +852,17 @@ fn extract_numeric_value(value: &crate::knowledge::FactValue) -> Option<f64> {
         crate::knowledge::FactValue::Numeric(n) => Some(*n),
         _ => None,
     }
+}
+
+fn match_label_from_score(score: f64) -> String {
+    if score >= 0.75 { "Strong match".to_string() }
+    else if score >= 0.5 { "Good match".to_string() }
+    else if score >= 0.25 { "Partial match".to_string() }
+    else { "Weak match".to_string() }
+}
+
+fn confidence_label(confidence: f32) -> String {
+    if confidence >= 0.7 { "high".to_string() }
+    else if confidence >= 0.4 { "medium".to_string() }
+    else { "low".to_string() }
 }

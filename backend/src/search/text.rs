@@ -215,6 +215,11 @@ impl TextSearch {
                     match_reason,
                     match_explanation,
                     semantic_score: None,
+                    society_score: None,
+                    society_confidence: None,
+                    concerns: Vec::new(),
+                    unmatched_preferences: Vec::new(),
+                    explanation_card: None,
                 })
             })
             .collect();

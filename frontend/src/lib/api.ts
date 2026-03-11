@@ -45,8 +45,9 @@ export function getShortlist(): Promise<ShortlistResponse> {
   return fetchJson("/api/shortlist");
 }
 
-export function searchProperties(query: string): Promise<SearchResponse> {
-  return fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
+export function searchProperties(query: string, debug = false): Promise<SearchResponse> {
+  const debugParam = debug ? "&debug=true" : "";
+  return fetchJson(`/api/search?q=${encodeURIComponent(query)}${debugParam}`);
 }
 
 export function searchSocieties(query: string): Promise<SocietySearchResponse> {

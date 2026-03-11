@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, useNavigate, Link } from "react-router-dom";
-import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
+import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, ExplanationCard, SearchDebugTrace } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { formatSearchSummary } from "../lib/search.ts";
@@ -233,10 +233,11 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, onQuickView, isComparing, onToggleCompare }: {
+function CardA({ property, match, explanation, explanationCard, onQuickView, isComparing, onToggleCompare }: {
   property: PropertyCardType;
   match?: MatchResult;
   explanation?: MatchExplanation;
+  explanationCard?: ExplanationCard;
   onQuickView?: (id: string) => void;
   isComparing?: boolean;
   onToggleCompare?: (id: string) => void;
@@ -318,6 +319,11 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
           {/* Structured match explanation — preference pills + reason badges */}
           {explanation && explanation.preference_coverage.length > 0 && (
             <MatchExplanationBlock explanation={explanation} />
+          )}
+
+          {/* Society-scored explanation card — why/concerns/gaps */}
+          {explanationCard && !explanation && (
+            <ExplanationCardPanel card={explanationCard} />
           )}
 
           <div className="card-a-signals">
@@ -449,6 +455,190 @@ function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation 
   );
 }
 
+/* ---------- Explanation Card Panel ---------- */
+
+const CONFIDENCE_STYLES: Record<string, { bg: string; color: string; border: string }> = {
+  high:   { bg: "rgba(42,122,42,0.07)",   color: "#2a7a2a", border: "rgba(42,122,42,0.18)" },
+  medium: { bg: "rgba(59,89,152,0.07)",   color: "#3b5998", border: "rgba(59,89,152,0.18)" },
+  low:    { bg: "rgba(180,100,20,0.07)",  color: "#8a6d00", border: "rgba(180,100,20,0.18)" },
+};
+
+const STRENGTH_DOT: Record<string, string> = {
+  strong:   "#2a7a2a",
+  moderate: "#3b5998",
+  limited:  "#aaa",
+};
+
+function ExplanationCardPanel({ card }: { card: ExplanationCard }) {
+  const [expanded, setExpanded] = useState(false);
+  const confStyle = CONFIDENCE_STYLES[card.confidenceLabel] ?? CONFIDENCE_STYLES.medium;
+
+  const hasContent = card.whyMatches.length > 0 || card.concerns.length > 0 || card.unmatched.length > 0;
+  if (!hasContent) return null;
+
+  const visibleMatches = expanded ? card.whyMatches : card.whyMatches.slice(0, 2);
+  const extraCount = card.whyMatches.length - 2;
+
+  return (
+    <div style={{
+      marginTop: "0.6rem",
+      borderTop: "1px solid var(--color-border)",
+      paddingTop: "0.55rem",
+    }}>
+      {/* Confidence badge */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.45rem" }}>
+        <span style={{
+          fontSize: "0.68rem",
+          fontWeight: 600,
+          padding: "0.15rem 0.45rem",
+          borderRadius: "5px",
+          backgroundColor: confStyle.bg,
+          color: confStyle.color,
+          border: `1px solid ${confStyle.border}`,
+          textTransform: "uppercase",
+          letterSpacing: "0.03em",
+        }}>
+          {card.confidenceLabel} confidence
+        </span>
+      </div>
+
+      {/* Why it matches */}
+      {visibleMatches.length > 0 && (
+        <div style={{ marginBottom: card.concerns.length > 0 || card.unmatched.length > 0 ? "0.4rem" : 0 }}>
+          {visibleMatches.map((r, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem", marginBottom: "0.25rem" }}>
+              <span style={{
+                width: 7,
+                height: 7,
+                borderRadius: "50%",
+                backgroundColor: STRENGTH_DOT[r.evidenceStrength] ?? "#aaa",
+                flexShrink: 0,
+                marginTop: "0.35rem",
+              }} />
+              <span style={{ fontSize: "0.76rem", color: "var(--color-text)", lineHeight: 1.5 }}>
+                {r.text}
+              </span>
+            </div>
+          ))}
+          {!expanded && extraCount > 0 && (
+            <button
+              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(true); }}
+              style={{ background: "none", border: "none", color: "#3b5998", fontSize: "0.72rem", cursor: "pointer", padding: "0.1rem 0", fontFamily: "inherit" }}
+            >
+              +{extraCount} more {extraCount === 1 ? "reason" : "reasons"}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Concerns */}
+      {card.concerns.length > 0 && (
+        <div style={{ marginBottom: card.unmatched.length > 0 ? "0.35rem" : 0 }}>
+          {card.concerns.map((c, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "flex-start", gap: "0.35rem", marginBottom: "0.2rem" }}>
+              <span style={{
+                fontSize: "0.7rem",
+                fontWeight: 600,
+                color: c.severity === "warning" ? "#b33" : "#8a6d00",
+                flexShrink: 0,
+                marginTop: "0.15rem",
+              }}>
+                {c.severity === "warning" ? "!" : "~"}
+              </span>
+              <span style={{ fontSize: "0.75rem", color: c.severity === "warning" ? "#8a3030" : "#7a5a00", lineHeight: 1.5 }}>
+                {c.text}
+                {c.note && <span style={{ color: "var(--color-text-muted)", marginLeft: "0.25rem" }}>({c.note})</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Gaps */}
+      {card.unmatched.length > 0 && (
+        <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.1rem 0 0", lineHeight: 1.5 }}>
+          No data on: {card.unmatched.join(", ")}
+        </p>
+      )}
+
+      {/* Evidence footer */}
+      {card.evidenceSummary.factsConsulted > 0 && (
+        <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", margin: "0.35rem 0 0", lineHeight: 1.4 }}>
+          Based on {card.evidenceSummary.factsConsulted} facts
+          {card.evidenceSummary.sources.length > 0 && ` from ${card.evidenceSummary.sources.join(", ")}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Debug Panel (dev mode only) ---------- */
+
+function DebugPanel({ trace }: { trace: SearchDebugTrace }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div style={{
+      background: "#0d0d0d",
+      color: "#e8e8e8",
+      borderRadius: "8px",
+      padding: "1rem 1.25rem",
+      marginBottom: "1.25rem",
+      fontFamily: "monospace",
+      fontSize: "0.75rem",
+      lineHeight: 1.6,
+    }}>
+      <div
+        style={{ cursor: "pointer", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+        onClick={() => setExpanded(p => !p)}
+      >
+        <span style={{ color: "#7ef", fontWeight: 700 }}>
+          DEBUG {expanded ? "▲" : "▼"}
+        </span>
+        <span style={{ color: "#aaa" }}>
+          total={trace.total_latency_ms}ms · intent={trace.intent_parse_ms}ms · scoring={trace.scoring_ms}ms · embed={trace.embedding_ms}ms
+        </span>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: "0.75rem" }}>
+          {/* Timing */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <span style={{ color: "#7ef" }}>Timing</span>
+            <br />
+            <span>total={trace.total_latency_ms}ms | intent={trace.intent_parse_ms}ms | scoring={trace.scoring_ms}ms | embedding={trace.embedding_ms}ms</span>
+          </div>
+
+          {/* Flags */}
+          <div style={{ marginBottom: "0.75rem" }}>
+            <span style={{ color: "#7ef" }}>Flags</span>
+            <br />
+            <span>candidates={trace.candidate_count} | also_consider={trace.also_consider_triggered ? "yes" : "no"} | discovery={trace.discovery_triggered ? "yes" : "no"}</span>
+          </div>
+
+          {/* Per-result breakdown */}
+          {trace.societies_scored.length > 0 && (
+            <div>
+              <span style={{ color: "#7ef" }}>Top results score breakdown</span>
+              {trace.societies_scored.map((s, i) => (
+                <div key={i} style={{ borderTop: "1px solid #333", marginTop: "0.5rem", paddingTop: "0.5rem" }}>
+                  <div style={{ color: "#cf8" }}>#{i + 1} {s.society_name} — score={s.final_score.toFixed(3)} conf={s.confidence.toFixed(2)} facts={s.facts_consulted}</div>
+                  {s.preference_scores.map((p, j) => (
+                    <div key={j} style={{ paddingLeft: "1rem", color: p.matched_fact_key ? "#afa" : "#888" }}>
+                      [{p.polarity}] {p.preference}: raw={p.raw_score.toFixed(3)} weighted={p.weighted_score.toFixed(3)}
+                      {p.matched_fact_key && ` → ${p.matched_fact_key}`}
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------- Results Page ---------- */
 
 export function ResultsPageA() {
@@ -478,6 +668,7 @@ export function ResultsPageA() {
   const navigate = useNavigate();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
+  const debugMode = import.meta.env.DEV && searchParams.get("debug") === "true";
   const [searchInput, setSearchInput] = useState(query);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -513,7 +704,7 @@ export function ResultsPageA() {
     setSearchFailed(false);
 
     if (query) {
-      searchProperties(query)
+      searchProperties(query, debugMode)
         .then((data) => {
           setSearchResponse(data);
           setStatus("ok");
@@ -538,7 +729,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; explanationCard?: ExplanationCard }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -547,6 +738,7 @@ export function ResultsPageA() {
           reason: r.match_reason,
         },
         explanation: r.match_explanation,
+        explanationCard: r.explanationCard,
       }));
     }
     // No query — show all properties without match labels
@@ -558,6 +750,7 @@ export function ResultsPageA() {
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
+  const alsoConsider = useBackendResults ? (searchResponse.also_consider ?? []) : [];
 
   if (status === "loading") return <PageState variant="loading" context="results" />;
   if (status === "error") {
@@ -709,6 +902,9 @@ export function ResultsPageA() {
         </div>
       )}
 
+      {/* Debug panel — dev mode only, shown when ?debug=true is in URL */}
+      {debugMode && searchResponse?.debug && <DebugPanel trace={searchResponse.debug} />}
+
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
 
@@ -718,12 +914,13 @@ export function ResultsPageA() {
         className={panelPropertyId ? "results-grid--panel-open" : ""}
         style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
-        {matchResults.map(({ property, match, explanation }) => (
+        {matchResults.map(({ property, match, explanation, explanationCard }) => (
           <CardA
             key={property.id}
             property={property}
             match={match}
             explanation={explanation}
+            explanationCard={explanationCard}
             onQuickView={setPanelPropertyId}
             isComparing={compareIds.includes(property.id)}
             onToggleCompare={(id) => {
@@ -736,6 +933,46 @@ export function ResultsPageA() {
           />
         ))}
       </div>
+
+      {/* Also Consider — semantically similar societies outside explicit filters */}
+      {alsoConsider.length > 0 && (
+        <div style={{ marginTop: "2rem", marginBottom: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", marginBottom: "0.75rem" }}>
+            <div style={{ flex: 1, height: 1, backgroundColor: "var(--color-border)" }} />
+            <span style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>
+              Also Consider
+            </span>
+            <div style={{ flex: 1, height: 1, backgroundColor: "var(--color-border)" }} />
+          </div>
+          <p style={{ fontSize: "0.76rem", color: "var(--color-text-muted)", margin: "0 0 0.75rem", lineHeight: 1.5 }}>
+            These properties are semantically similar to your search but outside your explicit filters.
+          </p>
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
+            gap: "1rem",
+            opacity: 0.85,
+          }}>
+            {alsoConsider.map((r) => (
+              <CardA
+                key={r.id}
+                property={r as PropertyCardType}
+                match={{ label: "Similar profile" as MatchResult["label"], reason: r.match_reason }}
+                explanationCard={r.explanationCard}
+                onQuickView={setPanelPropertyId}
+                isComparing={compareIds.includes(r.id)}
+                onToggleCompare={(id) => {
+                  setCompareIds(prev =>
+                    prev.includes(id)
+                      ? prev.filter(x => x !== id)
+                      : prev.length < MAX_COMPARE ? [...prev, id] : prev
+                  );
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Side panel — quick view */}
       {panelPropertyId && !showCompare && (() => {

@@ -1,5 +1,6 @@
 pub mod admin;
 pub mod areas;
+pub mod debug;
 pub mod enrichment;
 pub mod knowledge;
 pub mod properties;

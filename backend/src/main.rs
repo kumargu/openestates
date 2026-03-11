@@ -116,6 +116,8 @@ async fn main() {
             "/api/knowledge/embeddings/stats",
             get(routes::knowledge::embedding_stats),
         )
+        // Debug endpoints — gated by ENABLE_DEBUG_API=true
+        .route("/api/debug/score", get(routes::debug::score_debug))
         .layer(cors)
         .with_state(state);
 

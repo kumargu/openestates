@@ -39,6 +39,11 @@ impl fmt::Display for NodeType {
     }
 }
 
+/// The 6 scoring dimensions used for aspect embeddings.
+pub const ASPECT_NAMES: &[&str] = &[
+    "livability", "family", "risk", "investment", "environment", "infrastructure",
+];
+
 /// A node in the knowledge graph.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Node {
@@ -47,9 +52,13 @@ pub struct Node {
     pub name: String,
     /// Structured facts with provenance
     pub facts: Vec<SourcedFact>,
-    /// Optional summary embedding for semantic search (768-dim)
+    /// Summary embedding for backward-compat semantic search (768-dim)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary_embedding: Option<Vec<f32>>,
+    /// Per-aspect embeddings: aspect_name → 768-dim vector.
+    /// When present, used instead of summary_embedding for aspect-aware recall.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub aspect_embeddings: Option<std::collections::HashMap<String, Vec<f32>>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -63,6 +72,7 @@ impl Node {
             name: name.into(),
             facts: Vec::new(),
             summary_embedding: None,
+            aspect_embeddings: None,
             created_at: now,
             updated_at: now,
         }
