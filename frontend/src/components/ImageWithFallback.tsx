@@ -26,10 +26,14 @@ export function ImageWithFallback({
   src,
   alt,
   style,
+  className,
+  loading = "lazy",
 }: {
   src: string | null;
   alt: string;
   style?: React.CSSProperties;
+  className?: string;
+  loading?: "lazy" | "eager";
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -40,7 +44,9 @@ export function ImageWithFallback({
     const initials = getInitials(alt);
     return (
       <div
-        className="image-placeholder"
+        className={`image-placeholder${className ? ` ${className}` : ""}`}
+        role="img"
+        aria-label={alt}
         style={{
           ...style,
           background: `linear-gradient(135deg, ${bg}, ${bg}dd)`,
@@ -65,7 +71,9 @@ export function ImageWithFallback({
     <img
       src={src}
       alt={alt}
+      className={className}
       style={{ objectFit: "cover", ...style }}
+      loading={loading}
       onError={() => setFailed(true)}
     />
   );

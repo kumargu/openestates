@@ -17,9 +17,37 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class RetryPolicy:
+    """Configuration for retry behavior on transient failures."""
+    max_retries: int = 3
+    base_delay: float = 1.0
+    max_delay: float = 30.0
+    backoff_factor: float = 2.0
+    retryable_exceptions: Tuple[Type[BaseException], ...] = (
+        ConnectionError,
+        TimeoutError,
+        OSError,  # covers URLError, socket errors, etc.
+    )
+
+
+class SkillExecutionError(Exception):
+    """Wraps a skill failure after all retries are exhausted."""
+
+    def __init__(self, skill_id: str, original_error: BaseException, attempts: int, elapsed: float):
+        self.skill_id = skill_id
+        self.original_error = original_error
+        self.attempts = attempts
+        self.elapsed = elapsed
+        super().__init__(
+            f"Skill '{skill_id}' failed after {attempts} attempt(s) "
+            f"in {elapsed:.1f}s: {original_error}"
+        )
 
 
 @dataclass
@@ -121,6 +149,7 @@ class BaseSkill(ABC):
     description: str = ""
     version: str = "1.0"
     output_keys: list = []  # Fact keys this skill produces (for cheap gap detection)
+    retry_policy: RetryPolicy = RetryPolicy()  # Overridable by subclasses
 
     def __init__(self, cache_dir: Optional[Path] = None):
         self.cache_dir = cache_dir or Path("data/cache/skills")
@@ -196,34 +225,87 @@ class BaseSkill(ABC):
         """Estimated cost for one execution."""
         ...
 
-    def run(self, input_data: dict, force: bool = False) -> SkillResult:
+    def run(self, input_data: dict, force: bool = False, max_retries: Optional[int] = None) -> SkillResult:
         """
-        Run the skill with caching.
+        Run the skill with caching and retry.
 
         Args:
             input_data: Skill-specific input.
             force: Skip cache check.
+            max_retries: Override retry_policy.max_retries for this call.
 
         Returns:
             SkillResult with facts, edges, and cost.
+
+        Raises:
+            SkillExecutionError: If all retries are exhausted on a retryable error.
         """
         if not force:
             cached = self._check_cache(input_data)
             if cached:
                 return cached
 
+        policy = self.retry_policy
+        attempts = max_retries if max_retries is not None else policy.max_retries
+        attempts = max(attempts, 1)  # At least one attempt
+
         start = time.time()
         logger.info("[%s] Executing for input: %s", self.skill_id, input_data)
 
-        result = self.execute(input_data)
-        result.cost.estimated_usd = max(result.cost.estimated_usd, 0.0)
+        last_error: Optional[BaseException] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                result = self.execute(input_data)
+                result.cost.estimated_usd = max(result.cost.estimated_usd, 0.0)
 
-        duration = time.time() - start
-        logger.info(
-            "[%s] Done in %.1fs: %d facts, %d edges, $%.4f",
-            self.skill_id, duration, len(result.facts), len(result.edges),
-            result.cost.estimated_usd,
+                duration = time.time() - start
+                if attempt > 1:
+                    logger.info(
+                        "[%s] Succeeded on attempt %d/%d in %.1fs",
+                        self.skill_id, attempt, attempts, duration,
+                    )
+                logger.info(
+                    "[%s] Done in %.1fs: %d facts, %d edges, $%.4f",
+                    self.skill_id, duration, len(result.facts), len(result.edges),
+                    result.cost.estimated_usd,
+                )
+
+                self._write_cache(input_data, result)
+                return result
+
+            except policy.retryable_exceptions as e:
+                last_error = e
+                elapsed = time.time() - start
+                if attempt < attempts:
+                    delay = min(
+                        policy.base_delay * (policy.backoff_factor ** (attempt - 1)),
+                        policy.max_delay,
+                    )
+                    logger.warning(
+                        "[%s] Attempt %d/%d failed (%.1fs elapsed): %s — retrying in %.1fs",
+                        self.skill_id, attempt, attempts, elapsed, e, delay,
+                    )
+                    time.sleep(delay)
+                else:
+                    logger.error(
+                        "[%s] All %d attempts failed (%.1fs elapsed): %s",
+                        self.skill_id, attempts, elapsed, e,
+                    )
+                    raise SkillExecutionError(
+                        skill_id=self.skill_id,
+                        original_error=e,
+                        attempts=attempts,
+                        elapsed=elapsed,
+                    ) from e
+
+            except Exception:
+                # Non-retryable: raise immediately
+                raise
+
+        # Should not reach here, but safety net
+        raise SkillExecutionError(
+            skill_id=self.skill_id,
+            original_error=last_error or RuntimeError("Unknown failure"),
+            attempts=attempts,
+            elapsed=time.time() - start,
         )
-
-        self._write_cache(input_data, result)
-        return result

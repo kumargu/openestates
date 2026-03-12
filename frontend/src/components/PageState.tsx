@@ -5,7 +5,7 @@ type Variant = "loading" | "error" | "empty" | "not_found" | "backend_unavailabl
 interface PageStateProps {
   variant: Variant;
   message?: string;
-  context?: "results" | "shortlist" | "property" | "generic";
+  context?: "results" | "shortlist" | "property" | "society" | "generic";
 }
 
 const contextMessages: Record<string, Record<Variant, { title: string; subtitle: string; actions?: { label: string; path: string }[] }>> = {
@@ -76,6 +76,34 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       subtitle: "This listing may no longer be available or the link may be incorrect.",
       actions: [
         { label: "Browse properties", path: "/results" },
+        { label: "Return home", path: "/" },
+      ],
+    },
+  },
+  society: {
+    loading: { title: "Ranking societies...", subtitle: "Evaluating societies across multiple dimensions." },
+    error: {
+      title: "Society results unavailable",
+      subtitle: "We couldn't load society rankings right now. Please try again later.",
+      actions: [
+        { label: "Retry", path: "/societies" },
+        { label: "Return home", path: "/" },
+      ],
+    },
+    backend_unavailable: {
+      title: "Society results unavailable",
+      subtitle: "We couldn't load society rankings right now. Please try again later.",
+      actions: [
+        { label: "Retry", path: "/societies" },
+        { label: "Return home", path: "/" },
+      ],
+    },
+    empty: { title: "No societies match", subtitle: "Try adjusting your search criteria or explore a different area.", actions: [{ label: "Browse societies", path: "/societies" }] },
+    not_found: {
+      title: "Society not found",
+      subtitle: "This society may not be in our database yet.",
+      actions: [
+        { label: "Browse societies", path: "/societies" },
         { label: "Return home", path: "/" },
       ],
     },

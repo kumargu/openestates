@@ -161,7 +161,7 @@ export function ComparePanel({ cards, onClose, onRemove }: Props) {
         <div className="compare-panel-body">
           {/* Property header cards */}
           <div className="cmp-headers" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
-            {cards.map((card, i) => (
+            {cards.map((card) => (
               <div key={card.id} className="cmp-header-card">
                 <div className="cmp-header-img">
                   <ImageWithFallback

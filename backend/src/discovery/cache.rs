@@ -36,7 +36,7 @@ impl DiscoveryCache {
         let budget_str = budget_max.map_or("any".to_string(), |b| {
             // Bucket budgets to reduce cache fragmentation
             // e.g., 1.2cr and 1.3cr both map to "1cr-2cr"
-            let cr = b as f64 / 1_00_00_000.0;
+            let cr = b as f64 / 10_000_000.0;
             if cr <= 0.5 {
                 "under-50l".to_string()
             } else if cr <= 1.0 {
@@ -82,6 +82,7 @@ impl DiscoveryCache {
     }
 
     /// Evict expired entries.
+    #[allow(dead_code)]
     pub fn evict_expired(&mut self) {
         self.entries
             .retain(|_, entry| entry.discovered_at.elapsed() < self.ttl);

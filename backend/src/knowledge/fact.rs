@@ -118,11 +118,6 @@ pub enum SourceType {
 }
 
 impl SourceType {
-    /// Whether this source type is static (doesn't need periodic refresh).
-    pub fn is_static(&self) -> bool {
-        matches!(self, Self::Rera | Self::Bbmp | Self::Manual)
-    }
-
     /// Default confidence level for this source type.
     pub fn default_confidence(&self) -> f32 {
         match self {
@@ -160,29 +155,4 @@ impl SourcedFact {
         }
     }
 
-    /// Create a fact from a specific source type with default confidence.
-    pub fn from_source(
-        key: impl Into<String>,
-        value: FactValue,
-        source_type: SourceType,
-        skill_id: Option<String>,
-    ) -> Self {
-        Self {
-            key: key.into(),
-            value,
-            confidence: source_type.default_confidence(),
-            source: FactSource {
-                source_type,
-                url: None,
-                model: None,
-                skill_id,
-                triggered_by: None,
-            },
-            learned_at: Utc::now(),
-            version: 1,
-            display_template: None,
-            answers_preferences: Vec::new(),
-            scoring_hint: None,
-        }
-    }
 }

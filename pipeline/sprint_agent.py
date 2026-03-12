@@ -1,47 +1,37 @@
 """
-OpenEstates Sprint Agent — Autonomous day-by-day feature builder.
+OpenEstates Sprint Utilities — Checkpoint management and status.
 
-Two-layer agent architecture using `claude` CLI (zero Python dependencies):
-  PM Agent:      Envisions features, researches market, writes day specs
-  Builder Agent: Implements each day's spec with full codebase access
-  Verifier:      Checks acceptance criteria, runs build checks
-  Local Deploy:  cargo build + npm build + backend boot check + smoke tests
-  Orchestrator:  Python loop that sequences everything
+The orchestration happens via:
+  1. `run-sprint.sh` — bash loop, one Claude conversation per day (fire-and-forget)
+  2. `.claude/skills/run-sprint.md` — skill doc Claude reads for each day
+  3. This file — checkpoint/status utilities Claude calls via Bash
 
 Usage:
-  python3 -u pipeline/sprint_agent.py                           # auto-detect, run 1 day
-  python3 -u pipeline/sprint_agent.py --days 5                  # 5-day sprint
-  python3 -u pipeline/sprint_agent.py --start-day 31 --days 10  # days 31-40
-  python3 -u pipeline/sprint_agent.py --plan-only               # PM plans, no coding
-  python3 -u pipeline/sprint_agent.py --build-only              # skip planning, build existing
-  python3 -u pipeline/sprint_agent.py --status                  # show day status
-  python3 -u pipeline/sprint_agent.py --vision vision.md        # custom vision file
-  python3 -u pipeline/sprint_agent.py --dry-run                 # preview what would run
+  python3 pipeline/sprint_agent.py --status                    # show sprint + day status
+  python3 pipeline/sprint_agent.py --sprint-info               # show sprint boundaries
+  python3 pipeline/sprint_agent.py --sprint-info 2             # show sprint 2 details
+  python3 pipeline/sprint_agent.py --next-day                  # detect next day number
+  python3 pipeline/sprint_agent.py --mark-done 31              # mark day as complete
+  python3 pipeline/sprint_agent.py --mark-failed 31 --reason "build error in X"
+  python3 pipeline/sprint_agent.py --mark-step 31 plan         # mark step done
+  python3 pipeline/sprint_agent.py --resume-from 31            # which step to resume from
+  python3 pipeline/sprint_agent.py --checkpoint 31             # show checkpoint data
+  python3 pipeline/sprint_agent.py --checkpoint 31 --set k=v   # set checkpoint value
+  python3 pipeline/sprint_agent.py --checkpoint 31 --get k     # get checkpoint value
+  python3 pipeline/sprint_agent.py --load-context 31           # load context for a day
 
-Requirements:
-  - `claude` CLI installed (npm install -g @anthropic-ai/claude-code)
-  - Claude Max/Pro subscription OR ANTHROPIC_API_KEY in .env
+Sprint model: 5 sprints × 14 days = 70 days (day 31 to day 100).
+Days 1-30 are pre-sprint (prototype phase, already done).
 
-Notes:
-  - Use `python3 -u` for unbuffered output when monitoring overnight
-  - Checkpoints saved after every step — fully resumable with --resume
-  - Compatible with existing pipeline/checkpoints/ from agent.py
-  - Each agent invocation uses a fresh claude session
-  - Builder uses --dangerously-skip-permissions for autonomous operation
+No API keys or SDK needed — this is just a checkpoint/status helper.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import logging
-import os
-import subprocess
 import sys
-import time
-from datetime import date
 from pathlib import Path
-from typing import Optional
 
 # ---------------------------------------------------------------------------
 # Setup
@@ -49,160 +39,65 @@ from typing import Optional
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DAYS_DIR = PROJECT_ROOT / "days"
+STANDUPS_DIR = PROJECT_ROOT / "days" / "standups"
 CHECKPOINTS_DIR = PROJECT_ROOT / "pipeline" / "checkpoints"
 FEEDBACK_DIR = PROJECT_ROOT / "pipeline" / "feedback"
-LEARNINGS_DIR = PROJECT_ROOT / "pipeline" / "learnings"
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-    datefmt="%H:%M:%S",
-)
-log = logging.getLogger("sprint")
+# ---------------------------------------------------------------------------
+# Sprint model: 5 sprints × 14 days covering days 31-100
+# ---------------------------------------------------------------------------
+
+SPRINTS = [
+    {
+        "id": 1,
+        "name": "Buyer Experience & Foundation",
+        "days": (31, 44),
+        "theme": "Make discovery shareable, trustworthy, and mobile-ready.",
+    },
+    {
+        "id": 2,
+        "name": "Seller-Buyer Connection",
+        "days": (45, 58),
+        "theme": "Connect buyers and sellers. Every click matters.",
+    },
+    {
+        "id": 3,
+        "name": "Search Intelligence & Marketplace",
+        "days": (59, 72),
+        "theme": "Search that genuinely helps. The marketplace converts.",
+    },
+    {
+        "id": 4,
+        "name": "Performance & Data Expansion",
+        "days": (73, 86),
+        "theme": "Fast now, ready for 10x. More data, better data.",
+    },
+    {
+        "id": 5,
+        "name": "Launch-Ready Polish",
+        "days": (87, 100),
+        "theme": "Ship-quality product.",
+    },
+]
 
 
-def _load_dotenv():
-    env_file = PROJECT_ROOT / ".env"
-    if not env_file.exists():
-        return
-    for line in env_file.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip()
-        if key and not os.environ.get(key):
-            os.environ[key] = value
+def get_sprint_for_day(day: int) -> dict | None:
+    """Return the sprint a day belongs to, or None."""
+    for s in SPRINTS:
+        if s["days"][0] <= day <= s["days"][1]:
+            return s
+    return None
 
 
-_load_dotenv()
-
-
-def _claude_env() -> dict:
-    """Env for claude CLI calls — remove CLAUDECODE to allow nesting."""
-    env = os.environ.copy()
-    env.pop("CLAUDECODE", None)
-    return env
+def get_sprint_by_id(sprint_id: int) -> dict | None:
+    for s in SPRINTS:
+        if s["id"] == sprint_id:
+            return s
+    return None
 
 
 # ---------------------------------------------------------------------------
-# Company pillars — system prompt for all agents
-# ---------------------------------------------------------------------------
-
-COMPANY_PILLARS = """\
-You are building OpenEstates — a transparency-first property discovery platform.
-Target market: India (Bengaluru first, then expanding).
-
-PILLARS (non-negotiable in every decision):
-
-1. TRANSPARENCY: Every ranking, score, recommendation must be explainable.
-   No hidden magic. Users see WHY a property ranks where it does.
-   Every fact carries provenance (SourcedFact pattern).
-
-2. RICH UI: Premium, calm, Hinge-meets-Robinhood feel. Every component
-   should reduce ambiguity and aid comparison. Property pages feel like
-   Bloomberg terminals for homes — data-rich but not overwhelming.
-
-3. SLEEK UI: Minimal, modern, no clutter. White space is a feature.
-   Animations are subtle. Typography is clean. Colors are muted.
-
-4. LATENCY SENSITIVITY: Users feel delays >200ms. Cache aggressively.
-   Optimistic UI. Stream where possible. Backend responses <100ms for
-   cached data. Live discovery can be slower but must show progress.
-
-5. CONTEXT > FILTERS: Search by intent ("quiet family area near good schools"),
-   not dropdowns. The search engine understands preferences, tradeoffs,
-   and soft signals — not just price/BHK/area.
-
-CODING PRACTICES:
-- Rust+Axum backend (port 4000), React frontend (port 5173), Python pipeline
-- Explicit models, clean file boundaries, no premature abstractions
-- Every fact carries provenance (SourcedFact with display_template, scoring_hint)
-- Skills own the domain, Rust owns the runtime
-- Test before moving forward — cargo check, npm run build
-- No over-engineering: minimum complexity for the current task
-
-DETAILED CODING GUIDE:
-Read .claude/skills/coding-practices.md FIRST before writing any code.
-It contains the full quality bar: frontend design system, Rust hot-path rules,
-latency budgets (50ms warm / 200ms cold search), async patterns (tokio::join!,
-tokio::spawn, timeout-bounded enrichment), testing pyramid, cost sensitivity,
-and the pre-ship checklist.
-
-AVAILABLE SKILLS (use these, don't reinvent):
-When you need to do one of these tasks, read the corresponding skill file first.
-
-| Task | Skill File | What It Teaches |
-|------|-----------|-----------------|
-| Add a new Rust API endpoint | .claude/skills/add-api-endpoint.md | Route, handler, types, tests, frontend wiring |
-| Add a new data source/crawler | .claude/skills/add-crawler.md | BaseCrawler pattern, rate limits, caching |
-| Run AI enrichment on entities | .claude/skills/data-enrichment.md | Skills framework, SourcedFact, pushing to KG |
-| Debug pipeline failures | .claude/skills/debug-pipeline.md | Diagnosis flow, common failure modes |
-| Find missing knowledge gaps | .claude/skills/identify-gaps.md | Gap analysis, enrichment prioritization |
-| Rank societies for a query | .claude/skills/rank-for-intent.md | LLM-based ranking with evidence |
-| Score societies deterministically | .claude/skills/run-scoring.md | 7-dimension scoring engine |
-| Score a society with AI | .claude/skills/score-society.md | 6-dimension AI scoring with explanations |
-
-RULE: Before implementing anything, check if a skill file covers it.
-Skills save hours of figuring out patterns from scratch.\
-"""
-
-# ---------------------------------------------------------------------------
-# Default vision
-# ---------------------------------------------------------------------------
-
-DEFAULT_VISION = """\
-OpenEstates Vision — Phase by phase:
-
-PHASE 1 (Current): Search + Discovery
-- Natural language search that understands intent, not just keywords
-- Results with match explanations showing WHY each property ranks
-- Knowledge graph that learns from every search (the flywheel)
-- Live discovery via Gemini when data is missing
-- Progressive enrichment triggered by user interest
-
-PHASE 2: Property Intelligence
-- Property detail pages that feel like Bloomberg terminals for homes
-- Society quality scores with Reddit-sourced evidence
-- RERA verification status, builder track record
-- Area intelligence: noise, traffic, waterlogging, metro access
-- Conviction widgets that help users feel confident
-
-PHASE 3: Social Proof Layer
-- Reddit sentiment aggregation per society
-- Community-reported issues and praises
-- Builder reputation tracking across projects
-
-PHASE 4: Decision Tools
-- Shortlist and compare that reduces decision anxiety
-- Side-by-side comparison with tradeoff analysis
-- "What would you give up?" tradeoff exploration
-
-PHASE 5: Market Intelligence
-- Price trend tracking per area/society
-- "Is this a good deal?" confidence scoring
-- Supply-demand signals from listing velocity
-
-COMPETITIVE GAPS TO EXPLOIT:
-- 99acres/Housing.com: zero explanation of WHY results rank
-- MagicBricks: no society-level intelligence
-- NoBroker: good on brokerage, weak on area intelligence
-- None of them: Reddit/community signal integration
-- None of them: progressive enrichment that learns from searches\
-"""
-
-
-def load_vision(vision_path: Optional[str] = None) -> str:
-    if vision_path:
-        p = Path(vision_path)
-        if p.exists():
-            return p.read_text()
-        log.warning("Vision file %s not found, using default", vision_path)
-    return DEFAULT_VISION
-
-
-# ---------------------------------------------------------------------------
-# Checkpointing (compatible with existing agent.py)
+# Checkpointing
 # ---------------------------------------------------------------------------
 
 def checkpoint_path(day: int) -> Path:
@@ -226,752 +121,389 @@ def is_day_done(day: int) -> bool:
 
 
 def detect_next_day() -> int:
-    for d in range(1, 200):
-        plan_exists = (DAYS_DIR / f"day{d:02d}.md").exists()
-        done = is_day_done(d)
-        if done:
-            continue
-        return d
-    return 1
+    """Find the next day that isn't done, starting from day 31."""
+    for d in range(31, 101):
+        if not is_day_done(d):
+            return d
+    return 31
 
+
+# ---------------------------------------------------------------------------
+# Step-level checkpointing
+# ---------------------------------------------------------------------------
+
+# Ordered steps within a day. Each must complete before the next starts.
+DAY_STEPS = ["plan", "build", "verify"]
+
+
+def mark_step_done(day: int, step: str):
+    """Mark a step as completed for a day."""
+    cp = load_checkpoint(day)
+    steps_done = cp.get("steps_done", [])
+    if step not in steps_done:
+        steps_done.append(step)
+    save_checkpoint(day, {"steps_done": steps_done, "current_step": step})
+
+
+def get_resume_step(day: int) -> str:
+    """Return the step to resume from. If all done, returns 'done'."""
+    if is_day_done(day):
+        return "done"
+    cp = load_checkpoint(day)
+    steps_done = cp.get("steps_done", [])
+    for step in DAY_STEPS:
+        if step not in steps_done:
+            return step
+    return "done"
+
+
+def mark_day_failed(day: int, reason: str):
+    """Mark a day as failed with a reason that feeds into the next day's context."""
+    save_checkpoint(day, {
+        "code_success": False,
+        "failure_reason": reason,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Feedback loop — builder questions, tradeoffs, verifier observations
+# ---------------------------------------------------------------------------
+
+TRADEOFFS_FILE = PROJECT_ROOT / "docs" / "tradeoffs.md"
+
+
+def save_builder_feedback(day: int, feedback: dict):
+    """Save structured feedback from builder to checkpoint.
+
+    Expected keys:
+      questions:     list of strings — things the builder was unsure about
+      tradeoffs:     list of {decision, alternatives, reasoning} dicts
+      concerns:      list of strings — risks or issues noticed
+      data_gaps:     list of strings — missing data that affected the build
+    """
+    save_checkpoint(day, {"builder_feedback": feedback})
+
+
+def save_verifier_observations(day: int, observations: dict):
+    """Save verifier observations beyond pass/fail.
+
+    Expected keys:
+      passed:        bool
+      failures:      list of strings
+      warnings:      list of strings — things that technically pass but look wrong
+      suggestions:   list of strings — improvements for next day
+      data_quality:  list of strings — data issues noticed during verification
+    """
+    save_checkpoint(day, {"verification": observations})
+
+
+def append_tradeoff(day: int, decision: str, alternatives: str, reasoning: str):
+    """Append a tradeoff to the persistent tradeoffs log."""
+    TRADEOFFS_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+    entry = f"\n### Day {day}: {decision}\n"
+    entry += f"**Alternatives:** {alternatives}\n"
+    entry += f"**Reasoning:** {reasoning}\n"
+
+    if TRADEOFFS_FILE.exists():
+        content = TRADEOFFS_FILE.read_text()
+    else:
+        content = "# Design Tradeoffs Log\n\nAccumulated decisions across sprint days.\n"
+
+    content += entry
+    TRADEOFFS_FILE.write_text(content)
+
+
+def is_mid_sprint_review(day: int) -> bool:
+    """Check if this day is the mid-sprint review point (day 7 of 14)."""
+    sprint = get_sprint_for_day(day)
+    if not sprint:
+        return False
+    start = sprint["days"][0]
+    day_in_sprint = day - start + 1
+    return day_in_sprint == 8  # after 7 days done, review before day 8
+
+
+# ---------------------------------------------------------------------------
+# Status
+# ---------------------------------------------------------------------------
 
 def print_status():
-    print("\n  Day Status:")
-    found_any = False
-    for d in range(1, 200):
-        cp = load_checkpoint(d)
-        plan_exists = (DAYS_DIR / f"day{d:02d}.md").exists()
-        if not plan_exists and not cp:
-            if found_any:
-                break
-            continue
-        found_any = True
-        if cp.get("code_success"):
-            label = "DONE"
-        elif plan_exists:
-            label = "PLAN READY (code pending)"
-        elif cp.get("sprint_plan"):
-            label = "planned (not saved to file)"
-        else:
-            label = "not started"
-        print(f"    Day {d:02d}: {label}")
+    print("\n  OpenEstates Sprint Status (Days 31-100)")
+    print("  " + "=" * 50)
+
+    for sprint in SPRINTS:
+        start, end = sprint["days"]
+        done_count = sum(1 for d in range(start, end + 1) if is_day_done(d))
+        total = end - start + 1
+        pct = int(done_count / total * 100)
+        bar = "█" * (pct // 5) + "░" * (20 - pct // 5)
+
+        print(f"\n  Sprint {sprint['id']}: {sprint['name']}")
+        print(f"  Days {start}-{end} | {bar} {done_count}/{total} ({pct}%)")
+        print(f"  Theme: {sprint['theme']}")
+
+        # Show individual days
+        for d in range(start, end + 1):
+            cp = load_checkpoint(d)
+            plan_exists = (DAYS_DIR / f"day{d:02d}.md").exists()
+            standup_exists = (STANDUPS_DIR / f"day{d:02d}_standup.md").exists()
+
+            if cp.get("code_success"):
+                marker = "✓"
+                detail = cp.get("day_summary", "")[:50]
+                label = f"DONE  {detail}"
+            elif cp.get("code_success") is False and cp.get("failure_reason"):
+                marker = "✗"
+                label = f"FAILED: {cp['failure_reason'][:40]}"
+            elif cp.get("steps_done"):
+                steps = cp["steps_done"]
+                step_str = "+".join(steps)
+                marker = "◐"
+                label = f"PARTIAL [{step_str}] (resume: {get_resume_step(d)})"
+            elif cp.get("build_summary"):
+                marker = "◐"
+                label = "BUILD DONE (verify pending)"
+            elif plan_exists:
+                marker = "◯"
+                tag = " +standup" if standup_exists else ""
+                label = f"PLAN READY{tag}"
+            elif standup_exists:
+                marker = "◯"
+                label = "STANDUP DONE"
+            elif cp:
+                marker = "◯"
+                label = "in progress"
+            else:
+                marker = "·"
+                label = ""
+
+            if marker != "·" or d == detect_next_day():
+                if d == detect_next_day() and marker == "·":
+                    marker = "→"
+                    label = "NEXT"
+                print(f"    {marker} Day {d:02d}: {label}")
+
     print()
+
+
+def print_sprint_info(sprint_id: int | None = None):
+    """Print sprint boundaries and progress."""
+    if sprint_id:
+        s = get_sprint_by_id(sprint_id)
+        if not s:
+            print(f"No sprint {sprint_id}. Valid: 1-5")
+            return
+        sprints = [s]
+    else:
+        sprints = SPRINTS
+
+    for s in sprints:
+        start, end = s["days"]
+        done = sum(1 for d in range(start, end + 1) if is_day_done(d))
+        total = end - start + 1
+        print(f"Sprint {s['id']}: {s['name']}")
+        print(f"  Days: {start}-{end} ({total} days)")
+        print(f"  Theme: {s['theme']}")
+        print(f"  Progress: {done}/{total} done")
+        print()
 
 
 # ---------------------------------------------------------------------------
 # Context loaders
 # ---------------------------------------------------------------------------
 
-def load_completed_days_summary() -> str:
-    """Summaries of completed days for PM context (first 30 lines each)."""
+def load_context_for_day(day: int) -> str:
+    """Load all available context for a day — used by Claude before standup/planning."""
     parts = []
-    for d in range(1, 200):
-        plan_file = DAYS_DIR / f"day{d:02d}.md"
+
+    # Sprint context
+    sprint = get_sprint_for_day(day)
+    if sprint:
+        start, end = sprint["days"]
+        day_in_sprint = day - start + 1
+        done = sum(1 for d in range(start, day) if is_day_done(d))
+        parts.append(
+            f"## Sprint {sprint['id']}: {sprint['name']}\n"
+            f"Days {start}-{end} | Day {day_in_sprint} of {end - start + 1}\n"
+            f"Theme: {sprint['theme']}\n"
+            f"Completed so far: {done} days"
+        )
+
+    # Previous day's plan
+    prev_plan = DAYS_DIR / f"day{day - 1:02d}.md"
+    if prev_plan.exists():
+        lines = prev_plan.read_text().splitlines()[:40]
+        parts.append(f"## Day {day - 1} Plan (first 40 lines)\n" + "\n".join(lines))
+
+    # Previous day's checkpoint
+    prev_cp = load_checkpoint(day - 1)
+    if prev_cp.get("build_summary"):
+        parts.append(f"## Day {day - 1} Builder Output (truncated)\n{prev_cp['build_summary'][:2000]}")
+    if prev_cp.get("verification"):
+        v = prev_cp["verification"]
+        parts.append(f"## Day {day - 1} Verification\n"
+                     f"Passed: {v.get('passed')}\n"
+                     f"Failures: {v.get('failures', [])}\n"
+                     f"Summary: {v.get('summary', 'N/A')}")
+    if prev_cp.get("day_summary"):
+        parts.append(f"## Day {day - 1} Summary\n{prev_cp['day_summary']}")
+
+    # Failure history — scan recent days for unresolved failures
+    # This is the key feedback loop: if day N-1 or N-2 failed, the planner
+    # MUST see why and address it before moving on to new work.
+    failure_parts = []
+    for d in range(max(31, day - 3), day):
         cp = load_checkpoint(d)
-        if not plan_file.exists() and not cp:
-            break
-        status = "DONE" if cp.get("code_success") else "PENDING"
-        if plan_file.exists():
-            lines = plan_file.read_text().splitlines()[:30]
-            parts.append(f"## Day {d:02d} [{status}]\n" + "\n".join(lines) + "\n...")
-    return "\n\n---\n\n".join(parts) if parts else "No previous days yet."
+        if cp.get("code_success") is False and cp.get("failure_reason"):
+            failure_parts.append(
+                f"### Day {d} FAILED\n"
+                f"Reason: {cp['failure_reason']}\n"
+                f"Steps completed: {cp.get('steps_done', [])}"
+            )
+        if cp.get("verification") and not cp["verification"].get("passed"):
+            v = cp["verification"]
+            failures = v.get("failures", [])
+            if failures:
+                failure_parts.append(
+                    f"### Day {d} VERIFICATION FAILURES\n"
+                    f"Failures: {json.dumps(failures, indent=2)}\n"
+                    f"Summary: {v.get('summary', 'N/A')}"
+                )
+    if failure_parts:
+        parts.append(
+            "## ⚠ UNRESOLVED FAILURES (must address before new work)\n\n"
+            + "\n\n".join(failure_parts)
+        )
 
+    # Builder feedback from recent days — questions, tradeoffs, concerns
+    # This is the KEY feedback loop: builder surfaces unknowns → planner addresses them
+    feedback_from_builders = []
+    for d in range(max(31, day - 3), day):
+        cp = load_checkpoint(d)
+        bf = cp.get("builder_feedback", {})
+        if bf:
+            lines = [f"### Day {d} Builder Feedback"]
+            if bf.get("questions"):
+                lines.append("**Open Questions:**")
+                lines.extend(f"- {q}" for q in bf["questions"])
+            if bf.get("tradeoffs"):
+                lines.append("**Tradeoffs Made:**")
+                for t in bf["tradeoffs"]:
+                    lines.append(f"- **{t.get('decision', '?')}** — {t.get('reasoning', '?')}")
+                    if t.get("alternatives"):
+                        lines.append(f"  Alternatives considered: {t['alternatives']}")
+            if bf.get("concerns"):
+                lines.append("**Concerns:**")
+                lines.extend(f"- {c}" for c in bf["concerns"])
+            if bf.get("data_gaps"):
+                lines.append("**Data Gaps:**")
+                lines.extend(f"- {g}" for g in bf["data_gaps"])
+            feedback_from_builders.append("\n".join(lines))
 
-def load_feedback_for_pm() -> str:
-    """Accumulated feedback from previous days."""
+        # Also include verifier warnings/suggestions (beyond pass/fail)
+        v = cp.get("verification", {})
+        if v.get("warnings") or v.get("suggestions") or v.get("data_quality"):
+            lines = [f"### Day {d} Verifier Observations"]
+            if v.get("warnings"):
+                lines.append("**Warnings (passed but look wrong):**")
+                lines.extend(f"- {w}" for w in v["warnings"])
+            if v.get("suggestions"):
+                lines.append("**Suggestions for next day:**")
+                lines.extend(f"- {s}" for s in v["suggestions"])
+            if v.get("data_quality"):
+                lines.append("**Data quality issues:**")
+                lines.extend(f"- {d}" for d in v["data_quality"])
+            feedback_from_builders.append("\n".join(lines))
+
+    if feedback_from_builders:
+        parts.append(
+            "## 💬 FEEDBACK FROM PREVIOUS DAYS (planner must address)\n\n"
+            "The builder and verifier raised these items. The planner should:\n"
+            "- Answer open questions (decide and document in tradeoffs)\n"
+            "- Acknowledge concerns (plan mitigations or accept risk)\n"
+            "- Fill data gaps if they block upcoming work\n\n"
+            + "\n\n".join(feedback_from_builders)
+        )
+
+    # Mid-sprint review trigger
+    if is_mid_sprint_review(day):
+        sprint = get_sprint_for_day(day)
+        start = sprint["days"][0]
+        done = sum(1 for d in range(start, day) if is_day_done(d))
+        failed = sum(1 for d in range(start, day)
+                     if load_checkpoint(d).get("code_success") is False)
+        parts.append(
+            f"## 🔄 MID-SPRINT REVIEW (Day 8 of 14)\n\n"
+            f"This is the mid-point of Sprint {sprint['id']}: {sprint['name']}.\n"
+            f"Progress: {done} done, {failed} failed out of 7 days.\n\n"
+            f"**Before planning today, the planner MUST:**\n"
+            f"1. Review what was actually built vs what was planned in `docs/vision.md`\n"
+            f"2. Check `docs/tradeoffs.md` for accumulated decisions\n"
+            f"3. Assess: are we on track? Should remaining days pivot?\n"
+            f"4. Write a 5-line mid-sprint assessment into the day plan\n"
+            f"5. Adjust remaining scope if needed — it's better to cut scope than ship broken\n"
+        )
+
+    # Recent standups (last 3)
+    for d in range(max(31, day - 3), day):
+        f = STANDUPS_DIR / f"day{d:02d}_standup.md"
+        if f.exists():
+            parts.append(f"## Day {d:02d} Standup\n{f.read_text()[:1500]}")
+
+    # Current sprint completed days (not all 100 days — just this sprint)
+    if sprint:
+        start = sprint["days"][0]
+        completed_parts = []
+        for d in range(start, day):
+            cp = load_checkpoint(d)
+            plan_file = DAYS_DIR / f"day{d:02d}.md"
+            if cp.get("code_success") and plan_file.exists():
+                lines = plan_file.read_text().splitlines()[:10]
+                summary = cp.get("day_summary", "")
+                completed_parts.append(f"### Day {d:02d} [DONE] {summary}\n" + "\n".join(lines) + "\n...")
+            elif plan_file.exists():
+                completed_parts.append(f"### Day {d:02d} [PENDING]")
+        if completed_parts:
+            parts.append("## Sprint Progress (this sprint)\n" + "\n\n".join(completed_parts))
+
+    # Feedback
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
-    parts = []
+    feedback_parts = []
     for f in sorted(FEEDBACK_DIR.glob("day*_feedback.json")):
         try:
             data = json.loads(f.read_text())
         except json.JSONDecodeError:
             continue
-        day = data.get("day", "?")
+        day_num = data.get("day", "?")
         review = data.get("overall_impression", data.get("gpt_review", ""))
-        improvements = data.get("improvements", [])
-        if review or improvements:
-            part = f"### Day {day} feedback\n{review}"
-            if improvements:
-                part += "\nCarry-over: " + ", ".join(str(i) for i in improvements)
-            parts.append(part)
-    return "\n\n".join(parts)
+        if review:
+            feedback_parts.append(f"Day {day_num}: {review[:200]}")
+    if feedback_parts:
+        parts.append("## Feedback\n" + "\n".join(feedback_parts[-5:]))  # last 5
 
-
-def load_search_log_insights() -> str:
-    """Recent search queries for PM to understand user interest."""
+    # Search log insights
     log_dir = PROJECT_ROOT / "data" / "knowledge" / "search_log"
-    if not log_dir.exists():
-        return ""
-    log_files = sorted(log_dir.rglob("*.jsonl"), reverse=True)[:3]
-    queries = []
-    for lf in log_files:
-        for line in lf.read_text().splitlines()[-20:]:
-            try:
-                q = json.loads(line).get("query", "")
-                if q:
-                    queries.append(q)
-            except json.JSONDecodeError:
-                pass
-    if not queries:
-        return ""
-    return "### Recent user searches\n" + "\n".join(f"- {q}" for q in queries[:30])
-
-
-# ---------------------------------------------------------------------------
-# Claude CLI wrapper
-# ---------------------------------------------------------------------------
-
-def call_claude(
-    prompt: str,
-    system_prompt: str = "",
-    allowed_tools: Optional[list] = None,
-    model: str = "opus",
-    timeout: int = 1800,  # 30 min default
-    max_turns: Optional[int] = None,
-    skip_permissions: bool = False,
-    output_format: str = "text",
-) -> tuple[bool, str]:
-    """Call claude CLI with --print. Returns (success, output_text).
-
-    Uses the installed `claude` CLI which handles auth via subscription
-    or ANTHROPIC_API_KEY. Each call is a fresh session.
-    """
-    cmd = [
-        "claude",
-        "--print",
-        "--model", model,
-        "--output-format", output_format,
-    ]
-
-    if system_prompt:
-        cmd.extend(["--system-prompt", system_prompt])
-
-    if allowed_tools:
-        cmd.extend(["--allowedTools", ",".join(allowed_tools)])
-
-    if max_turns:
-        cmd.extend(["--max-turns", str(max_turns)])
-
-    if skip_permissions:
-        cmd.append("--dangerously-skip-permissions")
-
-    cmd.append(prompt)
-
-    log.debug("claude cmd: %s", " ".join(cmd[:6]) + "...")
-
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(PROJECT_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            env=_claude_env(),
-        )
-        output = result.stdout.strip()
-        if result.returncode != 0 and not output:
-            output = result.stderr.strip()
-        return result.returncode == 0, output
-    except subprocess.TimeoutExpired:
-        log.warning("Claude CLI timed out after %ds", timeout)
-        return False, f"TIMEOUT after {timeout}s"
-    except FileNotFoundError:
-        log.error("'claude' CLI not found. Install: npm install -g @anthropic-ai/claude-code")
-        return False, "claude CLI not found"
-
-
-# ---------------------------------------------------------------------------
-# PM Agent — plans and envisions features
-# ---------------------------------------------------------------------------
-
-def run_pm_agent(day_number: int, vision: str, num_days: int = 1) -> list[dict]:
-    """PM agent: reads codebase, researches market, produces day specs.
-
-    Returns list of {day, plan_markdown}.
-    """
-    completed = load_completed_days_summary()
-    feedback = load_feedback_for_pm()
-    search_insights = load_search_log_insights()
-
-    prompt = f"""You are the Product Manager for OpenEstates. Plan the next {num_days} day(s)
-of engineering work, starting at Day {day_number}.
-
-## Product Vision
-{vision}
-
-## Completed Work (first 30 lines of each day plan)
-{completed}
-
-{"## Feedback from Previous Days" + chr(10) + feedback if feedback else ""}
-
-{search_insights if search_insights else ""}
-
-## Your Task
-
-Plan Day {day_number}{f" through Day {day_number + num_days - 1}" if num_days > 1 else ""}.
-
-For each day, produce a COMPLETE day spec markdown document with these sections:
-## 1. Goal — one-line theme
-## 2. Product Reason — why this is the right next thing to build.
-   DO research before deciding:
-   - Read the existing codebase to understand what exists
-   - Consider what would differentiate OpenEstates from 99acres, Housing.com, NoBroker
-   - Think about what Indian property buyers actually struggle with
-   - Look at what features are half-built and should be completed first
-## 3. Deliverables — specific, testable outcomes with file paths
-## 4. Technical Guidance — concrete enough for an engineer to implement
-   (API shapes, component names, data structures, which files to modify)
-## 5. Constraints — what NOT to build, scope limits
-## 6. Success Criteria — checkboxes, each objectively verifiable
-
-RULES:
-- Each day must be achievable in ONE coding session (~3 hours of agent time)
-- Build incrementally on previous days — don't redo working code
-- Reference specific files and modules
-- Be concrete about API shapes, component names, data structures
-- If the codebase has broken or incomplete work, fixing it is a valid deliverable
-- Reference skill files when relevant in Technical Guidance:
-  * New API endpoint → mention .claude/skills/add-api-endpoint.md
-  * New data source → mention .claude/skills/add-crawler.md
-  * AI enrichment → mention .claude/skills/data-enrichment.md
-  * Society scoring → mention .claude/skills/score-society.md
-  * Read .claude/skills/coding-practices.md for latency budgets, async patterns, test requirements
-
-{"Separate multiple days with: ---DAY_SEPARATOR---" if num_days > 1 else ""}
-
-Start each day with: # Day NN: [Theme]"""
-
-    system = COMPANY_PILLARS + "\nYou are in PM/planning mode. Read the codebase, research, and plan — do NOT write code."
-
-    log.info("PM Agent: planning Day %d...", day_number)
-    ok, output = call_claude(
-        prompt=prompt,
-        system_prompt=system,
-        allowed_tools=["Read", "Glob", "Grep", "WebSearch", "WebFetch"],
-        model="opus",
-        timeout=600,   # 10 min for planning
-        max_turns=30,
-        skip_permissions=True,
-    )
-
-    if not ok:
-        log.error("PM Agent failed: %s", output[:300])
-        return []
-
-    # Parse specs
-    specs = []
-    if num_days == 1:
-        specs.append({"day": day_number, "plan_markdown": output})
-    else:
-        parts = output.split("---DAY_SEPARATOR---")
-        for i, part in enumerate(parts):
-            part = part.strip()
-            if part:
-                specs.append({"day": day_number + i, "plan_markdown": part})
-
-    log.info("PM Agent: produced %d day spec(s)", len(specs))
-    return specs
-
-
-# ---------------------------------------------------------------------------
-# Builder Agent — implements one day
-# ---------------------------------------------------------------------------
-
-def run_builder_agent(day_number: int, plan_markdown: str) -> dict:
-    """Builder agent: implements the day spec. Returns {success, output}."""
-
-    # Write plan to a temp location so claude can reference it
-    plan_ref = DAYS_DIR / f"day{day_number:02d}.md"
-
-    prompt = f"""## Your Task: Implement Day {day_number}
-
-Read the day plan at {plan_ref} and implement ALL deliverables.
-
-## Pre-Implementation Checklist (DO THIS FIRST)
-1. Read CLAUDE.md for project context
-2. Read .claude/skills/coding-practices.md for the quality bar
-3. For each deliverable, check if a skill file covers the pattern:
-   - Adding an API endpoint? Read .claude/skills/add-api-endpoint.md
-   - Adding a crawler/data source? Read .claude/skills/add-crawler.md
-   - Running enrichment? Read .claude/skills/data-enrichment.md
-   - Scoring societies? Read .claude/skills/score-society.md or run-scoring.md
-   - Debugging failures? Read .claude/skills/debug-pipeline.md
-4. Check what currently exists — read relevant files before changing them
-
-## Implementation Flow
-1. Implement each deliverable one at a time
-2. After each significant change, verify:
-   - `cargo check` for Rust changes
-   - `npm run build` for frontend changes
-3. When ALL deliverables are done, verify ALL success criteria
-4. Write a brief summary of what was built
-
-RULES:
-- DO NOT commit to git — the orchestrator handles that
-- DO NOT skip verification — every change must compile/build
-- If something from a previous day is broken, fix it FIRST
-- If a deliverable is unclear, make the best product-aligned decision
-- Prefer editing existing files over creating new ones
-- Follow the latency budgets from coding-practices.md (50ms warm, 200ms cold)
-- Use tokio::join! for parallel fan-out, tokio::spawn for background work
-
-## Day Plan
-{plan_markdown}"""
-
-    log.info("Builder Agent: implementing Day %d...", day_number)
-    ok, output = call_claude(
-        prompt=prompt,
-        system_prompt=COMPANY_PILLARS,
-        allowed_tools=[
-            "Read", "Write", "Edit", "Bash", "Glob", "Grep",
-            "Agent",   # can spawn subagents for parallel work
-        ],
-        model="opus",
-        timeout=2400,    # 40 min for implementation
-        max_turns=80,
-        skip_permissions=True,
-    )
-
-    return {"success": ok, "output": output}
-
-
-# ---------------------------------------------------------------------------
-# Verifier Agent — checks acceptance criteria
-# ---------------------------------------------------------------------------
-
-def run_verifier_agent(day_number: int, plan_markdown: str) -> dict:
-    """Checks if the day's acceptance criteria are met.
-
-    Returns {passed, failures, summary}.
-    """
-    prompt = f"""## Verify Day {day_number} Implementation
-
-Check EACH success criterion from the day plan below.
-
-## Steps
-1. Run `cargo check` in backend/ — must pass
-2. Run `npm run build` in frontend/ — must pass
-3. For each success criterion, verify it's actually done
-   (check files exist, code is correct, endpoints would work)
-4. If backend is running on port 4000, test API endpoints
-
-## Day Plan
-{plan_markdown}
-
-## Output Format
-Output ONLY a JSON object (no markdown, no commentary):
-{{
-  "passed": true/false,
-  "cargo_check": "pass" or "fail",
-  "npm_build": "pass" or "fail",
-  "criteria_results": [
-    {{"criterion": "...", "passed": true/false, "detail": "..."}}
-  ],
-  "failures": ["what failed"],
-  "summary": "one paragraph"
-}}"""
-
-    log.info("Verifier Agent: checking Day %d...", day_number)
-    ok, output = call_claude(
-        prompt=prompt,
-        allowed_tools=["Bash", "Read", "Glob", "Grep"],
-        model="opus",
-        timeout=300,     # 5 min for verification
-        max_turns=20,
-        skip_permissions=True,
-    )
-
-    # Parse JSON from output
-    try:
-        # Strip markdown code fences if present
-        text = output
-        if "```json" in text:
-            text = text.split("```json")[1].split("```")[0].strip()
-        elif "```" in text:
-            text = text.split("```")[1].split("```")[0].strip()
-        return json.loads(text)
-    except (json.JSONDecodeError, IndexError):
-        return {
-            "passed": False,
-            "failures": ["Could not parse verifier output"],
-            "summary": output[:500],
-        }
-
-
-# ---------------------------------------------------------------------------
-# Build checks (direct, no agent needed)
-# ---------------------------------------------------------------------------
-
-def run_build_checks() -> dict:
-    """Run cargo check + npm build directly. Returns structured result."""
-    results = {}
-
-    for name, cmd, cwd in [
-        ("cargo_check", ["cargo", "check"], PROJECT_ROOT / "backend"),
-        ("npm_build", ["npm", "run", "build"], PROJECT_ROOT / "frontend"),
-    ]:
-        try:
-            r = subprocess.run(
-                cmd, cwd=str(cwd),
-                capture_output=True, text=True, timeout=120,
-            )
-            results[name] = {
-                "success": r.returncode == 0,
-                "stderr_preview": r.stderr[:500] if r.returncode != 0 else "",
-            }
-        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-            results[name] = {"success": False, "error": str(e)}
-
-    results["all_pass"] = all(
-        v.get("success", False) for v in results.values()
-        if isinstance(v, dict) and "success" in v
-    )
-    return results
-
-
-# ---------------------------------------------------------------------------
-# Local deploy verification — build both services, smoke test backend
-# ---------------------------------------------------------------------------
-
-def run_local_deploy(port: int = 4000) -> dict:
-    """Build backend + frontend locally. Optionally smoke-test if backend runs.
-
-    Returns {cargo_build, npm_build, backend_boots, smoke_tests}.
-    """
-    result = {}
-
-    # 1. Cargo build (release check — ensures it compiles clean)
-    log.info("  Local deploy: cargo build...")
-    try:
-        r = subprocess.run(
-            ["cargo", "build"],
-            cwd=str(PROJECT_ROOT / "backend"),
-            capture_output=True, text=True, timeout=180,
-        )
-        result["cargo_build"] = {
-            "success": r.returncode == 0,
-            "stderr_preview": r.stderr[:500] if r.returncode != 0 else "",
-        }
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        result["cargo_build"] = {"success": False, "error": str(e)}
-
-    # 2. npm build (production build — catches TS errors + bundle issues)
-    log.info("  Local deploy: npm run build...")
-    try:
-        r = subprocess.run(
-            ["npm", "run", "build"],
-            cwd=str(PROJECT_ROOT / "frontend"),
-            capture_output=True, text=True, timeout=120,
-        )
-        result["npm_build"] = {
-            "success": r.returncode == 0,
-            "stderr_preview": r.stderr[:500] if r.returncode != 0 else "",
-        }
-    except (FileNotFoundError, subprocess.TimeoutExpired) as e:
-        result["npm_build"] = {"success": False, "error": str(e)}
-
-    # 3. Try to boot backend briefly and hit /api/health
-    log.info("  Local deploy: checking if backend boots...")
-    backend_boots = False
-    try:
-        # Start backend in background
-        proc = subprocess.Popen(
-            ["cargo", "run"],
-            cwd=str(PROJECT_ROOT / "backend"),
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        )
-        # Give it a few seconds to start
-        time.sleep(4)
-
-        if proc.poll() is None:  # still running = good
-            # Try hitting health endpoint
-            import urllib.request
-            try:
-                req = urllib.request.Request(
-                    f"http://localhost:{port}/api/health",
-                    headers={"Accept": "application/json"},
-                )
-                with urllib.request.urlopen(req, timeout=5) as resp:
-                    if resp.status == 200:
-                        backend_boots = True
-                        log.info("  Backend boots OK (health check passed)")
-            except Exception:
-                log.info("  Backend started but health check failed")
-                backend_boots = True  # it booted, just maybe not healthy yet
-        else:
-            stderr = proc.stderr.read().decode()[:300] if proc.stderr else ""
-            log.warning("  Backend failed to start: %s", stderr)
-
-        # Kill the backend process
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    except (FileNotFoundError, Exception) as e:
-        log.info("  Could not boot backend: %s", e)
-
-    result["backend_boots"] = backend_boots
-
-    # 4. Run smoke tests if backend was already running on the port
-    smoke = {}
-    try:
-        import urllib.request
-        req = urllib.request.Request(
-            f"http://localhost:{port}/api/health",
-            headers={"Accept": "application/json"},
-        )
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            if resp.status == 200:
-                log.info("  Backend already running on port %d, running smoke tests...", port)
-                smoke = run_smoke_tests(port)
-    except Exception:
-        pass  # backend not running, skip smoke tests
-    result["smoke_tests"] = smoke
-
-    result["all_pass"] = (
-        result.get("cargo_build", {}).get("success", False)
-        and result.get("npm_build", {}).get("success", False)
-    )
-    return result
-
-
-def run_smoke_tests(port: int = 4000) -> dict:
-    """Run smoke tests against a running backend."""
-    try:
-        r = subprocess.run(
-            [sys.executable, "pipeline/smoke_test_api.py",
-             "--base-url", f"http://localhost:{port}",
-             "--output-dir", str(FEEDBACK_DIR / "latest")],
-            cwd=str(PROJECT_ROOT),
-            capture_output=True, text=True, timeout=60,
-        )
-        output = r.stdout + r.stderr
-        passed = output.count("[PASS]")
-        failed = output.count("[FAIL]")
-        return {
-            "ran": True, "passed": passed, "failed": failed,
-            "total": passed + failed, "all_pass": failed == 0,
-            "output_preview": output[:1000],
-        }
-    except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        return {"ran": False, "error": str(e)}
-
-
-# ---------------------------------------------------------------------------
-# Orchestrator — run one day
-# ---------------------------------------------------------------------------
-
-def run_one_day(
-    day_number: int,
-    vision: str,
-    plan_only: bool = False,
-    build_only: bool = False,
-    resume: bool = True,
-) -> bool:
-    """Run a single day: plan -> build -> verify -> checkpoint."""
-    cp = load_checkpoint(day_number) if resume else {}
-
-    log.info("=" * 60)
-    log.info("  DAY %02d  —  %s", day_number, date.today().isoformat())
-    log.info("=" * 60)
-
-    plan_file = DAYS_DIR / f"day{day_number:02d}.md"
-
-    # ── Step 1: Plan ──────────────────────────────────────────────
-    if plan_file.exists():
-        log.info("[1/5] Plan exists: %s", plan_file)
-        plan_md = plan_file.read_text()
-    elif build_only:
-        log.error("No plan for Day %d and --build-only set", day_number)
-        return False
-    elif resume and cp.get("sprint_plan"):
-        log.info("[1/5] Plan from checkpoint")
-        plan_md = cp["sprint_plan"]
-        DAYS_DIR.mkdir(exist_ok=True)
-        plan_file.write_text(plan_md)
-    else:
-        log.info("[1/5] PM Agent: creating plan...")
-        specs = run_pm_agent(day_number, vision, num_days=1)
-        if not specs:
-            log.error("PM Agent returned no specs")
-            return False
-        plan_md = specs[0]["plan_markdown"]
-        save_checkpoint(day_number, {"sprint_plan": plan_md})
-        DAYS_DIR.mkdir(exist_ok=True)
-        plan_file.write_text(plan_md)
-        log.info("Plan saved: %s (%d chars)", plan_file, len(plan_md))
-
-    if plan_only:
-        log.info("Plan saved. Stopping (--plan-only).")
-        return True
-
-    # ── Step 2: Build ─────────────────────────────────────────────
-    if resume and cp.get("code_success") is not None:
-        log.info("[2/5] Build already done (success=%s)", cp["code_success"])
-        build_result = {"success": cp["code_success"], "output": cp.get("build_summary", "")}
-    else:
-        log.info("[2/5] Builder Agent: implementing...")
-        build_result = run_builder_agent(day_number, plan_md)
-        save_checkpoint(day_number, {
-            "build_summary": build_result["output"][:3000],
-        })
-        log.info("Builder done. Success: %s", build_result["success"])
-
-    # ── Step 3: Verify ────────────────────────────────────────────
-    if resume and "verification" in cp:
-        log.info("[3/5] Verification from checkpoint")
-        verification = cp["verification"]
-    else:
-        log.info("[3/5] Verifier Agent: checking criteria...")
-        verification = run_verifier_agent(day_number, plan_md)
-        save_checkpoint(day_number, {"verification": verification})
-
-    v_passed = verification.get("passed", False)
-    v_failures = verification.get("failures", [])
-    log.info("Verification: %s", "PASSED" if v_passed else f"FAILED: {v_failures}")
-
-    # ── Step 4: Build checks ──────────────────────────────────────
-    if resume and "build_checks" in cp:
-        log.info("[4/5] Build checks from checkpoint")
-        build_checks = cp["build_checks"]
-    else:
-        log.info("[4/5] Build checks (cargo check + npm build)...")
-        build_checks = run_build_checks()
-        save_checkpoint(day_number, {"build_checks": build_checks})
-
-    log.info("Build checks: %s", "PASSED" if build_checks.get("all_pass") else "FAILED")
-    if not build_checks.get("all_pass"):
-        for k, v in build_checks.items():
-            if isinstance(v, dict) and not v.get("success", True):
-                log.warning("  %s: %s", k, v.get("stderr_preview", v.get("error", ""))[:200])
-
-    # Overall success
-    code_success = v_passed and build_checks.get("all_pass", False)
-    save_checkpoint(day_number, {"code_success": code_success})
-
-    # ── Step 5: Local deploy (cargo build + npm build + boot check) ─
-    if resume and "local_deploy" in cp:
-        log.info("[5/5] Local deploy from checkpoint")
-        local_deploy = cp["local_deploy"]
-    elif code_success:
-        log.info("[5/5] Local deploy verification...")
-        local_deploy = run_local_deploy()
-        save_checkpoint(day_number, {"local_deploy": local_deploy})
-        if local_deploy.get("all_pass"):
-            log.info("Local deploy: PASSED (cargo build + npm build OK)")
-            if local_deploy.get("backend_boots"):
-                log.info("  Backend boots successfully")
-            smoke = local_deploy.get("smoke_tests", {})
-            if smoke.get("ran"):
-                log.info("  Smoke tests: %d/%d passed", smoke.get("passed", 0), smoke.get("total", 0))
-        else:
-            log.warning("Local deploy: FAILED")
-            for k, v in local_deploy.items():
-                if isinstance(v, dict) and not v.get("success", True):
-                    log.warning("  %s: %s", k, v.get("stderr_preview", v.get("error", ""))[:200])
-    else:
-        log.info("[5/5] Skipping local deploy — verification/build failed")
-        local_deploy = {}
-
-    log.info("Day %02d: %s", day_number, "COMPLETE" if code_success else "FAILED")
-    log.info("=" * 60)
-    return code_success
-
-
-# ---------------------------------------------------------------------------
-# Sprint loop
-# ---------------------------------------------------------------------------
-
-def run_sprint(
-    start_day: int,
-    num_days: int,
-    vision: str,
-    plan_only: bool = False,
-    build_only: bool = False,
-    max_retries: int = 1,
-):
-    """Run a multi-day sprint."""
-    log.info("#" * 60)
-    log.info("  SPRINT: Days %02d to %02d", start_day, start_day + num_days - 1)
-    log.info("  %s", date.today().isoformat())
-    log.info("#" * 60)
-
-    # Batch-plan if multiple new days
-    if not build_only and num_days > 1:
-        needs_plan = [
-            d for d in range(start_day, start_day + num_days)
-            if not (DAYS_DIR / f"day{d:02d}.md").exists()
-        ]
-        if len(needs_plan) > 1:
-            log.info("PM Agent: batch-planning %d days...", len(needs_plan))
-            specs = run_pm_agent(needs_plan[0], vision, num_days=len(needs_plan))
-            for spec in specs:
-                d = spec["day"]
-                pf = DAYS_DIR / f"day{d:02d}.md"
-                DAYS_DIR.mkdir(exist_ok=True)
-                pf.write_text(spec["plan_markdown"])
-                save_checkpoint(d, {"sprint_plan": spec["plan_markdown"]})
-                log.info("Saved plan: %s", pf)
-            if plan_only:
-                log.info("All plans saved. Stopping (--plan-only).")
-                return
-
-    completed = []
-    failed = []
-
-    for i in range(num_days):
-        day = start_day + i
-
-        if is_day_done(day):
-            log.info("Day %02d already done — skipping.", day)
-            completed.append(day)
-            continue
-
-        log.info("\n  Sprint day %d/%d (Day %02d)", i + 1, num_days, day)
-
-        success = False
-        for attempt in range(max_retries + 1):
-            if attempt > 0:
-                log.info("Retry %d/%d for Day %02d...", attempt, max_retries, day)
-                # Clear build state for retry (keep plan)
-                cp = load_checkpoint(day)
-                for key in ["code_success", "verification", "build_checks",
-                            "build_summary"]:
-                    cp.pop(key, None)
-                checkpoint_path(day).write_text(json.dumps(cp, indent=2))
-
-            try:
-                success = run_one_day(
-                    day, vision,
-                    plan_only=plan_only,
-                    build_only=build_only,
-                    resume=(attempt == 0),  # only resume on first attempt
-                )
-                if success:
-                    break
-            except KeyboardInterrupt:
-                log.info("\nSprint interrupted at Day %02d.", day)
-                print_status()
-                return
-            except Exception as e:
-                log.error("Day %02d crashed: %s", day, e, exc_info=True)
-                save_checkpoint(day, {"crash": str(e), "code_success": False})
-
-        if success:
-            completed.append(day)
-        else:
-            failed.append(day)
-            log.warning("Day %02d failed after %d attempts.", day, max_retries + 1)
-
-    # Summary
-    log.info("#" * 60)
-    log.info("  SPRINT COMPLETE")
-    log.info("  Completed: %s", completed)
-    if failed:
-        log.warning("  Failed: %s", failed)
-    log.info("#" * 60)
-    print_status()
+    if log_dir.exists():
+        log_files = sorted(log_dir.rglob("*.jsonl"), reverse=True)[:3]
+        queries = []
+        for lf in log_files:
+            for line in lf.read_text().splitlines()[-10:]:
+                try:
+                    q = json.loads(line).get("query", "")
+                    if q and q not in queries:
+                        queries.append(q)
+                except json.JSONDecodeError:
+                    pass
+        if queries:
+            parts.append("## Recent Searches\n" + "\n".join(f"- {q}" for q in queries[:10]))
+
+    # Today's existing plan
+    today_plan = DAYS_DIR / f"day{day:02d}.md"
+    if today_plan.exists():
+        parts.append(f"## Today's Existing Plan (Day {day})\n{today_plan.read_text()[:3000]}")
+
+    return "\n\n---\n\n".join(parts) if parts else "No context available."
 
 
 # ---------------------------------------------------------------------------
@@ -980,91 +512,111 @@ def run_sprint(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OpenEstates Sprint Agent — autonomous day-by-day builder",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  python3 -u pipeline/sprint_agent.py                           # next day, full cycle
-  python3 -u pipeline/sprint_agent.py --days 5                  # 5-day sprint
-  python3 -u pipeline/sprint_agent.py --start-day 31 --days 10  # days 31-40
-  python3 -u pipeline/sprint_agent.py --plan-only --days 3      # plan 3 days, no coding
-  python3 -u pipeline/sprint_agent.py --build-only              # build existing plan
-  python3 -u pipeline/sprint_agent.py --vision my_vision.md     # custom vision
-  python3 -u pipeline/sprint_agent.py --status                  # show day status
-  python3 -u pipeline/sprint_agent.py --dry-run --days 5        # preview
-""",
+        description="OpenEstates Sprint Utilities — 5 sprints × 14 days (days 31-100)",
     )
-    parser.add_argument("--start-day", type=int, default=None,
-                        help="Starting day number (default: auto-detect)")
-    parser.add_argument("--days", type=int, default=1,
-                        help="Number of days to run (default: 1)")
-    parser.add_argument("--plan-only", action="store_true",
-                        help="PM plans only — no coding")
-    parser.add_argument("--build-only", action="store_true",
-                        help="Build existing plans — no PM planning")
-    parser.add_argument("--skip-local-deploy", action="store_true",
-                        help="Skip local deploy verification (cargo build + npm build + boot check)")
-    parser.add_argument("--vision", type=str, default=None,
-                        help="Path to vision file (default: built-in)")
-    parser.add_argument("--max-retries", type=int, default=1,
-                        help="Max retries per failed day (default: 1)")
     parser.add_argument("--status", action="store_true",
-                        help="Show day status and exit")
-    parser.add_argument("--dry-run", action="store_true",
-                        help="Preview without executing")
-    parser.add_argument("--resume", action="store_true", default=True,
-                        help="Resume from checkpoint (default: true)")
-    parser.add_argument("--no-resume", action="store_true",
-                        help="Start fresh, ignore checkpoints")
+                        help="Show sprint + day status")
+    parser.add_argument("--sprint-info", type=int, nargs="?", const=0, metavar="N",
+                        help="Show sprint boundaries (all sprints, or sprint N)")
+    parser.add_argument("--next-day", action="store_true",
+                        help="Print next day number to work on")
+    parser.add_argument("--mark-done", type=int, metavar="DAY",
+                        help="Mark a day as successfully completed")
+    parser.add_argument("--mark-failed", type=int, metavar="DAY",
+                        help="Mark a day as failed")
+    parser.add_argument("--reason", type=str, default="",
+                        help="Failure reason (use with --mark-failed)")
+    parser.add_argument("--mark-step", nargs=2, metavar=("DAY", "STEP"),
+                        help="Mark a step as done (steps: plan, build, verify)")
+    parser.add_argument("--resume-from", type=int, metavar="DAY",
+                        help="Show which step to resume from for a day")
+    parser.add_argument("--checkpoint", type=int, metavar="DAY",
+                        help="Day number for checkpoint operations")
+    parser.add_argument("--set", type=str, metavar="KEY=VALUE",
+                        help="Set checkpoint key=value (use with --checkpoint)")
+    parser.add_argument("--get", type=str, metavar="KEY",
+                        help="Get checkpoint key (use with --checkpoint)")
+    parser.add_argument("--load-context", type=int, metavar="DAY",
+                        help="Load context for a day (sprint, yesterday, standups, progress)")
+    parser.add_argument("--save-builder-feedback", type=int, metavar="DAY",
+                        help="Save builder feedback JSON from stdin (pipe JSON)")
+    parser.add_argument("--save-verifier-obs", type=int, metavar="DAY",
+                        help="Save verifier observations JSON from stdin (pipe JSON)")
+    parser.add_argument("--add-tradeoff", type=int, metavar="DAY",
+                        help="Add a tradeoff entry (use with --decision, --alternatives, --reasoning)")
+    parser.add_argument("--decision", type=str, default="")
+    parser.add_argument("--alternatives", type=str, default="")
+    parser.add_argument("--reasoning", type=str, default="")
+    parser.add_argument("--is-mid-review", type=int, metavar="DAY",
+                        help="Check if day is the mid-sprint review point")
     args = parser.parse_args()
 
     if args.status:
         print_status()
-        return
-
-    start_day = args.start_day or detect_next_day()
-    vision = load_vision(args.vision)
-
-    if args.dry_run:
-        print(f"\n  Dry run — would execute:")
-        print(f"  Days: {start_day} to {start_day + args.days - 1}")
-        print(f"  Mode: {'plan-only' if args.plan_only else 'build-only' if args.build_only else 'full'}")
-        print(f"  Local deploy check: {not args.skip_local_deploy}")
-        print(f"  Vision: {'custom' if args.vision else 'default'} ({len(vision)} chars)")
-        for d in range(start_day, start_day + args.days):
-            s = "DONE" if is_day_done(d) else (
-                "PLAN EXISTS" if (DAYS_DIR / f"day{d:02d}.md").exists() else "NEW"
-            )
-            print(f"    Day {d:02d}: {s}")
-        print()
-        return
-
-    # Verify claude CLI exists
-    try:
-        subprocess.run(
-            ["claude", "--version"],
-            capture_output=True, timeout=10, env=_claude_env(),
-        )
-    except FileNotFoundError:
-        print("ERROR: 'claude' CLI not found.")
-        print("Install: npm install -g @anthropic-ai/claude-code")
-        sys.exit(1)
-
-    log.info("OpenEstates Sprint Agent")
-    log.info("  Start day: %d, Days: %d", start_day, args.days)
-    log.info("  Vision: %s", "custom" if args.vision else "default")
-    print_status()
-
-    run_sprint(
-        start_day=start_day,
-        num_days=args.days,
-        vision=vision,
-        plan_only=args.plan_only,
-        build_only=args.build_only,
-        max_retries=args.max_retries,
-    )
-
-    log.info("Done.")
+    elif args.sprint_info is not None:
+        print_sprint_info(args.sprint_info if args.sprint_info > 0 else None)
+    elif args.next_day:
+        print(detect_next_day())
+    elif args.mark_done is not None:
+        save_checkpoint(args.mark_done, {"code_success": True})
+        sprint = get_sprint_for_day(args.mark_done)
+        tag = f" (Sprint {sprint['id']}: {sprint['name']})" if sprint else ""
+        print(f"Day {args.mark_done} marked as done.{tag}")
+    elif args.mark_failed is not None:
+        mark_day_failed(args.mark_failed, args.reason or "no reason given")
+        print(f"Day {args.mark_failed} marked as failed. Reason: {args.reason or 'no reason given'}")
+    elif args.mark_step:
+        day_num = int(args.mark_step[0])
+        step = args.mark_step[1]
+        if step not in DAY_STEPS:
+            print(f"Invalid step '{step}'. Valid: {DAY_STEPS}")
+            sys.exit(1)
+        mark_step_done(day_num, step)
+        print(f"Day {day_num}: step '{step}' marked done. Next: {get_resume_step(day_num)}")
+    elif args.resume_from is not None:
+        step = get_resume_step(args.resume_from)
+        print(step)
+    elif args.checkpoint is not None:
+        if args.set:
+            key, _, value = args.set.partition("=")
+            try:
+                value = json.loads(value)
+            except json.JSONDecodeError:
+                pass
+            save_checkpoint(args.checkpoint, {key: value})
+            print(f"Set day {args.checkpoint}: {key}={value}")
+        elif args.get:
+            cp = load_checkpoint(args.checkpoint)
+            val = cp.get(args.get)
+            if val is not None:
+                print(json.dumps(val) if isinstance(val, (dict, list)) else str(val))
+            else:
+                print(f"Key '{args.get}' not found in day {args.checkpoint} checkpoint")
+                sys.exit(1)
+        else:
+            cp = load_checkpoint(args.checkpoint)
+            print(json.dumps(cp, indent=2))
+    elif args.load_context is not None:
+        print(load_context_for_day(args.load_context))
+    elif args.save_builder_feedback is not None:
+        data = json.loads(sys.stdin.read())
+        save_builder_feedback(args.save_builder_feedback, data)
+        n_items = sum(len(v) for v in data.values() if isinstance(v, list))
+        print(f"Saved builder feedback for day {args.save_builder_feedback} ({n_items} items)")
+    elif args.save_verifier_obs is not None:
+        data = json.loads(sys.stdin.read())
+        save_verifier_observations(args.save_verifier_obs, data)
+        print(f"Saved verifier observations for day {args.save_verifier_obs}")
+    elif args.add_tradeoff is not None:
+        if not args.decision:
+            print("--add-tradeoff requires --decision")
+            sys.exit(1)
+        append_tradeoff(args.add_tradeoff, args.decision, args.alternatives, args.reasoning)
+        print(f"Tradeoff logged for day {args.add_tradeoff}: {args.decision}")
+    elif args.is_mid_review is not None:
+        print("yes" if is_mid_sprint_review(args.is_mid_review) else "no")
+    else:
+        print_status()
 
 
 if __name__ == "__main__":

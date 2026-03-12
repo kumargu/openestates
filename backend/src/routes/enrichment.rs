@@ -335,6 +335,7 @@ pub fn enrich_property_card(
         facing: p.facing.clone(),
         google_rating,
         google_review_count,
+        seller_id: p.seller_id.clone(),
     }
 }
 

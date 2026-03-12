@@ -91,6 +91,7 @@ impl Node {
     }
 
     /// Get all facts for a given key (all versions).
+    #[allow(dead_code)]
     pub fn get_fact_history(&self, key: &str) -> Vec<&SourcedFact> {
         let mut facts: Vec<_> = self.facts.iter().filter(|f| f.key == key).collect();
         facts.sort_by_key(|f| f.version);

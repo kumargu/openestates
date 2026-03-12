@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::AtomicU64;
+use std::time::{Duration, Instant};
 
 use tokio::sync::{Mutex, RwLock};
 
@@ -8,7 +9,7 @@ use crate::cache::{Cache, InMemoryCache};
 use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge;
 use crate::knowledge::embed_client::EmbedClient;
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::state::AppState;
 use crate::storage::{LocalFsBackend, StorageBackend};
 
@@ -43,11 +44,21 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
             load_json_direct::<Vec<Society>>(&seed_root.join("societies.json"))
         });
 
+    // Load sellers from data/sellers/sellers.json
+    let sellers_path = project_root.join("data").join("sellers").join("sellers.json");
+    let sellers: Vec<Seller> = if sellers_path.exists() {
+        load_json_direct::<Vec<Seller>>(&sellers_path)
+    } else {
+        println!("WARN: No sellers.json found at {}", sellers_path.display());
+        Vec::new()
+    };
+
     println!(
-        "Loaded {} properties, {} areas, {} societies",
+        "Loaded {} properties, {} areas, {} societies, {} sellers",
         properties.len(),
         areas.len(),
-        societies.len()
+        societies.len(),
+        sellers.len()
     );
 
     // --- Knowledge Graph ---
@@ -127,11 +138,14 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         properties: RwLock::new(properties),
         areas,
         societies,
+        sellers,
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
         gemini,
         discovery_cache,
         embed_client,
+        interest_counter: AtomicU64::new(0),
+        interest_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
 }
 
@@ -179,11 +193,14 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
         properties: RwLock::new(properties),
         areas,
         societies,
+        sellers: Vec::new(),
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: data_dir.parent().unwrap_or(data_dir).to_path_buf(),
         gemini: None,
         discovery_cache: Mutex::new(DiscoveryCache::new(24, 10)),
         embed_client: None,
+        interest_counter: AtomicU64::new(0),
+        interest_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
 }
 

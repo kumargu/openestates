@@ -43,6 +43,7 @@ def main():
     parser.add_argument("--node-id", help="Graph node ID to push facts to")
     parser.add_argument("--api-base", default="http://localhost:4000", help="API base URL")
     parser.add_argument("--force", action="store_true", help="Skip cache")
+    parser.add_argument("--retries", type=int, default=None, help="Override max retry count (default: 3)")
     parser.add_argument("--dry-run", action="store_true", help="Run skill but don't push to graph")
 
     args = parser.parse_args()
@@ -67,7 +68,7 @@ def main():
     # Run the skill
     skill_class = SKILLS[args.skill]
     skill = skill_class()
-    result = skill.run(input_data, force=args.force)
+    result = skill.run(input_data, force=args.force, max_retries=args.retries)
 
     # Print results
     print(f"\n{'='*60}")

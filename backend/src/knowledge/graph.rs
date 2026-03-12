@@ -107,6 +107,7 @@ impl KnowledgeGraph {
         self.nodes.get(id)
     }
 
+    #[allow(dead_code)]
     pub fn get_node_mut(&mut self, id: &str) -> Option<&mut Node> {
         self.nodes.get_mut(id)
     }

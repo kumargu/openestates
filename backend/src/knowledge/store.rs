@@ -62,7 +62,7 @@ pub fn save_node(knowledge_dir: &Path, node: &Node) -> std::io::Result<()> {
     })?;
 
     let content = serde_json::to_string_pretty(node)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
 
     atomic_write(&path, content.as_bytes())
 }
@@ -100,7 +100,7 @@ fn load_all_nodes(knowledge_dir: &Path) -> Vec<Node> {
 
         for file_entry in files.flatten() {
             let path = file_entry.path();
-            if path.extension().map_or(true, |ext| ext != "json") {
+            if path.extension().is_none_or(|ext| ext != "json") {
                 continue;
             }
             if let Some(node) = load_node(&path) {
@@ -123,7 +123,7 @@ fn edges_path(knowledge_dir: &Path) -> PathBuf {
 /// Save all edges to a single file.
 pub fn save_edges(knowledge_dir: &Path, edges: &[Edge]) -> std::io::Result<()> {
     let content = serde_json::to_string_pretty(edges)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
     atomic_write(&edges_path(knowledge_dir), content.as_bytes())
 }
 
@@ -246,7 +246,7 @@ pub fn append_search_log(
     }
 
     let line = serde_json::to_string(event)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+        .map_err(std::io::Error::other)?;
 
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new()

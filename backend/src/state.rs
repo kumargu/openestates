@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::sync::atomic::AtomicU64;
 
 use tokio::sync::{Mutex, RwLock};
 
@@ -7,7 +8,7 @@ use crate::cache::Cache;
 use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::embed_client::EmbedClient;
-use crate::models::{AreaProfile, Property, Society};
+use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::storage::StorageBackend;
 
 #[allow(dead_code)]
@@ -19,6 +20,7 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
+    pub sellers: Vec<Seller>,
     /// The knowledge graph — the brain that learns from every search.
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
@@ -29,4 +31,9 @@ pub struct AppState {
     pub discovery_cache: Mutex<DiscoveryCache>,
     /// Embedding client for semantic search (None if GOOGLE_AI_API_KEY not set).
     pub embed_client: Option<EmbedClient>,
+    /// Monotonic counter for generating collision-free interest IDs.
+    pub interest_counter: AtomicU64,
+    /// Global rate limiter for POST /api/interests: (window_start, count_in_window).
+    /// Resets every 60 seconds. Max 60 requests per window.
+    pub interest_rate_limiter: RwLock<(std::time::Instant, u32)>,
 }

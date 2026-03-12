@@ -47,7 +47,7 @@ impl KnowledgeGraph {
             .filter(|n| {
                 n.id != node_id
                     && n.summary_embedding.is_some()
-                    && node_type_filter.map_or(true, |nt| n.node_type == nt)
+                    && node_type_filter.is_none_or(|nt| n.node_type == nt)
             })
             .filter_map(|n| {
                 let emb = n.summary_embedding.as_ref()?;
@@ -83,7 +83,7 @@ impl KnowledgeGraph {
             .values()
             .filter(|n| {
                 n.summary_embedding.is_some()
-                    && node_type_filter.map_or(true, |nt| n.node_type == nt)
+                    && node_type_filter.is_none_or(|nt| n.node_type == nt)
             })
             .filter_map(|n| {
                 let emb = n.summary_embedding.as_ref()?;

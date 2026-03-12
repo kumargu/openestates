@@ -102,6 +102,19 @@ async fn main() {
             "/api/knowledge/coverage",
             get(routes::knowledge::fact_coverage),
         )
+        // Seller endpoints
+        .route("/api/sellers", get(routes::sellers::list_sellers))
+        .route("/api/sellers/{id}", get(routes::sellers::get_seller))
+        // Interest endpoints
+        .route("/api/interests", post(routes::interests::express_interest))
+        .route(
+            "/api/properties/{id}/interests/count",
+            get(routes::interests::get_interest_count),
+        )
+        // Claims endpoint
+        .route("/api/claims", post(routes::claims::submit_claim))
+        // Sitemap endpoint
+        .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
         .route(
             "/api/admin/reload-knowledge",
@@ -137,6 +150,11 @@ async fn main() {
     println!("  GET /api/knowledge/coverage?type=society");
     println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
     println!("  GET /api/knowledge/embeddings/stats");
+    println!("  GET /api/sellers | /api/sellers/{{id}}");
+    println!("  POST /api/interests");
+    println!("  GET /api/properties/{{id}}/interests/count");
+    println!("  POST /api/claims");
+    println!("  GET  /api/sitemap.xml");
     println!("  POST /api/admin/reload-knowledge");
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")

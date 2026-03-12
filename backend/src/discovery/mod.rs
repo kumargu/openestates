@@ -10,5 +10,4 @@ pub mod cache;
 pub mod ingest;
 
 pub use cache::DiscoveryCache;
-pub use gemini::{GeminiClient, DiscoveredProperty};
-pub use ingest::ingest_discoveries;
+pub use gemini::GeminiClient;

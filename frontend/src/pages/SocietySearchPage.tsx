@@ -6,9 +6,11 @@
  * society discovery surface.
  */
 import { useEffect, useState, useCallback } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import type { SocietySearchResponse, SocietySearchResult } from "../lib/types.ts";
 import { searchSocieties } from "../lib/api.ts";
+import { PageState } from "../components/PageState.tsx";
 const DEFAULT_QUERY = "family friendly whitefield";
 
 // ---------------------------------------------------------------------------
@@ -77,13 +79,7 @@ function AreaContextBar({ ctx }: { ctx: NonNullable<SocietySearchResponse["area_
           Area Context: {ctx.name}
         </h2>
       </div>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-          gap: "1rem",
-        }}
-      >
+      <div className="society-area-context-grid">
         {ctx.metro_access_summary && (
           <div>
             <span style={{ fontSize: "0.72rem", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--color-text-muted)" }}>Metro access</span>
@@ -165,7 +161,7 @@ function SocietyCard({ result }: { result: SocietySearchResult }) {
     >
       {/* Hero image */}
       {heroSrc && (
-        <div style={{ position: "relative", height: "220px", overflow: "hidden" }}>
+        <div className="society-card-hero">
           <img
             src={heroSrc}
             alt={result.name}
@@ -438,7 +434,6 @@ function SocietyCard({ result }: { result: SocietySearchResult }) {
 
 export function SocietySearchPage() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const queryParam = searchParams.get("q") || DEFAULT_QUERY;
   const [inputValue, setInputValue] = useState(queryParam);
   const [data, setData] = useState<SocietySearchResponse | null>(null);
@@ -503,30 +498,7 @@ export function SocietySearchPage() {
   if (status === "error") {
     return (
       <div className="page-container" style={{ maxWidth: "800px" }}>
-        <div style={{
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "40vh",
-          textAlign: "center",
-          padding: "2rem",
-        }}>
-          <h2 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "0.5rem" }}>
-            Society results unavailable
-          </h2>
-          <p style={{ fontSize: "0.9rem", color: "var(--color-text-secondary)", maxWidth: "400px", lineHeight: 1.6, marginBottom: "1.5rem" }}>
-            {errorMsg}
-          </p>
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <button className="btn btn-primary" onClick={() => fetchResults(queryParam)}>
-              Retry
-            </button>
-            <button className="btn btn-outline" onClick={() => navigate("/")}>
-              Return home
-            </button>
-          </div>
-        </div>
+        <PageState variant="error" context="society" message={errorMsg || undefined} />
       </div>
     );
   }
@@ -535,22 +507,24 @@ export function SocietySearchPage() {
 
   const { query_interpreted, results, area_context, enrichment_status } = data;
 
+  const societyHelmetTitle = queryParam
+    ? `${queryParam} — Society Rankings | OpenEstates`
+    : "Society Rankings — OpenEstates";
+  const societyHelmetDescription = `${results.length} ${results.length === 1 ? "society" : "societies"} ranked for "${queryParam}"${query_interpreted.area ? ` in ${query_interpreted.area}` : ""}. Transparency-first society discovery on OpenEstates.`;
+
   return (
     <div className="page-container" style={{ maxWidth: "800px" }}>
+      <Helmet>
+        <title>{societyHelmetTitle}</title>
+        <meta name="description" content={societyHelmetDescription} />
+        <meta property="og:title" content={societyHelmetTitle} />
+        <meta property="og:description" content={societyHelmetDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="OpenEstates" />
+      </Helmet>
       {/* Search bar */}
       <form onSubmit={handleSearch} style={{ marginBottom: "1.5rem" }}>
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            padding: "0.85rem 1.25rem",
-            background: "var(--color-bg-card, #fff)",
-            border: "1px solid var(--color-border, #e5e5e5)",
-            borderRadius: "12px",
-            boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-          }}
-        >
+        <div className="society-search-bar">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -606,9 +580,11 @@ export function SocietySearchPage() {
       </div>
 
       {/* Society cards */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "1.25rem" }}>
+      <div className="society-cards-grid">
         {results.map((r) => (
-          <SocietyCard key={r.slug} result={r} />
+          <Link key={r.slug} to={`/society/${r.slug}`} style={{ textDecoration: "none", color: "inherit" }}>
+            <SocietyCard result={r} />
+          </Link>
         ))}
       </div>
 

@@ -199,6 +199,7 @@ impl TextSearch {
                         facing: p.facing.clone(),
                         google_rating: None,
                         google_review_count: None,
+                        seller_id: p.seller_id.clone(),
                     }
                 };
 
@@ -326,11 +327,10 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
         "greenery" => property.greenery_score.unwrap_or(0.0) * 2.0,
         "new construction" | "ready to move" => {
             let status = property.possession_status.to_lowercase();
-            if preference == "new construction"
-                && (status.contains("under") || status.contains("new"))
+            if (preference == "new construction"
+                && (status.contains("under") || status.contains("new")))
+                || (preference == "ready to move" && status.contains("ready"))
             {
-                2.0
-            } else if preference == "ready to move" && status.contains("ready") {
                 2.0
             } else {
                 0.0
@@ -467,10 +467,10 @@ fn build_match_reason(intent: &SearchIntent, reasons: &[String]) -> String {
         parts.push(format!("{} BHK", bhk));
     }
     if let Some(budget) = intent.budget_max {
-        let budget_str = if budget >= 1_00_00_000 {
-            format!("{:.1} Cr", budget as f64 / 1_00_00_000.0)
+        let budget_str = if budget >= 10_000_000 {
+            format!("{:.1} Cr", budget as f64 / 10_000_000.0)
         } else {
-            format!("{:.0} L", budget as f64 / 1_00_000.0)
+            format!("{:.0} L", budget as f64 / 100_000.0)
         };
         parts.push(format!("under {}", budget_str));
     }

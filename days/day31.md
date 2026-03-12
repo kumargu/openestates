@@ -1,107 +1,62 @@
-# Day 31: Enriched Embeddings — Embed Intelligence, Not Marketing
+# Day 31: CI Gate + Click Flow Audit + SEO Foundation
 
-## 1. Goal
+## Goal
 
-Re-embed all society nodes using KG fact intelligence instead of thin marketing summaries. Fix the foundation that all semantic search depends on.
+Establish the CI safety net and audit the buyer-facing click flow so the rest of Sprint 1 builds on verified ground.
 
-## 2. Product Reason
+## Product Reason
 
-Current embeddings are built from ~20 words of marketing copy ("Premium gated community in Whitefield. Best for: families. Signals: good-maintenance"). The KG has 10-15 rich SourcedFacts per society (maintenance scores, water supply status, family friendliness ratings, builder trust assessments) — none of which gets embedded. This means semantic search compares user queries against listing blurbs, not actual intelligence. A user searching "avoid water issues" gets similarity scores against marketing text that never mentions water problems.
+Sprint 1 is about making the buyer experience shareable, trustworthy, and mobile-ready. Before touching UI, we need: (1) a CI gate that prevents regressions across 14 days of rapid changes, and (2) a concrete inventory of every dead end and broken link across all 5 pages, so subsequent days fix real issues instead of guessing. The SEO meta tag foundation unblocks shareable property pages early.
 
-This is the single highest-leverage fix for search quality.
+## Deliverables
 
-## 3. Deliverables
+### 1. CI Gate — GitHub Actions workflow (`.github/workflows/ci.yml`)
 
-### D1: Upgrade `build_summary_text()` in `pipeline/skills/embed_entity.py`
+- Trigger on push to `main` and on pull requests
+- Two jobs: `backend-check` and `frontend-build`
+  - `backend-check`: `cargo check` in `backend/`
+  - `frontend-build`: `npm ci && npm run build` in `frontend/`
+- Fail fast — if either job fails, the workflow fails
+- No deployment step (Vercel handles that separately)
 
-For societies, construct embedding text from KG facts:
+### 2. Click Flow Audit (`docs/click-flow-audit.md`)
 
-```python
-def build_summary_text(input_data: dict) -> str:
-    parts = [name]
-    if summary:
-        parts.append(summary)
+Manual walkthrough of all 5 pages documenting every interactive element. Markdown table with: Page, Element, Expected Destination, Actual Behavior, Status (ok / dead-end / broken / missing).
 
-    # Include KG fact display texts
-    facts = input_data.get("facts", [])
-    for fact in facts:
-        tmpl = fact.get("display_template", "")
-        value = fact.get("value", {})
-        if tmpl and value:
-            data = value.get("data", "")
-            display = tmpl.replace("{value}", str(data))
-            parts.append(display)
+Pages: HomePage, ResultsPageA, PropertyPage, SocietySearchPage, ShortlistPage.
 
-    # Include known issues/complaints
-    negatives = input_data.get("common_complaints", [])
-    if negatives:
-        parts.append(f"Known concerns: {', '.join(negatives)}")
+Known issues to investigate:
+- Society cards on SocietySearchPage may have no clickthrough
+- PropertyPage "Back to results" may lose search query context
+- No footer navigation on any page
+- API_BASE hardcoded to localhost (blocker for production)
 
-    positives = input_data.get("common_positives", [])
-    if positives:
-        parts.append(f"Strengths: {', '.join(positives)}")
+### 3. SEO Meta Tag Foundation
 
-    return ". ".join(parts)
-```
+- Install `react-helmet-async`
+- Wrap `<App>` in `<HelmetProvider>` in `main.tsx`
+- Default `<Helmet>` with title, description, OG tags
+- Dynamic `<Helmet>` on `PropertyPage.tsx` with property-specific title and OG tags
 
-### D2: Create `pipeline/scripts/reembed_all.py` batch script
+## Files to Create/Modify
 
-Script that:
-1. Reads all society nodes from `data/knowledge/nodes/society/`
-2. Also reads matching society from `data/seed/societies.json` for common_complaints/common_positives
-3. Builds enriched input_data with facts included
-4. Calls `EmbedEntitySkill.run()` for each
-5. Pushes updated embeddings to KG via graph_client or direct file write
-6. Reports: old embedding dims, new embedding text length, entities processed
+- `.github/workflows/ci.yml` (new)
+- `docs/click-flow-audit.md` (new)
+- `frontend/package.json` (add react-helmet-async)
+- `frontend/src/main.tsx` (HelmetProvider + default Helmet)
+- `frontend/src/pages/PropertyPage.tsx` (dynamic Helmet)
 
-### D3: Also embed area nodes
+## Constraints
 
-Area nodes have rich facts (waterlogging, traffic, metro access, livability) but currently have NO embeddings. Embed all 16 area nodes so they can participate in semantic search later.
+- Do NOT start the mobile responsive pass (Days 32-33)
+- Do NOT add structured data / JSON-LD (mid-sprint)
+- Do NOT fix click-flow issues — just document them
+- Do NOT change routing structure — note gaps only
+- Do NOT fix API_BASE hardcoding — document as blocker
 
-### D4: Verify embedding quality with test queries
+## Success Criteria
 
-After re-embedding, run 5 test queries through the embedding similarity function and log results:
-- "family friendly quiet society" → should rank family-oriented societies higher
-- "avoid water issues" → should rank water-stressed societies LOWER
-- "good maintenance reliable builder" → should rank well-maintained societies higher
-- "investment opportunity good resale" → should rank market-active societies higher
-- "peaceful less crowded greenery" → should rank low-density societies higher
-
-Compare before/after similarity rankings to validate improvement.
-
-## 4. Technical Guidance
-
-**Files to modify:**
-- `pipeline/skills/embed_entity.py` — upgrade `build_summary_text()`
-- `pipeline/scripts/reembed_all.py` — new batch script
-
-**Key constraint:** The embedding API is `gemini-embedding-001` (768 dims). Max input is ~2048 tokens. With 15 facts, each fact's display text is ~10-20 words. Total text should be ~200-400 words — well within limits.
-
-**Data flow:**
-1. Read society node JSON from `data/knowledge/nodes/society/{slug}.json`
-2. Read society seed data from `data/seed/societies.json` for common_complaints/positives
-3. Merge into input_data dict
-4. Call `build_summary_text()` → enriched text
-5. Call `call_embedding_api(text)` → 768-dim vector
-6. Write updated `summary_embedding` back to node JSON file
-
-**Important:** Use atomic file writes (write to .tmp, rename) to avoid corrupting node files.
-
-## 5. Constraints
-
-- Do NOT change the embedding model or dimensions (stay on gemini-embedding-001, 768-dim)
-- Do NOT embed properties — they're found through hard constraints, not semantic search
-- Do NOT add new vector indexes or a vector DB — brute-force is fine at this scale
-- Keep `embed_entity.py` backward compatible — it should work for any entity type
-- Rate limit embedding API calls: max 1 per second (Google rate limits)
-
-## 6. Success Criteria
-
-- [ ] `build_summary_text()` for societies includes KG fact display texts and complaints/positives
-- [ ] All 48+ society nodes re-embedded with enriched text
-- [ ] All 16 area nodes embedded (they had no embeddings before)
-- [ ] Test query "avoid water issues" ranks water-stressed societies lower by cosine similarity
-- [ ] Test query "family friendly" ranks family-oriented societies higher by cosine similarity
-- [ ] Embedding text length is 100-500 words per entity (not 20 words like before)
-- [ ] `cargo check` passes
-- [ ] `npm run build` passes
+1. `cargo check` succeeds in `backend/` and `npm run build` succeeds in `frontend/`
+2. `docs/click-flow-audit.md` covers all 5 pages with 25+ interactive elements audited
+3. SEO meta tags visible in browser dev tools on home page and property detail page
+4. No regressions — `npm run build` still passes after all changes

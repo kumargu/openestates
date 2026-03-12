@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://openestates.in/api/sitemap.xml

@@ -78,7 +78,7 @@ fn detect_bhk(q: &str) -> Option<u32> {
     for (i, &b) in bytes.iter().enumerate() {
         if b.is_ascii_digit() {
             let digit = (b - b'0') as u32;
-            if digit >= 1 && digit <= 6 {
+            if (1..=6).contains(&digit) {
                 // Look ahead for "bhk" possibly with a separator
                 let rest = &q[i + 1..];
                 if rest.starts_with("bhk")
@@ -142,9 +142,9 @@ fn parse_amount(tokens: &[&str]) -> Option<u64> {
         if let Ok(num) = first.parse::<f64>() {
             let suffix = tokens[1];
             if suffix.starts_with("cr") {
-                return Some((num * 1_00_00_000.0) as u64);
+                return Some((num * 10_000_000.0) as u64);
             } else if suffix.starts_with("l") {
-                return Some((num * 1_00_000.0) as u64);
+                return Some((num * 100_000.0) as u64);
             }
         }
     }
@@ -153,32 +153,32 @@ fn parse_amount(tokens: &[&str]) -> Option<u64> {
 }
 
 fn parse_single_amount(token: &str) -> Option<u64> {
-    // "1.5cr" -> 1_50_00_000, "80l" -> 80_00_000
+    // "1.5cr" -> 15_000_000, "80l" -> 8_000_000
     let token = token.trim();
     if token.len() < 2 {
         return None;
     }
 
-    let (num_part, suffix) = if token.ends_with("crores") {
-        (&token[..token.len() - 6], "cr")
-    } else if token.ends_with("crore") {
-        (&token[..token.len() - 5], "cr")
-    } else if token.ends_with("cr") {
-        (&token[..token.len() - 2], "cr")
-    } else if token.ends_with("lakhs") {
-        (&token[..token.len() - 5], "l")
-    } else if token.ends_with("lakh") {
-        (&token[..token.len() - 4], "l")
-    } else if token.ends_with('l') {
-        (&token[..token.len() - 1], "l")
+    let (num_part, suffix) = if let Some(stripped) = token.strip_suffix("crores") {
+        (stripped, "cr")
+    } else if let Some(stripped) = token.strip_suffix("crore") {
+        (stripped, "cr")
+    } else if let Some(stripped) = token.strip_suffix("cr") {
+        (stripped, "cr")
+    } else if let Some(stripped) = token.strip_suffix("lakhs") {
+        (stripped, "l")
+    } else if let Some(stripped) = token.strip_suffix("lakh") {
+        (stripped, "l")
+    } else if let Some(stripped) = token.strip_suffix('l') {
+        (stripped, "l")
     } else {
         return None;
     };
 
     let num: f64 = num_part.parse().ok()?;
     match suffix {
-        "cr" => Some((num * 1_00_00_000.0) as u64),
-        "l" => Some((num * 1_00_000.0) as u64),
+        "cr" => Some((num * 10_000_000.0) as u64),
+        "l" => Some((num * 100_000.0) as u64),
         _ => None,
     }
 }
@@ -210,7 +210,7 @@ mod tests {
     #[test]
     fn test_parse_budget() {
         let intent = parse_intent("under 1.5cr in bellandur");
-        assert_eq!(intent.budget_max, Some(1_50_00_000));
+        assert_eq!(intent.budget_max, Some(15_000_000));
         assert_eq!(intent.area.as_deref(), Some("Bellandur"));
     }
 
@@ -226,6 +226,6 @@ mod tests {
     fn test_parse_budget_lakhs() {
         let intent = parse_intent("3 bhk below 80l");
         assert_eq!(intent.bhk, Some(3));
-        assert_eq!(intent.budget_max, Some(80_00_000));
+        assert_eq!(intent.budget_max, Some(8_000_000));
     }
 }

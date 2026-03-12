@@ -5,9 +5,10 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::Serialize;
 
-use crate::models::PropertyCard;
+use crate::models::{PropertyCard, SellerSummary};
 use crate::scoring::{
-    self, CompareThemes, MarketActivityResponse, TradeoffsResponse,
+    self, CompareThemes, MarketActivityResponse, TradeoffsResponse, TransparencyScore,
+    compute_transparency_score,
 };
 use crate::state::AppState;
 
@@ -49,6 +50,17 @@ pub struct PropertyDetail {
     /// Area intelligence from Reddit and other sources (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_intelligence: Option<AreaIntelligence>,
+    /// Composite transparency score (0-100) with breakdown.
+    pub transparency_score: TransparencyScore,
+    /// Lowest price_per_sqft among properties in the same area.
+    pub area_price_range_low: Option<u64>,
+    /// Highest price_per_sqft among properties in the same area.
+    pub area_price_range_high: Option<u64>,
+    /// Seller info for buyer-facing display (no email/phone).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller: Option<SellerSummary>,
+    /// Number of buyers who have expressed interest.
+    pub interest_count: usize,
 }
 
 #[derive(Serialize)]
@@ -142,6 +154,52 @@ pub async fn get_property(
     // Extract area intelligence from the area's KG node
     let area_intelligence = extract_area_intelligence(&graph, &property.area_id);
 
+    // Compute transparency score
+    let transparency_score = compute_transparency_score(&property, rera.as_ref());
+
+    // Compute area price range from all properties in the same area
+    let (area_price_range_low, area_price_range_high) = {
+        let area_props: Vec<u64> = properties
+            .iter()
+            .filter(|p| p.area_id == property.area_id && p.price_per_sqft > 0)
+            .map(|p| p.price_per_sqft)
+            .collect();
+
+        if area_props.len() >= 2 {
+            let low = area_props.iter().copied().min();
+            let high = area_props.iter().copied().max();
+            (low, high)
+        } else {
+            (None, None)
+        }
+    };
+
+    // Look up seller for this property.
+    // Pick first verified seller, then highest completeness.
+    let seller = {
+        let mut matching: Vec<_> = state
+            .sellers
+            .iter()
+            .filter(|s| s.property_ids.contains(&property.id))
+            .collect();
+        matching.sort_by(|a, b| {
+            b.verified
+                .cmp(&a.verified)
+                .then_with(|| b.completeness_pct().cmp(&a.completeness_pct()))
+        });
+        matching.first().map(|s| s.to_summary())
+    };
+
+    // Read interest count from JSONL file.
+    let interest_count = {
+        let file_path = state
+            .project_root
+            .join("data")
+            .join("interests")
+            .join(format!("{}.jsonl", property.id));
+        count_interest_lines(&file_path).await
+    };
+
     Ok(Json(PropertyDetail {
         property,
         society,
@@ -152,5 +210,18 @@ pub async fn get_property(
         similar_properties,
         rera,
         area_intelligence,
+        transparency_score,
+        area_price_range_low,
+        area_price_range_high,
+        seller,
+        interest_count,
     }))
+}
+
+/// Count non-empty lines in a JSONL file (interest events).
+async fn count_interest_lines(path: &std::path::Path) -> usize {
+    match tokio::fs::read_to_string(path).await {
+        Ok(contents) => contents.lines().filter(|l: &&str| !l.trim().is_empty()).count(),
+        Err(_) => 0,
+    }
 }

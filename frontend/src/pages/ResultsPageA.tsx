@@ -3,12 +3,13 @@
  * All data comes from the backend API — no client-side fallbacks.
  */
 import { useEffect, useState, useMemo } from "react";
-import { useSearchParams, useNavigate, Link } from "react-router-dom";
+import { useSearchParams, Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import { PageState } from "../components/PageState.tsx";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
+import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { PreferencePill } from "../components/PreferencePill.tsx";
 import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
@@ -16,6 +17,7 @@ import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { CompareBar } from "../components/CompareBar.tsx";
 import { ComparePanel } from "../components/ComparePanel.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { addRecentSearch } from "../lib/recent-searches.ts";
 
 const MAX_COMPARE = 3;
 
@@ -377,7 +379,7 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
           </svg>
-          Quick view
+          <span className="card-a-detail-btn-label">Quick view</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="9 18 15 12 9 6" />
           </svg>
@@ -475,7 +477,6 @@ export function ResultsPageA() {
   }, [compareIds]);
 
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
   const [searchInput, setSearchInput] = useState(query);
@@ -513,6 +514,7 @@ export function ResultsPageA() {
     setSearchFailed(false);
 
     if (query) {
+      addRecentSearch(query);
       searchProperties(query)
         .then((data) => {
           setSearchResponse(data);
@@ -559,20 +561,35 @@ export function ResultsPageA() {
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
 
-  if (status === "loading") return <PageState variant="loading" context="results" />;
+  if (status === "loading") return (
+    <div className="page-container">
+      <div className="page-header">
+        <h1>Properties</h1>
+        <div className="skeleton-search-bar skeleton-bar" />
+      </div>
+      <div className="results-grid">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="skeleton-card">
+            <div className="skeleton-card-image skeleton-bar" />
+            <div className="skeleton-card-body">
+              <div className="skeleton-card-title skeleton-bar" />
+              <div className="skeleton-card-location skeleton-bar" />
+              <div className="skeleton-card-price skeleton-bar" />
+              <div className="skeleton-card-tags">
+                <div className="skeleton-card-tag skeleton-bar" />
+                <div className="skeleton-card-tag skeleton-bar" />
+                <div className="skeleton-card-tag skeleton-bar" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
   if (status === "error") {
     return (
       <div className="page-container">
-        <div style={{ textAlign: "center", padding: "4rem 2rem" }}>
-          <h2 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "0.75rem" }}>Could not load results</h2>
-          <p style={{ color: "var(--color-text-secondary)", marginBottom: "1.5rem", lineHeight: 1.6 }}>
-            The backend is unavailable. Please try again later.
-          </p>
-          <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
-            <button className="btn btn-primary" onClick={() => window.location.reload()}>Retry</button>
-            <button className="btn btn-outline" onClick={() => navigate("/")}>Return home</button>
-          </div>
-        </div>
+        <PageState variant="error" context="results" />
       </div>
     );
   }
@@ -582,25 +599,30 @@ export function ResultsPageA() {
     : null;
   const hasSearchChips = intent && (intent.area || intent.bhk || intent.budget_max || intent.preferences.length > 0);
 
+  const helmetTitle = query
+    ? `${query} — Property Search | OpenEstates`
+    : "All Properties — OpenEstates";
+  const helmetDescription = query
+    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
+    : `Browse ${totalCount} properties with full transparency reports on OpenEstates.`;
+
   return (
     <div className="page-container">
+      <Helmet>
+        <title>{helmetTitle}</title>
+        <meta name="description" content={helmetDescription} />
+        <meta property="og:title" content={helmetTitle} />
+        <meta property="og:description" content={helmetDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="OpenEstates" />
+      </Helmet>
       <div className="page-header">
         <h1>Properties</h1>
 
         {/* Inline search bar for refining */}
         <form
           onSubmit={handleSearch}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            margin: "0.75rem 0",
-            padding: "0.65rem 1rem",
-            borderRadius: "var(--radius-md)",
-            backgroundColor: "var(--color-bg-card)",
-            border: "1px solid var(--color-border)",
-            maxWidth: "520px",
-          }}
+          className="results-search-bar"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
             <circle cx="11" cy="11" r="8" />
@@ -682,6 +704,13 @@ export function ResultsPageA() {
         )}
       </div>
 
+      {/* Accessible live region — announces result count to screen readers */}
+      <div aria-live="polite" className="sr-only">
+        {query
+          ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
+          : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
+      </div>
+
       {/* Discovery banner — shown when live discovery found new properties */}
       {discoveryStatus === "discovered_new" && discoveryCount && discoveryCount > 0 && (
         <div
@@ -714,9 +743,39 @@ export function ResultsPageA() {
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
+      {matchResults.length === 0 && query && (
+        <div className="empty-state">
+          <h2>No properties match "{query}"</h2>
+          <p>Try broadening your search or explore one of these suggestions.</p>
+          <div className="empty-state-chips">
+            {intent?.area && (
+              <button className="empty-state-chip" onClick={() => setSearchParams({ q: intent.area! })}>
+                Just {intent.area}
+              </button>
+            )}
+            {intent?.bhk && (
+              <button className="empty-state-chip" onClick={() => {
+                const without = query.replace(/\d+\s*bhk/i, "").trim();
+                if (without) setSearchParams({ q: without });
+              }}>
+                Without BHK filter
+              </button>
+            )}
+            {["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
+              <button key={s} className="empty-state-chip" onClick={() => setSearchParams({ q: s })}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <Link to="/results" style={{ color: "var(--color-accent)", fontSize: "0.88rem", fontWeight: 500 }}>
+            Browse all properties
+          </Link>
+        </div>
+      )}
+
       <div
-        className={panelPropertyId ? "results-grid--panel-open" : ""}
-        style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: "1.25rem", paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
+        className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
+        style={{ paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
         {matchResults.map(({ property, match, explanation }) => (
           <CardA

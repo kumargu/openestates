@@ -18,6 +18,7 @@ export type PropertyCard = {
   facing: string;
   google_rating?: number;
   google_review_count?: number;
+  seller_id?: string;
 };
 
 export type PropertyDetailResponse = {
@@ -63,6 +64,7 @@ export type PropertyDetailResponse = {
     description_summary: string;
     transparency_tags: string[];
     source_reference: string;
+    seller_id?: string;
   };
   society: {
     id: string;
@@ -100,6 +102,19 @@ export type PropertyDetailResponse = {
   similar_properties: PropertyCard[];
   rera?: ReraInfo;
   area_intelligence?: AreaIntelligence;
+  transparency_score: TransparencyScore;
+  area_price_range_low?: number;
+  area_price_range_high?: number;
+  seller?: SellerSummary;
+  interest_count?: number;
+};
+
+export type SellerSummary = {
+  name: string;
+  verified: boolean;
+  completeness_pct: number;
+  property_prompt?: string;
+  documents_provided: string[];
 };
 
 export type ThemeLabel = "strong" | "good" | "mixed" | "weak";
@@ -135,6 +150,18 @@ export type PriceVsMedian = {
   pct_diff: number;
   verdict: string;
   verdict_class: string;
+};
+
+export type TransparencyComponent = {
+  label: string;
+  score: number;
+  max_score: number;
+};
+
+export type TransparencyScore = {
+  overall: number;
+  components: TransparencyComponent[];
+  explainer: string;
 };
 
 export type MarketActivityResponse = {
@@ -319,6 +346,55 @@ export type AreaIntelligence = {
 
 export type ApiError = {
   error: string;
+};
+
+// Seller types
+export type SellerCard = {
+  id: string;
+  name: string;
+  property_count: number;
+  completeness_pct: number;
+  verified: boolean;
+};
+
+export type Seller = {
+  id: string;
+  name: string;
+  email?: string;
+  phone?: string;
+  property_ids: string[];
+  has_basic_info: boolean;
+  has_property_prompt: boolean;
+  property_prompt?: string;
+  has_details: boolean;
+  has_pricing: boolean;
+  has_documents: boolean;
+  has_photos: boolean;
+  has_society_info: boolean;
+  documents_provided: string[];
+  verified: boolean;
+  created_at: string;
+  updated_at: string;
+  completeness_pct: number;
+  properties: PropertyCard[];
+};
+
+// Interest types
+export type InterestRequest = {
+  property_id: string;
+  buyer_name?: string;
+  buyer_contact?: string;
+};
+
+export type InterestResponse = {
+  id: string;
+  status: string;
+  property_id: string;
+};
+
+export type InterestCount = {
+  property_id: string;
+  count: number;
 };
 
 // Society search types — aligned with pipeline/society_scorer.py output

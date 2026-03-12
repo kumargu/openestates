@@ -3,8 +3,10 @@
 //! to seed data thresholds.
 
 mod themes;
+mod transparency;
 
 pub use themes::{
     CompareThemes, MarketActivityResponse, TradeoffsResponse, compute_market_activity,
     compute_themes, compute_tradeoffs,
 };
+pub use transparency::{TransparencyScore, compute_transparency_score};

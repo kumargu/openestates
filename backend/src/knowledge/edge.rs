@@ -63,11 +63,13 @@ impl Edge {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_weight(mut self, weight: f32) -> Self {
         self.weight = weight;
         self
     }
 
+    #[allow(dead_code)]
     pub fn with_metadata(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.metadata.insert(key.into(), value.into());
         self

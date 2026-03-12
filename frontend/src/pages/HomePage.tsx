@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import type { PropertyCard } from "../lib/types.ts";
 import { getProperties } from "../lib/api.ts";
+import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 
 function useOnScreen(ref: React.RefObject<HTMLElement | null>) {
   const [visible, setVisible] = useState(false);
@@ -197,6 +198,7 @@ export function HomePage() {
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
+  const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const navigate = useNavigate();
   const pulseRef = useRef<HTMLElement | null>(null);
   const pulseVisible = useOnScreen(pulseRef);
@@ -210,7 +212,11 @@ export function HomePage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const q = query.trim();
-    if (q) sessionStorage.setItem("oe_search_query", q);
+    if (q) {
+      sessionStorage.setItem("oe_search_query", q);
+      addRecentSearch(q);
+      setRecents(getRecentSearches());
+    }
     navigate(q ? `/results?q=${encodeURIComponent(q)}` : "/results");
   };
 
@@ -289,19 +295,9 @@ export function HomePage() {
         </p>
         <form
           onSubmit={handleSearch}
-          className="fade-up fade-up-delay-2 search-container"
-          style={{
-            width: "100%",
-            maxWidth: "600px",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            padding: "1rem 1.5rem",
-            borderRadius: "16px",
-            backgroundColor: "#fff",
-            border: "1px solid rgba(0,0,0,0.08)",
-            boxShadow: "0 4px 24px rgba(0,0,0,0.06)",
-          }}
+          className="fade-up fade-up-delay-2 search-container home-search-form"
+          aria-label="Property search"
+          role="search"
         >
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
             <circle cx="11" cy="11" r="8" />
@@ -313,6 +309,7 @@ export function HomePage() {
             placeholder="Try: 3BHK near metro in Whitefield under 1.5Cr"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            aria-label="Describe the property you are looking for"
           />
           <button
             type="submit"
@@ -335,18 +332,39 @@ export function HomePage() {
           </button>
         </form>
 
+        {/* Error banner — non-blocking */}
+        {loadError && (
+          <div className="home-error-banner fade-up fade-up-delay-2">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+              <line x1="12" y1="9" x2="12" y2="13" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
+            </svg>
+            <span>Market data temporarily unavailable. Search still works.</span>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: "none",
+                border: "1px solid rgba(146,64,14,0.3)",
+                color: "#92400e",
+                padding: "0.25rem 0.75rem",
+                borderRadius: "6px",
+                fontSize: "0.78rem",
+                cursor: "pointer",
+                fontFamily: "inherit",
+                marginLeft: "0.5rem",
+                whiteSpace: "nowrap",
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Inline stats — social proof */}
         {snapshot && (
           <div
-            className="fade-up fade-up-delay-3"
-            style={{
-              marginTop: "1.5rem",
-              display: "flex",
-              gap: "1.5rem",
-              alignItems: "center",
-              fontSize: "0.82rem",
-              color: "#999",
-            }}
+            className="fade-up fade-up-delay-3 home-stats-row"
           >
             <span><strong style={{ color: "#555" }}>{snapshot.totalProperties}</strong> properties</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
@@ -373,6 +391,8 @@ export function HomePage() {
               key={s}
               onClick={() => {
                 sessionStorage.setItem("oe_search_query", s);
+                addRecentSearch(s);
+                setRecents(getRecentSearches());
                 navigate(`/results?q=${encodeURIComponent(s)}`);
               }}
               style={{
@@ -400,24 +420,35 @@ export function HomePage() {
           ))}
         </div>
 
+        {/* Recent searches */}
+        {recents.length > 0 && (
+          <div className="fade-up fade-up-delay-3 recent-searches">
+            <span className="recent-searches-label">Recent</span>
+            {recents.map((s) => (
+              <button
+                key={s}
+                className="empty-state-chip"
+                onClick={() => {
+                  sessionStorage.setItem("oe_search_query", s);
+                  navigate(`/results?q=${encodeURIComponent(s)}`);
+                }}
+              >
+                {s}
+              </button>
+            ))}
+            <button
+              className="recent-clear-btn"
+              onClick={() => { clearRecentSearches(); setRecents([]); }}
+            >
+              clear
+            </button>
+          </div>
+        )}
+
         {/* Trending strip */}
         {snapshot && snapshot.trending.length > 0 && (
           <div
-            className="fade-up fade-up-delay-4"
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: 0,
-              right: 0,
-              backgroundColor: "rgba(255,255,255,0.85)",
-              backdropFilter: "blur(12px)",
-              borderTop: "1px solid rgba(0,0,0,0.05)",
-              padding: "0.75rem clamp(1rem, 3vw, 3rem)",
-              display: "flex",
-              justifyContent: "center",
-              gap: "0.5rem",
-              flexWrap: "wrap",
-            }}
+            className="fade-up fade-up-delay-4 home-trending-strip"
           >
             {snapshot.trending.slice(0, 4).map((t, i) => (
               <button
@@ -505,7 +536,7 @@ export function HomePage() {
               Live snapshot across {snapshot.totalAreas} micro-markets in Bengaluru
             </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "1.25rem" }}>
+            <div className="home-pulse-grid">
               {/* Price range + BHK breakdown */}
               <div
                 style={{
@@ -906,7 +937,7 @@ function MicroMarketsSection({
             {markets.length} areas · {properties.length} listings · real-time intelligence
           </p>
         </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "0.75rem" }}>
+        <div className="home-micro-grid">
           {markets.map((m) => (
             <MicroMarketCard key={m.area} m={m} maxAvg={maxAvg} navigate={navigate} />
           ))}

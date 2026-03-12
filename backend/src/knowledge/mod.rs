@@ -19,7 +19,6 @@ pub mod query;
 pub mod search_event;
 pub mod store;
 
-pub use fact::{FactValue, ScoringDirection, ScoringHint, SourcedFact};
+pub use fact::{FactValue, SourcedFact};
 pub use graph::{GraphStats, KnowledgeGraph};
-pub use query::{FactAggregation, GraphPath, NodeComparison, Subgraph};
 pub use search_event::SearchEvent;

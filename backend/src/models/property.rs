@@ -49,6 +49,8 @@ pub struct Property {
     pub description_summary: String,
     pub transparency_tags: Vec<String>,
     pub source_reference: String,
+    #[serde(default)]
+    pub seller_id: Option<String>,
 }
 
 /// UI-ready property card for the results page.
@@ -75,4 +77,6 @@ pub struct PropertyCard {
     pub google_rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub google_review_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller_id: Option<String>,
 }

@@ -506,19 +506,7 @@ fn build_knowledge_context(
 // ---------------------------------------------------------------------------
 
 /// Score how well a node's facts match a user preference, using the graph's own
-/// scoring_hint metadata. Returns a score 0.0-2.0 (same scale as the old hardcoded fn).
-///
-/// Called from text.rs as a graph-aware alternative to the hardcoded preference_score.
-pub fn graph_preference_score(
-    graph: &KnowledgeGraph,
-    society_id: &str,
-    preference: &str,
-) -> Option<f64> {
-    graph_preference_score_detailed(graph, society_id, preference).map(|(score, _)| score)
-}
-
-/// Like `graph_preference_score`, but also returns the matching fact's metadata
-/// so the caller can build a structured MatchReason.
+/// scoring_hint metadata. Returns a score 0.0-2.0 and fact detail for MatchReason.
 pub fn graph_preference_score_detailed(
     graph: &KnowledgeGraph,
     society_id: &str,
@@ -574,7 +562,7 @@ pub struct GraphFactDetail {
 /// Apply a scoring hint to a fact value. Returns 0.0 - weight (typically 0-2).
 fn score_fact_with_hint(
     value: &crate::knowledge::FactValue,
-    hint: &crate::knowledge::ScoringHint,
+    hint: &crate::knowledge::fact::ScoringHint,
 ) -> f64 {
     let weight = hint.weight as f64;
 

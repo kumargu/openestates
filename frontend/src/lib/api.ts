@@ -6,12 +6,33 @@ import type {
   ShortlistResponse,
   SearchResponse,
   SocietySearchResponse,
+  SocietySearchResult,
+  SellerCard,
+  Seller,
+  InterestRequest,
+  InterestResponse,
+  InterestCount,
 } from "./types.ts";
 
-const API_BASE = "http://localhost:4000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `API ${res.status}: ${text || res.statusText}`
+    );
+  }
+  return res.json();
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(
@@ -51,6 +72,44 @@ export function searchProperties(query: string): Promise<SearchResponse> {
 
 export function searchSocieties(query: string): Promise<SocietySearchResponse> {
   return fetchJson(`/api/societies/search?q=${encodeURIComponent(query)}`);
+}
+
+export function getSociety(slug: string): Promise<SocietySearchResult> {
+  return fetchJson(`/api/societies/${encodeURIComponent(slug)}`);
+}
+
+export type ClaimRequest = {
+  property_id: string;
+  name: string;
+  phone?: string;
+  email?: string;
+};
+
+export type ClaimResponse = {
+  status: string;
+  property_id: string;
+};
+
+export function submitClaim(req: ClaimRequest): Promise<ClaimResponse> {
+  return postJson("/api/claims", req);
+}
+
+// Seller API
+export function getSellers(): Promise<SellerCard[]> {
+  return fetchJson("/api/sellers");
+}
+
+export function getSeller(id: string): Promise<Seller> {
+  return fetchJson(`/api/sellers/${encodeURIComponent(id)}`);
+}
+
+// Interest API
+export function expressInterest(req: InterestRequest): Promise<InterestResponse> {
+  return postJson("/api/interests", req);
+}
+
+export function getInterestCount(propertyId: string): Promise<InterestCount> {
+  return fetchJson(`/api/properties/${encodeURIComponent(propertyId)}/interests/count`);
 }
 
 export type PlatformStats = {

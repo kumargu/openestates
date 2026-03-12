@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 import type { PropertyCard as PropertyCardType, PropertyDetailResponse, CompareThemes, ThemeLabel } from "../lib/types.ts";
 import { getProperties, getProperty } from "../lib/api.ts";
+import { PageState } from "../components/PageState.tsx";
 import { PropertyCard } from "../components/PropertyCard.tsx";
 import { getShortlistedIds, toggleShortlist } from "../lib/shortlist-store.ts";
 
@@ -83,15 +85,8 @@ export function ShortlistPage() {
 
   if (loadError) {
     return (
-      <div className="page-container" style={{ textAlign: "center", padding: "4rem 2rem" }}>
-        <h2 style={{ fontSize: "1.3rem", fontWeight: 600, marginBottom: "0.75rem" }}>Could not load data</h2>
-        <p style={{ color: "var(--color-text-secondary)", marginBottom: "1.5rem", lineHeight: 1.6 }}>
-          The backend is unavailable. Please try again later.
-        </p>
-        <div style={{ display: "flex", gap: "0.75rem", justifyContent: "center" }}>
-          <button className="btn btn-primary" onClick={() => window.location.reload()}>Retry</button>
-          <button className="btn btn-outline" onClick={() => navigate("/")}>Return home</button>
-        </div>
+      <div className="page-container">
+        <PageState variant="error" context="shortlist" />
       </div>
     );
   }
@@ -99,7 +94,7 @@ export function ShortlistPage() {
   // Empty state
   if (savedProperties.length === 0) {
     return (
-      <div style={{ maxWidth: "600px", margin: "0 auto", padding: "3rem 2rem", textAlign: "center" }}>
+      <div className="shortlist-empty-state">
         <h1 style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>Compare saved homes</h1>
         <div data-testid="compare-empty-state" style={{
           padding: "2.5rem 2rem",
@@ -156,6 +151,14 @@ export function ShortlistPage() {
 
   return (
     <div className="page-container-wide" data-testid="shortlist-page">
+      <Helmet>
+        <title>Compare Saved Homes | OpenEstates</title>
+        <meta name="description" content="Compare your shortlisted properties side by side — value, commute, society quality, and risk signals." />
+        <meta property="og:title" content="Compare Saved Homes | OpenEstates" />
+        <meta property="og:description" content="Compare your shortlisted properties side by side — value, commute, society quality, and risk signals." />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="OpenEstates" />
+      </Helmet>
       <div className="page-header">
         <h1>Compare saved homes</h1>
         <p>{savedProperties.length} saved {savedProperties.length === 1 ? "property" : "properties"} for comparison</p>
@@ -203,7 +206,7 @@ export function ShortlistPage() {
       )}
 
       {/* === Layer A: Quick Compare === */}
-      <div className="section-card" data-testid="quick-compare-section" style={{ overflowX: "auto", marginBottom: "1.5rem" }}>
+      <div className="section-card mobile-scroll-x" data-testid="quick-compare-section" style={{ marginBottom: "1.5rem" }}>
         <div className="section-card-header">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
             <line x1="18" y1="20" x2="18" y2="10" />
@@ -259,7 +262,7 @@ export function ShortlistPage() {
 
       {/* === Layer B: Decision Themes === */}
       {detailsLoaded && detailedProps.length >= 2 && (
-        <div className="section-card" data-testid="decision-themes-section" style={{ overflowX: "auto", marginBottom: "1.5rem" }}>
+        <div className="section-card mobile-scroll-x" data-testid="decision-themes-section" style={{ marginBottom: "1.5rem" }}>
           <div className="section-card-header">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
               <circle cx="12" cy="12" r="10" />
@@ -307,11 +310,7 @@ export function ShortlistPage() {
         }}>
           Saved properties
         </h2>
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-          gap: "1.25rem",
-        }}>
+        <div className="shortlist-cards-grid">
           {savedProperties.map((p) => (
             <PropertyCard key={p.id} property={p} onShortlistChange={refreshIds} />
           ))}

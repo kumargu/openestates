@@ -1,8 +1,12 @@
 pub mod admin;
 pub mod areas;
+pub mod claims;
 pub mod enrichment;
+pub mod interests;
 pub mod knowledge;
 pub mod properties;
 pub mod search;
+pub mod sellers;
 pub mod shortlist;
+pub mod sitemap;
 pub mod societies;

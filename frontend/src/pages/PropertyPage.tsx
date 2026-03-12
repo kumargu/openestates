@@ -1,12 +1,15 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import type { PropertyDetailResponse, ThemeLabel } from "../lib/types.ts";
-import { getProperty } from "../lib/api.ts";
+import { useParams, Link, useNavigate } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+import type { PropertyDetailResponse, ThemeLabel, SellerSummary } from "../lib/types.ts";
+import { getProperty, submitClaim, expressInterest } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
 import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
+import { TransparencyScoreTile } from "../components/TransparencyScoreTile.tsx";
+import { ShareButtons } from "../components/ShareButtons.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -55,8 +58,39 @@ function ThemeBadge({ level }: { level: ThemeLabel }) {
   );
 }
 
+function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
+  const jsonLd: Record<string, unknown> = {
+    "@context": "https://schema.org",
+    "@type": "RealEstateListing",
+    name: p.title,
+    description: p.description_summary || `${p.bhk} BHK, ${p.carpet_area_sqft} sqft in ${p.area}, ${p.city}`,
+    url: `https://openestates.in/property/${p.id}`,
+    offers: {
+      "@type": "Offer",
+      price: p.price,
+      priceCurrency: "INR",
+    },
+    address: {
+      "@type": "PostalAddress",
+      addressLocality: p.area,
+      addressRegion: p.city,
+    },
+    floorSize: {
+      "@type": "QuantitativeValue",
+      value: p.carpet_area_sqft,
+      unitCode: "FTK",
+    },
+    numberOfRooms: p.bhk,
+  };
+  if (p.hero_image) {
+    jsonLd.image = p.hero_image;
+  }
+  return jsonLd;
+}
+
 export function PropertyPage() {
   const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
   const [saved, setSaved] = useState(false);
@@ -74,7 +108,37 @@ export function PropertyPage() {
       });
   }, [id]);
 
-  if (status === "loading") return <PageState variant="loading" context="property" />;
+  if (status === "loading") return (
+    <div className="page-container-wide">
+      {/* Hero placeholder */}
+      <div className="skeleton-bar" style={{ width: "100%", height: "320px", borderRadius: "var(--radius-md)", marginBottom: "1.5rem" }} />
+      {/* Title bar */}
+      <div className="skeleton-bar" style={{ width: "60%", height: "28px", marginBottom: "0.5rem" }} />
+      {/* Subtitle */}
+      <div className="skeleton-bar" style={{ width: "40%", height: "16px", marginBottom: "1rem" }} />
+      {/* Price bar */}
+      <div className="skeleton-bar" style={{ width: "25%", height: "24px", marginBottom: "0.75rem" }} />
+      {/* Tags row */}
+      <div style={{ display: "flex", gap: "0.5rem", marginBottom: "2rem" }}>
+        <div className="skeleton-bar" style={{ width: "60px", height: "24px", borderRadius: "999px" }} />
+        <div className="skeleton-bar" style={{ width: "80px", height: "24px", borderRadius: "999px" }} />
+        <div className="skeleton-bar" style={{ width: "70px", height: "24px", borderRadius: "999px" }} />
+        <div className="skeleton-bar" style={{ width: "90px", height: "24px", borderRadius: "999px" }} />
+      </div>
+      {/* Two-column layout */}
+      <div className="property-layout">
+        <div className="property-main">
+          <div className="skeleton-detail-section skeleton-bar" />
+          <div className="skeleton-detail-section skeleton-bar" />
+          <div className="skeleton-detail-section skeleton-bar" style={{ height: "140px" }} />
+        </div>
+        <div className="property-sidebar">
+          <div className="skeleton-detail-section skeleton-bar" style={{ height: "120px" }} />
+          <div className="skeleton-detail-section skeleton-bar" style={{ height: "160px" }} />
+        </div>
+      </div>
+    </div>
+  );
   if (status === "not_found") return <PageState variant="not_found" context="property" message={`Property "${id}" was not found.`} />;
   if (status === "error") return <PageState variant="error" context="property" />;
   if (!data) return null;
@@ -88,20 +152,44 @@ export function PropertyPage() {
     setSaved(!saved);
   };
 
+  const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
+  const pageDescription = `${p.bhk} BHK, ${p.carpet_area_sqft} sqft in ${society?.name ? society.name + ", " : ""}${p.area}. ${formatPrice(p.price)} (${p.price_per_sqft.toLocaleString("en-IN")}/sqft). Transparency scores, risk signals, and tradeoffs.`;
+
   return (
     <div className="page-container-wide">
-      <Link to="/results" className="back-link">
+      <Helmet>
+        <title>{pageTitle}</title>
+        <meta name="description" content={pageDescription} />
+        <meta property="og:title" content={pageTitle} />
+        <meta property="og:description" content={pageDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="OpenEstates" />
+        {p.hero_image && <meta property="og:image" content={p.hero_image} />}
+        <script type="application/ld+json">{JSON.stringify(buildPropertyJsonLd(p))}</script>
+      </Helmet>
+      <button
+        onClick={() => {
+          if (window.history.length > 1) {
+            navigate(-1);
+          } else {
+            navigate("/results");
+          }
+        }}
+        className="back-link"
+        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+      >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>
         Back to results
-      </Link>
+      </button>
 
       {/* Hero image */}
       <ImageWithFallback
         src={p.hero_image}
         alt={p.title}
-        style={{ width: "100%", height: "360px", borderRadius: "var(--radius-lg)" }}
+        className="property-hero-image"
+        loading="eager"
       />
 
       {/* === A. Property Summary === */}
@@ -143,9 +231,6 @@ export function PropertyPage() {
         {/* === Main column === */}
         <div className="property-main">
 
-      {/* === RERA Verification — high up for trust === */}
-      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
-
       {/* === B. Why This Property For You === */}
       <div className="section-card" data-testid="why-this-property-section">
         <div className="section-card-header">
@@ -174,6 +259,9 @@ export function PropertyPage() {
           ))}
         </div>
       </div>
+
+      {/* === RERA Verification === */}
+      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
 
       {/* === G. Tradeoffs to Know === */}
       {(tradeoffs.strengths.length > 0 || tradeoffs.cautions.length > 0) && (
@@ -439,11 +527,17 @@ export function PropertyPage() {
         />
       )}
 
+      {/* === Claim Section — only shown when no seller is linked === */}
+      {!data.seller && <ClaimSection propertyId={p.id} />}
+
         </div>{/* end property-main */}
 
         {/* === Sticky sidebar === */}
         <div className="property-sidebar">
-          {/* Price + Save */}
+          {/* Transparency Score — top of sidebar */}
+          <TransparencyScoreTile data={data.transparency_score} />
+
+          {/* Price + Save + Share */}
           <div className="section-card" style={{ marginBottom: "1rem" }}>
             <div style={{ marginBottom: "0.75rem" }}>
               <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
@@ -461,13 +555,27 @@ export function PropertyPage() {
             >
               {saved ? "\u2665 Saved to shortlist" : "\u2661 Save to shortlist"}
             </button>
+            <ShareButtons propertyId={p.id} title={p.title} />
           </div>
 
-          {/* Price vs Area Median — compact sidebar version */}
+          {/* "I'm Interested" button */}
+          <InterestButton propertyId={p.id} initialCount={data.interest_count ?? 0} />
+
+          {/* Seller info card (if linked) */}
+          {data.seller && <SellerInfoCard seller={data.seller} />}
+
+          {/* Price vs Area Median — spectrum gauge */}
           {pvm && area && (() => {
             const verdictColor = pvm.verdict_class === "positive" ? "var(--color-positive)"
               : pvm.verdict_class === "warning" ? "var(--color-warning)"
               : "var(--color-text-secondary)";
+
+            const rangeLow = data.area_price_range_low ?? area.median_price_per_sqft * 0.8;
+            const rangeHigh = data.area_price_range_high ?? area.median_price_per_sqft * 1.2;
+            const rangeSpan = rangeHigh - rangeLow || 1;
+            const propertyPos = Math.min(Math.max(((p.price_per_sqft - rangeLow) / rangeSpan) * 100, 2), 98);
+            const medianPos = Math.min(Math.max(((area.median_price_per_sqft - rangeLow) / rangeSpan) * 100, 2), 98);
+
             return (
             <div className="section-card" data-testid="price-vs-median-section" style={{ marginBottom: "1rem" }}>
               <div style={{
@@ -488,29 +596,51 @@ export function PropertyPage() {
                   vs {"\u20B9"}{area.median_price_per_sqft.toLocaleString("en-IN")}
                 </span>
               </div>
-              <div style={{
-                position: "relative",
-                height: "6px",
-                backgroundColor: "#eee",
-                borderRadius: "3px",
-                marginBottom: "0.5rem",
-              }}>
+
+              {/* Spectrum gauge */}
+              <div className="price-spectrum" style={{ position: "relative", marginBottom: "0.75rem" }}>
+                <div className="price-spectrum-bar" />
+                {/* Median marker */}
                 <div style={{
                   position: "absolute",
-                  left: "50%",
-                  top: "-1px",
+                  left: `${medianPos}%`,
+                  top: "-2px",
+                  transform: "translateX(-50%)",
                   width: "2px",
-                  height: "8px",
+                  height: "14px",
                   backgroundColor: "var(--color-text-muted)",
+                  borderRadius: "1px",
                 }} />
+                {/* Property marker */}
                 <div style={{
-                  height: "100%",
-                  width: `${Math.min(Math.max((p.price_per_sqft / area.median_price_per_sqft) * 50, 10), 90)}%`,
-                  borderRadius: "3px",
+                  position: "absolute",
+                  left: `${propertyPos}%`,
+                  top: "-4px",
+                  transform: "translateX(-50%)",
+                  width: "10px",
+                  height: "18px",
+                  borderRadius: "5px",
                   backgroundColor: verdictColor,
-                  transition: "width 0.8s var(--ease-out)",
+                  border: "2px solid var(--color-bg-card)",
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
+                  transition: "left 0.8s var(--ease-out)",
                 }} />
               </div>
+
+              {/* Range labels */}
+              {data.area_price_range_low && data.area_price_range_high && (
+                <div style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  fontSize: "0.65rem",
+                  color: "var(--color-text-muted)",
+                  marginBottom: "0.5rem",
+                }}>
+                  <span>{"\u20B9"}{data.area_price_range_low.toLocaleString("en-IN")}</span>
+                  <span>{"\u20B9"}{data.area_price_range_high.toLocaleString("en-IN")}</span>
+                </div>
+              )}
+
               <div style={{ fontSize: "0.8rem", fontWeight: 600, color: verdictColor }}>
                 {pvm.verdict} ({pvm.pct_diff > 0 ? "+" : ""}{pvm.pct_diff}%)
               </div>
@@ -618,6 +748,140 @@ export function PropertyPage() {
             ))}
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function ClaimSection({ propertyId }: { propertyId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [name, setName] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setStatus("submitting");
+    setErrorMsg("");
+    try {
+      await submitClaim({
+        property_id: propertyId,
+        name: name.trim(),
+        phone: phone.trim() || undefined,
+        email: email.trim() || undefined,
+      });
+      setStatus("success");
+    } catch (err: unknown) {
+      setStatus("error");
+      setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
+    }
+  };
+
+  if (status === "success") {
+    return (
+      <div className="claim-section" style={{ marginTop: "1.5rem" }}>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "0.5rem",
+          color: "var(--color-positive)",
+          fontWeight: 600,
+          fontSize: "0.95rem",
+        }}>
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+          Claim submitted. We'll be in touch.
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="claim-section" style={{ marginTop: "1.5rem" }}>
+      {!expanded ? (
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+        }}>
+          <div>
+            <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--color-text)" }}>
+              Is this your property?
+            </div>
+            <div style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
+              Verify ownership and manage your listing
+            </div>
+          </div>
+          <button
+            onClick={() => setExpanded(true)}
+            className="btn btn-outline"
+            style={{ flexShrink: 0 }}
+          >
+            Claim it
+          </button>
+        </div>
+      ) : (
+        <form onSubmit={handleSubmit}>
+          <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "0.75rem", color: "var(--color-text)" }}>
+            Claim this property
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+            <input
+              type="text"
+              className="claim-input"
+              placeholder="Your name *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              autoFocus
+            />
+            <input
+              type="tel"
+              className="claim-input"
+              placeholder="Phone number"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+            <input
+              type="email"
+              className="claim-input"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          {status === "error" && (
+            <div style={{
+              marginTop: "0.5rem",
+              fontSize: "0.82rem",
+              color: "var(--color-negative)",
+            }}>
+              {errorMsg || "Failed to submit claim. Please try again."}
+            </div>
+          )}
+          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.85rem" }}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={status === "submitting" || !name.trim() || (!phone.trim() && !email.trim())}
+            >
+              {status === "submitting" ? "Submitting..." : "Submit claim"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => { setExpanded(false); setStatus("idle"); setErrorMsg(""); }}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
       )}
     </div>
   );
@@ -731,6 +995,199 @@ function AreaInsight({ icon, text }: { icon: string; text: string }) {
       <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--color-text)", lineHeight: 1.5 }}>
         {text}
       </p>
+    </div>
+  );
+}
+
+const INTEREST_KEY_PREFIX = "oe_interest_";
+
+function InterestButton({ propertyId, initialCount }: { propertyId: string; initialCount: number }) {
+  const storageKey = `${INTEREST_KEY_PREFIX}${propertyId}`;
+  const alreadySent = localStorage.getItem(storageKey) === "1";
+
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "already_expressed">(
+    alreadySent ? "already_expressed" : "idle"
+  );
+  const [count, setCount] = useState(initialCount);
+
+  const handleClick = async () => {
+    if (status !== "idle") return;
+    setStatus("submitting");
+    try {
+      await expressInterest({ property_id: propertyId });
+      localStorage.setItem(storageKey, "1");
+      setStatus("success");
+      setCount((c) => c + 1);
+    } catch {
+      // On error, revert to idle so user can retry
+      setStatus("idle");
+    }
+  };
+
+  const isDisabled = status !== "idle";
+  const buttonLabel =
+    status === "submitting" ? "Sending..." :
+    status === "success" || status === "already_expressed" ? "Interest sent" :
+    "I'm interested";
+
+  return (
+    <div style={{ marginBottom: "1rem" }}>
+      <button
+        onClick={handleClick}
+        disabled={isDisabled}
+        className={`btn ${isDisabled ? "btn-primary" : "btn-outline"}`}
+        style={{
+          width: "100%",
+          justifyContent: "center",
+          opacity: status === "submitting" ? 0.7 : 1,
+        }}
+      >
+        {status === "success" || status === "already_expressed" ? (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginRight: "0.4rem" }}>
+            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+            <polyline points="22 4 12 14.01 9 11.01" />
+          </svg>
+        ) : (
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginRight: "0.4rem" }}>
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
+          </svg>
+        )}
+        {buttonLabel}
+      </button>
+      {count > 0 && (
+        <div style={{
+          marginTop: "0.5rem",
+          fontSize: "0.78rem",
+          color: "var(--color-text-muted)",
+          textAlign: "center",
+        }}>
+          {count} buyer{count !== 1 ? "s" : ""} interested
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SellerInfoCard({ seller }: { seller: SellerSummary }) {
+  const completenessColor =
+    seller.completeness_pct >= 70 ? "var(--color-positive)" :
+    seller.completeness_pct >= 42 ? "var(--color-warning)" :
+    "var(--color-negative)";
+
+  return (
+    <div className="section-card" style={{ marginBottom: "1rem" }}>
+      <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
+          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+          <circle cx="12" cy="7" r="4" />
+        </svg>
+        <h2 style={{ fontSize: "0.85rem" }}>Listed by</h2>
+      </div>
+
+      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>{seller.name}</span>
+        {seller.verified && (
+          <span style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "0.2rem",
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            padding: "0.1rem 0.45rem",
+            borderRadius: "var(--radius-xl)",
+            backgroundColor: "var(--color-positive-bg)",
+            color: "var(--color-positive)",
+            border: "1px solid var(--color-positive-border)",
+          }}>
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
+              <polyline points="22 4 12 14.01 9 11.01" />
+            </svg>
+            Verified
+          </span>
+        )}
+      </div>
+
+      {/* Completeness bar */}
+      <div style={{ marginBottom: "0.75rem" }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          fontSize: "0.72rem",
+          color: "var(--color-text-muted)",
+          marginBottom: "0.25rem",
+        }}>
+          <span>Profile completeness</span>
+          <span style={{ fontWeight: 600, color: completenessColor }}>{seller.completeness_pct}%</span>
+        </div>
+        <div style={{
+          height: "4px",
+          borderRadius: "2px",
+          backgroundColor: "var(--color-border)",
+          overflow: "hidden",
+        }}>
+          <div style={{
+            height: "100%",
+            width: `${seller.completeness_pct}%`,
+            backgroundColor: completenessColor,
+            borderRadius: "2px",
+            transition: "width 0.5s var(--ease-out)",
+          }} />
+        </div>
+      </div>
+
+      {/* Property prompt */}
+      {seller.property_prompt && (
+        <div style={{
+          padding: "0.75rem",
+          borderRadius: "var(--radius-sm)",
+          backgroundColor: "var(--color-bg-elevated)",
+          border: "1px solid var(--color-border)",
+          marginBottom: "0.75rem",
+        }}>
+          <p style={{
+            margin: 0,
+            fontSize: "0.82rem",
+            color: "var(--color-text-secondary)",
+            fontStyle: "italic",
+            lineHeight: 1.5,
+          }}>
+            &ldquo;{seller.property_prompt}&rdquo;
+          </p>
+          <p style={{
+            margin: "0.4rem 0 0",
+            fontSize: "0.65rem",
+            color: "var(--color-text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+          }}>
+            Seller's note
+          </p>
+        </div>
+      )}
+
+      {/* Documents provided */}
+      {seller.documents_provided.length > 0 && (
+        <div>
+          <div style={{
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            textTransform: "uppercase",
+            letterSpacing: "0.06em",
+            color: "var(--color-text-muted)",
+            marginBottom: "0.35rem",
+          }}>
+            Documents provided
+          </div>
+          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+            {seller.documents_provided.map((doc) => (
+              <span key={doc} className="tag tag-neutral" style={{ fontSize: "0.72rem" }}>
+                {doc}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

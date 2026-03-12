@@ -57,6 +57,7 @@ struct GeminiDiscoveryResponse {
     properties: Vec<DiscoveredProperty>,
     #[serde(default)]
     area_identified: Option<String>,
+    #[allow(dead_code)]
     #[serde(default)]
     nearby_landmarks: Vec<String>,
 }
@@ -71,6 +72,7 @@ struct GeminiApiResponse {
 #[derive(Debug, Deserialize)]
 struct GeminiCandidate {
     content: Option<GeminiContent>,
+    #[allow(dead_code)]
     #[serde(default, rename = "finishReason")]
     finish_reason: Option<String>,
 }
@@ -185,11 +187,11 @@ fn build_prompt(area: &str, city: &str, constraints: &DiscoveryConstraints) -> S
         constraint_text.push_str(&format!("\nFocus on {} BHK configurations.", bhk));
     }
     if let Some(budget) = constraints.budget_max {
-        let cr = budget as f64 / 1_00_00_000.0;
+        let cr = budget as f64 / 10_000_000.0;
         if cr >= 1.0 {
             constraint_text.push_str(&format!("\nBudget: under {:.1} Cr.", cr));
         } else {
-            let lakhs = budget as f64 / 1_00_000.0;
+            let lakhs = budget as f64 / 100_000.0;
             constraint_text.push_str(&format!("\nBudget: under {:.0} Lakhs.", lakhs));
         }
     }
@@ -299,7 +301,7 @@ fn strip_markdown_fences(text: &str) -> String {
     if trimmed.starts_with("```") {
         let lines: Vec<&str> = trimmed.lines().collect();
         let start = 1; // Skip first line (```json or ```)
-        let end = if lines.last().map_or(false, |l| l.trim() == "```") {
+        let end = if lines.last().is_some_and(|l| l.trim() == "```") {
             lines.len() - 1
         } else {
             lines.len()

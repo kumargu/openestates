@@ -12,7 +12,7 @@ use serde::Serialize;
 
 use super::edge::Relation;
 use super::graph::KnowledgeGraph;
-use super::node::{Node, NodeId, NodeType};
+use super::node::{NodeId, NodeType};
 
 // ---------------------------------------------------------------------------
 // Query result types
@@ -52,23 +52,6 @@ pub struct SubgraphEdge {
     pub to: NodeId,
     pub relation: String,
     pub weight: f32,
-}
-
-/// Aggregated facts across multiple nodes (e.g., all maintenance facts in an area).
-#[derive(Debug, Clone, Serialize)]
-pub struct FactAggregation {
-    pub fact_key: String,
-    pub entries: Vec<AggregatedFact>,
-    pub count: usize,
-}
-
-#[derive(Debug, Clone, Serialize)]
-pub struct AggregatedFact {
-    pub node_id: NodeId,
-    pub node_name: String,
-    pub value: serde_json::Value,
-    pub confidence: f32,
-    pub source_type: String,
 }
 
 /// Comparison of two nodes on shared fact keys.
@@ -244,37 +227,6 @@ impl KnowledgeGraph {
         })
     }
 
-    /// Aggregate a specific fact key across all neighbors of a node.
-    /// Useful for: "What do all societies in Whitefield say about maintenance?"
-    pub fn aggregate_fact(
-        &self,
-        node_id: &str,
-        fact_key: &str,
-        relation_filter: Option<Relation>,
-    ) -> FactAggregation {
-        let neighbors = self.neighbors(node_id, relation_filter);
-
-        let entries: Vec<AggregatedFact> = neighbors
-            .iter()
-            .filter_map(|n| {
-                n.get_fact(fact_key).map(|f| AggregatedFact {
-                    node_id: n.id.clone(),
-                    node_name: n.name.clone(),
-                    value: serde_json::to_value(&f.value).unwrap_or_default(),
-                    confidence: f.confidence,
-                    source_type: format!("{:?}", f.source.source_type),
-                })
-            })
-            .collect();
-
-        let count = entries.len();
-        FactAggregation {
-            fact_key: fact_key.to_string(),
-            entries,
-            count,
-        }
-    }
-
     /// Compare two nodes side-by-side on their shared fact keys.
     pub fn compare_nodes(&self, id_a: &str, id_b: &str) -> Option<NodeComparison> {
         let node_a = self.get_node(id_a)?;
@@ -315,60 +267,6 @@ impl KnowledgeGraph {
             unique_to_a,
             unique_to_b,
         })
-    }
-
-    /// Find all nodes that have a specific fact key, optionally filtered by type.
-    pub fn nodes_with_fact(
-        &self,
-        fact_key: &str,
-        node_type_filter: Option<NodeType>,
-    ) -> Vec<&Node> {
-        self.nodes
-            .values()
-            .filter(|n| {
-                if let Some(nt) = node_type_filter {
-                    if n.node_type != nt {
-                        return false;
-                    }
-                }
-                n.has_fact(fact_key)
-            })
-            .collect()
-    }
-
-    /// Find nodes that are missing a specific fact (enrichment gap detection).
-    pub fn nodes_missing_fact(
-        &self,
-        fact_key: &str,
-        node_type_filter: Option<NodeType>,
-    ) -> Vec<&Node> {
-        self.nodes
-            .values()
-            .filter(|n| {
-                if let Some(nt) = node_type_filter {
-                    if n.node_type != nt {
-                        return false;
-                    }
-                }
-                !n.has_fact(fact_key)
-            })
-            .collect()
-    }
-
-    /// Get all societies in an area (convenience query).
-    pub fn societies_in_area(&self, area_id: &str) -> Vec<&Node> {
-        self.neighbors(area_id, Some(Relation::SocietyInArea))
-            .into_iter()
-            .filter(|n| n.node_type == NodeType::Society)
-            .collect()
-    }
-
-    /// Get all properties in a society (convenience query).
-    pub fn properties_in_society(&self, society_id: &str) -> Vec<&Node> {
-        self.neighbors(society_id, Some(Relation::PropertyInSociety))
-            .into_iter()
-            .filter(|n| n.node_type == NodeType::Property)
-            .collect()
     }
 
     /// Coverage report: for each fact key, how many nodes of a type have it?

@@ -64,7 +64,7 @@ pub fn ingest_discoveries(
             let price = disc
                 .price_range_max_lakhs
                 .or(disc.price_range_min_lakhs)
-                .map(|l| (l * 1_00_000.0) as u64)
+                .map(|l| (l * 100_000.0) as u64)
                 .unwrap_or(0);
 
             let price_per_sqft = disc.price_per_sqft_approx.unwrap_or(0);
@@ -150,6 +150,7 @@ pub fn ingest_discoveries(
                     .source_url
                     .clone()
                     .unwrap_or_else(|| "Gemini Discovery".to_string()),
+                seller_id: None,
             };
 
             new_properties.push(prop);
@@ -188,7 +189,8 @@ pub fn ingest_discoveries(
                 scoring_hint: None,
             });
 
-            if let Some(ref configs) = Some(&disc.configurations) {
+            {
+                let configs = &disc.configurations;
                 if !configs.is_empty() {
                     facts.push(SourcedFact {
                         key: "configurations".to_string(),

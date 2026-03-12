@@ -57,6 +57,51 @@ body {
   line-height: 1.6;
 }
 
+/* ── Accessibility utilities ───────────────────────────────── */
+
+/* Focus-visible ring for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Override for inputs that already have custom focus styles */
+.search-input:focus-visible,
+.claim-input:focus-visible {
+  outline: none;
+}
+
+/* No focus ring on programmatic focus of main landmark */
+#main-content:focus {
+  outline: none;
+}
+
+/* Skip-to-content link — visible only on keyboard focus */
+.skip-link {
+  position: fixed;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.75rem 1.25rem;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 0.88rem;
+  font-weight: 500;
+  border-radius: 0 0 8px 8px;
+  text-decoration: none;
+  transition: top 0.15s ease;
+}
+
+.skip-link:focus {
+  top: 0;
+}
+
+/* ── Page layout ──────────────────────────────────────────── */
+
 /* Page layout wrapper — used by all child pages */
 .page-container {
   max-width: var(--page-max);
@@ -2317,5 +2362,879 @@ body {
 
   .cmp-row-value {
     font-size: 0.75rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Day 33
+   ══════════════════════════════════════════════════════ */
+
+/* Mobile scroll utility */
+.mobile-scroll-x {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.mobile-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* --- Nav: desktop links & hamburger visibility --- */
+.nav-links {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+}
+
+.nav-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--color-text);
+  padding: 0;
+  border-radius: var(--radius-sm);
+  transition: background 0.2s ease;
+}
+
+.nav-hamburger:hover {
+  background: rgba(0,0,0,0.04);
+}
+
+/* Drawer */
+.nav-drawer-backdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.nav-drawer-backdrop--open {
+  display: block;
+  animation: backdropFadeIn 0.2s ease;
+}
+
+.nav-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(280px, 80vw);
+  z-index: 201;
+  background: var(--color-bg);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  transform: translateX(100%);
+  transition: transform 0.3s var(--ease-out);
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem;
+}
+
+.nav-drawer--open {
+  transform: translateX(0);
+}
+
+.nav-drawer-close {
+  align-self: flex-end;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  margin-bottom: 1rem;
+}
+
+.nav-drawer-close:hover {
+  background: rgba(0,0,0,0.04);
+  color: var(--color-text);
+}
+
+.nav-drawer-link {
+  display: block;
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  padding: 0.85rem 0.5rem;
+  border-bottom: 1px solid var(--color-border);
+  transition: color 0.2s ease;
+}
+
+.nav-drawer-link:hover {
+  color: var(--color-text);
+}
+
+.nav-drawer-link--active {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+/* --- Homepage CSS classes for responsive overrides --- */
+.home-search-form {
+  width: 100%;
+  max-width: 600px;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-radius: 16px;
+  background-color: #fff;
+  border: 1px solid rgba(0,0,0,0.08);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+.home-stats-row {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+  font-size: 0.82rem;
+  color: #999;
+}
+
+.home-trending-strip {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background-color: rgba(255,255,255,0.85);
+  backdrop-filter: blur(12px);
+  border-top: 1px solid rgba(0,0,0,0.05);
+  padding: 0.75rem clamp(1rem, 3vw, 3rem);
+  display: flex;
+  justify-content: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.home-micro-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.home-pulse-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* --- Results page CSS classes for responsive overrides --- */
+.results-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.results-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+  padding: 0.65rem 1rem;
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  max-width: 520px;
+}
+
+/* --- Property page hero responsive --- */
+.property-hero-image {
+  width: 100%;
+  height: clamp(180px, 40vw, 360px);
+  border-radius: var(--radius-lg);
+}
+
+/* ══════════════════════════════════════════════════════
+   BREAKPOINT: 600px — Hamburger nav, grid adjustments
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .nav-links {
+    display: none;
+  }
+
+  .nav-hamburger {
+    display: flex;
+  }
+
+  /* Results grid single column */
+  .results-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Trending strip: horizontal scroll on mobile */
+  .home-trending-strip {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    justify-content: flex-start;
+    gap: 0;
+    padding: 0.65rem 1rem;
+  }
+
+  .home-trending-strip::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Results search bar: stack on mobile */
+  .results-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: none;
+  }
+
+  .results-search-bar input {
+    width: 100%;
+  }
+
+  .results-search-bar button {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Micro-market grid single column */
+  .home-micro-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Pulse grid single column */
+  .home-pulse-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Area signal chips: ensure tappable size */
+  .tag {
+    min-height: 32px;
+    padding: 0.3rem 0.65rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   BREAKPOINT: 480px — Tighter spacing, stacked search
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* Section card padding reduction */
+  .section-card {
+    padding: 1.25rem 1rem;
+  }
+
+  /* Page container padding reduction */
+  .page-container {
+    padding: 1.5rem 1rem;
+  }
+
+  .page-container-wide {
+    padding: 1.5rem 1rem;
+  }
+
+  /* Search form: stack button below input */
+  .home-search-form {
+    flex-direction: column;
+    padding: 0.85rem 1rem;
+    gap: 0.65rem;
+  }
+
+  .home-search-form .search-input {
+    font-size: 1rem;
+  }
+
+  .home-search-form button[type="submit"] {
+    width: 100%;
+    text-align: center;
+    padding: 0.65rem 1rem;
+  }
+
+  /* Stats row: reduce gap, wrap */
+  .home-stats-row {
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    font-size: 0.78rem;
+  }
+
+  /* Fact grid: 2 columns on very small screens */
+  .fact-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+  }
+
+  /* Compare bar: tighter on small screens */
+  .compare-bar-chip-img {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Day 34
+   Society Search, Society Detail, Shortlist, Footer
+   ══════════════════════════════════════════════════════ */
+
+/* --- Society Search Page --- */
+.society-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.25rem;
+  background: var(--color-bg-card, #fff);
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.society-card-hero {
+  position: relative;
+  height: clamp(160px, 30vw, 220px);
+  overflow: hidden;
+}
+
+.society-area-context-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.society-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* --- Society Detail Page --- */
+.society-hero-image {
+  width: 100%;
+  height: clamp(180px, 40vw, 360px);
+  object-fit: cover;
+  display: block;
+}
+
+.society-hero-wrapper {
+  position: relative;
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.society-photos-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 0.75rem;
+}
+
+.society-hero-badge {
+  padding: 0.35rem 0.85rem;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(8px);
+  font-weight: 600;
+}
+
+.society-hero-badge-rank {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(26, 26, 26, 0.85);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.society-hero-badge-confidence {
+  padding: 0.25rem 0.7rem;
+  border-radius: 100px;
+  background: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(8px);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.society-hero-badge-bestfor {
+  padding: 0.3rem 0.85rem;
+  border-radius: 100px;
+  background: rgba(237, 247, 237, 0.95);
+  backdrop-filter: blur(8px);
+  color: var(--color-positive);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+/* --- Shortlist Page --- */
+.shortlist-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+.shortlist-empty-state {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: 3rem 2rem;
+  text-align: center;
+}
+
+/* --- Site Footer --- */
+.site-footer {
+  border-top: 1px solid var(--color-border);
+  padding: 2.5rem var(--page-pad) 2rem;
+  text-align: center;
+  margin-top: 3rem;
+}
+
+.site-footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.site-footer-links a {
+  text-decoration: none;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.site-footer-links a:hover {
+  color: var(--color-text);
+}
+
+.site-footer-wordmark {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-text);
+  letter-spacing: -0.02em;
+  margin-bottom: 0.25rem;
+}
+
+.site-footer-tagline {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+/* ══════════════════════════════════════════════════════
+   BREAKPOINT: 600px — Day 34 additions
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  /* Society search bar: stack */
+  .society-search-bar {
+    flex-direction: column;
+    align-items: stretch;
+    max-width: none;
+  }
+
+  .society-search-bar input {
+    width: 100%;
+  }
+
+  .society-search-bar button {
+    width: 100%;
+    text-align: center;
+  }
+
+  /* Shortlist cards: single column */
+  .shortlist-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Footer: stack links */
+  .site-footer-links {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   BREAKPOINT: 480px — Day 34 additions
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* Society area context: single column */
+  .society-area-context-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Society detail photos: 2-column */
+  .society-photos-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Society detail hero badges: smaller on mobile */
+  .society-hero-badge {
+    padding: 0.25rem 0.6rem;
+    font-size: 0.78rem;
+  }
+
+  .society-hero-badge-rank {
+    width: 34px;
+    height: 34px;
+    font-size: 0.85rem;
+  }
+
+  .society-hero-badge-confidence {
+    font-size: 0.65rem;
+    padding: 0.2rem 0.5rem;
+  }
+
+  .society-hero-badge-bestfor {
+    font-size: 0.72rem;
+    padding: 0.2rem 0.65rem;
+  }
+
+  /* Shortlist empty state: tighter padding */
+  .shortlist-empty-state {
+    padding: 2rem 1rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   CLAIM SECTION — Day 36
+   ══════════════════════════════════════════════════════ */
+
+.claim-section {
+  padding: 1.25rem 1.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.claim-input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-size: 0.9rem;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.claim-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.claim-input:focus {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(201, 107, 79, 0.12);
+}
+
+@media (max-width: 480px) {
+  .claim-section {
+    padding: 1rem;
+  }
+
+  .claim-input {
+    font-size: 1rem;
+    padding: 0.75rem 0.85rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   UTILITIES — Day 35
+   ══════════════════════════════════════════════════════ */
+
+/* Screen-reader only: visually hidden but accessible */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Hide "Quick view" label text on small screens (icon-only) */
+@media (max-width: 600px) {
+  .card-a-detail-btn-label {
+    display: none;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   TRANSPARENCY SCORE TILE — Day 38
+   ══════════════════════════════════════════════════════ */
+
+.transparency-tile {
+  padding: 1rem 1.25rem;
+}
+
+/* ══════════════════════════════════════════════════════
+   SHARE BUTTONS — Day 38
+   ══════════════════════════════════════════════════════ */
+
+.share-buttons {
+  flex-wrap: wrap;
+}
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex: 1;
+  justify-content: center;
+  min-width: 0;
+}
+
+.share-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ══════════════════════════════════════════════════════
+   PRICE SPECTRUM GAUGE — Day 38
+   ══════════════════════════════════════════════════════ */
+
+.price-spectrum {
+  height: 10px;
+  margin-top: 0.25rem;
+}
+
+.price-spectrum-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(to right, var(--color-positive), var(--color-warning), var(--color-negative));
+  opacity: 0.4;
+}
+
+/* ══════════════════════════════════════════════════════
+   BREAKPOINT: 375px — Day 38 additions
+   ══════════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  .transparency-tile {
+    padding: 0.85rem 1rem;
+  }
+
+  .share-btn {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   SEARCH SKELETON — Day 39
+   ══════════════════════════════════════════════════════ */
+
+.skeleton-search-bar {
+  height: 48px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.5rem;
+}
+
+.skeleton-bar {
+  background: linear-gradient(90deg, var(--color-bg-soft) 0%, var(--color-bg-elevated) 50%, var(--color-bg-soft) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease infinite;
+  border-radius: 6px;
+}
+
+.skeleton-card {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  background: var(--color-bg-card);
+  overflow: hidden;
+}
+
+.skeleton-card-image {
+  height: 180px;
+}
+
+.skeleton-card-body {
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.skeleton-card-title {
+  height: 16px;
+  width: 70%;
+}
+
+.skeleton-card-location {
+  height: 12px;
+  width: 50%;
+}
+
+.skeleton-card-price {
+  height: 18px;
+  width: 35%;
+}
+
+.skeleton-card-tags {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.skeleton-card-tag {
+  height: 20px;
+  width: 60px;
+  border-radius: 999px;
+}
+
+.skeleton-detail-section {
+  height: 180px;
+  border-radius: var(--radius-md);
+  margin-bottom: 1.25rem;
+}
+
+/* ══════════════════════════════════════════════════════
+   EMPTY STATE — Day 39
+   ══════════════════════════════════════════════════════ */
+
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  max-width: 520px;
+  margin: 0 auto;
+}
+
+.empty-state h2 {
+  font-size: 1.3rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  color: var(--color-text);
+}
+
+.empty-state p {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0 0 1.5rem;
+}
+
+.empty-state-chips {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 1.5rem;
+}
+
+.empty-state-chip {
+  border: 1px solid rgba(0,0,0,0.08);
+  background: rgba(255,255,255,0.7);
+  color: #666;
+  padding: 0.4rem 0.85rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.empty-state-chip:hover {
+  border-color: rgba(201,107,79,0.3);
+  color: var(--color-accent);
+}
+
+/* ══════════════════════════════════════════════════════
+   RECENT SEARCHES — Day 39
+   ══════════════════════════════════════════════════════ */
+
+.recent-searches {
+  margin-top: 1rem;
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  max-width: 600px;
+}
+
+.recent-searches-label {
+  font-size: 0.72rem;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-right: 0.25rem;
+}
+
+.recent-clear-btn {
+  background: none;
+  border: none;
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  transition: color 0.2s;
+}
+
+.recent-clear-btn:hover {
+  color: var(--color-negative);
+}
+
+/* ---------- Home error banner ---------- */
+.home-error-banner {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 10px;
+  background: #fffbeb;
+  border: 1px solid rgba(146, 64, 14, 0.15);
+  color: #92400e;
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+/* ---------- Offline toast ---------- */
+.offline-toast {
+  position: fixed;
+  bottom: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 10px;
+  background: #1a1a1a;
+  color: #e5e5e5;
+  font-size: 0.82rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  z-index: 9999;
+  animation: slideUpToast 0.3s var(--ease-out) forwards;
+  white-space: nowrap;
+}
+
+@keyframes slideUpToast {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
   }
 }
