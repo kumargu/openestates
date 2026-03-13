@@ -52,4 +52,5 @@ pipeline/learnings/
 
 # Claude Code — track skills, settings, and memory; ignore local settings
 .claude/settings.local.json
+.claude/settings.json
 .vercel

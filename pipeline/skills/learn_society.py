@@ -4,7 +4,8 @@ learn_society — enrich a society node by synthesizing Reddit threads via Claud
 Input: {"society_name": "Prestige Lakeside Habitat", "area": "Whitefield", "city": "Bengaluru"}
 Output: SkillResult with facts about maintenance, family-friendliness, signals, cautions.
 
-Composes: search_reddit → Claude synthesis → structured facts.
+Primary: search_reddit → Claude synthesis → structured facts.
+Fallback: Gemini with Google Search grounding (when Reddit is blocked/empty).
 """
 
 import json
@@ -105,10 +106,96 @@ def call_claude(prompt: str, model: str = "claude-sonnet-4-20250514") -> Optiona
         return None
 
 
+GEMINI_SOCIETY_PROMPT = """Research the residential apartment society "{society_name}" in {area}, {city}, India.
+
+Find real resident reviews, Google reviews, forum discussions, and any news about this society.
+
+Return ONLY a JSON object:
+{{
+  "maintenance_quality": "good" | "average" | "poor" | null,
+  "family_suitability": "high" | "moderate" | "low" | null,
+  "noise_level": "quiet" | "moderate" | "noisy" | null,
+  "security_quality": "good" | "average" | "poor" | null,
+  "common_positives": ["list of 3-5 positive aspects"],
+  "common_complaints": ["list of 3-5 complaints"],
+  "signals": ["short signal tags like 'good-maintenance', 'family-friendly'"],
+  "cautions": ["short caution tags like 'traffic-congestion', 'water-issues'"],
+  "resident_sentiment": "positive" | "mixed" | "negative",
+  "sentiment_summary": "1-2 sentence synthesis of overall resident feeling",
+  "best_quote": "most insightful quote or paraphrase from reviews"
+}}
+
+Use null for fields where no reliable information is found. Be honest — do not fabricate."""
+
+
+def _call_gemini_grounded(prompt: str) -> Optional[dict]:
+    """Call Gemini 2.5 Flash with Google Search grounding."""
+    api_key = os.environ.get("GOOGLE_AI_API_KEY")
+    if not api_key:
+        logger.error("GOOGLE_AI_API_KEY not set")
+        return None
+
+    import urllib.request
+
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "tools": [{"google_search": {}}],
+        "generationConfig": {"temperature": 0.2, "maxOutputTokens": 4000},
+    }).encode()
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error("Gemini API call failed: %s", e)
+        return None
+
+    text = ""
+    for candidate in data.get("candidates", []):
+        for part in candidate.get("content", {}).get("parts", []):
+            if "text" in part:
+                text = part["text"]
+                break
+
+    text = text.strip()
+    if text.startswith("```"):
+        lines = text.split("\n")
+        text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+    try:
+        result = json.loads(text)
+        tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
+        result["_tokens"] = tokens
+        return result
+    except json.JSONDecodeError:
+        # Try to repair truncated JSON by closing open brackets/braces
+        repaired = text.rstrip()
+        # Close any open strings
+        if repaired.count('"') % 2 == 1:
+            repaired += '"'
+        # Close arrays and objects
+        open_brackets = repaired.count('[') - repaired.count(']')
+        open_braces = repaired.count('{') - repaired.count('}')
+        repaired += ']' * max(0, open_brackets)
+        repaired += '}' * max(0, open_braces)
+        try:
+            result = json.loads(repaired)
+            tokens = data.get("usageMetadata", {}).get("totalTokenCount", 0)
+            result["_tokens"] = tokens
+            logger.info("Repaired truncated Gemini JSON response")
+            return result
+        except json.JSONDecodeError:
+            logger.error("Failed to parse Gemini response as JSON: %s", text[:200])
+            return None
+
+
 class LearnSocietySkill(BaseSkill):
     skill_id = "learn_society"
-    description = "Enrich a society node by synthesizing Reddit discussions via Claude"
-    version = "1.0"
+    description = "Enrich a society node by synthesizing Reddit discussions via Claude, with Gemini fallback"
+    version = "2.0"
     output_keys = [
         "maintenance_quality", "family_suitability", "noise_level", "security_quality",
         "resident_sentiment", "sentiment_summary", "best_quote",
@@ -147,12 +234,8 @@ class LearnSocietySkill(BaseSkill):
                 thread_count = int(fact.value.get("data", 0))
 
         if thread_count == 0:
-            logger.info("No Reddit threads found for %s", society_name)
-            return SkillResult(
-                facts=reddit_result.facts,
-                confidence=0.2,
-                cost=reddit_result.cost,
-            )
+            logger.info("No Reddit threads for %s, falling back to Gemini grounded search", society_name)
+            return self._gemini_fallback(society_name, area, city, input_data)
 
         # Step 2: Synthesize via Claude
         threads_text = "\n".join(f"- {t}" for t in thread_titles)
@@ -283,6 +366,73 @@ class LearnSocietySkill(BaseSkill):
                 api_calls=2,  # 1 Reddit + 1 Claude
                 estimated_usd=tokens_used * 0.000003,  # rough Sonnet pricing
             ),
+        )
+
+    def _gemini_fallback(self, society_name: str, area: str, city: str, input_data: dict) -> SkillResult:
+        """Fallback: use Gemini with Google Search grounding when Reddit is unavailable."""
+        prompt = GEMINI_SOCIETY_PROMPT.format(society_name=society_name, area=area, city=city)
+        synthesis = _call_gemini_grounded(prompt)
+
+        if not synthesis:
+            # Try Claude as last resort
+            synthesis = call_claude(prompt)
+            if not synthesis:
+                return SkillResult(confidence=0.0, cost=SkillCost(api_calls=1))
+
+        tokens_used = synthesis.pop("_tokens", 0)
+
+        source = FactSource(
+            source_type="Google",
+            model="gemini-2.5-flash",
+            skill_id=self.skill_id,
+            triggered_by=input_data.get("triggered_by"),
+        )
+
+        facts = []
+        # Same fact mappings as the Reddit path, but lower confidence (0.5 vs 0.6)
+        fact_mappings = [
+            ("maintenance_quality", "Text", "Maintenance is {value}", ["good society", "well maintained", "maintenance"], {"direction": "TextMatch", "weight": 2.0}),
+            ("family_suitability", "Text", "Family suitability: {value}", ["family friendly", "families", "kids"], {"direction": "TextMatch", "weight": 2.0}),
+            ("noise_level", "Text", "Noise level: {value}", ["quiet neighborhood", "quiet", "peaceful", "calm"], {"direction": "TextMatch", "weight": 2.0}),
+            ("security_quality", "Text", "Security: {value}", ["safe", "safety", "secure", "gated community"], {"direction": "TextMatch", "weight": 2.0}),
+            ("resident_sentiment", "Text", "Resident sentiment: {value}", ["good reviews", "resident feedback"], {"direction": "TextMatch", "weight": 1.5}),
+            ("sentiment_summary", "Text", "{value}", [], None),
+            ("best_quote", "Text", 'Resident says: "{value}"', [], None),
+        ]
+
+        for key, vtype, template, prefs, scoring in fact_mappings:
+            val = synthesis.get(key)
+            if val is not None:
+                facts.append(SourcedFact(
+                    key=key,
+                    value={"type": vtype, "data": val},
+                    confidence=0.5,
+                    source=source,
+                    display_template=template,
+                    answers_preferences=prefs or None,
+                    scoring_hint=scoring,
+                ))
+
+        for key, vtype, template in [
+            ("common_positives", "Tags", "Positives: {value}"),
+            ("common_complaints", "Tags", "Complaints: {value}"),
+            ("signals", "Tags", "Signals: {value}"),
+            ("cautions", "Tags", "Cautions: {value}"),
+        ]:
+            val = synthesis.get(key)
+            if val and isinstance(val, list):
+                facts.append(SourcedFact(
+                    key=key,
+                    value={"type": vtype, "data": val},
+                    confidence=0.5,
+                    source=source,
+                    display_template=template,
+                ))
+
+        return SkillResult(
+            facts=facts,
+            confidence=0.5,
+            cost=SkillCost(llm_tokens=tokens_used, api_calls=1, estimated_usd=tokens_used * 0.0000001),
         )
 
     def estimated_cost(self) -> SkillCost:

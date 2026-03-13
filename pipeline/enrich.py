@@ -287,22 +287,84 @@ def _make_skill(skill_id: str):
         raise ValueError(f"Unknown skill: {skill_id}")
 
 
+def _get_node_fact(entity_id: str, fact_key: str) -> str:
+    """Read a single fact value from a KG node file."""
+    etype, slug = entity_id.split(":", 1)
+    node_path = Path("data/knowledge/nodes") / etype / f"{slug}.json"
+    if not node_path.exists():
+        return ""
+    try:
+        with open(node_path) as f:
+            node = json.load(f)
+        for fact in node.get("facts", []):
+            if fact.get("key") == fact_key:
+                val = fact.get("value", {})
+                if isinstance(val, dict):
+                    return str(val.get("data", ""))
+                return str(val)
+    except Exception:
+        pass
+    return ""
+
+
+def _resolve_area(entity_id: str) -> str:
+    """Try multiple strategies to find area for a society entity."""
+    # 1. Direct fact on node
+    area = _get_node_fact(entity_id, "area")
+    if area:
+        return area
+
+    # 2. Check edges (LocatedIn edge → area node)
+    edges_path = Path("data/knowledge/edges.json")
+    if edges_path.exists():
+        try:
+            with open(edges_path) as f:
+                edges = json.load(f)
+            for edge in edges:
+                if edge.get("from") == entity_id and edge.get("relation") == "LocatedIn":
+                    target = edge.get("to", "")
+                    if target.startswith("area:"):
+                        return target.split(":", 1)[-1].replace("-", " ").title()
+        except Exception:
+            pass
+
+    # 3. Check seed data for matching society
+    slug = entity_id.split(":", 1)[-1]
+    seed_path = Path("data/seed/properties.json")
+    if seed_path.exists():
+        try:
+            with open(seed_path) as f:
+                properties = json.load(f)
+            for p in properties:
+                sid = p.get("society_id", "")
+                # Match soc-slug or society-slug patterns
+                if sid.replace("soc-", "") == slug or sid.replace("society-", "") == slug:
+                    return p.get("area", "")
+        except Exception:
+            pass
+
+    return ""
+
+
 def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dict:
     """Build the input dict a skill expects from an entity ID."""
     name = resolver.get_name(entity_id) or entity_id.split(":", 1)[-1]
+    area = _resolve_area(entity_id) if entity_id.startswith("society:") else ""
 
     if skill_id == "search_reddit":
         return {"query": name, "subreddit": "bangalore"}
     elif skill_id == "fetch_rera":
         return {"project_name": name, "entity_id": entity_id}
     elif skill_id == "fetch_google_reviews":
-        return {"society_name": name, "area": "", "city": "Bengaluru"}
+        return {"society_name": name, "area": area, "city": "Bengaluru"}
     elif skill_id == "learn_society":
-        return {"society_name": name, "entity_id": entity_id}
+        return {"society_name": name, "entity_id": entity_id, "area": area}
     elif skill_id == "learn_area":
         return {"area_name": name, "entity_id": entity_id}
     elif skill_id == "score_society":
-        return {"entity_id": entity_id}
+        # score_society expects soc-* format, not society:* format
+        slug = entity_id.split(":", 1)[-1]
+        return {"society_id": f"soc-{slug}"}
     elif skill_id == "embed_entity":
         return {"entity_id": entity_id, "entity_type": entity_id.split(":")[0], "name": name}
     else:
@@ -383,9 +445,10 @@ def execute(
             if result.facts:
                 _push_facts(item.node_id, result)
 
-            # Mark fresh in tracker
-            freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
-            tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
+            # Only mark fresh if the skill actually produced facts
+            if result.facts:
+                freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
+                tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
 
             completed.add((item.node_id, item.skill_id))
             attempted.add((item.node_id, item.skill_id))
@@ -437,9 +500,9 @@ def execute(
 
             if result.facts:
                 _push_facts(item.node_id, result)
+                freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
+                tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
 
-            freshness_source = FRESHNESS_SOURCE_MAP.get(item.skill_id, item.skill_id)
-            tracker.mark_fresh(item.node_id, freshness_source, {"fact_count": len(result.facts)})
             completed.add((item.node_id, item.skill_id))
             record_success(failures, pool)
 

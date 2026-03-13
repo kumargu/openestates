@@ -67,7 +67,7 @@
       "key": "summary",
       "value": {
         "type": "Text",
-        "data": "Offers 3 and 4 BHK apartments. Starting from ₹98 Lac.. Configurations: 3 BHK, 4 BHK"
+        "data": "Offers 3 and 4 BHK apartments. Starting from \u20b998 Lac.. Configurations: 3 BHK, 4 BHK"
       },
       "confidence": 0.6,
       "source": {
@@ -76,21 +76,6 @@
         "skill_id": "discover_properties"
       },
       "learned_at": "2026-03-09T16:44:40.807674Z",
-      "version": 1
-    },
-    {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 0.0
-      },
-      "confidence": 0.5,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:23:20.201453Z",
       "version": 1
     },
     {
@@ -108,29 +93,6 @@
       "learned_at": "2026-03-09T17:28:29.850838Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:29:22.984335Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
     },
     {
       "key": "reddit_thread_count",

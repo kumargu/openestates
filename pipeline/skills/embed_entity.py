@@ -24,7 +24,12 @@ logger = logging.getLogger(__name__)
 
 
 def build_summary_text(input_data: dict) -> str:
-    """Build a summary text string for embedding based on entity type."""
+    """Build a summary text string for embedding based on entity type.
+
+    For societies and areas, enriches the text with KG fact display_templates
+    so embeddings capture actual intelligence (maintenance, water, family-friendliness)
+    rather than thin marketing copy.
+    """
     entity_type = input_data.get("entity_type", "")
     name = input_data.get("name", "")
 
@@ -32,14 +37,34 @@ def build_summary_text(input_data: dict) -> str:
         summary = input_data.get("summary", "")
         best_for = input_data.get("best_for", "")
         signals = input_data.get("signals", [])
-        signals_str = ", ".join(signals) if signals else ""
         parts = [name]
         if summary:
             parts.append(summary)
         if best_for:
             parts.append(f"Best for: {best_for}")
-        if signals_str:
-            parts.append(f"Signals: {signals_str}")
+        if signals:
+            parts.append(f"Signals: {', '.join(signals)}")
+
+        # Include KG fact display texts — this is the key improvement
+        facts = input_data.get("facts", [])
+        for fact in facts:
+            tmpl = fact.get("display_template", "")
+            value = fact.get("value", {})
+            if tmpl and value:
+                data = value.get("data", "")
+                if data is not None and data != "" and data is not False:
+                    display = tmpl.replace("{value}", str(data))
+                    parts.append(display)
+
+        # Include known issues/complaints and strengths from seed data
+        negatives = input_data.get("common_complaints", [])
+        if negatives:
+            parts.append(f"Known concerns: {', '.join(negatives)}")
+
+        positives = input_data.get("common_positives", [])
+        if positives:
+            parts.append(f"Strengths: {', '.join(positives)}")
+
         return ". ".join(parts)
 
     elif entity_type == "area":
@@ -53,6 +78,18 @@ def build_summary_text(input_data: dict) -> str:
             parts.append(metro)
         if vibe:
             parts.append(vibe)
+
+        # Include KG fact display texts for areas too
+        facts = input_data.get("facts", [])
+        for fact in facts:
+            tmpl = fact.get("display_template", "")
+            value = fact.get("value", {})
+            if tmpl and value:
+                data = value.get("data", "")
+                if data is not None and data != "" and data is not False:
+                    display = tmpl.replace("{value}", str(data))
+                    parts.append(display)
+
         return ". ".join(parts)
 
     elif entity_type == "property":
@@ -74,6 +111,67 @@ def build_summary_text(input_data: dict) -> str:
         # Fallback: concatenate name + summary
         summary = input_data.get("summary", "")
         return f"{name}. {summary}" if summary else name
+
+
+def build_aspect_texts(node_data: dict) -> dict:
+    """Build embedding text per aspect from KG facts.
+
+    Maps fact keys to the 6 scoring dimensions (livability, family, risk,
+    investment, environment, infrastructure). Returns a dict of aspect → text.
+    Only includes aspects that have at least one relevant fact.
+    """
+    ASPECT_KEY_MAP = {
+        "livability": [
+            "maintenance_quality", "society_management", "community_vibe",
+            "livability_score", "daily_convenience", "maintenance_sentiment",
+        ],
+        "family": [
+            "family_friendly", "child_safety", "school_nearby",
+            "calm_environment", "playground", "low_density", "community_vibe",
+        ],
+        "risk": [
+            "water_supply", "waterlogging_risk", "tanker_dependency",
+            "litigation_risk", "builder_reputation", "rera_status",
+            "possession_delay", "document_completeness",
+        ],
+        "investment": [
+            "resale_strength", "market_activity", "rental_yield",
+            "area_trend", "metro_distance", "price_per_sqft", "days_on_market",
+        ],
+        "environment": [
+            "greenery_score", "noise_score", "air_quality",
+            "open_space_score", "density", "waterlogging_risk",
+        ],
+        "infrastructure": [
+            "metro_distance", "road_quality", "traffic_score",
+            "commute_score", "connectivity", "public_transport",
+        ],
+    }
+
+    name = node_data.get("name", "")
+    aspects: dict = {k: [] for k in ASPECT_KEY_MAP}
+
+    for fact in node_data.get("facts", []):
+        key = fact.get("key", "")
+        tmpl = fact.get("display_template", "")
+        value = fact.get("value", {})
+        if not tmpl or not value:
+            continue
+        data = value.get("data", "")
+        if data is None or data == "" or data is False:
+            continue
+        display = tmpl.replace("{value}", str(data))
+
+        for aspect, keys in ASPECT_KEY_MAP.items():
+            if key in keys:
+                aspects[aspect].append(display)
+
+    result = {}
+    for aspect, texts in aspects.items():
+        if texts:
+            result[aspect] = f"{name}. {'. '.join(texts)}"
+
+    return result
 
 
 def call_embedding_api(text: str) -> Optional[List[float]]:
@@ -165,13 +263,28 @@ class EmbedEntitySkill(BaseSkill):
             ),
         ]
 
+        # Optionally build aspect embeddings for society/area nodes
+        entity_type = input_data.get("entity_type", "")
+        aspect_embeddings: dict = {}
+        api_calls = 1  # already called for summary
+
+        if entity_type in ("society", "area"):
+            aspect_texts = build_aspect_texts(input_data)
+            for aspect, text in aspect_texts.items():
+                aspect_emb = call_embedding_api(text)
+                api_calls += 1
+                if aspect_emb is not None:
+                    aspect_embeddings[aspect] = aspect_emb
+
         # The actual embedding vector goes into new_nodes for storage
-        new_nodes = [
-            {
-                "node_id": entity_id,
-                "summary_embedding": embedding,
-            },
-        ]
+        node_update: dict = {
+            "node_id": entity_id,
+            "summary_embedding": embedding,
+        }
+        if aspect_embeddings:
+            node_update["aspect_embeddings"] = aspect_embeddings
+
+        new_nodes = [node_update]
 
         return SkillResult(
             facts=facts,
@@ -179,8 +292,8 @@ class EmbedEntitySkill(BaseSkill):
             confidence=1.0,
             cost=SkillCost(
                 llm_tokens=0,
-                api_calls=1,
-                estimated_usd=0.0001,  # Embedding API is very cheap
+                api_calls=api_calls,
+                estimated_usd=api_calls * 0.0001,
             ),
         )
 
