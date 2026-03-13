@@ -31,15 +31,32 @@ pub const AREA_ALIASES: &[(&[&str], &str)] = &[
 ];
 
 /// Preference keywords to detect in the query.
+///
+/// IMPORTANT: Order matters — longer/more specific patterns must come BEFORE
+/// shorter ones. "under construction" must match before "new" would catch it.
+/// "ready to move" must match before "ready" alone.
+///
+/// The answers_preferences values here align with classify_project_status.py's
+/// STATUS_META so that graph-driven scoring connects user queries to RERA facts.
 const PREFERENCE_PATTERNS: &[(&[&str], &str)] = &[
+    // Project status patterns (specific phrases first)
+    (&["ready to move", "ready possession", "immediate possession", "delivered", "completed"], "ready to move"),
+    (&["under construction", "ongoing", "in progress"], "under construction"),
+    (&["new launch", "newly launched", "just launched"], "new launch"),
+    (&["delayed", "behind schedule"], "delayed"),
+    (&["upcoming", "pre-launch", "future project"], "upcoming"),
+    // Builder trust patterns
+    (&["reliable builder", "dependable builder"], "reliable builder"),
+    (&["trusted builder", "good builder", "reputed builder"], "trusted builder"),
+    (&["on time delivery", "no delays", "timely delivery"], "on time delivery"),
+    // General preferences
     (&["near metro", "metro access", "metro"], "metro access"),
     (&["quiet", "peaceful", "calm"], "quiet neighborhood"),
     (&["value", "affordable", "budget"], "value for money"),
     (&["premium", "luxury", "high end", "high-end"], "premium"),
     (&["good society", "well maintained", "well-maintained"], "good society"),
     (&["green", "greenery", "park", "garden"], "greenery"),
-    (&["new", "under construction", "upcoming"], "new construction"),
-    (&["ready to move", "ready", "immediate"], "ready to move"),
+    (&["new construction"], "new construction"),
     (&["top floor", "high floor"], "high floor"),
     (&["east facing", "east"], "east facing"),
 ];
@@ -232,5 +249,143 @@ mod tests {
         let intent = parse_intent("3 bhk below 80l");
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.budget_max, Some(8_000_000));
+    }
+
+    // --- Day 62: Project status preference extraction tests ---
+
+    #[test]
+    fn test_ready_to_move_preference() {
+        let intent = parse_intent("ready to move in whitefield");
+        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert!(
+            intent.preferences.contains(&"ready to move".to_string()),
+            "Expected 'ready to move' preference, got: {:?}",
+            intent.preferences
+        );
+        // Should NOT also extract "new construction"
+        assert!(
+            !intent.preferences.contains(&"new construction".to_string()),
+            "Should not extract 'new construction' for 'ready to move' query"
+        );
+    }
+
+    #[test]
+    fn test_under_construction_preference() {
+        let intent = parse_intent("under construction sarjapur");
+        assert_eq!(intent.area.as_deref(), Some("Sarjapur Road"));
+        assert!(
+            intent.preferences.contains(&"under construction".to_string()),
+            "Expected 'under construction' preference, got: {:?}",
+            intent.preferences
+        );
+        // Must NOT extract "new construction" — that was the old buggy behavior
+        assert!(
+            !intent.preferences.contains(&"new construction".to_string()),
+            "Should not extract 'new construction' for 'under construction' query"
+        );
+    }
+
+    #[test]
+    fn test_new_launch_preference() {
+        let intent = parse_intent("new launch 3bhk whitefield");
+        assert!(
+            intent.preferences.contains(&"new launch".to_string()),
+            "Expected 'new launch' preference, got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_delayed_preference() {
+        let intent = parse_intent("delayed projects in sarjapur");
+        assert!(
+            intent.preferences.contains(&"delayed".to_string()),
+            "Expected 'delayed' preference, got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_upcoming_preference() {
+        let intent = parse_intent("upcoming projects in whitefield");
+        assert!(
+            intent.preferences.contains(&"upcoming".to_string()),
+            "Expected 'upcoming' preference, got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_immediate_possession_maps_to_ready_to_move() {
+        let intent = parse_intent("immediate possession bellandur");
+        assert!(
+            intent.preferences.contains(&"ready to move".to_string()),
+            "Expected 'ready to move' from 'immediate possession', got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_completed_maps_to_ready_to_move() {
+        let intent = parse_intent("completed projects hsr layout");
+        assert!(
+            intent.preferences.contains(&"ready to move".to_string()),
+            "Expected 'ready to move' from 'completed', got: {:?}",
+            intent.preferences
+        );
+    }
+
+    // --- Day 63: Builder preference pattern tests ---
+
+    #[test]
+    fn test_reliable_builder_preference() {
+        let intent = parse_intent("reliable builder whitefield");
+        assert!(
+            intent.preferences.contains(&"reliable builder".to_string()),
+            "Expected 'reliable builder' preference, got: {:?}",
+            intent.preferences
+        );
+        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    }
+
+    #[test]
+    fn test_trusted_builder_preference() {
+        let intent = parse_intent("trusted builder sarjapur");
+        assert!(
+            intent.preferences.contains(&"trusted builder".to_string()),
+            "Expected 'trusted builder' preference, got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_on_time_delivery_preference() {
+        let intent = parse_intent("on time delivery 3bhk whitefield");
+        assert!(
+            intent.preferences.contains(&"on time delivery".to_string()),
+            "Expected 'on time delivery' preference, got: {:?}",
+            intent.preferences
+        );
+        assert_eq!(intent.bhk, Some(3));
+    }
+
+    #[test]
+    fn test_good_builder_maps_to_trusted_builder() {
+        let intent = parse_intent("good builder bellandur");
+        assert!(
+            intent.preferences.contains(&"trusted builder".to_string()),
+            "Expected 'trusted builder' from 'good builder', got: {:?}",
+            intent.preferences
+        );
+    }
+
+    #[test]
+    fn test_no_delays_maps_to_on_time_delivery() {
+        let intent = parse_intent("no delays whitefield");
+        assert!(
+            intent.preferences.contains(&"on time delivery".to_string()),
+            "Expected 'on time delivery' from 'no delays', got: {:?}",
+            intent.preferences
+        );
     }
 }

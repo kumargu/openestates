@@ -43,15 +43,33 @@ function stepRecommendation(key: string): string {
 
 /** Inline SVG sparkline for interest timeline data. */
 function Sparkline({ data }: { data: InterestTimelineEntry[] }) {
+  if (data.length === 0) return null;
+
   const counts = data.map((d) => d.count);
   const maxVal = Math.max(...counts, 1);
   const width = 120;
   const height = 20;
   const padding = 1;
 
+  // Single data point: render a dot instead of a polyline
+  if (data.length === 1) {
+    const cx = width / 2;
+    const cy = height - padding - (counts[0] / maxVal) * (height - 2 * padding);
+    return (
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        style={{ display: "block", flexShrink: 0 }}
+      >
+        <circle cx={cx} cy={cy} r={2.5} fill="#c96b4f" />
+      </svg>
+    );
+  }
+
   const points = counts
     .map((c, i) => {
-      const x = padding + (i / Math.max(counts.length - 1, 1)) * (width - 2 * padding);
+      const x = padding + (i / (counts.length - 1)) * (width - 2 * padding);
       const y = height - padding - (c / maxVal) * (height - 2 * padding);
       return `${x.toFixed(1)},${y.toFixed(1)}`;
     })

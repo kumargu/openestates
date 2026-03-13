@@ -12,6 +12,31 @@ use super::fact::SourcedFact;
 /// Unique identifier for a node. Format: "{type}:{slug}" e.g. "society:prestige-lakeside-habitat"
 pub type NodeId = String;
 
+/// Where a node's data originally came from — determines trust floor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum RootSource {
+    /// Government-verified (RERA), confidence floor = 1.0
+    Rera,
+    /// Self-reported by seller, enrichable but no legal proof
+    Seller,
+    /// Live discovery (Gemini), verification pending
+    Discovered,
+    /// Pre-Sprint 3 seed data, unclassified
+    Legacy,
+}
+
+impl RootSource {
+    /// Canonical string representation — single source of truth for serialization.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Rera => "rera",
+            Self::Seller => "seller",
+            Self::Discovered => "discovered",
+            Self::Legacy => "legacy",
+        }
+    }
+}
+
 /// What kind of entity this node represents.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum NodeType {
@@ -47,6 +72,9 @@ pub struct Node {
     pub name: String,
     /// Structured facts with provenance
     pub facts: Vec<SourcedFact>,
+    /// Where this node's data originally came from
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub root_source: Option<RootSource>,
     /// Optional summary embedding for semantic search (768-dim)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary_embedding: Option<Vec<f32>>,
@@ -62,6 +90,7 @@ impl Node {
             node_type,
             name: name.into(),
             facts: Vec::new(),
+            root_source: None,
             summary_embedding: None,
             created_at: now,
             updated_at: now,

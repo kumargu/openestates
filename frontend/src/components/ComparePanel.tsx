@@ -7,6 +7,10 @@ import { Link } from "react-router-dom";
 import type { PropertyDetailResponse, PropertyCard as PropertyCardType } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
+import { TrustBadge } from "./TrustBadge.tsx";
+import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
+import { BuilderTrustBadge } from "./BuilderTrustBadge.tsx";
+import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -296,6 +300,30 @@ export function ComparePanel({ cards, onClose, onRemove }: Props) {
                   text: d ? `\u20B9${d.property.maintenance_cost_monthly.toLocaleString("en-IN")}/mo` : "\u2014",
                 }))}
               />
+
+              {/* Data Trust */}
+              <h3 className="cmp-section-title" style={{ marginTop: "1.25rem" }}>Data Trust</h3>
+              <div className="cmp-tradeoffs" style={{ gridTemplateColumns: `repeat(${colCount}, 1fr)` }}>
+                {details.map((d, i) => (
+                  <div key={i} className="cmp-tradeoff-col" style={{ display: "flex", flexDirection: "column", gap: "0.35rem" }}>
+                    <TrustBadge rootSource={d?.root_source} compact />
+                    <ProjectStatusTag
+                      status={d?.project_status}
+                      displayText={d?.project_status_display}
+                      possessionStatus={cards[i]?.possession_status}
+                    />
+                    {d?.builder_trust?.delivery_display && (
+                      <BuilderTrustBadge
+                        deliveryDisplay={d.builder_trust.delivery_display}
+                        deliveryRate={d.builder_trust.delivery_rate}
+                        compact
+                      />
+                    )}
+                    <DataFreshnessBadge freshness={d?.data_freshness} compact />
+                    {!d && <span className="cmp-tradeoff-empty">No data</span>}
+                  </div>
+                ))}
+              </div>
 
               {/* Tradeoffs */}
               {details.some(d => d?.tradeoffs) && (

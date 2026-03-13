@@ -8,6 +8,10 @@ import type { PropertyDetailResponse, PropertyCard as PropertyCardType } from ".
 import { getProperty } from "../lib/api.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { TrustBadge } from "./TrustBadge.tsx";
+import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
+import { BuilderTrustBadge } from "./BuilderTrustBadge.tsx";
+import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -145,6 +149,24 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
           <p className="side-panel-location">
             {card.society_name} &middot; {card.area}
           </p>
+
+          {/* Trust badges */}
+          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", margin: "0.35rem 0 0.5rem" }}>
+            <TrustBadge rootSource={card.root_source} compact />
+            <ProjectStatusTag
+              status={detail?.project_status}
+              displayText={detail?.project_status_display}
+              possessionStatus={card.possession_status}
+            />
+            {detail?.builder_trust?.delivery_display && (
+              <BuilderTrustBadge
+                deliveryDisplay={detail.builder_trust.delivery_display}
+                deliveryRate={detail.builder_trust.delivery_rate}
+                compact
+              />
+            )}
+            <DataFreshnessBadge freshness={card.data_freshness ?? detail?.data_freshness} compact />
+          </div>
 
           <div className="side-panel-price-row">
             <span className="side-panel-price">{formatPrice(card.price)}</span>

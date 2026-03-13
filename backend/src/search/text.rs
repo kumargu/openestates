@@ -1,10 +1,11 @@
 use crate::knowledge::KnowledgeGraph;
+use crate::knowledge::node::RootSource;
 use crate::models::{Property, Seller, Society};
-use crate::routes::enrichment::enrich_property_card_with_sellers;
+use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
 use crate::routes::search::graph_preference_score_detailed;
 
 use super::intent::SearchIntent;
-use super::{MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard};
+use super::{ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard};
 
 /// Simple text-matching search engine.
 ///
@@ -68,6 +69,8 @@ impl TextSearch {
                         0.0 // exact match
                     } else if area_is_nearby(&p.area, area) {
                         -2.0 // nearby: include but rank lower
+                    } else if graph_area_match(&p.society_id, area, graph) {
+                        -1.0 // graph SocietyInArea edge match: between exact and nearby
                     } else {
                         return None; // unrelated area: exclude
                     }
@@ -217,6 +220,11 @@ impl TextSearch {
                         seller_completeness_pct: None,
                         documents_provided: Vec::new(),
                         seller_verified: None,
+                        root_source: None,
+                        project_status: None,
+                        project_status_display: None,
+                        builder_delivery_display: None,
+                        data_freshness: None,
                     }
                 };
 
@@ -236,6 +244,12 @@ impl TextSearch {
                 let match_label = match_label_from_score(normalized);
                 let match_reason = build_match_reason(intent, &reasons);
 
+                // Compute confidence score for this result
+                let gdp = match_explanation.as_ref()
+                    .map(|e| e.graph_driven_pct)
+                    .unwrap_or(0.0);
+                let confidence_score = compute_confidence(graph, &p.society_id, gdp);
+
                 Some(SearchResultCard {
                     card,
                     match_score: (normalized * 100.0).round() / 100.0,
@@ -243,6 +257,7 @@ impl TextSearch {
                     match_reason,
                     match_explanation,
                     semantic_score: None,
+                    confidence_score,
                 })
             })
             .collect();
@@ -254,6 +269,105 @@ impl TextSearch {
         });
         results
     }
+}
+
+/// Number of facts considered "full coverage" for confidence scoring.
+/// Calibrated to ~p25 of enriched societies (median=49, p25≈25).
+const FACT_COVERAGE_THRESHOLD: f64 = 25.0;
+
+/// Compute a confidence score for a property based on data quality dimensions.
+/// Used by both search results (with graph_driven_pct) and detail pages (with 0.0).
+pub fn compute_confidence(
+    graph: Option<&KnowledgeGraph>,
+    society_id: &str,
+    graph_driven_pct: f32,
+) -> Option<ConfidenceScore> {
+    let graph = graph?;
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id);
+
+    // Source quality: RERA=1.0, Discovered=0.5, Legacy/None=0.3
+    let (source_score, source_explanation) = if let Some(n) = &node {
+        match n.root_source {
+            Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
+            Some(RootSource::Seller) => (0.6, "Seller-listed data".to_string()),
+            Some(RootSource::Discovered) => (0.5, "Discovered via search, verification pending".to_string()),
+            Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
+        }
+    } else {
+        (0.3, "No knowledge graph data".to_string())
+    };
+
+    // Fact coverage: min(fact_count/FACT_COVERAGE_THRESHOLD, 1.0)
+    let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
+    let coverage_score = (fact_count as f64 / FACT_COVERAGE_THRESHOLD).min(1.0);
+    let coverage_explanation = format!("{} facts available ({} = full coverage)", fact_count, FACT_COVERAGE_THRESHOLD as u32);
+
+    // Freshness: use most recent fact learned_at, fall back to node updated_at
+    let (freshness_score, freshness_explanation) = if let Some(n) = &node {
+        let most_recent_fact_ts = n.facts.iter().map(|f| f.learned_at).max();
+        let effective_ts = most_recent_fact_ts.unwrap_or(n.updated_at);
+        let days_ago = (chrono::Utc::now() - effective_ts).num_days().max(0) as u32;
+        if days_ago < 7 {
+            (1.0, format!("Updated {} days ago (fresh)", days_ago))
+        } else if days_ago < 30 {
+            (0.8, format!("Updated {} days ago (recent)", days_ago))
+        } else if days_ago < 90 {
+            (0.5, format!("Updated {} days ago (aging)", days_ago))
+        } else {
+            (0.3, format!("Updated {} days ago (stale)", days_ago))
+        }
+    } else {
+        (0.3, "No update timestamp available".to_string())
+    };
+
+    // Match quality: graph_driven_pct / 100.0
+    let match_score = (graph_driven_pct / 100.0) as f64;
+    let match_explanation = format!("{}% of scoring from verified graph data", graph_driven_pct.round() as u32);
+
+    // Weighted average: source 0.4, coverage 0.2, freshness 0.2, match 0.2
+    let overall = source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
+
+    let label = if overall >= 0.7 {
+        "High".to_string()
+    } else if overall >= 0.4 {
+        "Moderate".to_string()
+    } else {
+        "Low".to_string()
+    };
+
+    let components = vec![
+        ConfidenceComponent {
+            dimension: "source_quality".to_string(),
+            score: source_score,
+            weight: 0.4,
+            explanation: source_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "fact_coverage".to_string(),
+            score: coverage_score,
+            weight: 0.2,
+            explanation: coverage_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "freshness".to_string(),
+            score: freshness_score,
+            weight: 0.2,
+            explanation: freshness_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "match_quality".to_string(),
+            score: match_score,
+            weight: 0.2,
+            explanation: match_explanation,
+        },
+    ];
+
+    Some(ConfidenceScore {
+        overall: (overall * 100.0).round() / 100.0,
+        label,
+        components,
+    })
 }
 
 /// Score a property against search terms. Returns (score, match_reasons).
@@ -352,12 +466,41 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
             }
         }
         "greenery" => property.greenery_score.unwrap_or(0.0) * 2.0,
-        "new construction" | "ready to move" => {
+        "new construction" | "under construction" => {
             let status = property.possession_status.to_lowercase();
-            if (preference == "new construction"
-                && (status.contains("under") || status.contains("new")))
-                || (preference == "ready to move" && status.contains("ready"))
-            {
+            if status.contains("under") || status.contains("construction") || status.contains("new") {
+                2.0
+            } else {
+                0.0
+            }
+        }
+        "ready to move" => {
+            let status = property.possession_status.to_lowercase();
+            if status.contains("ready") || status.contains("delivered") || status.contains("completed") {
+                2.0
+            } else {
+                0.0
+            }
+        }
+        "new launch" => {
+            let status = property.possession_status.to_lowercase();
+            if status.contains("new") || status.contains("launch") {
+                2.0
+            } else {
+                0.0
+            }
+        }
+        "delayed" => {
+            let status = property.possession_status.to_lowercase();
+            if status.contains("delay") || status.contains("behind") {
+                2.0
+            } else {
+                0.0
+            }
+        }
+        "upcoming" => {
+            let status = property.possession_status.to_lowercase();
+            if status.contains("upcoming") || status.contains("pre-launch") || status.contains("future") {
                 2.0
             } else {
                 0.0
@@ -454,7 +597,8 @@ fn legacy_fact_key_for_preference(preference: &str) -> String {
         "premium" => "price_per_sqft",
         "good society" => "society_quality_score",
         "greenery" => "greenery_score",
-        "new construction" | "ready to move" => "possession_status",
+        "new construction" | "under construction" | "ready to move"
+        | "new launch" | "delayed" | "upcoming" => "possession_status",
         "high floor" => "floor",
         "east facing" => "facing",
         _ => "unknown",
@@ -476,7 +620,8 @@ fn format_legacy_display(preference: &str, property: &Property) -> String {
             else { "Decent society quality".into() }
         }
         "greenery" => "Green surroundings".into(),
-        "new construction" => format!("Status: {}", property.possession_status),
+        "new construction" | "under construction" | "new launch"
+        | "delayed" | "upcoming" => format!("Status: {}", property.possession_status),
         "ready to move" => format!("Status: {}", property.possession_status),
         "high floor" => format!("Floor {}/{}", property.floor, property.total_floors),
         "east facing" => format!("Facing: {}", property.facing),
@@ -510,5 +655,214 @@ fn build_match_reason(intent: &SearchIntent, reasons: &[String]) -> String {
         reasons.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
     } else {
         parts.join(", ")
+    }
+}
+
+/// Check if a property's society has a SocietyInArea edge to an area node
+/// whose name matches the intent area. This catches societies whose area
+/// fact doesn't exactly match the property's area field.
+fn graph_area_match(society_id: &str, intent_area: &str, graph: Option<&KnowledgeGraph>) -> bool {
+    use crate::knowledge::edge::Relation;
+    use crate::routes::enrichment::society_node_id;
+
+    let g = match graph {
+        Some(g) => g,
+        None => return false,
+    };
+
+    let node_id = society_node_id(society_id);
+    let intent_lower = intent_area.to_lowercase();
+
+    // Check all SocietyInArea neighbors of this society node.
+    // Minimum length guard: only do substring containment when BOTH strings
+    // are >= 4 chars to prevent false positives with short area names (e.g. "jp").
+    // Exact matches always work regardless of length.
+    for area_node in g.neighbors(&node_id, Some(Relation::SocietyInArea)) {
+        let area_lower = area_node.name.to_lowercase();
+        if area_lower == intent_lower {
+            return true;
+        }
+        if area_lower.len() >= 4 && intent_lower.len() >= 4 {
+            if area_lower.contains(&intent_lower) || intent_lower.contains(&area_lower) {
+                return true;
+            }
+        }
+    }
+
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::knowledge::edge::{Edge, Relation};
+    use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
+    use crate::knowledge::graph::KnowledgeGraph;
+    use crate::knowledge::node::{Node, NodeType, RootSource};
+
+    /// Helper: build a minimal KnowledgeGraph with a society node, an area node,
+    /// and a SocietyInArea edge between them.
+    fn graph_with_society_in_area(society_slug: &str, area_slug: &str, area_name: &str) -> KnowledgeGraph {
+        let mut g = KnowledgeGraph::new();
+        let society_id = format!("society:{}", society_slug);
+        let area_id = format!("area:{}", area_slug);
+
+        g.add_node(Node::new(&society_id, NodeType::Society, society_slug));
+        g.add_node(Node::new(&area_id, NodeType::Area, area_name));
+        g.add_edge(Edge::new(society_id, area_id, Relation::SocietyInArea));
+        g
+    }
+
+    // ---------------------------------------------------------------
+    // graph_area_match tests
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_graph_area_match_exact() {
+        let g = graph_with_society_in_area("prestige-lakeside", "whitefield", "Whitefield");
+        assert!(graph_area_match("prestige-lakeside", "Whitefield", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_case_insensitive() {
+        let g = graph_with_society_in_area("prestige-lakeside", "whitefield", "Whitefield");
+        assert!(graph_area_match("prestige-lakeside", "whitefield", Some(&g)));
+        assert!(graph_area_match("prestige-lakeside", "WHITEFIELD", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_substring_containment() {
+        // Area "Sarjapur Road" should match intent "Sarjapur" (both >= 4 chars)
+        let g = graph_with_society_in_area("sobha-neopolis", "sarjapur-road", "Sarjapur Road");
+        assert!(graph_area_match("sobha-neopolis", "Sarjapur", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_substring_reverse() {
+        // Intent "Sarjapur Road" should match area "Sarjapur" (intent contains area)
+        let g = graph_with_society_in_area("sobha-neopolis", "sarjapur", "Sarjapur");
+        assert!(graph_area_match("sobha-neopolis", "Sarjapur Road", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_short_name_blocked() {
+        // Area "JP" (< 4 chars) — substring match should be blocked
+        let g = graph_with_society_in_area("some-society", "jp", "JP");
+        // Not an exact match either (intent is longer), so should be false
+        assert!(!graph_area_match("some-society", "JP Nagar", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_short_intent_blocked() {
+        // Intent "HSR" (3 chars) — substring match should be blocked even if area is long
+        let g = graph_with_society_in_area("some-society", "hsr-layout", "HSR Layout");
+        assert!(!graph_area_match("some-society", "HSR", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_short_exact_still_works() {
+        // Exact match works even for short names
+        let g = graph_with_society_in_area("some-society", "jp", "JP");
+        assert!(graph_area_match("some-society", "JP", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_no_edge() {
+        // Society exists but has no SocietyInArea edge
+        let mut g = KnowledgeGraph::new();
+        g.add_node(Node::new("society:lonely-society", NodeType::Society, "Lonely Society"));
+        assert!(!graph_area_match("lonely-society", "Whitefield", Some(&g)));
+    }
+
+    #[test]
+    fn test_graph_area_match_no_graph() {
+        assert!(!graph_area_match("prestige-lakeside", "Whitefield", None));
+    }
+
+    // ---------------------------------------------------------------
+    // compute_confidence tests
+    // ---------------------------------------------------------------
+
+    /// Helper: create a SourcedFact with a given key for padding fact counts.
+    fn make_fact(key: &str) -> SourcedFact {
+        SourcedFact::manual(key, FactValue::Text("test".into()))
+    }
+
+    /// Helper: build a graph with a society node having given root_source and fact count.
+    fn graph_with_society_node(slug: &str, root_source: Option<RootSource>, fact_count: usize) -> KnowledgeGraph {
+        let mut g = KnowledgeGraph::new();
+        let node_id = format!("society:{}", slug);
+        let mut node = Node::new(&node_id, NodeType::Society, slug);
+        node.root_source = root_source;
+        for i in 0..fact_count {
+            node.add_fact(make_fact(&format!("fact_{}", i)));
+        }
+        g.add_node(node);
+        g
+    }
+
+    #[test]
+    fn test_confidence_rera_many_facts_is_high() {
+        let g = graph_with_society_node("well-known", Some(RootSource::Rera), 30);
+        let score = compute_confidence(Some(&g), "well-known", 80.0).unwrap();
+        assert_eq!(score.label, "High");
+        // source=1.0*0.4 + coverage=1.0*0.2 + freshness~1.0*0.2 + match=0.8*0.2 = 0.96
+        assert!(score.overall >= 0.7, "Expected High, got overall={}", score.overall);
+    }
+
+    #[test]
+    fn test_confidence_discovered_few_facts_is_moderate_not_high() {
+        // Discovered source (0.5) with only 2 facts and 0% graph-driven scoring.
+        // source=0.5*0.4=0.20 + coverage=(2/25)*0.2=0.016 + freshness~1.0*0.2=0.20 + match=0.0*0.2=0.0
+        // total ~ 0.416 => "Moderate" (>= 0.4 but < 0.7)
+        let g = graph_with_society_node("unknown", Some(RootSource::Discovered), 2);
+        let score = compute_confidence(Some(&g), "unknown", 0.0).unwrap();
+        assert_eq!(score.label, "Moderate");
+        assert!(score.overall >= 0.4, "Expected >= 0.4, got {}", score.overall);
+        assert!(score.overall < 0.7, "Expected < 0.7, got {}", score.overall);
+
+        // Compare: same but with Legacy source (0.3) should be Low
+        let g2 = graph_with_society_node("legacy-sparse", Some(RootSource::Legacy), 1);
+        let score2 = compute_confidence(Some(&g2), "legacy-sparse", 0.0).unwrap();
+        assert_eq!(score2.label, "Low");
+    }
+
+    #[test]
+    fn test_confidence_threshold_calibration() {
+        // At exactly FACT_COVERAGE_THRESHOLD facts, coverage should be 1.0
+        let g = graph_with_society_node("calibrated", Some(RootSource::Legacy), FACT_COVERAGE_THRESHOLD as usize);
+        let score = compute_confidence(Some(&g), "calibrated", 0.0).unwrap();
+        let coverage_component = score.components.iter().find(|c| c.dimension == "fact_coverage").unwrap();
+        assert!(
+            (coverage_component.score - 1.0).abs() < 0.001,
+            "Expected coverage=1.0 at threshold, got {}",
+            coverage_component.score
+        );
+    }
+
+    #[test]
+    fn test_confidence_no_graph_returns_none() {
+        let result = compute_confidence(None, "any-society", 0.0);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_confidence_unknown_society_still_returns() {
+        // Society not in graph — should still return a score (low)
+        let g = KnowledgeGraph::new();
+        let score = compute_confidence(Some(&g), "nonexistent", 0.0).unwrap();
+        assert_eq!(score.label, "Low");
+    }
+
+    #[test]
+    fn test_confidence_components_sum_weights() {
+        let g = graph_with_society_node("test", Some(RootSource::Rera), 10);
+        let score = compute_confidence(Some(&g), "test", 50.0).unwrap();
+        let total_weight: f64 = score.components.iter().map(|c| c.weight).sum();
+        assert!(
+            (total_weight - 1.0).abs() < 0.001,
+            "Component weights should sum to 1.0, got {}",
+            total_weight
+        );
     }
 }

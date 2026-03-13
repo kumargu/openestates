@@ -10,13 +10,16 @@ use crate::scoring::{
     self, CompareThemes, MarketActivityResponse, TradeoffsResponse, TransparencyScore,
     compute_transparency_score,
 };
+use crate::search::ConfidenceScore;
+use crate::search::text::compute_confidence;
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
 
 use super::enrichment::{
     enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
-    extract_rera_info, society_node_id, AreaIntelligence, ReraInfo,
+    extract_builder_trust, extract_data_freshness, extract_rera_info, society_node_id,
+    AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
 };
 
 /// GET /api/properties — returns UI-ready property cards.
@@ -62,6 +65,24 @@ pub struct PropertyDetail {
     pub seller: Option<SellerSummary>,
     /// Number of buyers who have expressed interest.
     pub interest_count: usize,
+    /// Where the society data originally came from: "rera", "seller", "discovered", "legacy"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_source: Option<String>,
+    /// Human-readable project status from skill's display_template
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_status_display: Option<String>,
+    /// Machine-readable project status: "ready_to_move", "under_construction", etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_status: Option<String>,
+    /// Builder delivery track record from knowledge graph
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_trust: Option<BuilderTrust>,
+    /// Data freshness — how recently and richly the society data was updated
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_freshness: Option<DataFreshness>,
+    /// Data confidence score — how trustworthy is this property's data?
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence_score: Option<ConfidenceScore>,
 }
 
 #[derive(Serialize)]
@@ -204,6 +225,51 @@ pub async fn get_property(
         count_interest_lines(&file_path).await
     };
 
+    // Extract root_source, project_status, and project_status_display from society KG node
+    let (root_source, project_status, project_status_display) = {
+        let soc_node_id = society_node_id(&property.society_id);
+        if let Some(node) = graph.get_node(&soc_node_id) {
+            let rs = node.root_source.map(|r| r.as_str().to_string());
+            // Get machine-readable project_status
+            let ps = node.facts.iter()
+                .filter(|f| f.key == "project_status")
+                .max_by_key(|f| f.version)
+                .and_then(|f| match &f.value {
+                    crate::knowledge::FactValue::Text(s) => Some(s.clone()),
+                    _ => None,
+                });
+            // Get display_template for project_status fact
+            let ps_display = node.facts.iter()
+                .filter(|f| f.key == "project_status")
+                .max_by_key(|f| f.version)
+                .and_then(|f| {
+                    f.display_template.clone().map(|tmpl| {
+                        if tmpl.contains("{value}") {
+                            if let crate::knowledge::FactValue::Text(ref val) = f.value {
+                                tmpl.replace("{value}", val)
+                            } else {
+                                tmpl
+                            }
+                        } else {
+                            tmpl
+                        }
+                    })
+                });
+            (rs, ps, ps_display)
+        } else {
+            (None, None, None)
+        }
+    };
+
+    // Extract builder trust from KG
+    let builder_trust = extract_builder_trust(&graph, &property.society_id);
+
+    // Extract data freshness from KG
+    let data_freshness = extract_data_freshness(&graph, &property.society_id);
+
+    // Compute confidence score (no search context, so graph_driven_pct = 0.0)
+    let confidence_score = compute_confidence(Some(&graph), &property.society_id, 0.0);
+
     Ok(Json(PropertyDetail {
         property,
         society,
@@ -219,6 +285,12 @@ pub async fn get_property(
         area_price_range_high,
         seller,
         interest_count,
+        root_source,
+        project_status_display,
+        project_status,
+        builder_trust,
+        data_freshness,
+        confidence_score,
     }))
 }
 

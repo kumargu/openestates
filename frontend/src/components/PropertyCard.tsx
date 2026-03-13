@@ -5,6 +5,9 @@ import type { MatchResult } from "../lib/search.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { getProperty } from "../lib/api.ts";
+import { TrustBadge } from "./TrustBadge.tsx";
+import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
+import { BuilderTrustBadge } from "./BuilderTrustBadge.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -130,15 +133,19 @@ export function PropertyCard({
 
           {/* Compact signals row */}
           <div className="property-card-v2-signals">
-            <span className="property-signal">
-              {property.possession_status === "ready" ? "Ready to move" : "Under construction"}
-            </span>
+            <ProjectStatusTag
+              status={property.project_status}
+              displayText={property.project_status_display}
+              possessionStatus={property.possession_status}
+            />
             <span className="property-signal">
               {property.metro_distance_mins} min to metro
             </span>
             <span className="property-signal">
               {property.builder_name}
             </span>
+            <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
+            <TrustBadge rootSource={property.root_source} compact />
           </div>
 
           {/* Seller trust indicators */}

@@ -10,6 +10,11 @@ import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
 import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
 import { TransparencyScoreTile } from "../components/TransparencyScoreTile.tsx";
 import { ShareButtons } from "../components/ShareButtons.tsx";
+import { TrustBadge } from "../components/TrustBadge.tsx";
+import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
+import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
+import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
+import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -203,9 +208,14 @@ export function PropertyPage() {
           }}>
             {p.title}
           </h1>
-          <p style={{ color: "var(--color-text-secondary)", margin: "0 0 1rem", fontSize: "0.95rem" }}>
-            {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", margin: "0 0 1rem" }}>
+            <p style={{ color: "var(--color-text-secondary)", margin: 0, fontSize: "0.95rem" }}>
+              {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
+            </p>
+            <TrustBadge rootSource={data.root_source} />
+            <DataFreshnessBadge freshness={data.data_freshness} />
+            <ConfidenceMeter confidence={data.confidence_score} />
+          </div>
         </div>
 
         <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
@@ -222,7 +232,11 @@ export function PropertyPage() {
           <span className="tag tag-neutral">{p.carpet_area_sqft} sqft carpet</span>
           <span className="tag tag-neutral">{p.facing} facing</span>
           <span className="tag tag-neutral">Floor {p.floor}/{p.total_floors}</span>
-          <span className="tag tag-neutral">{p.possession_status.replace(/_/g, " ")}</span>
+          <ProjectStatusTag
+            status={data.project_status}
+            displayText={data.project_status_display}
+            possessionStatus={p.possession_status}
+          />
         </div>
       </div>
 
@@ -397,6 +411,14 @@ export function PropertyPage() {
 
           <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
             <SocietyMeta label="Builder" value={society.builder_name} />
+            {data.builder_trust?.delivery_display && (
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <BuilderTrustBadge
+                  deliveryDisplay={data.builder_trust.delivery_display}
+                  deliveryRate={data.builder_trust.delivery_rate}
+                />
+              </div>
+            )}
             <SocietyMeta label="Year built" value={String(society.year_built)} />
             <SocietyMeta label="Maintenance" value={society.maintenance_sentiment} />
             <SocietyMeta label="Livability" value={society.livability_sentiment} />
@@ -536,6 +558,67 @@ export function PropertyPage() {
         <div className="property-sidebar">
           {/* Transparency Score — top of sidebar */}
           <TransparencyScoreTile data={data.transparency_score} />
+
+          {/* Data Provenance */}
+          <div className="section-card" style={{ marginBottom: "1rem" }}>
+            <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+              </svg>
+              <h2 style={{ fontSize: "0.85rem" }}>Data Provenance</h2>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
+              {/* Data Source */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Source</span>
+                <TrustBadge rootSource={data.root_source} compact />
+              </div>
+
+              {/* Project Status */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Project Status</span>
+                <ProjectStatusTag
+                  status={data.project_status}
+                  displayText={data.project_status_display}
+                  possessionStatus={p.possession_status}
+                />
+              </div>
+
+              {/* Builder Track Record */}
+              {data.builder_trust?.delivery_display && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Builder Track Record</span>
+                  <BuilderTrustBadge
+                    deliveryDisplay={data.builder_trust.delivery_display}
+                    deliveryRate={data.builder_trust.delivery_rate}
+                    compact
+                  />
+                </div>
+              )}
+
+              {/* Data Freshness */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Freshness</span>
+                <DataFreshnessBadge freshness={data.data_freshness} compact />
+              </div>
+
+              {/* Data Confidence */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Confidence</span>
+                <ConfidenceMeter confidence={data.confidence_score} compact />
+              </div>
+
+              {/* RERA Number */}
+              {data.rera?.registration_number && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>RERA Number</span>
+                  <span style={{ fontSize: "0.72rem", fontWeight: 500, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono, monospace)" }}>
+                    {data.rera.registration_number}
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
 
           {/* Price + Save + Share */}
           <div className="section-card" style={{ marginBottom: "1rem" }}>

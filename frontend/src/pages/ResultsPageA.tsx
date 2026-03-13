@@ -16,6 +16,11 @@ import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { CompareBar } from "../components/CompareBar.tsx";
 import { ComparePanel } from "../components/ComparePanel.tsx";
+import { TrustBadge } from "../components/TrustBadge.tsx";
+import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
+import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
+import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
+import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
 
@@ -235,10 +240,11 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, onQuickView, isComparing, onToggleCompare }: {
+function CardA({ property, match, explanation, confidenceScore, onQuickView, isComparing, onToggleCompare }: {
   property: PropertyCardType;
   match?: MatchResult;
   explanation?: MatchExplanation;
+  confidenceScore?: import("../lib/types.ts").ConfidenceScore;
   onQuickView?: (id: string) => void;
   isComparing?: boolean;
   onToggleCompare?: (id: string) => void;
@@ -336,11 +342,17 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
                 )}
               </span>
             )}
-            <span className="property-signal">
-              {property.possession_status === "ready" ? "Ready to move" : "Under construction"}
-            </span>
+            <ProjectStatusTag
+              status={property.project_status}
+              displayText={property.project_status_display}
+              possessionStatus={property.possession_status}
+            />
             <span className="property-signal">{property.metro_distance_mins} min to metro</span>
             <span className="property-signal">{property.builder_name}</span>
+            <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
+            <TrustBadge rootSource={property.root_source} compact />
+            <DataFreshnessBadge freshness={property.data_freshness} compact />
+            <ConfidenceMeter confidence={confidenceScore} compact />
           </div>
 
           {property.transparency_tags.length > 0 && (
@@ -558,7 +570,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; confidenceScore?: import("../lib/types.ts").ConfidenceScore }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -567,6 +579,7 @@ export function ResultsPageA() {
           reason: r.match_reason,
         },
         explanation: r.match_explanation,
+        confidenceScore: r.confidence_score,
       }));
     }
     // No query — show all properties without match labels
@@ -795,12 +808,13 @@ export function ResultsPageA() {
         className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
         style={{ paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
       >
-        {matchResults.map(({ property, match, explanation }) => (
+        {matchResults.map(({ property, match, explanation, confidenceScore }) => (
           <CardA
             key={property.id}
             property={property}
             match={match}
             explanation={explanation}
+            confidenceScore={confidenceScore}
             onQuickView={setPanelPropertyId}
             isComparing={compareIds.includes(property.id)}
             onToggleCompare={(id) => {

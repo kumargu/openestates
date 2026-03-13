@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::routes::enrichment::DataFreshness;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Property {
     pub id: String,
@@ -86,4 +88,19 @@ pub struct PropertyCard {
     pub documents_provided: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seller_verified: Option<bool>,
+    /// Where the society data originally came from: "rera", "seller", "discovered", "legacy"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_source: Option<String>,
+    /// Machine-readable project status: "ready_to_move", "under_construction", etc.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_status: Option<String>,
+    /// Human-readable project status from skill's display_template, e.g. "Ready to Move — delivered 31/01/2020"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_status_display: Option<String>,
+    /// Human-readable builder delivery track record, e.g. "Builder delivers on time: 100% of projects"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_delivery_display: Option<String>,
+    /// Data freshness — how recent and rich the underlying data is
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_freshness: Option<DataFreshness>,
 }

@@ -1,8 +1,12 @@
 //! Shared enrichment functions used by all routes that return property/society/area data.
 //! Single source of truth: every route that returns these types calls these functions.
 
+use std::collections::HashMap;
+
+use chrono::Utc;
 use serde::Serialize;
 
+use crate::knowledge::edge::Relation;
 use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact};
 use crate::models::{AreaProfile, Property, PropertyCard, Seller, Society};
 
@@ -79,6 +83,12 @@ fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
     facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
         FactValue::Bool(b) => Some(*b),
         _ => None,
+    })
+}
+
+fn get_fact_display_template(facts: &[SourcedFact], key: &str) -> Option<String> {
+    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| {
+        f.display_template.clone()
     })
 }
 
@@ -228,6 +238,120 @@ pub fn extract_area_intelligence(graph: &KnowledgeGraph, area_id: &str) -> Optio
 }
 
 // ---------------------------------------------------------------------------
+// Builder trust extraction — reads builder facts via BuiltBy edges
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct BuilderTrust {
+    pub delivery_rate: Option<f64>,
+    pub project_count: Option<u32>,
+    pub delivery_display: Option<String>,
+    pub zero_revocations: Option<bool>,
+}
+
+/// Extract builder trust data by traversing BuiltBy edges from society to builder node.
+/// Returns None if no builder node found or no delivery data.
+pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option<BuilderTrust> {
+    let soc_node_id = society_node_id(society_id);
+
+    // Find builder nodes connected via BuiltBy edge (society -> builder)
+    let builder_nodes = graph.neighbors(&soc_node_id, Some(Relation::BuiltBy));
+    let builder = builder_nodes.first()?;
+
+    let facts = &builder.facts;
+
+    let delivery_rate = get_numeric_fact(facts, "builder_delivery_rate");
+    let project_count = get_numeric_fact(facts, "builder_project_count").map(|n| n as u32);
+
+    // Only return BuilderTrust if we have delivery data
+    if delivery_rate.is_none() && project_count.is_none() {
+        return None;
+    }
+
+    let delivery_display = get_fact_display_template(facts, "builder_delivery_rate")
+        .and_then(|tmpl| {
+            if tmpl.contains("{value}") {
+                delivery_rate.map(|r| {
+                    let pct = (r * 100.0) as u32;
+                    tmpl.replace("{value}", &pct.to_string())
+                })
+            } else {
+                Some(tmpl)
+            }
+        });
+
+    // Check for zero_revocations fact (stored as Text "true")
+    let zero_revocations = get_text_fact(facts, "builder_zero_revocations")
+        .map(|v| v == "true");
+
+    Some(BuilderTrust {
+        delivery_rate,
+        project_count,
+        delivery_display,
+        zero_revocations,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Data freshness extraction — how recent and rich the data is
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct DataFreshness {
+    /// ISO timestamp of last enrichment
+    pub last_enriched: String,
+    /// How many days ago the node was last updated
+    pub days_ago: u32,
+    /// Human-readable label: "Fresh", "Recent", "Stale", "Very stale"
+    pub freshness_label: String,
+    /// Total number of facts on the node
+    pub fact_count: u32,
+    /// Breakdown of facts by source type, e.g. {"Rera": 5, "Reddit": 3}
+    pub source_breakdown: HashMap<String, u32>,
+}
+
+/// Extract data freshness information from a society's KG node.
+/// Returns None if the society has no KG node.
+pub fn extract_data_freshness(graph: &KnowledgeGraph, society_id: &str) -> Option<DataFreshness> {
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id)?;
+
+    // Use the most recent learned_at from any fact for freshness, falling back to node updated_at
+    let most_recent_fact_ts = node.facts.iter()
+        .map(|f| f.learned_at)
+        .max();
+    let effective_ts = most_recent_fact_ts.unwrap_or(node.updated_at);
+    let last_enriched = effective_ts.to_rfc3339();
+    let days_ago = (Utc::now() - effective_ts).num_days().max(0) as u32;
+
+    let freshness_label = if days_ago < 7 {
+        "Fresh".to_string()
+    } else if days_ago < 30 {
+        "Recent".to_string()
+    } else if days_ago < 90 {
+        "Stale".to_string()
+    } else {
+        "Very stale".to_string()
+    };
+
+    let fact_count = node.facts.len() as u32;
+
+    let mut source_breakdown: HashMap<String, u32> = HashMap::new();
+    for fact in &node.facts {
+        let source_name = format!("{:?}", fact.source.source_type);
+        *source_breakdown.entry(source_name).or_insert(0) += 1;
+    }
+
+    Some(DataFreshness {
+        last_enriched,
+        days_ago,
+        freshness_label,
+        fact_count,
+        source_breakdown,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Slug normalization — single canonical implementation
 // ---------------------------------------------------------------------------
 
@@ -342,6 +466,32 @@ pub fn enrich_property_card_with_sellers(
             (None, Vec::new(), None)
         };
 
+    // Extract root_source and project_status from the society KG node
+    let (root_source, project_status, project_status_display) = if let Some(node) = graph.get_node(&node_id) {
+        let rs = node.root_source.map(|r| r.as_str().to_string());
+        let ps = get_text_fact(&node.facts, "project_status");
+        let ps_display = get_fact_display_template(&node.facts, "project_status")
+            .and_then(|tmpl| {
+                // Replace {value} placeholder with the actual value
+                let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
+                if tmpl.contains("{value}") {
+                    Some(tmpl.replace("{value}", &val))
+                } else {
+                    Some(tmpl)
+                }
+            });
+        (rs, ps, ps_display)
+    } else {
+        (None, None, None)
+    };
+
+    // Extract builder delivery display from builder node via BuiltBy edge
+    let builder_delivery_display = extract_builder_trust(graph, &p.society_id)
+        .and_then(|bt| bt.delivery_display);
+
+    // Extract data freshness from the society KG node
+    let data_freshness = extract_data_freshness(graph, &p.society_id);
+
     PropertyCard {
         id: p.id.clone(),
         title: p.title.clone(),
@@ -366,6 +516,11 @@ pub fn enrich_property_card_with_sellers(
         seller_completeness_pct,
         documents_provided,
         seller_verified,
+        root_source,
+        project_status,
+        project_status_display,
+        builder_delivery_display,
+        data_freshness,
     }
 }
 

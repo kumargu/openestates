@@ -22,6 +22,11 @@ export type PropertyCard = {
   seller_completeness_pct?: number;
   documents_provided?: string[];
   seller_verified?: boolean;
+  root_source?: string;
+  project_status?: string;
+  project_status_display?: string;
+  builder_delivery_display?: string;
+  data_freshness?: DataFreshness;
 };
 
 export type PropertyDetailResponse = {
@@ -110,6 +115,17 @@ export type PropertyDetailResponse = {
   area_price_range_high?: number;
   seller?: SellerSummary;
   interest_count?: number;
+  root_source?: string;
+  project_status_display?: string;
+  project_status?: string;
+  builder_trust?: {
+    delivery_rate?: number;
+    project_count?: number;
+    delivery_display?: string;
+    zero_revocations?: boolean;
+  };
+  data_freshness?: DataFreshness;
+  confidence_score?: ConfidenceScore;
 };
 
 export type SellerSummary = {
@@ -255,12 +271,34 @@ export type MatchExplanation = {
   total_facts_consulted: number;
 };
 
+export type DataFreshness = {
+  last_enriched: string;
+  days_ago: number;
+  freshness_label: string;
+  fact_count: number;
+  source_breakdown: Record<string, number>;
+};
+
+export type ConfidenceComponent = {
+  dimension: string;
+  score: number;
+  weight: number;
+  explanation: string;
+};
+
+export type ConfidenceScore = {
+  overall: number;
+  label: string;
+  components: ConfidenceComponent[];
+};
+
 export type SearchResultItem = PropertyCard & {
   match_score: number;
   match_label: string;
   match_reason: string;
   match_explanation?: MatchExplanation;
   semantic_score?: number;
+  confidence_score?: ConfidenceScore;
 };
 
 export type SearchAreaContext = {

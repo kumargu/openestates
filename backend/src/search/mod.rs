@@ -1,6 +1,6 @@
 pub mod intent;
 pub mod semantic;
-mod text;
+pub mod text;
 
 pub use intent::SearchIntent;
 pub use text::TextSearch;
@@ -53,6 +53,30 @@ pub struct MatchExplanation {
     pub total_facts_consulted: usize,
 }
 
+/// One component of the confidence score, explaining a dimension.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfidenceComponent {
+    /// Dimension name: "source_quality", "fact_coverage", "freshness", "match_quality"
+    pub dimension: String,
+    /// Score for this dimension (0.0 - 1.0)
+    pub score: f64,
+    /// Weight applied to this dimension
+    pub weight: f64,
+    /// Human-readable explanation
+    pub explanation: String,
+}
+
+/// Overall confidence in a search result's data quality.
+#[derive(Debug, Clone, Serialize)]
+pub struct ConfidenceScore {
+    /// Overall confidence (0.0 - 1.0)
+    pub overall: f64,
+    /// Human-readable label: "High", "Moderate", "Low"
+    pub label: String,
+    /// Per-dimension breakdown
+    pub components: Vec<ConfidenceComponent>,
+}
+
 /// A search result that includes full PropertyCard data plus match info.
 #[derive(Debug, Clone, Serialize)]
 pub struct SearchResultCard {
@@ -68,6 +92,9 @@ pub struct SearchResultCard {
     /// Cosine similarity score if this result was semantically boosted, None otherwise.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_score: Option<f64>,
+    /// Data confidence score — how trustworthy is this result's data?
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub confidence_score: Option<ConfidenceScore>,
 }
 
 /// Sourced claim — a piece of knowledge with provenance, shown alongside results.
