@@ -24,9 +24,10 @@ LOG_DIR="${SCRIPT_DIR}/pipeline/checkpoints"
 # ---------------------------------------------------------------------------
 
 MAX_RETRIES=10                # max retries per day before giving up
-INITIAL_WAIT=300              # 5 minutes — first retry wait
+DEFAULT_WAIT=3600             # 1 hour — fallback if we can't parse reset time
 MAX_WAIT=7200                 # 2 hours — cap on wait time
-RATE_LIMIT_PATTERNS="rate.limit\|too many requests\|429\|quota\|limit exceeded\|capacity\|overloaded"
+# Extended pattern: includes "hit your limit" which is Claude CLI's rate limit message
+RATE_LIMIT_PATTERNS="rate.limit\|too many requests\|429\|quota\|limit exceeded\|capacity\|overloaded\|hit your limit"
 
 # ---------------------------------------------------------------------------
 # Parse arguments
@@ -53,12 +54,12 @@ if [ $# -eq 0 ]; then
     exit 0
 fi
 
-# If single arg <= 5, treat as sprint number
-if [ $# -eq 1 ] && [ "$1" -le 5 ]; then
+# If single arg looks like a sprint number (small), query sprint_agent for day range
+SPRINT_DAYS=$($SPRINT_AGENT --sprint-info "$1" 2>/dev/null | grep "Days:" | head -1 | sed 's/.*Days:[[:space:]]*\([0-9]*\)-\([0-9]*\).*/\1 \2/')
+if [ $# -eq 1 ] && [ -n "$SPRINT_DAYS" ]; then
     SPRINT_ID=$1
-    # Calculate day range from sprint ID
-    START_DAY=$(( (SPRINT_ID - 1) * 14 + 31 ))
-    END_DAY=$(( START_DAY + 13 ))
+    START_DAY=$(echo "$SPRINT_DAYS" | awk '{print $1}')
+    END_DAY=$(echo "$SPRINT_DAYS" | awk '{print $2}')
 elif [ $# -eq 1 ]; then
     START_DAY=$1
     END_DAY=$1
@@ -119,6 +120,58 @@ is_rate_limited() {
     return 1  # no
 }
 
+compute_wait_seconds() {
+    # Parse "resets HH:MMam/pm (timezone)" from log and compute seconds until then.
+    # Returns the number of seconds to wait, or $DEFAULT_WAIT if parsing fails.
+    local log_file=$1
+
+    # Extract reset time like "12:30pm" from "resets 12:30pm (Asia/Calcutta)"
+    local reset_str
+    reset_str=$(tail -10 "$log_file" 2>/dev/null | grep -oi "resets [0-9]\{1,2\}:[0-9]\{2\}[ap]m" | head -1 | sed 's/resets //i')
+
+    if [ -z "$reset_str" ]; then
+        echo "$DEFAULT_WAIT"
+        return
+    fi
+
+    # Parse hour, minute, ampm
+    local hour minute ampm
+    hour=$(echo "$reset_str" | sed 's/\([0-9]*\):\([0-9]*\)\([ap]m\)/\1/')
+    minute=$(echo "$reset_str" | sed 's/\([0-9]*\):\([0-9]*\)\([ap]m\)/\2/')
+    ampm=$(echo "$reset_str" | sed 's/\([0-9]*\):\([0-9]*\)\([ap]m\)/\3/')
+
+    # Convert to 24h
+    if [ "$ampm" = "pm" ] && [ "$hour" -ne 12 ]; then
+        hour=$((hour + 12))
+    elif [ "$ampm" = "am" ] && [ "$hour" -eq 12 ]; then
+        hour=0
+    fi
+
+    # Get current time in seconds since midnight
+    local now_h now_m now_secs target_secs wait_secs
+    now_h=$(date "+%H" | sed 's/^0//')
+    now_m=$(date "+%M" | sed 's/^0//')
+    now_secs=$(( now_h * 3600 + now_m * 60 ))
+    target_secs=$(( hour * 3600 + minute * 60 ))
+
+    wait_secs=$(( target_secs - now_secs ))
+
+    # If target is in the past (already reset), try again in 5 minutes
+    if [ "$wait_secs" -le 0 ]; then
+        wait_secs=300
+    fi
+
+    # Add 2 minute buffer after reset time
+    wait_secs=$((wait_secs + 120))
+
+    # Cap at MAX_WAIT
+    if [ "$wait_secs" -gt "$MAX_WAIT" ]; then
+        wait_secs=$MAX_WAIT
+    fi
+
+    echo "$wait_secs"
+}
+
 human_duration() {
     local seconds=$1
     if [ "$seconds" -ge 3600 ]; then
@@ -167,7 +220,7 @@ for DAY in $(seq "$START_DAY" "$END_DAY"); do
     fi
 
     ATTEMPT=0
-    WAIT_TIME=$INITIAL_WAIT
+    WAIT_TIME=$DEFAULT_WAIT
     DAY_COMPLETE=false
     LOG_FILE="${LOG_DIR}/day${DAY}_log.txt"
 
@@ -199,18 +252,15 @@ for DAY in $(seq "$START_DAY" "$END_DAY"); do
             break
         fi
 
-        # Check if it was a rate limit
-        if [ $EXIT_CODE -ne 0 ] && is_rate_limited "$LOG_FILE"; then
+        # Check for rate limit FIRST — Claude CLI may exit 0 on rate limit!
+        # The "hit your limit" message comes with exit code 0, so we must
+        # check the log content regardless of exit code.
+        if is_rate_limited "$LOG_FILE"; then
+            WAIT_TIME=$(compute_wait_seconds "$LOG_FILE")
             echo "  ⚠ Rate limited (exit code: ${EXIT_CODE})"
 
             if [ $ATTEMPT -lt $MAX_RETRIES ]; then
                 wait_with_countdown "$WAIT_TIME" "Rate limited. Will retry day ${DAY} from step: ${RESULT}"
-
-                # Exponential backoff: 5m → 10m → 20m → 40m → ... capped at MAX_WAIT
-                WAIT_TIME=$((WAIT_TIME * 2))
-                if [ $WAIT_TIME -gt $MAX_WAIT ]; then
-                    WAIT_TIME=$MAX_WAIT
-                fi
             fi
         elif [ $EXIT_CODE -ne 0 ]; then
             # Non-rate-limit error — don't retry, move on
@@ -231,7 +281,7 @@ for DAY in $(seq "$START_DAY" "$END_DAY"); do
         echo "  ✓ Day ${DAY} complete."
         DAYS_DONE=$((DAYS_DONE + 1))
         # Reset wait time for next day
-        WAIT_TIME=$INITIAL_WAIT
+        WAIT_TIME=$DEFAULT_WAIT
     else
         echo "  ✗ Day ${DAY} incomplete (stopped at: $($SPRINT_AGENT --resume-from "$DAY"))"
         DAYS_FAILED=$((DAYS_FAILED + 1))

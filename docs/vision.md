@@ -210,13 +210,40 @@ This is the core product principle: **minimal filters, maximum intelligence.** T
 
 ---
 
-## Sprint 4: Data Cleanup, Expansion & Search Intelligence (Days 73–86)
+## Sprint 4: Data Cleanup & RERA Expansion (Days 73–86)
 
-**Clean house. Scale data. Make search genuinely smart.**
+**Clean house. Validate end-to-end. Scale to 100 properties.**
 
-Sprint 3 proved the RERA pipeline on 50-100 societies. Sprint 4 cleans out old hand-curated seed data, expands to 300+ RERA societies, adds new data sources, and builds real search intelligence on top of the trusted data.
+Sprint 3 proved the RERA pipeline on 50-100 societies. Sprint 4 validates the full stack on 10 properties first (enrichment, embeddings, search, seller matching), then scales to 100 RERA-rooted societies with rich data.
 
-### Data Cleanup (Sprint 4 starts here)
+### Phase 0: Validation Gate (Days 73–75)
+
+Before scaling, prove every layer works on 10 hand-picked properties:
+
+**Enrichment verification (all 10):**
+- RERA facts present (registration, builder, units, dates, project_status)
+- Market pricing facts present (per-BHK configs, price/sqft, appreciation)
+- Reddit/Google review facts present (where available)
+- Images fetched and linked
+- Trust badges rendering correctly (RERA verified vs enriched vs pending)
+- Fact provenance chain intact (every fact → source → skill_id → timestamp)
+
+**Embeddings & search (all 10):**
+- Entity embeddings generated and stored
+- NL search returns these properties for relevant queries
+- Search ranking uses graph-driven scoring (not legacy fallback)
+- "Why this matches" explanations reference real facts
+
+**Seller matching test (3–4 of the 10):**
+- Create/assign 3-4 dummy sellers to random properties from the 10
+- Seller property prompt matches against buyer search queries
+- Interest flow works: buyer → "I'm Interested" → seller dashboard shows it
+- Seller dashboard displays linked property with trust badges + enrichment data
+- Matching algorithm correctly ranks seller-listed properties alongside RERA-rooted ones
+
+**Gate criteria:** All 10 properties pass enrichment checks, search returns them correctly, and seller matching works for the 3-4 test cases. Only then proceed to Phase 1.
+
+### Phase 1: Data Cleanup (Days 76–78)
 
 - **Remove hand-curated seed data** — `data/seed/properties.json`, `data/seed/societies.json` become RERA-generated, not manually written
 - **Migrate existing 48 societies** — match to RERA entries where possible, tag unmatched as `root_source: "legacy"`
@@ -224,12 +251,33 @@ Sprint 3 proved the RERA pipeline on 50-100 societies. Sprint 4 cleans out old h
 - **Remove seed-JSON bootstrap** — backend loads KG directly, no more `bootstrap_from_seed()`
 - **Audit knowledge graph** — remove stale/duplicate facts, re-run skills on RERA-rooted nodes
 
-### Data Expansion
+### Phase 2: Scale to 100 (Days 79–83)
 
-- Expand RERA seeding to 300+ societies across Bengaluru
-- Add new data sources as enrichment skills (Google Maps, 99acres, MagicBricks)
+- Expand RERA seeding to **100 societies** across Bengaluru (not 300 — keep it tight, find data quality issues early)
+- Run full enrichment pipeline on all 100: RERA → market pricing → Reddit → images → embeddings
 - Automated data quality scoring — flag nodes with low fact counts or stale enrichment
-- Stale data re-enrichment scheduler
+- Verify Gemini-based live discovery works against RERA-rooted data (search → KG ingestion)
+
+### Phase 3: Market Pricing Enrichment (Days 84–86)
+
+- **`fetch_market_pricing` skill** — for each RERA-rooted society, query Gemini with grounded search for per-BHK pricing
+- Pass RERA context (builder, units, completion date, project type) to Gemini for more accurate results
+- Facts produced per society: `pricing_{bhk}` (sqft range, price range, price/sqft), `price_per_sqft`, `configurations`, `market_status`, `price_appreciation`, `comparable_projects`, `pricing_insight`
+- Each pricing fact has `answers_preferences` for search matching (e.g., "3bhk price", "under 2 crore", "affordable")
+- Comparable projects output feeds back into discovery — tells us what to seed next
+- Cached 14 days (market prices change); re-enrichable on demand
+
+### Not in this sprint
+
+- Search intelligence improvements (Sprint 5)
+- Seller→Society matching at scale (Sprint 5) — only 3-4 test cases in Phase 0
+- Performance optimization (Sprint 6)
+
+---
+
+## Sprint 5: Search Intelligence & Marketplace (Days 87–100)
+
+**Make search genuinely smart. Connect the dots between buyers and sellers.**
 
 ### Seller→Society Matching (needs Sprint 2 + Sprint 3 complete)
 
@@ -262,7 +310,7 @@ Sprint 3 proved the RERA pipeline on 50-100 societies. Sprint 4 cleans out old h
 
 ---
 
-## Sprint 5: Performance & Scale (Days 87–100)
+## Sprint 6: Performance & Scale (Days 101–114)
 
 **Fast now, ready for 10x.**
 
@@ -282,7 +330,7 @@ Sprint 3 proved the RERA pipeline on 50-100 societies. Sprint 4 cleans out old h
 
 ---
 
-## Sprint 6: Launch-Ready Polish (Days 101–114)
+## Sprint 7: Launch-Ready Polish (Days 115–128)
 
 **Ship-quality product.**
 

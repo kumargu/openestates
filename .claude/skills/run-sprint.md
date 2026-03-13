@@ -4,17 +4,14 @@
 When the user asks to run a sprint, work on a day, or do autonomous multi-day work.
 
 ## Sprint Model
-5 sprints × 14 days = 70 days (day 31 to day 100). Days 1-30 were the prototype phase.
 
-| Sprint | Days | Theme |
-|--------|------|-------|
-| 1 | 31-44 | Buyer Experience & Foundation |
-| 2 | 45-58 | Seller-Buyer Connection |
-| 3 | 59-72 | Search Intelligence & Marketplace |
-| 4 | 73-86 | Performance & Data Expansion |
-| 5 | 87-100 | Launch-Ready Polish |
+Sprint definitions are parsed from `docs/vision.md` at runtime — **do not hardcode sprint names or day ranges anywhere**. To see current sprints:
 
-Full vision: `docs/vision.md`. Project context: `CLAUDE.md`.
+```bash
+python3 pipeline/sprint_agent.py --sprint-info
+```
+
+Days 1-30 were the prototype phase. Full vision: `docs/vision.md`. Project context: `CLAUDE.md`.
 
 ## Architecture: One Conversation Per Day
 
