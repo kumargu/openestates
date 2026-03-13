@@ -198,12 +198,793 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828867+00:00",
+      "version": 1,
+      "display_template": "RERA Registered: Yes",
+      "answers_preferences": [
+        "rera verified",
+        "legally verified",
+        "safe investment",
+        "verified project"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_number",
+      "value": {
+        "type": "Text",
+        "data": "PRM/KA/RERA/1251/446/PR/181025/008182"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828886+00:00",
+      "version": 1,
+      "display_template": "RERA No: {value}"
+    },
+    {
+      "key": "rera_ack_number",
+      "value": {
+        "type": "Text",
+        "data": "ACK/KA/RERA/1251/446/PR/090925/009594"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828889+00:00",
+      "version": 1,
+      "display_template": "RERA ACK: {value}"
+    },
+    {
+      "key": "rera_status",
+      "value": {
+        "type": "Text",
+        "data": "APPROVED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828892+00:00",
+      "version": 1,
+      "display_template": "RERA Status: {value}",
+      "answers_preferences": [
+        "rera verified",
+        "safe investment"
+      ]
+    },
+    {
+      "key": "rera_promoter_name",
+      "value": {
+        "type": "Text",
+        "data": "Century Silicon City Private Limited"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828894+00:00",
+      "version": 1,
+      "display_template": "RERA Promoter: {value}"
+    },
+    {
+      "key": "rera_approved_on",
+      "value": {
+        "type": "Text",
+        "data": "18/10/2025"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828897+00:00",
+      "version": 1,
+      "display_template": "RERA Approved: {value}"
+    },
+    {
+      "key": "rera_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "30/10/2030"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828899+00:00",
+      "version": 1,
+      "display_template": "Expected Completion: {value}",
+      "answers_preferences": [
+        "possession date",
+        "completion",
+        "ready to move",
+        "when ready"
+      ]
+    },
+    {
+      "key": "rera_original_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "30-10-2030"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828901+00:00",
+      "version": 1,
+      "display_template": "Original Completion Date: {value}"
+    },
+    {
+      "key": "rera_start_date",
+      "value": {
+        "type": "Text",
+        "data": "01-10-2025"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828969+00:00",
+      "version": 1,
+      "display_template": "Registration Start Date: {value}"
+    },
+    {
+      "key": "rera_project_type",
+      "value": {
+        "type": "Text",
+        "data": "Residential/Group Housing"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828974+00:00",
+      "version": 1,
+      "display_template": "Project Type: {value}",
+      "answers_preferences": [
+        "apartment",
+        "villa",
+        "plotted",
+        "project type"
+      ]
+    },
+    {
+      "key": "rera_project_sub_type",
+      "value": {
+        "type": "Text",
+        "data": "Apartment"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828976+00:00",
+      "version": 1,
+      "display_template": "Sub Type: {value}"
+    },
+    {
+      "key": "rera_project_address",
+      "value": {
+        "type": "Text",
+        "data": "Sy. No. 42P, 43, 44, 45, 127P, 128P, 129P , Munnekolalu Village, Varthur Hobli , Bengaluru East , Bengaluru Urban, Karnataka - 560037"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828979+00:00",
+      "version": 1,
+      "display_template": "Address: {value}"
+    },
+    {
+      "key": "rera_total_units",
+      "value": {
+        "type": "Numeric",
+        "data": 475
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828981+00:00",
+      "version": 1,
+      "display_template": "{value} total units",
+      "answers_preferences": [
+        "project size",
+        "how many units",
+        "number of flats"
+      ]
+    },
+    {
+      "key": "rera_num_towers",
+      "value": {
+        "type": "Numeric",
+        "data": 5
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828983+00:00",
+      "version": 1,
+      "display_template": "{value} towers"
+    },
+    {
+      "key": "rera_open_parking",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828986+00:00",
+      "version": 1,
+      "display_template": "{value} open parking spots",
+      "answers_preferences": [
+        "parking"
+      ]
+    },
+    {
+      "key": "rera_covered_parking",
+      "value": {
+        "type": "Numeric",
+        "data": 570
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828988+00:00",
+      "version": 1,
+      "display_template": "{value} covered parking spots",
+      "answers_preferences": [
+        "parking",
+        "covered parking"
+      ]
+    },
+    {
+      "key": "rera_total_land_area_sqm",
+      "value": {
+        "type": "Numeric",
+        "data": 38033.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828991+00:00",
+      "version": 1,
+      "display_template": "Total Land Area: {value} sq m"
+    },
+    {
+      "key": "rera_total_carpet_area_sqm",
+      "value": {
+        "type": "Numeric",
+        "data": 59482.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828993+00:00",
+      "version": 1,
+      "display_template": "Total Carpet Area: {value} sq m"
+    },
+    {
+      "key": "rera_total_builtup_area_sqm",
+      "value": {
+        "type": "Numeric",
+        "data": 168708.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828996+00:00",
+      "version": 1,
+      "display_template": "Total Built-up Area: {value} sq m"
+    },
+    {
+      "key": "rera_far_sanctioned",
+      "value": {
+        "type": "Numeric",
+        "data": 3.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.828998+00:00",
+      "version": 1,
+      "display_template": "FAR Sanctioned: {value}"
+    },
+    {
+      "key": "rera_total_project_cost",
+      "value": {
+        "type": "Numeric",
+        "data": 11892252140.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829000+00:00",
+      "version": 1,
+      "display_template": "Total Project Cost: ₹{value}",
+      "answers_preferences": [
+        "project cost",
+        "total cost",
+        "how much",
+        "budget"
+      ]
+    },
+    {
+      "key": "rera_land_cost",
+      "value": {
+        "type": "Numeric",
+        "data": 3157676541.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829003+00:00",
+      "version": 1,
+      "display_template": "Land Cost: ₹{value}",
+      "answers_preferences": [
+        "land cost"
+      ]
+    },
+    {
+      "key": "rera_construction_cost",
+      "value": {
+        "type": "Numeric",
+        "data": 8734575599.0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829005+00:00",
+      "version": 1,
+      "display_template": "Construction Cost: ₹{value}",
+      "answers_preferences": [
+        "construction cost"
+      ]
+    },
+    {
+      "key": "rera_cost_per_unit",
+      "value": {
+        "type": "Numeric",
+        "data": 25036320
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829011+00:00",
+      "version": 1,
+      "display_template": "Avg Cost per Unit: ₹{value}",
+      "answers_preferences": [
+        "price per unit",
+        "average cost",
+        "value"
+      ]
+    },
+    {
+      "key": "rera_has_borrowing",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829013+00:00",
+      "version": 1,
+      "display_template": "Has Borrowing: {value}",
+      "answers_preferences": [
+        "financially safe",
+        "debt"
+      ]
+    },
+    {
+      "key": "rera_has_mortgage",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829016+00:00",
+      "version": 1,
+      "display_template": "Has Mortgage: {value}",
+      "answers_preferences": [
+        "financially safe",
+        "mortgage"
+      ]
+    },
+    {
+      "key": "rera_escrow_bank",
+      "value": {
+        "type": "Text",
+        "data": "HDFC"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829018+00:00",
+      "version": 1,
+      "display_template": "Escrow Bank: {value}",
+      "answers_preferences": [
+        "financially safe",
+        "escrow"
+      ]
+    },
+    {
+      "key": "rera_escrow_account",
+      "value": {
+        "type": "Text",
+        "data": "57500001846604"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829020+00:00",
+      "version": 1,
+      "display_template": "Escrow Account: {value}"
+    },
+    {
+      "key": "rera_escrow_ifsc",
+      "value": {
+        "type": "Text",
+        "data": "HDFC0003881"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829022+00:00",
+      "version": 1,
+      "display_template": "Escrow IFSC: {value}"
+    },
+    {
+      "key": "rera_land_litigation",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829026+00:00",
+      "version": 1,
+      "display_template": "Land Litigation: No",
+      "answers_preferences": [
+        "legal issues",
+        "litigation",
+        "safe",
+        "clear title"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_survey_numbers",
+      "value": {
+        "type": "Text",
+        "data": "07/10/2023, 21/07/2007, 28/06/2004, 28/04/1997, 21/03/2007, 19/06/2001, 08/07/2025, 23/08/2024, 20/09/2003, 22/09/2004, 09/07/2025"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829029+00:00",
+      "version": 1,
+      "display_template": "Survey Numbers: {value}"
+    },
+    {
+      "key": "rera_complaints_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829031+00:00",
+      "version": 1,
+      "display_template": "{value} complaints filed",
+      "answers_preferences": [
+        "complaints",
+        "legal issues",
+        "problems",
+        "safe"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          0.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "key": "rera_builder_revocations",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829034+00:00",
+      "version": 1,
+      "display_template": "{value} revocations",
+      "answers_preferences": [
+        "safe builder",
+        "trusted builder"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_builder_states",
+      "value": {
+        "type": "Text",
+        "data": "Karnataka"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829036+00:00",
+      "version": 1,
+      "display_template": "Builder active in: {value}",
+      "answers_preferences": [
+        "multi-state builder",
+        "national builder"
+      ]
+    },
+    {
+      "key": "rera_lat_lng",
+      "value": {
+        "type": "Text",
+        "data": "12.951798985210813,76.70448967424154"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829038+00:00",
+      "version": 1,
+      "display_template": "Location: {value}"
+    },
+    {
+      "key": "rera_portal_url",
+      "value": {
+        "type": "Text",
+        "data": "https://rera.karnataka.gov.in/projectViewDetails"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:50:45.829041+00:00",
+      "version": 1,
+      "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "project_status",
+      "value": {
+        "type": "Text",
+        "data": "new_launch"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:52:17.523654+00:00",
+      "version": 1,
+      "display_template": "New Launch",
+      "answers_preferences": [
+        "new launch",
+        "new project",
+        "newly launched",
+        "fresh project",
+        "just launched",
+        "latest project"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "summary_embedding": [
     -0.0018132764,
     -0.013351208,
-    -0.00004896809,
+    -4.896809e-05,
     -0.062394895,
     -0.003016588,
     -0.0072008744,
@@ -625,7 +1406,7 @@
     0.02843563,
     -0.015431885,
     -0.023364272,
-    0.000056091638,
+    5.6091638e-05,
     0.016588254,
     -0.02938703,
     -0.0038834712,
@@ -879,7 +1660,7 @@
     -0.012590639,
     0.0023338872,
     -0.04282321,
-    0.000053821037,
+    5.3821037e-05,
     0.0045054303,
     0.009431164,
     -0.018551188,
@@ -1057,7 +1838,7 @@
     -0.0018824568,
     -0.00037890286,
     0.011147834,
-    -0.00004914007,
+    -4.914007e-05,
     -0.0046642795,
     0.018853614,
     -0.010598831,
@@ -1099,7 +1880,7 @@
     0.013932944,
     0.012344401,
     0.011923903,
-    0.000014967249,
+    1.4967249e-05,
     0.026536988,
     -0.0009990718,
     -0.016760277,
@@ -1114,7 +1895,7 @@
     -0.0060283304,
     0.013514779,
     -0.008587339,
-    0.000016066804,
+    1.6066804e-05,
     0.00068446435,
     0.0017083737,
     0.01589337,
@@ -1140,7 +1921,7 @@
     0.012718686,
     0.01287519,
     0.008665187,
-    0.000020607607,
+    2.0607607e-05,
     0.011782429,
     -0.0007732833,
     0.0043404037,
@@ -1292,7 +2073,7 @@
     0.029702839,
     0.0024676982,
     0.003485031,
-    0.000036233785,
+    3.6233785e-05,
     0.0013350633,
     -0.0064042383,
     -0.0034152134,
@@ -1438,7 +2219,7 @@
     -0.011230541,
     0.015797095,
     -0.010352359,
-    0.000036939233,
+    3.6939233e-05,
     0.0017562708,
     0.009436758,
     0.0013193063,
@@ -1448,7 +2229,7 @@
     0.0008295684,
     -0.013243764,
     0.0020895514,
-    0.000005597061,
+    5.597061e-06,
     0.00570115,
     -0.020889178,
     0.0023260328,
@@ -1545,7 +2326,7 @@
     -0.007164966,
     0.004512864,
     -0.020031834,
-    0.0000072292764,
+    7.2292764e-06,
     -0.00061261724,
     -0.018575966,
     0.018430531,
@@ -1757,7 +2538,7 @@
     -0.019006602,
     -0.0024818832,
     -0.008615353,
-    0.00002877372,
+    2.877372e-05,
     -0.0610172,
     -0.0012089805,
     0.010139075,
@@ -1788,7 +2569,7 @@
     -0.008200739,
     0.008843726,
     0.0060974834,
-    -0.000089593246,
+    -8.9593246e-05,
     0.0127839055,
     0.005558376,
     -0.0036456059,
@@ -1921,7 +2702,7 @@
     -0.009191361,
     -0.0048422143,
     -0.0007264416,
-    -0.00008499364,
+    -8.499364e-05,
     -0.01526287,
     -0.006513417,
     0.009646105,
@@ -1953,14 +2734,14 @@
     0.009891253,
     -0.003514909,
     -0.0063987896,
-    -0.00004907764,
+    -4.907764e-05,
     0.030473981,
     -0.017270198,
     0.017091047,
     -0.016545229,
     -0.0073464294,
     0.0014200814,
-    -0.00006957851,
+    -6.957851e-05,
     0.024802025,
     -0.005703828,
     -0.01019367,
@@ -2017,7 +2798,7 @@
     -0.0015234292,
     0.009442156,
     0.025367096,
-    0.000098267854,
+    9.8267854e-05,
     0.019581452,
     -0.0002771565,
     -0.037016157,
@@ -2486,7 +3267,7 @@
     0.0073584653,
     -0.008455754,
     -0.0076673105,
-    -9.2009753e-7,
+    -9.2009753e-07,
     -0.0042357603,
     0.0150136575,
     0.021475142,
@@ -2641,7 +3422,7 @@
     0.005977788,
     0.0012134471,
     -0.011481545,
-    -0.00003874101,
+    -3.874101e-05,
     -0.022675741,
     0.015576092,
     -0.027015653,
@@ -2721,7 +3502,7 @@
     -0.0034292834,
     -0.01747651,
     -0.028992804,
-    -0.000054849705,
+    -5.4849705e-05,
     0.007175773,
     0.0009925709,
     -0.0077055236,
@@ -2854,7 +3635,7 @@
     -0.02174688,
     0.010055446,
     0.017852666,
-    -0.000054715383,
+    -5.4715383e-05,
     -0.0299436,
     -0.0046727112,
     -0.0018700422,
@@ -2869,7 +3650,7 @@
     0.0003272769,
     0.0038310108,
     0.017624663,
-    0.0000052182577,
+    5.2182577e-06,
     -0.001106244,
     -0.013234046,
     0.011787964,
@@ -2923,7 +3704,7 @@
     0.010351942,
     -0.0050393436,
     -0.008973097,
-    -0.00005358562,
+    -5.358562e-05,
     0.01025051,
     -0.011593426,
     0.0050996495,
@@ -3062,7 +3843,7 @@
     0.0025856604,
     0.020119399,
     -0.005235692,
-    -0.0000325396,
+    -3.25396e-05,
     -0.020940322,
     -0.011464449,
     0.0024659885,
@@ -3164,7 +3945,7 @@
     0.10428561,
     0.009928411,
     -0.008917221,
-    -0.00006096815,
+    -6.096815e-05,
     0.030311575,
     0.021923942,
     0.009104181,
@@ -3258,7 +4039,7 @@
     0.01838066,
     -0.010103249,
     0.006320768,
-    -0.000030240199,
+    -3.0240199e-05,
     -0.006683614,
     0.015992986,
     0.020240985,
@@ -3272,8 +4053,9 @@
     -0.016057212,
     0.003591656,
     0.012760018,
-    0.000043858174
+    4.3858174e-05
   ],
   "created_at": "2026-03-09T16:43:48.444010Z",
-  "updated_at": "2026-03-10T11:31:00.706771Z"
+  "updated_at": "2026-03-10T11:31:00.706771Z",
+  "root_source": "Rera"
 }

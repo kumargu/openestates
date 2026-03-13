@@ -32,6 +32,96 @@
       "learned_at": "2026-03-09T17:32:32.960267Z",
       "version": 1,
       "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "builder_delivery_rate",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.722851+00:00",
+      "version": 1,
+      "display_template": "Builder delivers on time: 100% of projects",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "on time delivery",
+        "dependable builder",
+        "good builder",
+        "reputed builder",
+        "timely delivery",
+        "no delays"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.5
+      }
+    },
+    {
+      "key": "builder_project_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.722858+00:00",
+      "version": 1,
+      "display_template": "Builder has 1 tracked projects",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "reputed builder",
+        "established builder",
+        "experienced builder"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0
+      }
+    },
+    {
+      "key": "builder_zero_revocations",
+      "value": {
+        "type": "Text",
+        "data": "true"
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.722861+00:00",
+      "version": 1,
+      "display_template": "No RERA revocations on record",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "no delays",
+        "safe builder",
+        "dependable builder"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
     }
   ],
   "summary_embedding": [
@@ -219,7 +309,7 @@
     0.00656554,
     -0.011437719,
     0.009775491,
-    -0.000056092744,
+    -5.6092744e-05,
     -0.0073219496,
     -0.00010191768,
     -0.012161592,
@@ -380,7 +470,7 @@
     0.004072584,
     0.0010104988,
     0.0107295895,
-    -0.000044301516,
+    -4.4301516e-05,
     -0.002871806,
     0.0063187275,
     -0.012429332,
@@ -921,7 +1011,7 @@
     0.008275452,
     0.0048812754,
     0.0039147413,
-    0.000039878923,
+    3.9878923e-05,
     0.012240283,
     -0.013703028,
     0.005629902,
@@ -945,7 +1035,7 @@
     0.020358512,
     -0.007655592,
     0.002157678,
-    -0.0000102262375,
+    -1.02262375e-05,
     -0.0031503765,
     -0.008871973,
     -0.008121366,
@@ -995,7 +1085,7 @@
     -0.0019080753,
     -0.007561702,
     0.012659132,
-    -0.00003577407,
+    -3.577407e-05,
     0.0001047773,
     0.017362503,
     0.006107571,
@@ -1439,7 +1529,7 @@
     0.013441658,
     -0.002856059,
     0.0056569995,
-    -0.00008448986,
+    -8.448986e-05,
     -0.004857609,
     0.0043551815,
     -0.00061128923,
@@ -1662,7 +1752,7 @@
     0.013622628,
     0.017142622,
     0.0037803357,
-    -0.000056661695,
+    -5.6661695e-05,
     -0.00828638,
     0.010499651,
     0.00884555,
@@ -1809,7 +1899,7 @@
     0.00071396446,
     0.014895728,
     -0.014519256,
-    -0.000010368979,
+    -1.0368979e-05,
     0.0283878,
     0.011410474,
     0.019345146,
@@ -2094,7 +2184,7 @@
     -0.0057317554,
     -0.023229938,
     -0.006691979,
-    -0.00008989464,
+    -8.989464e-05,
     -0.0069183246,
     0.0023812784,
     0.022067763,
@@ -2139,7 +2229,7 @@
     0.00049111265,
     0.010924674,
     -0.008477997,
-    -0.000024060697,
+    -2.4060697e-05,
     -0.00556486,
     -0.0054082605,
     -0.013944551,
@@ -2266,7 +2356,7 @@
     -0.0060761897,
     -0.0047484185,
     -0.012968194,
-    0.000042514035,
+    4.2514035e-05,
     0.014961905,
     -0.0073770774,
     -0.015691046,
@@ -2345,7 +2435,7 @@
     0.008219395,
     -0.013680848,
     -0.011115222,
-    -0.0000427141,
+    -4.27141e-05,
     -0.009931151,
     0.0018029457,
     0.00676197,
@@ -2404,7 +2494,7 @@
     -0.002154402,
     -0.0024236355,
     -0.027840782,
-    -0.00007501324,
+    -7.501324e-05,
     0.009931453,
     -0.011358072,
     -0.0046242317,
@@ -2902,7 +2992,7 @@
     0.024719758,
     -0.014728342,
     0.0013247731,
-    -0.00006945199,
+    -6.945199e-05,
     -0.009901749,
     0.012057972,
     0.010646608,
@@ -3064,7 +3154,7 @@
     0.008348458,
     -0.012122563,
     0.0050127245,
-    0.000089758825,
+    8.9758825e-05,
     0.020871924,
     -0.0016303291,
     0.0033368338,
@@ -3109,5 +3199,6 @@
     -0.0061092447
   ],
   "created_at": "2026-03-09T16:44:40.807333Z",
-  "updated_at": "2026-03-09T16:44:40.807333Z"
+  "updated_at": "2026-03-09T16:44:40.807333Z",
+  "root_source": "Discovered"
 }

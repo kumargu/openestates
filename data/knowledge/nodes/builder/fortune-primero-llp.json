@@ -1,0 +1,115 @@
+{
+  "id": "builder:fortune-primero-llp",
+  "node_type": "Builder",
+  "name": "FORTUNE PRIMERO LLP",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "FORTUNE PRIMERO LLP"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:57:19.128849+00:00",
+      "version": 1
+    },
+    {
+      "key": "builder_delivery_rate",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.717636+00:00",
+      "version": 1,
+      "display_template": "Builder delivers on time: 100% of projects",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "on time delivery",
+        "dependable builder",
+        "good builder",
+        "reputed builder",
+        "timely delivery",
+        "no delays"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.5
+      }
+    },
+    {
+      "key": "builder_project_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.717639+00:00",
+      "version": 1,
+      "display_template": "Builder has 1 tracked projects",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "reputed builder",
+        "established builder",
+        "experienced builder"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0
+      }
+    },
+    {
+      "key": "builder_zero_revocations",
+      "value": {
+        "type": "Text",
+        "data": "true"
+      },
+      "confidence": 0.9,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "compute_builder_delivery_rate",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:47:33.717641+00:00",
+      "version": 1,
+      "display_template": "No RERA revocations on record",
+      "answers_preferences": [
+        "reliable builder",
+        "trusted builder",
+        "no delays",
+        "safe builder",
+        "dependable builder"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    }
+  ]
+}

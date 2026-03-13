@@ -20,7 +20,7 @@ Usage:
   python3 pipeline/sprint_agent.py --checkpoint 31 --get k     # get checkpoint value
   python3 pipeline/sprint_agent.py --load-context 31           # load context for a day
 
-Sprint model: 5 sprints × 14 days = 70 days (day 31 to day 100).
+Sprint definitions are parsed from docs/vision.md at runtime.
 Days 1-30 are pre-sprint (prototype phase, already done).
 
 No API keys or SDK needed — this is just a checkpoint/status helper.
@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -42,58 +43,90 @@ DAYS_DIR = PROJECT_ROOT / "days"
 STANDUPS_DIR = PROJECT_ROOT / "days" / "standups"
 CHECKPOINTS_DIR = PROJECT_ROOT / "pipeline" / "checkpoints"
 FEEDBACK_DIR = PROJECT_ROOT / "pipeline" / "feedback"
+VISION_FILE = PROJECT_ROOT / "docs" / "vision.md"
 
 # ---------------------------------------------------------------------------
-# Sprint model: 5 sprints × 14 days covering days 31-100
+# Sprint model — parsed from docs/vision.md at runtime
 # ---------------------------------------------------------------------------
 
-SPRINTS = [
-    {
-        "id": 1,
-        "name": "Buyer Experience & Foundation",
-        "days": (31, 44),
-        "theme": "Make discovery shareable, trustworthy, and mobile-ready.",
-    },
-    {
-        "id": 2,
-        "name": "Seller-Buyer Connection",
-        "days": (45, 58),
-        "theme": "Connect buyers and sellers. Every click matters.",
-    },
-    {
-        "id": 3,
-        "name": "Search Intelligence & Marketplace",
-        "days": (59, 72),
-        "theme": "Search that genuinely helps. The marketplace converts.",
-    },
-    {
-        "id": 4,
-        "name": "Performance & Data Expansion",
-        "days": (73, 86),
-        "theme": "Fast now, ready for 10x. More data, better data.",
-    },
-    {
-        "id": 5,
-        "name": "Launch-Ready Polish",
-        "days": (87, 100),
-        "theme": "Ship-quality product.",
-    },
-]
+# Pattern: ## Sprint N: Name (Days X–Y)
+# The en-dash (–) and hyphen (-) are both supported.
+_SPRINT_RE = re.compile(
+    r"^## Sprint (\d+):\s*(.+?)\s*\(Days\s*(\d+)\s*[–\-]\s*(\d+)\s*\)",
+    re.MULTILINE,
+)
+
+# First bold line after the sprint header is the theme.
+_BOLD_LINE_RE = re.compile(r"^\*\*(.+?)\*\*", re.MULTILINE)
+
+
+def _parse_sprints_from_vision() -> list[dict]:
+    """Parse sprint definitions from docs/vision.md.
+
+    Expected format in vision.md:
+        ## Sprint 1: Buyer Experience & Foundation (Days 31–44)
+        **Make discovery shareable, trustworthy, and mobile-ready.**
+    """
+    if not VISION_FILE.exists():
+        return []
+
+    text = VISION_FILE.read_text()
+    sprints = []
+
+    for m in _SPRINT_RE.finditer(text):
+        sprint_id = int(m.group(1))
+        name = m.group(2).strip()
+        start = int(m.group(3))
+        end = int(m.group(4))
+
+        # Extract theme: first **bold** line after the header
+        after = text[m.end():]
+        theme_match = _BOLD_LINE_RE.search(after[:300])
+        theme = theme_match.group(1) if theme_match else ""
+
+        sprints.append({
+            "id": sprint_id,
+            "name": name,
+            "days": (start, end),
+            "theme": theme,
+        })
+
+    return sprints
+
+
+# Cache parsed sprints for the lifetime of the process.
+_sprints_cache: list[dict] | None = None
+
+
+def get_sprints() -> list[dict]:
+    """Return list of sprints, parsed from vision.md (cached)."""
+    global _sprints_cache
+    if _sprints_cache is None:
+        _sprints_cache = _parse_sprints_from_vision()
+    return _sprints_cache
 
 
 def get_sprint_for_day(day: int) -> dict | None:
     """Return the sprint a day belongs to, or None."""
-    for s in SPRINTS:
+    for s in get_sprints():
         if s["days"][0] <= day <= s["days"][1]:
             return s
     return None
 
 
 def get_sprint_by_id(sprint_id: int) -> dict | None:
-    for s in SPRINTS:
+    for s in get_sprints():
         if s["id"] == sprint_id:
             return s
     return None
+
+
+def get_max_day() -> int:
+    """Return the last day across all sprints."""
+    sprints = get_sprints()
+    if not sprints:
+        return 114  # fallback
+    return max(s["days"][1] for s in sprints)
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +155,7 @@ def is_day_done(day: int) -> bool:
 
 def detect_next_day() -> int:
     """Find the next day that isn't done, starting from day 31."""
-    for d in range(31, 101):
+    for d in range(31, get_max_day() + 1):
         if not is_day_done(d):
             return d
     return 31
@@ -229,10 +262,12 @@ def is_mid_sprint_review(day: int) -> bool:
 # ---------------------------------------------------------------------------
 
 def print_status():
-    print("\n  OpenEstates Sprint Status (Days 31-100)")
+    sprints = get_sprints()
+    max_day = get_max_day()
+    print(f"\n  OpenEstates Sprint Status (Days 31-{max_day})")
     print("  " + "=" * 50)
 
-    for sprint in SPRINTS:
+    for sprint in sprints:
         start, end = sprint["days"]
         done_count = sum(1 for d in range(start, end + 1) if is_day_done(d))
         total = end - start + 1
@@ -289,14 +324,16 @@ def print_status():
 
 def print_sprint_info(sprint_id: int | None = None):
     """Print sprint boundaries and progress."""
+    all_sprints = get_sprints()
     if sprint_id:
         s = get_sprint_by_id(sprint_id)
         if not s:
-            print(f"No sprint {sprint_id}. Valid: 1-5")
+            valid = ", ".join(str(sp["id"]) for sp in all_sprints)
+            print(f"No sprint {sprint_id}. Valid: {valid}")
             return
         sprints = [s]
     else:
-        sprints = SPRINTS
+        sprints = all_sprints
 
     for s in sprints:
         start, end = s["days"]
@@ -512,7 +549,7 @@ def load_context_for_day(day: int) -> str:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="OpenEstates Sprint Utilities — 5 sprints × 14 days (days 31-100)",
+        description="OpenEstates Sprint Utilities — sprints parsed from docs/vision.md",
     )
     parser.add_argument("--status", action="store_true",
                         help="Show sprint + day status")

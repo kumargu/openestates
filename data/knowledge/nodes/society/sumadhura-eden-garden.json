@@ -868,8 +868,41 @@
       "learned_at": "2026-03-10T10:32:36.643758Z",
       "version": 1,
       "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "project_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:40:10.567249+00:00",
+      "version": 1,
+      "display_template": "Ready to Move — delivered 30/09/2022",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "completed project",
+        "move in now",
+        "immediate possession",
+        "ready flat",
+        "delivered",
+        "completed"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "created_at": "2026-03-09T20:23:48.188977Z",
-  "updated_at": "2026-03-10T11:32:09.149429Z"
+  "updated_at": "2026-03-10T11:32:09.149429Z",
+  "root_source": "Rera"
 }

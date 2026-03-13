@@ -1,0 +1,243 @@
+{
+  "id": "area:jp-nagar",
+  "node_type": "Area",
+  "name": "JP Nagar",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "JP Nagar"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:34:49.638944+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T07:34:49.638947+00:00",
+      "version": 1
+    },
+    {
+      "key": "metro_status",
+      "value": {
+        "type": "Text",
+        "data": "operational"
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Metro: {value}",
+      "answers_preferences": ["metro access", "metro", "near metro"],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "metro_details",
+      "value": {
+        "type": "Text",
+        "data": "JP Nagar is served by the Green Line of Namma Metro with stations at JP Nagar (Phase 6) and Yelachenahalli. The metro provides direct connectivity to Majestic and north Bengaluru. Additional Phase 2 extensions have improved coverage."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "{value}",
+      "answers_preferences": ["metro access"]
+    },
+    {
+      "key": "traffic_reality",
+      "value": {
+        "type": "Text",
+        "data": "JP Nagar experiences moderate to heavy traffic, especially along Bannerghatta Road and the Outer Ring Road junction. Internal roads in the phases are relatively calmer. The metro has helped reduce dependency on road commutes for many residents."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Traffic: {value}",
+      "answers_preferences": ["easy commute", "traffic"]
+    },
+    {
+      "key": "waterlogging_risk",
+      "value": {
+        "type": "Text",
+        "data": "moderate"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Waterlogging risk: {value}",
+      "answers_preferences": ["safe from flooding", "no waterlogging"],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "upcoming_infra",
+      "value": {
+        "type": "Text",
+        "data": "Namma Metro Green Line extensions toward Anjanapura and beyond, Bannerghatta Road widening projects, and BBMP stormwater drain improvements. The area is largely built-up, so new infra is focused on upgrades rather than greenfield development."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Upcoming: {value}",
+      "answers_preferences": ["growing area", "appreciation"]
+    },
+    {
+      "key": "price_trend",
+      "value": {
+        "type": "Text",
+        "data": "stable_to_appreciating"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Price trend: {value}",
+      "answers_preferences": ["good investment", "appreciation"],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "livability_summary",
+      "value": {
+        "type": "Text",
+        "data": "JP Nagar is one of south Bengaluru's most established and well-planned residential areas, organized into 8 phases. It offers excellent social infrastructure with top schools, hospitals, shopping malls, and parks. Strong metro connectivity and a mature neighborhood make it ideal for families, though prices reflect the premium location."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "area_vibe",
+      "value": {
+        "type": "Text",
+        "data": "Mature, family-oriented residential neighborhood with tree-lined streets, established communities, good parks, and a calm suburban feel. Popular with working professionals who value stability and access to south Bengaluru's IT corridors."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Vibe: {value}"
+    },
+    {
+      "key": "school_quality",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "National Public School, JP Nagar",
+          "BGS National Public School",
+          "Presidency School, JP Nagar"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Top schools: {value}",
+      "answers_preferences": ["good schools", "schools nearby", "kids"]
+    },
+    {
+      "key": "price_range",
+      "value": {
+        "type": "Text",
+        "data": "7000-12000 per sqft for apartments"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Price range: {value}",
+      "answers_preferences": ["budget", "affordable"]
+    },
+    {
+      "key": "connectivity",
+      "value": {
+        "type": "Text",
+        "data": "Well connected via Bannerghatta Road, Outer Ring Road, and NICE Road. Green Line metro operational with JP Nagar and Yelachenahalli stations. Easy access to Electronic City, BTM Layout, and Jayanagar. Buses run frequently on major routes."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Manual",
+        "skill_id": "manual_enrichment",
+        "triggered_by": "day68_hardening"
+      },
+      "learned_at": "2026-03-13T12:00:00.000000+00:00",
+      "version": 1,
+      "display_template": "Connectivity: {value}",
+      "answers_preferences": ["well connected", "easy commute"]
+    }
+  ]
+}

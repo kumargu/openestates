@@ -577,7 +577,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.952698Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -599,7 +599,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.952698Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -618,7 +618,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.952698Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -637,7 +637,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.952698Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -1314,7 +1314,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.951299Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -1336,7 +1336,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.951301Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -1355,7 +1355,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.951303Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -1374,7 +1374,7 @@
       },
       "learned_at": "2026-03-10T10:32:14.951305Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -1664,6 +1664,35 @@
       "learned_at": "2026-03-10T10:32:14.951333Z",
       "version": 1,
       "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "project_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:40:10.559908+00:00",
+      "version": 1,
+      "display_template": "Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "ongoing project",
+        "building",
+        "in progress",
+        "pre-launch"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "summary_embedding": [
@@ -4741,5 +4770,6 @@
     -0.0035315575
   ],
   "created_at": "2026-03-09T16:39:49.748914Z",
-  "updated_at": "2026-03-10T11:30:24.214106Z"
+  "updated_at": "2026-03-10T11:30:24.214106Z",
+  "root_source": "Rera"
 }

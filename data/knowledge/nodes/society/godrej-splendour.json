@@ -1549,8 +1549,38 @@
       "learned_at": "2026-03-10T10:29:06.230236Z",
       "version": 1,
       "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "project_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:40:10.532807+00:00",
+      "version": 1,
+      "display_template": "Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "ongoing project",
+        "building",
+        "in progress",
+        "pre-launch"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
     }
   ],
   "created_at": "2026-03-09T20:23:48.188193Z",
-  "updated_at": "2026-03-10T11:31:11.009692Z"
+  "updated_at": "2026-03-10T11:31:11.009692Z",
+  "root_source": "Rera"
 }
