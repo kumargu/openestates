@@ -19,6 +19,9 @@ export type PropertyCard = {
   google_rating?: number;
   google_review_count?: number;
   seller_id?: string;
+  seller_completeness_pct?: number;
+  documents_provided?: string[];
+  seller_verified?: boolean;
 };
 
 export type PropertyDetailResponse = {
@@ -110,6 +113,7 @@ export type PropertyDetailResponse = {
 };
 
 export type SellerSummary = {
+  id: string;
   name: string;
   verified: boolean;
   completeness_pct: number;
@@ -395,6 +399,118 @@ export type InterestResponse = {
 export type InterestCount = {
   property_id: string;
   count: number;
+};
+
+// Seller dashboard types
+export type InterestTimelineEntry = {
+  date: string;
+  count: number;
+};
+
+export type PropertyInterestSummary = {
+  property_id: string;
+  property_title: string;
+  interest_count: number;
+  last_interest_at: string | null;
+  timeline?: InterestTimelineEntry[];
+};
+
+export type CompletenessGuide = {
+  pct: number;
+  min_pct: number;
+  completed_steps: string[];
+  next_steps: string[];
+};
+
+export type SellerDashboard = {
+  seller: Seller;
+  interest_summary: PropertyInterestSummary[];
+  completeness_guide: CompletenessGuide;
+};
+
+// Registration types
+export type RegistrationDraft = {
+  id: string;
+  current_step: number;
+  created_at: string;
+  updated_at: string;
+  name?: string;
+  email?: string;
+  phone?: string;
+  property_prompt?: string;
+  property_details?: unknown;
+  pricing?: unknown;
+  documents?: unknown;
+  photos?: unknown;
+  society_info?: unknown;
+};
+
+export type RegistrationCreated = {
+  id: string;
+  current_step: number;
+  completeness_pct: number;
+};
+
+export type StepUpdated = {
+  id: string;
+  current_step: number;
+  completeness_pct: number;
+};
+
+export type PublishResult = {
+  seller_id: string;
+  property_id: string;
+  dashboard_url: string;
+};
+
+export type Step1Payload = {
+  name: string;
+  email?: string;
+  phone?: string;
+};
+
+export type Step2Payload = {
+  property_prompt: string;
+};
+
+export type Step3Payload = {
+  property_type: string;
+  bhk?: number;
+  carpet_area_sqft?: number;
+  floor?: number;
+  total_floors?: number;
+  facing?: string;
+  furnishing?: string;
+  age_years?: number;
+};
+
+export type Step4Payload = {
+  asking_price: number;
+  price_negotiable?: boolean;
+  maintenance_monthly?: number;
+  possession_status?: string;
+};
+
+export type Step5Payload = {
+  has_sale_deed?: boolean;
+  has_khata?: boolean;
+  has_ec?: boolean;
+  has_rera_registration?: boolean;
+  rera_number?: string;
+};
+
+export type Step6Payload = {
+  photo_count?: number;
+  has_floor_plan?: boolean;
+  video_tour_url?: string;
+};
+
+export type Step7Payload = {
+  society_name?: string;
+  area?: string;
+  total_units?: number;
+  amenities?: string[];
+  additional_notes?: string;
 };
 
 // Society search types — aligned with pipeline/society_scorer.py output

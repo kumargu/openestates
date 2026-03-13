@@ -138,7 +138,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         properties: RwLock::new(properties),
         areas,
         societies,
-        sellers,
+        sellers: RwLock::new(sellers),
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
         gemini,
@@ -146,6 +146,9 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         embed_client,
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
+        registration_counter: AtomicU64::new(0),
+        registration_rate_limiter: RwLock::new((Instant::now(), 0)),
+        publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
 }
 
@@ -193,7 +196,7 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
         properties: RwLock::new(properties),
         areas,
         societies,
-        sellers: Vec::new(),
+        sellers: RwLock::new(Vec::new()),
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: data_dir.parent().unwrap_or(data_dir).to_path_buf(),
         gemini: None,
@@ -201,6 +204,9 @@ pub fn load_seed_data(data_dir: &Path) -> AppState {
         embed_client: None,
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
+        registration_counter: AtomicU64::new(0),
+        registration_rate_limiter: RwLock::new((Instant::now(), 0)),
+        publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
 }
 

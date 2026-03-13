@@ -9,11 +9,12 @@ mod scoring;
 mod search;
 mod state;
 mod storage;
+mod utils;
 
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use axum::routing::{get, post};
+use axum::routing::{get, post, put};
 use axum::{Json, Router};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
@@ -105,11 +106,32 @@ async fn main() {
         // Seller endpoints
         .route("/api/sellers", get(routes::sellers::list_sellers))
         .route("/api/sellers/{id}", get(routes::sellers::get_seller))
+        .route(
+            "/api/sellers/{id}/dashboard",
+            get(routes::sellers::get_seller_dashboard),
+        )
         // Interest endpoints
         .route("/api/interests", post(routes::interests::express_interest))
         .route(
             "/api/properties/{id}/interests/count",
             get(routes::interests::get_interest_count),
+        )
+        // Registration endpoints
+        .route(
+            "/api/registrations",
+            post(routes::registration::create_registration),
+        )
+        .route(
+            "/api/registrations/{id}",
+            get(routes::registration::get_registration),
+        )
+        .route(
+            "/api/registrations/{id}/step/{step_num}",
+            put(routes::registration::update_registration_step),
+        )
+        .route(
+            "/api/registrations/{id}/publish",
+            post(routes::registration::publish_registration),
         )
         // Claims endpoint
         .route("/api/claims", post(routes::claims::submit_claim))
@@ -150,9 +172,10 @@ async fn main() {
     println!("  GET /api/knowledge/coverage?type=society");
     println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
     println!("  GET /api/knowledge/embeddings/stats");
-    println!("  GET /api/sellers | /api/sellers/{{id}}");
+    println!("  GET /api/sellers | /api/sellers/{{id}} | /api/sellers/{{id}}/dashboard");
     println!("  POST /api/interests");
     println!("  GET /api/properties/{{id}}/interests/count");
+    println!("  POST /api/registrations | GET /api/registrations/{{id}} | PUT /api/registrations/{{id}}/step/{{n}} | POST /api/registrations/{{id}}/publish");
     println!("  POST /api/claims");
     println!("  GET  /api/sitemap.xml");
     println!("  POST /api/admin/reload-knowledge");

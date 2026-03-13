@@ -15,7 +15,7 @@ use crate::state::AppState;
 use crate::knowledge::node::NodeType;
 
 use super::enrichment::{
-    enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
+    enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
     extract_rera_info, society_node_id, AreaIntelligence, ReraInfo,
 };
 
@@ -25,10 +25,11 @@ pub async fn list_properties(
 ) -> Json<Vec<PropertyCard>> {
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
+    let sellers = state.sellers.read().await;
 
     let cards: Vec<PropertyCard> = properties
         .iter()
-        .map(|p| enrich_property_card(p, &state.societies, &graph))
+        .map(|p| enrich_property_card_with_sellers(p, &state.societies, &graph, &sellers))
         .collect();
 
     Json(cards)
@@ -125,6 +126,10 @@ pub async fn get_property(
     );
     let market_activity = scoring::compute_market_activity(&property, area.as_ref());
 
+    // Hold a read lock on sellers — no clone needed, just borrow for the
+    // duration of this request.
+    let sellers_guard = state.sellers.read().await;
+
     // Find similar properties via embedding similarity on the society node
     let similar_properties = {
         let soc_node_id = society_node_id(&property.society_id);
@@ -139,7 +144,7 @@ pub async fn get_property(
             if let Some(prop) = properties.iter().find(|p| {
                 society_node_id(&p.society_id) == sim_soc.node_id && p.id != property.id
             }) {
-                similar.push(enrich_property_card(prop, &state.societies, &graph));
+                similar.push(enrich_property_card_with_sellers(prop, &state.societies, &graph, &sellers_guard));
                 if similar.len() >= 4 {
                     break;
                 }
@@ -177,8 +182,7 @@ pub async fn get_property(
     // Look up seller for this property.
     // Pick first verified seller, then highest completeness.
     let seller = {
-        let mut matching: Vec<_> = state
-            .sellers
+        let mut matching: Vec<_> = sellers_guard
             .iter()
             .filter(|s| s.property_ids.contains(&property.id))
             .collect();

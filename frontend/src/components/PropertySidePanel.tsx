@@ -120,11 +120,20 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
           />
           {card.transparency_tags.length > 0 && (
             <div className="side-panel-hero-tags">
-              {card.transparency_tags.slice(0, 3).map((tag) => (
-                <span key={tag} className="side-panel-hero-tag">
-                  {tag.replace(/_/g, " ")}
-                </span>
-              ))}
+              {card.transparency_tags.slice(0, 3).map((tag) => {
+                const isSellerRegistered = tag === "seller-registered";
+                const isVerificationPending = tag === "verification-pending";
+                const tagStyle = isSellerRegistered
+                  ? { background: "rgba(251, 191, 36, 0.85)", color: "#78350f" }
+                  : isVerificationPending
+                  ? { background: "rgba(156, 163, 175, 0.85)", color: "#fff" }
+                  : undefined;
+                return (
+                  <span key={tag} className="side-panel-hero-tag" style={tagStyle}>
+                    {tag.replace(/_/g, " ").replace(/-/g, " ")}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>
@@ -185,6 +194,49 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
               <div className="side-panel-loading-bar" />
               <div className="side-panel-loading-bar" style={{ width: "60%" }} />
               <div className="side-panel-loading-bar" style={{ width: "80%" }} />
+            </div>
+          )}
+
+          {/* Seller trust indicators */}
+          {(card.seller_verified || (card.documents_provided && card.documents_provided.length > 0) || card.seller_completeness_pct != null) && (
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", padding: "0.5rem 0", borderBottom: "1px solid var(--color-border, #e5e7eb)" }}>
+              {card.seller_verified ? (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.25rem", fontSize: "0.78rem", color: "#059669", fontWeight: 600 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  Seller verified
+                </span>
+              ) : card.seller_completeness_pct != null ? (
+                <span style={{ fontSize: "0.78rem", color: "#9ca3af" }}>
+                  Verification pending
+                </span>
+              ) : null}
+              {card.seller_completeness_pct != null && (
+                <span style={{ fontSize: "0.75rem", color: "#6b7280", marginLeft: "auto" }}>
+                  {card.seller_completeness_pct}% profile complete
+                </span>
+              )}
+            </div>
+          )}
+          {(card.documents_provided && card.documents_provided.length > 0) && (
+            <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", padding: "0.35rem 0" }}>
+              {card.documents_provided.map((doc) => (
+                <span
+                  key={doc}
+                  style={{
+                    display: "inline-block",
+                    fontSize: "0.7rem",
+                    padding: "0.15rem 0.4rem",
+                    borderRadius: "3px",
+                    background: "#f0fdf4",
+                    color: "#166534",
+                    border: "1px solid #bbf7d0",
+                    textTransform: "uppercase",
+                    letterSpacing: "0.02em",
+                  }}
+                >
+                  {doc.replace(/_/g, " ")}
+                </span>
+              ))}
             </div>
           )}
 

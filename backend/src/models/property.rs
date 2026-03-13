@@ -79,4 +79,11 @@ pub struct PropertyCard {
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seller_id: Option<String>,
+    /// Seller trust fields — populated from seller data when available.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller_completeness_pct: Option<u32>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub documents_provided: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub seller_verified: Option<bool>,
 }

@@ -347,18 +347,36 @@ function CardA({ property, match, explanation, onQuickView, isComparing, onToggl
             <div className="card-a-tags">
               {property.transparency_tags.map((tag) => {
                 const isDiscovery = tag === "Discovered via Search" || tag === "Verification Pending";
-                return (
-                  <span
-                    key={tag}
-                    className={isDiscovery ? "tag" : "tag tag-positive"}
-                    style={isDiscovery ? {
+                const isSellerRegistered = tag === "seller-registered";
+                const isVerificationPending = tag === "verification-pending";
+                const isSpecial = isDiscovery || isSellerRegistered || isVerificationPending;
+                const tagStyle = isSellerRegistered
+                  ? {
+                      background: "#fffbeb",
+                      color: "#92400e",
+                      border: "1px solid #fcd34d",
+                      fontSize: "0.72rem",
+                    }
+                  : isVerificationPending
+                  ? {
+                      background: "#f9fafb",
+                      color: "#6b7280",
+                      border: "1px solid #e5e7eb",
+                      fontSize: "0.72rem",
+                    }
+                  : isDiscovery ? {
                       background: tag === "Verification Pending" ? "#fff7ed" : "#f0fdf4",
                       color: tag === "Verification Pending" ? "#9a3412" : "#15803d",
                       border: `1px solid ${tag === "Verification Pending" ? "#fed7aa" : "#bbf7d0"}`,
                       fontSize: "0.72rem",
-                    } : undefined}
+                    } : undefined;
+                return (
+                  <span
+                    key={tag}
+                    className={isSpecial ? "tag" : "tag tag-positive"}
+                    style={tagStyle}
                   >
-                    {tag.replace(/_/g, " ")}
+                    {tag.replace(/_/g, " ").replace(/-/g, " ")}
                   </span>
                 );
               })}

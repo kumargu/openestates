@@ -1,4 +1,3 @@
-use std::path::Path;
 use std::sync::Arc;
 use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
@@ -180,18 +179,10 @@ pub async fn get_interest_count(
     // NOTE: Reads JSONL on every GET. Acceptable at current scale (single-digit
     // interests per property). Scaling path: maintain an in-memory counter map
     // updated on write, with periodic JSONL reconciliation.
-    let count = count_lines(&file_path).await;
+    let count = crate::utils::count_lines(&file_path).await;
 
     Ok(Json(InterestCount {
         property_id: id,
         count,
     }))
-}
-
-/// Count non-empty lines in a JSONL file.
-async fn count_lines(path: &Path) -> usize {
-    match tokio::fs::read_to_string(path).await {
-        Ok(contents) => contents.lines().filter(|l| !l.trim().is_empty()).count(),
-        Err(_) => 0,
-    }
 }

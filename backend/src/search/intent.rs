@@ -11,6 +11,11 @@ pub struct SearchIntent {
 
 /// Known area names and their aliases.
 /// Includes landmark/station names that map to the canonical area.
+///
+/// NOTE: Currently Bengaluru-specific. For multi-city support, this should be
+/// restructured into a per-city map (e.g. HashMap<City, Vec<(aliases, canonical)>>)
+/// loaded from configuration rather than hardcoded. See also: extract_area_from_text
+/// in routes/registration.rs which depends on this list.
 pub const AREA_ALIASES: &[(&[&str], &str)] = &[
     (&["whitefield", "wf", "kadugodi", "varthur", "itpl", "hope farm", "kundalahalli", "pattandur agrahara", "brookefield", "nallurhalli", "hagadur"], "Whitefield"),
     (&["sarjapur", "sarjapur road", "sjr", "doddakannelli", "carmelaram"], "Sarjapur Road"),

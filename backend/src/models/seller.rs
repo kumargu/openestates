@@ -1,5 +1,11 @@
 use serde::{Deserialize, Serialize};
 
+/// Minimum completeness percentage for a seller profile to be considered
+/// adequately filled. Profiles below this threshold get prominent
+/// "complete your profile" nudges. Exposed via the dashboard API
+/// so the frontend can use the same threshold.
+pub const MIN_COMPLETENESS_PCT: u32 = 42;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Seller {
     pub id: String,
@@ -77,6 +83,7 @@ pub struct SellerCard {
 /// Intentionally omits email/phone — those are not exposed to buyers.
 #[derive(Debug, Clone, Serialize)]
 pub struct SellerSummary {
+    pub id: String,
     pub name: String,
     pub verified: bool,
     pub completeness_pct: u32,
@@ -89,6 +96,7 @@ impl Seller {
     /// Convert to a buyer-facing summary (no email/phone).
     pub fn to_summary(&self) -> SellerSummary {
         SellerSummary {
+            id: self.id.clone(),
             name: self.name.clone(),
             verified: self.verified,
             completeness_pct: self.completeness_pct(),

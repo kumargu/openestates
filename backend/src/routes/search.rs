@@ -72,13 +72,15 @@ pub async fn search_properties(
         let text_search_fut = async {
             let graph = state.knowledge.read().await;
             let properties = state.properties.read().await;
-            TextSearch::search_with_intent(
+            let sellers = state.sellers.read().await;
+            TextSearch::search_with_intent_and_sellers(
                 &properties,
                 &society_names,
                 &state.societies,
                 &query,
                 &parsed_intent,
                 Some(&graph),
+                &sellers,
             )
         };
 
@@ -133,9 +135,11 @@ pub async fn search_properties(
                 }
 
                 let graph = state.knowledge.read().await;
-                let card = crate::routes::enrichment::enrich_property_card(
-                    prop, &state.societies, &graph,
+                let sellers = state.sellers.read().await;
+                let card = crate::routes::enrichment::enrich_property_card_with_sellers(
+                    prop, &state.societies, &graph, &sellers,
                 );
+                drop(sellers);
                 drop(graph);
 
                 results.push(crate::search::SearchResultCard {
@@ -250,14 +254,17 @@ pub async fn search_properties(
                         // Re-run search with expanded corpus
                         let graph = state.knowledge.read().await;
                         let properties = state.properties.read().await;
-                        results = TextSearch::search_with_intent(
+                        let sellers = state.sellers.read().await;
+                        results = TextSearch::search_with_intent_and_sellers(
                             &properties,
                             &society_names,
                             &state.societies,
                             &query,
                             &parsed_intent,
                             Some(&graph),
+                            &sellers,
                         );
+                        drop(sellers);
                         drop(properties);
                         drop(graph);
                     }

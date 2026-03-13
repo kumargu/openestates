@@ -1005,13 +1005,13 @@ function InterestButton({ propertyId, initialCount }: { propertyId: string; init
   const storageKey = `${INTEREST_KEY_PREFIX}${propertyId}`;
   const alreadySent = localStorage.getItem(storageKey) === "1";
 
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "already_expressed">(
+  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "already_expressed" | "error">(
     alreadySent ? "already_expressed" : "idle"
   );
   const [count, setCount] = useState(initialCount);
 
   const handleClick = async () => {
-    if (status !== "idle") return;
+    if (status !== "idle" && status !== "error") return;
     setStatus("submitting");
     try {
       await expressInterest({ property_id: propertyId });
@@ -1019,16 +1019,17 @@ function InterestButton({ propertyId, initialCount }: { propertyId: string; init
       setStatus("success");
       setCount((c) => c + 1);
     } catch {
-      // On error, revert to idle so user can retry
-      setStatus("idle");
+      setStatus("error");
+      setTimeout(() => setStatus("idle"), 3000);
     }
   };
 
-  const isDisabled = status !== "idle";
+  const isDisabled = status === "submitting" || status === "success" || status === "already_expressed";
   const buttonLabel =
     status === "submitting" ? "Sending..." :
     status === "success" || status === "already_expressed" ? "Interest sent" :
-    "I'm interested";
+    status === "error" ? "Try Again" :
+    "I'm Interested";
 
   return (
     <div style={{ marginBottom: "1rem" }}>
@@ -1054,6 +1055,17 @@ function InterestButton({ propertyId, initialCount }: { propertyId: string; init
         )}
         {buttonLabel}
       </button>
+      {status === "error" && (
+        <div style={{
+          marginTop: "0.5rem",
+          fontSize: "0.78rem",
+          color: "var(--color-negative, #ef4444)",
+          textAlign: "center",
+          lineHeight: 1.4,
+        }}>
+          Something went wrong. You can try again.
+        </div>
+      )}
       {count > 0 && (
         <div style={{
           marginTop: "0.5rem",
@@ -1168,7 +1180,7 @@ function SellerInfoCard({ seller }: { seller: SellerSummary }) {
 
       {/* Documents provided */}
       {seller.documents_provided.length > 0 && (
-        <div>
+        <div style={{ marginBottom: "0.75rem" }}>
           <div style={{
             fontSize: "0.68rem",
             fontWeight: 600,
@@ -1188,6 +1200,26 @@ function SellerInfoCard({ seller }: { seller: SellerSummary }) {
           </div>
         </div>
       )}
+
+      {/* View seller profile link */}
+      <Link
+        to={`/seller/${seller.id}`}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.35rem",
+          fontSize: "0.82rem",
+          fontWeight: 600,
+          color: "var(--color-accent, #c96b4f)",
+          textDecoration: "none",
+          marginTop: "0.25rem",
+        }}
+      >
+        View seller profile
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+          <path d="M5 12h14M12 5l7 7-7 7" />
+        </svg>
+      </Link>
     </div>
   );
 }

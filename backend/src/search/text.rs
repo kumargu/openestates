@@ -1,6 +1,6 @@
 use crate::knowledge::KnowledgeGraph;
-use crate::models::{Property, Society};
-use crate::routes::enrichment::enrich_property_card;
+use crate::models::{Property, Seller, Society};
+use crate::routes::enrichment::enrich_property_card_with_sellers;
 use crate::routes::search::graph_preference_score_detailed;
 
 use super::intent::SearchIntent;
@@ -19,6 +19,7 @@ impl TextSearch {
     /// When `graph` is provided, preference scoring uses the graph's self-describing
     /// `answers_preferences` + `scoring_hint` metadata. Falls back to hardcoded
     /// scoring when the graph doesn't have relevant facts.
+    #[allow(dead_code)]
     pub fn search_with_intent(
         properties: &[Property],
         society_names: &std::collections::HashMap<String, String>,
@@ -26,6 +27,19 @@ impl TextSearch {
         query: &str,
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
+    ) -> Vec<SearchResultCard> {
+        Self::search_with_intent_and_sellers(properties, society_names, societies, query, intent, graph, &[])
+    }
+
+    /// Intent-based search with seller trust data for completeness boost and card enrichment.
+    pub fn search_with_intent_and_sellers(
+        properties: &[Property],
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+        sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
         let query_lower = query.to_lowercase();
         let terms: Vec<&str> = query_lower.split_whitespace().collect();
@@ -176,7 +190,7 @@ impl TextSearch {
                 // Use shared enrichment — same PropertyCard as /api/properties.
                 // graph is always Some in practice (search always has KG access).
                 let card = if let Some(g) = graph {
-                    enrich_property_card(p, societies, g)
+                    enrich_property_card_with_sellers(p, societies, g, sellers)
                 } else {
                     // Fallback without graph — build minimal card
                     crate::models::PropertyCard {
@@ -200,12 +214,25 @@ impl TextSearch {
                         google_rating: None,
                         google_review_count: None,
                         seller_id: p.seller_id.clone(),
+                        seller_completeness_pct: None,
+                        documents_provided: Vec::new(),
+                        seller_verified: None,
                     }
                 };
 
                 // Normalize score to 0.0–1.0 range (rough normalization)
                 let max_possible = 15.0; // approximate ceiling
-                let normalized = (score / max_possible).min(1.0);
+                let mut normalized = (score / max_possible).min(1.0);
+
+                // Seller completeness boost — multiplicative so low-score properties
+                // don't get disproportionately lifted (0.10 → 0.105, not 0.15).
+                if let Some(pct) = card.seller_completeness_pct {
+                    if pct >= 70 {
+                        normalized = (normalized * 1.05).min(1.0);
+                    } else if pct >= 42 {
+                        normalized = (normalized * 1.02).min(1.0);
+                    }
+                }
                 let match_label = match_label_from_score(normalized);
                 let match_reason = build_match_reason(intent, &reasons);
 

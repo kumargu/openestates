@@ -20,7 +20,7 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
-    pub sellers: Vec<Seller>,
+    pub sellers: RwLock<Vec<Seller>>,
     /// The knowledge graph — the brain that learns from every search.
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
@@ -36,4 +36,12 @@ pub struct AppState {
     /// Global rate limiter for POST /api/interests: (window_start, count_in_window).
     /// Resets every 60 seconds. Max 60 requests per window.
     pub interest_rate_limiter: RwLock<(std::time::Instant, u32)>,
+    /// Monotonic counter for generating collision-free registration draft IDs.
+    pub registration_counter: AtomicU64,
+    /// Global rate limiter for POST /api/registrations: (window_start, count_in_window).
+    /// Resets every 60 seconds. Max 30 requests per window.
+    pub registration_rate_limiter: RwLock<(std::time::Instant, u32)>,
+    /// Global rate limiter for POST /api/registrations/{id}/publish: (window_start, count_in_window).
+    /// Resets every 60 seconds. Max 10 requests per window (tighter than registration creation).
+    pub publish_rate_limiter: RwLock<(std::time::Instant, u32)>,
 }

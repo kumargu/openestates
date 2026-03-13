@@ -9,9 +9,21 @@ import type {
   SocietySearchResult,
   SellerCard,
   Seller,
+  SellerDashboard,
   InterestRequest,
   InterestResponse,
   InterestCount,
+  RegistrationDraft,
+  RegistrationCreated,
+  StepUpdated,
+  PublishResult,
+  Step1Payload,
+  Step2Payload,
+  Step3Payload,
+  Step4Payload,
+  Step5Payload,
+  Step6Payload,
+  Step7Payload,
 } from "./types.ts";
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
@@ -27,9 +39,24 @@ async function fetchJson<T>(path: string): Promise<T> {
   return res.json();
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
+async function postJson<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `API ${res.status}: ${text || res.statusText}`
+    );
+  }
+  return res.json();
+}
+
+async function putJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
@@ -103,6 +130,10 @@ export function getSeller(id: string): Promise<Seller> {
   return fetchJson(`/api/sellers/${encodeURIComponent(id)}`);
 }
 
+export function getSellerDashboard(id: string): Promise<SellerDashboard> {
+  return fetchJson(`/api/sellers/${encodeURIComponent(id)}/dashboard`);
+}
+
 // Interest API
 export function expressInterest(req: InterestRequest): Promise<InterestResponse> {
   return postJson("/api/interests", req);
@@ -110,6 +141,30 @@ export function expressInterest(req: InterestRequest): Promise<InterestResponse>
 
 export function getInterestCount(propertyId: string): Promise<InterestCount> {
   return fetchJson(`/api/properties/${encodeURIComponent(propertyId)}/interests/count`);
+}
+
+// Registration API
+export function createRegistration(): Promise<RegistrationCreated> {
+  return postJson("/api/registrations");
+}
+
+export function getRegistration(id: string): Promise<RegistrationDraft> {
+  return fetchJson(`/api/registrations/${encodeURIComponent(id)}`);
+}
+
+export function updateRegistrationStep(
+  id: string,
+  step: number,
+  payload: Step1Payload | Step2Payload | Step3Payload | Step4Payload | Step5Payload | Step6Payload | Step7Payload
+): Promise<StepUpdated> {
+  return putJson(
+    `/api/registrations/${encodeURIComponent(id)}/step/${step}`,
+    payload
+  );
+}
+
+export function publishRegistration(draftId: string): Promise<PublishResult> {
+  return postJson(`/api/registrations/${encodeURIComponent(draftId)}/publish`);
 }
 
 export type PlatformStats = {

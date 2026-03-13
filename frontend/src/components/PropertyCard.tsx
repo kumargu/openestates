@@ -141,14 +141,74 @@ export function PropertyCard({
             </span>
           </div>
 
+          {/* Seller trust indicators */}
+          {(property.seller_verified || (property.documents_provided && property.documents_provided.length > 0) || property.seller_completeness_pct) && (
+            <div className="property-card-v2-trust" style={{ display: "flex", alignItems: "center", gap: "0.4rem", flexWrap: "wrap", marginTop: "0.25rem" }}>
+              {property.seller_verified && (
+                <span style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem", fontSize: "0.72rem", color: "#059669", fontWeight: 500 }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#059669" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
+                  Verified seller
+                </span>
+              )}
+              {property.documents_provided && property.documents_provided.length > 0 && (
+                property.documents_provided.map((doc) => (
+                  <span
+                    key={doc}
+                    style={{
+                      display: "inline-block",
+                      fontSize: "0.68rem",
+                      padding: "0.1rem 0.35rem",
+                      borderRadius: "3px",
+                      background: "#f0fdf4",
+                      color: "#166534",
+                      border: "1px solid #bbf7d0",
+                      textTransform: "uppercase",
+                      letterSpacing: "0.02em",
+                    }}
+                  >
+                    {doc.replace(/_/g, " ")}
+                  </span>
+                ))
+              )}
+              {property.seller_completeness_pct != null && !property.seller_verified && (
+                <span style={{ fontSize: "0.7rem", color: "#9ca3af" }}>
+                  {property.seller_completeness_pct}% profile
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Tags */}
           {property.transparency_tags.length > 0 && (
             <div className="property-card-v2-tags">
-              {property.transparency_tags.map((tag) => (
-                <span key={tag} className="tag tag-positive">
-                  {tag.replace(/_/g, " ")}
-                </span>
-              ))}
+              {property.transparency_tags.map((tag) => {
+                const isSellerRegistered = tag === "seller-registered";
+                const isVerificationPending = tag === "verification-pending";
+                const tagStyle = isSellerRegistered
+                  ? {
+                      background: "#fffbeb",
+                      color: "#92400e",
+                      border: "1px solid #fcd34d",
+                      fontSize: "0.72rem",
+                    }
+                  : isVerificationPending
+                  ? {
+                      background: "#f9fafb",
+                      color: "#6b7280",
+                      border: "1px solid #e5e7eb",
+                      fontSize: "0.72rem",
+                    }
+                  : undefined;
+                return (
+                  <span
+                    key={tag}
+                    className={isSellerRegistered || isVerificationPending ? "tag" : "tag tag-positive"}
+                    style={tagStyle}
+                  >
+                    {tag.replace(/_/g, " ").replace(/-/g, " ")}
+                  </span>
+                );
+              })}
             </div>
           )}
         </div>

@@ -4,7 +4,7 @@
 use serde::Serialize;
 
 use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact};
-use crate::models::{AreaProfile, Property, PropertyCard, Society};
+use crate::models::{AreaProfile, Property, PropertyCard, Seller, Society};
 
 // ---------------------------------------------------------------------------
 // RERA and Area Intelligence response structs
@@ -296,6 +296,17 @@ pub fn enrich_property_card(
     societies: &[Society],
     graph: &KnowledgeGraph,
 ) -> PropertyCard {
+    enrich_property_card_with_sellers(p, societies, graph, &[])
+}
+
+/// Enrich a Property into a PropertyCard with KG data and seller trust fields.
+/// When sellers slice is non-empty, populates completeness, documents, and verified status.
+pub fn enrich_property_card_with_sellers(
+    p: &Property,
+    societies: &[Society],
+    graph: &KnowledgeGraph,
+    sellers: &[Seller],
+) -> PropertyCard {
     let society_name = societies
         .iter()
         .find(|s| s.id == p.society_id)
@@ -314,6 +325,22 @@ pub fn enrich_property_card(
     } else {
         p.hero_image.clone()
     };
+
+    // Look up seller trust fields if seller_id is set and sellers are provided
+    let (seller_completeness_pct, documents_provided, seller_verified) =
+        if let Some(ref seller_id) = p.seller_id {
+            if let Some(seller) = sellers.iter().find(|s| s.id == *seller_id) {
+                (
+                    Some(seller.completeness_pct()),
+                    seller.documents_provided.clone(),
+                    Some(seller.verified),
+                )
+            } else {
+                (None, Vec::new(), None)
+            }
+        } else {
+            (None, Vec::new(), None)
+        };
 
     PropertyCard {
         id: p.id.clone(),
@@ -336,6 +363,9 @@ pub fn enrich_property_card(
         google_rating,
         google_review_count,
         seller_id: p.seller_id.clone(),
+        seller_completeness_pct,
+        documents_provided,
+        seller_verified,
     }
 }
 

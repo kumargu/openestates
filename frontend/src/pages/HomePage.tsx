@@ -681,21 +681,33 @@ export function HomePage() {
                     </div>
                     {featured.transparency_tags.length > 0 && (
                       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "auto" }}>
-                        {featured.transparency_tags.slice(0, 3).map((tag) => (
-                          <span
-                            key={tag}
-                            style={{
-                              fontSize: "0.7rem",
-                              padding: "0.2rem 0.55rem",
-                              borderRadius: "999px",
-                              backgroundColor: "rgba(42,122,42,0.08)",
-                              color: "#2a7a2a",
-                              fontWeight: 500,
-                            }}
-                          >
-                            {tag}
-                          </span>
-                        ))}
+                        {featured.transparency_tags.slice(0, 3).map((tag) => {
+                          const isSellerRegistered = tag === "seller-registered";
+                          const isVerificationPending = tag === "verification-pending";
+                          return (
+                            <span
+                              key={tag}
+                              style={{
+                                fontSize: "0.7rem",
+                                padding: "0.2rem 0.55rem",
+                                borderRadius: "999px",
+                                backgroundColor: isSellerRegistered
+                                  ? "rgba(251, 191, 36, 0.15)"
+                                  : isVerificationPending
+                                  ? "rgba(156, 163, 175, 0.15)"
+                                  : "rgba(42,122,42,0.08)",
+                                color: isSellerRegistered
+                                  ? "#92400e"
+                                  : isVerificationPending
+                                  ? "#6b7280"
+                                  : "#2a7a2a",
+                                fontWeight: 500,
+                              }}
+                            >
+                              {tag.replace(/-/g, " ")}
+                            </span>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
