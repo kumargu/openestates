@@ -249,17 +249,8 @@ pub struct BuilderTrust {
     pub zero_revocations: Option<bool>,
 }
 
-/// Extract builder trust data by traversing BuiltBy edges from society to builder node.
-/// Returns None if no builder node found or no delivery data.
-pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option<BuilderTrust> {
-    let soc_node_id = society_node_id(society_id);
-
-    // Find builder nodes connected via BuiltBy edge (society -> builder)
-    let builder_nodes = graph.neighbors(&soc_node_id, Some(Relation::BuiltBy));
-    let builder = builder_nodes.first()?;
-
-    let facts = &builder.facts;
-
+/// Extract builder trust from a facts slice — shared logic between direct and canonical builder.
+fn builder_trust_from_facts(facts: &[SourcedFact]) -> Option<BuilderTrust> {
     let delivery_rate = get_numeric_fact(facts, "builder_delivery_rate");
     let project_count = get_numeric_fact(facts, "builder_project_count").map(|n| n as u32);
 
@@ -280,7 +271,6 @@ pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option
             }
         });
 
-    // Check for zero_revocations fact (stored as Text "true")
     let zero_revocations = get_text_fact(facts, "builder_zero_revocations")
         .map(|v| v == "true");
 
@@ -290,6 +280,31 @@ pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option
         delivery_display,
         zero_revocations,
     })
+}
+
+/// Extract builder trust data by traversing BuiltBy edges from society to builder node.
+/// If the builder has a `canonical_builder` fact (orphan resolution), follows the
+/// reference to the canonical builder node and reads delivery data from there.
+/// Returns None if no builder node found or no delivery data.
+pub fn extract_builder_trust(graph: &KnowledgeGraph, society_id: &str) -> Option<BuilderTrust> {
+    let soc_node_id = society_node_id(society_id);
+
+    // Find builder nodes connected via BuiltBy edge (society -> builder)
+    let builder_nodes = graph.neighbors(&soc_node_id, Some(Relation::BuiltBy));
+    let builder = builder_nodes.first()?;
+
+    // Check for canonical_builder fact — if present, follow to canonical builder node
+    // and read delivery data from there instead of the orphan.
+    if let Some(canonical_id) = get_text_fact(&builder.facts, "canonical_builder") {
+        if let Some(canonical_node) = graph.get_node(&canonical_id) {
+            if let Some(trust) = builder_trust_from_facts(&canonical_node.facts) {
+                return Some(trust);
+            }
+        }
+    }
+
+    // Fall back to direct builder facts
+    builder_trust_from_facts(&builder.facts)
 }
 
 // ---------------------------------------------------------------------------
@@ -636,5 +651,120 @@ pub fn enrich_area(area: &mut AreaProfile, graph: &KnowledgeGraph) {
         if !tags.is_empty() {
             area.infrastructure_tags = tags;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::knowledge::edge::Edge;
+    use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
+    use crate::knowledge::graph::KnowledgeGraph;
+    use crate::knowledge::node::{Node, NodeType};
+
+    fn make_text_fact(key: &str, value: &str) -> SourcedFact {
+        SourcedFact {
+            key: key.into(),
+            value: FactValue::Text(value.into()),
+            confidence: 0.9,
+            source: FactSource {
+                source_type: SourceType::Manual,
+                url: None,
+                model: None,
+                skill_id: None,
+                triggered_by: None,
+            },
+            learned_at: chrono::Utc::now(),
+            version: 1,
+            display_template: None,
+            answers_preferences: Vec::new(),
+            scoring_hint: None,
+        }
+    }
+
+    fn make_numeric_fact(key: &str, value: f64) -> SourcedFact {
+        SourcedFact {
+            key: key.into(),
+            value: FactValue::Numeric(value),
+            confidence: 0.9,
+            source: FactSource {
+                source_type: SourceType::Manual,
+                url: None,
+                model: None,
+                skill_id: None,
+                triggered_by: None,
+            },
+            learned_at: chrono::Utc::now(),
+            version: 1,
+            display_template: Some("Delivery rate: {value}%".into()),
+            answers_preferences: Vec::new(),
+            scoring_hint: None,
+        }
+    }
+
+    #[test]
+    fn test_canonical_builder_resolution() {
+        let mut g = KnowledgeGraph::new();
+
+        // Create society node
+        let soc_id = "society:test-society";
+        g.add_node(Node::new(soc_id, NodeType::Society, "Test Society"));
+
+        // Create orphan builder node with canonical_builder pointing to canonical
+        let orphan_id = "builder:orphan-builder";
+        let mut orphan = Node::new(orphan_id, NodeType::Builder, "Orphan Builder");
+        orphan.add_fact(make_text_fact("canonical_builder", "builder:canonical-builder"));
+        g.add_node(orphan);
+
+        // Create canonical builder node with actual delivery data
+        let canonical_id = "builder:canonical-builder";
+        let mut canonical = Node::new(canonical_id, NodeType::Builder, "Canonical Builder");
+        canonical.add_fact(make_numeric_fact("builder_delivery_rate", 0.85));
+        canonical.add_fact(make_numeric_fact("builder_project_count", 12.0));
+        g.add_node(canonical);
+
+        // Add BuiltBy edge from society to orphan builder
+        g.add_edge(Edge::new(
+            soc_id.to_string(),
+            orphan_id.to_string(),
+            Relation::BuiltBy,
+        ));
+
+        // Extract builder trust — should follow canonical_builder to canonical node
+        let trust = extract_builder_trust(&g, "test-society").unwrap();
+        assert!(
+            (trust.delivery_rate.unwrap() - 0.85).abs() < 0.001,
+            "Should read delivery_rate from canonical builder, got {:?}",
+            trust.delivery_rate
+        );
+        assert_eq!(trust.project_count, Some(12));
+    }
+
+    #[test]
+    fn test_builder_trust_direct_when_no_canonical() {
+        let mut g = KnowledgeGraph::new();
+
+        // Create society node
+        let soc_id = "society:direct-society";
+        g.add_node(Node::new(soc_id, NodeType::Society, "Direct Society"));
+
+        // Create builder node with delivery data but NO canonical_builder fact
+        let builder_id = "builder:direct-builder";
+        let mut builder = Node::new(builder_id, NodeType::Builder, "Direct Builder");
+        builder.add_fact(make_numeric_fact("builder_delivery_rate", 0.90));
+        g.add_node(builder);
+
+        // Add BuiltBy edge
+        g.add_edge(Edge::new(
+            soc_id.to_string(),
+            builder_id.to_string(),
+            Relation::BuiltBy,
+        ));
+
+        let trust = extract_builder_trust(&g, "direct-society").unwrap();
+        assert!(
+            (trust.delivery_rate.unwrap() - 0.90).abs() < 0.001,
+            "Should read delivery_rate directly from builder"
+        );
     }
 }

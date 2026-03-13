@@ -212,8 +212,6 @@ export function PropertyPage() {
             <p style={{ color: "var(--color-text-secondary)", margin: 0, fontSize: "0.95rem" }}>
               {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
             </p>
-            <TrustBadge rootSource={data.root_source} />
-            <DataFreshnessBadge freshness={data.data_freshness} />
             <ConfidenceMeter confidence={data.confidence_score} />
           </div>
         </div>
@@ -615,6 +613,34 @@ export function PropertyPage() {
                   <span style={{ fontSize: "0.72rem", fontWeight: 500, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono, monospace)" }}>
                     {data.rera.registration_number}
                   </span>
+                </div>
+              )}
+
+              {/* RERA Portal Link */}
+              {data.rera?.rera_portal_url && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>RERA Portal</span>
+                  <a
+                    href={data.rera.rera_portal_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 500,
+                      color: "var(--color-primary, #2563eb)",
+                      textDecoration: "none",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "0.25rem",
+                    }}
+                  >
+                    Verify on RERA
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
                 </div>
               )}
             </div>

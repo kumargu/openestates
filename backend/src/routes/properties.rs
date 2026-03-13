@@ -11,7 +11,7 @@ use crate::scoring::{
     compute_transparency_score,
 };
 use crate::search::ConfidenceScore;
-use crate::search::text::compute_confidence;
+use crate::search::text::compute_confidence_for_detail;
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
@@ -267,8 +267,8 @@ pub async fn get_property(
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);
 
-    // Compute confidence score (no search context, so graph_driven_pct = 0.0)
-    let confidence_score = compute_confidence(Some(&graph), &property.society_id, 0.0);
+    // Compute confidence score for detail page (uses fact-quality instead of match_quality)
+    let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
 
     Ok(Json(PropertyDetail {
         property,

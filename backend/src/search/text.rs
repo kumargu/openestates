@@ -276,7 +276,7 @@ impl TextSearch {
 const FACT_COVERAGE_THRESHOLD: f64 = 25.0;
 
 /// Compute a confidence score for a property based on data quality dimensions.
-/// Used by both search results (with graph_driven_pct) and detail pages (with 0.0).
+/// Used by search results (with graph_driven_pct from match explanation).
 pub fn compute_confidence(
     graph: Option<&KnowledgeGraph>,
     society_id: &str,
@@ -287,39 +287,13 @@ pub fn compute_confidence(
     let node = graph.get_node(&node_id);
 
     // Source quality: RERA=1.0, Discovered=0.5, Legacy/None=0.3
-    let (source_score, source_explanation) = if let Some(n) = &node {
-        match n.root_source {
-            Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
-            Some(RootSource::Seller) => (0.6, "Seller-listed data".to_string()),
-            Some(RootSource::Discovered) => (0.5, "Discovered via search, verification pending".to_string()),
-            Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
-        }
-    } else {
-        (0.3, "No knowledge graph data".to_string())
-    };
+    let (source_score, source_explanation) = compute_source_quality(&node);
 
     // Fact coverage: min(fact_count/FACT_COVERAGE_THRESHOLD, 1.0)
-    let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
-    let coverage_score = (fact_count as f64 / FACT_COVERAGE_THRESHOLD).min(1.0);
-    let coverage_explanation = format!("{} facts available ({} = full coverage)", fact_count, FACT_COVERAGE_THRESHOLD as u32);
+    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
 
-    // Freshness: use most recent fact learned_at, fall back to node updated_at
-    let (freshness_score, freshness_explanation) = if let Some(n) = &node {
-        let most_recent_fact_ts = n.facts.iter().map(|f| f.learned_at).max();
-        let effective_ts = most_recent_fact_ts.unwrap_or(n.updated_at);
-        let days_ago = (chrono::Utc::now() - effective_ts).num_days().max(0) as u32;
-        if days_ago < 7 {
-            (1.0, format!("Updated {} days ago (fresh)", days_ago))
-        } else if days_ago < 30 {
-            (0.8, format!("Updated {} days ago (recent)", days_ago))
-        } else if days_ago < 90 {
-            (0.5, format!("Updated {} days ago (aging)", days_ago))
-        } else {
-            (0.3, format!("Updated {} days ago (stale)", days_ago))
-        }
-    } else {
-        (0.3, "No update timestamp available".to_string())
-    };
+    // Freshness with bulk-creation cap
+    let (freshness_score, freshness_explanation) = compute_freshness(&node);
 
     // Match quality: graph_driven_pct / 100.0
     let match_score = (graph_driven_pct / 100.0) as f64;
@@ -328,13 +302,7 @@ pub fn compute_confidence(
     // Weighted average: source 0.4, coverage 0.2, freshness 0.2, match 0.2
     let overall = source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
 
-    let label = if overall >= 0.7 {
-        "High".to_string()
-    } else if overall >= 0.4 {
-        "Moderate".to_string()
-    } else {
-        "Low".to_string()
-    };
+    let label = confidence_label(overall);
 
     let components = vec![
         ConfidenceComponent {
@@ -368,6 +336,164 @@ pub fn compute_confidence(
         label,
         components,
     })
+}
+
+/// Compute a confidence score for the detail page, replacing match_quality
+/// (which is meaningless outside search context) with fact_source_quality
+/// (average confidence of the node's facts).
+pub fn compute_confidence_for_detail(
+    graph: Option<&KnowledgeGraph>,
+    society_id: &str,
+) -> Option<ConfidenceScore> {
+    let graph = graph?;
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id);
+
+    let (source_score, source_explanation) = compute_source_quality(&node);
+    let (coverage_score, coverage_explanation) = compute_fact_coverage(&node);
+    let (freshness_score, freshness_explanation) = compute_freshness(&node);
+
+    // Fact source quality: average confidence of all facts on this node.
+    // This replaces match_quality (graph_driven_pct) which is 0.0 on detail pages.
+    let (fact_quality_score, fact_quality_explanation) = if let Some(n) = &node {
+        if n.facts.is_empty() {
+            (0.0, "No facts available".to_string())
+        } else {
+            let avg: f64 = n.facts.iter().map(|f| f.confidence as f64).sum::<f64>() / n.facts.len() as f64;
+            (avg, format!("Average fact confidence: {:.0}% across {} facts", avg * 100.0, n.facts.len()))
+        }
+    } else {
+        (0.0, "No knowledge graph data".to_string())
+    };
+
+    // Weighted average: source 0.4, coverage 0.2, freshness 0.2, fact_quality 0.2
+    let overall = source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + fact_quality_score * 0.2;
+
+    let label = confidence_label(overall);
+
+    let components = vec![
+        ConfidenceComponent {
+            dimension: "source_quality".to_string(),
+            score: source_score,
+            weight: 0.4,
+            explanation: source_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "fact_coverage".to_string(),
+            score: coverage_score,
+            weight: 0.2,
+            explanation: coverage_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "freshness".to_string(),
+            score: freshness_score,
+            weight: 0.2,
+            explanation: freshness_explanation,
+        },
+        ConfidenceComponent {
+            dimension: "fact_source_quality".to_string(),
+            score: fact_quality_score,
+            weight: 0.2,
+            explanation: fact_quality_explanation,
+        },
+    ];
+
+    Some(ConfidenceScore {
+        overall: (overall * 100.0).round() / 100.0,
+        label,
+        components,
+    })
+}
+
+// ---------------------------------------------------------------------------
+// Confidence scoring helpers — shared between search and detail variants
+// ---------------------------------------------------------------------------
+
+use crate::knowledge::node::Node;
+
+fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
+    if let Some(n) = node {
+        match n.root_source {
+            Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
+            Some(RootSource::Seller) => (0.6, "Seller-listed data".to_string()),
+            Some(RootSource::Discovered) => (0.5, "Discovered via search, verification pending".to_string()),
+            Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
+        }
+    } else {
+        (0.3, "No knowledge graph data".to_string())
+    }
+}
+
+fn compute_fact_coverage(node: &Option<&Node>) -> (f64, String) {
+    let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
+    let score = (fact_count as f64 / FACT_COVERAGE_THRESHOLD).min(1.0);
+    let explanation = format!("{} facts available ({} = full coverage)", fact_count, FACT_COVERAGE_THRESHOLD as u32);
+    (score, explanation)
+}
+
+/// Compute freshness score with a cap for bulk-created nodes.
+/// If all facts share the same learned_at timestamp (within 1 second), freshness
+/// is capped at 0.5 to distinguish "freshly enriched" from "bulk-seeded".
+fn compute_freshness(node: &Option<&Node>) -> (f64, String) {
+    if let Some(n) = node {
+        let most_recent_fact_ts = n.facts.iter().map(|f| f.learned_at).max();
+        let effective_ts = most_recent_fact_ts.unwrap_or(n.updated_at);
+        let days_ago = (chrono::Utc::now() - effective_ts).num_days().max(0) as u32;
+
+        let raw_score: f64 = if days_ago < 7 {
+            1.0
+        } else if days_ago < 30 {
+            0.8
+        } else if days_ago < 90 {
+            0.5
+        } else {
+            0.3
+        };
+
+        // Cap freshness at 0.5 if all facts have the same timestamp (within 1s).
+        // This catches bulk seed data and newly discovered nodes where all facts
+        // were created in a single batch, vs genuinely enriched nodes where facts
+        // were added over time by different skills.
+        let capped = if n.facts.len() >= 2 && all_facts_same_timestamp(&n.facts) {
+            raw_score.min(0.5)
+        } else {
+            raw_score
+        };
+
+        let suffix = if capped < raw_score { " (bulk-created cap)" } else { "" };
+        let label = match days_ago {
+            0..=6 => "fresh",
+            7..=29 => "recent",
+            30..=89 => "aging",
+            _ => "stale",
+        };
+
+        (capped, format!("Updated {} days ago ({}){}", days_ago, label, suffix))
+    } else {
+        (0.3, "No update timestamp available".to_string())
+    }
+}
+
+/// Check if all facts in a slice share the same learned_at timestamp within 1 second.
+fn all_facts_same_timestamp(facts: &[crate::knowledge::SourcedFact]) -> bool {
+    if facts.is_empty() {
+        return true;
+    }
+    let first = facts[0].learned_at;
+    facts.iter().all(|f| {
+        let diff = (f.learned_at - first).num_seconds().abs();
+        diff <= 1
+    })
+}
+
+fn confidence_label(overall: f64) -> String {
+    if overall >= 0.7 {
+        "High".to_string()
+    } else if overall >= 0.4 {
+        "Moderate".to_string()
+    } else {
+        "Low".to_string()
+    }
 }
 
 /// Score a property against search terms. Returns (score, match_reasons).
@@ -696,7 +822,7 @@ fn graph_area_match(society_id: &str, intent_area: &str, graph: Option<&Knowledg
 mod tests {
     use super::*;
     use crate::knowledge::edge::{Edge, Relation};
-    use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
+    use crate::knowledge::fact::{FactValue, SourcedFact};
     use crate::knowledge::graph::KnowledgeGraph;
     use crate::knowledge::node::{Node, NodeType, RootSource};
 
@@ -811,17 +937,17 @@ mod tests {
     }
 
     #[test]
-    fn test_confidence_discovered_few_facts_is_moderate_not_high() {
+    fn test_confidence_discovered_few_facts_bulk_created_is_low() {
         // Discovered source (0.5) with only 2 facts and 0% graph-driven scoring.
-        // source=0.5*0.4=0.20 + coverage=(2/25)*0.2=0.016 + freshness~1.0*0.2=0.20 + match=0.0*0.2=0.0
-        // total ~ 0.416 => "Moderate" (>= 0.4 but < 0.7)
+        // All facts have same timestamp (bulk-created), so freshness capped at 0.5.
+        // source=0.5*0.4=0.20 + coverage=(2/25)*0.2=0.016 + freshness=0.5*0.2=0.10 + match=0.0*0.2=0.0
+        // total ~ 0.316 => "Low" (< 0.4)
         let g = graph_with_society_node("unknown", Some(RootSource::Discovered), 2);
         let score = compute_confidence(Some(&g), "unknown", 0.0).unwrap();
-        assert_eq!(score.label, "Moderate");
-        assert!(score.overall >= 0.4, "Expected >= 0.4, got {}", score.overall);
-        assert!(score.overall < 0.7, "Expected < 0.7, got {}", score.overall);
+        assert_eq!(score.label, "Low");
+        assert!(score.overall < 0.4, "Expected < 0.4, got {}", score.overall);
 
-        // Compare: same but with Legacy source (0.3) should be Low
+        // Compare: Legacy source (0.3) with 1 fact also Low
         let g2 = graph_with_society_node("legacy-sparse", Some(RootSource::Legacy), 1);
         let score2 = compute_confidence(Some(&g2), "legacy-sparse", 0.0).unwrap();
         assert_eq!(score2.label, "Low");
@@ -863,6 +989,110 @@ mod tests {
             (total_weight - 1.0).abs() < 0.001,
             "Component weights should sum to 1.0, got {}",
             total_weight
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // compute_confidence_for_detail tests (Day 71)
+    // ---------------------------------------------------------------
+
+    #[test]
+    fn test_confidence_detail_uses_fact_quality() {
+        // Detail page confidence uses average fact.confidence instead of graph_driven_pct.
+        // Create a node with high-confidence facts (RERA facts default to 0.9 confidence).
+        let mut g = KnowledgeGraph::new();
+        let node_id = "society:well-enriched";
+        let mut node = Node::new(node_id, NodeType::Society, "well-enriched");
+        node.root_source = Some(RootSource::Rera);
+        // Add facts with varying confidence
+        for i in 0..10 {
+            let mut fact = make_fact(&format!("fact_{}", i));
+            fact.confidence = 0.8;
+            // Space out timestamps so freshness cap doesn't kick in
+            fact.learned_at = chrono::Utc::now() - chrono::Duration::hours(i as i64);
+            node.add_fact(fact);
+        }
+        g.add_node(node);
+
+        let score = compute_confidence_for_detail(Some(&g), "well-enriched").unwrap();
+
+        // Should have "fact_source_quality" component instead of "match_quality"
+        let fsq = score.components.iter().find(|c| c.dimension == "fact_source_quality");
+        assert!(fsq.is_some(), "Should have fact_source_quality component");
+
+        let mq = score.components.iter().find(|c| c.dimension == "match_quality");
+        assert!(mq.is_none(), "Should NOT have match_quality component");
+
+        // fact_source_quality should be ~0.8 (all facts have 0.8 confidence)
+        let fsq = fsq.unwrap();
+        assert!((fsq.score - 0.8).abs() < 0.01, "Expected ~0.8, got {}", fsq.score);
+
+        // Overall should be High (RERA + good coverage + fresh + high fact quality)
+        assert_eq!(score.label, "High");
+    }
+
+    #[test]
+    fn test_freshness_capped_for_bulk_created_nodes() {
+        // All facts created at the same timestamp — freshness should be capped at 0.5
+        let g = graph_with_society_node("bulk-created", Some(RootSource::Discovered), 5);
+        let score = compute_confidence_for_detail(Some(&g), "bulk-created").unwrap();
+
+        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        assert!(
+            freshness.score <= 0.5,
+            "Bulk-created freshness should be capped at 0.5, got {}",
+            freshness.score
+        );
+        assert!(
+            freshness.explanation.contains("bulk-created cap"),
+            "Explanation should mention bulk-created cap: {}",
+            freshness.explanation
+        );
+    }
+
+    #[test]
+    fn test_freshness_not_capped_after_enrichment() {
+        // Facts with different timestamps (spread over hours) — freshness should NOT be capped
+        let mut g = KnowledgeGraph::new();
+        let node_id = "society:enriched-over-time";
+        let mut node = Node::new(node_id, NodeType::Society, "enriched-over-time");
+        node.root_source = Some(RootSource::Rera);
+        for i in 0..5 {
+            let mut fact = make_fact(&format!("fact_{}", i));
+            // Space facts apart by 2 seconds each
+            fact.learned_at = chrono::Utc::now() - chrono::Duration::seconds(i as i64 * 2);
+            node.add_fact(fact);
+        }
+        g.add_node(node);
+
+        let score = compute_confidence_for_detail(Some(&g), "enriched-over-time").unwrap();
+
+        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        assert!(
+            freshness.score > 0.5,
+            "Enriched-over-time freshness should NOT be capped, got {}",
+            freshness.score
+        );
+        // Should be 1.0 since they're all within the last 7 days
+        assert!(
+            (freshness.score - 1.0).abs() < 0.01,
+            "Expected freshness ~1.0 for recent diverse timestamps, got {}",
+            freshness.score
+        );
+    }
+
+    #[test]
+    fn test_freshness_single_fact_not_capped() {
+        // A node with only 1 fact should NOT be capped (need >= 2 facts for bulk detection)
+        let g = graph_with_society_node("single-fact", Some(RootSource::Discovered), 1);
+        let score = compute_confidence_for_detail(Some(&g), "single-fact").unwrap();
+
+        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        // Single fact => all_facts_same_timestamp returns true, but n.facts.len() < 2 guard prevents cap
+        assert!(
+            freshness.score > 0.5,
+            "Single-fact node should not be capped, got {}",
+            freshness.score
         );
     }
 }
