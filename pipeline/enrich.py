@@ -94,6 +94,22 @@ SKILL_REGISTRY: Dict[str, dict] = {
         "priority": 3,
         "depends_on": [],
     },
+    "fetch_market_pricing": {
+        "node_types": ["society"],
+        "pool": "llm",
+        "max_age_days": 14,
+        "cost_tier": "cheap",
+        "priority": 3,
+        "depends_on": ["fetch_rera"],
+    },
+    "fetch_images": {
+        "node_types": ["society"],
+        "pool": "serpapi",
+        "max_age_days": 30,
+        "cost_tier": "free",
+        "priority": 4,
+        "depends_on": [],
+    },
 }
 
 # Map skill_id -> freshness tracker source name
@@ -106,6 +122,8 @@ FRESHNESS_SOURCE_MAP = {
     "learn_area": "reddit_area",
     "score_society": "score_society",
     "embed_entity": "embed_entity",
+    "fetch_market_pricing": "market_pricing",
+    "fetch_images": "fetch_images",
 }
 
 COST_TIER_ORDER = {"free": 0, "cheap": 1, "moderate": 2, "expensive": 3}
@@ -283,6 +301,12 @@ def _make_skill(skill_id: str):
     elif skill_id == "embed_entity":
         from pipeline.skills.embed_entity import EmbedEntitySkill
         return EmbedEntitySkill()
+    elif skill_id == "fetch_market_pricing":
+        from pipeline.skills.fetch_market_pricing import FetchMarketPricingSkill
+        return FetchMarketPricingSkill()
+    elif skill_id == "fetch_images":
+        from pipeline.skills.fetch_images import FetchImagesSkill
+        return FetchImagesSkill()
     else:
         raise ValueError(f"Unknown skill: {skill_id}")
 
@@ -367,18 +391,92 @@ def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dic
         return {"society_id": f"soc-{slug}"}
     elif skill_id == "embed_entity":
         return {"entity_id": entity_id, "entity_type": entity_id.split(":")[0], "name": name}
+    elif skill_id == "fetch_market_pricing":
+        slug = entity_id.split(":", 1)[-1]
+        return {"society_slug": slug}
+    elif skill_id == "fetch_images":
+        area = _resolve_area(entity_id) if entity_id.startswith("society:") else ""
+        return {
+            "entity_id": entity_id,
+            "entity_type": entity_id.split(":")[0],
+            "name": name,
+            "area": area,
+        }
     else:
         return {"entity_id": entity_id}
 
 
+def _persist_facts_locally(entity_id: str, result) -> int:
+    """Write skill result facts directly to the node JSON file on disk.
+
+    This is the fallback when the Rust backend is not running.
+    Merges new facts with existing ones (newer version wins for same key).
+    Returns count of facts written.
+    """
+    if not result.facts:
+        return 0
+
+    parts = entity_id.split(":", 1)
+    if len(parts) != 2:
+        return 0
+    etype, slug = parts
+    node_path = Path("data/knowledge/nodes") / etype / f"{slug}.json"
+    if not node_path.exists():
+        logger.debug("Node file not found for %s, skipping local persist", entity_id)
+        return 0
+
+    try:
+        node = json.loads(node_path.read_text())
+    except (json.JSONDecodeError, OSError) as e:
+        logger.warning("Failed to read node file %s: %s", node_path, e)
+        return 0
+
+    existing_facts = node.get("facts", [])
+    # Build index of existing facts by key for dedup
+    existing_by_key: Dict[str, dict] = {}
+    for f in existing_facts:
+        key = f.get("key", "")
+        ver = f.get("version", 1)
+        if key not in existing_by_key or ver > existing_by_key[key].get("version", 1):
+            existing_by_key[key] = f
+
+    new_count = 0
+    for fact in result.facts:
+        fd = fact.to_dict()
+        key = fd["key"]
+        new_ver = fd.get("version", 1)
+        if key in existing_by_key:
+            old_ver = existing_by_key[key].get("version", 1)
+            if new_ver <= old_ver:
+                continue  # Existing fact is same or newer version
+        existing_by_key[key] = fd
+        new_count += 1
+
+    if new_count == 0:
+        return 0
+
+    # Rebuild facts list from the deduplicated map
+    node["facts"] = list(existing_by_key.values())
+    node["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Atomic write via tmp+rename
+    tmp = node_path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(node, indent=2, ensure_ascii=False))
+    os.rename(tmp, node_path)
+
+    logger.debug("Persisted %d facts locally for %s", new_count, entity_id)
+    return new_count
+
+
 def _push_facts(entity_id: str, result):
-    """Push skill result facts to the Rust backend (best-effort)."""
+    """Push skill result facts to the Rust backend, with local file fallback."""
     try:
         from pipeline.skills.graph_client import GraphClient
         client = GraphClient()
         client.push_skill_result(entity_id, result)
     except Exception as e:
-        logger.debug("Backend push skipped: %s", e)
+        logger.debug("Backend push skipped (%s), persisting locally", e)
+        _persist_facts_locally(entity_id, result)
 
 
 # ---------------------------------------------------------------------------

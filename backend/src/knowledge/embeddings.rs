@@ -106,60 +106,6 @@ impl KnowledgeGraph {
         scored
     }
 
-    /// Find the top-N most similar nodes using aspect-specific embeddings.
-    ///
-    /// For each node, computes the average cosine similarity across the specified aspects.
-    /// Falls back to `summary_embedding` if aspect embeddings are not available.
-    /// Nodes with neither are skipped.
-    pub fn similar_to_vector_by_aspect(
-        &self,
-        query_embedding: &[f32],
-        aspects: &[String],
-        top_n: usize,
-        node_type_filter: Option<NodeType>,
-    ) -> Vec<SimilarEntity> {
-        let mut scored: Vec<SimilarEntity> = self
-            .nodes
-            .values()
-            .filter(|n| node_type_filter.map_or(true, |nt| n.node_type == nt))
-            .filter_map(|n| {
-                let sim = if let Some(ref aspect_embs) = n.aspect_embeddings {
-                    // Average similarity across the requested aspects that are available
-                    let sims: Vec<f64> = aspects.iter()
-                        .filter_map(|asp| aspect_embs.get(asp.as_str()))
-                        .map(|emb| cosine_similarity(query_embedding, emb))
-                        .collect();
-                    if sims.is_empty() {
-                        // No matching aspects — fall back to summary embedding
-                        n.summary_embedding.as_ref()
-                            .map(|emb| cosine_similarity(query_embedding, emb))?
-                    } else {
-                        sims.iter().sum::<f64>() / sims.len() as f64
-                    }
-                } else {
-                    // No aspect embeddings — fall back to summary embedding
-                    let emb = n.summary_embedding.as_ref()?;
-                    cosine_similarity(query_embedding, emb)
-                };
-
-                Some(SimilarEntity {
-                    node_id: n.id.clone(),
-                    name: n.name.clone(),
-                    node_type: format!("{}", n.node_type),
-                    similarity: sim,
-                })
-            })
-            .collect();
-
-        scored.sort_by(|a, b| {
-            b.similarity
-                .partial_cmp(&a.similarity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        scored.truncate(top_n);
-        scored
-    }
-
     /// Count how many nodes have embeddings, by type.
     pub fn embedding_stats(&self) -> Vec<(String, usize, usize)> {
         let mut stats: std::collections::HashMap<String, (usize, usize)> =
@@ -169,8 +115,8 @@ impl KnowledgeGraph {
             let key = format!("{}", node.node_type);
             let entry = stats.entry(key).or_insert((0, 0));
             entry.1 += 1; // total
-            if node.summary_embedding.is_some() || node.aspect_embeddings.is_some() {
-                entry.0 += 1; // with embedding (summary or aspect)
+            if node.summary_embedding.is_some() {
+                entry.0 += 1; // with embedding
             }
         }
 

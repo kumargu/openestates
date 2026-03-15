@@ -1,0 +1,25 @@
+{
+  "id": "builder:mahindra-lifespace-developers-limited",
+  "node_type": "Builder",
+  "name": "MAHINDRA LIFESPACE DEVELOPERS LIMITED",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "MAHINDRA LIFESPACE DEVELOPERS LIMITED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:24:06.818636+00:00",
+      "version": 1
+    }
+  ]
+}

@@ -669,6 +669,463 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "moderate"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183393+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183446+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183459+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The project is generally praised for its strategic location, excellent connectivity to IT hubs, and a wide array of luxurious amenities. However, some potential residents express concerns about the limited open and play areas for children, the project being based on an older plan, and perceived overpricing."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183468+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "The project is being executed on an outdated plan (over 10 years old), overpriced for what it offers, with amenities forced around the walls except for the clubhouse."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183478+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Excellent connectivity to major IT hubs, educational institutions, healthcare facilities, and shopping centers.",
+          "Luxurious features and a wide range of amenities including a clubhouse, gymnasium, swimming pool, outdoor sports courts, and children's play area.",
+          "Developed by DNR Group, a reputed builder with a focus on quality living and green architecture.",
+          "Strategic location in Bellandur, near Sarjapur Road and Outer Ring Road.",
+          "State-of-the-art 24/7 security and surveillance."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183491+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Major traffic bottlenecks during peak hours in the surrounding Bellandur and Sarjapur Road areas.",
+          "Concerns about limited open space and play areas for children and community functions.",
+          "Feedback suggesting the project might be based on an outdated plan (over 10 years old).",
+          "Perception that the project is overpriced for what it offers.",
+          "Amenities potentially being forced around the walls, except for the clubhouse."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183500+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-connectivity",
+          "luxury-amenities",
+          "reputable-builder",
+          "green-architecture",
+          "good-security"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183509+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "traffic-congestion",
+          "limited-open-space",
+          "outdated-plan-concern",
+          "overpriced-concern"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:10:25.183518+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "1260-1340",
+          "price_range_lakh": "180-220",
+          "price_per_sqft": "13400-17500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493012+00:00",
+      "version": 1,
+      "display_template": "2BHK: 1260-1340 sq ft — ₹180-220 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 2.2 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1665-1750",
+          "price_range_lakh": "210-295",
+          "price_per_sqft": "12000-17700"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493044+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1665-1750 sq ft — ₹210-295 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 3.0 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2025-2410",
+          "price_range_lakh": "255-380",
+          "price_per_sqft": "10600-18800"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493060+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2025-2410 sq ft — ₹255-380 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 3.8 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 16500
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493079+00:00",
+      "version": 1,
+      "display_template": "₹16,500/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "2BHK",
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493097+00:00",
+      "version": 1,
+      "display_template": "Available: 2BHK, 3BHK, 4BHK",
+      "answers_preferences": [
+        "2bhk",
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493116+00:00",
+      "version": 1,
+      "display_template": "Market: Ready To Move",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "immediate"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 11.49,
+          "period": "Q4 2025"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493129+00:00",
+      "version": 1,
+      "display_template": "11.49% appreciation Q4 2025",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Orchid Lakeview, Bellandur",
+          "Prestige Ferns Residency, Harlur",
+          "Sterling Ascentia, Bellandur",
+          "Prestige Kew Gardens"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493140+00:00",
+      "version": 1,
+      "display_template": "Similar: Orchid Lakeview, Bellandur, Prestige Ferns Residency, Harlur, Sterling Ascentia, Bellandur"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "DNR Arista Phase 2 offers competitive pricing for its luxurious features and prime location in Bellandur, an IT hub with rising property values. The project's average asking price is showing a quarter-on-quarter increase, positioning it as a reasonable value in the local real estate market."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:46:46.493147+00:00",
+      "version": 1,
+      "display_template": "DNR Arista Phase 2 offers competitive pricing for its luxurious features and prime location in Bellandur, an IT hub with rising property values. The project's average asking price is showing a quarter-on-quarter increase, positioning it as a reasonable value in the local real estate market."
     }
   ],
   "summary_embedding": [
@@ -3746,6 +4203,6 @@
     -0.00786248
   ],
   "created_at": "2026-03-09T16:39:49.757900Z",
-  "updated_at": "2026-03-10T11:31:02.605708Z",
+  "updated_at": "2026-03-13T15:11:56.723241+00:00",
   "root_source": "Rera"
 }

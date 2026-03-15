@@ -590,7 +590,7 @@
       },
       "learned_at": "2026-03-10T10:31:23.318896Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -612,7 +612,7 @@
       },
       "learned_at": "2026-03-10T10:31:23.318897Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -631,7 +631,7 @@
       },
       "learned_at": "2026-03-10T10:31:23.318899Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -650,7 +650,7 @@
       },
       "learned_at": "2026-03-10T10:31:23.318902Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -950,6 +950,482 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "maintenance_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317855+00:00",
+      "version": 1,
+      "display_template": "Maintenance is {value}",
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317899+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "moderate"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317909+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317918+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "positive"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317926+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally express positive sentiment, highlighting the society's prime location, luxurious amenities, and high construction quality, which contribute to a premium lifestyle. While some financial considerations and general Koramangala traffic are noted, direct living experience reviews are largely favorable."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317935+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "This project boasts a prime location in Koramangala with excellent access to amenities and lifestyle features. Reviews highlight strong quality control, ample units, and appealing recreational facilities, offering a premium lifestyle."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317943+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Prime location in Koramangala with excellent connectivity",
+          "Luxurious amenities including clubhouse, pools, gym, and recreation rooms",
+          "Strong quality control and robust construction",
+          "24/7 security with CCTV and full power backup",
+          "Serene environment with landscaped gardens and open spaces"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317956+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Potential unplanned financial complexities due to added costs",
+          "Concerns about limited returns if area's infrastructure growth slows down",
+          "Traffic bottlenecks in Koramangala during peak hours",
+          "Proximity to a 'nala' (drain) which some initially feared could cause smell issues (though a resident denies current smell and builder is addressing it)"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317966+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "luxury-living",
+          "prime-location",
+          "rich-amenities",
+          "good-security",
+          "quality-construction",
+          "family-friendly",
+          "eco-friendly-features"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317976+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "potential-extra-costs",
+          "traffic-congestion-koramangala",
+          "nala-proximity-being-addressed"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:44:01.317984+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "2167-2413",
+          "price_range_lakh": "353-401",
+          "price_per_sqft": "14600-18500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853777+00:00",
+      "version": 1,
+      "display_template": "3BHK: 2167-2413 sq ft — ₹353-401 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 4.0 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "3056-3064",
+          "price_range_lakh": "480-527",
+          "price_per_sqft": "15600-17300"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853819+00:00",
+      "version": 1,
+      "display_template": "4BHK: 3056-3064 sq ft — ₹480-527 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 5.3 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 16400
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853845+00:00",
+      "version": 1,
+      "display_template": "₹16,400/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853869+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853894+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 5.12,
+          "period": "since last year"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853912+00:00",
+      "version": 1,
+      "display_template": "5.12% appreciation since last year",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Prestige Acropolis, Koramangala",
+          "Prestige PineWood, Koramangala",
+          "Svamitva Soul Spring, HSR Layout",
+          "Lodha Haven, HSR Layout"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853926+00:00",
+      "version": 1,
+      "display_template": "Similar: Prestige Acropolis, Koramangala, Prestige PineWood, Koramangala, Svamitva Soul Spring, HSR Layout"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Radiance Platinum offers luxury apartments in Koramangala at a competitive price point for the locality, especially considering its under-construction status and premium amenities. The project is positioned to offer value compared to other luxury developments in the area."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:04:35.853936+00:00",
+      "version": 1,
+      "display_template": "Radiance Platinum offers luxury apartments in Koramangala at a competitive price point for the locality, especially considering its under-construction status and premium amenities. The project is positioned to offer value compared to other luxury developments in the area."
     }
   ],
   "summary_embedding": [
@@ -4027,6 +4503,6 @@
     -0.0042795907
   ],
   "created_at": "2026-03-09T16:44:40.802665Z",
-  "updated_at": "2026-03-10T11:31:46.319968Z",
+  "updated_at": "2026-03-13T15:11:56.842483+00:00",
   "root_source": "Rera"
 }

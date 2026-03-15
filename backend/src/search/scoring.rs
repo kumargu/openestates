@@ -120,7 +120,7 @@ fn source_display_name(source_type: &str) -> &'static str {
         "Computed" => "Computed from data",
         "Manual" => "Verified data",
         "Llm" => "AI analysis",
-        "Seed" => "Seed data",
+        "Seed" => "Curated data",
         _ => "Data sources",
     }
 }

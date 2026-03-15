@@ -634,6 +634,462 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "maintenance_quality",
+      "value": {
+        "type": "Text",
+        "data": "poor"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.314978+00:00",
+      "version": 1,
+      "display_template": "Maintenance is {value}",
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "moderate"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315016+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "noisy"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315027+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "poor"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315035+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315044+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents appreciate the luxurious design, spacious apartments, extensive amenities, and strategic location of Century Ethos. However, there are significant complaints regarding construction delays, poor internal finishing quality, inadequate maintenance of common facilities, poor water quality, and serious security lapses, leading to a mixed overall sentiment."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315052+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "I am one of the owners and residents of the society. Firstly the handover took close to 1 year and 8 months and there is some unfinished snag list pending even after we moved in which has not been closed for more than 5 months. The bathroom has water seepage, water clogging and broken tiles, and unclean bathrooms were given during the handover and they said to deal with it this is how it is done for everyone. The Italian marble it's broken all over and they have used cheap labor to do the job. Windows and the mesh are of very poor quality and are barely functional."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315060+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Luxurious design, architecture, and finishes.",
+          "Large and well-equipped clubhouse with numerous amenities (50,000 sq ft, over 40 amenities).",
+          "Strategic and convenient location with good connectivity to airport, tech parks, schools, hospitals, and malls.",
+          "Spacious apartments with good floor plans, natural light, and ventilation.",
+          "Ample open spaces and green landscaping (80% open space)."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315073+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Significant handover delays and pending snag lists.",
+          "Poor quality of internal fittings and finishes (water seepage, broken tiles, poor marble, bad windows/mesh).",
+          "Poor maintenance of common amenities (dirty pools, unkempt gardens, frequent lift breakdowns, gym equipment issues).",
+          "Extremely poor water quality (hard water).",
+          "Security concerns (lack of basement CCTV, compromised resident data, missing emergency exit, zero safety at basement entry).",
+          "Noise pollution from ongoing construction and traffic congestion.",
+          "Unfinished structures and steel rods making it unsafe for kids, pets, and seniors."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315083+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "luxury-living",
+          "good-connectivity",
+          "spacious-apartments",
+          "extensive-amenities",
+          "green-spaces"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315092+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "maintenance-issues",
+          "water-quality-issues",
+          "security-lapses",
+          "construction-delays",
+          "noise-pollution",
+          "traffic-congestion",
+          "unfinished-work-safety-risk"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:06:37.315101+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "2850-3485",
+          "price_range_lakh": "336-600",
+          "price_per_sqft": "12000-18000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076133+00:00",
+      "version": 1,
+      "display_template": "3BHK: 2850-3485 sq ft — ₹336-600 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 6.0 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "4235-4940",
+          "price_range_lakh": "485-1000",
+          "price_per_sqft": "12000-20000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076159+00:00",
+      "version": 1,
+      "display_template": "4BHK: 4235-4940 sq ft — ₹485-1000 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 10.0 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": "12000-20000"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076174+00:00",
+      "version": 1,
+      "display_template": "₹12000-20000/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076188+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076204+00:00",
+      "version": 1,
+      "display_template": "Market: Ready To Move",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "immediate"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "L&T Elara Celestia, Hebbal",
+          "Embassy Lake Terraces, Hebbal",
+          "SNN Clermont, Hebbal",
+          "Embassy Sky Terraces, Hebbal"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076212+00:00",
+      "version": 1,
+      "display_template": "Similar: L&T Elara Celestia, Hebbal, Embassy Lake Terraces, Hebbal, SNN Clermont, Hebbal"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Century Ethos is positioned as a super luxury residential project in Hebbal, North Bangalore, offering spacious apartments and extensive amenities. Its strategic location and premium offerings contribute to its high demand and significant price appreciation since its launch in 2016. The current market prices reflect its status as a prime investment in a rapidly developing area."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:44:30.076217+00:00",
+      "version": 1,
+      "display_template": "Century Ethos is positioned as a super luxury residential project in Hebbal, North Bangalore, offering spacious apartments and extensive amenities. Its strategic location and premium offerings contribute to its high demand and significant price appreciation since its launch in 2016. The current market prices reflect its status as a prime investment in a rapidly developing area."
     }
   ],
   "summary_embedding": [
@@ -3711,6 +4167,6 @@
     -0.0030351493
   ],
   "created_at": "2026-03-09T16:43:12.057920Z",
-  "updated_at": "2026-03-10T11:30:58.917601Z",
+  "updated_at": "2026-03-13T15:11:56.709208+00:00",
   "root_source": "Rera"
 }

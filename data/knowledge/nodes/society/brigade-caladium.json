@@ -4,6 +4,149 @@
   "name": "Brigade Caladium",
   "facts": [
     {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "skill_id": "embed_entity",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:28:16.638594Z",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fetch_rera"
+      },
+      "learned_at": "2026-03-10T10:28:21.683451Z",
+      "version": 1,
+      "display_template": "RERA Registration: Not Found",
+      "answers_preferences": [
+        "rera verified"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "connectivity/location",
+          "amenities",
+          "security",
+          "construction quality",
+          "maintenance/repairs",
+          "local infrastructure (roads, water, power, pollution)",
+          "greenery/environment",
+          "spaciousness of apartments"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:07:48.133665Z",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "numerous potholes on local roads, making them hazardous",
+          "frequent waterlogging, power cuts, and water supply disruptions in the locality",
+          "high pollution levels due to nearby industries and a dumping ground in the area",
+          "minor issues with security staff and past construction-related inconveniences",
+          "some aspects needing repair and timely resolution",
+          "heavy traffic and noise pollution in the locality",
+          "locality being far from CBD and lacking many famous or good hotels (for businessmen)"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:07:48.133661Z",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "excellent construction quality and fittings",
+          "ample open space and greenery",
+          "strong and efficient security features (24-hour security, CCTV, gated community)",
+          "good amenities (swimming pool, gym, clubhouse, children's play area, various sports facilities, full power backup)",
+          "convenient and well-connected location (easy access to highways, CBD, airport, schools, hospitals, malls, tech parks)",
+          "luxurious and spacious apartments, comfortable and age-friendly living environment",
+          "well-managed society",
+          "peace within the complex",
+          "beautiful landscapes, unique architecture and design",
+          "small and elite community"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:07:48.133655Z",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally praise Brigade Caladium for its luxurious apartments, excellent amenities, strong security, and good construction, along with its convenient location. However, external issues like poor local road conditions, water/power supply problems, and environmental concerns are common complaints."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:07:48.133623Z",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
       "key": "name",
       "value": {
         "type": "Text",
@@ -64,6 +207,82 @@
       "version": 1
     },
     {
+      "key": "reddit_threads",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Redditors living near Karle Towers or Brigade Caladium - Hebbal, what are those loud explosion sounds we’ve been hearing all day?"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:51.414804Z",
+      "version": 1,
+      "display_template": "Discussed on Reddit: {value}"
+    },
+    {
+      "key": "reddit_total_comments",
+      "value": {
+        "type": "Numeric",
+        "data": 0.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:51.414784Z",
+      "version": 1,
+      "display_template": "{value} comments across Reddit threads"
+    },
+    {
+      "key": "reddit_total_score",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:51.414768Z",
+      "version": 1,
+      "display_template": "Reddit community score: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "url": "https://reddit.com/r/bangalore/comments/qn88wv/redditors_living_near_karle_towers_or_brigade/",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:30:51.414719Z",
+      "version": 1,
+      "display_template": "{value} Reddit discussions found",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback",
+        "reddit"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          5.0,
+          2.0
+        ]
+      }
+    },
+    {
       "key": "total_units",
       "value": {
         "type": "Numeric",
@@ -109,21 +328,194 @@
       "version": 1
     },
     {
-      "key": "google_sentiment",
+      "key": "google_rating",
       "value": {
-        "type": "Text",
-        "data": "Residents generally praise Brigade Caladium for its luxurious apartments, excellent amenities, strong security, and good construction, along with its convenient location. However, external issues like poor local road conditions, water/power supply problems, and environmental concerns are common complaints."
+        "type": "Numeric",
+        "data": 4.4
       },
       "confidence": 0.8,
       "source": {
         "source_type": "Google",
+        "url": null,
         "model": "gemini-2.5-flash",
         "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T17:07:48.133623Z",
+      "learned_at": "2026-03-13T13:59:18.214958+00:00",
       "version": 1,
-      "display_template": "Google Reviews: {value}",
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 130
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:18.214998+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "maintenance_quality",
+      "value": {
+        "type": "Text",
+        "data": "average"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:48.915238+00:00",
+      "version": 1,
+      "display_template": "Maintenance is {value}",
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:48.915279+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "quiet"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:48.915290+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:48.915298+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:59:48.915307+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
       "answers_preferences": [
         "good reviews",
         "resident feedback"
@@ -134,300 +526,135 @@
       }
     },
     {
-      "key": "google_top_positives",
+      "key": "sentiment_summary",
       "value": {
-        "type": "Tags",
-        "data": [
-          "excellent construction quality and fittings",
-          "ample open space and greenery",
-          "strong and efficient security features (24-hour security, CCTV, gated community)",
-          "good amenities (swimming pool, gym, clubhouse, children's play area, various sports facilities, full power backup)",
-          "convenient and well-connected location (easy access to highways, CBD, airport, schools, hospitals, malls, tech parks)",
-          "luxurious and spacious apartments, comfortable and age-friendly living environment",
-          "well-managed society",
-          "peace within the complex",
-          "beautiful landscapes, unique architecture and design",
-          "small and elite community"
-        ]
+        "type": "Text",
+        "data": "Residents generally praise Brigade Caladium for its luxurious apartments, extensive amenities, and serene internal environment. However, the overall experience is somewhat marred by significant external issues such as poor road conditions, pollution, and unreliable civic services in the surrounding Hebbal locality."
       },
-      "confidence": 0.8,
+      "confidence": 0.5,
       "source": {
         "source_type": "Google",
+        "url": null,
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T17:07:48.133655Z",
+      "learned_at": "2026-03-13T13:59:48.915315+00:00",
       "version": 1,
-      "display_template": "Praised for: {value}"
+      "display_template": "{value}"
     },
     {
-      "key": "google_top_negatives",
+      "key": "best_quote",
       "value": {
-        "type": "Tags",
-        "data": [
-          "numerous potholes on local roads, making them hazardous",
-          "frequent waterlogging, power cuts, and water supply disruptions in the locality",
-          "high pollution levels due to nearby industries and a dumping ground in the area",
-          "minor issues with security staff and past construction-related inconveniences",
-          "some aspects needing repair and timely resolution",
-          "heavy traffic and noise pollution in the locality",
-          "locality being far from CBD and lacking many famous or good hotels (for businessmen)"
-        ]
+        "type": "Text",
+        "data": "The society offers a comfortable living environment with good amenities, efficient security, and luxurious flats in a serene neighborhood. However, the surrounding locality faces significant issues like hazardous roads, high pollution, and frequent disruptions in water and power supply, impacting the overall living experience."
       },
-      "confidence": 0.8,
+      "confidence": 0.5,
       "source": {
         "source_type": "Google",
+        "url": null,
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T17:07:48.133661Z",
+      "learned_at": "2026-03-13T13:59:48.915323+00:00",
       "version": 1,
-      "display_template": "Criticized for: {value}"
+      "display_template": "Resident says: \"{value}\""
     },
     {
-      "key": "google_common_themes",
+      "key": "common_positives",
       "value": {
         "type": "Tags",
         "data": [
-          "connectivity/location",
-          "amenities",
-          "security",
-          "construction quality",
-          "maintenance/repairs",
-          "local infrastructure (roads, water, power, pollution)",
-          "greenery/environment",
-          "spaciousness of apartments"
+          "Luxurious and spacious apartments (3 & 4 BHK, 3450-4450 sq ft).",
+          "Excellent connectivity to major roads, tech parks, and the airport.",
+          "Extensive amenities including swimming pool, gym, clubhouse, and children's play area.",
+          "Peaceful and serene environment within the complex.",
+          "Good construction quality and fittings."
         ]
       },
-      "confidence": 0.8,
+      "confidence": 0.5,
       "source": {
         "source_type": "Google",
+        "url": null,
         "model": "gemini-2.5-flash",
-        "skill_id": "fetch_google_reviews",
-        "triggered_by": "batch_enrich"
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T17:07:48.133665Z",
+      "learned_at": "2026-03-13T13:59:48.915336+00:00",
       "version": 1,
-      "display_template": "Review themes: {value}"
+      "display_template": "Positives: {value}"
     },
     {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 3.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/qn88wv/redditors_living_near_karle_towers_or_brigade/",
-        "skill_id": "search_reddit",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:22:35.779706Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 495.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:22:35.779768Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 53.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-09T17:22:35.779785Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
+      "key": "common_complaints",
       "value": {
         "type": "Tags",
         "data": [
-          "Redditors living near Karle Towers or Brigade Caladium - Hebbal, what are those loud explosion sounds we\u2019ve been hearing all day?",
-          "Swiggy to move HQ from Bengaluru's Bellandur to Whitefield; cites better infra, affordable housing",
-          "Railway way crossing from Veeranapalya to Nagavara Brigade Underpass"
+          "Numerous potholes on external roads, posing safety risks.",
+          "High pollution levels due to nearby industries.",
+          "Presence of a dumping ground in the area contributing to a filthy environment.",
+          "Frequent waterlogging, power cuts, and water supply disruptions in the locality.",
+          "Minor issues with security staff behavior and past construction inconveniences."
         ]
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T17:22:35.779807Z",
+      "learned_at": "2026-03-13T13:59:48.915345+00:00",
       "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
+      "display_template": "Complaints: {value}"
     },
     {
-      "key": "embedding_computed",
-      "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Computed",
-        "skill_id": "embed_entity",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:28:16.638594Z",
-      "version": 1,
-      "display_template": "Embedding computed (3072 dims)"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:28:21.683451Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 1.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/qn88wv/redditors_living_near_karle_towers_or_brigade/",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:30:51.414719Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 1.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:30:51.414768Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 0.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:30:51.414784Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
+      "key": "signals",
       "value": {
         "type": "Tags",
         "data": [
-          "Redditors living near Karle Towers or Brigade Caladium - Hebbal, what are those loud explosion sounds we\u2019ve been hearing all day?"
+          "luxury-living",
+          "excellent-connectivity",
+          "rich-amenities",
+          "peaceful-environment",
+          "gated-community"
         ]
       },
-      "confidence": 0.7,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-10T11:30:51.414804Z",
+      "learned_at": "2026-03-13T13:59:48.915353+00:00",
       "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
+      "display_template": "Signals: {value}"
     },
     {
-      "key": "rera_registered",
+      "key": "cautions",
       "value": {
-        "type": "Bool",
-        "data": false
+        "type": "Tags",
+        "data": [
+          "poor-external-roads",
+          "pollution-issues",
+          "water-power-disruptions",
+          "minor-security-staff-issues"
+        ]
       },
-      "confidence": 0.8,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-10T10:28:21.681749Z",
+      "learned_at": "2026-03-13T13:59:48.915362+00:00",
       "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
+      "display_template": "Cautions: {value}"
     }
   ],
   "summary_embedding": [
@@ -3505,6 +3732,6 @@
     0.008949561
   ],
   "created_at": "2026-03-09T16:43:12.060322Z",
-  "updated_at": "2026-03-10T11:30:51.427302Z",
+  "updated_at": "2026-03-13T15:11:56.690900+00:00",
   "root_source": "Discovered"
 }

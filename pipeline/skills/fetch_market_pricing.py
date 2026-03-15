@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from pipeline.skills.base import FactSource, SourcedFact
+from pipeline.skills.base import BaseSkill, FactSource, SkillCost, SkillResult, SourcedFact
 
 logger = logging.getLogger(__name__)
 
@@ -251,12 +251,18 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
     # Avg price per sqft
     avg_psf = pricing.get("avg_price_per_sqft")
     if avg_psf:
+        try:
+            avg_psf_num = float(avg_psf) if isinstance(avg_psf, str) else avg_psf
+            display_psf = f"₹{avg_psf_num:,.0f}/sq ft (market rate)"
+        except (ValueError, TypeError):
+            avg_psf_num = avg_psf
+            display_psf = f"₹{avg_psf}/sq ft (market rate)"
         facts.append(SourcedFact(
             key="price_per_sqft",
-            value={"type": "Numeric", "data": avg_psf},
+            value={"type": "Numeric", "data": avg_psf_num},
             confidence=0.7,
             source=source,
-            display_template=f"₹{avg_psf:,}/sq ft (market rate)",
+            display_template=display_psf,
             answers_preferences=["price per sqft", "rate", "affordable", "expensive", "budget"],
             scoring_hint={"direction": "LowerIsBetter", "weight": 1.5},
         ))
@@ -424,6 +430,67 @@ def enrich_society(society_slug: str, dry_run: bool = False) -> Optional[int]:
     avg_psf = pricing.get("avg_price_per_sqft", "?")
     print(f"  {name:<50} ENRICHED ({len(facts)} facts) [{config_str}] ₹{avg_psf}/sqft")
     return len(facts)
+
+
+# ---------------------------------------------------------------------------
+# BaseSkill wrapper for enrichment engine integration
+# ---------------------------------------------------------------------------
+
+class FetchMarketPricingSkill(BaseSkill):
+    skill_id = "fetch_market_pricing"
+    description = "Enrich societies with per-BHK market pricing via Gemini + Google Search"
+    version = "1.0"
+    output_keys = ["pricing_2bhk", "pricing_3bhk", "price_per_sqft", "configurations", "market_status"]
+
+    def execute(self, input_data: dict) -> SkillResult:
+        society_slug = input_data.get("society_slug", "")
+        if not society_slug:
+            logger.error("fetch_market_pricing requires society_slug")
+            return SkillResult(confidence=0.0)
+
+        node_path = SOCIETY_DIR / f"{society_slug}.json"
+        if not node_path.exists():
+            logger.warning("Society not found: %s", society_slug)
+            return SkillResult(confidence=0.0)
+
+        node = json.loads(node_path.read_text())
+        name = node.get("name", society_slug)
+
+        # Check cache
+        cached = _get_cached(society_slug)
+        if cached:
+            pricing = cached
+        else:
+            area = get_fact_value(node, "area") or "Bengaluru"
+            builder = get_fact_value(node, "builder_name") or get_fact_value(node, "rera_promoter_name") or "Unknown"
+            total_units = get_fact_value(node, "rera_total_units") or get_fact_value(node, "total_units") or "Unknown"
+            completion = get_fact_value(node, "rera_completion_date") or "Unknown"
+            project_type = get_fact_value(node, "rera_project_sub_type") or "Apartment"
+            status = get_fact_value(node, "project_status") or "unknown"
+
+            prompt = PRICING_PROMPT.format(
+                society_name=name, area=area, builder_name=builder,
+                total_units=total_units, completion_date=completion,
+                project_type=project_type, project_status=status,
+            )
+
+            pricing = call_gemini_pricing(prompt)
+            if not pricing:
+                return SkillResult(confidence=0.0, cost=SkillCost(api_calls=1))
+            _save_cache(society_slug, pricing)
+
+        if not pricing.get("found", False):
+            return SkillResult(confidence=0.0, cost=SkillCost(api_calls=1))
+
+        facts = pricing_to_facts(pricing)
+        return SkillResult(
+            facts=facts,
+            confidence=0.7,
+            cost=SkillCost(api_calls=1, estimated_usd=0.001),
+        )
+
+    def estimated_cost(self) -> SkillCost:
+        return SkillCost(llm_tokens=3000, api_calls=1, estimated_usd=0.002)
 
 
 # ---------------------------------------------------------------------------

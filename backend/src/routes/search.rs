@@ -223,17 +223,6 @@ pub async fn search_properties(
                     };
 
                     if !new_properties.is_empty() {
-                        // Persist to seed data
-                        let existing_props = state.properties.read().await;
-                        if let Err(e) = discovery::ingest::persist_to_seed(
-                            &state.project_root,
-                            &existing_props,
-                            &new_properties,
-                        ) {
-                            eprintln!("WARN: Failed to persist discovered properties: {}", e);
-                        }
-                        drop(existing_props);
-
                         // Add to in-memory property list
                         {
                             let mut props = state.properties.write().await;
@@ -244,12 +233,32 @@ pub async fn search_properties(
                             }
                         }
 
-                        // Persist knowledge graph
+                        // Persist newly created nodes individually (crash-safe: each
+                        // save_node uses tmp+rename atomicity, so surviving nodes are
+                        // intact even if a crash occurs mid-batch).
                         {
                             let graph = state.knowledge.read().await;
                             let kg_dir = kg_store::knowledge_dir(&state.project_root);
-                            if let Err(e) = kg_store::save_graph(&kg_dir, &graph) {
-                                eprintln!("WARN: Failed to persist knowledge graph: {}", e);
+                            for p in &new_properties {
+                                // Save property node
+                                let prop_node_id = format!("property:{}", p.id);
+                                if let Some(node) = graph.get_node(&prop_node_id) {
+                                    if let Err(e) = kg_store::save_node(&kg_dir, node) {
+                                        eprintln!("WARN: Failed to save node {}: {}", prop_node_id, e);
+                                    }
+                                }
+                                // Save corresponding society node
+                                let society_slug = p.society_id.strip_prefix("soc-").unwrap_or(&p.society_id);
+                                let society_node_id = format!("society:{}", society_slug);
+                                if let Some(node) = graph.get_node(&society_node_id) {
+                                    if let Err(e) = kg_store::save_node(&kg_dir, node) {
+                                        eprintln!("WARN: Failed to save node {}: {}", society_node_id, e);
+                                    }
+                                }
+                            }
+                            // Save edges (single file, still atomic via tmp+rename)
+                            if let Err(e) = kg_store::save_edges(&kg_dir, &graph.edges) {
+                                eprintln!("WARN: Failed to save edges: {}", e);
                             }
                         }
 
@@ -383,6 +392,9 @@ enum ClaimFormat {
 }
 
 /// Legacy: maps a preference to a fact key (for nodes without answers_preferences).
+///
+/// TODO(Phase 2): Remove once KG property/society nodes carry `answers_preferences`
+/// on their facts. Currently needed because most nodes lack self-describing metadata.
 fn legacy_preference_to_fact_key(preference: &str) -> Option<&'static str> {
     match preference {
         "metro access" | "metro" | "near metro" => Some("metro_distance"),

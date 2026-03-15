@@ -367,6 +367,321 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "negative"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:14.041964+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Discussions indicate a negative perception of the East Bangalore / IT corridor area where Sobha Marvella is located, with residents likely facing challenges related to traffic congestion and poor civic infrastructure due to unplanned growth."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:14.042003+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Isn't East Bangalore already messed up ?"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:14.042023+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Traffic congestion in the IT corridor/East Bangalore",
+          "Poor civic infrastructure and planning in the region",
+          "General urban problems and 'messy' conditions in East Bangalore"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:14.042039+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "area-traffic",
+          "poor-civic-planning",
+          "unplanned-growth"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:14.042050+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1800-2109",
+          "price_range_lakh": "171-210",
+          "price_per_sqft": "8100-11700"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653857+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1800-2109 sq ft — ₹171-210 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 2.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "3700-4000",
+          "price_range_lakh": "344-558",
+          "price_per_sqft": "9200-14900"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653878+00:00",
+      "version": 1,
+      "display_template": "4BHK: 3700-4000 sq ft — ₹344-558 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 5.6 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 12000
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653888+00:00",
+      "version": 1,
+      "display_template": "₹12,000/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653897+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653906+00:00",
+      "version": 1,
+      "display_template": "Market: Ready To Move",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "immediate"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 120,
+          "period": "since 2012 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653921+00:00",
+      "version": 1,
+      "display_template": "120% appreciation since 2012 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "DNR Arista Phase 1, Bellandur",
+          "Purva Codename Ai, Bellandur",
+          "Vaishnavi Signature, Bellandur"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653927+00:00",
+      "version": 1,
+      "display_template": "Similar: DNR Arista Phase 1, Bellandur, Purva Codename Ai, Bellandur, Vaishnavi Signature, Bellandur"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Sobha Marvella is a premium ready-to-move project by a reputed builder in Bellandur, commanding strong resale values and demonstrating significant price appreciation since its 2012 launch. The price per sqft varies based on the specific unit, floor, and current market demand."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:29.653931+00:00",
+      "version": 1,
+      "display_template": "Sobha Marvella is a premium ready-to-move project by a reputed builder in Bellandur, commanding strong resale values and demonstrating significant price appreciation since its 2012 launch. The price per sqft varies based on the specific unit, floor, and current market demand."
     }
   ],
   "summary_embedding": [
@@ -3444,6 +3759,6 @@
     -0.0069307205
   ],
   "created_at": "2026-03-09T16:39:49.751630Z",
-  "updated_at": "2026-03-10T11:31:58.411372Z",
+  "updated_at": "2026-03-13T15:40:14.045368+00:00",
   "root_source": "Discovered"
 }

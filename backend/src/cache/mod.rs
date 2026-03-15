@@ -6,7 +6,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Used via Arc<dyn Cache> — compiler can't see dynamic dispatch
 pub enum CacheError {
     #[error("serialization error: {0}")]
     Serialization(String),
@@ -21,7 +21,7 @@ pub enum CacheError {
 /// let retrieved: MyStruct = serde_json::from_value(cache.get("key").await.unwrap()).unwrap();
 /// ```
 #[async_trait]
-#[allow(dead_code)]
+#[allow(dead_code)] // Used via Arc<dyn Cache> — compiler can't see dynamic dispatch
 pub trait Cache: Send + Sync {
     async fn get(&self, key: &str) -> Option<serde_json::Value>;
     async fn set(

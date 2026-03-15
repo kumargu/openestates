@@ -1,14 +1,14 @@
 {
   "id": "society:y-whitefield",
   "node_type": "Society",
-  "name": "Y @ WHITEFIELD",
+  "name": "Y @ Whitefield",
   "root_source": "Rera",
   "facts": [
     {
       "key": "name",
       "value": {
         "type": "Text",
-        "data": "Y @ WHITEFIELD"
+        "data": "Y @ Whitefield"
       },
       "confidence": 1.0,
       "source": {
@@ -833,6 +833,407 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:05:13.760011+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 3.5
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.345367+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.345395+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "The project is generally viewed positively for its strategic location, investment potential, and comprehensive amenities, although some buyers have expressed concerns about administrative issues such as registration delays and staff responsiveness."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.345406+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "strategic and well-connected location",
+          "good investment potential and property appreciation",
+          "comprehensive amenities"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.345416+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "registration delays",
+          "unresponsive staff"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.345425+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "location",
+          "amenities",
+          "investment",
+          "registration",
+          "staff responsiveness"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:23.813899+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278819+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278859+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278870+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Resident sentiment for Gen Y at Whitefield is mixed, with many appreciating its strategic location, investment potential, and comprehensive amenities, while some express concerns about registration delays and staff responsiveness."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278879+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "The project at Y at Whitefield Hoodi Bangalore has mixed reviews, with concerns raised about registration delays and unresponsive staff. However, the location is praised for its investment potential and planning."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278887+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Good investment potential and well-planned project.",
+          "Attractive location with good appreciation and ROI.",
+          "Seamless connectivity and proximity to public facilities like metro, IT hubs, schools, and hospitals.",
+          "Offers a wide array of world-class amenities including a clubhouse, swimming pool, gymnasium, and kids play area.",
+          "Designed with modern aesthetics for comfortable living."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278901+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Concerns raised about registration delays.",
+          "Feedback regarding unresponsive staff."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278910+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-connectivity",
+          "amenity-rich",
+          "investment-potential",
+          "family-friendly",
+          "gated-community"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278919+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "registration-delays",
+          "unresponsive-staff",
+          "traffic-congestion-locality",
+          "pollution-locality",
+          "water-scarcity-locality"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:51.278927+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "url": null,
+        "model": null,
+        "skill_id": "search_reddit",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:46:21.562245+00:00",
+      "version": 1
     }
-  ]
+  ],
+  "updated_at": "2026-03-13T15:11:56.916505+00:00"
 }

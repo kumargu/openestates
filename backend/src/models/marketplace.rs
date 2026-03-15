@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum PropertySource {
-    /// Original seed / bootstrap data.
+    /// Loaded from knowledge graph (formerly seed data).
     #[default]
     Seed,
     /// Listed directly by a registered seller.

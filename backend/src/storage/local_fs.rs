@@ -7,42 +7,28 @@ use super::{StorageBackend, StorageError};
 
 /// Filesystem-backed storage that reads from a configurable root directory.
 ///
-/// Supports two layouts:
-/// - **Lake layout** (`data/lake/{key}`): the new organized structure matching the Python pipeline
-/// - **Seed layout** (`data/seed/{file}`): the legacy flat JSON format, used as fallback
+/// Uses the lake layout (`data/lake/{key}`): the organized structure matching the Python pipeline.
 pub struct LocalFsBackend {
     /// Primary root: typically `data/lake/`
     lake_root: PathBuf,
-    /// Fallback root: typically `data/seed/` for backward compat
-    seed_root: PathBuf,
 }
 
 impl LocalFsBackend {
-    pub fn new(lake_root: PathBuf, seed_root: PathBuf) -> Self {
-        Self {
-            lake_root,
-            seed_root,
-        }
+    pub fn new(lake_root: PathBuf) -> Self {
+        Self { lake_root }
     }
 
-    /// Resolve a key to a filesystem path, checking lake first then seed fallback.
+    /// Resolve a key to a filesystem path under the lake root.
     fn resolve_path(&self, key: &str) -> PathBuf {
-        // If the key starts with "seed/", map to the seed root directly.
-        if let Some(rest) = key.strip_prefix("seed/") {
-            return self.seed_root.join(rest);
-        }
         self.lake_root.join(key)
     }
 
-    /// Try lake path first; if it doesn't exist and we have a seed fallback, try that.
+    /// Resolve a key, returning NotFound if the path doesn't exist.
     async fn resolve_with_fallback(&self, key: &str) -> Result<PathBuf, StorageError> {
-        let lake_path = self.resolve_path(key);
-        if fs::try_exists(&lake_path).await.unwrap_or(false) {
-            return Ok(lake_path);
+        let path = self.resolve_path(key);
+        if fs::try_exists(&path).await.unwrap_or(false) {
+            return Ok(path);
         }
-
-        // For keys like "seed/properties.json", the resolve_path already points to seed_root.
-        // For lake keys, there's no automatic fallback — the key scheme is different.
         Err(StorageError::NotFound(key.to_string()))
     }
 }
@@ -90,7 +76,6 @@ impl StorageBackend for LocalFsBackend {
 }
 
 /// Recursively collect all file keys under a directory.
-#[allow(dead_code)]
 async fn collect_keys_recursive(
     base: &Path,
     dir: &Path,

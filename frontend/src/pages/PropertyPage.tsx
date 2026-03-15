@@ -7,14 +7,12 @@ import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
-import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
 import { TransparencyScoreTile } from "../components/TransparencyScoreTile.tsx";
 import { ShareButtons } from "../components/ShareButtons.tsx";
-import { TrustBadge } from "../components/TrustBadge.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
-import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
 import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
+import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -270,23 +268,10 @@ export function PropertyPage() {
             </div>
           ))}
         </div>
-      </div>
 
-      {/* === RERA Verification === */}
-      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
-
-      {/* === G. Tradeoffs to Know === */}
-      {(tradeoffs.strengths.length > 0 || tradeoffs.cautions.length > 0) && (
-        <div className="section-card" data-testid="tradeoffs-section">
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z" />
-              <path d="M12 16v-4" />
-              <path d="M12 8h.01" />
-            </svg>
-            <h2>Tradeoffs to know</h2>
-          </div>
-          <div className="detail-grid" style={{ gap: "1rem" }}>
+        {/* Strengths & Cautions inline */}
+        {(tradeoffs.strengths.length > 0 || tradeoffs.cautions.length > 0) && (
+          <div className="detail-grid" style={{ gap: "1rem", marginTop: "1rem" }}>
             {tradeoffs.strengths.length > 0 && (
               <div style={{
                 padding: "1rem",
@@ -332,8 +317,11 @@ export function PropertyPage() {
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* === RERA Verification === */}
+      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
 
       {/* === Key facts card === */}
       <div className="section-card">
@@ -358,38 +346,20 @@ export function PropertyPage() {
         </div>
       </div>
 
-      {/* Scores + Risk — two-column on desktop */}
-      <div className="detail-grid">
-        {/* Transparency scores */}
-        <div className="section-card">
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            <h2>Transparency scores</h2>
-          </div>
-          <ScoreBar label="Document completeness" value={p.document_completeness_score} />
-          <ScoreBar label="Society quality" value={p.society_quality_score} />
-          <ScoreBar label="Builder reputation" value={p.builder_quality_score} />
-          <ScoreBar label="Sunlight access" value={p.sunlight_score} />
+      {/* === Risk signals === */}
+      <div className="section-card">
+        <div className="section-card-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
+          </svg>
+          <h2>Risk signals</h2>
         </div>
-
-        {/* Risk signals */}
-        <div className="section-card">
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-              <line x1="12" y1="9" x2="12" y2="13" />
-              <line x1="12" y1="17" x2="12.01" y2="17" />
-            </svg>
-            <h2>Risk signals</h2>
-          </div>
-          <ScoreBar label="Litigation risk" value={p.litigation_risk} />
-          <ScoreBar label="Waterlogging risk" value={p.waterlogging_risk_score} />
-          <ScoreBar label="Traffic congestion" value={p.traffic_score} />
-          <ScoreBar label="Noise level" value={p.noise_score} />
-        </div>
+        <ScoreBar label="Litigation risk" value={p.litigation_risk} />
+        <ScoreBar label="Waterlogging risk" value={p.waterlogging_risk_score} />
+        <ScoreBar label="Traffic congestion" value={p.traffic_score} />
+        <ScoreBar label="Noise level" value={p.noise_score} />
       </div>
 
       {/* === E. Society / Livability === */}
@@ -539,12 +509,9 @@ export function PropertyPage() {
         </div>
       )}
 
-      {/* === Area Intelligence === */}
-      {data.area_intelligence && p.area && (
-        <AreaIntelligenceTile
-          area={p.area}
-          intelligence={data.area_intelligence}
-        />
+      {/* === Area Intelligence (Reddit sentiments) === */}
+      {data.area_intelligence && area && (
+        <AreaIntelligenceTile area={area.name} intelligence={data.area_intelligence} />
       )}
 
       {/* === Claim Section — only shown when no seller is linked === */}
@@ -557,105 +524,8 @@ export function PropertyPage() {
           {/* Transparency Score — top of sidebar */}
           <TransparencyScoreTile data={data.transparency_score} />
 
-          {/* Data Provenance */}
+          {/* Save + Share */}
           <div className="section-card" style={{ marginBottom: "1rem" }}>
-            <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-              </svg>
-              <h2 style={{ fontSize: "0.85rem" }}>Data Provenance</h2>
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-              {/* Data Source */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Source</span>
-                <TrustBadge rootSource={data.root_source} compact />
-              </div>
-
-              {/* Project Status */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Project Status</span>
-                <ProjectStatusTag
-                  status={data.project_status}
-                  displayText={data.project_status_display}
-                  possessionStatus={p.possession_status}
-                />
-              </div>
-
-              {/* Builder Track Record */}
-              {data.builder_trust?.delivery_display && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Builder Track Record</span>
-                  <BuilderTrustBadge
-                    deliveryDisplay={data.builder_trust.delivery_display}
-                    deliveryRate={data.builder_trust.delivery_rate}
-                    compact
-                  />
-                </div>
-              )}
-
-              {/* Data Freshness */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Freshness</span>
-                <DataFreshnessBadge freshness={data.data_freshness} compact />
-              </div>
-
-              {/* Data Confidence */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>Data Confidence</span>
-                <ConfidenceMeter confidence={data.confidence_score} compact />
-              </div>
-
-              {/* RERA Number */}
-              {data.rera?.registration_number && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>RERA Number</span>
-                  <span style={{ fontSize: "0.72rem", fontWeight: 500, color: "var(--color-text-secondary)", fontFamily: "var(--font-mono, monospace)" }}>
-                    {data.rera.registration_number}
-                  </span>
-                </div>
-              )}
-
-              {/* RERA Portal Link */}
-              {data.rera?.rera_portal_url && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: "0.78rem", color: "var(--color-text-muted)" }}>RERA Portal</span>
-                  <a
-                    href={data.rera.rera_portal_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 500,
-                      color: "var(--color-primary, #2563eb)",
-                      textDecoration: "none",
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: "0.25rem",
-                    }}
-                  >
-                    Verify on RERA
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
-                      <polyline points="15 3 21 3 21 9" />
-                      <line x1="10" y1="14" x2="21" y2="3" />
-                    </svg>
-                  </a>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Price + Save + Share */}
-          <div className="section-card" style={{ marginBottom: "1rem" }}>
-            <div style={{ marginBottom: "0.75rem" }}>
-              <div style={{ fontSize: "1.5rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
-                {formatPrice(p.price)}
-              </div>
-              <div style={{ fontSize: "0.82rem", color: "var(--color-text-muted)" }}>
-                {p.price_per_sqft.toLocaleString("en-IN")} /sqft &middot; {p.bhk} BHK &middot; {p.carpet_area_sqft} sqft
-              </div>
-            </div>
             <button
               onClick={handleSave}
               data-testid="sidebar-save-button"

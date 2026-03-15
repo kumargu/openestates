@@ -119,6 +119,7 @@ pub enum SourceType {
 
 impl SourceType {
     /// Default confidence level for this source type.
+    #[cfg(test)]
     pub fn default_confidence(&self) -> f32 {
         match self {
             Self::Rera => 1.0,
@@ -134,7 +135,8 @@ impl SourceType {
 }
 
 impl SourcedFact {
-    /// Create a manually-sourced fact (from seed data).
+    /// Create a manually-sourced fact (used by tests).
+    #[cfg(test)]
     pub fn manual(key: impl Into<String>, value: FactValue) -> Self {
         Self {
             key: key.into(),

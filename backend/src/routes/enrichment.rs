@@ -540,7 +540,7 @@ pub fn enrich_property_card_with_sellers(
 }
 
 // ---------------------------------------------------------------------------
-// Society enrichment — overlays KG facts onto seed data
+// Society enrichment — overlays KG facts onto in-memory data
 // ---------------------------------------------------------------------------
 
 /// Enrich a Society with knowledge graph facts. Mutates in place.
@@ -587,7 +587,7 @@ pub fn enrich_society(society: &mut Society, graph: &KnowledgeGraph) {
 }
 
 // ---------------------------------------------------------------------------
-// Area enrichment — overlays KG facts onto seed data
+// Area enrichment — overlays KG facts onto in-memory data
 // ---------------------------------------------------------------------------
 
 /// Enrich an AreaProfile with knowledge graph facts. Mutates in place.

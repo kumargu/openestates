@@ -1131,6 +1131,381 @@
       "learned_at": "2026-03-13T07:49:32.915777+00:00",
       "version": 1,
       "display_template": "Aiikya Village Sarjapur offers spacious, eco-friendly homes at prices generally below the average for Sarjapur Road, positioning it as a value-for-money option in the area."
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:53.858036+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally express a positive sentiment towards Aiikya Village Sarjapur, appreciating its luxurious and spacious homes, extensive modern and eco-friendly amenities, and its strategic location with good connectivity. The primary consideration for potential buyers is the significant initial investment."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:11.840105+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "world-class amenities including gym, swimming pool, clubhouse, and various sports facilities",
+          "spacious and well-designed apartments with modern interiors and high ceilings",
+          "focus on sustainability and eco-friendly features like rainwater harvesting, sewage treatment plants, and organic planters",
+          "robust security measures including CCTV, gated community, video door phone, and keyless entry",
+          "strategic and well-connected location near IT hubs, schools, hospitals, and malls, with planned metro connectivity",
+          "resort-like environment promoting a healthy lifestyle",
+          "work-from-home ready with co-working spaces and convertible home designs",
+          "provision of power backup and visitor parking",
+          "positive home-buying experience with supportive sales team",
+          "Vaastu compliant homes"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:11.840141+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "significant initial investment"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:11.840148+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "amenities",
+          "location/connectivity",
+          "sustainability/eco-friendliness",
+          "apartment design/spaciousness",
+          "security",
+          "price/investment",
+          "home-buying experience"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:11.840154+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414530+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "quiet"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414571+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414580+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414589+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The society is praised for its modern amenities, sustainable design, and family-friendly environment, offering a resort-like living experience. However, potential buyers express concerns about the builder's newness and the perceived high pricing for the location."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414598+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "I had been to Aikiya Village Sarjapur last week and liked the concept. The pricing compared to what others are quoting looks reasonable, but the builder seems to be quite new in the apartment construction business."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414605+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Extensive modern and world-class amenities including sports facilities, gym, and swimming pool.",
+          "Focus on sustainable and eco-friendly living with features like rainwater harvesting, sewage treatment, and hydroponics.",
+          "Spacious, well-ventilated duplex homes with double-height living and convertible spaces.",
+          "Work-from-home ready infrastructure with managed co-working spaces.",
+          "Peaceful, resort-like environment with good connectivity to IT hubs and essential services."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414617+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "High initial investment cost.",
+          "Concerns about the builder being relatively new to apartment construction.",
+          "Perceived inflated pricing for the specific location (Sarjapur-Attibele road)."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414626+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-amenities",
+          "family-friendly",
+          "eco-friendly",
+          "spacious-homes",
+          "work-from-home-friendly",
+          "good-connectivity"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414634+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "high-investment",
+          "new-builder-concern",
+          "pricing-concern"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:49:33.414644+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "url": null,
+        "model": null,
+        "skill_id": "search_reddit",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:39:20.973320+00:00",
+      "version": 1
     }
-  ]
+  ],
+  "updated_at": "2026-03-13T15:11:56.663378+00:00"
 }

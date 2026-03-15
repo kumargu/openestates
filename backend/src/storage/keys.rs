@@ -27,9 +27,4 @@ impl StorageKey {
     ) -> String {
         format!("{}/{}/{}/{}/{}", entity_type, city, area, id, filename)
     }
-
-    /// Key for the seed-format flat file (backward compat).
-    pub fn seed_file(filename: &str) -> String {
-        format!("seed/{}", filename)
-    }
 }

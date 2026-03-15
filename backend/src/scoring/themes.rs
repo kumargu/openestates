@@ -1,7 +1,12 @@
 //! Theme, tradeoff, and market activity computation.
 //! KG-facts-first: when the knowledge graph has pre-scored facts from skills
 //! (e.g., score_society's overall_score, top_signals, top_cautions), use them
-//! directly. Fall back to seed data thresholds only when KG facts are absent.
+//! directly. Fall back to Property struct field thresholds only when KG facts are absent.
+//!
+//! TODO(Phase 2): The Property-struct fallback paths (value, commute, society, greenery,
+//! risk) are actively needed because KG property nodes currently lack score facts
+//! (e.g., score_value_for_money, score_connectivity). Once enrichment skills populate
+//! these scores on KG nodes, the fallback paths can be removed.
 
 use serde::Serialize;
 
@@ -127,7 +132,7 @@ fn compute_value(p: &Property, area: Option<&AreaProfile>, graph: &KnowledgeGrap
         };
     }
 
-    // Fallback: seed data price_per_sqft vs area median
+    // Fallback: Property struct price_per_sqft vs area median
     let Some(area) = area else {
         return ThemeResult {
             label: ThemeLabel::Mixed,
@@ -229,7 +234,7 @@ fn compute_commute(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
         };
     }
 
-    // Fallback: seed data metro_distance_mins + traffic_score
+    // Fallback: Property struct metro_distance_mins + traffic_score
     let metro = p.metro_distance_mins;
     let traffic = p.traffic_score;
 
@@ -290,7 +295,7 @@ fn compute_society(
         };
     }
 
-    // Fallback: seed data society_quality_score
+    // Fallback: Property struct society_quality_score
     let score = p.society_quality_score;
     let label = score_to_label(score);
 
@@ -332,13 +337,13 @@ fn compute_greenery(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
     // KG-first: check for amenities score as proxy
     if let Some(score) = kg_numeric(graph, &node_id, "score_amenities") {
         let normalized = score / 100.0;
-        // Blend with seed data if available
-        let seed_avg = {
+        // Blend with Property struct scores if available
+        let prop_avg = {
             let g = p.greenery_score.unwrap_or(0.5);
             let o = p.open_space_score.unwrap_or(0.5);
             (g + o) / 2.0
         };
-        let blended = (normalized + seed_avg) / 2.0;
+        let blended = (normalized + prop_avg) / 2.0;
         let label = score_to_label(blended);
         let summary = if blended >= 0.8 {
             "Lush greenery, spacious open areas".into()
@@ -352,7 +357,7 @@ fn compute_greenery(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
         return ThemeResult { label, summary };
     }
 
-    // Fallback: seed data greenery_score + open_space_score
+    // Fallback: Property struct greenery_score + open_space_score
     let g = p.greenery_score.unwrap_or(0.5);
     let o = p.open_space_score.unwrap_or(0.5);
     let avg = (g + o) / 2.0;
@@ -388,7 +393,7 @@ fn compute_risk(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
         };
     }
 
-    // Fallback: seed data risk scores (lower = better)
+    // Fallback: Property struct risk scores (lower = better)
     let avg_risk = (p.litigation_risk + p.waterlogging_risk_score + p.noise_score) / 3.0;
     let label = risk_label(avg_risk);
     let summary = fallback_risk_summary(p);
@@ -522,7 +527,7 @@ pub fn compute_tradeoffs(
     let mut strengths = kg_signals.unwrap_or_default();
     let mut cautions = kg_cautions.unwrap_or_default();
 
-    // Supplement with seed-data-derived tradeoffs if KG didn't provide enough
+    // Supplement with Property-struct-derived tradeoffs if KG didn't provide enough
     if strengths.len() < 2 {
         if let Some(a) = area {
             if a.median_price_per_sqft > 0 {

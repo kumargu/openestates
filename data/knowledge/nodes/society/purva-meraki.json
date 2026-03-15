@@ -603,7 +603,7 @@
       },
       "learned_at": "2026-03-10T10:31:10.674944Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -625,7 +625,7 @@
       },
       "learned_at": "2026-03-10T10:31:10.674946Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -644,7 +644,7 @@
       },
       "learned_at": "2026-03-10T10:31:10.674947Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -663,7 +663,7 @@
       },
       "learned_at": "2026-03-10T10:31:10.674950Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -982,6 +982,468 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 4.7
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:11.017906+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 150
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:11.017937+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486107+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486146+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "positive"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486157+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The overall sentiment towards Purva Meraki is positive, with experts and potential buyers highlighting its luxurious amenities, prime HSR Layout location, and high-quality construction standards."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486166+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "The development's location in HSR Layout ensures proximity to essential services, schools, hospitals, and recreational centers, making it an ideal choice for those seeking a blend of luxury and convenience. Purva Meraki ratings are good, receiving positive responses from buyers for its ultra-luxurious amenities, world-class infrastructure, seamless connectivity, and high-quality construction standards."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486174+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Luxury living with modern architecture and spacious layouts.",
+          "Extensive world-class amenities including an infinity pool, clubhouse, gym, and kids' play areas.",
+          "Prime location in HSR Layout with excellent connectivity to major IT hubs and arterial roads.",
+          "Offers serene lake views of Soma Sundara Palya Lake and Isha Lakefront.",
+          "Low-density development with over 76% lush green open space."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486188+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-amenities",
+          "prime-location",
+          "luxury-living",
+          "lake-views",
+          "family-friendly",
+          "good-security",
+          "RERA-approved"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486198+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Project is under construction with possession expected by October 2027.",
+          "HSR Layout generally experiences unscheduled power cuts.",
+          "Water shortages in parts of HSR Layout may lead to reliance on private tankers.",
+          "Parking can be difficult in HSR Layout, especially on weekends.",
+          "Internal roads in HSR Layout may suffer from waterlogging during heavy rains."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:42:35.486206+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "2500-2770",
+          "price_range_lakh": "368-438",
+          "price_per_sqft": "13285-17520"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020820+00:00",
+      "version": 1,
+      "display_template": "3BHK: 2500-2770 sq ft — ₹368-438 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 4.4 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "3600-3745",
+          "price_range_lakh": "478-617",
+          "price_per_sqft": "12763-17138"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020843+00:00",
+      "version": 1,
+      "display_template": "4BHK: 3600-3745 sq ft — ₹478-617 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 6.2 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 15145
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020860+00:00",
+      "version": 1,
+      "display_template": "₹15,145/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020873+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020889+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 5,
+          "period": "last 1 year"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020897+00:00",
+      "version": 1,
+      "display_template": "5% appreciation last 1 year",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Sobha Infinia Phase II",
+          "Kritane Avyana Living",
+          "Assetz Mizumi Reserve",
+          "Casagrand Flamingo"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020904+00:00",
+      "version": 1,
+      "display_template": "Similar: Sobha Infinia Phase II, Kritane Avyana Living, Assetz Mizumi Reserve"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Purva Meraki is positioned as an ultra-luxury, limited-edition project in the prime HSR Layout, justifying its premium pricing in a highly developed area with scarce new land availability. The project was launched in October 2022 and is expected to be completed by October 2027."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:03:52.020909+00:00",
+      "version": 1,
+      "display_template": "Purva Meraki is positioned as an ultra-luxury, limited-edition project in the prime HSR Layout, justifying its premium pricing in a highly developed area with scarce new land availability. The project was launched in October 2022 and is expected to be completed by October 2027."
     }
   ],
   "summary_embedding": [
@@ -4059,6 +4521,6 @@
     -0.0117896665
   ],
   "created_at": "2026-03-09T16:41:06.742114Z",
-  "updated_at": "2026-03-10T11:31:44.507935Z",
+  "updated_at": "2026-03-13T15:11:56.836467+00:00",
   "root_source": "Rera"
 }

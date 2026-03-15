@@ -708,7 +708,7 @@
       },
       "learned_at": "2026-03-10T10:32:33.346230Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -730,7 +730,7 @@
       },
       "learned_at": "2026-03-10T10:32:33.346232Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -749,7 +749,7 @@
       },
       "learned_at": "2026-03-10T10:32:33.346234Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -768,7 +768,7 @@
       },
       "learned_at": "2026-03-10T10:32:33.346238Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -1087,6 +1087,362 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657862+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "While Whitefield is seen as having improving infrastructure and relatively affordable housing that attracts corporates, residents frequently discuss rent levels, indicating cost remains a significant consideration."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657906+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Swiggy's move highlights Whitefield's improving infrastructure and housing affordability, though rent discussions indicate costs are a key consideration for residents."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657918+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "improving infrastructure in Whitefield",
+          "relative housing affordability compared to other areas like Bellandur",
+          "attracting corporate headquarters and job opportunities (e.g., Swiggy)"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657931+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "rent levels are a significant topic of discussion, suggesting cost considerations"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657941+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "whitefield-infrastructure-development",
+          "whitefield-housing-affordability",
+          "corporate-relocation-attraction"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657950+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "whitefield-rent-cost-discussion"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:41:40.657960+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1635-1860",
+          "price_range_lakh": "235-327",
+          "price_per_sqft": "15000-17000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.926949+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1635-1860 sq ft — ₹235-327 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 3.3 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2100-2150",
+          "price_range_lakh": "285-352",
+          "price_per_sqft": "15000-17000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.926973+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2100-2150 sq ft — ₹285-352 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 3.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 15500
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.926990+00:00",
+      "version": 1,
+      "display_template": "₹15,500/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.927002+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.927017+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 23.51,
+          "period": "last 1 year"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.927026+00:00",
+      "version": 1,
+      "display_template": "23.51% appreciation last 1 year",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Sumadhura Solace Phase I, Whitefield",
+          "ELV High Garden, Whitefield",
+          "Sarang By Sumadhura Phase 2, Whitefield",
+          "Birla Evara, Whitefield",
+          "Alembic Cloud Forest, Whitefield"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.927035+00:00",
+      "version": 1,
+      "display_template": "Similar: Sumadhura Solace Phase I, Whitefield, ELV High Garden, Whitefield, Sarang By Sumadhura Phase 2, Whitefield"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Sumadhura Capitol Residences offers luxury apartments in a prime Whitefield location, with pricing reflecting its under-construction status and the area's robust demand. The project has seen significant appreciation in the last year."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:14:36.927039+00:00",
+      "version": 1,
+      "display_template": "Sumadhura Capitol Residences offers luxury apartments in a prime Whitefield location, with pricing reflecting its under-construction status and the area's robust demand. The project has seen significant appreciation in the last year."
     }
   ],
   "summary_embedding": [
@@ -4164,6 +4520,6 @@
     -0.01553312
   ],
   "created_at": "2026-03-09T16:38:04.929785Z",
-  "updated_at": "2026-03-10T11:32:07.278349Z",
+  "updated_at": "2026-03-13T15:41:40.661383+00:00",
   "root_source": "Rera"
 }

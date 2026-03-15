@@ -703,6 +703,368 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:04:29.110081+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 4.3
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:11.509840+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Autumn Leaves is generally well-regarded by homebuyers and experts for its luxurious amenities, strategic location with excellent connectivity, and strong investment potential as a plotted development. While praised for its serene environment and comprehensive facilities, some concerns exist regarding the pace of local infrastructure development and traffic congestion."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:11.509880+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "luxurious amenities and excellent connectivity",
+          "well-planned infrastructure and amenities",
+          "exclusive gated community with landscaped gardens and green spaces",
+          "strategic location with good connectivity to schools, hospitals, IT hubs, and the airport",
+          "good investment potential and future appreciation prospects",
+          "comprehensive amenities including clubhouse, swimming pool, gym, sports courts, children's play area, and 24/7 security",
+          "sustainable design with eco-friendly infrastructure",
+          "peaceful and serene environment"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:11.509893+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "slow infrastructure development and poor road maintenance in the locality",
+          "traffic congestion during peak hours"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:11.509904+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "location",
+          "amenities",
+          "connectivity",
+          "investment",
+          "security",
+          "infrastructure",
+          "green spaces",
+          "plot sizes"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:11.509914+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408134+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "quiet"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408174+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408185+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "positive"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408194+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Autumn Leaves receives highly rated reviews for its luxurious amenities and excellent connectivity from homebuyers and property experts, with a strong positive outlook on its investment potential and planned infrastructure."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408202+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Autumn Leaves receives highly rated reviews for its luxurious amenities and excellent connectivity. They got a review on Google with 4.3 out of 5 from homebuyers. This project is one of the most popular plotted developments in the region. This is because of its excellent surroundings and nearby facilities."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408211+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Luxurious amenities and excellent connectivity.",
+          "Strategic location with proximity to airport, IT hubs, schools, and hospitals.",
+          "Well-planned infrastructure, wide roads, and green spaces within a gated community.",
+          "Focus on eco-luxury living with underground utilities, rainwater harvesting, and solar street lighting.",
+          "Strong investment potential due to Devanahalli's growth and high appreciation rates."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408224+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-connectivity",
+          "luxurious-amenities",
+          "gated-community",
+          "family-friendly",
+          "investment-potential"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:30:38.408234+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "url": null,
+        "model": null,
+        "skill_id": "search_reddit",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:42:55.462434+00:00",
+      "version": 1
     }
-  ]
+  ],
+  "updated_at": "2026-03-13T15:11:56.792690+00:00"
 }

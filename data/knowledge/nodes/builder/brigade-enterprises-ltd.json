@@ -1,0 +1,25 @@
+{
+  "id": "builder:brigade-enterprises-ltd",
+  "node_type": "Builder",
+  "name": "Brigade Enterprises Ltd",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Brigade Enterprises Ltd"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:26:37.717051+00:00",
+      "version": 1
+    }
+  ]
+}

@@ -208,7 +208,7 @@ fn load_legacy_graph(knowledge_dir: &Path) -> Option<KnowledgeGraph> {
     Some(graph)
 }
 
-/// Save the entire graph (all nodes + edges). Used for bootstrap and full persists.
+/// Save the entire graph (all nodes + edges). Used for full persists after bulk operations.
 pub fn save_graph(knowledge_dir: &Path, graph: &KnowledgeGraph) -> std::io::Result<()> {
     std::fs::create_dir_all(knowledge_dir)?;
 

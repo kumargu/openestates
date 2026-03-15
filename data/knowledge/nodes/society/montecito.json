@@ -1,14 +1,14 @@
 {
   "id": "society:montecito",
   "node_type": "Society",
-  "name": "MONTECITO",
+  "name": "Montecito",
   "root_source": "Rera",
   "facts": [
     {
       "key": "name",
       "value": {
         "type": "Text",
-        "data": "MONTECITO"
+        "data": "Montecito"
       },
       "confidence": 1.0,
       "source": {
@@ -655,6 +655,175 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:04:25.656382+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:26:31.019101+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Unbeatable location in Whitefield, close to ITPL, Kadugodi metro station, and an upcoming Forum mall.",
+          "Ultra-luxury design with international architectural styles including French, Tuscan, Spanish, Dutch, and Contemporary.",
+          "Fabulous amenities, including a 50,000 sq. ft. private clubhouse with a spa, indoor pool, gym, and 15 luxury suites for guests.",
+          "Large plots and estates (up to 20,000 sq. ft.) with private manicured lawns and options for private pools.",
+          "Proximity to top schools and healthcare facilities, making it ideal for family living."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:26:31.019148+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "luxury-living",
+          "excellent-connectivity",
+          "extensive-amenities",
+          "spacious-villas",
+          "family-friendly"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:26:31.019161+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "url": null,
+        "model": null,
+        "skill_id": "search_reddit",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:42:47.909540+00:00",
+      "version": 1
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Montecito in Whitefield, Bengaluru, is an ultra-luxury villa community (not an apartment society) that is currently under construction, with an expected completion in April 2032. As such, there are no real resident reviews, Google reviews, or forum discussions from actual residents available yet to gauge sentiment or specific experiences. Information found is primarily promotional material from the developers."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:38.508711+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Montecito offers five-star living just 5 minutes from Kadugodi metro station on Whitefield, as an ultra-luxury villa community that brings a whole new level of elegance and sophistication to Bangalore's luxury home market."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:38.508752+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "no-resident-reviews-available",
+          "long-possession-timeline",
+          "villa-community-not-apartments"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:38.508789+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
     }
-  ]
+  ],
+  "updated_at": "2026-03-13T15:30:38.511179+00:00"
 }

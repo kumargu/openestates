@@ -107,11 +107,6 @@ impl KnowledgeGraph {
         self.nodes.get(id)
     }
 
-    #[allow(dead_code)]
-    pub fn get_node_mut(&mut self, id: &str) -> Option<&mut Node> {
-        self.nodes.get_mut(id)
-    }
-
     /// Get all nodes of a given type.
     pub fn nodes_of_type(&self, node_type: NodeType) -> Vec<&Node> {
         self.nodes_by_type

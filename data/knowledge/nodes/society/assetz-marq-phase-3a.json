@@ -902,6 +902,689 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:03:58.938533+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 4.6
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:43.618056+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 66
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:43.618087+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally express high satisfaction with Assetz Marq, praising its extensive range of amenities, spacious and well-designed apartments, and the abundance of green spaces. The project's strategic location in Whitefield, offering excellent connectivity to key areas and facilities, is also highly valued. While some residents have noted concerns regarding maintenance costs and minor initial quality issues in older phases, the overall sentiment is positive, highlighting a luxurious and comfortable living experience."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:43.618093+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "extensive amenities including clubhouse, swimming pool, gym, and sports facilities",
+          "spacious and well-designed apartments with good natural light and ventilation",
+          "abundant green spaces and landscaped gardens",
+          "strategic location with excellent connectivity to IT hubs, schools, hospitals, and malls",
+          "good security measures",
+          "quality construction by a reputable developer"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:43.618098+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "high maintenance costs",
+          "some minor initial quality issues (e.g., door latches in older phases)",
+          "public transport connectivity could be improved",
+          "traffic congestion in the surrounding Whitefield area",
+          "periodic waterlogging in underpasses during heavy monsoons",
+          "air quality concerns due to construction dust and high traffic",
+          "perceived as being far from Bangalore central"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:43.618103+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "amenities",
+          "location and connectivity",
+          "apartment design and space",
+          "green spaces",
+          "security",
+          "maintenance",
+          "construction quality",
+          "local infrastructure (traffic, waterlogging)"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:55:45.455438+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "maintenance_quality",
+      "value": {
+        "type": "Text",
+        "data": "average"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.506970+00:00",
+      "version": 1,
+      "display_template": "Maintenance is {value}",
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507008+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "moderate"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507018+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507026+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507034+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate the spacious apartments, extensive amenities, and prime Whitefield location of Assetz Marq Phase 3A. However, some older and isolated reports raise significant concerns regarding potential legal issues, water scarcity, and maintenance quality, leading to a mixed overall sentiment."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507042+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "I've booked a 3BHK apartment in Assetz Marq 3 after seeing the spacious Assetz Marq floor plan and reading Assetz builder reviews. This property fulfilled all of my criteria for big rooms and the location advantage."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507051+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Spacious and well-designed apartments with good natural light and ventilation.",
+          "Extensive amenities including a clubhouse, swimming pool, gym, sports courts, library, pet park, and creche.",
+          "Strategic and prime location in Whitefield, with good connectivity to IT hubs, schools, hospitals, and metro.",
+          "Large open spaces and green areas, with 75-80% open space.",
+          "Reputed builder (Assetz Property Group) with a focus on quality and modern architecture."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507063+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Allegations of the property being illegal and potential legal issues (from 2018, possibly referring to earlier phases).",
+          "Reports of serious water scarcity (from 2018, possibly referring to earlier phases).",
+          "Past complaints about poor maintenance, lack of transparency in accounts, and garbage issues (from 2018, possibly referring to earlier phases).",
+          "Concerns about security lapses where guards reportedly allowed entry without proper checks (from 2018, possibly referring to earlier phases).",
+          "High price point mentioned in some discussions.",
+          "Reports of unresponsive CRM and leadership, with one user mentioning \"critically sensitive life threats\" in Marq 2."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507072+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-amenities",
+          "family-friendly",
+          "prime-location",
+          "spacious-apartments",
+          "green-spaces",
+          "good-security"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507081+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "legal-disputes-potential-past",
+          "water-scarcity-reported-past",
+          "maintenance-issues-reported-past",
+          "unresponsive-management-reported",
+          "high-price-point"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:56:13.507088+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Reddit",
+        "url": null,
+        "model": null,
+        "skill_id": "search_reddit",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:40:00.090242+00:00",
+      "version": 1
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1372-1940",
+          "price_range_lakh": "204-320",
+          "price_per_sqft": "14900-16500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.014991+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1372-1940 sq ft — ₹204-320 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 3.2 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2275",
+          "price_range_lakh": "265-287",
+          "price_per_sqft": "11600-12600"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015013+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2275 sq ft — ₹265-287 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 2.9 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 14500
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015026+00:00",
+      "version": 1,
+      "display_template": "₹14,500/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015037+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015051+00:00",
+      "version": 1,
+      "display_template": "Market: Ready To Move",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "immediate"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 90,
+          "period": "since launch (Dec 2021/Jan 2022)"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015057+00:00",
+      "version": 1,
+      "display_template": "90% appreciation since launch (Dec 2021/Jan 2022)",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Sumadhura Folium Phase 2",
+          "Pavani Mirabilia",
+          "Prestige Park Grove",
+          "Brigade Calista",
+          "Godrej Parkshire"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015064+00:00",
+      "version": 1,
+      "display_template": "Similar: Sumadhura Folium Phase 2, Pavani Mirabilia, Prestige Park Grove"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Assetz Marq Phase 3A, a recently completed project, is positioned in the premium segment of Whitefield, reflecting significant appreciation since its launch. Current prices are driven by its ready-to-move status and the established demand in the IT hub."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:18:01.015068+00:00",
+      "version": 1,
+      "display_template": "Assetz Marq Phase 3A, a recently completed project, is positioned in the premium segment of Whitefield, reflecting significant appreciation since its launch. Current prices are driven by its ready-to-move status and the established demand in the IT hub."
     }
-  ]
+  ],
+  "updated_at": "2026-03-13T15:11:56.680798+00:00"
 }

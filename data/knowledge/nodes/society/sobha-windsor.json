@@ -4,185 +4,28 @@
   "name": "Sobha Windsor",
   "facts": [
     {
-      "key": "builder_name",
-      "value": {
-        "type": "Text",
-        "data": "Sobha Ltd."
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Google",
-        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
-        "model": "gemini-2.5-flash",
-        "skill_id": "live_discovery",
-        "triggered_by": "3bhk Kadugodi"
-      },
-      "learned_at": "2026-03-09T20:23:48.188304Z",
-      "version": 1,
-      "display_template": "Built by {value}",
-      "answers_preferences": [
-        "builder"
-      ]
-    },
-    {
-      "key": "configurations",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "2 BHK",
-          "3 BHK",
-          "4 BHK"
-        ]
-      },
-      "confidence": 0.6,
-      "source": {
-        "source_type": "Google",
-        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
-        "model": "gemini-2.5-flash",
-        "skill_id": "live_discovery",
-        "triggered_by": "3bhk Kadugodi"
-      },
-      "learned_at": "2026-03-09T20:23:48.188307Z",
-      "version": 1,
-      "display_template": "Configurations: {value}"
-    },
-    {
-      "key": "price_range",
-      "value": {
-        "type": "Text",
-        "data": "\u20b9215L - \u20b9322L"
-      },
-      "confidence": 0.6,
-      "source": {
-        "source_type": "Google",
-        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
-        "model": "gemini-2.5-flash",
-        "skill_id": "live_discovery",
-        "triggered_by": "3bhk Kadugodi"
-      },
-      "learned_at": "2026-03-09T20:23:48.188311Z",
-      "version": 1,
-      "display_template": "Price: {value}",
-      "answers_preferences": [
-        "value for money",
-        "budget"
-      ]
-    },
-    {
-      "key": "possession_status",
+      "key": "project_status",
       "value": {
         "type": "Text",
         "data": "under_construction"
       },
-      "confidence": 0.7,
+      "confidence": 1.0,
       "source": {
-        "source_type": "Google",
-        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
-        "model": "gemini-2.5-flash",
-        "skill_id": "live_discovery",
-        "triggered_by": "3bhk Kadugodi"
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-09T20:23:48.188314Z",
+      "learned_at": "2026-03-13T04:52:17.557026+00:00",
       "version": 1,
-      "display_template": "Possession: {value}",
+      "display_template": "Under Construction",
       "answers_preferences": [
-        "ready to move",
-        "new construction"
-      ]
-    },
-    {
-      "key": "reddit_thread_count",
-      "value": {
-        "type": "Numeric",
-        "data": 1.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "url": "https://reddit.com/r/bangalore/comments/m482rb/prestige_waterford_vs_sobha_windsor_vs_brigade/",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:32:02.009858Z",
-      "version": 1,
-      "display_template": "{value} Reddit discussions found",
-      "answers_preferences": [
-        "good reviews",
-        "resident feedback",
-        "reddit"
-      ],
-      "scoring_hint": {
-        "direction": "HigherIsBetter",
-        "weight": 1.0,
-        "thresholds": [
-          5.0,
-          2.0
-        ]
-      }
-    },
-    {
-      "key": "reddit_total_score",
-      "value": {
-        "type": "Numeric",
-        "data": 11.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:32:02.009903Z",
-      "version": 1,
-      "display_template": "Reddit community score: {value}"
-    },
-    {
-      "key": "reddit_total_comments",
-      "value": {
-        "type": "Numeric",
-        "data": 19.0
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:32:02.009915Z",
-      "version": 1,
-      "display_template": "{value} comments across Reddit threads"
-    },
-    {
-      "key": "reddit_threads",
-      "value": {
-        "type": "Tags",
-        "data": [
-          "Prestige Waterford vs Sobha Windsor vs Brigade Utopia"
-        ]
-      },
-      "confidence": 0.7,
-      "source": {
-        "source_type": "Reddit",
-        "skill_id": "search_reddit"
-      },
-      "learned_at": "2026-03-10T11:32:02.009934Z",
-      "version": 1,
-      "display_template": "Discussed on Reddit: {value}"
-    },
-    {
-      "key": "rera_registered",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 0.8,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
-      },
-      "learned_at": "2026-03-10T10:32:24.039434Z",
-      "version": 1,
-      "display_template": "RERA Registration: Not Found",
-      "answers_preferences": [
-        "rera verified"
+        "under construction",
+        "ongoing project",
+        "building",
+        "in progress",
+        "pre-launch"
       ],
       "scoring_hint": {
         "direction": "TextMatch",
@@ -190,10 +33,10 @@
       }
     },
     {
-      "key": "rera_registered",
+      "key": "rera_portal_url",
       "value": {
-        "type": "Bool",
-        "data": true
+        "type": "Text",
+        "data": "https://rera.karnataka.gov.in/projectViewDetails"
       },
       "confidence": 1.0,
       "source": {
@@ -203,83 +46,37 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034047+00:00",
+      "learned_at": "2026-03-13T04:51:51.034201+00:00",
       "version": 1,
-      "display_template": "RERA Registered: Yes",
+      "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "rera_builder_states",
+      "value": {
+        "type": "Text",
+        "data": "Haryana, Karnataka, Tamil Nadu"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034198+00:00",
+      "version": 1,
+      "display_template": "Builder active in: {value}",
       "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_number",
-      "value": {
-        "type": "Text",
-        "data": "PRM/KA/RERA/1251/446/PR/210219/003942"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034070+00:00",
-      "version": 1,
-      "display_template": "RERA No: {value}"
-    },
-    {
-      "key": "rera_ack_number",
-      "value": {
-        "type": "Text",
-        "data": "ACK/KA/RERA/1251/446/PR/201201/004405"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034073+00:00",
-      "version": 1,
-      "display_template": "RERA ACK: {value}"
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "APPROVED"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034077+00:00",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
+        "multi-state builder",
+        "national builder"
       ]
     },
     {
-      "key": "rera_promoter_name",
+      "key": "rera_builder_revocations",
       "value": {
-        "type": "Text",
-        "data": "SOBHA LIMITED"
+        "type": "Numeric",
+        "data": 0
       },
       "confidence": 1.0,
       "source": {
@@ -289,116 +86,12 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034080+00:00",
+      "learned_at": "2026-03-13T04:51:51.034194+00:00",
       "version": 1,
-      "display_template": "RERA Promoter: {value}"
-    },
-    {
-      "key": "rera_approved_on",
-      "value": {
-        "type": "Text",
-        "data": "19/02/2021"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034083+00:00",
-      "version": 1,
-      "display_template": "RERA Approved: {value}"
-    },
-    {
-      "key": "rera_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "30/04/2026"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034086+00:00",
-      "version": 1,
-      "display_template": "Expected Completion: {value}",
+      "display_template": "{value} revocations",
       "answers_preferences": [
-        "possession date",
-        "completion",
-        "ready to move",
-        "when ready"
-      ]
-    },
-    {
-      "key": "rera_original_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "30-04-2026"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034088+00:00",
-      "version": 1,
-      "display_template": "Original Completion Date: {value}"
-    },
-    {
-      "key": "rera_project_type",
-      "value": {
-        "type": "Text",
-        "data": "Residential/Group Housing"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034167+00:00",
-      "version": 1,
-      "display_template": "Project Type: {value}",
-      "answers_preferences": [
-        "apartment",
-        "villa",
-        "plotted",
-        "project type"
-      ]
-    },
-    {
-      "key": "rera_land_litigation",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:51.034175+00:00",
-      "version": 1,
-      "display_template": "Land Litigation: No",
-      "answers_preferences": [
-        "legal issues",
-        "litigation",
-        "safe",
-        "clear title"
+        "safe builder",
+        "trusted builder"
       ],
       "scoring_hint": {
         "direction": "LowerIsBetter",
@@ -406,10 +99,10 @@
       }
     },
     {
-      "key": "rera_survey_numbers",
+      "key": "rera_complaints_resolved_pct",
       "value": {
-        "type": "Text",
-        "data": "116/3, 30/6"
+        "type": "Numeric",
+        "data": 100.0
       },
       "confidence": 1.0,
       "source": {
@@ -419,9 +112,12 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034178+00:00",
+      "learned_at": "2026-03-13T04:51:51.034190+00:00",
       "version": 1,
-      "display_template": "Survey Numbers: {value}"
+      "display_template": "{value}% complaints resolved",
+      "answers_preferences": [
+        "complaints resolved"
+      ]
     },
     {
       "key": "rera_complaints_count",
@@ -456,10 +152,10 @@
       }
     },
     {
-      "key": "rera_complaints_resolved_pct",
+      "key": "rera_survey_numbers",
       "value": {
-        "type": "Numeric",
-        "data": 100.0
+        "type": "Text",
+        "data": "116/3, 30/6"
       },
       "confidence": 1.0,
       "source": {
@@ -469,18 +165,15 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034190+00:00",
+      "learned_at": "2026-03-13T04:51:51.034178+00:00",
       "version": 1,
-      "display_template": "{value}% complaints resolved",
-      "answers_preferences": [
-        "complaints resolved"
-      ]
+      "display_template": "Survey Numbers: {value}"
     },
     {
-      "key": "rera_builder_revocations",
+      "key": "rera_land_litigation",
       "value": {
-        "type": "Numeric",
-        "data": 0
+        "type": "Bool",
+        "data": false
       },
       "confidence": 1.0,
       "source": {
@@ -490,12 +183,14 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034194+00:00",
+      "learned_at": "2026-03-13T04:51:51.034175+00:00",
       "version": 1,
-      "display_template": "{value} revocations",
+      "display_template": "Land Litigation: No",
       "answers_preferences": [
-        "safe builder",
-        "trusted builder"
+        "legal issues",
+        "litigation",
+        "safe",
+        "clear title"
       ],
       "scoring_hint": {
         "direction": "LowerIsBetter",
@@ -503,10 +198,10 @@
       }
     },
     {
-      "key": "rera_builder_states",
+      "key": "rera_project_type",
       "value": {
         "type": "Text",
-        "data": "Haryana, Karnataka, Tamil Nadu"
+        "data": "Residential/Group Housing"
       },
       "confidence": 1.0,
       "source": {
@@ -516,19 +211,21 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034198+00:00",
+      "learned_at": "2026-03-13T04:51:51.034167+00:00",
       "version": 1,
-      "display_template": "Builder active in: {value}",
+      "display_template": "Project Type: {value}",
       "answers_preferences": [
-        "multi-state builder",
-        "national builder"
+        "apartment",
+        "villa",
+        "plotted",
+        "project type"
       ]
     },
     {
-      "key": "rera_portal_url",
+      "key": "rera_original_completion_date",
       "value": {
         "type": "Text",
-        "data": "https://rera.karnataka.gov.in/projectViewDetails"
+        "data": "30-04-2026"
       },
       "confidence": 1.0,
       "source": {
@@ -538,41 +235,800 @@
         "skill_id": "fetch_rera",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:51.034201+00:00",
+      "learned_at": "2026-03-13T04:51:51.034088+00:00",
       "version": 1,
-      "display_template": "View on RERA Portal"
+      "display_template": "Original Completion Date: {value}"
     },
     {
-      "key": "project_status",
+      "key": "rera_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "30/04/2026"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034086+00:00",
+      "version": 1,
+      "display_template": "Expected Completion: {value}",
+      "answers_preferences": [
+        "possession date",
+        "completion",
+        "ready to move",
+        "when ready"
+      ]
+    },
+    {
+      "key": "rera_approved_on",
+      "value": {
+        "type": "Text",
+        "data": "19/02/2021"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034083+00:00",
+      "version": 1,
+      "display_template": "RERA Approved: {value}"
+    },
+    {
+      "key": "rera_promoter_name",
+      "value": {
+        "type": "Text",
+        "data": "SOBHA LIMITED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034080+00:00",
+      "version": 1,
+      "display_template": "RERA Promoter: {value}"
+    },
+    {
+      "key": "rera_status",
+      "value": {
+        "type": "Text",
+        "data": "APPROVED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034077+00:00",
+      "version": 1,
+      "display_template": "RERA Status: {value}",
+      "answers_preferences": [
+        "rera verified",
+        "safe investment"
+      ]
+    },
+    {
+      "key": "rera_ack_number",
+      "value": {
+        "type": "Text",
+        "data": "ACK/KA/RERA/1251/446/PR/201201/004405"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034073+00:00",
+      "version": 1,
+      "display_template": "RERA ACK: {value}"
+    },
+    {
+      "key": "rera_number",
+      "value": {
+        "type": "Text",
+        "data": "PRM/KA/RERA/1251/446/PR/210219/003942"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034070+00:00",
+      "version": 1,
+      "display_template": "RERA No: {value}"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:51.034047+00:00",
+      "version": 1,
+      "display_template": "RERA Registered: Yes",
+      "answers_preferences": [
+        "rera verified",
+        "legally verified",
+        "safe investment",
+        "verified project"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "reddit_threads",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Prestige Waterford vs Sobha Windsor vs Brigade Utopia"
+        ]
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009934Z",
+      "version": 1,
+      "display_template": "Discussed on Reddit: {value}"
+    },
+    {
+      "key": "reddit_total_comments",
+      "value": {
+        "type": "Numeric",
+        "data": 19.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009915Z",
+      "version": 1,
+      "display_template": "{value} comments across Reddit threads"
+    },
+    {
+      "key": "reddit_total_score",
+      "value": {
+        "type": "Numeric",
+        "data": 11.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009903Z",
+      "version": 1,
+      "display_template": "Reddit community score: {value}"
+    },
+    {
+      "key": "reddit_thread_count",
+      "value": {
+        "type": "Numeric",
+        "data": 1.0
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Reddit",
+        "url": "https://reddit.com/r/bangalore/comments/m482rb/prestige_waterford_vs_sobha_windsor_vs_brigade/",
+        "skill_id": "search_reddit"
+      },
+      "learned_at": "2026-03-10T11:32:02.009858Z",
+      "version": 1,
+      "display_template": "{value} Reddit discussions found",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback",
+        "reddit"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          5.0,
+          2.0
+        ]
+      }
+    },
+    {
+      "key": "possession_status",
       "value": {
         "type": "Text",
         "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188314Z",
+      "version": 1,
+      "display_template": "Possession: {value}",
+      "answers_preferences": [
+        "ready to move",
+        "new construction"
+      ]
+    },
+    {
+      "key": "builder_name",
+      "value": {
+        "type": "Text",
+        "data": "Sobha Ltd."
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188304Z",
+      "version": 1,
+      "display_template": "Built by {value}",
+      "answers_preferences": [
+        "builder"
+      ]
+    },
+    {
+      "key": "price_range",
+      "value": {
+        "type": "Text",
+        "data": "₹215L - ₹322L"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188311Z",
+      "version": 1,
+      "display_template": "Price: {value}",
+      "answers_preferences": [
+        "value for money",
+        "budget"
+      ]
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "2 BHK",
+          "3 BHK",
+          "4 BHK"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": "https://www.magicbricks.com/3-bhk-flats-for-sale-in-sobha-windsor-whitefield-bangalore-pppfs",
+        "model": "gemini-2.5-flash",
+        "skill_id": "live_discovery",
+        "triggered_by": "3bhk Kadugodi"
+      },
+      "learned_at": "2026-03-09T20:23:48.188307Z",
+      "version": 1,
+      "display_template": "Configurations: {value}"
+    },
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Whitefield"
+      },
+      "confidence": 0.7,
+      "version": 1,
+      "created_at": "2026-03-13T13:14:26.383129+00:00",
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fix_unknown_areas",
+        "collected_at": "2026-03-13T13:14:26.383129+00:00"
+      },
+      "display_template": "Located in {value}",
+      "answers_preferences": [
+        "location",
+        "area"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.0
+      }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
       },
       "confidence": 1.0,
       "source": {
         "source_type": "Computed",
         "url": null,
         "model": null,
-        "skill_id": "classify_project_status",
+        "skill_id": "embed_entity",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:52:17.557026+00:00",
+      "learned_at": "2026-03-13T15:05:01.199602+00:00",
       "version": 1,
-      "display_template": "Under Construction",
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 3.2
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:55:17.853100+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
       "answers_preferences": [
-        "under construction",
-        "ongoing project",
-        "building",
-        "in progress",
-        "pre-launch"
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally express satisfaction with Sobha Windsor's luxurious amenities, quality construction, and well-connected location. However, some drawbacks include external environmental issues like nearby waste, traffic, and the project's premium pricing."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:55:17.853133+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
       ],
       "scoring_hint": {
         "direction": "TextMatch",
-        "weight": 3.0
+        "weight": 1.5
       }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Excellent amenities including a clubhouse, swimming pool, gym, various sports courts, and green spaces.",
+          "Prime location in Whitefield with strong connectivity to IT hubs, schools, hospitals, and upcoming metro.",
+          "High-quality construction and elegant British-inspired architectural design.",
+          "Robust security measures with 24/7 surveillance."
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:55:17.853143+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Issues with nearby external environment, such as garbage dumps and associated smells.",
+          "Traffic congestion and waterlogging on main roads impacting accessibility.",
+          "High premium and affordability concerns for some buyers.",
+          "Occasional problems with food supply and network connectivity."
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:55:17.853149+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Amenities",
+          "Location",
+          "Connectivity",
+          "Construction quality",
+          "Security",
+          "Pricing",
+          "Environmental factors"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:55:20.123891+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "whitefield-location",
+          "prominent-society"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:46.475829+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "east-bangalore-concerns",
+          "potential-traffic-congestion"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:40:46.475870+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Perceived issues with the overall condition and infrastructure of East Bangalore (Whitefield area)"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:52:55.849825+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "1350-1600",
+          "price_range_lakh": "195-210",
+          "price_per_sqft": "14000-15500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878301+00:00",
+      "version": 1,
+      "display_template": "2BHK: 1350-1600 sq ft — ₹195-210 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 2.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1550-1850",
+          "price_range_lakh": "230-310",
+          "price_per_sqft": "14500-17000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878315+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1550-1850 sq ft — ₹230-310 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 3.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2200-2300",
+          "price_range_lakh": "320-385",
+          "price_per_sqft": "14500-17000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878323+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2200-2300 sq ft — ₹320-385 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 3.9 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 15500
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878331+00:00",
+      "version": 1,
+      "display_template": "₹15,500/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "2BHK",
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878338+00:00",
+      "version": 1,
+      "display_template": "Available: 2BHK, 3BHK, 4BHK",
+      "answers_preferences": [
+        "2bhk",
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "resale_market"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878346+00:00",
+      "version": 1,
+      "display_template": "Market: Resale Market",
+      "answers_preferences": [
+        "resale market"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 113,
+          "period": "since 2020 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878351+00:00",
+      "version": 1,
+      "display_template": "113% appreciation since 2020 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Prestige Waterford",
+          "Sobha Neopolis",
+          "Mahindra Blossom",
+          "Prestige Park Grove",
+          "Folium by Sumadhura Phase 3"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878356+00:00",
+      "version": 1,
+      "display_template": "Similar: Prestige Waterford, Sobha Neopolis, Mahindra Blossom"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Sobha Windsor offers premium Victorian-themed luxury apartments in Whitefield, commanding higher prices due to its brand, architecture, and strategic location with excellent connectivity, including the Purple Line Metro. The project has seen significant appreciation since its launch."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T18:12:52.878359+00:00",
+      "version": 1,
+      "display_template": "Sobha Windsor offers premium Victorian-themed luxury apartments in Whitefield, commanding higher prices due to its brand, architecture, and strategic location with excellent connectivity, including the Purple Line Metro. The project has seen significant appreciation since its launch."
     }
   ],
   "created_at": "2026-03-09T20:23:48.188301Z",
-  "updated_at": "2026-03-10T11:32:02.018798Z",
+  "updated_at": "2026-03-13T15:52:55.852808+00:00",
   "root_source": "Rera"
 }

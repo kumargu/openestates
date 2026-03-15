@@ -716,7 +716,7 @@
       },
       "learned_at": "2026-03-10T10:27:45.622209Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -738,7 +738,7 @@
       },
       "learned_at": "2026-03-10T10:27:45.622211Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -757,7 +757,7 @@
       },
       "learned_at": "2026-03-10T10:27:45.622212Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -776,7 +776,7 @@
       },
       "learned_at": "2026-03-10T10:27:45.622216Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -1051,6 +1051,297 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "negative"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:25:13.817941+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents express significant dissatisfaction with the overall urban infrastructure, road quality, and traffic conditions around Sarjapur Road, often questioning if the area can even be considered part of Bangalore due to its poor state."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:25:13.817977+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Does urban infrastructure in areas like Marathahalli, Bellandur, and Sarjapur Road and other surrounding IT hub areas feel like living in tier 3 city? Are these areas even Considered as Bangalore?"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:25:13.817984+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Poor urban infrastructure, feeling like a tier 3 city",
+          "Bad road conditions including dusty roads and poor lane markings",
+          "Severe traffic congestion in the area",
+          "Hosa Road (nearby) is considered one of the worst roads in the city"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:25:13.817995+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "poor-infrastructure",
+          "bad-roads",
+          "traffic-congestion",
+          "dustiness"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:25:13.818002+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "1200-1350",
+          "price_range_lakh": "103-152",
+          "price_per_sqft": "8500-11500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.723993+00:00",
+      "version": 1,
+      "display_template": "2BHK: 1200-1350 sq ft — ₹103-152 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 1.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1400-2000",
+          "price_range_lakh": "130-220",
+          "price_per_sqft": "8500-11500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724016+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1400-2000 sq ft — ₹130-220 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 2.2 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 10800
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724029+00:00",
+      "version": 1,
+      "display_template": "₹10,800/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "2BHK",
+          "3BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724041+00:00",
+      "version": 1,
+      "display_template": "Available: 2BHK, 3BHK",
+      "answers_preferences": [
+        "2bhk",
+        "3bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724055+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Mana The Right Life",
+          "Sapthagiri Nirvana",
+          "Trifecta Vanto",
+          "TG Legacy"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724063+00:00",
+      "version": 1,
+      "display_template": "Similar: Mana The Right Life, Sapthagiri Nirvana, Trifecta Vanto"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Abhee Celestial City is positioned as a premium under-construction project on Sarjapur Road, offering competitive pricing within its segment. The project has shown consistent quarterly price appreciation, indicating strong market confidence and investment potential in the rapidly developing East Bangalore corridor."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:16:10.724068+00:00",
+      "version": 1,
+      "display_template": "Abhee Celestial City is positioned as a premium under-construction project on Sarjapur Road, offering competitive pricing within its segment. The project has shown consistent quarterly price appreciation, indicating strong market confidence and investment potential in the rapidly developing East Bangalore corridor."
     }
   ],
   "summary_embedding": [
@@ -4128,6 +4419,6 @@
     -0.014135571
   ],
   "created_at": "2026-03-09T16:38:45.246602Z",
-  "updated_at": "2026-03-10T11:30:37.340555Z",
+  "updated_at": "2026-03-13T15:25:13.822748+00:00",
   "root_source": "Rera"
 }

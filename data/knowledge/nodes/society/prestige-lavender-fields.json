@@ -510,7 +510,7 @@
       },
       "learned_at": "2026-03-10T10:30:48.650671Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -532,7 +532,7 @@
       },
       "learned_at": "2026-03-10T10:30:48.650672Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -551,7 +551,7 @@
       },
       "learned_at": "2026-03-10T10:30:48.650673Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -570,7 +570,7 @@
       },
       "learned_at": "2026-03-10T10:30:48.650675Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -870,6 +870,629 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 3.2
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423337+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 15
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423365+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "As an under-construction project, the overall sentiment is highly positive, with potential buyers and real estate experts praising its strategic location, comprehensive amenities, and the trusted reputation of the Prestige Group. The primary concern noted in some reviews is the perceived high price of the apartments."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423371+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Strategic location with excellent connectivity to IT hubs, schools, hospitals, and malls",
+          "Luxurious apartments with spacious layouts and modern designs",
+          "Extensive amenities including a clubhouse, swimming pools, gymnasium, landscaped gardens, and sports courts",
+          "Reputable builder (Prestige Group) and strong brand value",
+          "Potential for long-term appreciation and good investment opportunity",
+          "Well-planned layout and green spaces",
+          "High-quality construction and architecture"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423376+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Perceived high price of the apartments"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423381+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Location",
+          "Connectivity",
+          "Amenities",
+          "Builder Reputation",
+          "Price",
+          "Project Status"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:28.423386+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793594+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793632+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Prospective buyers and experts view Prestige Lavender Fields positively due to the developer's reputation, extensive amenities, and strategic location with good connectivity to IT hubs. However, the surrounding Varthur area faces challenges with road conditions, traffic congestion, and waterlogging."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793643+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Homebuyers appreciate the project for its Varthur–Whitefield connectivity, tower height, clean layout, and Prestige brand value. Reviews often mention the spacious floor plans, amenities and the long-term appreciation expected from the location."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793652+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Reputation of Prestige Group as a quality and timely builder.",
+          "Strategic location with good connectivity to IT hubs, schools, hospitals, and shopping malls.",
+          "Extensive modern amenities planned, including a clubhouse, swimming pools, sports courts, gymnasium, children's play area, and party hall.",
+          "Spacious and well-designed 1-4 BHK apartment configurations.",
+          "High potential for investment and strong rental demand due to proximity to IT employment hubs."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793663+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Poor road conditions, including potholes and inadequate lighting, on Varthur Main Road.",
+          "Waterlogging in the Varthur area during short spells of rain.",
+          "Heavy traffic congestion at Varthur Kodi junction during peak hours.",
+          "Past pollution issues affecting Varthur Lake.",
+          "Varthur Main Road is busy due to its proximity to IT spaces."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793674+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "reputable-builder",
+          "good-connectivity",
+          "rich-amenities",
+          "investment-potential",
+          "family-friendly"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793682+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "local-road-conditions",
+          "traffic-congestion",
+          "waterlogging-risk",
+          "lake-pollution"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:33:57.793691+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_1bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "1BHK",
+          "sqft_range": "669-784",
+          "price_range_lakh": "75-95",
+          "price_per_sqft": "9600-14200"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212729+00:00",
+      "version": 1,
+      "display_template": "1BHK: 669-784 sq ft — ₹75-95 Lakh",
+      "answers_preferences": [
+        "1bhk",
+        "1bhk price",
+        "1bhk flat",
+        "under 0.95 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "1018-1151",
+          "price_range_lakh": "110-150",
+          "price_per_sqft": "9600-14700"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212756+00:00",
+      "version": 1,
+      "display_template": "2BHK: 1018-1151 sq ft — ₹110-150 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 1.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1407-1902",
+          "price_range_lakh": "150-235",
+          "price_per_sqft": "7900-16700"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212772+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1407-1902 sq ft — ₹150-235 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 2.4 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2226-2717",
+          "price_range_lakh": "235-350",
+          "price_per_sqft": "8600-15700"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212783+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2226-2717 sq ft — ₹235-350 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 3.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 14900
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212798+00:00",
+      "version": 1,
+      "display_template": "₹14,900/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "1BHK",
+          "2BHK",
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212813+00:00",
+      "version": 1,
+      "display_template": "Available: 1BHK, 2BHK, 3BHK, 4BHK",
+      "answers_preferences": [
+        "1bhk",
+        "2bhk",
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212829+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 36,
+          "period": "since June 2023 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212837+00:00",
+      "version": 1,
+      "display_template": "36% appreciation since June 2023 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Prestige Serenity Shores",
+          "Prestige Raintree Park",
+          "Adarsh Park Heights",
+          "Candeur Novo Gardenia",
+          "Sobha Dream Acres"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212847+00:00",
+      "version": 1,
+      "display_template": "Similar: Prestige Serenity Shores, Prestige Raintree Park, Adarsh Park Heights"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Lavender Fields is positioned in the premium segment of the Varthur-Whitefield market, offering luxury apartments in a fast-developing area with good expected price growth."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:59:50.212852+00:00",
+      "version": 1,
+      "display_template": "Prestige Lavender Fields is positioned in the premium segment of the Varthur-Whitefield market, offering luxury apartments in a fast-developing area with good expected price growth."
     }
   ],
   "summary_embedding": [
@@ -3947,6 +4570,6 @@
     0.005451511
   ],
   "created_at": "2026-03-09T16:43:48.460485Z",
-  "updated_at": "2026-03-10T11:31:32.075181Z",
+  "updated_at": "2026-03-13T15:11:56.805608+00:00",
   "root_source": "Rera"
 }

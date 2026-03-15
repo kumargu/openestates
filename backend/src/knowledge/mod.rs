@@ -8,7 +8,6 @@
 //! - **Edge**: A typed relationship between nodes
 //! - **KnowledgeGraph**: The container with indexes for fast traversal
 
-pub mod bootstrap;
 pub mod edge;
 pub mod embed_client;
 pub mod embeddings;

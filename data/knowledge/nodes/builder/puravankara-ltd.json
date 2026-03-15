@@ -1,0 +1,25 @@
+{
+  "id": "builder:puravankara-ltd",
+  "node_type": "Builder",
+  "name": "Puravankara Ltd",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Puravankara Ltd"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:17:21.316623+00:00",
+      "version": 1
+    }
+  ]
+}

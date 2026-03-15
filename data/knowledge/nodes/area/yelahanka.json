@@ -1,0 +1,42 @@
+{
+  "id": "area:yelahanka",
+  "node_type": "Area",
+  "name": "Yelahanka",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Yelahanka"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:20:55.245813+00:00",
+      "version": 1
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "seed_from_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:20:55.245819+00:00",
+      "version": 1
+    }
+  ]
+}

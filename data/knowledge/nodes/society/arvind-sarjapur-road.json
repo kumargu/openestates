@@ -158,7 +158,7 @@
       "value": {
         "type": "Tags",
         "data": [
-          "Brand new divider on Sarjapur Road\u2026 already ruined by gutka stains in 5-6 days.",
+          "Brand new divider on Sarjapur Road… already ruined by gutka stains in 5-6 days.",
           "Bengaluru biker harasses couple on Sarjapur road, breaks the car glass and creates ruckus. Video",
           "Does urban infrastructure in areas like Marathahalli, Bellandur, and Sarjapur Road and other surrounding IT hub areas feel like living in tier 3 city? Are these areas even Considered as Bangalore?",
           "Alert: My dog ran away from Springfields Society, Sarjapur road; Responds to his name Pax and is wearing a olive green harness",
@@ -196,6 +196,272 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Arvind Sarjapur Road is an upcoming premium residential high-rise apartment project by Arvind SmartSpaces, anticipated to offer modern apartments with world-class amenities and excellent connectivity to major IT hubs and social infrastructure."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:53:49.060832+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815166+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "noise_level",
+      "value": {
+        "type": "Text",
+        "data": "quiet"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815213+00:00",
+      "version": 1,
+      "display_template": "Noise level: {value}",
+      "answers_preferences": [
+        "quiet neighborhood",
+        "quiet",
+        "peaceful",
+        "calm"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815226+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815235+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The \"Arvind Sarjapur Road\" project, often referred to as Arvind Forest Trails, is largely presented with positive expert and promotional reviews highlighting its luxurious, nature-themed living, extensive amenities, and strategic connectivity. However, the broader Sarjapur Road area where it is located faces challenges such as traffic congestion, slower infrastructure development, and occasional utility issues."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815244+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "As per the reviews, the project stands out as the best choice for those seeking a blend of modern living and serene surroundings. It is worth spending the money on the project. Timely project delivery with good quality is again positive feedback for the property. Most reviews are decent and have given 4 out of 5 scores."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815253+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Excellent connectivity to major IT hubs and key areas like Whitefield, Electronic City, and Outer Ring Road.",
+          "Nature-themed design with lush greenery, ample open spaces, and a 1.2 km forest trail.",
+          "Luxurious and extensive amenities including a clubhouse, swimming pool, gymnasium, and various sports courts.",
+          "Spacious and well-designed 5 BHK villas, with mentions of 2, 3, and 4 BHK apartments in other Arvind SmartSpaces projects.",
+          "Developed by Arvind SmartSpaces, a reputable builder known for quality construction and timely delivery."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815264+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Slow infrastructure development and poor road maintenance in the general Sarjapur Road locality.",
+          "Frequent traffic congestion during peak hours on Sarjapur Road.",
+          "Irregular water supply and power cuts reported in some parts of the broader Sarjapur Road area.",
+          "Limited parking for guest cars and irregular garbage collection in some surrounding areas of Sarjapur Road."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815274+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "good-connectivity",
+          "nature-friendly",
+          "luxury-amenities",
+          "spacious-homes",
+          "reputable-builder",
+          "family-friendly"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815282+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "traffic-congestion",
+          "infrastructure-development-pace",
+          "water-issues",
+          "power-cuts"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T13:54:23.815291+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
     }
   ],
   "summary_embedding": [
@@ -3273,6 +3539,6 @@
     -0.0002745188
   ],
   "created_at": "2026-03-09T16:38:45.260218Z",
-  "updated_at": "2026-03-10T11:30:45.216212Z",
+  "updated_at": "2026-03-13T15:11:56.674472+00:00",
   "root_source": "Discovered"
 }

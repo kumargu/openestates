@@ -20,7 +20,7 @@ impl TextSearch {
     /// When `graph` is provided, preference scoring uses the graph's self-describing
     /// `answers_preferences` + `scoring_hint` metadata. Falls back to hardcoded
     /// scoring when the graph doesn't have relevant facts.
-    #[allow(dead_code)]
+    #[allow(dead_code)] // Convenience wrapper used by tests — prod code calls search_with_intent_and_sellers
     pub fn search_with_intent(
         properties: &[Property],
         society_names: &std::collections::HashMap<String, String>,
@@ -451,7 +451,7 @@ fn compute_freshness(node: &Option<&Node>) -> (f64, String) {
         };
 
         // Cap freshness at 0.5 if all facts have the same timestamp (within 1s).
-        // This catches bulk seed data and newly discovered nodes where all facts
+        // This catches bulk-imported and newly discovered nodes where all facts
         // were created in a single batch, vs genuinely enriched nodes where facts
         // were added over time by different skills.
         let capped = if n.facts.len() >= 2 && all_facts_same_timestamp(&n.facts) {
@@ -544,6 +544,11 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
 
 /// Legacy hardcoded preference scoring — used when the graph doesn't have
 /// self-describing scoring_hint metadata for this preference.
+///
+/// TODO(Phase 2): Remove once KG property nodes carry `answers_preferences` and
+/// `scoring_hint` on their facts. Currently KG property nodes have only 7-8 bare
+/// fact keys (area, city, bhk, price, etc.) with no scoring metadata, so this
+/// fallback is actively needed for all preference-based ranking.
 fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
     match preference {
         "metro access" => {

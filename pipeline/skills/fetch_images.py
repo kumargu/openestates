@@ -33,6 +33,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from pipeline.skills.base import BaseSkill, SkillCost, SkillResult
+
 logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -664,6 +666,48 @@ def populate_property_images():
         logger.info("Updated %d properties with hero images", updated)
 
     return updated
+
+
+# ---------------------------------------------------------------------------
+# BaseSkill wrapper for enrichment engine integration
+# ---------------------------------------------------------------------------
+
+class FetchImagesSkill(BaseSkill):
+    skill_id = "fetch_images"
+    description = "Fetch and score images for societies from search engines"
+    version = "1.0"
+    output_keys = ["hero_image", "gallery"]
+
+    def execute(self, input_data: dict) -> SkillResult:
+        entity_id = input_data.get("entity_id", "")
+        entity_type = input_data.get("entity_type", "society")
+        name = input_data.get("name", "")
+        area = input_data.get("area", "")
+
+        if not entity_id or not name:
+            logger.error("fetch_images requires entity_id and name")
+            return SkillResult(confidence=0.0)
+
+        serpapi_key = os.environ.get("SERPAPI_API_KEY") or os.environ.get("SERPAPI_KEY")
+        metadata = fetch_images_for_entity(
+            entity_id=entity_id,
+            entity_type=entity_type,
+            name=name,
+            area=area,
+            serpapi_key=serpapi_key,
+        )
+
+        # No SourcedFacts produced — images are stored on disk
+        # Return a result with confidence based on images found
+        photo_count = len(metadata.get("all_photos", []))
+        confidence = 0.8 if photo_count >= 3 else 0.5 if photo_count >= 1 else 0.0
+        return SkillResult(
+            confidence=confidence,
+            cost=SkillCost(api_calls=1 if serpapi_key else 0),
+        )
+
+    def estimated_cost(self) -> SkillCost:
+        return SkillCost(api_calls=1, estimated_usd=0.0)
 
 
 def main():

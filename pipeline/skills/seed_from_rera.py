@@ -1,15 +1,17 @@
 """
 seed_from_rera — fuzzy-match societies against RERA listing and backfill/seed.
 
-Two modes:
-  --backfill: Enrich existing 32 societies missing RERA date facts
-  --seed:     Create new society nodes from RERA registry
+Three modes:
+  --backfill:           Enrich existing societies missing RERA date facts
+  --seed --area X:      Create new society nodes from RERA for a given area
+  --builder "Name":     Filter RERA listing by promoter name, infer area from address
 
 Imports scraping infra from fetch_rera.py — no duplication.
 
 Usage:
   python3 -m pipeline.skills.seed_from_rera --backfill
   python3 -m pipeline.skills.seed_from_rera --seed --area "Whitefield" --limit 10
+  python3 -m pipeline.skills.seed_from_rera --builder "Puravankara" --limit 5
 """
 
 import argparse
@@ -340,16 +342,33 @@ def run_backfill(dry_run: bool = False):
 # ---------------------------------------------------------------------------
 
 def _infer_area_from_address(address: str) -> Optional[str]:
-    """Try to infer area name from RERA project address."""
-    # Common Bangalore area names to match against
+    """Try to infer area name from RERA project address.
+
+    Checks against a comprehensive list of Bengaluru corridors.
+    Longer names are checked first to avoid partial matches
+    (e.g., "Sarjapur Road" before "Sarjapur").
+    """
+    # Comprehensive Bangalore area names — sorted longest-first for greedy matching
     known_areas = [
-        "Whitefield", "Sarjapur", "Marathahalli", "Bellandur", "HSR Layout",
+        # Multi-word areas (check first to avoid partial matches)
+        "Electronic City", "HSR Layout", "JP Nagar", "KR Puram",
+        "Old Madras Road", "Hosur Road", "Tumkur Road", "Mysore Road",
+        "Sarjapur Road", "Kanakapura Road", "Bannerghatta Road",
+        # Single-word areas
+        "Whitefield", "Sarjapur", "Marathahalli", "Bellandur",
         "Koramangala", "Hebbal", "Thanisandra", "Hoodi", "Panathur",
-        "Varthur", "Haralur", "Electronic City", "Yelahanka", "Devanahalli",
-        "Kanakapura", "Bannerghatta", "JP Nagar", "Jayanagar", "Rajajinagar",
-        "Malleshwaram", "Indiranagar", "Domlur", "Ulsoor", "KR Puram",
+        "Varthur", "Haralur", "Harlur", "Yelahanka", "Devanahalli",
+        "Kanakapura", "Bannerghatta", "Jayanagar", "Rajajinagar",
+        "Malleshwaram", "Indiranagar", "Domlur", "Ulsoor",
         "Mahadevapura", "Kadugodi", "Budigere", "Bagalur", "Hennur",
-        "Brookefield", "Kundalahalli", "Harlur",
+        "Brookefield", "Kundalahalli",
+        # Additional corridors (Day 79 expansion)
+        "Bommanahalli", "Begur", "Jakkur", "Banashankari",
+        "Vijayanagar", "Attibele", "Chandapura",
+        "Anekal", "Jigani", "Dommasandra", "Hoskote",
+        "Chikkajala", "Kogilu", "Kasavanahalli", "Carmelaram",
+        "Somasundarapalya", "Kudlu", "Arekere", "Gottigere",
+        "Hulimavu", "Akshayanagar", "Kanakpura",
     ]
     address_lower = address.lower()
     for area in known_areas:
@@ -475,6 +494,8 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
             area_name = area_filter  # Fall back to user-provided area
 
         # Create society node
+        # Normalize name: RERA data is often ALL-CAPS, convert to title case
+        normalized_name = entry.project_name.title() if entry.project_name.isupper() else entry.project_name
         society_slug = slugify(entry.project_name)
         society_id = f"society:{society_slug}"
 
@@ -488,7 +509,7 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
         base_facts = [
             SourcedFact(
                 key="name",
-                value={"type": "Text", "data": entry.project_name},
+                value={"type": "Text", "data": normalized_name},
                 confidence=1.0,
                 source=base_source,
             ).to_dict(),
@@ -515,13 +536,13 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
         society_node = {
             "id": society_id,
             "node_type": "Society",
-            "name": entry.project_name,
+            "name": normalized_name,
             "root_source": "Rera",
             "facts": base_facts + [f.to_dict() for f in facts],
         }
 
         if dry_run:
-            print(f"  {entry.project_name:<55} {entry.promoter_name:<35} WOULD-CREATE ({len(facts)} RERA facts)")
+            print(f"  {normalized_name:<55} {entry.promoter_name:<35} WOULD-CREATE ({len(facts)} RERA facts)")
             created += 1
             continue
 
@@ -603,6 +624,285 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
 
 
 # ---------------------------------------------------------------------------
+# Builder-based seed mode
+# ---------------------------------------------------------------------------
+
+def _count_societies_by_area() -> Dict[str, int]:
+    """Count existing societies per area for saturation checks."""
+    area_counts: Dict[str, int] = {}
+    for f in SOCIETY_DIR.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            area = None
+            for fact in data.get("facts", []):
+                if fact["key"] == "area":
+                    area = fact.get("value", {}).get("data")
+            if area and area.lower() not in ("unknown", "none", ""):
+                area_lower = area.lower()
+                area_counts[area_lower] = area_counts.get(area_lower, 0) + 1
+        except (json.JSONDecodeError, OSError):
+            pass
+    return area_counts
+
+
+def run_builder_seed(
+    builder_name: str,
+    limit: int = 10,
+    dry_run: bool = False,
+    max_area_societies: int = 8,
+) -> int:
+    """Seed new society nodes by filtering RERA listing by promoter name.
+
+    1. Filters RERA listing by promoter name (substring match, case-insensitive)
+    2. For each matching project, fetches detail page for address
+    3. Uses _infer_area_from_address() to determine area
+    4. Skips projects in areas that already have max_area_societies societies
+    5. Creates society/builder/area nodes with edges
+
+    Returns the number of societies created.
+    """
+    print(f"\n=== Builder Seed: '{builder_name}' (limit={limit}) ===\n")
+
+    builder_lower = builder_name.lower()
+
+    # Load existing data
+    existing_slugs = {f.stem for f in SOCIETY_DIR.glob("*.json")}
+    existing_names_lower = set()
+    for f in SOCIETY_DIR.glob("*.json"):
+        try:
+            data = json.loads(f.read_text())
+            existing_names_lower.add(data.get("name", "").lower())
+        except (json.JSONDecodeError, OSError):
+            pass
+
+    area_counts = _count_societies_by_area()
+
+    # Load RERA listing
+    print("Loading RERA listing...")
+    listing = scrape_rera_listing()
+    print(f"  {len(listing)} RERA projects loaded\n")
+
+    if not listing:
+        print("ERROR: No RERA listing available.", file=sys.stderr)
+        return 0
+
+    # Filter by promoter name (substring match)
+    candidates = []
+    for entry in listing:
+        if builder_lower not in entry.promoter_name.lower():
+            continue
+        slug = slugify(entry.project_name)
+        if slug in existing_slugs:
+            continue
+        if entry.project_name.lower() in existing_names_lower:
+            continue
+        candidates.append(entry)
+
+    print(f"  {len(candidates)} candidates matching promoter '{builder_name}'\n")
+
+    if not candidates:
+        print("  No new candidates found.")
+        return 0
+
+    # Fuzzy dedup against existing societies
+    filtered = []
+    for entry in candidates:
+        entry_tokens = tokenize(entry.project_name)
+        is_dupe = False
+        for f in SOCIETY_DIR.glob("*.json"):
+            try:
+                data = json.loads(f.read_text())
+                existing_tokens = tokenize(data.get("name", ""))
+                if jaccard_similarity(entry_tokens, existing_tokens) > 0.7:
+                    is_dupe = True
+                    break
+            except (json.JSONDecodeError, OSError):
+                pass
+        if not is_dupe:
+            filtered.append(entry)
+
+    print(f"  {len(filtered)} after fuzzy dedup\n")
+
+    session = ReraSession()
+    edges = load_edges()
+    created = 0
+    skipped_saturated = 0
+
+    print(f"  {'RERA Project':<50} {'Area':<20} {'Action'}")
+    print("  " + "-" * 90)
+
+    for entry in filtered:
+        if created >= limit:
+            break
+
+        # Fetch detail page to get address
+        try:
+            search_result = search_rera_project(session, entry.project_name)
+        except Exception as e:
+            print(f"  {entry.project_name:<50} {'?':<20} SEARCH-ERROR: {e}")
+            continue
+
+        if not search_result:
+            print(f"  {entry.project_name:<50} {'?':<20} NOT-FOUND")
+            continue
+
+        try:
+            detail_html = fetch_rera_detail(session, search_result.numeric_id)
+        except Exception as e:
+            print(f"  {entry.project_name:<50} {'?':<20} DETAIL-ERROR: {e}")
+            continue
+
+        detail = parse_rera_detail(detail_html, search_result)
+
+        # Infer area from address
+        area_name = _infer_area_from_address(detail.project_address or "")
+        if not area_name:
+            # Try the project name itself
+            area_name = _infer_area_from_address(entry.project_name)
+        if not area_name:
+            print(f"  {entry.project_name:<50} {'unknown':<20} SKIP-NO-AREA")
+            continue
+
+        # Check area saturation
+        area_key = area_name.lower()
+        current_count = area_counts.get(area_key, 0)
+        if current_count >= max_area_societies:
+            print(f"  {entry.project_name:<50} {area_name:<20} SKIP-SATURATED ({current_count}/{max_area_societies})")
+            skipped_saturated += 1
+            continue
+
+        facts = rera_detail_to_facts(detail)
+        if not facts:
+            print(f"  {entry.project_name:<50} {area_name:<20} NO-FACTS")
+            continue
+
+        # Normalize name: RERA data is often ALL-CAPS, convert to title case
+        normalized_name = entry.project_name.title() if entry.project_name.isupper() else entry.project_name
+        society_slug = slugify(entry.project_name)
+        society_id = f"society:{society_slug}"
+
+        base_source = FactSource(
+            source_type="Rera",
+            url="https://rera.karnataka.gov.in/projectViewDetails",
+            skill_id="seed_from_rera",
+        )
+
+        base_facts = [
+            SourcedFact(
+                key="name",
+                value={"type": "Text", "data": normalized_name},
+                confidence=1.0,
+                source=base_source,
+            ).to_dict(),
+            SourcedFact(
+                key="area",
+                value={"type": "Text", "data": area_name},
+                confidence=0.8,
+                source=base_source,
+            ).to_dict(),
+            SourcedFact(
+                key="city",
+                value={"type": "Text", "data": "Bengaluru"},
+                confidence=1.0,
+                source=base_source,
+            ).to_dict(),
+            SourcedFact(
+                key="builder_name",
+                value={"type": "Text", "data": entry.promoter_name},
+                confidence=1.0,
+                source=base_source,
+            ).to_dict(),
+        ]
+
+        society_node = {
+            "id": society_id,
+            "node_type": "Society",
+            "name": normalized_name,
+            "root_source": "Rera",
+            "facts": base_facts + [f.to_dict() for f in facts],
+        }
+
+        if dry_run:
+            print(f"  {normalized_name:<50} {area_name:<20} WOULD-CREATE ({len(facts)} facts)")
+            created += 1
+            area_counts[area_key] = current_count + 1
+            continue
+
+        society_path = SOCIETY_DIR / f"{society_slug}.json"
+        if society_path.exists():
+            print(f"  {entry.project_name:<50} {area_name:<20} ALREADY-EXISTS")
+            continue
+
+        atomic_write_json(society_path, society_node)
+
+        # Create/check builder node
+        builder_slug = slugify(entry.promoter_name)
+        builder_id = f"builder:{builder_slug}"
+        builder_path = BUILDER_DIR / f"{builder_slug}.json"
+
+        if not builder_path.exists():
+            builder_node = {
+                "id": builder_id,
+                "node_type": "Builder",
+                "name": entry.promoter_name,
+                "root_source": "Rera",
+                "facts": [
+                    SourcedFact(
+                        key="name",
+                        value={"type": "Text", "data": entry.promoter_name},
+                        confidence=1.0,
+                        source=base_source,
+                    ).to_dict(),
+                ],
+            }
+            BUILDER_DIR.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(builder_path, builder_node)
+
+        # Create area node if missing
+        area_slug = slugify(area_name)
+        area_id = f"area:{area_slug}"
+        area_path = AREA_DIR / f"{area_slug}.json"
+
+        if not area_path.exists():
+            area_node = {
+                "id": area_id,
+                "node_type": "Area",
+                "name": area_name,
+                "root_source": "Rera",
+                "facts": [
+                    SourcedFact(
+                        key="name",
+                        value={"type": "Text", "data": area_name},
+                        confidence=1.0,
+                        source=base_source,
+                    ).to_dict(),
+                    SourcedFact(
+                        key="city",
+                        value={"type": "Text", "data": "Bengaluru"},
+                        confidence=1.0,
+                        source=base_source,
+                    ).to_dict(),
+                ],
+            }
+            AREA_DIR.mkdir(parents=True, exist_ok=True)
+            atomic_write_json(area_path, area_node)
+
+        edges = add_edge(edges, society_id, area_id, "SocietyInArea")
+        edges = add_edge(edges, society_id, builder_id, "BuiltBy")
+
+        created += 1
+        area_counts[area_key] = current_count + 1
+        print(f"  {entry.project_name:<50} {area_name:<20} CREATED ({len(facts)} facts)")
+
+    if not dry_run and created > 0:
+        save_edges(edges)
+        print(f"\n  Edges saved ({len(edges)} total)")
+
+    print(f"\n  Builder seed complete: {created} created, {skipped_saturated} skipped (saturated)")
+    return created
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -614,15 +914,17 @@ def main():
 
     parser = argparse.ArgumentParser(description="RERA-based society seeding and backfill")
     parser.add_argument("--backfill", action="store_true", help="Backfill RERA facts for existing societies")
-    parser.add_argument("--seed", action="store_true", help="Seed new society nodes from RERA")
+    parser.add_argument("--seed", action="store_true", help="Seed new society nodes from RERA (area-based)")
+    parser.add_argument("--builder", type=str, default="", help="Seed by builder/promoter name (substring match)")
     parser.add_argument("--area", type=str, default="", help="Area filter for seed mode")
-    parser.add_argument("--limit", type=int, default=10, help="Max new societies to create in seed mode")
+    parser.add_argument("--limit", type=int, default=10, help="Max new societies to create")
+    parser.add_argument("--max-area", type=int, default=8, help="Max societies per area (builder mode)")
     parser.add_argument("--dry-run", action="store_true", help="Log actions without writing files")
 
     args = parser.parse_args()
 
-    if not args.backfill and not args.seed:
-        parser.error("Must specify --backfill or --seed")
+    if not args.backfill and not args.seed and not args.builder:
+        parser.error("Must specify --backfill, --seed, or --builder")
 
     if args.backfill:
         run_backfill(dry_run=args.dry_run)
@@ -631,6 +933,14 @@ def main():
         if not args.area:
             parser.error("--seed requires --area")
         run_seed(area_filter=args.area, limit=args.limit, dry_run=args.dry_run)
+
+    if args.builder:
+        run_builder_seed(
+            builder_name=args.builder,
+            limit=args.limit,
+            dry_run=args.dry_run,
+            max_area_societies=args.max_area,
+        )
 
 
 if __name__ == "__main__":

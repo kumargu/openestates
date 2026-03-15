@@ -1,6 +1,6 @@
 //! Scoring module: computes themes, tradeoffs, and market activity for properties.
 //! KG-facts-first: checks knowledge graph for pre-scored facts before falling back
-//! to seed data thresholds.
+//! to Property struct field thresholds.
 
 mod themes;
 mod transparency;

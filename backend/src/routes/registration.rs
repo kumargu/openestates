@@ -1125,16 +1125,131 @@ pub async fn publish_registration(
     all_sellers.push(seller.clone());
     atomic_write_json(&sellers_path, &all_sellers).await?;
 
-    // 2. Append property to data/seed/properties.json
-    let properties_path = state.project_root.join("data").join("seed").join("properties.json");
-    let mut all_properties: Vec<Property> = if properties_path.exists() {
-        let content = tokio::fs::read_to_string(&properties_path).await.unwrap_or_else(|_| "[]".to_string());
-        serde_json::from_str(&content).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    all_properties.push(property.clone());
-    atomic_write_json(&properties_path, &all_properties).await?;
+    // 2. Create KG property node and persist to data/knowledge/nodes/property/
+    {
+        use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
+        use crate::knowledge::node::{Node, NodeType, RootSource};
+        use crate::knowledge::store as kg_store;
+        use chrono::Utc;
+
+        let prop_node_id = format!("property:{}", property.id);
+        let mut prop_node = Node::new(&prop_node_id, NodeType::Property, &property.title);
+        prop_node.root_source = Some(RootSource::Seller);
+
+        let source = FactSource {
+            source_type: SourceType::Manual,
+            url: None,
+            model: None,
+            skill_id: Some("seller_registration".to_string()),
+            triggered_by: Some(format!("seller:{}", seller_id)),
+        };
+
+        let mut facts = vec![
+            SourcedFact {
+                key: "area".to_string(),
+                value: FactValue::Text(property.area.clone()),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+            SourcedFact {
+                key: "city".to_string(),
+                value: FactValue::Text(property.city.clone()),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+            SourcedFact {
+                key: "bhk".to_string(),
+                value: FactValue::Numeric(property.bhk as f64),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+            SourcedFact {
+                key: "price".to_string(),
+                value: FactValue::Numeric(property.price as f64),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+            SourcedFact {
+                key: "builder_name".to_string(),
+                value: FactValue::Text(property.builder_name.clone()),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+            SourcedFact {
+                key: "title".to_string(),
+                value: FactValue::Text(property.title.clone()),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            },
+        ];
+        if property.carpet_area_sqft > 0 {
+            facts.push(SourcedFact {
+                key: "carpet_area_sqft".to_string(),
+                value: FactValue::Numeric(property.carpet_area_sqft as f64),
+                confidence: 0.9,
+                source: source.clone(),
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            });
+        }
+        if !property.seller_id.as_ref().map_or(true, |s| s.is_empty()) {
+            facts.push(SourcedFact {
+                key: "seller_id".to_string(),
+                value: FactValue::Text(property.seller_id.clone().unwrap_or_default()),
+                confidence: 1.0,
+                source,
+                learned_at: Utc::now(),
+                version: 1,
+                display_template: None,
+                answers_preferences: Vec::new(),
+                scoring_hint: None,
+            });
+        }
+        prop_node.add_facts(facts);
+
+        // Save to disk
+        let kg_dir = kg_store::knowledge_dir(&state.project_root);
+        if let Err(e) = kg_store::save_node(&kg_dir, &prop_node) {
+            eprintln!("WARN: Failed to persist KG property node: {}", e);
+        }
+
+        // Add to in-memory KG
+        let mut graph = state.knowledge.write().await;
+        graph.add_node(prop_node);
+    }
 
     // --- Insert into in-memory state ---
     {

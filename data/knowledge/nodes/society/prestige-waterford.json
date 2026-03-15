@@ -734,6 +734,336 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "999-1128",
+          "price_range_lakh": "180-270",
+          "price_per_sqft": "16000-27000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393001+00:00",
+      "version": 1,
+      "display_template": "2BHK: 999-1128 sq ft — ₹180-270 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 2.7 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1775-2060",
+          "price_range_lakh": "315-430",
+          "price_per_sqft": "15000-24000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393029+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1775-2060 sq ft — ₹315-430 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 4.3 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2525-2555",
+          "price_range_lakh": "420-510",
+          "price_per_sqft": "16000-20000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393040+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2525-2555 sq ft — ₹420-510 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 5.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 19000
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393053+00:00",
+      "version": 1,
+      "display_template": "₹19,000/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "2BHK",
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393070+00:00",
+      "version": 1,
+      "display_template": "Available: 2BHK, 3BHK, 4BHK",
+      "answers_preferences": [
+        "2bhk",
+        "3bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393084+00:00",
+      "version": 1,
+      "display_template": "Market: Ready To Move",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "immediate"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 130,
+          "period": "since 2020 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393092+00:00",
+      "version": 1,
+      "display_template": "130% appreciation since 2020 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Brigade Cosmopolis, Whitefield",
+          "Vaswani Exquisite, Hoodi",
+          "Prestige Glenbrook, Whitefield",
+          "Prestige Somerville, Varthur Road – Whitefield",
+          "Prestige Lakeside Habitat, Varthur–Sarjapur Road"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393100+00:00",
+      "version": 1,
+      "display_template": "Similar: Brigade Cosmopolis, Whitefield, Vaswani Exquisite, Hoodi, Prestige Glenbrook, Whitefield"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Waterford is a luxury, ready-to-move project in a prime Whitefield location. The market is primarily driven by resale, with significant price appreciation since its 2020 launch due to high demand in the area."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:27:49.393105+00:00",
+      "version": 1,
+      "display_template": "Prestige Waterford is a luxury, ready-to-move project in a prime Whitefield location. The market is primarily driven by resale, with significant price appreciation since its 2020 launch due to high demand in the area."
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "neutral"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:50:02.663197+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The available information is limited to a news article title discussing metro connectivity to the area, offering no direct resident sentiment or specific details about the society's internal aspects."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:50:02.663239+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "metro accessibility"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:50:02.663255+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "metro-access"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:50:02.663266+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
     }
   ],
   "summary_embedding": [
@@ -3811,6 +4141,6 @@
     -0.006288086
   ],
   "created_at": "2026-03-09T16:38:04.939635Z",
-  "updated_at": "2026-03-10T11:31:42.787440Z",
+  "updated_at": "2026-03-13T15:50:02.666330+00:00",
   "root_source": "Rera"
 }

@@ -1,0 +1,38 @@
+{
+  "id": "area:dommasandra",
+  "node_type": "Area",
+  "name": "Dommasandra",
+  "root_source": "Rera",
+  "facts": [
+    {
+      "key": "name",
+      "value": {
+        "type": "Text",
+        "data": "Dommasandra"
+      },
+      "confidence": 1.0,
+      "version": 1,
+      "created_at": "2026-03-13T13:14:40.856018+00:00",
+      "source": {
+        "source_type": "Rera",
+        "skill_id": "fix_unknown_areas",
+        "collected_at": "2026-03-13T13:14:40.856018+00:00"
+      }
+    },
+    {
+      "key": "city",
+      "value": {
+        "type": "Text",
+        "data": "Bengaluru"
+      },
+      "confidence": 1.0,
+      "version": 1,
+      "created_at": "2026-03-13T13:14:40.856018+00:00",
+      "source": {
+        "source_type": "Rera",
+        "skill_id": "fix_unknown_areas",
+        "collected_at": "2026-03-13T13:14:40.856018+00:00"
+      }
+    }
+  ]
+}

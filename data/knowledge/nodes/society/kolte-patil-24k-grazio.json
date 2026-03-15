@@ -4,6 +4,400 @@
   "name": "Kolte Patil 24K Grazio",
   "facts": [
     {
+      "key": "project_status",
+      "value": {
+        "type": "Text",
+        "data": "ready_to_move"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "classify_project_status",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:52:17.531814+00:00",
+      "version": 1,
+      "display_template": "Ready to Move — delivered 28/05/2023",
+      "answers_preferences": [
+        "ready to move",
+        "ready possession",
+        "completed project",
+        "move in now",
+        "immediate possession",
+        "ready flat",
+        "delivered",
+        "completed"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_portal_url",
+      "value": {
+        "type": "Text",
+        "data": "https://rera.karnataka.gov.in/projectViewDetails"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.010009+00:00",
+      "version": 1,
+      "display_template": "View on RERA Portal"
+    },
+    {
+      "key": "rera_builder_states",
+      "value": {
+        "type": "Text",
+        "data": "Maharashtra"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.010004+00:00",
+      "version": 1,
+      "display_template": "Builder active in: {value}",
+      "answers_preferences": [
+        "multi-state builder",
+        "national builder"
+      ]
+    },
+    {
+      "key": "rera_builder_revocations",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.010000+00:00",
+      "version": 1,
+      "display_template": "{value} revocations",
+      "answers_preferences": [
+        "safe builder",
+        "trusted builder"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_complaints_count",
+      "value": {
+        "type": "Numeric",
+        "data": 0
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009995+00:00",
+      "version": 1,
+      "display_template": "{value} complaints filed",
+      "answers_preferences": [
+        "complaints",
+        "legal issues",
+        "problems",
+        "safe"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          0.0,
+          3.0
+        ]
+      }
+    },
+    {
+      "key": "rera_land_litigation",
+      "value": {
+        "type": "Bool",
+        "data": false
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009990+00:00",
+      "version": 1,
+      "display_template": "Land Litigation: No",
+      "answers_preferences": [
+        "legal issues",
+        "litigation",
+        "safe",
+        "clear title"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "rera_project_type",
+      "value": {
+        "type": "Text",
+        "data": "Residential/Group Housing"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009981+00:00",
+      "version": 1,
+      "display_template": "Project Type: {value}",
+      "answers_preferences": [
+        "apartment",
+        "villa",
+        "plotted",
+        "project type"
+      ]
+    },
+    {
+      "key": "rera_delay_months",
+      "value": {
+        "type": "Numeric",
+        "data": 8
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009974+00:00",
+      "version": 1,
+      "display_template": "Project delayed by {value} months",
+      "answers_preferences": [
+        "delayed",
+        "on time",
+        "possession delay",
+        "risk"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 2.5,
+        "thresholds": [
+          0.0,
+          12.0
+        ]
+      }
+    },
+    {
+      "key": "rera_original_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "31-08-2022"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009856+00:00",
+      "version": 1,
+      "display_template": "Original Completion Date: {value}"
+    },
+    {
+      "key": "rera_completion_date",
+      "value": {
+        "type": "Text",
+        "data": "28/05/2023"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009852+00:00",
+      "version": 1,
+      "display_template": "Expected Completion: {value}",
+      "answers_preferences": [
+        "possession date",
+        "completion",
+        "ready to move",
+        "when ready"
+      ]
+    },
+    {
+      "key": "rera_approved_on",
+      "value": {
+        "type": "Text",
+        "data": "14/10/2017"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009846+00:00",
+      "version": 1,
+      "display_template": "RERA Approved: {value}"
+    },
+    {
+      "key": "rera_promoter_name",
+      "value": {
+        "type": "Text",
+        "data": "ANKIT ENTERPRISES"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009842+00:00",
+      "version": 1,
+      "display_template": "RERA Promoter: {value}"
+    },
+    {
+      "key": "rera_status",
+      "value": {
+        "type": "Text",
+        "data": "APPROVED"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009838+00:00",
+      "version": 1,
+      "display_template": "RERA Status: {value}",
+      "answers_preferences": [
+        "rera verified",
+        "safe investment"
+      ]
+    },
+    {
+      "key": "rera_ack_number",
+      "value": {
+        "type": "Text",
+        "data": "PR/KN/170731/000876"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009832+00:00",
+      "version": 1,
+      "display_template": "RERA ACK: {value}"
+    },
+    {
+      "key": "rera_number",
+      "value": {
+        "type": "Text",
+        "data": "PRM/KA/RERA/1251/310/PR/171014/000876"
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009817+00:00",
+      "version": 1,
+      "display_template": "RERA No: {value}"
+    },
+    {
+      "key": "rera_registered",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "model": null,
+        "skill_id": "fetch_rera",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T04:51:02.009700+00:00",
+      "version": 1,
+      "display_template": "RERA Registered: Yes",
+      "answers_preferences": [
+        "rera verified",
+        "legally verified",
+        "safe investment",
+        "verified project"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 3.0
+      }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "skill_id": "embed_entity",
+        "triggered_by": "batch_enrich"
+      },
+      "learned_at": "2026-03-09T17:28:29.850838Z",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
       "key": "name",
       "value": {
         "type": "Text",
@@ -67,7 +461,7 @@
       "key": "summary",
       "value": {
         "type": "Text",
-        "data": "Offers 3 and 4 BHK apartments. Starting from \u20b998 Lac.. Configurations: 3 BHK, 4 BHK"
+        "data": "Offers 3 and 4 BHK apartments. Starting from ₹98 Lac.. Configurations: 3 BHK, 4 BHK"
       },
       "confidence": 0.6,
       "source": {
@@ -77,22 +471,6 @@
       },
       "learned_at": "2026-03-09T16:44:40.807674Z",
       "version": 1
-    },
-    {
-      "key": "embedding_computed",
-      "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Computed",
-        "skill_id": "embed_entity",
-        "triggered_by": "batch_enrich"
-      },
-      "learned_at": "2026-03-09T17:28:29.850838Z",
-      "version": 1,
-      "display_template": "Embedding computed (3072 dims)"
     },
     {
       "key": "reddit_thread_count",
@@ -109,405 +487,474 @@
       "version": 1
     },
     {
-      "key": "rera_registered",
+      "key": "google_sentiment",
       "value": {
-        "type": "Bool",
-        "data": false
+        "type": "Text",
+        "data": "Residents generally express high satisfaction with Kolte Patil 24K Grazio, praising its prime location in Koramangala, luxurious and spacious apartments, and the extensive range of modern amenities and robust security features."
       },
       "confidence": 0.8,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "skill_id": "fetch_rera"
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
       },
-      "learned_at": "2026-03-10T10:29:22.982467Z",
+      "learned_at": "2026-03-13T14:21:58.979475+00:00",
       "version": 1,
-      "display_template": "RERA Registration: Not Found",
+      "display_template": "Google Reviews: {value}",
       "answers_preferences": [
-        "rera verified"
+        "good reviews",
+        "resident feedback"
       ],
       "scoring_hint": {
         "direction": "TextMatch",
-        "weight": 3.0
+        "weight": 1.5
       }
     },
     {
-      "key": "rera_registered",
+      "key": "google_top_positives",
       "value": {
-        "type": "Bool",
-        "data": true
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009700+00:00",
-      "version": 1,
-      "display_template": "RERA Registered: Yes",
-      "answers_preferences": [
-        "rera verified",
-        "legally verified",
-        "safe investment",
-        "verified project"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_number",
-      "value": {
-        "type": "Text",
-        "data": "PRM/KA/RERA/1251/310/PR/171014/000876"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009817+00:00",
-      "version": 1,
-      "display_template": "RERA No: {value}"
-    },
-    {
-      "key": "rera_ack_number",
-      "value": {
-        "type": "Text",
-        "data": "PR/KN/170731/000876"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009832+00:00",
-      "version": 1,
-      "display_template": "RERA ACK: {value}"
-    },
-    {
-      "key": "rera_status",
-      "value": {
-        "type": "Text",
-        "data": "APPROVED"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009838+00:00",
-      "version": 1,
-      "display_template": "RERA Status: {value}",
-      "answers_preferences": [
-        "rera verified",
-        "safe investment"
-      ]
-    },
-    {
-      "key": "rera_promoter_name",
-      "value": {
-        "type": "Text",
-        "data": "ANKIT ENTERPRISES"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009842+00:00",
-      "version": 1,
-      "display_template": "RERA Promoter: {value}"
-    },
-    {
-      "key": "rera_approved_on",
-      "value": {
-        "type": "Text",
-        "data": "14/10/2017"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009846+00:00",
-      "version": 1,
-      "display_template": "RERA Approved: {value}"
-    },
-    {
-      "key": "rera_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "28/05/2023"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009852+00:00",
-      "version": 1,
-      "display_template": "Expected Completion: {value}",
-      "answers_preferences": [
-        "possession date",
-        "completion",
-        "ready to move",
-        "when ready"
-      ]
-    },
-    {
-      "key": "rera_original_completion_date",
-      "value": {
-        "type": "Text",
-        "data": "31-08-2022"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009856+00:00",
-      "version": 1,
-      "display_template": "Original Completion Date: {value}"
-    },
-    {
-      "key": "rera_delay_months",
-      "value": {
-        "type": "Numeric",
-        "data": 8
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009974+00:00",
-      "version": 1,
-      "display_template": "Project delayed by {value} months",
-      "answers_preferences": [
-        "delayed",
-        "on time",
-        "possession delay",
-        "risk"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 2.5,
-        "thresholds": [
-          0.0,
-          12.0
+        "type": "Tags",
+        "data": [
+          "prime location and connectivity",
+          "luxurious living and design",
+          "comprehensive amenities",
+          "24/7 security"
         ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:21:58.979506+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "location",
+          "amenities",
+          "luxury",
+          "design",
+          "security",
+          "connectivity"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:21:59.397519+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134020+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
       }
     },
     {
-      "key": "rera_project_type",
+      "key": "security_quality",
       "value": {
         "type": "Text",
-        "data": "Residential/Group Housing"
+        "data": "good"
       },
-      "confidence": 1.0,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:02.009981+00:00",
+      "learned_at": "2026-03-13T14:22:26.134051+00:00",
       "version": 1,
-      "display_template": "Project Type: {value}",
+      "display_template": "Security: {value}",
       "answers_preferences": [
-        "apartment",
-        "villa",
-        "plotted",
-        "project type"
-      ]
-    },
-    {
-      "key": "rera_land_litigation",
-      "value": {
-        "type": "Bool",
-        "data": false
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009990+00:00",
-      "version": 1,
-      "display_template": "Land Litigation: No",
-      "answers_preferences": [
-        "legal issues",
-        "litigation",
         "safe",
-        "clear title"
+        "safety",
+        "secure",
+        "gated community"
       ],
       "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
+        "direction": "TextMatch",
+        "weight": 2.0
       }
     },
     {
-      "key": "rera_complaints_count",
-      "value": {
-        "type": "Numeric",
-        "data": 0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.009995+00:00",
-      "version": 1,
-      "display_template": "{value} complaints filed",
-      "answers_preferences": [
-        "complaints",
-        "legal issues",
-        "problems",
-        "safe"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 2.0,
-        "thresholds": [
-          0.0,
-          3.0
-        ]
-      }
-    },
-    {
-      "key": "rera_builder_revocations",
-      "value": {
-        "type": "Numeric",
-        "data": 0
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.010000+00:00",
-      "version": 1,
-      "display_template": "{value} revocations",
-      "answers_preferences": [
-        "safe builder",
-        "trusted builder"
-      ],
-      "scoring_hint": {
-        "direction": "LowerIsBetter",
-        "weight": 3.0
-      }
-    },
-    {
-      "key": "rera_builder_states",
+      "key": "resident_sentiment",
       "value": {
         "type": "Text",
-        "data": "Maharashtra"
+        "data": "positive"
       },
-      "confidence": 1.0,
+      "confidence": 0.5,
       "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:51:02.010004+00:00",
+      "learned_at": "2026-03-13T14:22:26.134056+00:00",
       "version": 1,
-      "display_template": "Builder active in: {value}",
+      "display_template": "Resident sentiment: {value}",
       "answers_preferences": [
-        "multi-state builder",
-        "national builder"
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally express a positive sentiment, highlighting the luxurious and spacious apartments, excellent location with good connectivity, and a wide range of amenities. The project is often described as an elite and desirable place to live."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134061+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Good Construction with amazing planning. Here you feel peace of life after work. It has planned with lots of amenities."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134065+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Luxury living and spacious apartments.",
+          "Excellent connectivity and prime location in Koramangala.",
+          "Wide range of amenities including a clubhouse, gymnasium, swimming pool, and children's play area.",
+          "Developed by Kolte Patil Developers, a reputable and trusted builder.",
+          "Ready-to-move-in status."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134074+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "luxury-living",
+          "prime-location",
+          "good-amenities",
+          "reputable-builder",
+          "ready-to-move",
+          "family-friendly",
+          "good-security"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134080+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "unconfirmed-query-about-project-status"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:22:26.134084+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1900-2900",
+          "price_range_lakh": "428-654",
+          "price_per_sqft": "22550"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819882+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1900-2900 sq ft — ₹428-654 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 6.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2400-3050",
+          "price_range_lakh": "541-688",
+          "price_per_sqft": "22550"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819903+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2400-3050 sq ft — ₹541-688 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 6.9 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 22550
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819918+00:00",
+      "version": 1,
+      "display_template": "₹22,550/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819931+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK, 4BHK",
+      "answers_preferences": [
+        "3bhk",
+        "4bhk"
       ]
     },
     {
-      "key": "rera_portal_url",
-      "value": {
-        "type": "Text",
-        "data": "https://rera.karnataka.gov.in/projectViewDetails"
-      },
-      "confidence": 1.0,
-      "source": {
-        "source_type": "Rera",
-        "url": "https://rera.karnataka.gov.in/projectViewDetails",
-        "model": null,
-        "skill_id": "fetch_rera",
-        "triggered_by": null
-      },
-      "learned_at": "2026-03-13T04:51:02.010009+00:00",
-      "version": 1,
-      "display_template": "View on RERA Portal"
-    },
-    {
-      "key": "project_status",
+      "key": "market_status",
       "value": {
         "type": "Text",
         "data": "ready_to_move"
       },
-      "confidence": 1.0,
+      "confidence": 0.7,
       "source": {
-        "source_type": "Computed",
+        "source_type": "Google",
         "url": null,
-        "model": null,
-        "skill_id": "classify_project_status",
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
         "triggered_by": null
       },
-      "learned_at": "2026-03-13T04:52:17.531814+00:00",
+      "learned_at": "2026-03-13T17:54:14.819946+00:00",
       "version": 1,
-      "display_template": "Ready to Move — delivered 28/05/2023",
+      "display_template": "Market: Ready To Move",
       "answers_preferences": [
         "ready to move",
         "ready possession",
-        "completed project",
-        "move in now",
-        "immediate possession",
-        "ready flat",
-        "delivered",
-        "completed"
-      ],
-      "scoring_hint": {
-        "direction": "TextMatch",
-        "weight": 3.0
-      }
+        "immediate"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 89,
+          "period": "since Nov 2017 launch to Q4 2025"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819954+00:00",
+      "version": 1,
+      "display_template": "89% appreciation since Nov 2017 launch to Q4 2025",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Prestige Pine Wood",
+          "Sobha Sterling Infinia",
+          "K Raheja Vivarea"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819962+00:00",
+      "version": 1,
+      "display_template": "Similar: Prestige Pine Wood, Sobha Sterling Infinia, K Raheja Vivarea"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Kolte Patil 24K Grazio is a premium ready-to-move project in Koramangala, commanding high market prices due to its upscale location and luxury offerings, reflected in a significant price appreciation since its launch."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:54:14.819967+00:00",
+      "version": 1,
+      "display_template": "Kolte Patil 24K Grazio is a premium ready-to-move project in Koramangala, commanding high market prices due to its upscale location and luxury offerings, reflected in a significant price appreciation since its launch."
     }
   ],
   "summary_embedding": [
@@ -3585,6 +4032,6 @@
     -0.0032451889
   ],
   "created_at": "2026-03-09T16:44:40.807674Z",
-  "updated_at": "2026-03-10T11:31:14.461715Z",
+  "updated_at": "2026-03-13T15:11:56.759088+00:00",
   "root_source": "Rera"
 }

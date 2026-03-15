@@ -1,9 +1,9 @@
 //! Ingestion — converts discovered properties into the system's data structures.
 //!
 //! Discovered properties become:
-//! 1. Property structs (same shape as seed data) added to in-memory list
-//! 2. Knowledge graph nodes with source_type: Google, confidence: 0.6
-//! 3. Persisted to data/seed/properties.json for restart survival
+//! 1. Property structs added to in-memory list
+//! 2. Knowledge graph property + society nodes with source_type: Google, confidence: 0.6
+//! 3. Persisted to data/knowledge/nodes/property/ for restart survival
 
 use chrono::Utc;
 
@@ -153,10 +153,111 @@ pub fn ingest_discoveries(
                 seller_id: None,
             };
 
+            // --- Create KG property node ---
+            let prop_source = FactSource {
+                source_type: SourceType::Google,
+                url: disc.source_url.clone(),
+                model: Some("gemini-2.5-flash".to_string()),
+                skill_id: Some("live_discovery".to_string()),
+                triggered_by: Some(triggered_by.to_string()),
+            };
+            let prop_node_id = format!("property:{}", prop_id);
+            if graph.get_node(&prop_node_id).is_none() {
+                let mut prop_node = Node::new(
+                    prop_node_id,
+                    NodeType::Property,
+                    &prop.title,
+                );
+                prop_node.root_source = Some(crate::knowledge::node::RootSource::Discovered);
+                let mut prop_facts = vec![
+                    SourcedFact {
+                        key: "area".to_string(),
+                        value: FactValue::Text(area.clone()),
+                        confidence: 0.8,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                    SourcedFact {
+                        key: "city".to_string(),
+                        value: FactValue::Text("Bengaluru".to_string()),
+                        confidence: 0.8,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                    SourcedFact {
+                        key: "bhk".to_string(),
+                        value: FactValue::Numeric(bhk as f64),
+                        confidence: 0.8,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                    SourcedFact {
+                        key: "price".to_string(),
+                        value: FactValue::Numeric(price as f64),
+                        confidence: 0.6,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                    SourcedFact {
+                        key: "builder_name".to_string(),
+                        value: FactValue::Text(disc.builder_name.clone()),
+                        confidence: 0.7,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                    SourcedFact {
+                        key: "title".to_string(),
+                        value: FactValue::Text(prop.title.clone()),
+                        confidence: 0.8,
+                        source: prop_source.clone(),
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    },
+                ];
+                if prop.carpet_area_sqft > 0 {
+                    prop_facts.push(SourcedFact {
+                        key: "carpet_area_sqft".to_string(),
+                        value: FactValue::Numeric(prop.carpet_area_sqft as f64),
+                        confidence: 0.6,
+                        source: prop_source,
+                        learned_at: Utc::now(),
+                        version: 1,
+                        display_template: None,
+                        answers_preferences: Vec::new(),
+                        scoring_hint: None,
+                    });
+                }
+                prop_node.add_facts(prop_facts);
+                graph.add_node(prop_node);
+            }
+
             new_properties.push(prop);
         }
 
-        // --- Knowledge graph ingestion ---
+        // --- Knowledge graph ingestion (society nodes) ---
         let source = FactSource {
             source_type: SourceType::Google,
             url: disc.source_url.clone(),
@@ -278,30 +379,3 @@ pub fn ingest_discoveries(
     new_properties
 }
 
-/// Persist new properties to the seed file (append, don't overwrite existing).
-pub fn persist_to_seed(
-    project_root: &std::path::Path,
-    existing: &[Property],
-    new_properties: &[Property],
-) -> Result<(), String> {
-    let seed_path = project_root.join("data").join("seed").join("properties.json");
-
-    let mut all: Vec<&Property> = existing.iter().collect();
-    for p in new_properties {
-        if !all.iter().any(|ep| ep.id == p.id) {
-            all.push(p);
-        }
-    }
-
-    let json = serde_json::to_string_pretty(&all)
-        .map_err(|e| format!("Failed to serialize properties: {}", e))?;
-
-    // Atomic write: write to tmp, then rename
-    let tmp_path = seed_path.with_extension("json.tmp");
-    std::fs::write(&tmp_path, json)
-        .map_err(|e| format!("Failed to write {}: {}", tmp_path.display(), e))?;
-    std::fs::rename(&tmp_path, &seed_path)
-        .map_err(|e| format!("Failed to rename to {}: {}", seed_path.display(), e))?;
-
-    Ok(())
-}

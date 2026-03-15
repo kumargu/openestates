@@ -119,14 +119,6 @@ impl Node {
             .max_by_key(|f| f.version)
     }
 
-    /// Get all facts for a given key (all versions).
-    #[allow(dead_code)]
-    pub fn get_fact_history(&self, key: &str) -> Vec<&SourcedFact> {
-        let mut facts: Vec<_> = self.facts.iter().filter(|f| f.key == key).collect();
-        facts.sort_by_key(|f| f.version);
-        facts
-    }
-
     /// List all unique fact keys on this node.
     pub fn fact_keys(&self) -> Vec<&str> {
         let mut keys: Vec<&str> = self.facts.iter().map(|f| f.key.as_str()).collect();
@@ -141,7 +133,3 @@ impl Node {
     }
 }
 
-/// Helper to build a NodeId from type and slug.
-pub fn node_id(node_type: NodeType, slug: &str) -> NodeId {
-    format!("{}:{}", node_type, slug)
-}

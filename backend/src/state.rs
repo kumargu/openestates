@@ -11,9 +11,10 @@ use crate::knowledge::embed_client::EmbedClient;
 use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::storage::StorageBackend;
 
-#[allow(dead_code)]
 pub struct AppState {
+    #[allow(dead_code)] // Infrastructure for future S3-backed storage — not yet read at request time
     pub storage: Arc<dyn StorageBackend>,
+    #[allow(dead_code)] // Pre-populated at startup, request-time cache reads not yet wired
     pub cache: Arc<dyn Cache>,
     /// In-memory hot data loaded at startup. Routes can read directly from here
     /// for fast access without going through storage/cache on every request.

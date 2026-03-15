@@ -196,6 +196,337 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1446-1826",
+          "price_range_lakh": "135-181",
+          "price_per_sqft": "7400-12500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674136+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1446-1826 sq ft — ₹135-181 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 1.8 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 9900
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674152+00:00",
+      "version": 1,
+      "display_template": "₹9,900/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "3BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674161+00:00",
+      "version": 1,
+      "display_template": "Available: 3BHK",
+      "answers_preferences": [
+        "3bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674171+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "DSR The Address",
+          "Mana Cresta",
+          "Serene Heights By Modern Spaaces",
+          "The Urban Forest"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674177+00:00",
+      "version": 1,
+      "display_template": "Similar: DSR The Address, Mana Cresta, Serene Heights By Modern Spaaces"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "NBR Soul Of The Season is a premium under-construction project offering exclusively 3 BHK apartments, positioned in a rapidly developing corridor with a focus on luxury amenities and green living."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:22:23.674180+00:00",
+      "version": 1,
+      "display_template": "NBR Soul Of The Season is a premium under-construction project offering exclusively 3 BHK apartments, positioned in a rapidly developing corridor with a focus on luxury amenities and green living."
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "NBR Soul of the Seasons is presented as a luxurious, nature-inspired, and well-connected residential community offering a high-quality lifestyle with extensive amenities, appealing to families and professionals seeking a balanced urban living experience."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:27:01.221605+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Modern architecture and spacious 3 BHK layouts with ample natural light, ventilation, and privacy (no common walls, twin balconies)",
+          "Extensive world-class amenities including a large clubhouse, swimming pool, gymnasium, children's play area, indoor recreation, multipurpose party area, jogging/skating track, and numerous outdoor nature-themed amenities",
+          "Abundant green spaces and low-density living with over 80-88% open spaces, lush landscaped gardens, and walking trails",
+          "Strategic location with excellent connectivity to major IT hubs (Wipro SEZ Kodathi, RGA Tech Park, Electronic City, Whitefield, Outer Ring Road) and proximity to schools, hospitals, and shopping centers",
+          "Quality construction by NBR Group, a developer with a 2-decade legacy, and features like 24/7 security, CCTV surveillance, rainwater harvesting, and a sewage treatment plant",
+          "Family-oriented community with a resort-style theme"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:27:01.221637+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Amenities",
+          "Location/Connectivity",
+          "Green Spaces/Open Areas",
+          "Apartment Design/Layouts",
+          "Security"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:27:03.158173+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "negative"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:56.284318+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The Reddit discussions predominantly highlight significant challenges and frustrations regarding the Sarjapur Road area, describing it as 'hell' due to extreme dust, dangerous potholes, and traffic issues."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:56.284351+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "Sarjapur Road is hell!"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:56.284357+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "dusty roads",
+          "pothole-ridden roads",
+          "traffic congestion",
+          "poor general infrastructure"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:56.284367+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "dusty-environment",
+          "poor-road-conditions",
+          "traffic-congestion",
+          "safety-concerns"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch"
+      },
+      "learned_at": "2026-03-13T15:30:56.284373+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
     }
   ],
   "summary_embedding": [
@@ -3273,6 +3604,6 @@
     -0.015529351
   ],
   "created_at": "2026-03-09T16:38:45.244350Z",
-  "updated_at": "2026-03-10T11:31:20.871446Z",
+  "updated_at": "2026-03-13T15:30:56.287061+00:00",
   "root_source": "Discovered"
 }

@@ -50,7 +50,7 @@
       "key": "price_range",
       "value": {
         "type": "Text",
-        "data": "\u20b993L - \u20b9145L"
+        "data": "₹93L - ₹145L"
       },
       "confidence": 0.6,
       "source": {
@@ -476,7 +476,7 @@
       },
       "learned_at": "2026-03-10T10:29:06.230191Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -498,7 +498,7 @@
       },
       "learned_at": "2026-03-10T10:29:06.230193Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -517,7 +517,7 @@
       },
       "learned_at": "2026-03-10T10:29:06.230195Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -536,7 +536,7 @@
       },
       "learned_at": "2026-03-10T10:29:06.230200Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -855,9 +855,668 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "area",
+      "value": {
+        "type": "Text",
+        "data": "Dommasandra"
+      },
+      "confidence": 0.7,
+      "version": 1,
+      "created_at": "2026-03-13T13:14:26.383129+00:00",
+      "source": {
+        "source_type": "Rera",
+        "url": "https://rera.karnataka.gov.in/projectViewDetails",
+        "skill_id": "fix_unknown_areas",
+        "collected_at": "2026-03-13T13:14:26.383129+00:00"
+      },
+      "display_template": "Located in {value}",
+      "answers_preferences": [
+        "location",
+        "area"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.0
+      }
+    },
+    {
+      "key": "embedding_computed",
+      "value": {
+        "type": "Bool",
+        "data": true
+      },
+      "confidence": 1.0,
+      "source": {
+        "source_type": "Computed",
+        "url": null,
+        "model": null,
+        "skill_id": "embed_entity",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T15:04:18.916495+00:00",
+      "version": 1,
+      "display_template": "Embedding computed (3072 dims)"
+    },
+    {
+      "key": "google_rating",
+      "value": {
+        "type": "Numeric",
+        "data": 3.7
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860883+00:00",
+      "version": 1,
+      "display_template": "Google Rating: {value}/5",
+      "answers_preferences": [
+        "good reviews",
+        "well rated",
+        "popular",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 2.0,
+        "thresholds": [
+          4.0,
+          3.5
+        ]
+      }
+    },
+    {
+      "key": "google_review_count",
+      "value": {
+        "type": "Numeric",
+        "data": 766
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860898+00:00",
+      "version": 1,
+      "display_template": "{value} Google reviews",
+      "answers_preferences": [
+        "popular",
+        "well known"
+      ],
+      "scoring_hint": {
+        "direction": "HigherIsBetter",
+        "weight": 1.0,
+        "thresholds": [
+          50.0,
+          20.0
+        ]
+      }
+    },
+    {
+      "key": "google_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate Godrej Splendour for its modern amenities, quality construction, and strategic location with excellent connectivity to key areas in Bangalore. However, some concerns exist regarding the high cost and compact unit sizes, as well as environmental issues like odor from wetlands and allegations of construction on a filled lake."
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860902+00:00",
+      "version": 1,
+      "display_template": "Google Reviews: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "google_top_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "well-designed layouts and strong construction",
+          "excellent location with good connectivity to IT hubs, schools, hospitals, and supermarkets",
+          "abundance of modern amenities including clubhouses, swimming pools, gyms, sports courts, children's play areas, and green spaces",
+          "secure living environment with CCTV and video door phones",
+          "suitable for families and working professionals"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860906+00:00",
+      "version": 1,
+      "display_template": "Praised for: {value}"
+    },
+    {
+      "key": "google_top_negatives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "high pricing and small unit sizes",
+          "potential environmental concerns like odor and mosquitoes due to nearby wetlands",
+          "allegations of construction on a filled lake, raising concerns about legality and stability",
+          "issues with unresponsive customer service/relationship managers"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860910+00:00",
+      "version": 1,
+      "display_template": "Criticized for: {value}"
+    },
+    {
+      "key": "google_common_themes",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "location and connectivity",
+          "amenities and facilities",
+          "pricing and unit size",
+          "construction quality",
+          "environmental impact/concerns",
+          "customer service"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_google_reviews",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:01.860914+00:00",
+      "version": 1,
+      "display_template": "Review themes: {value}"
+    },
+    {
+      "key": "family_suitability",
+      "value": {
+        "type": "Text",
+        "data": "high"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172646+00:00",
+      "version": 1,
+      "display_template": "Family suitability: {value}",
+      "answers_preferences": [
+        "family friendly",
+        "families",
+        "kids"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "security_quality",
+      "value": {
+        "type": "Text",
+        "data": "good"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172688+00:00",
+      "version": 1,
+      "display_template": "Security: {value}",
+      "answers_preferences": [
+        "safe",
+        "safety",
+        "secure",
+        "gated community"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172698+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "Residents generally appreciate the extensive amenities, strategic location, and the builder's reputation, making it suitable for families and professionals. However, significant concerns exist regarding the alleged construction on a lake bed, the perceived high price for unit sizes, and a noticeable number of investor exits."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172707+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "The size of the room is a major drawback. ... is located next to a lake, which the builders claim is secure and has all kinds of approvals, but following floods in Bangalore in last year's rain, I have my doubts and would think twice before investing in a project next to a lakeshore bed."
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172715+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
+    },
+    {
+      "key": "common_positives",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Extensive amenities including two clubhouses, swimming pools, sports courts, mini theatre, and pet park.",
+          "Strategic and well-connected location with proximity to IT hubs, schools, hospitals, and major roads.",
+          "Reputable builder (Godrej Properties) known for quality construction.",
+          "Spacious apartment designs with ample natural light and ventilation.",
+          "Good investment potential with consistent price appreciation."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172728+00:00",
+      "version": 1,
+      "display_template": "Positives: {value}"
+    },
+    {
+      "key": "common_complaints",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "Allegations of construction on a filled Whitefield lake, raising concerns about legal issues and flood safety.",
+          "Perceived as 'too pricey' with units considered 'tiny' for the cost, especially for 2BHK and 3BHK configurations.",
+          "Unresponsive sales or relationship managers reported by some prospective buyers.",
+          "Roads in the immediate vicinity are currently in poor condition, though expected to improve.",
+          "A noticeable number of resale properties appearing, suggesting investor exits."
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172739+00:00",
+      "version": 1,
+      "display_template": "Complaints: {value}"
+    },
+    {
+      "key": "signals",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "excellent-amenities",
+          "prime-location",
+          "reputable-builder",
+          "good-connectivity",
+          "family-friendly"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172748+00:00",
+      "version": 1,
+      "display_template": "Signals: {value}"
+    },
+    {
+      "key": "cautions",
+      "value": {
+        "type": "Tags",
+        "data": [
+          "lake-encroachment-allegations",
+          "high-price-small-units",
+          "investor-exits",
+          "poor-road-conditions-nearby",
+          "potential-builder-issues"
+        ]
+      },
+      "confidence": 0.5,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T14:19:37.172757+00:00",
+      "version": 1,
+      "display_template": "Cautions: {value}"
+    },
+    {
+      "key": "pricing_1bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "1BHK",
+          "sqft_range": "605",
+          "price_range_lakh": "66.5-79",
+          "price_per_sqft": "10700-13000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104898+00:00",
+      "version": 1,
+      "display_template": "1BHK: 605 sq ft — ₹66.5-79 Lakh",
+      "answers_preferences": [
+        "1bhk",
+        "1bhk price",
+        "1bhk flat",
+        "under 0.79 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "982-1137",
+          "price_range_lakh": "108-148",
+          "price_per_sqft": "8800-14250"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104922+00:00",
+      "version": 1,
+      "display_template": "2BHK: 982-1137 sq ft — ₹108-148 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 1.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1234-1529",
+          "price_range_lakh": "135.7-214",
+          "price_per_sqft": "9150-17000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104933+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1234-1529 sq ft — ₹135.7-214 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 2.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 11900
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104948+00:00",
+      "version": 1,
+      "display_template": "₹11,900/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "1BHK",
+          "2BHK",
+          "3BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104961+00:00",
+      "version": 1,
+      "display_template": "Available: 1BHK, 2BHK, 3BHK",
+      "answers_preferences": [
+        "1bhk",
+        "2bhk",
+        "3bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104977+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 67,
+          "period": "since March 2022 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104985+00:00",
+      "version": 1,
+      "display_template": "67% appreciation since March 2022 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Goyal Orchid Whitefield",
+          "SBR One Residence, Whitefield",
+          "Brigade Lakecrest, Battarahalli"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104993+00:00",
+      "version": 1,
+      "display_template": "Similar: Goyal Orchid Whitefield, SBR One Residence, Whitefield, Brigade Lakecrest, Battarahalli"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Godrej Splendour's average asking price has shown stability quarter-on-quarter compared to the broader Whitefield market. The Whitefield area, driven by its thriving IT corridor, continues to attract working professionals, ensuring sustained demand for quality housing and potential for long-term rental income. Investors can anticipate a promising ROI, supported by the strategic location, robust infrastructure development, and increasing demand for premium residential properties in the region."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T17:52:02.104998+00:00",
+      "version": 1,
+      "display_template": "Godrej Splendour's average asking price has shown stability quarter-on-quarter compared to the broader Whitefield market. The Whitefield area, driven by its thriving IT corridor, continues to attract working professionals, ensuring sustained demand for quality housing and potential for long-term rental income. Investors can anticipate a promising ROI, supported by the strategic location, robust infrastructure development, and increasing demand for premium residential properties in the region."
     }
   ],
   "created_at": "2026-03-09T20:23:48.188193Z",
-  "updated_at": "2026-03-10T11:31:11.009692Z",
+  "updated_at": "2026-03-13T15:11:56.749445+00:00",
   "root_source": "Rera"
 }

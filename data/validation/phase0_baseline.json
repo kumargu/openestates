@@ -1,0 +1,1338 @@
+{
+  "timestamp": "2026-03-13T12:14:59.699474Z",
+  "validation_set": [
+    "discovered-sarang-by-sumadhura-phase-2-3bhk",
+    "discovered-sarang-by-sumadhura-phase-2-4bhk",
+    "discovered-total-environment-pursuit-of-a-radical-rhapsody-3bhk",
+    "discovered-total-environment-pursuit-of-a-radical-rhapsody-4bhk",
+    "discovered-prestige-somerville-2bhk",
+    "discovered-vaswani-starlight-3bhk",
+    "discovered-nbr-group-apartments-near-wipro-sarjapur-road-3bhk",
+    "discovered-brigade-cornerstone-utopia-1bhk",
+    "discovered-prestige-waterford-3bhk",
+    "discovered-sobha-neopolis-1bhk"
+  ],
+  "summary": {
+    "total_properties": 10,
+    "total_checks": 212,
+    "pass": 207,
+    "warn": 5,
+    "fail": 0
+  },
+  "gaps": [
+    {
+      "gap": "[WARN] kg_society_rera",
+      "count": 1
+    },
+    {
+      "gap": "[WARN] kg_society_project_status",
+      "count": 1
+    },
+    {
+      "gap": "[WARN] kg_society_total_units",
+      "count": 1
+    },
+    {
+      "gap": "[WARN] reviews",
+      "count": 1
+    },
+    {
+      "gap": "[WARN] trust_badges_rera",
+      "count": 1
+    }
+  ],
+  "results": {
+    "discovered-sarang-by-sumadhura-phase-2-3bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/sarang-by-sumadhura-phase-2/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-sarang-by-sumadhura-phase-2 found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 64 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "rera_total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2.5bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 64 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-001 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-sarang-by-sumadhura-phase-2-3bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "32 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "14 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-sarang-by-sumadhura-phase-2-4bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/sarang-by-sumadhura-phase-2/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-sarang-by-sumadhura-phase-2 found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 64 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "rera_total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2.5bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 64 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-001 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-sarang-by-sumadhura-phase-2-4bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "32 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "14 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-total-environment-pursuit-of-a-radical-rhapsody-3bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/total-environment-pursuit-of-a-radical-rhapsody/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-total-environment-pursuit-of-a-radical-rhapsody found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 63 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "rera_total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_5bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 63 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-002 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-total-environment-pursuit-of-a-radical-rhapsody-3bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "31 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "13 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-total-environment-pursuit-of-a-radical-rhapsody-4bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/total-environment-pursuit-of-a-radical-rhapsody/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-total-environment-pursuit-of-a-radical-rhapsody found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 63 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "rera_total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_5bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 63 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-007 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-total-environment-pursuit-of-a-radical-rhapsody-4bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "31 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "13 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-prestige-somerville-2bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/prestige-somerville/1.webp",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-prestige-somerville found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 66 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2bhk', 'pricing_3.5bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 66 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-006 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-prestige-somerville-2bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "33 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "15 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-vaswani-starlight-3bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/vaswani-starlight/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-vaswani-starlight found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 59 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "rera_total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 59 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_exists",
+        "message": "Seller seller-003 found",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_property_link",
+        "message": "Property discovered-vaswani-starlight-3bhk in seller's property_ids",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_prompt",
+        "message": "Seller has property_prompt",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "28 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "12 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-nbr-group-apartments-near-wipro-sarjapur-road-3bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/nbr-group-apartments-near-wipro-sarjapur-road/1.webp",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-nbr-group-apartments-near-wipro-sarjapur-road found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 17 facts",
+        "details": {}
+      },
+      {
+        "status": "WARN",
+        "check": "kg_society_rera",
+        "message": "Partial RERA: ['rera_registered'], missing: ['rera_ack_number', 'rera_number']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "WARN",
+        "check": "kg_society_project_status",
+        "message": "No project_status fact",
+        "details": {}
+      },
+      {
+        "status": "WARN",
+        "check": "kg_society_total_units",
+        "message": "No total_units or rera_total_units fact",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_3bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "WARN",
+        "check": "reviews",
+        "message": "Reddit facts present but no Google sentiment",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "WARN",
+        "check": "trust_badges_rera",
+        "message": "rera_registered fact present but value is not true",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 17 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_matching",
+        "message": "No seller_id \u2014 seller checks skipped (expected for some properties)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "6 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "4 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-brigade-cornerstone-utopia-1bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/brigade-cornerstone-utopia/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-brigade-cornerstone-utopia found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 64 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_1bhk', 'pricing_2bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 64 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_matching",
+        "message": "No seller_id \u2014 seller checks skipped (expected for some properties)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "31 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "13 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-prestige-waterford-3bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/prestige-waterford/1.jpg",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-prestige-waterford found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 44 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_2bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 44 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_matching",
+        "message": "No seller_id \u2014 seller checks skipped (expected for some properties)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "22 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "14 facts have scoring_hint",
+        "details": {}
+      }
+    ],
+    "discovered-sobha-neopolis-1bhk": [
+      {
+        "status": "PASS",
+        "check": "seed_required_fields",
+        "message": "All required fields present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_hero_image_exists",
+        "message": "Hero image file exists: /societies/sobha-neopolis/1.webp",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seed_society_mapping",
+        "message": "Society soc-sobha-neopolis found in societies.json",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_exists",
+        "message": "KG society node exists with 65 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_rera",
+        "message": "RERA facts present: ['rera_ack_number', 'rera_number', 'rera_registered']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_builder",
+        "message": "builder_name fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_project_status",
+        "message": "project_status fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "kg_society_total_units",
+        "message": "total_units fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "market_pricing",
+        "message": "Pricing facts present: ['configurations', 'price_per_sqft', 'pricing_1bhk', 'pricing_3.5bhk', 'pricing_3bhk', 'pricing_4bhk', 'pricing_insight']",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "reviews",
+        "message": "Reddit + sentiment facts present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_exists",
+        "message": "Property KG node exists with 8 facts",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding",
+        "message": "embedding_computed fact present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "property_kg_embedding_vector",
+        "message": "summary_embedding vector present",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "trust_badges_rera",
+        "message": "RERA badge eligible: registered + rera root_source",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_completeness",
+        "message": "All 65 facts have complete provenance",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "provenance_duplicates",
+        "message": "No duplicate fact keys",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "seller_matching",
+        "message": "No seller_id \u2014 seller checks skipped (expected for some properties)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_embedding",
+        "message": "Embedding computed for search",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_answers_preferences",
+        "message": "30 facts have answers_preferences (self-describing)",
+        "details": {}
+      },
+      {
+        "status": "PASS",
+        "check": "search_scoring_hints",
+        "message": "12 facts have scoring_hint",
+        "details": {}
+      }
+    ]
+  }
+}

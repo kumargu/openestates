@@ -1,11 +1,12 @@
 """
-learn_society — enrich a society node by synthesizing Reddit threads via Claude.
+learn_society — enrich a society node by synthesizing Reddit threads via LLM.
 
 Input: {"society_name": "Prestige Lakeside Habitat", "area": "Whitefield", "city": "Bengaluru"}
 Output: SkillResult with facts about maintenance, family-friendliness, signals, cautions.
 
-Primary: search_reddit → Claude synthesis → structured facts.
-Fallback: Gemini with Google Search grounding (when Reddit is blocked/empty).
+Primary: search_reddit → Gemini 2.5 Flash synthesis → structured facts.
+Fallback (no Reddit): Gemini with Google Search grounding.
+Last resort: Claude Sonnet.
 """
 
 import json
@@ -50,18 +51,112 @@ IMPORTANT:
 - Be honest about sentiment — don't sugarcoat if residents complain"""
 
 
-def call_claude(prompt: str, model: str = "claude-sonnet-4-20250514") -> Optional[dict]:
-    """Call Claude API and return parsed JSON response."""
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        logger.error("ANTHROPIC_API_KEY not set")
+def _call_llm(prompt: str) -> Optional[dict]:
+    """Call LLM API and return parsed JSON. Tries Gemini first, falls back to Claude."""
+    import urllib.request
+
+    # Try Gemini Flash first (cheaper, more reliable)
+    gemini_key = os.environ.get("GOOGLE_AI_API_KEY")
+    if gemini_key:
+        result = _call_gemini_synthesis(prompt, gemini_key)
+        if result is not None:
+            return result
+        logger.warning("Gemini synthesis failed, trying Claude fallback")
+
+    # Fall back to Claude
+    claude_key = os.environ.get("ANTHROPIC_API_KEY")
+    if claude_key:
+        return _call_claude_api(prompt, claude_key)
+
+    logger.error("No LLM API key set (GOOGLE_AI_API_KEY or ANTHROPIC_API_KEY)")
+    return None
+
+
+def _call_gemini_synthesis(prompt: str, api_key: str) -> Optional[dict]:
+    """Call Gemini 2.5 Flash for Reddit synthesis (no grounding needed)."""
+    import urllib.request
+
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+    payload = json.dumps({
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 8192,
+        },
+    }).encode()
+
+    req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
+
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            data = json.loads(resp.read().decode())
+    except Exception as e:
+        logger.error("Gemini synthesis API call failed: %s", e)
         return None
 
+    try:
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        usage = data.get("usageMetadata", {})
+        tokens = usage.get("totalTokenCount", 0)
+
+        if text.startswith("```"):
+            lines = text.split("\n")
+            text = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
+
+        result = json.loads(text)
+        result["_tokens"] = tokens
+        result["_model"] = "gemini-2.5-flash"
+        return result
+    except (KeyError, IndexError) as e:
+        logger.error("Failed to extract Gemini response: %s", e)
+        return None
+    except json.JSONDecodeError as e:
+        logger.warning("Gemini JSON parse error: %s — attempting repair", e)
+        repaired = _repair_json(text)
+        if repaired:
+            repaired["_tokens"] = tokens
+            repaired["_model"] = "gemini-2.5-flash"
+            return repaired
+        logger.error("Could not repair JSON. First 300 chars: %s", text[:300])
+        return None
+
+
+def _repair_json(text: str) -> Optional[dict]:
+    """Attempt to repair truncated or malformed JSON from LLM output."""
+    import re
+    text = re.sub(r'[\x00-\x1f\x7f]', ' ', text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Close any unclosed braces/brackets
+    text = re.sub(r',\s*"[^"]*$', '', text)
+    text = re.sub(r',\s*$', '', text)
+    text = re.sub(r':\s*"[^"]*$', ': ""', text)
+
+    stack = []
+    for ch in text:
+        if ch in '{[':
+            stack.append('}' if ch == '{' else ']')
+        elif ch in '}]':
+            if stack:
+                stack.pop()
+    text += ''.join(reversed(stack))
+
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
+def _call_claude_api(prompt: str, api_key: str) -> Optional[dict]:
+    """Call Claude API as fallback."""
     import urllib.request
 
     payload = json.dumps({
-        "model": model,
-        "max_tokens": 1024,
+        "model": "claude-sonnet-4-20250514",
+        "max_tokens": 1500,
         "messages": [{"role": "user", "content": prompt}],
     }).encode()
 
@@ -76,20 +171,18 @@ def call_claude(prompt: str, model: str = "claude-sonnet-4-20250514") -> Optiona
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=45) as resp:
             data = json.loads(resp.read().decode())
     except Exception as e:
         logger.error("Claude API call failed: %s", e)
         return None
 
-    # Extract text content
     text = ""
     for block in data.get("content", []):
         if block.get("type") == "text":
             text = block["text"]
             break
 
-    # Parse JSON from response (handle markdown code blocks)
     text = text.strip()
     if text.startswith("```"):
         lines = text.split("\n")
@@ -97,12 +190,12 @@ def call_claude(prompt: str, model: str = "claude-sonnet-4-20250514") -> Optiona
 
     try:
         result = json.loads(text)
-        # Return result + token usage
         usage = data.get("usage", {})
         result["_tokens"] = usage.get("input_tokens", 0) + usage.get("output_tokens", 0)
+        result["_model"] = "claude-sonnet-4-20250514"
         return result
     except json.JSONDecodeError:
-        logger.error("Failed to parse Claude response as JSON: %s", text[:200])
+        logger.error("Failed to parse Claude response as JSON: %s", text[:300])
         return None
 
 
@@ -237,7 +330,7 @@ class LearnSocietySkill(BaseSkill):
             logger.info("No Reddit threads for %s, falling back to Gemini grounded search", society_name)
             return self._gemini_fallback(society_name, area, city, input_data)
 
-        # Step 2: Synthesize via Claude
+        # Step 2: Synthesize via LLM (Gemini primary, Claude fallback)
         threads_text = "\n".join(f"- {t}" for t in thread_titles)
         prompt = SYNTHESIS_PROMPT.format(
             society_name=society_name,
@@ -247,8 +340,9 @@ class LearnSocietySkill(BaseSkill):
             threads_text=threads_text,
         )
 
-        synthesis = call_claude(prompt)
+        synthesis = _call_llm(prompt)
         if not synthesis:
+            logger.warning("LLM synthesis failed for %s — returning Reddit facts only", society_name)
             return SkillResult(
                 facts=reddit_result.facts,
                 confidence=0.3,
@@ -256,11 +350,12 @@ class LearnSocietySkill(BaseSkill):
             )
 
         tokens_used = synthesis.pop("_tokens", 0)
+        model_used = synthesis.pop("_model", "unknown")
 
         # Step 3: Convert synthesis into SourcedFacts
         source = FactSource(
             source_type="Llm",
-            model="claude-sonnet-4-20250514",
+            model=model_used,
             skill_id=self.skill_id,
             triggered_by=input_data.get("triggered_by"),
         )
@@ -373,17 +468,28 @@ class LearnSocietySkill(BaseSkill):
         prompt = GEMINI_SOCIETY_PROMPT.format(society_name=society_name, area=area, city=city)
         synthesis = _call_gemini_grounded(prompt)
 
+        model_used = "gemini-2.5-flash"
+        source_type = "Google"
+
         if not synthesis:
             # Try Claude as last resort
-            synthesis = call_claude(prompt)
+            claude_key = os.environ.get("ANTHROPIC_API_KEY")
+            if claude_key:
+                logger.info("Gemini grounded search failed for %s, trying Claude", society_name)
+                synthesis = _call_claude_api(prompt, claude_key)
+                model_used = "claude-sonnet-4-20250514"
+                source_type = "Llm"
             if not synthesis:
+                logger.warning("All LLM providers failed for %s", society_name)
                 return SkillResult(confidence=0.0, cost=SkillCost(api_calls=1))
 
         tokens_used = synthesis.pop("_tokens", 0)
+        # Use _model from response if present (overrides default)
+        model_used = synthesis.pop("_model", model_used)
 
         source = FactSource(
-            source_type="Google",
-            model="gemini-2.5-flash",
+            source_type=source_type,
+            model=model_used,
             skill_id=self.skill_id,
             triggered_by=input_data.get("triggered_by"),
         )

@@ -114,23 +114,29 @@ def load_project_context() -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def load_previous_days_summary() -> str:
-    """Load all existing day plans as context."""
+def load_previous_days_summary(max_recent: int = 2) -> str:
+    """Load the most recent day plans as context (default: last 2)."""
     day_files = sorted(DAYS_DIR.glob("day*.md"))
     if not day_files:
         return "No previous day plans exist yet."
-    parts = [f"## {f.name}\n{f.read_text()}" for f in day_files]
+    recent = day_files[-max_recent:]
+    skipped = len(day_files) - len(recent)
+    parts = []
+    if skipped > 0:
+        parts.append(f"({skipped} earlier day plans omitted for brevity)")
+    parts.extend(f"## {f.name}\n{f.read_text()}" for f in recent)
     return "\n\n---\n\n".join(parts)
 
 
-def load_feedback_history() -> str:
-    """Load structured feedback from all previous days."""
+def load_feedback_history(max_recent: int = 3) -> str:
+    """Load recent feedback (default: last 3 days)."""
     FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
     feedback_files = sorted(FEEDBACK_DIR.glob("day*_feedback.json"))
 
     if not feedback_files:
         return ""
 
+    feedback_files = feedback_files[-max_recent:]
     parts = []
     for f in feedback_files:
         data = json.loads(f.read_text())

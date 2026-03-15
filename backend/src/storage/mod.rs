@@ -9,7 +9,7 @@ use async_trait::async_trait;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
-#[allow(dead_code)]
+#[allow(dead_code)] // Used via Arc<dyn StorageBackend> — compiler can't see dynamic dispatch
 pub enum StorageError {
     #[error("key not found: {0}")]
     NotFound(String),
@@ -20,7 +20,7 @@ pub enum StorageError {
 }
 
 #[async_trait]
-#[allow(dead_code)]
+#[allow(dead_code)] // Used via Arc<dyn StorageBackend> — compiler can't see dynamic dispatch
 pub trait StorageBackend: Send + Sync {
     async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError>;
     async fn put(&self, key: &str, data: &[u8]) -> Result<(), StorageError>;

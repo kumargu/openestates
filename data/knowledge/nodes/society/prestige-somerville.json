@@ -22,7 +22,7 @@
       "key": "area",
       "value": {
         "type": "Text",
-        "data": "Marathahalli\u2014Whitefield Road"
+        "data": "Marathahalli—Whitefield Road"
       },
       "confidence": 0.8,
       "source": {
@@ -82,7 +82,7 @@
       "key": "summary",
       "value": {
         "type": "Text",
-        "data": "This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.. It is located on Marathahalli\u2014Whitefield Road and features a 'live-work-play' theme.. Configurations: 2 BHK, 3 BHK, 3.5 BHK, 4 BHK"
+        "data": "This lavish residential development offers 2, 3, 3.5, and 4 BHK apartments with stunning views of Varthur Lake.. It is located on Marathahalli—Whitefield Road and features a 'live-work-play' theme.. Configurations: 2 BHK, 3 BHK, 3.5 BHK, 4 BHK"
       },
       "confidence": 0.6,
       "source": {
@@ -712,7 +712,7 @@
       },
       "learned_at": "2026-03-10T10:31:02.345124Z",
       "version": 1,
-      "display_template": "Total Project Cost: \u20b9{value}",
+      "display_template": "Total Project Cost: ₹{value}",
       "answers_preferences": [
         "project cost",
         "total cost",
@@ -734,7 +734,7 @@
       },
       "learned_at": "2026-03-10T10:31:02.345126Z",
       "version": 1,
-      "display_template": "Land Cost: \u20b9{value}",
+      "display_template": "Land Cost: ₹{value}",
       "answers_preferences": [
         "land cost"
       ]
@@ -753,7 +753,7 @@
       },
       "learned_at": "2026-03-10T10:31:02.345128Z",
       "version": 1,
-      "display_template": "Construction Cost: \u20b9{value}",
+      "display_template": "Construction Cost: ₹{value}",
       "answers_preferences": [
         "construction cost"
       ]
@@ -772,7 +772,7 @@
       },
       "learned_at": "2026-03-10T10:31:02.345131Z",
       "version": 1,
-      "display_template": "Avg Cost per Unit: \u20b9{value}",
+      "display_template": "Avg Cost per Unit: ₹{value}",
       "answers_preferences": [
         "price per unit",
         "average cost",
@@ -1091,6 +1091,348 @@
         "direction": "TextMatch",
         "weight": 3.0
       }
+    },
+    {
+      "key": "pricing_2bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "2BHK",
+          "sqft_range": "1203-1547",
+          "price_range_lakh": "198-255",
+          "price_per_sqft": "13000-21000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042609+00:00",
+      "version": 1,
+      "display_template": "2BHK: 1203-1547 sq ft — ₹198-255 Lakh",
+      "answers_preferences": [
+        "2bhk",
+        "2bhk price",
+        "2bhk flat",
+        "under 2.5 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3BHK",
+          "sqft_range": "1773-2295",
+          "price_range_lakh": "265-344",
+          "price_per_sqft": "11500-19500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042639+00:00",
+      "version": 1,
+      "display_template": "3BHK: 1773-2295 sq ft — ₹265-344 Lakh",
+      "answers_preferences": [
+        "3bhk",
+        "3bhk price",
+        "3bhk flat",
+        "under 3.4 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_3.5bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "3.5BHK",
+          "sqft_range": "1962-2700",
+          "price_range_lakh": "294-408",
+          "price_per_sqft": "11000-21000"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042651+00:00",
+      "version": 1,
+      "display_template": "3.5BHK: 1962-2700 sq ft — ₹294-408 Lakh",
+      "answers_preferences": [
+        "3.5bhk",
+        "3.5bhk price",
+        "3.5bhk flat",
+        "under 4.1 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "pricing_4bhk",
+      "value": {
+        "type": "Object",
+        "data": {
+          "bhk": "4BHK",
+          "sqft_range": "2616-3543",
+          "price_range_lakh": "392-530",
+          "price_per_sqft": "11000-20500"
+        }
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042660+00:00",
+      "version": 1,
+      "display_template": "4BHK: 2616-3543 sq ft — ₹392-530 Lakh",
+      "answers_preferences": [
+        "4bhk",
+        "4bhk price",
+        "4bhk flat",
+        "under 5.3 crore"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 2.0
+      }
+    },
+    {
+      "key": "price_per_sqft",
+      "value": {
+        "type": "Numeric",
+        "data": 15000
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042672+00:00",
+      "version": 1,
+      "display_template": "₹15,000/sq ft (market rate)",
+      "answers_preferences": [
+        "price per sqft",
+        "rate",
+        "affordable",
+        "expensive",
+        "budget"
+      ],
+      "scoring_hint": {
+        "direction": "LowerIsBetter",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "configurations",
+      "value": {
+        "type": "List",
+        "data": [
+          "2BHK",
+          "3BHK",
+          "3.5BHK",
+          "4BHK"
+        ]
+      },
+      "confidence": 0.8,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042688+00:00",
+      "version": 1,
+      "display_template": "Available: 2BHK, 3BHK, 3.5BHK, 4BHK",
+      "answers_preferences": [
+        "2bhk",
+        "3bhk",
+        "3.5bhk",
+        "4bhk"
+      ]
+    },
+    {
+      "key": "market_status",
+      "value": {
+        "type": "Text",
+        "data": "under_construction"
+      },
+      "confidence": 0.7,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042703+00:00",
+      "version": 1,
+      "display_template": "Market: Under Construction",
+      "answers_preferences": [
+        "under construction",
+        "new project"
+      ]
+    },
+    {
+      "key": "price_appreciation",
+      "value": {
+        "type": "Object",
+        "data": {
+          "pct": 15,
+          "period": "since Feb 2024 launch"
+        }
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042710+00:00",
+      "version": 1,
+      "display_template": "15% appreciation since Feb 2024 launch",
+      "answers_preferences": [
+        "good investment",
+        "appreciation",
+        "value growth"
+      ]
+    },
+    {
+      "key": "comparable_projects",
+      "value": {
+        "type": "List",
+        "data": [
+          "Prestige Raintree Park",
+          "Sumadhura Solace",
+          "Assetz 66 and Shibui",
+          "Folium By Sumadhura Phase 2",
+          "Mahindra Blossom"
+        ]
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042717+00:00",
+      "version": 1,
+      "display_template": "Similar: Prestige Raintree Park, Sumadhura Solace, Assetz 66 and Shibui"
+    },
+    {
+      "key": "pricing_insight",
+      "value": {
+        "type": "Text",
+        "data": "Prestige Somerville is a new launch, under-construction project offering luxury apartments in Whitefield. It is competitively priced for its features and location, with good potential for long-term appreciation."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Google",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "fetch_market_pricing",
+        "triggered_by": null
+      },
+      "learned_at": "2026-03-13T09:23:16.042721+00:00",
+      "version": 1,
+      "display_template": "Prestige Somerville is a new launch, under-construction project offering luxury apartments in Whitefield. It is competitively priced for its features and location, with good potential for long-term appreciation."
+    },
+    {
+      "key": "resident_sentiment",
+      "value": {
+        "type": "Text",
+        "data": "mixed"
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:49:34.274610+00:00",
+      "version": 1,
+      "display_template": "Resident sentiment: {value}",
+      "answers_preferences": [
+        "good reviews",
+        "resident feedback"
+      ],
+      "scoring_hint": {
+        "direction": "TextMatch",
+        "weight": 1.5
+      }
+    },
+    {
+      "key": "sentiment_summary",
+      "value": {
+        "type": "Text",
+        "data": "The provided Reddit discussions do not contain specific information or opinions about Prestige Somerville. One thread discusses general rent in Whitefield, and the other focuses on a different Prestige society, 'Prestige Lakeside Habitat'."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:49:34.274641+00:00",
+      "version": 1,
+      "display_template": "{value}"
+    },
+    {
+      "key": "best_quote",
+      "value": {
+        "type": "Text",
+        "data": "No direct mentions or discussions about Prestige Somerville were found in the provided Reddit threads."
+      },
+      "confidence": 0.6,
+      "source": {
+        "source_type": "Llm",
+        "url": null,
+        "model": "gemini-2.5-flash",
+        "skill_id": "learn_society",
+        "triggered_by": "day81_batch_r2"
+      },
+      "learned_at": "2026-03-13T15:49:34.274648+00:00",
+      "version": 1,
+      "display_template": "Resident says: \"{value}\""
     }
   ],
   "summary_embedding": [
@@ -4168,6 +4510,6 @@
     -0.00251424
   ],
   "created_at": "2026-03-09T16:38:04.935036Z",
-  "updated_at": "2026-03-10T11:31:40.864448Z",
+  "updated_at": "2026-03-13T15:49:34.278983+00:00",
   "root_source": "Rera"
 }
