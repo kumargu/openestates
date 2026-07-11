@@ -4,7 +4,13 @@
  * This file only contains display formatting helpers.
  */
 
-export type MatchLabel = "Strong match" | "Good match" | "Value pick" | "Premium match";
+export type MatchLabel =
+  | "Strong match"
+  | "Good match"
+  | "Value pick"
+  | "Premium match"
+  | "Candidate"
+  | "Similar profile";
 
 export interface MatchResult {
   label: MatchLabel;
