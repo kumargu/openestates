@@ -557,6 +557,8 @@ pub fn enrich_property_card_with_sellers(
         price_per_sqft: p.price_per_sqft,
         bhk: p.bhk,
         sqft: p.carpet_area_sqft,
+        carpet_area_sqft: p.carpet_area_sqft,
+        super_builtup_sqft: p.super_builtup_sqft,
         society_name,
         builder_name: p.builder_name.clone(),
         hero_image,

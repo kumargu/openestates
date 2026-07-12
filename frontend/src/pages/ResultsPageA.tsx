@@ -539,30 +539,12 @@ function SheetTray({
 }
 
 type ResultsViewMode = "cards" | "sheet";
-type SheetSortKey = "sheet" | "price" | "sqft" | "ppsqft" | "match";
+type SheetSortKey = "sheet" | "price" | "carpet" | "efficiency" | "carpetCost";
 
 type SheetCompareRow = {
   property: PropertyCardType;
   item?: SheetItem;
-  match?: MatchResult;
-  confidenceScore?: ConfidenceScore;
   onSheet: boolean;
-};
-
-const SHEET_TAG_LABELS: Record<SheetItem["tag"], string> = {
-  watching: "Watching",
-  finalist: "Finalist",
-  verify: "Verify",
-  stretch: "Stretch",
-};
-
-const MATCH_SORT_ORDER: Record<MatchResult["label"], number> = {
-  "Strong match": 0,
-  "Good match": 1,
-  "Value pick": 2,
-  "Premium match": 2,
-  Candidate: 3,
-  "Similar profile": 4,
 };
 
 function ViewModeSwitch({
@@ -610,11 +592,47 @@ function ViewModeSwitch({
   );
 }
 
+function knownMetric(value: number | null | undefined): number | null {
+  return hasKnownNumber(value) ? value : null;
+}
+
+function carpetSqft(property: PropertyCardType): number | null {
+  return knownMetric(property.carpet_area_sqft ?? property.sqft);
+}
+
+function totalSqft(property: PropertyCardType): number | null {
+  return knownMetric(property.super_builtup_sqft);
+}
+
+function carpetEfficiency(property: PropertyCardType): number | null {
+  const carpet = carpetSqft(property);
+  const total = totalSqft(property);
+  if (!carpet || !total || carpet > total) return null;
+  return carpet / total;
+}
+
+function carpetCost(property: PropertyCardType): number | null {
+  const carpet = carpetSqft(property);
+  if (!carpet || !hasKnownNumber(property.price)) return null;
+  return Math.round(property.price / carpet);
+}
+
+function formatPercent(value: number | null): string {
+  if (!value || !Number.isFinite(value)) return "—";
+  return `${Math.round(value * 100)}%`;
+}
+
 function sortValue(row: SheetCompareRow, key: SheetSortKey): number {
   if (key === "price") return row.property.price || Number.MAX_SAFE_INTEGER;
-  if (key === "sqft") return row.property.sqft || Number.MAX_SAFE_INTEGER;
-  if (key === "ppsqft") return row.property.price_per_sqft || Number.MAX_SAFE_INTEGER;
-  if (key === "match") return row.match ? MATCH_SORT_ORDER[row.match.label] : Number.MAX_SAFE_INTEGER;
+  if (key === "carpet") {
+    const value = carpetSqft(row.property);
+    return value ? -value : Number.MAX_SAFE_INTEGER;
+  }
+  if (key === "efficiency") {
+    const value = carpetEfficiency(row.property);
+    return value ? -value : Number.MAX_SAFE_INTEGER;
+  }
+  if (key === "carpetCost") return carpetCost(row.property) ?? Number.MAX_SAFE_INTEGER;
   return row.onSheet ? 0 : 1;
 }
 
@@ -688,10 +706,10 @@ function SheetCompareView({
         </div>
         <div className="comparison-sort-group" aria-label="Sort comparison sheet">
           <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Sheet</SheetSortButton>
-          <SheetSortButton sortKey="match" active={sortKey === "match"} onSort={onSortChange}>Fit</SheetSortButton>
           <SheetSortButton sortKey="price" active={sortKey === "price"} onSort={onSortChange}>Price</SheetSortButton>
-          <SheetSortButton sortKey="sqft" active={sortKey === "sqft"} onSort={onSortChange}>Sqft</SheetSortButton>
-          <SheetSortButton sortKey="ppsqft" active={sortKey === "ppsqft"} onSort={onSortChange}>/sqft</SheetSortButton>
+          <SheetSortButton sortKey="carpet" active={sortKey === "carpet"} onSort={onSortChange}>Carpet</SheetSortButton>
+          <SheetSortButton sortKey="efficiency" active={sortKey === "efficiency"} onSort={onSortChange}>Eff.</SheetSortButton>
+          <SheetSortButton sortKey="carpetCost" active={sortKey === "carpetCost"} onSort={onSortChange}>₹/carpet</SheetSortButton>
         </div>
       </div>
 
@@ -703,16 +721,16 @@ function SheetCompareView({
               <th>Area</th>
               <th>BHK</th>
               <th>Price</th>
-              <th>Sqft</th>
-              <th>₹/sqft</th>
+              <th>Carpet</th>
+              <th>Total</th>
+              <th>Eff.</th>
+              <th>₹/carpet</th>
               <th>Status</th>
-              <th>Source</th>
-              <th>Signal</th>
               <th aria-label="Actions" />
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map(({ property, item, match, confidenceScore, onSheet }) => (
+            {sortedRows.map(({ property, onSheet }) => (
               <tr key={property.id}>
                 <td className="comparison-table-home">
                   <Link to={`/property/${property.id}`} className="comparison-home-link">
@@ -723,26 +741,15 @@ function SheetCompareView({
                 <td>{property.area || "—"}</td>
                 <td>{property.bhk ? `${property.bhk}` : "—"}</td>
                 <td className="comparison-num">{property.price ? formatPrice(property.price) : "—"}</td>
-                <td className="comparison-num">{formatMetric(property.sqft)}</td>
-                <td className="comparison-num">{formatMetric(property.price_per_sqft)}</td>
+                <td className="comparison-num">{formatMetric(carpetSqft(property))}</td>
+                <td className="comparison-num">{formatMetric(totalSqft(property))}</td>
+                <td className="comparison-num">{formatPercent(carpetEfficiency(property))}</td>
+                <td className="comparison-num">{formatMetric(carpetCost(property))}</td>
                 <td>
                   <ProjectStatusTag
                     status={property.project_status}
                     possessionStatus={property.possession_status}
                   />
-                </td>
-                <td>
-                  <span className="comparison-source-stack">
-                    <TrustBadge rootSource={property.root_source} compact />
-                    <DataFreshnessBadge freshness={property.data_freshness} compact />
-                  </span>
-                </td>
-                <td>
-                  <span className="comparison-signal-stack">
-                    {item && <em className="comparison-sheet-chip">{SHEET_TAG_LABELS[item.tag]}</em>}
-                    {match ? <em>{match.label}</em> : <em>{rootSourceLabel(property.root_source)}</em>}
-                    <ConfidenceMeter confidence={confidenceScore} compact />
-                  </span>
                 </td>
                 <td className="comparison-actions">
                   <button type="button" className="comparison-icon-btn" onClick={() => onQuickView(property.id)} aria-label={`Quick view ${property.title}`}>
@@ -1049,41 +1056,25 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     refreshSheetItems();
   };
 
-  const matchById = useMemo(() => {
-    const next = new Map<string, { match?: MatchResult; confidenceScore?: ConfidenceScore }>();
-    for (const result of matchResults) {
-      next.set(result.property.id, {
-        match: result.match,
-        confidenceScore: result.confidenceScore,
-      });
-    }
-    return next;
-  }, [matchResults]);
-
   const sheetCompareRows = useMemo<SheetCompareRow[]>(() => {
     const savedRows: SheetCompareRow[] = [];
     for (const item of sheetItems) {
       const property = propertiesById.get(item.id);
       if (!property) continue;
-      const matchData = matchById.get(item.id);
       savedRows.push({
         property,
         item,
-        match: matchData?.match,
-        confidenceScore: matchData?.confidenceScore,
         onSheet: true,
       });
     }
 
     if (savedRows.length > 0) return savedRows;
 
-    return matchResults.map(({ property, match, confidenceScore }) => ({
+    return matchResults.map(({ property }) => ({
       property,
-      match,
-      confidenceScore,
       onSheet: sheetIds.has(property.id),
     }));
-  }, [matchById, matchResults, propertiesById, sheetIds, sheetItems]);
+  }, [matchResults, propertiesById, sheetIds, sheetItems]);
 
   const missingSheetCount = useMemo(() => {
     return sheetItems.filter((item) => !propertiesById.has(item.id)).length;

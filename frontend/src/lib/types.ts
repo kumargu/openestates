@@ -6,6 +6,8 @@ export type PropertyCard = {
   price_per_sqft: number;
   bhk: number;
   sqft: number;
+  carpet_area_sqft?: number;
+  super_builtup_sqft?: number;
   society_name: string;
   builder_name: string;
   hero_image: string | null;

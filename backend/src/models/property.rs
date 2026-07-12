@@ -65,6 +65,8 @@ pub struct PropertyCard {
     pub price_per_sqft: u64,
     pub bhk: u32,
     pub sqft: u32,
+    pub carpet_area_sqft: u32,
+    pub super_builtup_sqft: u32,
     pub society_name: String,
     pub builder_name: String,
     pub hero_image: String,
