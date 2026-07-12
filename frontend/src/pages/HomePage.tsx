@@ -565,7 +565,10 @@ export function HomePage() {
               <div className="inline-results-shell">
                 <div className="inline-results-header">
                   <span className="inline-results-kicker">OpenEstates search</span>
-                  <h1>Ranked matches</h1>
+                  <div className="results-view-switch" aria-hidden="true">
+                    <span className="results-view-switch-btn results-view-switch-btn--active">Discover</span>
+                    <span className="results-view-switch-btn">Compare</span>
+                  </div>
                   <div className="skeleton-search-bar skeleton-bar" />
                 </div>
               </div>

@@ -1,12 +1,12 @@
 /**
- * Results page with inline sheet actions and backend search integration.
+ * Results page with inline save actions and backend search integration.
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
 import { useEffect, useState, useMemo, type FormEvent, type ReactNode } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchIntent } from "../lib/types.ts";
+import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -38,18 +38,6 @@ function formatPrice(price: number): string {
 function formatMetric(value: number | null | undefined, suffix = ""): string {
   if (!hasKnownNumber(value)) return "—";
   return `${value.toLocaleString("en-IN")}${suffix}`;
-}
-
-function formatBudgetBrief(price: number | null): string {
-  if (!price) return "Open budget";
-  return `Under ${formatPrice(price)}`;
-}
-
-function compactSignalList(values: string[], fallback: string): string {
-  if (values.length === 0) return fallback;
-  const visible = values.slice(0, 2).join(", ");
-  const remaining = values.length - 2;
-  return remaining > 0 ? `${visible} +${remaining}` : visible;
 }
 
 function hasKnownNumber(value: number | null | undefined): value is number {
@@ -428,7 +416,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
           <svg width="16" height="16" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-          {onSheet ? "On sheet" : "Add to sheet"}
+          {onSheet ? "Saved" : "Save"}
         </button>
         <button className="card-a-detail-btn" onClick={handleQuickView}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -480,8 +468,8 @@ function SheetTray({
     <div className={`sheet-tray${open ? " sheet-tray--open" : ""}`}>
       <button type="button" className="sheet-tray-toggle" onClick={() => setOpen((value) => !value)}>
         <span className="sheet-tray-copy">
-          <span className="sheet-tray-kicker">Sheet</span>
-          <strong>{items.length} {items.length === 1 ? "home" : "homes"} on sheet</strong>
+          <span className="sheet-tray-kicker">Saved</span>
+          <strong>{items.length} saved {items.length === 1 ? "home" : "homes"}</strong>
         </span>
         <span className="sheet-tray-action">
           {open ? "Close" : "Open"}
@@ -515,7 +503,7 @@ function SheetTray({
                   <span className="sheet-tray-link sheet-tray-link--missing">
                     <span className="sheet-tray-image" />
                     <span className="sheet-tray-item-copy">
-                      <strong>Sheet item</strong>
+                      <strong>Saved home</strong>
                       <span>Refresh results to reload this home.</span>
                     </span>
                   </span>
@@ -529,7 +517,7 @@ function SheetTray({
 
           {items.length > visibleItems.length && (
             <p className="sheet-tray-overflow">
-              {items.length - visibleItems.length} more on sheet. Refine search to bring them back into view.
+              {items.length - visibleItems.length} more saved. Refine search to bring them back into view.
             </p>
           )}
         </div>
@@ -570,7 +558,7 @@ function ViewModeSwitch({
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
-        Discovery
+        Discover
       </button>
       <button
         type="button"
@@ -585,7 +573,7 @@ function ViewModeSwitch({
           <path d="M9 4v16" />
           <path d="M15 4v16" />
         </svg>
-        Sheet
+        Compare
         {sheetCount > 0 && <span>{sheetCount}</span>}
       </button>
     </div>
@@ -689,10 +677,10 @@ function SheetCompareView({
     return (
       <section className="comparison-sheet comparison-sheet--empty">
         <div>
-          <span className="comparison-sheet-kicker">Sheet</span>
-          <h2>No homes on sheet yet</h2>
+          <span className="comparison-sheet-kicker">Compare</span>
+          <h2>No saved homes yet</h2>
         </div>
-        <p>Add homes from discovery to compare price, area, source, and status in one place.</p>
+        <p>Save homes from discovery to compare price, area, and usable space in one place.</p>
       </section>
     );
   }
@@ -701,11 +689,11 @@ function SheetCompareView({
     <section className="comparison-sheet" aria-label="Comparison sheet">
       <div className="comparison-sheet-toolbar">
         <div className="comparison-sheet-heading">
-          <span className="comparison-sheet-kicker">{showingSaved ? "Sheet homes" : "Current results"}</span>
+          <span className="comparison-sheet-kicker">{showingSaved ? "Saved homes" : "Current results"}</span>
           <h2>{sortedRows.length} {sortedRows.length === 1 ? "home" : "homes"} compared</h2>
         </div>
         <div className="comparison-sort-group" aria-label="Sort comparison sheet">
-          <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Sheet</SheetSortButton>
+          <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Saved</SheetSortButton>
           <SheetSortButton sortKey="price" active={sortKey === "price"} onSort={onSortChange}>Price</SheetSortButton>
           <SheetSortButton sortKey="carpet" active={sortKey === "carpet"} onSort={onSortChange}>Carpet</SheetSortButton>
           <SheetSortButton sortKey="efficiency" active={sortKey === "efficiency"} onSort={onSortChange}>Eff.</SheetSortButton>
@@ -764,7 +752,7 @@ function SheetCompareView({
                     className={onSheet ? "comparison-sheet-toggle comparison-sheet-toggle--on" : "comparison-sheet-toggle"}
                     onClick={() => onSheetToggle(property.id)}
                   >
-                    {onSheet ? "On sheet" : "Add"}
+                    {onSheet ? "Saved" : "Save"}
                   </button>
                 </td>
               </tr>
@@ -841,46 +829,6 @@ function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation 
         </p>
       )}
     </div>
-  );
-}
-
-function SearchBrief({
-  query,
-  intent,
-  totalCount,
-}: {
-  query: string;
-  intent: SearchIntent;
-  totalCount: number;
-}) {
-  const hardConstraints = intent.hard_constraints ?? [];
-  const signals = [
-    ...hardConstraints.map((constraint) => constraint.raw_text),
-    ...intent.preferences,
-  ];
-  const items = [
-    { label: "Location", value: intent.area ?? "Open market" },
-    { label: "Home", value: intent.bhk ? `${intent.bhk} BHK` : "Any BHK" },
-    { label: "Budget", value: formatBudgetBrief(intent.budget_max) },
-    { label: "Signals", value: compactSignalList(signals, "Fit + transparency") },
-    { label: "Matches", value: `${totalCount} ranked` },
-  ];
-
-  return (
-    <section className="search-brief" aria-label="Search brief">
-      <div className="search-brief-query">
-        <span>Search brief</span>
-        <strong>{query}</strong>
-      </div>
-      <div className="search-brief-grid">
-        {items.map((item) => (
-          <div key={item.label} className="search-brief-item">
-            <span>{item.label}</span>
-            <strong>{item.value}</strong>
-          </div>
-        ))}
-      </div>
-    </section>
   );
 }
 
@@ -1088,13 +1036,17 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const intent = useBackendResults ? searchResponse.intent : null;
   const containerClass = isEmbedded ? "inline-results-shell" : viewMode === "sheet" ? "page-container-wide" : "page-container";
   const headerClass = isEmbedded ? "inline-results-header" : "page-header";
-  const title = isEmbedded && query ? "Ranked matches" : "Properties";
+  const title = "Properties";
 
   if (status === "loading") return (
     <div className={containerClass}>
       <div className={headerClass}>
         {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
-        <h1>{title}</h1>
+        {isEmbedded && query ? (
+          <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
+        ) : (
+          <h1>{title}</h1>
+        )}
         <div className="skeleton-search-bar skeleton-bar" />
       </div>
       <div className="results-grid">
@@ -1157,7 +1109,11 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       </Helmet>
       <div className={headerClass}>
         {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
-        <h1>{title}</h1>
+        {isEmbedded && query ? (
+          <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
+        ) : (
+          <h1>{title}</h1>
+        )}
 
         {/* Inline search bar for refining */}
         <form
@@ -1182,10 +1138,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             Search
           </button>
         </form>
-
-        {isEmbedded && query && intent && (
-          <SearchBrief query={query} intent={intent} totalCount={totalCount} />
-        )}
 
         {!isEmbedded && query && intent && (
           <div style={{ marginTop: "0.5rem" }}>
@@ -1266,11 +1218,13 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       )}
 
       {/* Area context bar — shown when backend search returns area info */}
-      {areaContext && <AreaContextBar ctx={areaContext} />}
+      {!isEmbedded && areaContext && <AreaContextBar ctx={areaContext} />}
 
-      <div className="results-view-row">
-        <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
-      </div>
+      {!isEmbedded && (
+        <div className="results-view-row">
+          <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
+        </div>
+      )}
 
       {viewMode === "cards" && (
         <SheetTray items={sheetItems} propertiesById={propertiesById} onRemove={removeSheetItem} />

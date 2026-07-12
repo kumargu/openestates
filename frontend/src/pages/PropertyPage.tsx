@@ -338,7 +338,7 @@ export function PropertyPage() {
             onClick={handleSave}
             className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
           >
-            {saved ? "\u2665 On sheet" : "\u2661 Add to sheet"}
+            {saved ? "\u2665 Saved" : "\u2661 Save"}
           </button>
         </div>
       </section>
