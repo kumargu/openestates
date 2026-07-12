@@ -126,6 +126,7 @@ pub struct BuilderProjectRecord {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct SourcePanel {
+    pub kind: String,
     pub title: String,
     pub subtitle: String,
     pub items: Vec<SourceItem>,
@@ -134,8 +135,11 @@ pub struct SourcePanel {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct SourceItem {
+    pub key: String,
     pub label: String,
     pub value: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<String>,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
@@ -267,6 +271,10 @@ fn source_item(
     label: &str,
 ) -> Option<SourceItem> {
     let fact = latest_fact(graph, node_id, key)?;
+    let values = match &fact.value {
+        FactValue::Tags(tags) => tags.clone(),
+        _ => Vec::new(),
+    };
     let value = match (&fact.value, key) {
         (FactValue::Numeric(n), "rera_complaints_count") if (*n - 1.0).abs() < f64::EPSILON => {
             "1 complaint filed".to_string()
@@ -304,14 +312,41 @@ fn source_item(
         (FactValue::Tags(tags), "reddit_threads") => tags.join("\n"),
         _ => fact_display(fact),
     };
+    if is_low_signal_source_value(key, &value) {
+        return None;
+    }
     Some(SourceItem {
+        key: key.to_string(),
         label: label.to_string(),
         value,
+        values,
         source_type: format!("{:?}", fact.source.source_type),
         source_url: fact.source.url.clone(),
         confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
         learned_at: fact.learned_at.to_rfc3339(),
     })
+}
+
+fn is_low_signal_source_value(key: &str, value: &str) -> bool {
+    let normalized = value.trim().to_lowercase();
+    if normalized.is_empty() {
+        return true;
+    }
+
+    match key {
+        "best_quote" | "sentiment_summary" | "resident_sentiment" | "google_sentiment" => {
+            normalized.contains("not available")
+                || normalized.contains("not captured")
+                || normalized.contains("not provided")
+                || normalized.contains("no specific resident sentiment")
+                || normalized.contains("no reddit discussion content")
+                || normalized.contains("no verbatim quotes")
+                || normalized.contains("direct resident sentiment")
+                || normalized.contains("actual content of the reddit discussions was not provided")
+                || normalized.contains("quote can be extracted")
+        }
+        _ => false,
+    }
 }
 
 fn collect_source_items(
@@ -347,32 +382,13 @@ fn build_source_panels(
     );
     if !rera_items.is_empty() {
         panels.push(SourcePanel {
-            title: "RERA trail".to_string(),
-            subtitle: "Government project file and builder record.".to_string(),
+            kind: "rera".to_string(),
+            title: "RERA file".to_string(),
+            subtitle: "Official project registration and delivery record.".to_string(),
             items: rera_items,
             missing: vec![],
         });
     }
-
-    let reddit_items = collect_source_items(
-        graph,
-        &society_id,
-        &[
-            ("reddit_thread_count", "Threads found"),
-            ("reddit_total_comments", "Comments found"),
-            ("reddit_total_score", "Community score"),
-            ("reddit_threads", "Thread title"),
-        ],
-    );
-    panels.push(SourcePanel {
-        title: "Reddit trail".to_string(),
-        subtitle: "Community mentions tied to this society.".to_string(),
-        items: reddit_items,
-        missing: vec![
-            "Comment text is not captured yet.".to_string(),
-            "Comment-level sentiment is not extracted yet.".to_string(),
-        ],
-    });
 
     let market_items = collect_source_items(
         graph,
@@ -385,8 +401,9 @@ fn build_source_panels(
         ],
     );
     panels.push(SourcePanel {
+        kind: "market".to_string(),
         title: "Market trail".to_string(),
-        subtitle: "Google-sourced pricing and comparable-project signals.".to_string(),
+        subtitle: "Pricing, appreciation, and nearby comparable signals.".to_string(),
         items: market_items,
         missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
     });
@@ -402,6 +419,7 @@ fn build_source_panels(
         ],
     );
     panels.push(SourcePanel {
+        kind: "area".to_string(),
         title: "Area trail".to_string(),
         subtitle: "Neighbourhood evidence around daily life.".to_string(),
         items: area_items,
@@ -411,24 +429,48 @@ fn build_source_panels(
         ],
     });
 
+    let reddit_items = collect_source_items(
+        graph,
+        &society_id,
+        &[
+            ("resident_sentiment", "Overall take"),
+            ("sentiment_summary", "What forums point to"),
+            ("best_quote", "Quote"),
+            ("common_positives", "Repeated positives"),
+            ("common_complaints", "Repeated concerns"),
+        ],
+    );
+    panels.push(SourcePanel {
+        kind: "community".to_string(),
+        title: "Community pulse".to_string(),
+        subtitle: "Forum chatter distilled into takeaways, quotes, and recurring issues."
+            .to_string(),
+        items: reddit_items,
+        missing: vec![
+            "Direct Reddit comment excerpts are not stored for every society yet.".to_string(),
+            "Thread-level coverage still needs improving for low-mention projects.".to_string(),
+        ],
+    });
+
     let review_items = collect_source_items(
         graph,
         &society_id,
         &[
-            ("google_rating", "Google rating"),
-            ("google_review_count", "Review count"),
-            ("google_common_themes", "Common themes"),
-            ("google_top_positives", "Review positives"),
-            ("google_top_negatives", "Review concerns"),
+            ("google_sentiment", "Overall take"),
+            ("google_top_positives", "Praised for"),
+            ("google_top_negatives", "Recurring complaints"),
+            ("google_common_themes", "Themes"),
         ],
     );
     panels.push(SourcePanel {
-        title: "Review trail".to_string(),
-        subtitle: "Google review evidence for the society.".to_string(),
+        kind: "reviews".to_string(),
+        title: "Google reviews".to_string(),
+        subtitle: "What public reviews consistently praise, complain about, and repeat."
+            .to_string(),
         items: review_items,
         missing: vec![
             "Google review snippets are not stored for this society yet.".to_string(),
-            "Maintenance and resident-service themes need review extraction.".to_string(),
+            "More verbatim review quotes still need extraction.".to_string(),
         ],
     });
 

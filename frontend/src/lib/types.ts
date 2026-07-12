@@ -133,6 +133,7 @@ export type PropertyDetailResponse = {
 };
 
 export type SourcePanel = {
+  kind?: string;
   title: string;
   subtitle: string;
   items: SourceItem[];
@@ -140,8 +141,10 @@ export type SourcePanel = {
 };
 
 export type SourceItem = {
+  key?: string;
   label: string;
   value: string;
+  values?: string[];
   source_type: string;
   source_url?: string;
   confidence_pct: number;

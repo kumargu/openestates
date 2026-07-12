@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse, SourcePanel } from "../lib/types.ts";
+import type { BuilderPortfolio, PropertyDetailResponse, SourceItem, SourcePanel } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
@@ -64,6 +64,9 @@ type RiskSignal = {
   label: string;
   value: number;
 };
+
+type SourcePanelKind = "rera" | "market" | "area" | "community" | "reviews";
+type SourceTone = "good" | "watch" | "risk" | "neutral";
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -579,10 +582,221 @@ function EvidenceRow({ label, value, detail }: { label: string; value: string; d
   );
 }
 
-function formatSourceDate(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Date not available";
-  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+const SOURCE_PANEL_COPY: Record<SourcePanelKind, { title: string; subtitle: string }> = {
+  rera: {
+    title: "RERA file",
+    subtitle: "Official registration, delivery dates, and file-level complaints.",
+  },
+  market: {
+    title: "Market trail",
+    subtitle: "Price bands, rate checks, and nearby comparison points.",
+  },
+  area: {
+    title: "Area trail",
+    subtitle: "Daily-life signals around access, traffic, flooding, and schools.",
+  },
+  community: {
+    title: "Community pulse",
+    subtitle: "What resident chatter keeps repeating around this project.",
+  },
+  reviews: {
+    title: "Google reviews",
+    subtitle: "Public review patterns that show up before and after visits.",
+  },
+};
+
+function normalizeSourceToken(value: string | undefined): string {
+  return (value ?? "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function sourcePanelKind(panel: SourcePanel): SourcePanelKind {
+  const explicitKind = normalizeSourceToken(panel.kind);
+  if (
+    explicitKind === "rera" ||
+    explicitKind === "market" ||
+    explicitKind === "area" ||
+    explicitKind === "community" ||
+    explicitKind === "reviews"
+  ) {
+    return explicitKind;
+  }
+
+  const title = `${panel.title} ${panel.subtitle}`.toLowerCase();
+  if (title.includes("rera")) return "rera";
+  if (title.includes("market")) return "market";
+  if (title.includes("area")) return "area";
+  if (title.includes("reddit") || title.includes("community") || title.includes("forum")) return "community";
+  return "reviews";
+}
+
+function findSourceItem(panel: SourcePanel, ...candidates: string[]): SourceItem | undefined {
+  const wanted = new Set(candidates.map(normalizeSourceToken));
+  return panel.items.find((item) => (
+    wanted.has(normalizeSourceToken(item.key)) ||
+    wanted.has(normalizeSourceToken(item.label))
+  ));
+}
+
+function cleanSourceText(item?: SourceItem | null): string {
+  if (!item) return "";
+
+  return item.value
+    .replace(/^RERA Status:\s*/i, "")
+    .replace(/^RERA No:\s*/i, "")
+    .replace(/^Expected Completion:\s*/i, "")
+    .replace(/^Resident sentiment:\s*/i, "")
+    .replace(/^Google Reviews:\s*/i, "")
+    .replace(/^Praised for:\s*/i, "")
+    .replace(/^Criticized for:\s*/i, "")
+    .replace(/^Review themes:\s*/i, "")
+    .replace(/^Complaints:\s*/i, "")
+    .replace(/^Top schools:\s*/i, "")
+    .replace(/^Traffic:\s*/i, "")
+    .replace(/^3BHK:\s*/i, "")
+    .replace(/^Similar:\s*/i, "")
+    .replace(/^Resident says:\s*/i, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function sourceItemList(item?: SourceItem | null): string[] {
+  if (!item) return [];
+
+  if (item.values && item.values.length > 0) {
+    return item.values
+      .map((value) => value.trim())
+      .filter((value) => value.length > 0);
+  }
+
+  const value = cleanSourceText(item);
+  if (!value) return [];
+
+  const key = normalizeSourceToken(item.key || item.label);
+  const splitKeys = new Set([
+    "common_positives",
+    "common_complaints",
+    "google_top_positives",
+    "google_top_negatives",
+    "google_common_themes",
+    "comparable_projects",
+    "school_quality",
+  ]);
+
+  if (!splitKeys.has(key)) return [value];
+
+  return value
+    .split(/\s*,\s*/g)
+    .map((entry) => entry.replace(/^["“]|["”]$/g, "").trim())
+    .filter((entry) => entry.length > 0);
+}
+
+function sourceQuoteText(item?: SourceItem | null): string {
+  return cleanSourceText(item).replace(/^["“]|["”]$/g, "").trim();
+}
+
+function sourcePanelUrl(panel: SourcePanel): string | undefined {
+  return panel.items.find((item) => item.source_url)?.source_url;
+}
+
+function previewText(value: string, limit = 44): string {
+  if (value.length <= limit) return value;
+  return `${value.slice(0, limit - 1).trimEnd()}…`;
+}
+
+function compactPreview(parts: string[]): string {
+  return parts
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0)
+    .slice(0, 3)
+    .map((part, index) => previewText(part, index === 0 ? 44 : 34))
+    .join(" · ");
+}
+
+function finalizeSourcePreview(panel: SourcePanel, preview: string): string {
+  if (preview) return preview;
+  return panel.missing[0] ? previewText(panel.missing[0], 54) : "";
+}
+
+function sourceTone(text: string): SourceTone {
+  const value = text.toLowerCase();
+
+  if (
+    value.includes("0 complaint") ||
+    value.includes("0 revocation") ||
+    value.includes("approved") ||
+    value.includes("positive") ||
+    value.includes("praised") ||
+    value.includes("registered")
+  ) {
+    return "good";
+  }
+
+  if (
+    value.includes("negative") ||
+    value.includes("complaint") ||
+    value.includes("concern") ||
+    value.includes("delay") ||
+    value.includes("revocation") ||
+    value.includes("waterlogging") ||
+    value.includes("severe traffic")
+  ) {
+    return "risk";
+  }
+
+  if (
+    value.includes("mixed") ||
+    value.includes("construction") ||
+    value.includes("under review") ||
+    value.includes("unpredictable")
+  ) {
+    return "watch";
+  }
+
+  return "neutral";
+}
+
+function sourcePanelPreview(panel: SourcePanel, kind: SourcePanelKind): string {
+  if (kind === "rera") {
+    return finalizeSourcePreview(panel, compactPreview([
+      cleanSourceText(findSourceItem(panel, "rera_status", "status")),
+      cleanSourceText(findSourceItem(panel, "rera_completion_date", "completion")),
+      cleanSourceText(findSourceItem(panel, "rera_complaints_count", "complaints"))
+        || cleanSourceText(findSourceItem(panel, "rera_delay_months", "delay")),
+    ]));
+  }
+
+  if (kind === "market") {
+    return finalizeSourcePreview(panel, compactPreview([
+      cleanSourceText(findSourceItem(panel, "price_per_sqft", "market_rate", "market rate")),
+      cleanSourceText(findSourceItem(panel, "price_appreciation", "price movement")),
+      cleanSourceText(findSourceItem(panel, "pricing_3bhk", "3bhk pricing")),
+    ]));
+  }
+
+  if (kind === "area") {
+    const parts = [
+      findSourceItem(panel, "metro_details", "metro access") ? "Metro access" : "",
+      findSourceItem(panel, "traffic_reality", "traffic") ? "Peak-hour traffic" : "",
+      findSourceItem(panel, "waterlogging_detail", "waterlogging") ? "Rain watch" : "",
+      findSourceItem(panel, "school_quality", "schools") ? "School cluster" : "",
+    ];
+    return finalizeSourcePreview(panel, compactPreview(parts));
+  }
+
+  if (kind === "community") {
+    return finalizeSourcePreview(panel, compactPreview([
+      cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take")),
+      sourceItemList(findSourceItem(panel, "common_complaints", "repeated concerns"))[0] ?? "",
+    ]));
+  }
+
+  return finalizeSourcePreview(panel, compactPreview([
+    sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"))[0] ?? "",
+    sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"))[0] ?? "",
+  ]));
 }
 
 function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
@@ -596,80 +810,252 @@ function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
       </div>
 
       <div className="source-panel-grid">
-        {panels.map((panel, index) => (
-          <details key={panel.title} className="source-panel" open={index === 0}>
-            <summary>
-              <div>
-                <h3>{panel.title}</h3>
-                <p>{panel.subtitle}</p>
-              </div>
-              <div className="source-panel-actions">
-                <strong className="source-panel-count">{panel.items.length} stored</strong>
-                <span className="source-disclosure-toggle" aria-hidden="true">
-                  <span className="source-disclosure-toggle-open">Hide</span>
-                  <span className="source-disclosure-toggle-closed">Open</span>
-                </span>
-              </div>
-            </summary>
+        {panels.map((panel, index) => {
+          const kind = sourcePanelKind(panel);
+          const copy = SOURCE_PANEL_COPY[kind];
+          const preview = sourcePanelPreview(panel, kind);
 
-            <div className="source-panel-body">
-              {panel.items.map((item) => (
-                <details
-                  key={`${panel.title}-${item.label}`}
-                  className="source-fact-disclosure"
-                >
-                  <summary className="source-fact-row">
-                    <div>
-                      <span>{item.label}</span>
-                      <strong>{item.value}</strong>
-                    </div>
-                    <div className="source-fact-meta">
-                      <span>{item.source_type} · {item.confidence_pct}% · {formatSourceDate(item.learned_at)}</span>
-                      <span className="source-disclosure-toggle" aria-hidden="true">
-                        <span className="source-disclosure-toggle-open">Hide</span>
-                        <span className="source-disclosure-toggle-closed">Open</span>
-                      </span>
-                    </div>
-                  </summary>
-
-                  <div className="source-fact-detail">
-                    <blockquote>{item.value}</blockquote>
-                    <dl>
-                      <div>
-                        <dt>Type</dt>
-                        <dd>{item.source_type}</dd>
-                      </div>
-                      <div>
-                        <dt>Confidence</dt>
-                        <dd>{item.confidence_pct}%</dd>
-                      </div>
-                      <div>
-                        <dt>Stored</dt>
-                        <dd>{formatSourceDate(item.learned_at)}</dd>
-                      </div>
-                    </dl>
-                    {item.source_url && (
-                      <a className="source-fact-link" href={item.source_url} target="_blank" rel="noreferrer">
-                        Open source
-                      </a>
-                    )}
-                  </div>
-                </details>
-              ))}
-
-              {panel.missing.length > 0 && (
-                <div className="source-missing-list">
-                  <span>Not captured</span>
-                  {panel.missing.map((item) => (
-                    <p key={item}>{item}</p>
-                  ))}
+          return (
+            <details key={`${panel.title}-${kind}`} className={`source-panel source-panel--${kind}`} open={index === 0}>
+              <summary>
+                <i className="source-chevron" aria-hidden="true" />
+                <div className="source-panel-headline">
+                  <h3>{copy.title}</h3>
+                  <p>{copy.subtitle}</p>
                 </div>
-              )}
-            </div>
-          </details>
-        ))}
+                {preview && <span className="source-panel-glance">{preview}</span>}
+              </summary>
+
+              <div className="source-panel-body">
+                <SourcePanelBody panel={panel} kind={kind} />
+                <SourceMissingNotes items={panel.missing} />
+              </div>
+            </details>
+          );
+        })}
       </div>
     </section>
+  );
+}
+
+function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePanelKind }) {
+  if (kind === "rera") {
+    const status = findSourceItem(panel, "rera_status", "status");
+    const registration = findSourceItem(panel, "rera_number", "registration");
+    const completion = findSourceItem(panel, "rera_completion_date", "completion");
+    const delay = findSourceItem(panel, "rera_delay_months", "delay");
+    const complaints = findSourceItem(panel, "rera_complaints_count", "complaints");
+    const revocations = findSourceItem(panel, "rera_builder_revocations", "builder revocations");
+    const sourceUrl = sourcePanelUrl(panel);
+
+    const stats = [
+      status ? { label: "Status", value: cleanSourceText(status), tone: sourceTone(cleanSourceText(status)) } : null,
+      registration ? { label: "Registration", value: cleanSourceText(registration), tone: "neutral" as SourceTone } : null,
+      completion ? { label: "Completion", value: cleanSourceText(completion), tone: "neutral" as SourceTone } : null,
+      delay ? { label: "Delay", value: cleanSourceText(delay), tone: "watch" as SourceTone } : null,
+      complaints ? { label: "Complaints", value: cleanSourceText(complaints), tone: sourceTone(cleanSourceText(complaints)) } : null,
+      revocations ? { label: "Revocations", value: cleanSourceText(revocations), tone: sourceTone(cleanSourceText(revocations)) } : null,
+    ].filter((stat): stat is { label: string; value: string; tone: SourceTone } => stat !== null);
+
+    return (
+      <div className="source-panel-stack">
+        <div className="source-stat-grid">
+          {stats.map((stat) => (
+            <SourceStat key={stat.label} label={stat.label} value={stat.value} tone={stat.tone} />
+          ))}
+        </div>
+        {sourceUrl && (
+          <a className="property-text-link source-panel-link" href={sourceUrl} target="_blank" rel="noreferrer">
+            Open RERA source
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  if (kind === "market") {
+    const pricing = findSourceItem(panel, "pricing_3bhk", "3bhk pricing");
+    const rate = findSourceItem(panel, "price_per_sqft", "market rate");
+    const appreciation = findSourceItem(panel, "price_appreciation", "price movement");
+    const comparables = sourceItemList(findSourceItem(panel, "comparable_projects", "nearby comparables"));
+
+    return (
+      <div className="source-panel-stack">
+        <div className="source-stat-grid source-stat-grid--wide">
+          {pricing && <SourceStat label="3BHK band" value={cleanSourceText(pricing)} tone="neutral" />}
+          {rate && <SourceStat label="Rate check" value={cleanSourceText(rate)} tone="good" />}
+          {appreciation && <SourceStat label="Cycle" value={cleanSourceText(appreciation)} tone="watch" />}
+        </div>
+        <SourceTagRow title="Compared against" items={comparables} />
+      </div>
+    );
+  }
+
+  if (kind === "area") {
+    const cards = [
+      (() => {
+        const item = findSourceItem(panel, "metro_details", "metro access");
+        return item ? { label: "Metro access", value: cleanSourceText(item), tone: "good" as SourceTone } : null;
+      })(),
+      (() => {
+        const item = findSourceItem(panel, "traffic_reality", "traffic");
+        return item ? { label: "Traffic", value: cleanSourceText(item), tone: "watch" as SourceTone } : null;
+      })(),
+      (() => {
+        const item = findSourceItem(panel, "waterlogging_detail", "waterlogging");
+        return item ? { label: "Waterlogging", value: cleanSourceText(item), tone: "risk" as SourceTone } : null;
+      })(),
+      (() => {
+        const item = findSourceItem(panel, "school_quality", "schools");
+        return item ? { label: "Schools", value: cleanSourceText(item), tone: "good" as SourceTone } : null;
+      })(),
+    ].filter((card): card is { label: string; value: string; tone: SourceTone } => card !== null);
+
+    return (
+      <div className="source-signal-grid">
+        {cards.map((card) => (
+          <SourceSignalCard key={card.label} label={card.label} value={card.value} tone={card.tone} />
+        ))}
+      </div>
+    );
+  }
+
+  if (kind === "community") {
+    const overall = cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take"));
+    const summary = cleanSourceText(findSourceItem(panel, "sentiment_summary", "what forums point to"));
+    const quoteItem = findSourceItem(panel, "best_quote", "quote");
+    const quote = sourceQuoteText(quoteItem);
+    const positives = sourceItemList(findSourceItem(panel, "common_positives", "repeated positives"));
+    const concerns = sourceItemList(findSourceItem(panel, "common_complaints", "repeated concerns"));
+
+    return (
+      <div className="source-panel-stack">
+        {(overall || summary) && (
+          <div className="source-lead">
+            {overall && (
+              <span className={`source-sentiment-pill source-sentiment-pill--${sourceTone(overall)}`}>
+                {overall}
+              </span>
+            )}
+            {summary && <p>{summary}</p>}
+          </div>
+        )}
+
+        {quote && (
+          <blockquote className="source-quote">
+            <p>{quote}</p>
+            <span>{quoteItem?.source_type === "Llm" ? "Representative line" : "Quoted line"}</span>
+          </blockquote>
+        )}
+
+        <div className="source-list-grid">
+          <SourceListCard title="What people like" items={positives} tone="good" />
+          <SourceListCard title="What people complain about" items={concerns} tone="watch" />
+        </div>
+      </div>
+    );
+  }
+
+  const overall = cleanSourceText(findSourceItem(panel, "google_sentiment", "overall take"));
+  const positives = sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"));
+  const concerns = sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"));
+  const themes = sourceItemList(findSourceItem(panel, "google_common_themes", "themes"));
+
+  return (
+    <div className="source-panel-stack">
+      {overall && (
+        <div className="source-lead">
+          <p>{overall}</p>
+        </div>
+      )}
+      <div className="source-list-grid">
+        <SourceListCard title="Often praised" items={positives} tone="good" />
+        <SourceListCard title="Often criticized" items={concerns} tone="watch" />
+      </div>
+      <SourceTagRow title="Themes" items={themes} />
+    </div>
+  );
+}
+
+function SourceStat({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: SourceTone;
+}) {
+  return (
+    <div className={`source-stat source-stat--${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SourceSignalCard({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: string;
+  tone: SourceTone;
+}) {
+  return (
+    <div className={`source-signal-card source-signal-card--${tone}`}>
+      <span>{label}</span>
+      <p>{value}</p>
+    </div>
+  );
+}
+
+function SourceListCard({
+  title,
+  items,
+  tone,
+}: {
+  title: string;
+  items: string[];
+  tone: "good" | "watch";
+}) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="source-list-card">
+      <CompactList title={title} items={items} tone={tone} />
+    </div>
+  );
+}
+
+function SourceTagRow({ title, items }: { title: string; items: string[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="source-tag-row">
+      <span>{title}</span>
+      <div className="source-chip-wrap">
+        {items.map((item) => (
+          <span key={item} className="source-chip">{item}</span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SourceMissingNotes({ items }: { items: string[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className="source-missing-list">
+      <span>Still missing</span>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
