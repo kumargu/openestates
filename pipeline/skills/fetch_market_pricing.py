@@ -20,7 +20,7 @@ import time
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from pipeline.skills.base import BaseSkill, FactSource, SkillCost, SkillResult, SourcedFact
 
@@ -30,6 +30,8 @@ KNOWLEDGE_DIR = Path("data/knowledge/nodes")
 SOCIETY_DIR = KNOWLEDGE_DIR / "society"
 CACHE_DIR = Path("data/cache/skills/market_pricing")
 CACHE_TTL_DAYS = 14  # market prices change, refresh every 2 weeks
+CACHE_SCHEMA_VERSION = 2
+PRICE_MATH_TOLERANCE = 0.35
 
 PRICING_PROMPT = """You are a real estate market analyst. Research current selling prices for this apartment project.
 
@@ -43,10 +45,19 @@ PRICING_PROMPT = """You are a real estate market analyst. Research current selli
 
 Find the current market selling prices for each available BHK configuration (1BHK, 2BHK, 3BHK, 4BHK, 5BHK — only include configs that actually exist in this project).
 
+Pricing source policy:
+- Start with MagicBricks project/listing pages. Use MagicBricks as the primary price source when it has this project.
+- If MagicBricks is unavailable or incomplete, use another marketplace such as Housing, 99acres, SquareYards, or NoBroker.
+- Do not use RERA total project cost or cost per unit as the buyer-facing sale price.
+- Do not use developer "Price on request" as a numeric price.
+- Include the source URL for every price range. If no price source URL is available, return found=false.
+- Treat prices as asking-price market signals, not legal/project truth.
+
 For each configuration include:
 - Super built-up area range in sq ft
 - Current market price range in INR
 - Approximate price per sq ft
+- The marketplace/source URL used for this configuration
 
 Also find:
 - Overall price appreciation since launch (if known)
@@ -56,18 +67,25 @@ Also find:
 Output ONLY a JSON object (no explanation, no markdown):
 {{
   "found": true,
+  "primary_source_name": "MagicBricks",
+  "primary_source_url": "https://www.magicbricks.com/...",
+  "source_urls": ["https://www.magicbricks.com/..."],
   "configurations": [
     {{
       "bhk": "2BHK",
       "sqft_range": "1100-1250",
       "price_range_lakh": "85-110",
-      "price_per_sqft": "7700-8800"
+      "price_per_sqft": "7700-8800",
+      "source_name": "MagicBricks",
+      "source_url": "https://www.magicbricks.com/..."
     }},
     {{
       "bhk": "3BHK",
       "sqft_range": "1500-1800",
       "price_range_lakh": "120-165",
-      "price_per_sqft": "8000-9200"
+      "price_per_sqft": "8000-9200",
+      "source_name": "MagicBricks",
+      "source_url": "https://www.magicbricks.com/..."
     }}
   ],
   "market_status": "ready_to_move",
@@ -82,7 +100,7 @@ Output ONLY a JSON object (no explanation, no markdown):
   "pricing_notes": "Brief 1-2 line market insight about this project's pricing position"
 }}
 
-If you cannot find reliable pricing data, return: {{"found": false, "reason": "..."}}
+If you cannot find reliable pricing data with a source URL, return: {{"found": false, "reason": "..."}}
 Prices should be in lakhs (1 lakh = 100,000 INR). Use current 2026 market prices, not launch prices."""
 
 
@@ -165,6 +183,8 @@ def _get_cached(society_slug: str) -> Optional[dict]:
         return None
     try:
         data = json.loads(p.read_text())
+        if data.get("schema_version") != CACHE_SCHEMA_VERSION:
+            return None
         cached_at = datetime.fromisoformat(data.get("cached_at", "2000-01-01"))
         age_days = (datetime.now(timezone.utc) - cached_at).days
         if age_days > CACHE_TTL_DAYS:
@@ -177,6 +197,7 @@ def _get_cached(society_slug: str) -> Optional[dict]:
 def _save_cache(society_slug: str, result: dict):
     p = _cache_path(society_slug)
     p.write_text(json.dumps({
+        "schema_version": CACHE_SCHEMA_VERSION,
         "cached_at": datetime.now(timezone.utc).isoformat(),
         "result": result,
     }, indent=2, ensure_ascii=False))
@@ -212,22 +233,63 @@ def atomic_write_json(path: Path, data: dict):
 
 def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
     """Convert Gemini pricing response to self-describing SourcedFacts."""
+    primary_source_name = _clean_text(pricing.get("primary_source_name")) or "Marketplace"
+    primary_source_url = _primary_source_url(pricing)
     source = FactSource(
         source_type="Google",
+        url=primary_source_url,
         model="gemini-2.5-flash",
         skill_id="fetch_market_pricing",
     )
     facts = []
 
+    if primary_source_url:
+        facts.append(SourcedFact(
+            key="pricing_source",
+            value={"type": "Object", "data": {
+                "source_name": primary_source_name,
+                "source_url": primary_source_url,
+                "basis": "marketplace_asking_price",
+            }},
+            confidence=0.8 if _is_magicbricks(primary_source_name, primary_source_url) else 0.65,
+            source=source,
+            display_template=f"Pricing source: {primary_source_name}",
+            answers_preferences=["price source", "market price source", "asking price"],
+        ))
+
+    accepted_config_list = []
     configs = pricing.get("configurations", [])
     for cfg in configs:
         bhk = cfg.get("bhk", "").lower().replace(" ", "")  # "3bhk"
         sqft = cfg.get("sqft_range", "")
         price_range = cfg.get("price_range_lakh", "")
         price_psf = cfg.get("price_per_sqft", "")
+        source_name = _clean_text(cfg.get("source_name")) or primary_source_name
+        source_url = _clean_text(cfg.get("source_url")) or primary_source_url
 
-        if not bhk or not price_range:
+        if not bhk or not price_range or not sqft or not source_url:
             continue
+        if not _price_math_is_plausible(price_range, sqft, price_psf):
+            logger.warning(
+                "Skipping implausible pricing config: bhk=%s price=%s sqft=%s psf=%s source=%s",
+                bhk,
+                price_range,
+                sqft,
+                price_psf,
+                source_url,
+            )
+            continue
+
+        config_source = FactSource(
+            source_type="Google",
+            url=source_url,
+            model="gemini-2.5-flash",
+            skill_id="fetch_market_pricing",
+        )
+        if not source.url:
+            source.url = source_url
+        config_confidence = 0.75 if _is_magicbricks(source_name, source_url) else 0.65
+        accepted_config_list.append(cfg.get("bhk", bhk))
 
         # Per-config fact
         facts.append(SourcedFact(
@@ -237,9 +299,12 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
                 "sqft_range": sqft,
                 "price_range_lakh": price_range,
                 "price_per_sqft": price_psf,
+                "source_name": source_name,
+                "source_url": source_url,
+                "basis": "marketplace_asking_price",
             }},
-            confidence=0.7,
-            source=source,
+            confidence=config_confidence,
+            source=config_source,
             display_template=f"{cfg.get('bhk', bhk)}: {sqft} sq ft — ₹{price_range} Lakh",
             answers_preferences=[
                 bhk, f"{bhk} price", f"{bhk} flat",
@@ -250,7 +315,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
 
     # Avg price per sqft
     avg_psf = pricing.get("avg_price_per_sqft")
-    if avg_psf:
+    if avg_psf and source.url and accepted_config_list:
         try:
             avg_psf_num = float(avg_psf) if isinstance(avg_psf, str) else avg_psf
             display_psf = f"₹{avg_psf_num:,.0f}/sq ft (market rate)"
@@ -268,7 +333,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
         ))
 
     # Configurations available
-    config_list = [cfg.get("bhk", "") for cfg in configs if cfg.get("bhk")]
+    config_list = [cfg for cfg in accepted_config_list if cfg]
     if config_list:
         facts.append(SourcedFact(
             key="configurations",
@@ -281,7 +346,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
 
     # Market status
     market_status = pricing.get("market_status")
-    if market_status:
+    if market_status and source.url and accepted_config_list:
         facts.append(SourcedFact(
             key="market_status",
             value={"type": "Text", "data": market_status},
@@ -293,7 +358,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
 
     # Appreciation
     appreciation = pricing.get("price_appreciation_pct")
-    if appreciation is not None:
+    if appreciation is not None and source.url and accepted_config_list:
         period = pricing.get("appreciation_period", "")
         facts.append(SourcedFact(
             key="price_appreciation",
@@ -309,7 +374,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
 
     # Comparable projects
     comparables = pricing.get("comparable_projects", [])
-    if comparables:
+    if comparables and source.url and accepted_config_list:
         facts.append(SourcedFact(
             key="comparable_projects",
             value={"type": "List", "data": comparables},
@@ -320,7 +385,7 @@ def pricing_to_facts(pricing: dict) -> List[SourcedFact]:
 
     # Pricing notes
     notes = pricing.get("pricing_notes")
-    if notes:
+    if notes and source.url and accepted_config_list:
         facts.append(SourcedFact(
             key="pricing_insight",
             value={"type": "Text", "data": notes},
@@ -342,6 +407,69 @@ def _upper_bound_crore(price_range_lakh: str) -> str:
         return f"{upper / 100:.2f}"
     except (ValueError, IndexError):
         return "?"
+
+
+def _clean_text(value: object) -> str:
+    """Return stripped text for simple JSON string fields."""
+    return value.strip() if isinstance(value, str) else ""
+
+
+def _primary_source_url(pricing: dict) -> Optional[str]:
+    """Pick the best source URL from the pricing response."""
+    primary = _clean_text(pricing.get("primary_source_url"))
+    if primary:
+        return primary
+    source_urls = pricing.get("source_urls")
+    if isinstance(source_urls, list):
+        for value in source_urls:
+            url = _clean_text(value)
+            if url:
+                return url
+    return None
+
+
+def _is_magicbricks(source_name: str, source_url: Optional[str]) -> bool:
+    marker = f"{source_name} {source_url or ''}".lower()
+    return "magicbricks" in marker or "magic bricks" in marker
+
+
+def _parse_numeric_range(raw: object, *, crore_to_lakh: bool = False) -> Optional[Tuple[float, float]]:
+    """Parse a numeric range like '259-353', '2.59-3.53 Cr', or '2,004-2,482'."""
+    text = _clean_text(raw).lower().replace(",", "")
+    if not text:
+        return None
+    numbers = [float(part) for part in re.findall(r"\d+(?:\.\d+)?", text)]
+    if not numbers:
+        return None
+    multiplier = 100.0 if crore_to_lakh and ("cr" in text or "crore" in text) else 1.0
+    if len(numbers) == 1:
+        value = numbers[0] * multiplier
+        return value, value
+    return numbers[0] * multiplier, numbers[-1] * multiplier
+
+
+def _ranges_overlap(left: Tuple[float, float], right: Tuple[float, float]) -> bool:
+    return max(left[0], right[0]) <= min(left[1], right[1])
+
+
+def _price_math_is_plausible(price_range_lakh: object, sqft_range: object, price_per_sqft: object) -> bool:
+    """Validate that price, area, and psf ranges can describe the same units."""
+    price = _parse_numeric_range(price_range_lakh, crore_to_lakh=True)
+    sqft = _parse_numeric_range(sqft_range)
+    if not price or not sqft or sqft[0] <= 0 or sqft[1] <= 0:
+        return False
+
+    expected_low = (price[0] * 100_000.0) / sqft[1]
+    expected_high = (price[1] * 100_000.0) / sqft[0]
+    expected = (
+        expected_low * (1.0 - PRICE_MATH_TOLERANCE),
+        expected_high * (1.0 + PRICE_MATH_TOLERANCE),
+    )
+
+    psf = _parse_numeric_range(price_per_sqft)
+    if not psf:
+        return True
+    return _ranges_overlap(expected, psf)
 
 
 def _market_status_prefs(status: str) -> List[str]:
