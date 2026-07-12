@@ -1201,13 +1201,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1375",
-          "price_range_lakh": "214-216",
-          "price_per_sqft": "15500-15700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"15500-15700\", \"price_range_lakh\": \"214-216\", \"sqft_range\": \"1375\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1234,13 +1229,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1665-1990",
-          "price_range_lakh": "260-375",
-          "price_per_sqft": "15600-18800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15600-18800\", \"price_range_lakh\": \"260-375\", \"sqft_range\": \"1665-1990\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1267,13 +1257,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3115",
-          "price_range_lakh": "485-520",
-          "price_per_sqft": "15500-16700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15500-16700\", \"price_range_lakh\": \"485-520\", \"sqft_range\": \"3115\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1329,7 +1314,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1378,11 +1363,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 63.54,
-          "period": "since Oct 2025 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 63.54, \"period\": \"since Oct 2025 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1404,7 +1386,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sumadhura Solace Phase-I",
           "Sobha Neopolis",
@@ -1442,5 +1424,6 @@
       "display_template": "Century Mirai Ph1 is a new launch, under-construction luxury apartment project in a rapidly developing micro-market of East Bengaluru. It offers competitive pricing with significant appreciation potential due to its strategic location and comprehensive amenities."
     }
   ],
-  "updated_at": "2026-03-13T15:28:19.784633+00:00"
+  "updated_at": "2026-03-13T15:28:19.784633+00:00",
+  "created_at": "2026-03-13T13:28:03.309582+00:00"
 }

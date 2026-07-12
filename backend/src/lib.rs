@@ -1,6 +1,4 @@
-pub mod cache;
 pub mod data_loader;
-pub mod discovery;
 pub mod enrichment_queue;
 pub mod knowledge;
 pub mod models;
@@ -8,5 +6,4 @@ pub mod routes;
 pub mod scoring;
 pub mod search;
 pub mod state;
-pub mod storage;
 pub mod utils;

@@ -1246,13 +1246,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1900-2173",
-          "price_range_lakh": "238-295",
-          "price_per_sqft": "12500-15500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12500-15500\", \"price_range_lakh\": \"238-295\", \"sqft_range\": \"1900-2173\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1279,13 +1274,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2400-2477",
-          "price_range_lakh": "309-339",
-          "price_per_sqft": "12500-14500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12500-14500\", \"price_range_lakh\": \"309-339\", \"sqft_range\": \"2400-2477\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1341,7 +1331,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1388,7 +1378,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Kritan Icon (HSR Layout)",
           "Svamitva Soul Spring (HSR Layout)",

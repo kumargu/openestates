@@ -855,13 +855,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1502-1698",
-          "price_range_lakh": "134-156",
-          "price_per_sqft": "7900-10400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"7900-10400\", \"price_range_lakh\": \"134-156\", \"sqft_range\": \"1502-1698\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -888,13 +883,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1691-1812",
-          "price_range_lakh": "152-183",
-          "price_per_sqft": "8400-10800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"8400-10800\", \"price_range_lakh\": \"152-183\", \"sqft_range\": \"1691-1812\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -921,13 +911,8 @@
     {
       "key": "pricing_4.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4.5BHK",
-          "sqft_range": "2471",
-          "price_range_lakh": "210-219",
-          "price_per_sqft": "8500-8900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4.5BHK\", \"price_per_sqft\": \"8500-8900\", \"price_range_lakh\": \"210-219\", \"sqft_range\": \"2471\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -954,13 +939,8 @@
     {
       "key": "pricing_5.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5.5BHK",
-          "sqft_range": "2733",
-          "price_range_lakh": "228-243",
-          "price_per_sqft": "8300-8900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5.5BHK\", \"price_per_sqft\": \"8300-8900\", \"price_range_lakh\": \"228-243\", \"sqft_range\": \"2733\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1016,7 +996,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2.5BHK",
           "3.5BHK",
@@ -1067,11 +1047,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 36.51,
-          "period": "Q3 2025 to Q4 2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 36.51, \"period\": \"Q3 2025 to Q4 2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1093,7 +1070,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "ARS Zurich",
           "Binary Temple Tree",
@@ -1507,5 +1484,6 @@
       "version": 1
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.663378+00:00"
+  "updated_at": "2026-03-13T15:11:56.663378+00:00",
+  "created_at": "2026-03-13T04:57:23.928013+00:00"
 }

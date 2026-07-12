@@ -1237,13 +1237,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1635-1860",
-          "price_range_lakh": "235-327",
-          "price_per_sqft": "15000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15000-17000\", \"price_range_lakh\": \"235-327\", \"sqft_range\": \"1635-1860\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1270,13 +1265,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2100-2150",
-          "price_range_lakh": "285-352",
-          "price_per_sqft": "15000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15000-17000\", \"price_range_lakh\": \"285-352\", \"sqft_range\": \"2100-2150\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1332,7 +1322,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1379,11 +1369,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 23.51,
-          "period": "last 1 year"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 23.51, \"period\": \"last 1 year\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1405,7 +1392,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sumadhura Solace Phase I, Whitefield",
           "ELV High Garden, Whitefield",

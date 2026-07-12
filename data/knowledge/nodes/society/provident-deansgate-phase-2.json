@@ -1024,13 +1024,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1927-2166",
-          "price_range_lakh": "259-291",
-          "price_per_sqft": "12000-15000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12000-15000\", \"price_range_lakh\": \"259-291\", \"sqft_range\": \"1927-2166\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1086,7 +1081,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK"
         ]
@@ -1131,7 +1126,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Signature One",
           "Preeti Aarna Ville",
@@ -1170,5 +1165,6 @@
       "display_template": "Provident Deansgate Phase 2 offers luxury 3 BHK villaments with prices reflecting its premium positioning and Manchester-inspired design in the developing Devanahalli area. As the project is under construction with a completion date in March 2028, specific price appreciation since its February 2025 launch is not widely reported yet. The locality, however, is experiencing growth."
     }
   ],
-  "updated_at": "2026-03-13T15:50:20.406776+00:00"
+  "updated_at": "2026-03-13T15:50:20.406776+00:00",
+  "created_at": "2026-03-13T13:17:17.408724+00:00"
 }

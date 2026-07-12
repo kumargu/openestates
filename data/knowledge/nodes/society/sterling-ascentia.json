@@ -824,13 +824,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1591-2015",
-          "price_range_lakh": "270-484",
-          "price_per_sqft": "17000-24000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"17000-24000\", \"price_range_lakh\": \"270-484\", \"sqft_range\": \"1591-2015\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -886,7 +881,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK"
         ]
@@ -932,11 +927,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 225,
-          "period": "since 2015 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 225, \"period\": \"since 2015 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -958,7 +950,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Waterford, Whitefield",
           "Sobha Royal Pavilion, Sarjapur Road",

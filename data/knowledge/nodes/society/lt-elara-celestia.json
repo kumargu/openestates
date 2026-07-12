@@ -1272,13 +1272,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1503-2202",
-          "price_range_lakh": "283-519",
-          "price_per_sqft": "17000-26000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"17000-26000\", \"price_range_lakh\": \"283-519\", \"sqft_range\": \"1503-2202\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1305,13 +1300,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2757-3162",
-          "price_range_lakh": "512-787",
-          "price_per_sqft": "18000-25000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"18000-25000\", \"price_range_lakh\": \"512-787\", \"sqft_range\": \"2757-3162\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1338,13 +1328,8 @@
     {
       "key": "pricing_5bhkduplex",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK Duplex",
-          "sqft_range": "5000-5500",
-          "price_range_lakh": "900+",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK Duplex\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"900+\", \"sqft_range\": \"5000-5500\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1400,7 +1385,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK",
@@ -1449,11 +1434,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 11,
-          "period": "annual average in Hebbal"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 11, \"period\": \"annual average in Hebbal\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1475,7 +1457,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Century Ethos",
           "SNN Clermont",

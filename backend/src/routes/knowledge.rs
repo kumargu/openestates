@@ -7,8 +7,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use crate::knowledge::{GraphStats, SourcedFact, store as kg_store};
 use crate::knowledge::node::NodeType;
+use crate::knowledge::{store as kg_store, GraphStats, SourcedFact};
 use crate::state::AppState;
 
 /// GET /api/knowledge/stats — graph overview
@@ -158,12 +158,7 @@ pub async fn enrichment_queue(State(state): State<Arc<AppState>>) -> Json<serde_
 pub async fn search_log(State(state): State<Arc<AppState>>) -> Json<serde_json::Value> {
     let graph = state.knowledge.read().await;
     // Return the most recent 50 search events
-    let recent: Vec<_> = graph
-        .search_log
-        .iter()
-        .rev()
-        .take(50)
-        .collect();
+    let recent: Vec<_> = graph.search_log.iter().rev().take(50).collect();
     Json(serde_json::to_value(recent).unwrap_or_default())
 }
 

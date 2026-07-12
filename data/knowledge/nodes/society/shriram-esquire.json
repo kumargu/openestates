@@ -1195,13 +1195,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1940-1950",
-          "price_range_lakh": "280-380",
-          "price_per_sqft": "14400-19500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14400-19500\", \"price_range_lakh\": \"280-380\", \"sqft_range\": \"1940-1950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1228,13 +1223,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2285-2370",
-          "price_range_lakh": "340-500",
-          "price_per_sqft": "14900-21100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"14900-21100\", \"price_range_lakh\": \"340-500\", \"sqft_range\": \"2285-2370\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1290,7 +1280,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1337,7 +1327,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sattva Magnificia",
           "Vaishnavi AT One Krishna Brindavan",

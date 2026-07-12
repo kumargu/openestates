@@ -61,8 +61,7 @@ pub fn save_node(knowledge_dir: &Path, node: &Node) -> std::io::Result<()> {
         )
     })?;
 
-    let content = serde_json::to_string_pretty(node)
-        .map_err(std::io::Error::other)?;
+    let content = serde_json::to_string_pretty(node).map_err(std::io::Error::other)?;
 
     atomic_write(&path, content.as_bytes())
 }
@@ -122,8 +121,7 @@ fn edges_path(knowledge_dir: &Path) -> PathBuf {
 
 /// Save all edges to a single file.
 pub fn save_edges(knowledge_dir: &Path, edges: &[Edge]) -> std::io::Result<()> {
-    let content = serde_json::to_string_pretty(edges)
-        .map_err(std::io::Error::other)?;
+    let content = serde_json::to_string_pretty(edges).map_err(std::io::Error::other)?;
     atomic_write(&edges_path(knowledge_dir), content.as_bytes())
 }
 
@@ -245,8 +243,7 @@ pub fn append_search_log(
         std::fs::create_dir_all(parent)?;
     }
 
-    let line = serde_json::to_string(event)
-        .map_err(std::io::Error::other)?;
+    let line = serde_json::to_string(event).map_err(std::io::Error::other)?;
 
     use std::io::Write;
     let mut file = std::fs::OpenOptions::new()

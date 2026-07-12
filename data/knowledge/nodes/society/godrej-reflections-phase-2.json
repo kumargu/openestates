@@ -871,13 +871,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "752-871",
-          "price_range_lakh": "58-73.8",
-          "price_per_sqft": "6600-9800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"6600-9800\", \"price_range_lakh\": \"58-73.8\", \"sqft_range\": \"752-871\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -904,13 +899,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1259-1632",
-          "price_range_lakh": "98-137",
-          "price_per_sqft": "6000-10900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"6000-10900\", \"price_range_lakh\": \"98-137\", \"sqft_range\": \"1259-1632\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -937,13 +927,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1645-2215",
-          "price_range_lakh": "139-206",
-          "price_per_sqft": "6300-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"6300-12500\", \"price_range_lakh\": \"139-206\", \"sqft_range\": \"1645-2215\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -970,13 +955,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2378",
-          "price_range_lakh": "200-227",
-          "price_per_sqft": "8400-9500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"8400-9500\", \"price_range_lakh\": \"200-227\", \"sqft_range\": \"2378\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1003,13 +983,8 @@
     {
       "key": "pricing_5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK",
-          "sqft_range": "2923-3336",
-          "price_range_lakh": "246-281",
-          "price_per_sqft": "7400-9600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK\", \"price_per_sqft\": \"7400-9600\", \"price_range_lakh\": \"246-281\", \"sqft_range\": \"2923-3336\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1065,7 +1040,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1119,7 +1094,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Tru Windchimes by TRU Dwellings Pvt Ltd (Carmelaram, Bangalore)",
           "Godrej 24 (Sarjapur Road)",

@@ -1127,13 +1127,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1180-1250",
-          "price_range_lakh": "85-120",
-          "price_per_sqft": "6800-10200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"6800-10200\", \"price_range_lakh\": \"85-120\", \"sqft_range\": \"1180-1250\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1160,13 +1155,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1400-1900",
-          "price_range_lakh": "115-162",
-          "price_per_sqft": "6100-11600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"6100-11600\", \"price_range_lakh\": \"115-162\", \"sqft_range\": \"1400-1900\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1193,13 +1183,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1950-2100",
-          "price_range_lakh": "Not readily available",
-          "price_per_sqft": "Not readily available"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"Not readily available\", \"price_range_lakh\": \"Not readily available\", \"sqft_range\": \"1950-2100\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1255,7 +1240,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1304,7 +1289,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Varshith Vistas Sarjapur",
           "Modern Neon Chikka Tirupathi Road",
@@ -1343,5 +1328,6 @@
       "display_template": "Seven Sarjapur is a new launch project, with RERA approval secured in March 2026. Pricing reflects early market entry, offering competitive rates for 2, 3, and 4 BHK configurations in the rapidly developing Sarjapur-Attibele corridor."
     }
   ],
-  "updated_at": "2026-03-13T15:35:29.109528+00:00"
+  "updated_at": "2026-03-13T15:35:29.109528+00:00",
+  "created_at": "2026-03-13T04:57:19.125991+00:00"
 }

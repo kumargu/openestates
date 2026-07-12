@@ -1,33 +1,24 @@
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Instant;
 
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::RwLock;
 
-use crate::cache::{Cache, InMemoryCache};
-use crate::discovery::{DiscoveryCache, GeminiClient};
 use crate::knowledge;
-use crate::knowledge::embed_client::EmbedClient;
 use crate::knowledge::fact::FactValue;
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
-use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::models::area_profile::{PriceRange, RedditSignals};
+use crate::models::{AreaProfile, Property, Seller, Society};
+use crate::search::SearchIndex;
 use crate::state::AppState;
-use crate::storage::{LocalFsBackend, StorageBackend};
 
 /// Load all data and construct the full AppState.
 ///
 /// All entity data (properties, societies, areas) is derived from the Knowledge Graph
 /// — the single source of truth. No seed JSON files are read at startup.
 pub async fn load_app_state(project_root: &Path) -> AppState {
-    let lake_root = project_root.join("data").join("lake");
-
-    let storage: Arc<dyn StorageBackend> =
-        Arc::new(LocalFsBackend::new(lake_root));
-    let cache: Arc<dyn Cache> = Arc::new(InMemoryCache::new());
-
     // --- Knowledge Graph (must load first — societies and areas derive from it) ---
     let kg_dir = knowledge::store::knowledge_dir(project_root);
     let graph = knowledge::store::load_graph(&kg_dir).unwrap_or_else(|| {
@@ -44,10 +35,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
 
     // --- Derive societies and areas from KG ---
     let societies = societies_from_graph(&graph);
-    println!(
-        "Derived {} societies from knowledge graph",
-        societies.len()
-    );
+    println!("Derived {} societies from knowledge graph", societies.len());
 
     let areas = areas_from_graph(&graph);
     println!("Derived {} areas from knowledge graph", areas.len());
@@ -58,9 +46,17 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         "Derived {} properties from knowledge graph",
         properties.len()
     );
+    let search_index = SearchIndex::build(&properties);
+    println!(
+        "Built local search index for {} properties",
+        properties.len()
+    );
 
     // --- Sellers ---
-    let sellers_path = project_root.join("data").join("sellers").join("sellers.json");
+    let sellers_path = project_root
+        .join("data")
+        .join("sellers")
+        .join("sellers.json");
     let sellers: Vec<Seller> = if sellers_path.exists() {
         load_json_direct::<Vec<Seller>>(&sellers_path)
     } else {
@@ -76,58 +72,16 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         sellers.len()
     );
 
-    // Pre-populate cache with frequently accessed data.
-    let ttl = Duration::from_secs(300);
-    if let Ok(val) = serde_json::to_value(&properties) {
-        let _ = cache.set("all_properties", val, ttl).await;
-    }
-    if let Ok(val) = serde_json::to_value(&areas) {
-        let _ = cache.set("all_areas", val, ttl).await;
-    }
-    if let Ok(val) = serde_json::to_value(&societies) {
-        let _ = cache.set("all_societies", val, ttl).await;
-    }
-
-    // Cache individual properties by ID for detail page lookups.
-    for p in &properties {
-        let key = format!("property:{}", p.id);
-        if let Ok(val) = serde_json::to_value(p) {
-            let _ = cache.set(&key, val, ttl).await;
-        }
-    }
-
-    // --- Live Discovery + Semantic Search ---
-    let api_key = std::env::var("GOOGLE_AI_API_KEY").ok();
-    let gemini = api_key.as_ref().map(|key| {
-        println!("Live discovery enabled (GOOGLE_AI_API_KEY found)");
-        GeminiClient::new(key.clone())
-    });
-    let embed_client = api_key.map(|key| {
-        println!("Semantic search enabled (embedding client initialized)");
-        EmbedClient::new(key)
-    });
-    if gemini.is_none() {
-        println!("Live discovery + semantic search disabled (set GOOGLE_AI_API_KEY to enable)");
-    }
-
-    let max_per_hour: u32 = std::env::var("MAX_DISCOVERIES_PER_HOUR")
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(10);
-    let discovery_cache = Mutex::new(DiscoveryCache::new(24, max_per_hour));
+    println!("Request-time AI disabled: search uses only local knowledge graph data");
 
     AppState {
-        storage,
-        cache,
         properties: RwLock::new(properties),
+        search_index: RwLock::new(search_index),
         areas,
         societies,
         sellers: RwLock::new(sellers),
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
-        gemini,
-        discovery_cache,
-        embed_client,
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
         registration_counter: AtomicU64::new(0),
@@ -140,14 +94,18 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
 ///
 /// Extracts known fact keys into the flat Society struct fields.
 /// Missing facts get sensible defaults — KG nodes may have sparse data
-/// (especially Gemini-discovered societies).
+/// when offline enrichment has not filled every dimension yet.
 pub fn societies_from_graph(graph: &KnowledgeGraph) -> Vec<Society> {
     graph
         .nodes_of_type(NodeType::Society)
         .into_iter()
         .map(|node| {
             // Strip "society:" prefix from node id to get the plain id
-            let id = node.id.strip_prefix("society:").unwrap_or(&node.id).to_string();
+            let id = node
+                .id
+                .strip_prefix("society:")
+                .unwrap_or(&node.id)
+                .to_string();
 
             Society {
                 id,
@@ -189,7 +147,11 @@ fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
         .nodes_of_type(NodeType::Area)
         .into_iter()
         .map(|node| {
-            let id = node.id.strip_prefix("area:").unwrap_or(&node.id).to_string();
+            let id = node
+                .id
+                .strip_prefix("area:")
+                .unwrap_or(&node.id)
+                .to_string();
 
             AreaProfile {
                 id,
@@ -237,7 +199,7 @@ fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
 /// Derive Property structs from KG property nodes.
 ///
 /// Maps KG fact keys (area, city, bhk, price, etc.) to Property struct fields.
-/// Missing facts get sensible defaults matching what `ingest_discoveries()` produces.
+/// Missing facts get conservative defaults so sparse local nodes can still render.
 pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
     graph
         .nodes_of_type(NodeType::Property)
@@ -300,11 +262,19 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 builder_name: fact_text(node, "builder_name").into(),
                 property_type: {
                     let t: String = fact_text(node, "property_type").into();
-                    if t.is_empty() { "Apartment".to_string() } else { t }
+                    if t.is_empty() {
+                        "Apartment".to_string()
+                    } else {
+                        t
+                    }
                 },
                 listing_type: {
                     let t: String = fact_text(node, "listing_type").into();
-                    if t.is_empty() { "Resale".to_string() } else { t }
+                    if t.is_empty() {
+                        "Resale".to_string()
+                    } else {
+                        t
+                    }
                 },
                 bhk,
                 price,
@@ -315,11 +285,19 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 total_floors: fact_numeric(node, "total_floors") as u32,
                 facing: {
                     let f: String = fact_text(node, "facing").into();
-                    if f.is_empty() { "Not specified".to_string() } else { f }
+                    if f.is_empty() {
+                        "Not specified".to_string()
+                    } else {
+                        f
+                    }
                 },
                 possession_status: {
                     let p: String = fact_text(node, "possession_status").into();
-                    if p.is_empty() { "unknown".to_string() } else { p }
+                    if p.is_empty() {
+                        "unknown".to_string()
+                    } else {
+                        p
+                    }
                 },
                 metro_distance_mins: fact_numeric(node, "metro_distance_mins") as u32,
                 maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
@@ -329,17 +307,29 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                     .max(0.5),
                 litigation_risk: {
                     let v = fact_numeric(node, "litigation_risk");
-                    if v == 0.0 { 0.1 } else { v }
+                    if v == 0.0 {
+                        0.1
+                    } else {
+                        v
+                    }
                 },
                 noise_score: fact_numeric(node, "noise_score").max(0.5),
                 sunlight_score: fact_numeric(node, "sunlight_score").max(0.5),
                 airport_noise_score: {
                     let v = fact_numeric(node, "airport_noise_score");
-                    if v == 0.0 { 0.1 } else { v }
+                    if v == 0.0 {
+                        0.1
+                    } else {
+                        v
+                    }
                 },
                 waterlogging_risk_score: {
                     let v = fact_numeric(node, "waterlogging_risk_score");
-                    if v == 0.0 { 0.2 } else { v }
+                    if v == 0.0 {
+                        0.2
+                    } else {
+                        v
+                    }
                 },
                 traffic_score: fact_numeric(node, "traffic_score").max(0.5),
                 days_on_market: fact_numeric(node, "days_on_market") as u32,
@@ -366,7 +356,11 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 },
                 seller_id: {
                     let s: String = fact_text(node, "seller_id").into();
-                    if s.is_empty() { None } else { Some(s) }
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
                 },
             }
         })
@@ -576,7 +570,14 @@ mod tests {
         assert_eq!(s.total_units, 0);
     }
 
-    fn make_property_node(slug: &str, name: &str, area: &str, builder: &str, bhk: u32, price: f64) -> Node {
+    fn make_property_node(
+        slug: &str,
+        name: &str,
+        area: &str,
+        builder: &str,
+        bhk: u32,
+        price: f64,
+    ) -> Node {
         let id = format!("property:{}", slug);
         let mut node = Node::new(&id, NodeType::Property, name);
         node.add_facts(vec![
@@ -625,7 +626,11 @@ mod tests {
     fn test_property_sparse_defaults() {
         let mut graph = KnowledgeGraph::new();
         // Minimal node — only name, no facts
-        let node = Node::new("property:minimal-prop", NodeType::Property, "Minimal Property");
+        let node = Node::new(
+            "property:minimal-prop",
+            NodeType::Property,
+            "Minimal Property",
+        );
         graph.add_node(node);
         graph.rebuild_indexes();
 
@@ -644,17 +649,28 @@ mod tests {
         // Default scores
         assert_eq!(p.society_quality_score, 0.5);
         assert_eq!(p.litigation_risk, 0.1);
-        assert!(p.transparency_tags.contains(&"Discovered via Search".to_string()));
+        assert!(p
+            .transparency_tags
+            .contains(&"Discovered via Search".to_string()));
         assert!(p.greenery_score.is_none());
         assert!(p.seller_id.is_none());
     }
 
     #[test]
     fn test_derive_society_id() {
-        assert_eq!(derive_society_id("discovered-prestige-park-grove-3bhk"), "soc-prestige-park-grove");
-        assert_eq!(derive_society_id("discovered-sobha-windsor-2bhk"), "soc-sobha-windsor");
+        assert_eq!(
+            derive_society_id("discovered-prestige-park-grove-3bhk"),
+            "soc-prestige-park-grove"
+        );
+        assert_eq!(
+            derive_society_id("discovered-sobha-windsor-2bhk"),
+            "soc-sobha-windsor"
+        );
         assert_eq!(derive_society_id("prop-w-001"), "soc-prop-w-001");
-        assert_eq!(derive_society_id("discovered-some-project"), "soc-some-project");
+        assert_eq!(
+            derive_society_id("discovered-some-project"),
+            "soc-some-project"
+        );
     }
 
     #[test]

@@ -1088,13 +1088,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1875-2291",
-          "price_range_lakh": "351-421",
-          "price_per_sqft": "18700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"18700\", \"price_range_lakh\": \"351-421\", \"sqft_range\": \"1875-2291\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1121,13 +1116,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2400-2570",
-          "price_range_lakh": "449-477",
-          "price_per_sqft": "18700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"18700\", \"price_range_lakh\": \"449-477\", \"sqft_range\": \"2400-2570\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1183,7 +1173,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1230,11 +1220,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 73,
-          "period": "since 2021 (Sarjapur Road market)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 73, \"period\": \"since 2021 (Sarjapur Road market)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1256,7 +1243,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sobha Royal Pavilion",
           "Sobha Neopolis",
@@ -1296,5 +1283,6 @@
       "display_template": "Sobha Altair is positioned as an ultra-luxury residential project, offering premium pricing justified by its prime location, Sobha's renowned construction quality, and comprehensive amenities, making it attractive for discerning buyers and long-term investors."
     }
   ],
-  "updated_at": "2026-03-13T15:51:34.571024+00:00"
+  "updated_at": "2026-03-13T15:51:34.571024+00:00",
+  "created_at": "2026-03-13T13:25:30.268523+00:00"
 }

@@ -19,7 +19,7 @@ pub enum RootSource {
     Rera,
     /// Self-reported by seller, enrichable but no legal proof
     Seller,
-    /// Live discovery (Gemini), verification pending
+    /// Offline discovery or crawler source, verification pending
     Discovered,
     /// Pre-Sprint 3 seed data, unclassified
     Legacy,
@@ -75,7 +75,7 @@ pub struct Node {
     /// Where this node's data originally came from
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub root_source: Option<RootSource>,
-    /// Optional summary embedding for semantic search (768-dim)
+    /// Optional precomputed summary embedding for local similarity search.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub summary_embedding: Option<Vec<f32>>,
     pub created_at: DateTime<Utc>,
@@ -132,4 +132,3 @@ impl Node {
         self.facts.iter().any(|f| f.key == key)
     }
 }
-

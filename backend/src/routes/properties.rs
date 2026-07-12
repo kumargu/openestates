@@ -1,17 +1,17 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::Json;
 use serde::Serialize;
 
 use crate::models::{PropertyCard, SellerSummary};
 use crate::scoring::{
-    self, CompareThemes, MarketActivityResponse, TradeoffsResponse, TransparencyScore,
-    compute_transparency_score,
+    self, compute_transparency_score, CompareThemes, MarketActivityResponse, TradeoffsResponse,
+    TransparencyScore,
 };
-use crate::search::ConfidenceScore;
 use crate::search::text::compute_confidence_for_detail;
+use crate::search::ConfidenceScore;
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
@@ -23,9 +23,7 @@ use super::enrichment::{
 };
 
 /// GET /api/properties — returns UI-ready property cards.
-pub async fn list_properties(
-    State(state): State<Arc<AppState>>,
-) -> Json<Vec<PropertyCard>> {
+pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<PropertyCard>> {
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
     let sellers = state.sellers.read().await;
@@ -46,7 +44,7 @@ pub struct PropertyDetail {
     pub themes: CompareThemes,
     pub tradeoffs: TradeoffsResponse,
     pub market_activity: MarketActivityResponse,
-    /// Similar properties from semantically related societies (embedding-based).
+    /// Similar properties from locally precomputed society embeddings.
     pub similar_properties: Vec<PropertyCard>,
     /// RERA regulatory data from the knowledge graph (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -90,6 +88,16 @@ pub struct ErrorResponse {
     pub error: String,
 }
 
+fn canonical_property_id(id: &str) -> &str {
+    match id {
+        "fixture-prestige-lakeside-3bhk" => "discovered-prestige-lakeside-habitat-3bhk",
+        "fixture-samadhura-capitol-3bhk" => "discovered-sumadhura-capitol-residences-3bhk",
+        "fixture-vaswani-starlight-3bhk" => "discovered-vaswani-starlight-3bhk",
+        "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
+        _ => id,
+    }
+}
+
 /// GET /api/properties/:id — returns joined property + society + area,
 /// enriched from the knowledge graph.
 pub async fn get_property(
@@ -97,9 +105,10 @@ pub async fn get_property(
     Path(id): Path<String>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
     let properties = state.properties.read().await;
+    let canonical_id = canonical_property_id(&id);
     let property = properties
         .iter()
-        .find(|p| p.id == id)
+        .find(|p| p.id == canonical_id)
         .cloned()
         .ok_or_else(|| {
             (
@@ -133,25 +142,15 @@ pub async fn get_property(
     }
 
     // Compute themes, tradeoffs, market activity (KG-first scoring)
-    let themes = scoring::compute_themes(
-        &property,
-        area.as_ref(),
-        society.as_ref(),
-        &graph,
-    );
-    let tradeoffs = scoring::compute_tradeoffs(
-        &property,
-        area.as_ref(),
-        society.as_ref(),
-        &graph,
-    );
+    let themes = scoring::compute_themes(&property, area.as_ref(), society.as_ref(), &graph);
+    let tradeoffs = scoring::compute_tradeoffs(&property, area.as_ref(), society.as_ref(), &graph);
     let market_activity = scoring::compute_market_activity(&property, area.as_ref());
 
     // Hold a read lock on sellers — no clone needed, just borrow for the
     // duration of this request.
     let sellers_guard = state.sellers.read().await;
 
-    // Find similar properties via embedding similarity on the society node
+    // Find similar properties via local embedding similarity on the society node.
     let similar_properties = {
         let soc_node_id = society_node_id(&property.society_id);
         let similar_societies = graph.similar_to(&soc_node_id, 5, Some(NodeType::Society));
@@ -162,10 +161,16 @@ pub async fn get_property(
                 continue;
             }
             // Find one property from this society
-            if let Some(prop) = properties.iter().find(|p| {
-                society_node_id(&p.society_id) == sim_soc.node_id && p.id != property.id
-            }) {
-                similar.push(enrich_property_card_with_sellers(prop, &state.societies, &graph, &sellers_guard));
+            if let Some(prop) = properties
+                .iter()
+                .find(|p| society_node_id(&p.society_id) == sim_soc.node_id && p.id != property.id)
+            {
+                similar.push(enrich_property_card_with_sellers(
+                    prop,
+                    &state.societies,
+                    &graph,
+                    &sellers_guard,
+                ));
                 if similar.len() >= 4 {
                     break;
                 }
@@ -231,7 +236,9 @@ pub async fn get_property(
         if let Some(node) = graph.get_node(&soc_node_id) {
             let rs = node.root_source.map(|r| r.as_str().to_string());
             // Get machine-readable project_status
-            let ps = node.facts.iter()
+            let ps = node
+                .facts
+                .iter()
                 .filter(|f| f.key == "project_status")
                 .max_by_key(|f| f.version)
                 .and_then(|f| match &f.value {
@@ -239,7 +246,9 @@ pub async fn get_property(
                     _ => None,
                 });
             // Get display_template for project_status fact
-            let ps_display = node.facts.iter()
+            let ps_display = node
+                .facts
+                .iter()
                 .filter(|f| f.key == "project_status")
                 .max_by_key(|f| f.version)
                 .and_then(|f| {
@@ -297,7 +306,10 @@ pub async fn get_property(
 /// Count non-empty lines in a JSONL file (interest events).
 async fn count_interest_lines(path: &std::path::Path) -> usize {
     match tokio::fs::read_to_string(path).await {
-        Ok(contents) => contents.lines().filter(|l: &&str| !l.trim().is_empty()).count(),
+        Ok(contents) => contents
+            .lines()
+            .filter(|l: &&str| !l.trim().is_empty())
+            .count(),
         Err(_) => 0,
     }
 }

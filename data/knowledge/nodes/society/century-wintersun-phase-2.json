@@ -1038,13 +1038,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3100-3350",
-          "price_range_lakh": "310-380",
-          "price_per_sqft": "9500-10200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"9500-10200\", \"price_range_lakh\": \"310-380\", \"sqft_range\": \"3100-3350\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1100,7 +1095,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "4BHK"
         ]
@@ -1144,11 +1139,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 22.58,
-          "period": "since July 2023 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 22.58, \"period\": \"since July 2023 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1170,7 +1162,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Merusri Sunscape Villas, IVC Road, North Bangalore",
           "Century Artizan, Yelahanka, Bangalore",
@@ -1208,5 +1200,6 @@
       "display_template": "Century Wintersun Phase 2 (Ferie Villas) is officially sold out by the developer, with current market prices reflecting resale values for these under-construction luxury villas."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.720254+00:00"
+  "updated_at": "2026-03-13T15:11:56.720254+00:00",
+  "created_at": "2026-03-13T13:28:37.399165+00:00"
 }

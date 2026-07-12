@@ -1126,13 +1126,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1864-2302",
-          "price_range_lakh": "230-310",
-          "price_per_sqft": "10000-16600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"10000-16600\", \"price_range_lakh\": \"230-310\", \"sqft_range\": \"1864-2302\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1159,13 +1154,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2824-4272",
-          "price_range_lakh": "342-379",
-          "price_per_sqft": "8000-13400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"8000-13400\", \"price_range_lakh\": \"342-379\", \"sqft_range\": \"2824-4272\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1192,13 +1182,8 @@
     {
       "key": "pricing_5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK",
-          "sqft_range": "4800-5400",
-          "price_range_lakh": "490-710",
-          "price_per_sqft": "9100-14800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK\", \"price_per_sqft\": \"9100-14800\", \"price_range_lakh\": \"490-710\", \"sqft_range\": \"4800-5400\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1254,7 +1239,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK",
@@ -1303,7 +1288,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "MICROPOLIS (Kudlu)",
           "TREES & TANDEM (Chokkasandra)",
@@ -1341,5 +1326,6 @@
       "display_template": "Purva Silversky is positioned as an ultra-luxury project with competitive new launch pricing, offering spacious homes and premium amenities in a rapidly developing corridor of South Bangalore."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.840617+00:00"
+  "updated_at": "2026-03-13T15:11:56.840617+00:00",
+  "created_at": "2026-03-13T13:17:13.728831+00:00"
 }

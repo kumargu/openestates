@@ -18,7 +18,7 @@ const SellerLandingPage = lazy(() => import("./pages/SellerLandingPage.tsx").the
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
-function FocusOnNavigate() {
+export function FocusOnNavigate() {
   const { pathname } = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
@@ -28,7 +28,7 @@ function FocusOnNavigate() {
   return null;
 }
 
-function NavLink({ to, label, active }: { to: string; label: string; active: boolean }) {
+export function NavLink({ to, label, active }: { to: string; label: string; active: boolean }) {
   return (
     <Link
       to={to}
@@ -63,11 +63,11 @@ function NavLink({ to, label, active }: { to: string; label: string; active: boo
 const NAV_ITEMS = [
   { to: "/results", label: "Properties", matchFn: (p: string) => p === "/results" || p.startsWith("/property/") },
   { to: "/societies", label: "Societies", matchFn: (p: string) => p === "/societies" || p.startsWith("/society/") },
-  { to: "/shortlist", label: "Shortlist", matchFn: (p: string) => p === "/shortlist" },
+  { to: "/shortlist", label: "Decision Sheet", matchFn: (p: string) => p === "/shortlist" },
   { to: "/sell", label: "List Property", matchFn: (p: string) => p === "/sell" || p === "/register" },
 ];
 
-function Nav() {
+export function Nav() {
   const location = useLocation();
   const isHome = location.pathname === "/";
   const path = location.pathname;
@@ -181,7 +181,7 @@ function Nav() {
   );
 }
 
-function SiteFooter() {
+export function SiteFooter() {
   const location = useLocation();
   if (location.pathname === "/") return null;
 
@@ -190,7 +190,7 @@ function SiteFooter() {
       <div className="site-footer-links">
         <Link to="/results">Properties</Link>
         <Link to="/societies">Societies</Link>
-        <Link to="/shortlist">Shortlist</Link>
+        <Link to="/shortlist">Decision Sheet</Link>
       </div>
       <div className="site-footer-wordmark">OpenEstates</div>
       <p className="site-footer-tagline">Transparent property discovery</p>
@@ -198,7 +198,7 @@ function SiteFooter() {
   );
 }
 
-function App() {
+export function App() {
   return (
     <HelmetProvider>
       <Helmet>

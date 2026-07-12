@@ -5,7 +5,7 @@
  * signal/caution chips, and area context — the transparency-first
  * society discovery surface.
  */
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type { SocietySearchResponse, SocietySearchResult } from "../lib/types.ts";
@@ -439,28 +439,46 @@ export function SocietySearchPage() {
   const [data, setData] = useState<SocietySearchResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ok" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState("");
+  const latestRequestId = useRef(0);
 
-  const fetchResults = useCallback(async (q: string) => {
-    setStatus("loading");
-    setErrorMsg("");
+  const fetchResults = useCallback(async (q: string, requestId: number) => {
     try {
       const json = await searchSocieties(q);
+      if (latestRequestId.current !== requestId) return;
       setData(json);
       setStatus("ok");
     } catch {
+      if (latestRequestId.current !== requestId) return;
       setErrorMsg("Could not load society results. Please try again later.");
       setStatus("error");
     }
   }, []);
 
   useEffect(() => {
-    fetchResults(queryParam);
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
+
+    queueMicrotask(() => {
+      if (latestRequestId.current !== requestId) return;
+      setData(null);
+      setStatus("loading");
+      setErrorMsg("");
+      void fetchResults(queryParam, requestId);
+    });
+
+    return () => {
+      if (latestRequestId.current === requestId) {
+        latestRequestId.current += 1;
+      }
+    };
   }, [queryParam, fetchResults]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = inputValue.trim();
     if (trimmed) {
+      setStatus("loading");
+      setErrorMsg("");
       setSearchParams({ q: trimmed });
     }
   };
@@ -575,7 +593,7 @@ export function SocietySearchPage() {
           {results.length} {results.length === 1 ? "society" : "societies"} ranked
         </h1>
         <span style={{ fontSize: "0.72rem", color: "var(--color-text-muted)" }}>
-          {enrichment_status.reddit_enriched}/{enrichment_status.societies_scored} Reddit-enriched
+          {enrichment_status.societies_discovered} discovered · {enrichment_status.reddit_enriched} Reddit-enriched
         </span>
       </div>
 

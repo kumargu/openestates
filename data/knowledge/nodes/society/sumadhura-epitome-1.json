@@ -1067,13 +1067,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1290-1545",
-          "price_range_lakh": "146-194",
-          "price_per_sqft": "11300-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11300-12500\", \"price_range_lakh\": \"146-194\", \"sqft_range\": \"1290-1545\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1100,13 +1095,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1580-1865",
-          "price_range_lakh": "178-236",
-          "price_per_sqft": "11300-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11300-12500\", \"price_range_lakh\": \"178-236\", \"sqft_range\": \"1580-1865\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1133,13 +1123,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2120",
-          "price_range_lakh": "239-263",
-          "price_per_sqft": "11300-12400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11300-12400\", \"price_range_lakh\": \"239-263\", \"sqft_range\": \"2120\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1195,7 +1180,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1244,11 +1229,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 7.35,
-          "period": "since mid-2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 7.35, \"period\": \"since mid-2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1270,7 +1252,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Adarsh Crest",
           "Goyal Orchid Salisbury",

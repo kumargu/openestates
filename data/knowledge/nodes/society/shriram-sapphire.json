@@ -1073,13 +1073,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "975-1035",
-          "price_range_lakh": "80-100",
-          "price_per_sqft": "7700-10300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"7700-10300\", \"price_range_lakh\": \"80-100\", \"sqft_range\": \"975-1035\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1106,13 +1101,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1265-1295",
-          "price_range_lakh": "110-150",
-          "price_per_sqft": "8500-11900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"8500-11900\", \"price_range_lakh\": \"110-150\", \"sqft_range\": \"1265-1295\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1168,7 +1158,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK"
@@ -1215,11 +1205,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 25,
-          "period": "since Dec 2023 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 25, \"period\": \"since Dec 2023 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1241,7 +1228,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Shriram Green Field Phase 1",
           "Abhee Serenity Springs",
@@ -1281,5 +1268,6 @@
       "display_template": "Shriram Sapphire offers competitive pricing for its luxury 2 and 3 BHK apartments, positioned as a new launch/under construction project in a rapidly developing area. The average asking price has shown significant appreciation in the last year."
     }
   ],
-  "updated_at": "2026-03-13T15:37:12.012035+00:00"
+  "updated_at": "2026-03-13T15:37:12.012035+00:00",
+  "created_at": "2026-03-13T13:21:20.561415+00:00"
 }

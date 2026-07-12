@@ -1,6 +1,4 @@
-mod cache;
 mod data_loader;
-mod discovery;
 mod enrichment_queue;
 mod knowledge;
 mod models;
@@ -8,7 +6,6 @@ mod routes;
 mod scoring;
 mod search;
 mod state;
-mod storage;
 mod utils;
 
 use std::path::PathBuf;
@@ -62,10 +59,7 @@ async fn main() {
             "/api/societies/search",
             get(routes::societies::search_societies),
         )
-        .route(
-            "/api/societies/{slug}",
-            get(routes::societies::get_society),
-        )
+        .route("/api/societies/{slug}", get(routes::societies::get_society))
         // Knowledge graph endpoints
         .route("/api/knowledge/stats", get(routes::knowledge::graph_stats))
         .route("/api/knowledge/nodes", get(routes::knowledge::list_nodes))
@@ -184,7 +178,5 @@ async fn main() {
         .await
         .expect("Failed to bind port 4000");
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

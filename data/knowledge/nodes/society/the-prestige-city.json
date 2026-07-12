@@ -870,13 +870,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "634-666",
-          "price_range_lakh": "70-95",
-          "price_per_sqft": "11000-14500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"11000-14500\", \"price_range_lakh\": \"70-95\", \"sqft_range\": \"634-666\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -903,13 +898,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1135-1430",
-          "price_range_lakh": "140-215",
-          "price_per_sqft": "12000-15000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"12000-15000\", \"price_range_lakh\": \"140-215\", \"sqft_range\": \"1135-1430\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -936,13 +926,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1361-1898",
-          "price_range_lakh": "175-310",
-          "price_per_sqft": "12000-16500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12000-16500\", \"price_range_lakh\": \"175-310\", \"sqft_range\": \"1361-1898\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -969,13 +954,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2204-2600",
-          "price_range_lakh": "265-350",
-          "price_per_sqft": "12000-13500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12000-13500\", \"price_range_lakh\": \"265-350\", \"sqft_range\": \"2204-2600\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1031,7 +1011,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1083,11 +1063,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 70,
-          "period": "since 2021 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 70, \"period\": \"since 2021 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1109,7 +1086,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Brigade Gem, Sarjapur Road",
           "Sobha Neopolis, Panathur",

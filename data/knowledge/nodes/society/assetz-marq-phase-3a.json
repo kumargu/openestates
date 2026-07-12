@@ -1377,13 +1377,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1372-1940",
-          "price_range_lakh": "204-320",
-          "price_per_sqft": "14900-16500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14900-16500\", \"price_range_lakh\": \"204-320\", \"sqft_range\": \"1372-1940\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1410,13 +1405,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2275",
-          "price_range_lakh": "265-287",
-          "price_per_sqft": "11600-12600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11600-12600\", \"price_range_lakh\": \"265-287\", \"sqft_range\": \"2275\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1472,7 +1462,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1520,11 +1510,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 90,
-          "period": "since launch (Dec 2021/Jan 2022)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 90, \"period\": \"since launch (Dec 2021/Jan 2022)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1546,7 +1533,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sumadhura Folium Phase 2",
           "Pavani Mirabilia",
@@ -1586,5 +1573,6 @@
       "display_template": "Assetz Marq Phase 3A, a recently completed project, is positioned in the premium segment of Whitefield, reflecting significant appreciation since its launch. Current prices are driven by its ready-to-move status and the established demand in the IT hub."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.680798+00:00"
+  "updated_at": "2026-03-13T15:11:56.680798+00:00",
+  "created_at": "2026-03-13T04:53:17.411943+00:00"
 }

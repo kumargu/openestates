@@ -53,7 +53,11 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Metro: {value}",
-      "answers_preferences": ["metro access", "metro", "near metro"],
+      "answers_preferences": [
+        "metro access",
+        "metro",
+        "near metro"
+      ],
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 2.0
@@ -74,7 +78,9 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "{value}",
-      "answers_preferences": ["metro access"]
+      "answers_preferences": [
+        "metro access"
+      ]
     },
     {
       "key": "traffic_reality",
@@ -91,7 +97,10 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Traffic: {value}",
-      "answers_preferences": ["easy commute", "traffic"]
+      "answers_preferences": [
+        "easy commute",
+        "traffic"
+      ]
     },
     {
       "key": "waterlogging_risk",
@@ -108,7 +117,10 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Waterlogging risk: {value}",
-      "answers_preferences": ["safe from flooding", "no waterlogging"],
+      "answers_preferences": [
+        "safe from flooding",
+        "no waterlogging"
+      ],
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 2.0
@@ -129,7 +141,10 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Upcoming: {value}",
-      "answers_preferences": ["growing area", "appreciation"]
+      "answers_preferences": [
+        "growing area",
+        "appreciation"
+      ]
     },
     {
       "key": "price_trend",
@@ -146,7 +161,10 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Price trend: {value}",
-      "answers_preferences": ["good investment", "appreciation"],
+      "answers_preferences": [
+        "good investment",
+        "appreciation"
+      ],
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.5
@@ -203,7 +221,11 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Top schools: {value}",
-      "answers_preferences": ["good schools", "schools nearby", "kids"]
+      "answers_preferences": [
+        "good schools",
+        "schools nearby",
+        "kids"
+      ]
     },
     {
       "key": "price_range",
@@ -220,7 +242,10 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Price range: {value}",
-      "answers_preferences": ["budget", "affordable"]
+      "answers_preferences": [
+        "budget",
+        "affordable"
+      ]
     },
     {
       "key": "connectivity",
@@ -237,7 +262,12 @@
       "learned_at": "2026-03-13T12:00:00.000000+00:00",
       "version": 1,
       "display_template": "Connectivity: {value}",
-      "answers_preferences": ["well connected", "easy commute"]
+      "answers_preferences": [
+        "well connected",
+        "easy commute"
+      ]
     }
-  ]
+  ],
+  "created_at": "2026-03-13T07:34:49.638944+00:00",
+  "updated_at": "2026-03-13T12:00:00.000000+00:00"
 }

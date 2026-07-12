@@ -45,6 +45,22 @@ DETAIL_CACHE_TTL_DAYS = 30
 _last_detail_fetch_time = 0.0
 
 
+def _parse_cache_timestamp(value: str) -> datetime:
+    """Parse an ISO-ish UTC timestamp on Python 3.6.
+
+    Python 3.6 does not have datetime.fromisoformat(), but the cache only needs
+    enough precision to decide whether to refresh. Treat stored offsets as UTC.
+    """
+    value = (value or "2000-01-01T00:00:00").replace("Z", "+00:00")
+    value = re.sub(r'([+-]\d{2}:\d{2})$', '', value)
+    for fmt in ("%Y-%m-%dT%H:%M:%S.%f", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Data classes
 # ---------------------------------------------------------------------------
@@ -342,7 +358,7 @@ def scrape_rera_listing(force: bool = False) -> List[ReraListingEntry]:
     if not force and LISTING_CACHE_PATH.exists():
         try:
             cache_data = json.loads(LISTING_CACHE_PATH.read_text())
-            cached_at = datetime.fromisoformat(cache_data.get("cached_at", "2000-01-01"))
+            cached_at = _parse_cache_timestamp(cache_data.get("cached_at", "2000-01-01"))
             if datetime.now(timezone.utc) - cached_at < timedelta(days=LISTING_CACHE_TTL_DAYS):
                 entries = [ReraListingEntry(**e) for e in cache_data["entries"]]
                 logger.info("Using cached RERA listing: %d entries", len(entries))

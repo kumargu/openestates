@@ -979,13 +979,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1452-1771",
-          "price_range_lakh": "173-211",
-          "price_per_sqft": "11500-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11500-12500\", \"price_range_lakh\": \"173-211\", \"sqft_range\": \"1452-1771\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1012,13 +1007,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1953-2005",
-          "price_range_lakh": "232-239",
-          "price_per_sqft": "11500-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"11500-12500\", \"price_range_lakh\": \"232-239\", \"sqft_range\": \"1953-2005\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1074,7 +1064,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "3.5BHK"
@@ -1121,11 +1111,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 41,
-          "period": "since February 2025 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 41, \"period\": \"since February 2025 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1147,7 +1134,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Klassik Exotica",
           "Legacy Grand",
@@ -1185,5 +1172,6 @@
       "display_template": "Prestige Suncrest is positioned as a luxury offering in Electronic City, with prices reflecting its premium builder reputation and amenities, showing significant appreciation since its launch. The 1BHK and 2BHK units are currently sold out from the builder."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.824631+00:00"
+  "updated_at": "2026-03-13T15:11:56.824631+00:00",
+  "created_at": "2026-03-13T13:27:19.702634+00:00"
 }

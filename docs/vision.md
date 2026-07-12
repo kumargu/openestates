@@ -34,7 +34,7 @@ Two roots, explicit trust:
 | Stack | Rust+Axum backend, React frontend, Python pipeline |
 | Sellers | 5 seed sellers, registration flow in progress |
 
-**What works:** NL search, property discovery, knowledge graph, live discovery via Gemini, scoring with explanations, shortlist + compare, seller dashboard, interest flow.
+**What works:** NL search, local knowledge graph search, scoring with explanations, shortlist + decision sheet, seller dashboard, interest flow.
 
 **What's missing:** RERA-rooted data foundation, trust badges, marketplace analytics, performance, CI/CD, SEO.
 
@@ -181,7 +181,7 @@ This is the core product principle: **minimal filters, maximum intelligence.** T
 - Every KG node gets a `root_source` field: `"rera"`, `"seller"`, or `"discovered"`
 - RERA-rooted nodes: government-verified, full trust chain
 - Seller-rooted nodes: self-reported, enrichable but no legal proof
-- Discovered nodes (Gemini): verification pending, queued for RERA cross-check
+- Discovered nodes from offline crawlers/enrichment: verification pending, queued for RERA cross-check
 
 ### Trust Badges UI
 
@@ -256,7 +256,7 @@ Before scaling, prove every layer works on 10 hand-picked properties:
 - Expand RERA seeding to **100 societies** across Bengaluru (not 300 — keep it tight, find data quality issues early)
 - Run full enrichment pipeline on all 100: RERA → market pricing → Reddit → images → embeddings
 - Automated data quality scoring — flag nodes with low fact counts or stale enrichment
-- Verify Gemini-based live discovery works against RERA-rooted data (search → KG ingestion)
+- Verify local search works against RERA-rooted data and queues enrichment gaps instead of making request-time LLM calls
 
 ### Phase 3: Market Pricing Enrichment (Days 84–86)
 

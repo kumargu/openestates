@@ -589,7 +589,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:47:36.781627+00:00"
     },
     {
       "key": "embedding_computed",
@@ -781,13 +782,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1350-1950",
-          "price_range_lakh": "202.5-331.5",
-          "price_per_sqft": "15000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15000-17000\", \"price_range_lakh\": \"202.5-331.5\", \"sqft_range\": \"1350-1950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -814,13 +810,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1550-2275",
-          "price_range_lakh": "230-420",
-          "price_per_sqft": "15000-18500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15000-18500\", \"price_range_lakh\": \"230-420\", \"sqft_range\": \"1550-2275\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -876,7 +867,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -924,11 +915,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 216,
-          "period": "since 2019 launch to Feb 2026"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 216, \"period\": \"since 2019 launch to Feb 2026\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -950,7 +938,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Park Grove",
           "Prestige Glenbrook",

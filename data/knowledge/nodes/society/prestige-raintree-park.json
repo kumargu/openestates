@@ -1145,13 +1145,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "650",
-          "price_range_lakh": "110",
-          "price_per_sqft": "16923"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"16923\", \"price_range_lakh\": \"110\", \"sqft_range\": \"650\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1178,13 +1173,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1200",
-          "price_range_lakh": "200",
-          "price_per_sqft": "16667"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"16667\", \"price_range_lakh\": \"200\", \"sqft_range\": \"1200\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1211,13 +1201,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2004-2482",
-          "price_range_lakh": "259-353",
-          "price_per_sqft": "11600-13200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11600-13200\", \"price_range_lakh\": \"259-353\", \"sqft_range\": \"2004-2482\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1244,13 +1229,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2226-2968",
-          "price_range_lakh": "308-455",
-          "price_per_sqft": "11900-13800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11900-13800\", \"price_range_lakh\": \"308-455\", \"sqft_range\": \"2226-2968\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1277,13 +1257,8 @@
     {
       "key": "pricing_5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK",
-          "sqft_range": "3503-3698",
-          "price_range_lakh": "420-560",
-          "price_per_sqft": "12000-12700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK\", \"price_per_sqft\": \"12000-12700\", \"price_range_lakh\": \"420-560\", \"sqft_range\": \"3503-3698\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1310,7 +1285,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "13500-14500"
       },
       "confidence": 0.7,
@@ -1339,7 +1314,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1392,11 +1367,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 21,
-          "period": "since August 2024 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 21, \"period\": \"since August 2024 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1418,7 +1390,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Somerville",
           "Prestige Serenity Shores",

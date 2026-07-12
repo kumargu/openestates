@@ -488,13 +488,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1133",
-          "price_range_lakh": "118-143",
-          "price_per_sqft": "10400-12600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"10400-12600\", \"price_range_lakh\": \"118-143\", \"sqft_range\": \"1133\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -521,13 +516,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1367-1469",
-          "price_range_lakh": "150-175",
-          "price_per_sqft": "10200-12800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"10200-12800\", \"price_range_lakh\": \"150-175\", \"sqft_range\": \"1367-1469\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -554,13 +544,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1524-1626",
-          "price_range_lakh": "149-210",
-          "price_per_sqft": "9100-13800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"9100-13800\", \"price_range_lakh\": \"149-210\", \"sqft_range\": \"1524-1626\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -616,7 +601,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "2.5BHK",
@@ -666,11 +651,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 126,
-          "period": "since June 2020 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 126, \"period\": \"since June 2020 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -692,7 +674,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Concorde Antares",
           "Bhartiya Nikoo Homes VI Phase 2",
@@ -1138,5 +1120,6 @@
       "display_template": "Cautions: {value}"
     }
   ],
-  "updated_at": "2026-03-13T15:25:54.106103+00:00"
+  "updated_at": "2026-03-13T15:25:54.106103+00:00",
+  "created_at": "2026-03-13T04:57:47.382540+00:00"
 }

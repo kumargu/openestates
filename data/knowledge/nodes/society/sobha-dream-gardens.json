@@ -1250,13 +1250,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "600-750",
-          "price_range_lakh": "75-95",
-          "price_per_sqft": "10000-15800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"10000-15800\", \"price_range_lakh\": \"75-95\", \"sqft_range\": \"600-750\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1283,13 +1278,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1004-1058",
-          "price_range_lakh": "95-145",
-          "price_per_sqft": "9000-14500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"9000-14500\", \"price_range_lakh\": \"95-145\", \"sqft_range\": \"1004-1058\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1345,7 +1335,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK"
@@ -1392,11 +1382,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 45,
-          "period": "since November 2018 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 45, \"period\": \"since November 2018 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1418,7 +1405,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Bhartiya Nikoo Homes 4",
           "SNN Estates Felicity",

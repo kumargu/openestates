@@ -31,20 +31,20 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   shortlist: {
-    loading: { title: "Loading your shortlist...", subtitle: "Retrieving your saved properties." },
+    loading: { title: "Loading your decision sheet...", subtitle: "Retrieving your saved candidates." },
     error: {
-      title: "Compare saved homes",
-      subtitle: "We couldn't load property details right now. Your shortlist is stored locally on this device.",
+      title: "Decision sheet unavailable",
+      subtitle: "We couldn't load property details right now. Your saved candidates are stored locally on this device.",
       actions: [{ label: "Browse properties", path: "/results" }],
     },
     backend_unavailable: {
-      title: "Compare saved homes",
-      subtitle: "We couldn't load property details right now. Your shortlist is stored locally on this device.",
+      title: "Decision sheet unavailable",
+      subtitle: "We couldn't load property details right now. Your saved candidates are stored locally on this device.",
       actions: [{ label: "Browse properties", path: "/results" }],
     },
     empty: {
-      title: "Compare saved homes",
-      subtitle: "Your shortlist is stored on this device. Save a few homes to compare value, commute, openness, and risk side by side.",
+      title: "Your decision sheet is empty",
+      subtitle: "Save a few homes to benchmark value, commute, openness, and risk in one place.",
       actions: [
         { label: "Browse properties", path: "/results" },
         { label: "Return home", path: "/" },

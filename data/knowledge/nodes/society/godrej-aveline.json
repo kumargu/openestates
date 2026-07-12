@@ -1016,13 +1016,8 @@
     {
       "key": "pricing_3bhkpremium",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK Premium",
-          "sqft_range": "1593-1600",
-          "price_range_lakh": "253-270",
-          "price_per_sqft": "15800-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK Premium\", \"price_per_sqft\": \"15800-17000\", \"price_range_lakh\": \"253-270\", \"sqft_range\": \"1593-1600\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1049,13 +1044,8 @@
     {
       "key": "pricing_3bhkluxe",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK Luxe",
-          "sqft_range": "1900-1908",
-          "price_range_lakh": "288-342",
-          "price_per_sqft": "15100-18000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK Luxe\", \"price_per_sqft\": \"15100-18000\", \"price_range_lakh\": \"288-342\", \"sqft_range\": \"1900-1908\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1082,13 +1072,8 @@
     {
       "key": "pricing_3.5bhkluxe",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK Luxe",
-          "sqft_range": "2138-2195",
-          "price_range_lakh": "345-387",
-          "price_per_sqft": "15700-18100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK Luxe\", \"price_per_sqft\": \"15700-18100\", \"price_range_lakh\": \"345-387\", \"sqft_range\": \"2138-2195\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1115,13 +1100,8 @@
     {
       "key": "pricing_4.5bhkluxe",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4.5BHK Luxe",
-          "sqft_range": "2500-2514",
-          "price_range_lakh": "415-450",
-          "price_per_sqft": "16500-18000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4.5BHK Luxe\", \"price_per_sqft\": \"16500-18000\", \"price_range_lakh\": \"415-450\", \"sqft_range\": \"2500-2514\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1177,7 +1157,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK Premium",
           "3BHK Luxe",
@@ -1228,11 +1208,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": "25-30",
-          "period": "North Bangalore over last 3 years"
-        }
+        "type": "Text",
+        "data": "{\"pct\": \"25-30\", \"period\": \"North Bangalore over last 3 years\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1254,7 +1231,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Brigade Eternia, Yelahanka",
           "Brigade Insignia, Yelahanka",
@@ -1294,5 +1271,6 @@
       "display_template": "Godrej Aveline is currently in its new launch/pre-launch phase, offering competitive pricing for early buyers. The project is expected to benefit from the strong appreciation trends observed in the rapidly developing North Bangalore corridor."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.739546+00:00"
+  "updated_at": "2026-03-13T15:11:56.739546+00:00",
+  "created_at": "2026-03-13T13:24:42.686527+00:00"
 }

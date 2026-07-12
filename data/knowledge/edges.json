@@ -2130,5 +2130,291 @@
       "url": "https://rera.karnataka.gov.in/projectViewDetails",
       "skill_id": "seed_from_rera"
     }
+  },
+  {
+    "from": "society:local-square-whitefield",
+    "to": "area:hoodi",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:local-square-whitefield",
+    "to": "builder:curated-living-solutions-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:assetz-marq-building-3-tower-6",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:assetz-marq-building-3-tower-6",
+    "to": "builder:assetz-whitefield-homes-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:assetz-marq-building-2-tower-5",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:assetz-marq-building-2-tower-5",
+    "to": "builder:assetz-whitefield-homes-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:shriram-earth-whitefield",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:shriram-earth-whitefield",
+    "to": "builder:shriprop-builders-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:avenue",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:avenue",
+    "to": "builder:ezzy-whitefield",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:garden-residency-whitefield",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:garden-residency-whitefield",
+    "to": "builder:it-estates",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:vdb-willow-farm",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:vdb-willow-farm",
+    "to": "builder:vdb-whitefield-development-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:whitefield-tower-appl",
+    "to": "area:whitefield",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:whitefield-tower-appl",
+    "to": "builder:aubergine-properties-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:pelican-gardens",
+    "to": "area:jakkur",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:pelican-gardens",
+    "to": "builder:jakkur-views-developers-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:visista-by-vista-spaces-okas",
+    "to": "area:yelahanka",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:visista-by-vista-spaces-okas",
+    "to": "builder:vista-spaces-jakkur-residency-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:pelican-grove",
+    "to": "area:jakkur",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:pelican-grove",
+    "to": "builder:jakkur-grove-developers-llp",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:century-bliss",
+    "to": "area:hebbal",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:century-bliss",
+    "to": "builder:hebbal-properties-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:century-kindle-phase-1",
+    "to": "area:yelahanka",
+    "relation": "SocietyInArea",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
+  },
+  {
+    "from": "society:century-kindle-phase-1",
+    "to": "builder:hebbal-properties-private-limited",
+    "relation": "BuiltBy",
+    "weight": 1.0,
+    "source": {
+      "source_type": "Rera",
+      "url": "https://rera.karnataka.gov.in/projectViewDetails",
+      "skill_id": "seed_from_rera"
+    }
   }
 ]

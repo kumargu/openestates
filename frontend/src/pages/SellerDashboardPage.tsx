@@ -207,12 +207,26 @@ export function SellerDashboardPage() {
 
   useEffect(() => {
     if (!id) return;
-    setStatus("loading");
-    getSellerDashboard(id)
-      .then((d) => { setData(d); setStatus("loaded"); })
-      .catch((err) => {
-        setStatus(err?.message?.includes("404") ? "not_found" : "error");
-      });
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setStatus("loading");
+      getSellerDashboard(id)
+        .then((d) => {
+          if (cancelled) return;
+          setData(d);
+          setStatus("loaded");
+        })
+        .catch((err) => {
+          if (cancelled) return;
+          setStatus(err?.message?.includes("404") ? "not_found" : "error");
+        });
+    });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (status === "loading") return <PageState variant="loading" context="generic" message="Loading seller dashboard..." />;

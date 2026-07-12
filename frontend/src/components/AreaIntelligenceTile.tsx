@@ -3,7 +3,7 @@ import type { AreaIntelligence } from "../lib/types";
 type InsightRow = { label: string; value: string };
 
 function formatDate(dateStr: string): string {
-  const separators = /[/\-]/;
+  const separators = /[/-]/;
   const parts = dateStr.split(separators);
   if (parts.length === 3) {
     if (parts[0].length === 4) {

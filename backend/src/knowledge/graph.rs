@@ -111,11 +111,7 @@ impl KnowledgeGraph {
     pub fn nodes_of_type(&self, node_type: NodeType) -> Vec<&Node> {
         self.nodes_by_type
             .get(&node_type)
-            .map(|ids| {
-                ids.iter()
-                    .filter_map(|id| self.nodes.get(id))
-                    .collect()
-            })
+            .map(|ids| ids.iter().filter_map(|id| self.nodes.get(id)).collect())
             .unwrap_or_default()
     }
 
@@ -208,35 +204,6 @@ impl KnowledgeGraph {
 
     // --- Enrichment queue ---
 
-    /// Queue an enrichment task. If an identical task already exists, bump its priority.
-    pub fn queue_enrichment(
-        &mut self,
-        entity_id: NodeId,
-        skill_needed: String,
-        triggered_by: String,
-    ) {
-        if let Some(existing) = self.enrichment_queue.iter_mut().find(|t| {
-            t.entity_id == entity_id
-                && t.skill_needed == skill_needed
-                && t.status == TaskStatus::Pending
-        }) {
-            existing.priority += 1.0;
-            if !existing.triggered_by.contains(&triggered_by) {
-                existing.triggered_by.push(triggered_by);
-            }
-            return;
-        }
-
-        self.enrichment_queue.push(EnrichmentTask {
-            entity_id,
-            skill_needed,
-            priority: 1.0,
-            triggered_by: vec![triggered_by],
-            status: TaskStatus::Pending,
-            created_at: Utc::now(),
-        });
-    }
-
     /// Get pending enrichment tasks sorted by priority (highest first).
     pub fn pending_enrichments(&self) -> Vec<&EnrichmentTask> {
         let mut tasks: Vec<_> = self
@@ -244,7 +211,11 @@ impl KnowledgeGraph {
             .iter()
             .filter(|t| t.status == TaskStatus::Pending)
             .collect();
-        tasks.sort_by(|a, b| b.priority.partial_cmp(&a.priority).unwrap_or(std::cmp::Ordering::Equal));
+        tasks.sort_by(|a, b| {
+            b.priority
+                .partial_cmp(&a.priority)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
         tasks
     }
 
@@ -258,7 +229,9 @@ impl KnowledgeGraph {
 
         let mut nodes_by_type = HashMap::new();
         for node in self.nodes.values() {
-            *nodes_by_type.entry(format!("{}", node.node_type)).or_insert(0usize) += 1;
+            *nodes_by_type
+                .entry(format!("{}", node.node_type))
+                .or_insert(0usize) += 1;
         }
 
         GraphStats {
@@ -267,7 +240,11 @@ impl KnowledgeGraph {
             total_facts: facts_count,
             nodes_by_type,
             search_events: self.search_log.len(),
-            pending_enrichments: self.enrichment_queue.iter().filter(|t| t.status == TaskStatus::Pending).count(),
+            pending_enrichments: self
+                .enrichment_queue
+                .iter()
+                .filter(|t| t.status == TaskStatus::Pending)
+                .count(),
         }
     }
 }

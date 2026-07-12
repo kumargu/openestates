@@ -72,10 +72,7 @@ pub enum FactValue {
     Text(String),
     Bool(bool),
     Tags(Vec<String>),
-    Score {
-        value: f64,
-        explanation: String,
-    },
+    Score { value: f64, explanation: String },
 }
 
 /// Where a fact came from — the provenance chain.
@@ -156,5 +153,4 @@ impl SourcedFact {
             scoring_hint: None,
         }
     }
-
 }

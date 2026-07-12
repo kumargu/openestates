@@ -835,7 +835,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -914,13 +914,8 @@
     {
       "key": "pricing_3bhk+servant",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK + Servant",
-          "sqft_range": "1890",
-          "price_range_lakh": "245-290",
-          "price_per_sqft": "13000-15300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK + Servant\", \"price_per_sqft\": \"13000-15300\", \"price_range_lakh\": \"245-290\", \"sqft_range\": \"1890\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -947,13 +942,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1762",
-          "price_range_lakh": "225-280",
-          "price_per_sqft": "12800-15900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12800-15900\", \"price_range_lakh\": \"225-280\", \"sqft_range\": \"1762\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -980,13 +970,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1314",
-          "price_range_lakh": "180-200",
-          "price_per_sqft": "13700-15200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13700-15200\", \"price_range_lakh\": \"180-200\", \"sqft_range\": \"1314\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1154,7 +1139,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Oakville",
           "Adithya Valioso",
@@ -1178,11 +1163,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 85,
-          "period": "since 2018 completion"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 85, \"period\": \"since 2018 completion\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1224,7 +1206,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:11:56.665557+00:00"
     },
     {
       "key": "embedding_computed",

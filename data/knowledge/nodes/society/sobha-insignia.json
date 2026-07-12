@@ -1179,13 +1179,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1819-2234",
-          "price_range_lakh": "274-391",
-          "price_per_sqft": "15000-17500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15000-17500\", \"price_range_lakh\": \"274-391\", \"sqft_range\": \"1819-2234\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1212,13 +1207,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "2378-2460",
-          "price_range_lakh": "370-443",
-          "price_per_sqft": "15500-18000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"15500-18000\", \"price_range_lakh\": \"370-443\", \"sqft_range\": \"2378-2460\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1245,13 +1235,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3406-3419",
-          "price_range_lakh": "578-677",
-          "price_per_sqft": "16900-19900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"16900-19900\", \"price_range_lakh\": \"578-677\", \"sqft_range\": \"3406-3419\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1307,7 +1292,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "3.5BHK",
@@ -1356,7 +1341,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sobha Infinia, Bellandur",
           "Adarsh Lakefront, Bellandur",

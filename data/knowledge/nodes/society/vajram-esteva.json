@@ -745,13 +745,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2122-2401",
-          "price_range_lakh": "305-330",
-          "price_per_sqft": "12700-15600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12700-15600\", \"price_range_lakh\": \"305-330\", \"sqft_range\": \"2122-2401\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -778,13 +773,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3232",
-          "price_range_lakh": "450-510",
-          "price_per_sqft": "13900-15800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"13900-15800\", \"price_range_lakh\": \"450-510\", \"sqft_range\": \"3232\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -840,7 +830,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -888,11 +878,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 154,
-          "period": "since 2016 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 154, \"period\": \"since 2016 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -914,7 +901,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Adarsh Lakefront, Bellandur",
           "Mahaveer Ranches, Parappana Agrahara",

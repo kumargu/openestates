@@ -1095,13 +1095,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1203-1547",
-          "price_range_lakh": "198-255",
-          "price_per_sqft": "13000-21000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13000-21000\", \"price_range_lakh\": \"198-255\", \"sqft_range\": \"1203-1547\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1128,13 +1123,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1773-2295",
-          "price_range_lakh": "265-344",
-          "price_per_sqft": "11500-19500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11500-19500\", \"price_range_lakh\": \"265-344\", \"sqft_range\": \"1773-2295\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1161,13 +1151,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1962-2700",
-          "price_range_lakh": "294-408",
-          "price_per_sqft": "11000-21000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"11000-21000\", \"price_range_lakh\": \"294-408\", \"sqft_range\": \"1962-2700\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1194,13 +1179,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2616-3543",
-          "price_range_lakh": "392-530",
-          "price_per_sqft": "11000-20500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11000-20500\", \"price_range_lakh\": \"392-530\", \"sqft_range\": \"2616-3543\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1256,7 +1236,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1307,11 +1287,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 15,
-          "period": "since Feb 2024 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 15, \"period\": \"since Feb 2024 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1333,7 +1310,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Raintree Park",
           "Sumadhura Solace",

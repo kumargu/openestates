@@ -1110,13 +1110,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "780-800",
-          "price_range_lakh": "103-120",
-          "price_per_sqft": "12800-15400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"12800-15400\", \"price_range_lakh\": \"103-120\", \"sqft_range\": \"780-800\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1143,13 +1138,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "850-1260",
-          "price_range_lakh": "120-200",
-          "price_per_sqft": "13500-15500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13500-15500\", \"price_range_lakh\": \"120-200\", \"sqft_range\": \"850-1260\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1176,13 +1166,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1390-1900",
-          "price_range_lakh": "215-322",
-          "price_per_sqft": "14000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14000-17000\", \"price_range_lakh\": \"215-322\", \"sqft_range\": \"1390-1900\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1209,13 +1194,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3200-3950",
-          "price_range_lakh": "400-514",
-          "price_per_sqft": "12500-13000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12500-13000\", \"price_range_lakh\": \"400-514\", \"sqft_range\": \"3200-3950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1271,7 +1251,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1323,11 +1303,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 90,
-          "period": "since 2021 (launched 2018-2019)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 90, \"period\": \"since 2021 (launched 2018-2019)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1349,7 +1326,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Rohan Ekanta, Varthur",
           "Prestige Lakeside Habitat, Gunjur (Near Varthur)",

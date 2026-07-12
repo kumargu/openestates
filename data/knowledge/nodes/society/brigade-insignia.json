@@ -1152,13 +1152,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2145-2481",
-          "price_range_lakh": "299-419",
-          "price_per_sqft": "14000-16500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14000-16500\", \"price_range_lakh\": \"299-419\", \"sqft_range\": \"2145-2481\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1185,13 +1180,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2544-3114",
-          "price_range_lakh": "396-529",
-          "price_per_sqft": "15000-18500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15000-18500\", \"price_range_lakh\": \"396-529\", \"sqft_range\": \"2544-3114\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1218,13 +1208,8 @@
     {
       "key": "pricing_5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK",
-          "sqft_range": "4137-5947",
-          "price_range_lakh": "586-1005",
-          "price_per_sqft": "15000-16000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK\", \"price_per_sqft\": \"15000-16000\", \"price_range_lakh\": \"586-1005\", \"sqft_range\": \"4137-5947\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1280,7 +1265,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK",
@@ -1329,7 +1314,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Brigade Eternia, Yelahanka",
           "Prestige Camden Gardens",
@@ -1368,5 +1353,6 @@
       "display_template": "Brigade Insignia is a new launch ultra-luxury project in North Bangalore with a completion date of June 2029. It offers premium amenities and a low-density living experience, positioning its pricing at the higher end for the Yelahanka area. Due to its recent launch (May/October 2024), there is insufficient data to determine a historical price appreciation percentage, though the region is noted for high appreciation potential."
     }
   ],
-  "updated_at": "2026-03-13T15:26:25.989946+00:00"
+  "updated_at": "2026-03-13T15:26:25.989946+00:00",
+  "created_at": "2026-03-13T13:26:56.277535+00:00"
 }

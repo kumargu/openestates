@@ -204,6 +204,56 @@ def add_edge(edges: list, from_id: str, to_id: str, relation: str) -> list:
     return edges
 
 
+def now_iso() -> str:
+    """Current UTC timestamp for Rust Node compatibility."""
+    return datetime.now(timezone.utc).isoformat()
+
+
+NON_RESIDENTIAL_TERMS = frozenset({
+    "commercial",
+    "office",
+    "retail",
+    "business park",
+    "tech park",
+    "warehouse",
+    "industrial",
+    "startup city",
+})
+
+RESIDENTIAL_TERMS = frozenset({
+    "residential",
+    "group housing",
+    "apartment",
+    "apartments",
+    "homes",
+    "residence",
+    "residences",
+    "villa",
+    "villas",
+})
+
+
+def should_seed_society_project(detail, project_name: str) -> bool:
+    """Return False for obvious non-residential RERA projects.
+
+    RERA includes commercial buildings and business parks under the same
+    listing. The society graph should not create residential society nodes for
+    those projects.
+    """
+    project_type = (detail.project_type or "").lower()
+    project_sub_type = (detail.project_sub_type or "").lower()
+    combined = " ".join([project_type, project_sub_type, project_name.lower()])
+
+    has_residential_signal = any(term in combined for term in RESIDENTIAL_TERMS)
+    has_non_residential_signal = any(term in combined for term in NON_RESIDENTIAL_TERMS)
+
+    if has_non_residential_signal and not has_residential_signal:
+        return False
+    if "commercial" in project_type and not has_residential_signal:
+        return False
+    return True
+
+
 # ---------------------------------------------------------------------------
 # Backfill mode
 # ---------------------------------------------------------------------------
@@ -484,6 +534,11 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
         detail = parse_rera_detail(detail_html, search_result)
         facts = rera_detail_to_facts(detail)
 
+        if not should_seed_society_project(detail, entry.project_name):
+            project_type = detail.project_type or "unknown"
+            print(f"  {entry.project_name:<55} {entry.promoter_name:<35} SKIP-NON-RESIDENTIAL ({project_type})")
+            continue
+
         if not facts:
             print(f"  {entry.project_name:<55} {entry.promoter_name:<35} NO-FACTS")
             continue
@@ -533,11 +588,14 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
             ).to_dict(),
         ]
 
+        now = now_iso()
         society_node = {
             "id": society_id,
             "node_type": "Society",
             "name": normalized_name,
             "root_source": "Rera",
+            "created_at": now,
+            "updated_at": now,
             "facts": base_facts + [f.to_dict() for f in facts],
         }
 
@@ -565,6 +623,8 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
                 "node_type": "Builder",
                 "name": entry.promoter_name,
                 "root_source": "Rera",
+                "created_at": now,
+                "updated_at": now,
                 "facts": [
                     SourcedFact(
                         key="name",
@@ -588,6 +648,8 @@ def run_seed(area_filter: str, limit: int = 10, dry_run: bool = False):
                 "node_type": "Area",
                 "name": area_name,
                 "root_source": "Rera",
+                "created_at": now,
+                "updated_at": now,
                 "facts": [
                     SourcedFact(
                         key="name",
@@ -754,6 +816,11 @@ def run_builder_seed(
 
         detail = parse_rera_detail(detail_html, search_result)
 
+        if not should_seed_society_project(detail, entry.project_name):
+            project_type = detail.project_type or "unknown"
+            print(f"  {entry.project_name:<50} {'?':<20} SKIP-NON-RESIDENTIAL ({project_type})")
+            continue
+
         # Infer area from address
         area_name = _infer_area_from_address(detail.project_address or "")
         if not area_name:
@@ -814,11 +881,14 @@ def run_builder_seed(
             ).to_dict(),
         ]
 
+        now = now_iso()
         society_node = {
             "id": society_id,
             "node_type": "Society",
             "name": normalized_name,
             "root_source": "Rera",
+            "created_at": now,
+            "updated_at": now,
             "facts": base_facts + [f.to_dict() for f in facts],
         }
 
@@ -846,6 +916,8 @@ def run_builder_seed(
                 "node_type": "Builder",
                 "name": entry.promoter_name,
                 "root_source": "Rera",
+                "created_at": now,
+                "updated_at": now,
                 "facts": [
                     SourcedFact(
                         key="name",
@@ -869,6 +941,8 @@ def run_builder_seed(
                 "node_type": "Area",
                 "name": area_name,
                 "root_source": "Rera",
+                "created_at": now,
+                "updated_at": now,
                 "facts": [
                     SourcedFact(
                         key="name",

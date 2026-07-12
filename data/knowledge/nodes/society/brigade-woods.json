@@ -558,7 +558,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:26:50.171211+00:00"
     },
     {
       "key": "resident_sentiment",
@@ -710,13 +711,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "621-632",
-          "price_range_lakh": "150-150",
-          "price_per_sqft": "23700-26100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"23700-26100\", \"price_range_lakh\": \"150-150\", \"sqft_range\": \"621-632\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -743,13 +739,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1307-1465",
-          "price_range_lakh": "190-270",
-          "price_per_sqft": "13000-20700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13000-20700\", \"price_range_lakh\": \"190-270\", \"sqft_range\": \"1307-1465\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -776,13 +767,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1695-1768",
-          "price_range_lakh": "230-430",
-          "price_per_sqft": "13000-25400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"13000-25400\", \"price_range_lakh\": \"230-430\", \"sqft_range\": \"1695-1768\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -838,7 +824,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -888,11 +874,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 100,
-          "period": "since 2018 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 100, \"period\": \"since 2018 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -914,7 +897,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Alembic Cloud Forest",
           "Sumadhura Folium",

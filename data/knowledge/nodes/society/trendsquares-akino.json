@@ -1297,13 +1297,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1455",
-          "price_range_lakh": "164",
-          "price_per_sqft": "10700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"10700\", \"price_range_lakh\": \"164\", \"sqft_range\": \"1455\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1330,13 +1325,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1455-1895",
-          "price_range_lakh": "156-195",
-          "price_per_sqft": "10300-10970"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"10300-10970\", \"price_range_lakh\": \"156-195\", \"sqft_range\": \"1455-1895\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1363,13 +1353,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1975-2010",
-          "price_range_lakh": "204-226",
-          "price_per_sqft": "10300-11060"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"10300-11060\", \"price_range_lakh\": \"204-226\", \"sqft_range\": \"1975-2010\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1425,7 +1410,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2.5BHK",
           "3BHK",
@@ -1474,7 +1459,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Amberstone Ventara Residences, Sarjapur Road, Bangalore",
           "The Adwaith, Varthur, Bangalore",

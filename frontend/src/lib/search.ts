@@ -23,6 +23,7 @@ export function formatSearchSummary(intent: {
   area?: string;
   bhk?: number;
   budgetMax?: number;
+  hardConstraints?: { raw_text: string }[];
   preferences: string[];
 }): string {
   const parts: string[] = [];
@@ -32,6 +33,7 @@ export function formatSearchSummary(intent: {
     const cr = intent.budgetMax / 10_000_000;
     parts.push(cr >= 1 ? `under ${cr} Cr` : `under ${(intent.budgetMax / 100_000).toFixed(0)}L`);
   }
+  parts.push(...(intent.hardConstraints ?? []).map((constraint) => constraint.raw_text));
   parts.push(...intent.preferences);
 
   if (parts.length === 0) return "Showing all properties ranked by transparency signals";

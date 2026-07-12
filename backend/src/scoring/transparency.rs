@@ -55,7 +55,7 @@ pub fn compute_transparency_score(
             base.min(1.0)
         }
         Some(_) => 0.2, // present but not registered
-        None => 0.0,     // no RERA data at all
+        None => 0.0,    // no RERA data at all
     };
     let rera_score = rera_raw * 20.0;
 

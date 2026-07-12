@@ -1164,13 +1164,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1059-1576",
-          "price_range_lakh": "166-247",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"166-247\", \"sqft_range\": \"1059-1576\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1197,13 +1192,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1637-2158",
-          "price_range_lakh": "260-370",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"260-370\", \"sqft_range\": \"1637-2158\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1230,13 +1220,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1806-2138",
-          "price_range_lakh": "290-365",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"290-365\", \"sqft_range\": \"1806-2138\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1263,13 +1248,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2542-2930",
-          "price_range_lakh": "405-500",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"405-500\", \"sqft_range\": \"2542-2930\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1325,7 +1305,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1376,11 +1356,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": "Not explicitly known, but typical for under-construction premium projects in HSR Layout to see appreciation during the construction phase.",
-          "period": "since Feb 2023 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": \"Not explicitly known, but typical for under-construction premium projects in HSR Layout to see appreciation during the construction phase.\", \"period\": \"since Feb 2023 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1402,7 +1379,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Purva Meraki (HSR Layout)",
           "Assetz Mizumi Reserve (HSR Layout)",

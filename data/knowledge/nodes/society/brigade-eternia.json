@@ -1121,13 +1121,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "700-803",
-          "price_range_lakh": "98-112",
-          "price_per_sqft": "12200-16000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"12200-16000\", \"price_range_lakh\": \"98-112\", \"sqft_range\": \"700-803\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1154,13 +1149,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1183-1516",
-          "price_range_lakh": "134-207",
-          "price_per_sqft": "8800-17500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"8800-17500\", \"price_range_lakh\": \"134-207\", \"sqft_range\": \"1183-1516\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1187,13 +1177,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1620-2000",
-          "price_range_lakh": "226-296",
-          "price_per_sqft": "11300-18300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11300-18300\", \"price_range_lakh\": \"226-296\", \"sqft_range\": \"1620-2000\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1220,13 +1205,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2700-2950",
-          "price_range_lakh": "406-446",
-          "price_per_sqft": "13800-16500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"13800-16500\", \"price_range_lakh\": \"406-446\", \"sqft_range\": \"2700-2950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1282,7 +1262,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1333,11 +1313,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 40,
-          "period": "since 2020 (Yelahanka market)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 40, \"period\": \"since 2020 (Yelahanka market)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1359,7 +1336,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Assetz Zen & Sato",
           "Godrej Aveline",
@@ -1398,5 +1375,6 @@
       "display_template": "Brigade Eternia is a premium under-construction project in Yelahanka, with prices reflecting a luxury offering above the local market average. While specific project appreciation since its recent launch is not yet fully realized, the broader Yelahanka real estate market has experienced significant growth, with prices increasing up to 40% since 2020."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.700685+00:00"
+  "updated_at": "2026-03-13T15:11:56.700685+00:00",
+  "created_at": "2026-03-13T13:26:37.714449+00:00"
 }

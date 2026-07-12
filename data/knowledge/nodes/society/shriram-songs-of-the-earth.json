@@ -1095,13 +1095,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1210",
-          "price_range_lakh": "102-113",
-          "price_per_sqft": "8430-9340"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"8430-9340\", \"price_range_lakh\": \"102-113\", \"sqft_range\": \"1210\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1128,13 +1123,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1440-1714",
-          "price_range_lakh": "125-168",
-          "price_per_sqft": "8680-9800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"8680-9800\", \"price_range_lakh\": \"125-168\", \"sqft_range\": \"1440-1714\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1190,7 +1180,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK"
@@ -1237,11 +1227,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 26.67,
-          "period": "last 1 year (locality)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 26.67, \"period\": \"last 1 year (locality)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1263,7 +1250,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Purva Silversky",
           "GM Infinite E City Town",
@@ -1303,5 +1290,6 @@
       "display_template": "Shriram Songs Of The Earth is a new launch/under construction project offering competitive pricing in the rapidly developing Attibele/Chandapura/Electronic City corridor, known for its connectivity and investment potential. The pricing reflects the premium segment and the builder's reputation."
     }
   ],
-  "updated_at": "2026-03-13T15:37:46.828772+00:00"
+  "updated_at": "2026-03-13T15:37:46.828772+00:00",
+  "created_at": "2026-03-13T13:21:10.255080+00:00"
 }

@@ -571,7 +571,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:52:55.852808+00:00"
     },
     {
       "key": "embedding_computed",
@@ -786,13 +787,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1350-1600",
-          "price_range_lakh": "195-210",
-          "price_per_sqft": "14000-15500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"14000-15500\", \"price_range_lakh\": \"195-210\", \"sqft_range\": \"1350-1600\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -819,13 +815,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1550-1850",
-          "price_range_lakh": "230-310",
-          "price_per_sqft": "14500-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14500-17000\", \"price_range_lakh\": \"230-310\", \"sqft_range\": \"1550-1850\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -852,13 +843,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2200-2300",
-          "price_range_lakh": "320-385",
-          "price_per_sqft": "14500-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"14500-17000\", \"price_range_lakh\": \"320-385\", \"sqft_range\": \"2200-2300\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -914,7 +900,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -962,11 +948,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 113,
-          "period": "since 2020 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 113, \"period\": \"since 2020 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -988,7 +971,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Waterford",
           "Sobha Neopolis",

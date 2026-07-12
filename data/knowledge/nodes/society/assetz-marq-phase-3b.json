@@ -1162,13 +1162,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "731",
-          "price_range_lakh": "85-88",
-          "price_per_sqft": "11600-12050"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"11600-12050\", \"price_range_lakh\": \"85-88\", \"sqft_range\": \"731\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1195,13 +1190,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1350-1950",
-          "price_range_lakh": "138-255",
-          "price_per_sqft": "10200-13100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"10200-13100\", \"price_range_lakh\": \"138-255\", \"sqft_range\": \"1350-1950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1228,13 +1218,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2262-2275",
-          "price_range_lakh": "228-238",
-          "price_per_sqft": "10000-10500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"10000-10500\", \"price_range_lakh\": \"228-238\", \"sqft_range\": \"2262-2275\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1290,7 +1275,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "3BHK",
@@ -1339,11 +1324,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 44,
-          "period": "since Oct 2022"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 44, \"period\": \"since Oct 2022\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1365,7 +1347,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Pavani Mirabilia",
           "Prestige Park Grove",
@@ -1405,5 +1387,6 @@
       "display_template": "Assetz Marq Phase 3B offers premium apartments in Whitefield, with current pricing reflecting the area's strong demand and the project's under-construction status. The price per sqft is competitive within the luxury segment of Whitefield."
     }
   ],
-  "updated_at": "2026-03-13T15:26:13.713518+00:00"
+  "updated_at": "2026-03-13T15:26:13.713518+00:00",
+  "created_at": "2026-03-13T04:53:09.167150+00:00"
 }

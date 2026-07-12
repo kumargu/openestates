@@ -879,7 +879,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:11:56.749445+00:00"
     },
     {
       "key": "embedding_computed",
@@ -1275,13 +1276,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "605",
-          "price_range_lakh": "66.5-79",
-          "price_per_sqft": "10700-13000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"10700-13000\", \"price_range_lakh\": \"66.5-79\", \"sqft_range\": \"605\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1308,13 +1304,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "982-1137",
-          "price_range_lakh": "108-148",
-          "price_per_sqft": "8800-14250"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"8800-14250\", \"price_range_lakh\": \"108-148\", \"sqft_range\": \"982-1137\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1341,13 +1332,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1234-1529",
-          "price_range_lakh": "135.7-214",
-          "price_per_sqft": "9150-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"9150-17000\", \"price_range_lakh\": \"135.7-214\", \"sqft_range\": \"1234-1529\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1403,7 +1389,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1452,11 +1438,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 67,
-          "period": "since March 2022 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 67, \"period\": \"since March 2022 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1478,7 +1461,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Goyal Orchid Whitefield",
           "SBR One Residence, Whitefield",

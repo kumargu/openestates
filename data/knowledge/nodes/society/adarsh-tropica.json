@@ -829,7 +829,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -971,13 +971,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1950",
-          "price_range_lakh": "235-240",
-          "price_per_sqft": "12000-12300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12000-12300\", \"price_range_lakh\": \"235-240\", \"sqft_range\": \"1950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1004,13 +999,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1600-1610",
-          "price_range_lakh": "167-184",
-          "price_per_sqft": "10400-11500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"10400-11500\", \"price_range_lakh\": \"167-184\", \"sqft_range\": \"1600-1610\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1037,13 +1027,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1385-1395",
-          "price_range_lakh": "147-181",
-          "price_per_sqft": "10500-13100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"10500-13100\", \"price_range_lakh\": \"147-181\", \"sqft_range\": \"1385-1395\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1070,13 +1055,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "925-985",
-          "price_range_lakh": "113-120",
-          "price_per_sqft": "11500-13000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11500-13000\", \"price_range_lakh\": \"113-120\", \"sqft_range\": \"925-985\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1103,13 +1083,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "560-650",
-          "price_range_lakh": "58.52-64.69",
-          "price_per_sqft": "9000-11600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"9000-11600\", \"price_range_lakh\": \"58.52-64.69\", \"sqft_range\": \"560-650\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1202,7 +1177,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Godrej Lakeside Orchard",
           "Mana Macasa Emerald",
@@ -1226,11 +1201,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 15,
-          "period": "since Phase 1 launch (late 2022)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 15, \"period\": \"since Phase 1 launch (late 2022)\"}"
       },
       "confidence": 0.6,
       "source": {

@@ -7,9 +7,7 @@ use axum::response::IntoResponse;
 use crate::state::AppState;
 
 /// GET /api/sitemap.xml — dynamic XML sitemap for SEO.
-pub async fn sitemap_xml(
-    State(state): State<Arc<AppState>>,
-) -> impl IntoResponse {
+pub async fn sitemap_xml(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     let base_url = "https://openestates.in";
 
     let mut urls = Vec::new();

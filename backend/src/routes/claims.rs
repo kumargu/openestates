@@ -53,8 +53,18 @@ pub async fn submit_claim(
     }
 
     // Validate at least one contact method
-    let phone = req.phone.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from);
-    let email = req.email.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from);
+    let phone = req
+        .phone
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
+    let email = req
+        .email
+        .as_deref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(String::from);
     if phone.is_none() && email.is_none() {
         return Err((
             StatusCode::BAD_REQUEST,

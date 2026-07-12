@@ -835,13 +835,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1230-1439",
-          "price_range_lakh": "172-201",
-          "price_per_sqft": "12000-16300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"12000-16300\", \"price_range_lakh\": \"172-201\", \"sqft_range\": \"1230-1439\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -868,13 +863,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1815-1884",
-          "price_range_lakh": "228-263",
-          "price_per_sqft": "12100-14500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12100-14500\", \"price_range_lakh\": \"228-263\", \"sqft_range\": \"1815-1884\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -901,13 +891,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2167-2357",
-          "price_range_lakh": "302-329",
-          "price_per_sqft": "12800-15200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12800-15200\", \"price_range_lakh\": \"302-329\", \"sqft_range\": \"2167-2357\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -963,7 +948,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2.5BHK",
           "3BHK",
@@ -1013,11 +998,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 45,
-          "period": "since 2018 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 45, \"period\": \"since 2018 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1039,7 +1021,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Kolte Patil 24K Grazio Bangalore",
           "Prestige Elysian",

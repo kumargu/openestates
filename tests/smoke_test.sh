@@ -242,8 +242,8 @@ else
 fi
 
 # ── Society Search ──
-# Note: society search may return 503 when GOOGLE_AI_API_KEY is not set (requires Gemini).
-# We test what we can — at minimum the endpoint exists and responds.
+# Society search is local-first. Offline enrichment can improve evidence, but the
+# endpoint should not require a live LLM/API key.
 echo ""
 echo "Society Search"
 SOC_SEARCH_CODE=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "${BASE}/api/societies/search?q=best%20societies%20Whitefield" 2>/dev/null || echo "000")
@@ -255,8 +255,8 @@ if [[ "$SOC_SEARCH_CODE" == "200" ]]; then
     '.results | type == "array"' \
     "expected results array"
 elif [[ "$SOC_SEARCH_CODE" == "503" ]]; then
-  PASS=$((PASS + 1))
-  printf "  %s Society search returns 503 (Gemini API key not set — expected)\n" "$(green "✓")"
+  FAIL=$((FAIL + 1))
+  printf "  %s Society search returned 503; local search should not require live Gemini\n" "$(red "✗")"
 else
   FAIL=$((FAIL + 1))
   printf "  %s Society search — unexpected HTTP %s\n" "$(red "✗")" "$SOC_SEARCH_CODE"

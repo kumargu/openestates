@@ -1270,13 +1270,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1200-1200",
-          "price_range_lakh": "115-137",
-          "price_per_sqft": "9600-11400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"9600-11400\", \"price_range_lakh\": \"115-137\", \"sqft_range\": \"1200-1200\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1303,13 +1298,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1750-1850",
-          "price_range_lakh": "166-220",
-          "price_per_sqft": "9000-12600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"9000-12600\", \"price_range_lakh\": \"166-220\", \"sqft_range\": \"1750-1850\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1336,13 +1326,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2200-2600",
-          "price_range_lakh": "209-313",
-          "price_per_sqft": "8000-14200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"8000-14200\", \"price_range_lakh\": \"209-313\", \"sqft_range\": \"2200-2600\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1398,7 +1383,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1447,7 +1432,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sattva Vasanta Skye",
           "Godrej MSR City",
@@ -1486,5 +1471,6 @@
       "display_template": "Embassy Greenshore is a new launch, under-construction luxury residential project within the Embassy Springs township. Its pricing reflects a premium positioning in the rapidly appreciating Devanahalli micro-market, which has seen significant growth since 2020. The project is RERA approved with RERA number PRM/KA/RERA/1250/303/PR/201125/008265. Price appreciation since the project's launch (January 2026) is not yet quantifiable."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.731076+00:00"
+  "updated_at": "2026-03-13T15:11:56.731076+00:00",
+  "created_at": "2026-03-13T13:20:22.542947+00:00"
 }

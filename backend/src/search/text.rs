@@ -1,11 +1,16 @@
-use crate::knowledge::KnowledgeGraph;
 use crate::knowledge::node::RootSource;
+use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{Property, Seller, Society};
 use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
 use crate::routes::search::graph_preference_score_detailed;
 
-use super::intent::SearchIntent;
-use super::{ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard};
+use super::index::SearchIndex;
+use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
+use super::schema::{self, NumericConstraintSchema};
+use super::{
+    ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
+    SearchResultCard,
+};
 
 /// Simple text-matching search engine.
 ///
@@ -29,7 +34,15 @@ impl TextSearch {
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        Self::search_with_intent_and_sellers(properties, society_names, societies, query, intent, graph, &[])
+        Self::search_with_intent_and_sellers(
+            properties,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+            &[],
+        )
     }
 
     /// Intent-based search with seller trust data for completeness boost and card enrichment.
@@ -42,12 +55,47 @@ impl TextSearch {
         graph: Option<&KnowledgeGraph>,
         sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
+        Self::search_with_index_and_intent_and_sellers(
+            properties,
+            None,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+            sellers,
+        )
+    }
+
+    /// Indexed local recall followed by deterministic ranking and explanation.
+    pub fn search_with_index_and_intent_and_sellers(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+        sellers: &[Seller],
+    ) -> Vec<SearchResultCard> {
         let query_lower = query.to_lowercase();
         let terms: Vec<&str> = query_lower.split_whitespace().collect();
+        let positive_preferences = positive_preference_labels(intent);
+        let negative_preferences = negative_preference_labels(intent);
+        let has_explainable_signals = !positive_preferences.is_empty()
+            || !negative_preferences.is_empty()
+            || !intent.hard_constraints.is_empty();
+        let candidate_ids = search_index.map(|index| index.recall_ids(query, intent));
 
         let mut results: Vec<SearchResultCard> = properties
             .iter()
             .filter_map(|p| {
+                if let Some(ids) = candidate_ids.as_ref() {
+                    if !ids.iter().any(|id| id == &p.id) {
+                        return None;
+                    }
+                }
+
                 // Hard constraint: BHK
                 if let Some(bhk) = intent.bhk {
                     if p.bhk != bhk {
@@ -78,6 +126,8 @@ impl TextSearch {
                     0.0
                 };
 
+                let hard_constraint_matches = match_hard_constraints(intent, graph, &p.society_id)?;
+
                 let society_name = society_names
                     .get(&p.society_id)
                     .map(|s| s.as_str())
@@ -98,10 +148,33 @@ impl TextSearch {
                 let mut legacy_count: usize = 0;
                 let mut total_facts_consulted: usize = 0;
 
-                for pref in &intent.preferences {
+                for evidence in hard_constraint_matches {
+                    total_facts_consulted += 1;
+                    graph_count += 1;
+                    score += evidence.score_delta;
+                    reasons.push(evidence.reason.clone());
+                    match_reasons.push(MatchReason {
+                        preference: evidence.preference.clone(),
+                        fact_key: evidence.fact_key.clone(),
+                        display: evidence.display,
+                        score: evidence.normalized_score,
+                        confidence: evidence.confidence,
+                        source_type: evidence.source_type,
+                        scoring_method: evidence.scoring_method,
+                    });
+                    pref_coverage.push(PreferenceCoverage {
+                        preference: evidence.preference,
+                        status: "matched".into(),
+                        fact_key: Some(evidence.fact_key),
+                    });
+                }
+
+                for pref in &positive_preferences {
                     // Graph-first: check if the society's facts declare scoring for this preference
                     if let Some(g) = graph {
-                        if let Some((gs, detail)) = graph_preference_score_detailed(g, &p.society_id, pref) {
+                        if let Some((gs, detail)) =
+                            graph_preference_score_detailed(g, &p.society_id, pref)
+                        {
                             total_facts_consulted += 1;
                             score += gs;
                             reasons.push(format!("matches preference: {}", pref));
@@ -119,8 +192,43 @@ impl TextSearch {
                             });
                             pref_coverage.push(PreferenceCoverage {
                                 preference: pref.clone(),
-                                status: if norm_score > 0.5 { "matched" } else { "partial" }.into(),
+                                status: if norm_score > 0.5 {
+                                    "matched"
+                                } else {
+                                    "partial"
+                                }
+                                .into(),
                                 fact_key: Some(detail.fact_key),
+                            });
+                            graph_count += 1;
+                            continue;
+                        }
+
+                        if let Some(evidence) =
+                            graph_textual_preference_evidence(g, &p.society_id, pref)
+                        {
+                            total_facts_consulted += 1;
+                            score += evidence.score_delta;
+                            reasons.push(evidence.reason.clone());
+
+                            match_reasons.push(MatchReason {
+                                preference: pref.clone(),
+                                fact_key: evidence.fact_key.clone(),
+                                display: evidence.display,
+                                score: evidence.normalized_score,
+                                confidence: evidence.confidence,
+                                source_type: evidence.source_type,
+                                scoring_method: evidence.scoring_method,
+                            });
+                            pref_coverage.push(PreferenceCoverage {
+                                preference: pref.clone(),
+                                status: if evidence.normalized_score > 0.5 {
+                                    "matched"
+                                } else {
+                                    "partial"
+                                }
+                                .into(),
+                                fact_key: Some(evidence.fact_key),
                             });
                             graph_count += 1;
                             continue;
@@ -146,7 +254,12 @@ impl TextSearch {
                         });
                         pref_coverage.push(PreferenceCoverage {
                             preference: pref.clone(),
-                            status: if norm_score > 0.5 { "matched" } else { "partial" }.into(),
+                            status: if norm_score > 0.5 {
+                                "matched"
+                            } else {
+                                "partial"
+                            }
+                            .into(),
                             fact_key: Some(fact_key),
                         });
                         legacy_count += 1;
@@ -159,8 +272,41 @@ impl TextSearch {
                     }
                 }
 
-                // Build explanation only when there are preferences
-                let match_explanation = if !intent.preferences.is_empty() {
+                for pref in &negative_preferences {
+                    if let Some(evaluation) = legacy_negative_preference_evaluation(p, pref) {
+                        score += evaluation.score_delta;
+                        if evaluation.score_delta >= 0.0 {
+                            reasons.push(format!("avoids {}", pref));
+                        } else {
+                            reasons.push(format!("risk: {}", pref));
+                        }
+
+                        match_reasons.push(MatchReason {
+                            preference: format!("avoid {}", pref),
+                            fact_key: evaluation.fact_key.to_string(),
+                            display: evaluation.display,
+                            score: evaluation.score,
+                            confidence: 0.5,
+                            source_type: "Seed".into(),
+                            scoring_method: "local-risk".into(),
+                        });
+                        pref_coverage.push(PreferenceCoverage {
+                            preference: format!("avoid {}", pref),
+                            status: evaluation.status.to_string(),
+                            fact_key: Some(evaluation.fact_key.to_string()),
+                        });
+                        legacy_count += 1;
+                    } else {
+                        pref_coverage.push(PreferenceCoverage {
+                            preference: format!("avoid {}", pref),
+                            status: "no_data".into(),
+                            fact_key: None,
+                        });
+                    }
+                }
+
+                // Build explanation only when the query asked for constraints/preferences.
+                let match_explanation = if has_explainable_signals {
                     let total = graph_count + legacy_count;
                     let graph_pct = if total > 0 {
                         (graph_count as f32 / total as f32) * 100.0
@@ -179,8 +325,10 @@ impl TextSearch {
 
                 // If we had hard constraints that passed, give a base score even if
                 // text matching scored zero.
-                let has_constraints =
-                    intent.area.is_some() || intent.bhk.is_some() || intent.budget_max.is_some();
+                let has_constraints = intent.area.is_some()
+                    || intent.bhk.is_some()
+                    || intent.budget_max.is_some()
+                    || !intent.hard_constraints.is_empty();
                 if score <= 0.0 && has_constraints {
                     score = 1.0;
                     reasons.push("matches search criteria".to_string());
@@ -245,7 +393,8 @@ impl TextSearch {
                 let match_reason = build_match_reason(intent, &reasons);
 
                 // Compute confidence score for this result
-                let gdp = match_explanation.as_ref()
+                let gdp = match_explanation
+                    .as_ref()
                     .map(|e| e.graph_driven_pct)
                     .unwrap_or(0.0);
                 let confidence_score = compute_confidence(graph, &p.society_id, gdp);
@@ -268,6 +417,143 @@ impl TextSearch {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         results
+    }
+}
+
+struct EvidenceMatch {
+    preference: String,
+    fact_key: String,
+    display: String,
+    normalized_score: f64,
+    score_delta: f64,
+    confidence: f32,
+    source_type: String,
+    scoring_method: String,
+    reason: String,
+}
+
+fn match_hard_constraints(
+    intent: &SearchIntent,
+    graph: Option<&KnowledgeGraph>,
+    society_id: &str,
+) -> Option<Vec<EvidenceMatch>> {
+    if intent.hard_constraints.is_empty() {
+        return Some(Vec::new());
+    }
+
+    let graph = graph?;
+    let mut matches = Vec::new();
+
+    for constraint in &intent.hard_constraints {
+        let schema = schema::numeric_constraint_schema(&constraint.field)?;
+        let evidence = numeric_constraint_evidence(graph, society_id, schema, constraint)?;
+        matches.push(evidence);
+    }
+
+    Some(matches)
+}
+
+fn numeric_constraint_evidence(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    schema: &NumericConstraintSchema,
+    constraint: &HardConstraint,
+) -> Option<EvidenceMatch> {
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id)?;
+    let query_unit = schema
+        .query_units
+        .iter()
+        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
+    let threshold = constraint.value * query_unit.to_canonical;
+
+    for fact_key in &schema.fact_keys {
+        let Some(fact) = node.facts.iter().find(|fact| {
+            fact.key.eq_ignore_ascii_case(fact_key)
+                && schema
+                    .proof_sources
+                    .iter()
+                    .any(|source| source == &fact.source.source_type)
+        }) else {
+            continue;
+        };
+
+        let FactValue::Numeric(canonical_value) = &fact.value else {
+            continue;
+        };
+        if *canonical_value <= 0.0 {
+            continue;
+        }
+
+        match constraint.operator {
+            ConstraintOperator::Min => {
+                if canonical_value + 0.001 < threshold {
+                    return None;
+                }
+            }
+        }
+
+        let display_value = canonical_value / query_unit.to_canonical;
+        return Some(EvidenceMatch {
+            preference: constraint.raw_text.clone(),
+            fact_key: fact.key.clone(),
+            display: format!(
+                "{}: {} {}",
+                schema.label,
+                format_measurement(display_value),
+                query_unit.unit
+            ),
+            normalized_score: 1.0,
+            score_delta: 2.0,
+            confidence: fact.confidence,
+            source_type: format!("{:?}", fact.source.source_type),
+            scoring_method: schema.scoring_method.clone(),
+            reason: format!("proved constraint: {}", constraint.raw_text),
+        });
+    }
+
+    None
+}
+
+fn graph_textual_preference_evidence(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    preference: &str,
+) -> Option<EvidenceMatch> {
+    let schema = schema::text_evidence_schema(preference)?;
+    let node_id = society_node_id(society_id);
+    let node = graph.get_node(&node_id)?;
+
+    for fact in &node.facts {
+        if !schema::fact_answers_text_schema(&fact.key, &fact.answers_preferences, schema) {
+            continue;
+        }
+
+        if let Some(snippet) = schema::text_support_snippet(&fact.value, schema) {
+            return Some(EvidenceMatch {
+                preference: preference.to_string(),
+                fact_key: fact.key.clone(),
+                display: format!("{}: {}", schema.display_label, snippet),
+                normalized_score: 0.7,
+                score_delta: schema.score_delta,
+                confidence: fact.confidence,
+                source_type: format!("{:?}", fact.source.source_type),
+                scoring_method: "graph-text".into(),
+                reason: format!("matches preference: {}", preference),
+            });
+        }
+    }
+
+    None
+}
+
+fn format_measurement(value: f64) -> String {
+    if value >= 100.0 {
+        format!("{:.0}", value)
+    } else if value >= 10.0 {
+        format!("{:.1}", value)
+    } else {
+        format!("{:.2}", value)
     }
 }
 
@@ -297,10 +583,14 @@ pub fn compute_confidence(
 
     // Match quality: graph_driven_pct / 100.0
     let match_score = (graph_driven_pct / 100.0) as f64;
-    let match_explanation = format!("{}% of scoring from verified graph data", graph_driven_pct.round() as u32);
+    let match_explanation = format!(
+        "{}% of scoring from verified graph data",
+        graph_driven_pct.round() as u32
+    );
 
     // Weighted average: source 0.4, coverage 0.2, freshness 0.2, match 0.2
-    let overall = source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
+    let overall =
+        source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
 
     let label = confidence_label(overall);
 
@@ -359,15 +649,26 @@ pub fn compute_confidence_for_detail(
         if n.facts.is_empty() {
             (0.0, "No facts available".to_string())
         } else {
-            let avg: f64 = n.facts.iter().map(|f| f.confidence as f64).sum::<f64>() / n.facts.len() as f64;
-            (avg, format!("Average fact confidence: {:.0}% across {} facts", avg * 100.0, n.facts.len()))
+            let avg: f64 =
+                n.facts.iter().map(|f| f.confidence as f64).sum::<f64>() / n.facts.len() as f64;
+            (
+                avg,
+                format!(
+                    "Average fact confidence: {:.0}% across {} facts",
+                    avg * 100.0,
+                    n.facts.len()
+                ),
+            )
         }
     } else {
         (0.0, "No knowledge graph data".to_string())
     };
 
     // Weighted average: source 0.4, coverage 0.2, freshness 0.2, fact_quality 0.2
-    let overall = source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + fact_quality_score * 0.2;
+    let overall = source_score * 0.4
+        + coverage_score * 0.2
+        + freshness_score * 0.2
+        + fact_quality_score * 0.2;
 
     let label = confidence_label(overall);
 
@@ -416,7 +717,10 @@ fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
         match n.root_source {
             Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
             Some(RootSource::Seller) => (0.6, "Seller-listed data".to_string()),
-            Some(RootSource::Discovered) => (0.5, "Discovered via search, verification pending".to_string()),
+            Some(RootSource::Discovered) => (
+                0.5,
+                "Discovered via search, verification pending".to_string(),
+            ),
             Some(RootSource::Legacy) | None => (0.3, "Legacy/unclassified source".to_string()),
         }
     } else {
@@ -427,7 +731,10 @@ fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
 fn compute_fact_coverage(node: &Option<&Node>) -> (f64, String) {
     let fact_count = node.as_ref().map(|n| n.facts.len()).unwrap_or(0);
     let score = (fact_count as f64 / FACT_COVERAGE_THRESHOLD).min(1.0);
-    let explanation = format!("{} facts available ({} = full coverage)", fact_count, FACT_COVERAGE_THRESHOLD as u32);
+    let explanation = format!(
+        "{} facts available ({} = full coverage)",
+        fact_count, FACT_COVERAGE_THRESHOLD as u32
+    );
     (score, explanation)
 }
 
@@ -460,7 +767,11 @@ fn compute_freshness(node: &Option<&Node>) -> (f64, String) {
             raw_score
         };
 
-        let suffix = if capped < raw_score { " (bulk-created cap)" } else { "" };
+        let suffix = if capped < raw_score {
+            " (bulk-created cap)"
+        } else {
+            ""
+        };
         let label = match days_ago {
             0..=6 => "fresh",
             7..=29 => "recent",
@@ -468,7 +779,10 @@ fn compute_freshness(node: &Option<&Node>) -> (f64, String) {
             _ => "stale",
         };
 
-        (capped, format!("Updated {} days ago ({}){}", days_ago, label, suffix))
+        (
+            capped,
+            format!("Updated {} days ago ({}){}", days_ago, label, suffix),
+        )
     } else {
         (0.3, "No update timestamp available".to_string())
     }
@@ -596,10 +910,35 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
                 0.0
             }
         }
+        "reliable builder" | "trusted builder" => {
+            if property.builder_quality_score >= 0.8 {
+                2.0
+            } else if property.builder_quality_score >= 0.6 {
+                1.0
+            } else {
+                0.0
+            }
+        }
+        "on time delivery" => {
+            let status = property.possession_status.to_lowercase();
+            if status.contains("delay") || status.contains("behind") {
+                0.0
+            } else if status.contains("ready")
+                || status.contains("delivered")
+                || status.contains("completed")
+            {
+                2.0
+            } else if property.builder_quality_score >= 0.75 {
+                1.0
+            } else {
+                0.0
+            }
+        }
         "greenery" => property.greenery_score.unwrap_or(0.0) * 2.0,
         "new construction" | "under construction" => {
             let status = property.possession_status.to_lowercase();
-            if status.contains("under") || status.contains("construction") || status.contains("new") {
+            if status.contains("under") || status.contains("construction") || status.contains("new")
+            {
                 2.0
             } else {
                 0.0
@@ -607,7 +946,10 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
         }
         "ready to move" => {
             let status = property.possession_status.to_lowercase();
-            if status.contains("ready") || status.contains("delivered") || status.contains("completed") {
+            if status.contains("ready")
+                || status.contains("delivered")
+                || status.contains("completed")
+            {
                 2.0
             } else {
                 0.0
@@ -631,7 +973,10 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
         }
         "upcoming" => {
             let status = property.possession_status.to_lowercase();
-            if status.contains("upcoming") || status.contains("pre-launch") || status.contains("future") {
+            if status.contains("upcoming")
+                || status.contains("pre-launch")
+                || status.contains("future")
+            {
                 2.0
             } else {
                 0.0
@@ -658,7 +1003,7 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
 }
 
 /// Check if a property's area is "nearby" the canonical search area.
-/// This catches sub-areas, micro-markets, and Gemini-assigned areas that
+/// This catches sub-areas, micro-markets, and externally assigned areas that
 /// belong to the same macro area but don't exactly match the canonical name.
 ///
 /// Checks: alias list membership, substring containment, and same-city
@@ -727,13 +1072,16 @@ fn legacy_fact_key_for_preference(preference: &str) -> String {
         "value for money" => "price_per_sqft",
         "premium" => "price_per_sqft",
         "good society" => "society_quality_score",
+        "reliable builder" | "trusted builder" => "builder_quality_score",
+        "on time delivery" => "possession_status",
         "greenery" => "greenery_score",
-        "new construction" | "under construction" | "ready to move"
-        | "new launch" | "delayed" | "upcoming" => "possession_status",
+        "new construction" | "under construction" | "ready to move" | "new launch" | "delayed"
+        | "upcoming" => "possession_status",
         "high floor" => "floor",
         "east facing" => "facing",
         _ => "unknown",
-    }.to_string()
+    }
+    .to_string()
 }
 
 /// Build a human-readable display string for a legacy preference match.
@@ -741,18 +1089,33 @@ fn format_legacy_display(preference: &str, property: &Property) -> String {
     match preference {
         "metro access" => format!("{} min to metro", property.metro_distance_mins),
         "quiet neighborhood" => {
-            if property.noise_score < 0.3 { "Quiet neighborhood".into() }
-            else { "Moderately quiet area".into() }
+            if property.noise_score < 0.3 {
+                "Quiet neighborhood".into()
+            } else {
+                "Moderately quiet area".into()
+            }
         }
         "value for money" => format!("{}/sqft — good value", property.price_per_sqft),
         "premium" => format!("{}/sqft — premium segment", property.price_per_sqft),
         "good society" => {
-            if property.society_quality_score >= 0.8 { "Strong society quality".into() }
-            else { "Decent society quality".into() }
+            if property.society_quality_score >= 0.8 {
+                "Strong society quality".into()
+            } else {
+                "Decent society quality".into()
+            }
         }
+        "reliable builder" | "trusted builder" => {
+            if property.builder_quality_score >= 0.8 {
+                "Strong builder quality".into()
+            } else {
+                "Acceptable builder quality".into()
+            }
+        }
+        "on time delivery" => format!("Status: {}", property.possession_status),
         "greenery" => "Green surroundings".into(),
-        "new construction" | "under construction" | "new launch"
-        | "delayed" | "upcoming" => format!("Status: {}", property.possession_status),
+        "new construction" | "under construction" | "new launch" | "delayed" | "upcoming" => {
+            format!("Status: {}", property.possession_status)
+        }
         "ready to move" => format!("Status: {}", property.possession_status),
         "high floor" => format!("Floor {}/{}", property.floor, property.total_floors),
         "east facing" => format!("Facing: {}", property.facing),
@@ -777,15 +1140,192 @@ fn build_match_reason(intent: &SearchIntent, reasons: &[String]) -> String {
         };
         parts.push(format!("under {}", budget_str));
     }
-    for pref in &intent.preferences {
-        parts.push(pref.clone());
+
+    for constraint in &intent.hard_constraints {
+        parts.push(constraint.raw_text.clone());
+    }
+
+    for pref in positive_preference_labels(intent) {
+        if preference_was_matched(reasons, &pref) {
+            parts.push(pref);
+        }
+    }
+    for pref in negative_preference_labels(intent) {
+        if negative_preference_was_avoided(reasons, &pref) {
+            parts.push(format!("avoid {}", pref));
+        }
     }
 
     if parts.is_empty() {
         // Fall back to raw match reasons
-        reasons.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+        reasons
+            .iter()
+            .take(3)
+            .cloned()
+            .collect::<Vec<_>>()
+            .join(", ")
     } else {
         parts.join(", ")
+    }
+}
+
+fn preference_was_matched(reasons: &[String], preference: &str) -> bool {
+    let expected = format!("matches preference: {}", preference);
+    reasons.iter().any(|reason| reason == &expected)
+}
+
+fn negative_preference_was_avoided(reasons: &[String], preference: &str) -> bool {
+    let expected = format!("avoids {}", preference);
+    reasons.iter().any(|reason| reason == &expected)
+}
+
+fn positive_preference_labels(intent: &SearchIntent) -> Vec<String> {
+    if !intent.positive_preferences.is_empty() {
+        intent
+            .positive_preferences
+            .iter()
+            .map(|pref| pref.raw_text.clone())
+            .collect()
+    } else {
+        intent
+            .preferences
+            .iter()
+            .filter(|pref| !pref.starts_with("avoid "))
+            .cloned()
+            .collect()
+    }
+}
+
+fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
+    if !intent.negative_preferences.is_empty() {
+        intent
+            .negative_preferences
+            .iter()
+            .map(|pref| pref.raw_text.clone())
+            .collect()
+    } else {
+        intent
+            .preferences
+            .iter()
+            .filter_map(|pref| pref.strip_prefix("avoid ").map(str::to_string))
+            .collect()
+    }
+}
+
+struct LocalPreferenceEvaluation {
+    score_delta: f64,
+    fact_key: &'static str,
+    display: String,
+    status: &'static str,
+    score: f64,
+}
+
+fn legacy_negative_preference_evaluation(
+    property: &Property,
+    preference: &str,
+) -> Option<LocalPreferenceEvaluation> {
+    match preference {
+        "waterlogging risk" => Some(lower_risk_evaluation(
+            property.waterlogging_risk_score,
+            "waterlogging_risk_score",
+            "waterlogging",
+            0.2,
+            0.5,
+            1.4,
+        )),
+        "traffic" => Some(lower_risk_evaluation(
+            property.traffic_score,
+            "traffic_score",
+            "traffic",
+            0.35,
+            0.6,
+            1.3,
+        )),
+        "noise" => Some(lower_risk_evaluation(
+            property.noise_score,
+            "noise_score",
+            "noise",
+            0.3,
+            0.5,
+            1.0,
+        )),
+        "legal risk" => Some(lower_risk_evaluation(
+            property.litigation_risk,
+            "litigation_risk",
+            "legal",
+            0.15,
+            0.3,
+            1.5,
+        )),
+        "delay risk" => Some(delay_risk_evaluation(property)),
+        _ => None,
+    }
+}
+
+fn lower_risk_evaluation(
+    value: f64,
+    fact_key: &'static str,
+    label: &'static str,
+    good_max: f64,
+    ok_max: f64,
+    weight: f64,
+) -> LocalPreferenceEvaluation {
+    if value <= good_max {
+        LocalPreferenceEvaluation {
+            score_delta: 2.0 * weight,
+            fact_key,
+            display: format!("Low {} risk", label),
+            status: "matched",
+            score: 1.0,
+        }
+    } else if value <= ok_max {
+        LocalPreferenceEvaluation {
+            score_delta: 0.7 * weight,
+            fact_key,
+            display: format!("Moderate {} risk", label),
+            status: "partial",
+            score: 0.5,
+        }
+    } else {
+        LocalPreferenceEvaluation {
+            score_delta: -2.0 * weight,
+            fact_key,
+            display: format!("High {} risk", label),
+            status: "partial",
+            score: 0.0,
+        }
+    }
+}
+
+fn delay_risk_evaluation(property: &Property) -> LocalPreferenceEvaluation {
+    let status = property.possession_status.to_lowercase();
+    if status.contains("delay") || status.contains("behind") {
+        LocalPreferenceEvaluation {
+            score_delta: -2.8,
+            fact_key: "possession_status",
+            display: format!("Delay risk in status: {}", property.possession_status),
+            status: "partial",
+            score: 0.0,
+        }
+    } else if status.contains("under") || status.contains("construction") {
+        LocalPreferenceEvaluation {
+            score_delta: -0.8,
+            fact_key: "possession_status",
+            display: format!(
+                "Handover still depends on status: {}",
+                property.possession_status
+            ),
+            status: "partial",
+            score: 0.4,
+        }
+    } else {
+        LocalPreferenceEvaluation {
+            score_delta: 2.0,
+            fact_key: "possession_status",
+            display: format!("No delay signal in status: {}", property.possession_status),
+            status: "matched",
+            score: 1.0,
+        }
     }
 }
 
@@ -827,13 +1367,18 @@ fn graph_area_match(society_id: &str, intent_area: &str, graph: Option<&Knowledg
 mod tests {
     use super::*;
     use crate::knowledge::edge::{Edge, Relation};
-    use crate::knowledge::fact::{FactValue, SourcedFact};
+    use crate::knowledge::fact::{FactValue, SourceType, SourcedFact};
     use crate::knowledge::graph::KnowledgeGraph;
     use crate::knowledge::node::{Node, NodeType, RootSource};
+    use crate::search::schema::SQM_PER_ACRE;
 
     /// Helper: build a minimal KnowledgeGraph with a society node, an area node,
     /// and a SocietyInArea edge between them.
-    fn graph_with_society_in_area(society_slug: &str, area_slug: &str, area_name: &str) -> KnowledgeGraph {
+    fn graph_with_society_in_area(
+        society_slug: &str,
+        area_slug: &str,
+        area_name: &str,
+    ) -> KnowledgeGraph {
         let mut g = KnowledgeGraph::new();
         let society_id = format!("society:{}", society_slug);
         let area_id = format!("area:{}", area_slug);
@@ -851,14 +1396,26 @@ mod tests {
     #[test]
     fn test_graph_area_match_exact() {
         let g = graph_with_society_in_area("prestige-lakeside", "whitefield", "Whitefield");
-        assert!(graph_area_match("prestige-lakeside", "Whitefield", Some(&g)));
+        assert!(graph_area_match(
+            "prestige-lakeside",
+            "Whitefield",
+            Some(&g)
+        ));
     }
 
     #[test]
     fn test_graph_area_match_case_insensitive() {
         let g = graph_with_society_in_area("prestige-lakeside", "whitefield", "Whitefield");
-        assert!(graph_area_match("prestige-lakeside", "whitefield", Some(&g)));
-        assert!(graph_area_match("prestige-lakeside", "WHITEFIELD", Some(&g)));
+        assert!(graph_area_match(
+            "prestige-lakeside",
+            "whitefield",
+            Some(&g)
+        ));
+        assert!(graph_area_match(
+            "prestige-lakeside",
+            "WHITEFIELD",
+            Some(&g)
+        ));
     }
 
     #[test]
@@ -872,7 +1429,11 @@ mod tests {
     fn test_graph_area_match_substring_reverse() {
         // Intent "Sarjapur Road" should match area "Sarjapur" (intent contains area)
         let g = graph_with_society_in_area("sobha-neopolis", "sarjapur", "Sarjapur");
-        assert!(graph_area_match("sobha-neopolis", "Sarjapur Road", Some(&g)));
+        assert!(graph_area_match(
+            "sobha-neopolis",
+            "Sarjapur Road",
+            Some(&g)
+        ));
     }
 
     #[test]
@@ -901,7 +1462,11 @@ mod tests {
     fn test_graph_area_match_no_edge() {
         // Society exists but has no SocietyInArea edge
         let mut g = KnowledgeGraph::new();
-        g.add_node(Node::new("society:lonely-society", NodeType::Society, "Lonely Society"));
+        g.add_node(Node::new(
+            "society:lonely-society",
+            NodeType::Society,
+            "Lonely Society",
+        ));
         assert!(!graph_area_match("lonely-society", "Whitefield", Some(&g)));
     }
 
@@ -920,7 +1485,11 @@ mod tests {
     }
 
     /// Helper: build a graph with a society node having given root_source and fact count.
-    fn graph_with_society_node(slug: &str, root_source: Option<RootSource>, fact_count: usize) -> KnowledgeGraph {
+    fn graph_with_society_node(
+        slug: &str,
+        root_source: Option<RootSource>,
+        fact_count: usize,
+    ) -> KnowledgeGraph {
         let mut g = KnowledgeGraph::new();
         let node_id = format!("society:{}", slug);
         let mut node = Node::new(&node_id, NodeType::Society, slug);
@@ -938,7 +1507,11 @@ mod tests {
         let score = compute_confidence(Some(&g), "well-known", 80.0).unwrap();
         assert_eq!(score.label, "High");
         // source=1.0*0.4 + coverage=1.0*0.2 + freshness~1.0*0.2 + match=0.8*0.2 = 0.96
-        assert!(score.overall >= 0.7, "Expected High, got overall={}", score.overall);
+        assert!(
+            score.overall >= 0.7,
+            "Expected High, got overall={}",
+            score.overall
+        );
     }
 
     #[test]
@@ -961,9 +1534,17 @@ mod tests {
     #[test]
     fn test_confidence_threshold_calibration() {
         // At exactly FACT_COVERAGE_THRESHOLD facts, coverage should be 1.0
-        let g = graph_with_society_node("calibrated", Some(RootSource::Legacy), FACT_COVERAGE_THRESHOLD as usize);
+        let g = graph_with_society_node(
+            "calibrated",
+            Some(RootSource::Legacy),
+            FACT_COVERAGE_THRESHOLD as usize,
+        );
         let score = compute_confidence(Some(&g), "calibrated", 0.0).unwrap();
-        let coverage_component = score.components.iter().find(|c| c.dimension == "fact_coverage").unwrap();
+        let coverage_component = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "fact_coverage")
+            .unwrap();
         assert!(
             (coverage_component.score - 1.0).abs() < 0.001,
             "Expected coverage=1.0 at threshold, got {}",
@@ -1022,15 +1603,25 @@ mod tests {
         let score = compute_confidence_for_detail(Some(&g), "well-enriched").unwrap();
 
         // Should have "fact_source_quality" component instead of "match_quality"
-        let fsq = score.components.iter().find(|c| c.dimension == "fact_source_quality");
+        let fsq = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "fact_source_quality");
         assert!(fsq.is_some(), "Should have fact_source_quality component");
 
-        let mq = score.components.iter().find(|c| c.dimension == "match_quality");
+        let mq = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "match_quality");
         assert!(mq.is_none(), "Should NOT have match_quality component");
 
         // fact_source_quality should be ~0.8 (all facts have 0.8 confidence)
         let fsq = fsq.unwrap();
-        assert!((fsq.score - 0.8).abs() < 0.01, "Expected ~0.8, got {}", fsq.score);
+        assert!(
+            (fsq.score - 0.8).abs() < 0.01,
+            "Expected ~0.8, got {}",
+            fsq.score
+        );
 
         // Overall should be High (RERA + good coverage + fresh + high fact quality)
         assert_eq!(score.label, "High");
@@ -1042,7 +1633,11 @@ mod tests {
         let g = graph_with_society_node("bulk-created", Some(RootSource::Discovered), 5);
         let score = compute_confidence_for_detail(Some(&g), "bulk-created").unwrap();
 
-        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        let freshness = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "freshness")
+            .unwrap();
         assert!(
             freshness.score <= 0.5,
             "Bulk-created freshness should be capped at 0.5, got {}",
@@ -1072,7 +1667,11 @@ mod tests {
 
         let score = compute_confidence_for_detail(Some(&g), "enriched-over-time").unwrap();
 
-        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        let freshness = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "freshness")
+            .unwrap();
         assert!(
             freshness.score > 0.5,
             "Enriched-over-time freshness should NOT be capped, got {}",
@@ -1092,12 +1691,654 @@ mod tests {
         let g = graph_with_society_node("single-fact", Some(RootSource::Discovered), 1);
         let score = compute_confidence_for_detail(Some(&g), "single-fact").unwrap();
 
-        let freshness = score.components.iter().find(|c| c.dimension == "freshness").unwrap();
+        let freshness = score
+            .components
+            .iter()
+            .find(|c| c.dimension == "freshness")
+            .unwrap();
         // Single fact => all_facts_same_timestamp returns true, but n.facts.len() < 2 guard prevents cap
         assert!(
             freshness.score > 0.5,
             "Single-fact node should not be capped, got {}",
             freshness.score
         );
+    }
+
+    fn local_property(
+        id: &str,
+        area: &str,
+        society_id: &str,
+        bhk: u32,
+        price: u64,
+        metro_distance_mins: u32,
+        noise_score: f64,
+    ) -> crate::models::Property {
+        crate::models::Property {
+            id: id.to_string(),
+            title: format!("{} BHK apartment", bhk),
+            area: area.to_string(),
+            area_id: area.to_lowercase().replace(' ', "-"),
+            city: "Bengaluru".to_string(),
+            society_id: society_id.to_string(),
+            builder_name: "Test Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk,
+            price,
+            price_per_sqft: 12_000,
+            carpet_area_sqft: 1_200,
+            super_builtup_sqft: 1_550,
+            floor: 8,
+            total_floors: 20,
+            facing: "East".to_string(),
+            possession_status: "Ready to Move".to_string(),
+            metro_distance_mins,
+            maintenance_cost_monthly: 6_000,
+            society_quality_score: 0.7,
+            builder_quality_score: 0.7,
+            document_completeness_score: 0.8,
+            litigation_risk: 0.1,
+            noise_score,
+            sunlight_score: 0.7,
+            airport_noise_score: 0.1,
+            waterlogging_risk_score: 0.1,
+            traffic_score: 0.6,
+            days_on_market: 20,
+            greenery_score: Some(0.6),
+            open_space_score: Some(0.6),
+            resale_strength_score: Some(0.7),
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            description_summary: "Local test listing".to_string(),
+            transparency_tags: Vec::new(),
+            source_reference: "unit-test".to_string(),
+            seller_id: None,
+        }
+    }
+
+    fn local_society_names(
+        properties: &[crate::models::Property],
+    ) -> std::collections::HashMap<String, String> {
+        properties
+            .iter()
+            .map(|p| (p.society_id.clone(), format!("{} Society", p.society_id)))
+            .collect()
+    }
+
+    fn graph_with_society_facts(slug: &str, facts: Vec<SourcedFact>) -> KnowledgeGraph {
+        let mut graph = KnowledgeGraph::new();
+        let mut node = Node::new(format!("society:{}", slug), NodeType::Society, slug);
+        node.add_facts(facts);
+        graph.add_node(node);
+        graph
+    }
+
+    fn add_society_facts(graph: &mut KnowledgeGraph, slug: &str, facts: Vec<SourcedFact>) {
+        let mut node = Node::new(format!("society:{}", slug), NodeType::Society, slug);
+        node.add_facts(facts);
+        graph.add_node(node);
+    }
+
+    fn numeric_fact(key: &str, value: f64) -> SourcedFact {
+        SourcedFact::manual(key, FactValue::Numeric(value))
+    }
+
+    fn rera_numeric_fact(key: &str, value: f64) -> SourcedFact {
+        let mut fact = numeric_fact(key, value);
+        fact.source.source_type = SourceType::Rera;
+        fact.confidence = 1.0;
+        fact
+    }
+
+    fn tags_fact(key: &str, tags: Vec<&str>) -> SourcedFact {
+        SourcedFact::manual(
+            key,
+            FactValue::Tags(tags.into_iter().map(str::to_string).collect()),
+        )
+    }
+
+    #[test]
+    fn test_search_index_recalls_hard_constraint_candidates_without_network() {
+        let properties = vec![
+            local_property(
+                "whitefield-fit",
+                "Whitefield",
+                "whitefield-fit",
+                3,
+                19_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "bellandur-leak",
+                "Bellandur",
+                "bellandur-leak",
+                3,
+                18_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "whitefield-over-budget",
+                "Whitefield",
+                "whitefield-over-budget",
+                3,
+                21_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "whitefield-wrong-bhk",
+                "Whitefield",
+                "whitefield-wrong-bhk",
+                2,
+                15_000_000,
+                8,
+                0.2,
+            ),
+        ];
+        let index = crate::search::SearchIndex::build(&properties);
+        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+
+        let ids = index.recall_ids("3BHK Whitefield under 2Cr", &intent);
+
+        assert_eq!(ids, vec!["whitefield-fit"]);
+    }
+
+    #[test]
+    fn test_search_hard_filters_area_bhk_and_budget_without_network() {
+        let properties = vec![
+            local_property(
+                "whitefield-fit",
+                "Whitefield",
+                "whitefield-fit",
+                3,
+                19_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "bellandur-leak",
+                "Bellandur",
+                "bellandur-leak",
+                3,
+                18_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "whitefield-over-budget",
+                "Whitefield",
+                "whitefield-over-budget",
+                3,
+                21_000_000,
+                8,
+                0.2,
+            ),
+            local_property(
+                "whitefield-wrong-bhk",
+                "Whitefield",
+                "whitefield-wrong-bhk",
+                2,
+                15_000_000,
+                8,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr",
+            &intent,
+            None,
+        );
+
+        let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
+        assert_eq!(ids, vec!["whitefield-fit"]);
+    }
+
+    #[test]
+    fn test_indexed_search_filters_candidates_before_ranking() {
+        let mut noisy_unrelated = local_property(
+            "bellandur-keyword-spam",
+            "Bellandur",
+            "bellandur-keyword-spam",
+            3,
+            18_000_000,
+            8,
+            0.2,
+        );
+        noisy_unrelated.title = "Whitefield 3 BHK keyword-heavy decoy".to_string();
+
+        let properties = vec![
+            noisy_unrelated,
+            local_property(
+                "whitefield-fit",
+                "Whitefield",
+                "whitefield-fit",
+                3,
+                19_000_000,
+                8,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let index = crate::search::SearchIndex::build(&properties);
+        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+
+        let results = TextSearch::search_with_index_and_intent_and_sellers(
+            &properties,
+            Some(&index),
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr",
+            &intent,
+            None,
+            &[],
+        );
+
+        let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
+        assert_eq!(ids, vec!["whitefield-fit"]);
+    }
+
+    #[test]
+    fn test_search_ranks_local_preference_fit_before_weaker_match() {
+        let properties = vec![
+            local_property(
+                "quiet-near-metro",
+                "Whitefield",
+                "quiet-near-metro",
+                3,
+                19_000_000,
+                5,
+                0.2,
+            ),
+            local_property(
+                "noisy-far-from-metro",
+                "Whitefield",
+                "noisy-far-from-metro",
+                3,
+                19_000_000,
+                25,
+                0.7,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let intent =
+            crate::search::intent::parse_intent("quiet 3BHK near metro in Whitefield under 2Cr");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "quiet 3BHK near metro in Whitefield under 2Cr",
+            &intent,
+            None,
+        );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].card.id, "quiet-near-metro");
+        assert!(
+            results[0].match_score > results[1].match_score,
+            "preference-fit property should score higher than weaker match"
+        );
+
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("preference query should include structured explanation");
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|r| r.preference == "metro access" && r.scoring_method == "legacy"),
+            "metro preference should be explained by local legacy scoring when no graph fact is present"
+        );
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "legacy"),
+            "quiet preference should be explained by local legacy scoring when no graph fact is present"
+        );
+    }
+
+    #[test]
+    fn test_search_requires_rera_land_area_for_min_acres_constraint() {
+        let mut large_green = local_property(
+            "large-green",
+            "Whitefield",
+            "large-green",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        large_green.greenery_score = None;
+
+        let mut small_green = local_property(
+            "small-green",
+            "Whitefield",
+            "small-green",
+            3,
+            18_000_000,
+            8,
+            0.2,
+        );
+        small_green.greenery_score = None;
+
+        let mut unknown_area = local_property(
+            "unknown-area",
+            "Whitefield",
+            "unknown-area",
+            3,
+            17_000_000,
+            8,
+            0.2,
+        );
+        unknown_area.greenery_score = None;
+
+        let properties = vec![small_green, unknown_area, large_green];
+        let society_names = local_society_names(&properties);
+
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "large-green",
+            vec![
+                rera_numeric_fact("rera_total_land_area_sqm", 12.0 * SQM_PER_ACRE),
+                tags_fact(
+                    "google_top_positives",
+                    vec!["wide open spaces and green cover across the campus"],
+                ),
+            ],
+        );
+        add_society_facts(
+            &mut graph,
+            "small-green",
+            vec![
+                rera_numeric_fact("rera_total_land_area_sqm", 5.0 * SQM_PER_ACRE),
+                tags_fact(
+                    "google_top_positives",
+                    vec!["landscaped open spaces and greenery"],
+                ),
+            ],
+        );
+
+        let intent =
+            crate::search::intent::parse_intent("3bhk with greenery in whitefield above 10 acres");
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3bhk with greenery in whitefield above 10 acres",
+            &intent,
+            Some(&graph),
+        );
+
+        let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
+        assert_eq!(ids, vec!["large-green"]);
+        assert!(
+            results[0].match_reason.contains("above 10 acres"),
+            "hard constraint should be visible in match reason: {}",
+            results[0].match_reason
+        );
+        assert!(
+            results[0].match_reason.contains("greenery"),
+            "greenery should be visible only because graph text supports it: {}",
+            results[0].match_reason
+        );
+        let explanation = results[0].match_explanation.as_ref().unwrap();
+        assert!(explanation
+            .reasons
+            .iter()
+            .any(|reason| reason.scoring_method == "rera-proof"
+                && reason.fact_key == "rera_total_land_area_sqm"));
+    }
+
+    #[test]
+    fn test_no_data_preference_is_not_advertised_in_match_reason() {
+        let mut property = local_property(
+            "no-greenery-data",
+            "Whitefield",
+            "no-greenery-data",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        property.greenery_score = None;
+        let properties = vec![property];
+        let society_names = local_society_names(&properties);
+        let graph = graph_with_society_facts("no-greenery-data", Vec::new());
+        let intent = crate::search::intent::parse_intent("3bhk whitefield greenery");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3bhk whitefield greenery",
+            &intent,
+            Some(&graph),
+        );
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            !results[0].match_reason.contains("greenery"),
+            "match reason should not claim no-data greenery: {}",
+            results[0].match_reason
+        );
+        let explanation = results[0].match_explanation.as_ref().unwrap();
+        assert!(
+            explanation
+                .preference_coverage
+                .iter()
+                .any(|coverage| coverage.preference == "greenery" && coverage.status == "no_data"),
+            "expected greenery no_data coverage, got {:?}",
+            explanation.preference_coverage
+        );
+    }
+
+    #[test]
+    fn test_graph_text_greenery_evidence_supports_preference() {
+        let mut property = local_property(
+            "graph-greenery",
+            "Whitefield",
+            "graph-greenery",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        property.greenery_score = None;
+        let properties = vec![property];
+        let society_names = local_society_names(&properties);
+        let graph = graph_with_society_facts(
+            "graph-greenery",
+            vec![tags_fact(
+                "google_top_positives",
+                vec!["abundant green spaces, landscaped common areas, and open spaces"],
+            )],
+        );
+        let intent = crate::search::intent::parse_intent("3bhk whitefield greenery");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3bhk whitefield greenery",
+            &intent,
+            Some(&graph),
+        );
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].match_reason.contains("greenery"));
+        let explanation = results[0].match_explanation.as_ref().unwrap();
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.preference == "greenery"
+                    && reason.scoring_method == "graph-text"
+                    && reason.fact_key == "google_top_positives"),
+            "expected graph-text greenery reason, got {:?}",
+            explanation.reasons
+        );
+    }
+
+    #[test]
+    fn test_search_ranks_low_waterlogging_before_high_risk_when_avoiding_waterlogging() {
+        let mut low_risk = local_property(
+            "low-waterlogging",
+            "Whitefield",
+            "low-waterlogging",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        low_risk.waterlogging_risk_score = 0.1;
+
+        let mut high_risk = local_property(
+            "high-waterlogging",
+            "Whitefield",
+            "high-waterlogging",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        high_risk.waterlogging_risk_score = 0.85;
+
+        let properties = vec![high_risk, low_risk];
+        let society_names = local_society_names(&properties);
+        let intent =
+            crate::search::intent::parse_intent("3BHK Whitefield under 2Cr avoid waterlogging");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr avoid waterlogging",
+            &intent,
+            None,
+        );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].card.id, "low-waterlogging");
+        assert!(
+            results[0].match_score > results[1].match_score,
+            "low waterlogging risk should outrank high waterlogging risk"
+        );
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("negative-preference query should include explanation");
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|r| r.preference == "avoid waterlogging risk"
+                    && r.scoring_method == "local-risk"),
+            "avoid-waterlogging should be explained by local risk scoring"
+        );
+    }
+
+    #[test]
+    fn test_search_penalizes_heavy_traffic_when_user_requests_less_traffic() {
+        let mut low_traffic = local_property(
+            "low-traffic",
+            "Whitefield",
+            "low-traffic",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        low_traffic.traffic_score = 0.2;
+
+        let mut heavy_traffic = local_property(
+            "heavy-traffic",
+            "Whitefield",
+            "heavy-traffic",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        heavy_traffic.traffic_score = 0.9;
+
+        let properties = vec![heavy_traffic, low_traffic];
+        let society_names = local_society_names(&properties);
+        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr less traffic");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr less traffic",
+            &intent,
+            None,
+        );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].card.id, "low-traffic");
+        assert!(results[0].match_score > results[1].match_score);
+    }
+
+    #[test]
+    fn test_search_ranks_reliable_builder_locally() {
+        let mut stronger_builder = local_property(
+            "stronger-builder",
+            "Whitefield",
+            "stronger-builder",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        stronger_builder.builder_quality_score = 0.9;
+
+        let mut weaker_builder = local_property(
+            "weaker-builder",
+            "Whitefield",
+            "weaker-builder",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        weaker_builder.builder_quality_score = 0.35;
+
+        let properties = vec![weaker_builder, stronger_builder];
+        let society_names = local_society_names(&properties);
+        let intent =
+            crate::search::intent::parse_intent("3BHK Whitefield under 2Cr reliable builder");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr reliable builder",
+            &intent,
+            None,
+        );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].card.id, "stronger-builder");
+        assert!(results[0]
+            .match_explanation
+            .as_ref()
+            .expect("builder preference should have explanation")
+            .reasons
+            .iter()
+            .any(|r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"));
     }
 }

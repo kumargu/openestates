@@ -152,11 +152,7 @@ fn compute_value(p: &Property, area: Option<&AreaProfile>, graph: &KnowledgeGrap
     if ratio < 0.9 {
         ThemeResult {
             label: ThemeLabel::Strong,
-            summary: format!(
-                "{}% below {} median — strong value",
-                pct_abs,
-                area.name
-            ),
+            summary: format!("{}% below {} median — strong value", pct_abs, area.name),
         }
     } else if ratio <= 1.05 {
         ThemeResult {
@@ -166,19 +162,14 @@ fn compute_value(p: &Property, area: Option<&AreaProfile>, graph: &KnowledgeGrap
     } else if ratio <= 1.2 {
         ThemeResult {
             label: ThemeLabel::Mixed,
-            summary: format!(
-                "{}% above {} median — premium pricing",
-                pct_abs,
-                area.name
-            ),
+            summary: format!("{}% above {} median — premium pricing", pct_abs, area.name),
         }
     } else {
         ThemeResult {
             label: ThemeLabel::Weak,
             summary: format!(
                 "{}% above {} median — significant premium",
-                pct_abs,
-                area.name
+                pct_abs, area.name
             ),
         }
     }
@@ -195,19 +186,11 @@ fn fallback_value_summary(p: &Property, area: Option<&AreaProfile>) -> String {
     let pct_diff = ((1.0 - ratio) * 100.0).round() as i32;
     let pct_abs = (pct_diff as i64).unsigned_abs() as u32;
     if ratio < 0.9 {
-        format!(
-            "{}% below {} median — strong value",
-            pct_abs,
-            area.name
-        )
+        format!("{}% below {} median — strong value", pct_abs, area.name)
     } else if ratio <= 1.05 {
         format!("Near {} median — fair market pricing", area.name)
     } else {
-        format!(
-            "{}% above {} median — premium pricing",
-            pct_abs,
-            area.name
-        )
+        format!("{}% above {} median — premium pricing", pct_abs, area.name)
     }
 }
 
@@ -277,11 +260,7 @@ fn compute_commute(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
     }
 }
 
-fn compute_society(
-    p: &Property,
-    society: Option<&Society>,
-    graph: &KnowledgeGraph,
-) -> ThemeResult {
+fn compute_society(p: &Property, society: Option<&Society>, graph: &KnowledgeGraph) -> ThemeResult {
     let node_id = society_node_id(&p.society_id);
 
     // KG-first: overall_score from score_society skill (0-100)
@@ -318,10 +297,7 @@ fn compute_society(
             if score >= 0.85 {
                 format!("Premium society, {}", sentiment_note)
             } else if score >= 0.7 {
-                format!(
-                    "Good society by {}, {}",
-                    soc.builder_name, sentiment_note
-                )
+                format!("Good society by {}, {}", soc.builder_name, sentiment_note)
             } else {
                 format!("Average society quality, {}", sentiment_note)
             }
@@ -452,10 +428,7 @@ fn compute_resale(p: &Property) -> ThemeResult {
 }
 
 fn compute_market_theme(p: &Property) -> ThemeResult {
-    let interest = p
-        .interest_level
-        .as_deref()
-        .unwrap_or("moderate");
+    let interest = p.interest_level.as_deref().unwrap_or("moderate");
     let saves = p.saves_last_7d.unwrap_or(0);
     let dom = p.days_on_market;
 
@@ -472,7 +445,11 @@ fn compute_market_theme(p: &Property) -> ThemeResult {
             label: ThemeLabel::Good,
             summary: format!(
                 "{} interest, {} days on market",
-                if interest == "high" { "High" } else { "Moderate" },
+                if interest == "high" {
+                    "High"
+                } else {
+                    "Moderate"
+                },
                 dom
             ),
         }
@@ -546,8 +523,7 @@ pub fn compute_tradeoffs(
         if p.society_quality_score >= 0.85 {
             strengths.push("Premium society quality".into());
         }
-        let green_avg =
-            (p.greenery_score.unwrap_or(0.5) + p.open_space_score.unwrap_or(0.5)) / 2.0;
+        let green_avg = (p.greenery_score.unwrap_or(0.5) + p.open_space_score.unwrap_or(0.5)) / 2.0;
         if green_avg >= 0.75 {
             strengths.push("Greener, more open surroundings".into());
         }
@@ -558,10 +534,7 @@ pub fn compute_tradeoffs(
             if a.median_price_per_sqft > 0 {
                 let ratio = p.price_per_sqft as f64 / a.median_price_per_sqft as f64;
                 if ratio > 1.1 {
-                    cautions.push(format!(
-                        "Premium pricing vs other {} listings",
-                        a.name
-                    ));
+                    cautions.push(format!("Premium pricing vs other {} listings", a.name));
                 }
             }
         }
@@ -580,8 +553,7 @@ pub fn compute_tradeoffs(
         if p.waterlogging_risk_score >= 0.3 {
             cautions.push("Waterlogging risk — verify monsoon history".into());
         }
-        let green_avg =
-            (p.greenery_score.unwrap_or(0.5) + p.open_space_score.unwrap_or(0.5)) / 2.0;
+        let green_avg = (p.greenery_score.unwrap_or(0.5) + p.open_space_score.unwrap_or(0.5)) / 2.0;
         if green_avg < 0.45 {
             cautions.push("Dense built environment, limited greenery".into());
         }
@@ -660,10 +632,7 @@ fn build_headline(themes: &CompareThemes) -> String {
     }
 
     if strengths.len() >= 2 {
-        format!(
-            "Strong match for {} and {}.",
-            strengths[0], strengths[1]
-        )
+        format!("Strong match for {} and {}.", strengths[0], strengths[1])
     } else if strengths.len() == 1 && !caution_labels.is_empty() {
         format!(
             "Good option for {}, but {}.",
@@ -679,10 +648,7 @@ fn build_headline(themes: &CompareThemes) -> String {
 }
 
 /// Compute market activity response with display labels.
-pub fn compute_market_activity(
-    p: &Property,
-    area: Option<&AreaProfile>,
-) -> MarketActivityResponse {
+pub fn compute_market_activity(p: &Property, area: Option<&AreaProfile>) -> MarketActivityResponse {
     let interest_level = p
         .interest_level
         .clone()

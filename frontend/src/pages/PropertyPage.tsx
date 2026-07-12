@@ -1,18 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { PropertyDetailResponse, ThemeLabel, SellerSummary } from "../lib/types.ts";
+import type { PropertyDetailResponse, SellerSummary } from "../lib/types.ts";
 import { getProperty, submitClaim, expressInterest } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
-import { ReraTile, ReraPendingTile } from "../components/ReraTile.tsx";
-import { TransparencyScoreTile } from "../components/TransparencyScoreTile.tsx";
 import { ShareButtons } from "../components/ShareButtons.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
-import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
-import { AreaIntelligenceTile } from "../components/AreaIntelligenceTile.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -20,53 +16,23 @@ function formatPrice(price: number): string {
   return price.toLocaleString("en-IN");
 }
 
-function ScoreBar({ label, value }: { label: string; value: number }) {
-  const pct = Math.round(value * 100);
-  const color = pct >= 70 ? "var(--color-positive)" : pct >= 40 ? "var(--color-warning)" : "var(--color-negative)";
-  return (
-    <div className="score-bar">
-      <div className="score-bar-label">
-        <span>{label}</span>
-        <span style={{ fontWeight: 600, color }}>{pct}%</span>
-      </div>
-      <div className="score-bar-track">
-        <div className="score-bar-fill" style={{ width: `${pct}%`, backgroundColor: color }} />
-      </div>
-    </div>
-  );
+function hasKnownNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
 
-function ThemeBadge({ level }: { level: ThemeLabel }) {
-  const config: Record<ThemeLabel, { bg: string; color: string; border: string }> = {
-    strong: { bg: "var(--color-positive-bg)", color: "var(--color-positive)", border: "var(--color-positive-border)" },
-    good: { bg: "#f0f5f0", color: "#3a8a3a", border: "#c0d8c0" },
-    mixed: { bg: "#fdf8f0", color: "var(--color-warning)", border: "#e8dcc0" },
-    weak: { bg: "var(--color-negative-bg)", color: "var(--color-negative)", border: "var(--color-negative-border)" },
-  };
-  const c = config[level];
-  return (
-    <span style={{
-      display: "inline-block",
-      fontSize: "0.7rem",
-      fontWeight: 600,
-      padding: "0.15rem 0.5rem",
-      borderRadius: "var(--radius-xl)",
-      backgroundColor: c.bg,
-      color: c.color,
-      border: `1px solid ${c.border}`,
-      textTransform: "capitalize",
-    }}>
-      {level}
-    </span>
-  );
+function isKnownText(value: string | null | undefined): value is string {
+  return !!value && value.trim().length > 0 && value !== "Not specified";
 }
 
 function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
+  const sizeDescription = hasKnownNumber(p.carpet_area_sqft)
+    ? `${p.carpet_area_sqft} sqft`
+    : "available configuration";
   const jsonLd: Record<string, unknown> = {
     "@context": "https://schema.org",
     "@type": "RealEstateListing",
     name: p.title,
-    description: p.description_summary || `${p.bhk} BHK, ${p.carpet_area_sqft} sqft in ${p.area}, ${p.city}`,
+    description: p.description_summary || `${p.bhk} BHK, ${sizeDescription} in ${p.area}, ${p.city}`,
     url: `https://openestates.in/property/${p.id}`,
     offers: {
       "@type": "Offer",
@@ -78,17 +44,124 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
       addressLocality: p.area,
       addressRegion: p.city,
     },
-    floorSize: {
+    numberOfRooms: p.bhk,
+  };
+  if (hasKnownNumber(p.carpet_area_sqft)) {
+    jsonLd.floorSize = {
       "@type": "QuantitativeValue",
       value: p.carpet_area_sqft,
       unitCode: "FTK",
-    },
-    numberOfRooms: p.bhk,
-  };
+    };
+  }
   if (p.hero_image) {
     jsonLd.image = p.hero_image;
   }
   return jsonLd;
+}
+
+type DecisionTone = "keep" | "verify" | "negotiate";
+
+type RiskSignal = {
+  label: string;
+  value: number;
+};
+
+function clamp(value: number, min = 0, max = 1): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function pct(value: number): string {
+  return `${Math.round(value * 100)}%`;
+}
+
+function normalizedDelta(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  return Math.abs(value) <= 1 ? value * 100 : value;
+}
+
+function formatMedianDelta(value: number | null): string {
+  if (value === null) return "No local benchmark";
+  const rounded = Math.round(Math.abs(value));
+  if (rounded === 0) return "At local median";
+  return value < 0 ? `${rounded}% below local median` : `${rounded}% above local median`;
+}
+
+function riskSignalsFor(p: PropertyDetailResponse["property"]): RiskSignal[] {
+  return [
+    { label: "Legal", value: clamp(p.litigation_risk) },
+    { label: "Waterlogging", value: clamp(p.waterlogging_risk_score) },
+    { label: "Traffic", value: clamp(1 - p.traffic_score) },
+    { label: "Noise", value: clamp(p.noise_score) },
+  ].sort((a, b) => b.value - a.value);
+}
+
+function riskLabel(value: number): "Low" | "Moderate" | "High" {
+  if (value <= 0.24) return "Low";
+  if (value <= 0.55) return "Moderate";
+  return "High";
+}
+
+function trustPercent(data: PropertyDetailResponse): number {
+  if (data.confidence_score?.overall != null) return Math.round(data.confidence_score.overall * 100);
+  return data.transparency_score.overall;
+}
+
+function buildDecision(data: PropertyDetailResponse): {
+  label: string;
+  tone: DecisionTone;
+  summary: string;
+  nextAction: string;
+} {
+  const p = data.property;
+  const delta = normalizedDelta(data.market_activity.price_vs_median?.pct_diff);
+  const trust = trustPercent(data);
+  const risks = riskSignalsFor(p);
+  const topRisk = risks[0];
+  const topRiskLabel = riskLabel(topRisk.value);
+
+  if (trust < 60) {
+    return {
+      label: "Verify before shortlisting",
+      tone: "verify",
+      summary: "The home may fit, but the source chain is not strong enough yet.",
+      nextAction: "Verify seller source and documents before scheduling a final visit.",
+    };
+  }
+
+  if (topRiskLabel === "High") {
+    return {
+      label: "Verify risk before visit",
+      tone: "verify",
+      summary: `${topRisk.label} risk is the main blocker. Clear that before treating this as a finalist.`,
+      nextAction: `Resolve ${topRisk.label.toLowerCase()} evidence before final visit.`,
+    };
+  }
+
+  if (delta !== null && delta > 8) {
+    return {
+      label: "Negotiate before final visit",
+      tone: "negotiate",
+      summary: "The home is above the local benchmark, so it needs a sharper comp-backed price conversation.",
+      nextAction: "Use area median and recent comps as the negotiation anchor.",
+    };
+  }
+
+  return {
+    label: "Good shortlist candidate",
+    tone: "keep",
+    summary: "Price, trust, and risk are balanced enough to keep this in the decision sheet.",
+    nextAction: "Verify tower documents and access-road conditions before final visit.",
+  };
+}
+
+function shortlistChecks(data: PropertyDetailResponse): string[] {
+  const p = data.property;
+  const riskChecks = riskSignalsFor(p)
+    .filter((risk) => risk.value >= 0.25)
+    .slice(0, 2)
+    .map((risk) => `Check ${risk.label.toLowerCase()} evidence`);
+  const explicit = data.tradeoffs.cautions.slice(0, 2);
+  return Array.from(new Set([...explicit, ...riskChecks])).slice(0, 3);
 }
 
 export function PropertyPage() {
@@ -100,7 +173,7 @@ export function PropertyPage() {
 
   useEffect(() => {
     if (!id) return;
-    setSaved(isShortlisted(id));
+    queueMicrotask(() => setSaved(isShortlisted(id)));
     getProperty(id)
       .then((d) => {
         setData(d);
@@ -156,10 +229,39 @@ export function PropertyPage() {
   };
 
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
-  const pageDescription = `${p.bhk} BHK, ${p.carpet_area_sqft} sqft in ${society?.name ? society.name + ", " : ""}${p.area}. ${formatPrice(p.price)} (${p.price_per_sqft.toLocaleString("en-IN")}/sqft). Transparency scores, risk signals, and tradeoffs.`;
+  const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
+    ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
+    : null;
+  const sizeLabel = hasKnownNumber(p.carpet_area_sqft)
+    ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
+    : null;
+  const pageDescription = [
+    `${p.bhk} BHK`,
+    sizeLabel,
+    `in ${society?.name ? society.name + ", " : ""}${p.area}`,
+    formatPrice(p.price),
+    pricePerSqftLabel,
+    "Transparency scores, risk signals, and tradeoffs.",
+  ].filter(Boolean).join(". ");
+  const decision = buildDecision(data);
+  const medianDelta = normalizedDelta(pvm?.pct_diff);
+  const trust = trustPercent(data);
+  const trustLabel = data.confidence_score?.label ?? (trust >= 75 ? "High" : trust >= 55 ? "Medium" : "Low");
+  const risks = riskSignalsFor(p);
+  const topRisk = risks[0];
+  const checks = shortlistChecks(data);
+  const sourceLabel = data.root_source === "rera" ? "RERA-rooted source" : data.root_source === "seller" ? "Seller source" : "Source pending";
+  const marketRows = [
+    market_activity.interest_label,
+    market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
+    market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0
+      ? `${market_activity.offers_last_7d} offer${market_activity.offers_last_7d > 1 ? "s" : ""} this week`
+      : null,
+    `Listed ${market_activity.days_on_market}d ago`,
+  ].filter((row): row is string => row !== null);
 
   return (
-    <div className="page-container-wide">
+    <div className="page-container-wide property-decision-page">
       <Helmet>
         <title>{pageTitle}</title>
         <meta name="description" content={pageDescription} />
@@ -178,8 +280,7 @@ export function PropertyPage() {
             navigate("/results");
           }
         }}
-        className="back-link"
-        style={{ background: "none", border: "none", cursor: "pointer", padding: 0 }}
+        className="back-link property-brief-back"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <polyline points="15 18 9 12 15 6" />
@@ -187,547 +288,283 @@ export function PropertyPage() {
         Back to results
       </button>
 
-      {/* Hero image */}
-      <ImageWithFallback
-        src={p.hero_image}
-        alt={p.title}
-        className="property-hero-image"
-        loading="eager"
-      />
+      <section className="property-brief-hero">
+        <div className="property-brief-media">
+          <ImageWithFallback
+            src={p.hero_image}
+            alt={p.title}
+            className="property-brief-image"
+            loading="eager"
+          />
+          <div className="property-brief-media-strip">
+            <span>{p.area}</span>
+            {hasKnownNumber(p.metro_distance_mins) && <span>{p.metro_distance_mins} min metro</span>}
+            <span>{sourceLabel}</span>
+          </div>
+        </div>
 
-      {/* === A. Property Summary === */}
-      <div style={{ marginTop: "1.5rem", marginBottom: "2rem" }}>
-        <div>
-          <h1 style={{
-            fontSize: "clamp(1.5rem, 1.2rem + 1vw, 2rem)",
-            fontWeight: 700,
-            letterSpacing: "-0.025em",
-            margin: "0 0 0.35rem",
-          }}>
+        <div className="property-brief-copy">
+          <span className={`property-verdict property-verdict--${decision.tone}`}>
+            {decision.label}
+          </span>
+          <h1>
             {p.title}
           </h1>
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap", margin: "0 0 1rem" }}>
-            <p style={{ color: "var(--color-text-secondary)", margin: 0, fontSize: "0.95rem" }}>
-              {society?.name ? `${society.name} \u00B7 ` : ""}{p.area}, {p.city}
-            </p>
-            <ConfidenceMeter confidence={data.confidence_score} />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", flexWrap: "wrap" }}>
-          <span style={{ fontSize: "1.75rem", fontWeight: 700, letterSpacing: "-0.02em" }}>
-            {formatPrice(p.price)}
-          </span>
-          <span style={{ color: "var(--color-text-muted)", fontSize: "0.9rem" }}>
-            {p.price_per_sqft.toLocaleString("en-IN")} /sqft
-          </span>
-        </div>
-
-        <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginTop: "0.75rem" }}>
-          <span className="tag tag-neutral">{p.bhk} BHK</span>
-          <span className="tag tag-neutral">{p.carpet_area_sqft} sqft carpet</span>
-          <span className="tag tag-neutral">{p.facing} facing</span>
-          <span className="tag tag-neutral">Floor {p.floor}/{p.total_floors}</span>
-          <ProjectStatusTag
-            status={data.project_status}
-            displayText={data.project_status_display}
-            possessionStatus={p.possession_status}
-          />
-        </div>
-      </div>
-
-      {/* === Two-column layout: Main content + Sticky sidebar === */}
-      <div className="property-layout">
-        {/* === Main column === */}
-        <div className="property-main">
-
-      {/* === B. Why This Property For You === */}
-      <div className="section-card" data-testid="why-this-property-section">
-        <div className="section-card-header">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-          <h2>Why this property for you</h2>
-        </div>
-        <p style={{ margin: "0 0 1.25rem", fontSize: "1.05rem", lineHeight: 1.6, color: "var(--color-text)", fontWeight: 500 }}>
-          {tradeoffs.headline}
-        </p>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))", gap: "0.75rem" }}>
-          {tradeoffs.components.map((c) => (
-            <div key={c.label} style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              padding: "0.6rem 0.85rem",
-              borderRadius: "var(--radius-sm)",
-              backgroundColor: "var(--color-bg-elevated)",
-              border: "1px solid var(--color-border)",
-            }}>
-              <span style={{ fontSize: "0.8rem", color: "var(--color-text-secondary)" }}>{c.label}</span>
-              <ThemeBadge level={c.level} />
-            </div>
-          ))}
-        </div>
-
-        {/* Strengths & Cautions inline */}
-        {(tradeoffs.strengths.length > 0 || tradeoffs.cautions.length > 0) && (
-          <div className="detail-grid" style={{ gap: "1rem", marginTop: "1rem" }}>
-            {tradeoffs.strengths.length > 0 && (
-              <div style={{
-                padding: "1rem",
-                borderRadius: "var(--radius-sm)",
-                backgroundColor: "var(--color-positive-bg)",
-                border: "1px solid var(--color-positive-border)",
-              }}>
-                <h3 style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  color: "var(--color-positive)",
-                }}>
-                  Strengths
-                </h3>
-                <ul className="insight-list insight-list-positive">
-                  {tradeoffs.strengths.map((s, i) => <li key={i}>{s}</li>)}
-                </ul>
-              </div>
-            )}
-            {tradeoffs.cautions.length > 0 && (
-              <div style={{
-                padding: "1rem",
-                borderRadius: "var(--radius-sm)",
-                backgroundColor: "var(--color-negative-bg)",
-                border: "1px solid var(--color-negative-border)",
-              }}>
-                <h3 style={{
-                  margin: "0 0 0.5rem",
-                  fontSize: "0.7rem",
-                  fontWeight: 600,
-                  textTransform: "uppercase",
-                  letterSpacing: "0.08em",
-                  color: "var(--color-negative)",
-                }}>
-                  Cautions
-                </h3>
-                <ul className="insight-list insight-list-negative">
-                  {tradeoffs.cautions.map((c, i) => <li key={i}>{c}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* === RERA Verification === */}
-      {data.rera ? <ReraTile rera={data.rera} /> : <ReraPendingTile />}
-
-      {/* === Key facts card === */}
-      <div className="section-card">
-        <div className="section-card-header">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-            <rect x="3" y="3" width="7" height="7" />
-            <rect x="14" y="3" width="7" height="7" />
-            <rect x="3" y="14" width="7" height="7" />
-            <rect x="14" y="14" width="7" height="7" />
-          </svg>
-          <h2>Property details</h2>
-        </div>
-        <div className="fact-grid">
-          <Fact label="Configuration" value={`${p.bhk} BHK`} />
-          <Fact label="Carpet area" value={`${p.carpet_area_sqft} sqft`} />
-          <Fact label="Super built-up" value={`${p.super_builtup_sqft} sqft`} />
-          <Fact label="Floor" value={`${p.floor} of ${p.total_floors}`} />
-          <Fact label="Facing" value={p.facing} />
-          <Fact label="Possession" value={p.possession_status.replace(/_/g, " ")} />
-          <Fact label="Metro distance" value={`${p.metro_distance_mins} min`} />
-          <Fact label="Maintenance" value={`\u20B9${p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo`} />
-        </div>
-      </div>
-
-      {/* === Risk signals === */}
-      <div className="section-card">
-        <div className="section-card-header">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
-            <line x1="12" y1="9" x2="12" y2="13" />
-            <line x1="12" y1="17" x2="12.01" y2="17" />
-          </svg>
-          <h2>Risk signals</h2>
-        </div>
-        <ScoreBar label="Litigation risk" value={p.litigation_risk} />
-        <ScoreBar label="Waterlogging risk" value={p.waterlogging_risk_score} />
-        <ScoreBar label="Traffic congestion" value={p.traffic_score} />
-        <ScoreBar label="Noise level" value={p.noise_score} />
-      </div>
-
-      {/* === E. Society / Livability === */}
-      {society && (
-        <div className="section-card" data-testid="society-livability-section">
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-              <polyline points="9 22 9 12 15 12 15 22" />
-            </svg>
-            <h2>Society / Livability &middot; {society.name}</h2>
-          </div>
-
-          <p style={{ margin: "0 0 1rem", lineHeight: 1.6, color: "var(--color-text)", fontSize: "0.95rem" }}>
-            {society.summary}
+          <p className="property-brief-location">
+            {society?.name ? `${society.name} · ` : ""}{p.area}, {p.city}
           </p>
 
-          <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
-            <SocietyMeta label="Builder" value={society.builder_name} />
-            {data.builder_trust?.delivery_display && (
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <BuilderTrustBadge
-                  deliveryDisplay={data.builder_trust.delivery_display}
-                  deliveryRate={data.builder_trust.delivery_rate}
+          <div className="property-brief-price-row">
+            <strong>{formatPrice(p.price)}</strong>
+            {pricePerSqftLabel && <span>{pricePerSqftLabel}</span>}
+          </div>
+
+          <p className="property-brief-summary">{decision.summary}</p>
+
+          <div className="property-brief-tags">
+            <span>{p.bhk} BHK</span>
+            {hasKnownNumber(p.carpet_area_sqft) && (
+              <span>{p.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet</span>
+            )}
+            {isKnownText(p.facing) && <span>{p.facing} facing</span>}
+            {hasKnownNumber(p.floor) && hasKnownNumber(p.total_floors) && (
+              <span>Floor {p.floor}/{p.total_floors}</span>
+            )}
+            <ProjectStatusTag
+              status={data.project_status}
+              displayText={data.project_status_display}
+              possessionStatus={p.possession_status}
+            />
+          </div>
+
+          <button
+            onClick={handleSave}
+            className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
+          >
+            {saved ? "\u2665 In decision sheet" : "\u2661 Save to sheet"}
+          </button>
+        </div>
+      </section>
+
+      <div className="property-decision-layout">
+        <main className="property-decision-main">
+          <section className="property-decision-card property-decision-card--lead">
+            <div className="property-section-heading">
+              <span>Decision brief</span>
+              <h2>What this means for a buyer</h2>
+            </div>
+
+            <div className="property-decision-metrics">
+              <DecisionMetric
+                label="Value"
+                value={formatMedianDelta(medianDelta)}
+                detail={area ? `Area median ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft` : "Area benchmark unavailable"}
+                tone={medianDelta !== null && medianDelta <= 0 ? "good" : medianDelta !== null && medianDelta > 8 ? "watch" : "neutral"}
+              />
+              <DecisionMetric
+                label="Trust"
+                value={trustLabel}
+                detail={`${trust}/100 · ${sourceLabel}`}
+                tone={trust >= 75 ? "good" : trust >= 55 ? "watch" : "risk"}
+              />
+              <DecisionMetric
+                label="Risk"
+                value={riskLabel(topRisk.value)}
+                detail={`${topRisk.label} is the highest signal at ${pct(topRisk.value)}`}
+                tone={topRisk.value <= 0.24 ? "good" : topRisk.value <= 0.55 ? "watch" : "risk"}
+              />
+              <DecisionMetric
+                label="Next action"
+                value={decision.nextAction}
+                detail="Use this before scheduling or negotiating."
+                tone={decision.tone === "keep" ? "good" : "watch"}
+              />
+            </div>
+
+            <div className="property-brief-columns">
+              <div>
+                <h3>Why keep it</h3>
+                <ul className="property-check-list property-check-list--positive">
+                  {(tradeoffs.strengths.length > 0 ? tradeoffs.strengths : ["Fits the active shortlist profile."]).slice(0, 3).map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3>Verify before moving</h3>
+                <ul className="property-check-list property-check-list--watch">
+                  {checks.map((item) => (
+                    <li key={item}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </section>
+
+          <section className="property-evidence-section">
+            <div className="property-section-heading">
+              <span>Evidence</span>
+              <h2>What supports the decision</h2>
+            </div>
+
+            <div className="property-evidence-grid">
+              <div className="property-evidence-card">
+                <h3>Price and market</h3>
+                <EvidenceRow label="Ask" value={formatPrice(p.price)} detail={pricePerSqftLabel ?? "Rate per sqft not available"} />
+                <EvidenceRow label="Benchmark" value={formatMedianDelta(medianDelta)} detail={area ? `${area.name} median: ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft` : "No area benchmark"} />
+                <EvidenceRow label="Demand" value={market_activity.interest_label} detail={`${market_activity.days_on_market} days on market`} />
+              </div>
+
+              <div className="property-evidence-card">
+                <h3>Source and documents</h3>
+                <EvidenceRow label="Trust" value={`${trust}/100`} detail={sourceLabel} />
+                <EvidenceRow label="RERA" value={data.rera?.registered ? "Registered" : "Verification pending"} detail={data.rera?.registration_number ?? "Confirm before token or legal review"} />
+                <EvidenceRow
+                  label="Documents"
+                  value={`${Math.round(p.document_completeness_score * 100)}% complete`}
+                  detail={data.rera ? "RERA and source documents are available for legal review." : "Ask for sale deed, khata, OC/CC, and dues before token."}
+                />
+                {data.builder_trust?.delivery_display && (
+                  <BuilderTrustBadge
+                    deliveryDisplay={data.builder_trust.delivery_display}
+                    deliveryRate={data.builder_trust.delivery_rate}
+                  />
+                )}
+              </div>
+
+              <div className="property-evidence-card">
+                <h3>Home facts</h3>
+                <EvidenceRow
+                  label="Configuration"
+                  value={`${p.bhk} BHK`}
+                  detail={[
+                    hasKnownNumber(p.carpet_area_sqft) ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet` : null,
+                    hasKnownNumber(p.super_builtup_sqft) ? `${p.super_builtup_sqft.toLocaleString("en-IN")} sqft SBA` : null,
+                  ].filter(Boolean).join(" · ") || "Size not available"}
+                />
+                <EvidenceRow
+                  label="Floor"
+                  value={hasKnownNumber(p.floor) && hasKnownNumber(p.total_floors) ? `${p.floor} of ${p.total_floors}` : "Not available"}
+                  detail={isKnownText(p.facing) ? `${p.facing} facing` : "Facing not available"}
+                />
+                <EvidenceRow
+                  label="Commute proxy"
+                  value={hasKnownNumber(p.metro_distance_mins) ? `${p.metro_distance_mins} min to metro` : "Not available"}
+                  detail={hasKnownNumber(p.maintenance_cost_monthly) ? `Maintenance ₹${p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo` : "Maintenance not available"}
                 />
               </div>
-            )}
-            <SocietyMeta label="Year built" value={String(society.year_built)} />
-            <SocietyMeta label="Maintenance" value={society.maintenance_sentiment} />
-            <SocietyMeta label="Livability" value={society.livability_sentiment} />
-          </div>
-
-          {(society.common_positives.length > 0 || society.common_complaints.length > 0) && (
-            <div className="detail-grid" style={{ gap: "1rem" }}>
-              {society.common_positives.length > 0 && (
-                <div style={{
-                  padding: "1.25rem",
-                  borderRadius: "var(--radius-sm)",
-                  backgroundColor: "var(--color-positive-bg)",
-                  border: "1px solid var(--color-positive-border)",
-                }}>
-                  <h3 style={{
-                    margin: "0 0 0.5rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "var(--color-positive)",
-                  }}>
-                    What residents like
-                  </h3>
-                  <ul className="insight-list insight-list-positive">
-                    {society.common_positives.map((item, i) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-              )}
-              {society.common_complaints.length > 0 && (
-                <div style={{
-                  padding: "1.25rem",
-                  borderRadius: "var(--radius-sm)",
-                  backgroundColor: "var(--color-negative-bg)",
-                  border: "1px solid var(--color-negative-border)",
-                }}>
-                  <h3 style={{
-                    margin: "0 0 0.5rem",
-                    fontSize: "0.75rem",
-                    fontWeight: 600,
-                    textTransform: "uppercase",
-                    letterSpacing: "0.08em",
-                    color: "var(--color-negative)",
-                  }}>
-                    Common concerns
-                  </h3>
-                  <ul className="insight-list insight-list-negative">
-                    {society.common_complaints.map((item, i) => <li key={i}>{item}</li>)}
-                  </ul>
-                </div>
-              )}
             </div>
+          </section>
+
+          {(society || area) && (
+            <section className="property-context-panel">
+              <div className="property-section-heading">
+                <span>Context</span>
+                <h2>What changes the lived experience</h2>
+              </div>
+
+              <div className="property-context-grid">
+                {society && (
+                  <div>
+                    <h3>{society.name}</h3>
+                    <p>{society.review_summary || society.summary}</p>
+                    <div className="property-context-pills">
+                      <span>Builder: {society.builder_name}</span>
+                      <span>{society.year_built}</span>
+                      <span>{society.maintenance_sentiment}</span>
+                    </div>
+                    <div className="property-context-lists">
+                      <CompactList title="Resident positives" items={society.common_positives.slice(0, 3)} tone="good" />
+                      <CompactList title="Concerns" items={society.common_complaints.slice(0, 3)} tone="watch" />
+                    </div>
+                  </div>
+                )}
+
+                {area && (
+                  <div>
+                    <h3>{area.name}</h3>
+                    <p>{area.trend_summary}</p>
+                    <div className="property-context-pills">
+                      <span>₹{area.median_price_per_sqft.toLocaleString("en-IN")} /sqft median</span>
+                      <span>{area.trend_direction}</span>
+                    </div>
+                    <ul className="property-context-notes">
+                      {[area.metro_access_summary, area.traffic_summary, area.waterlogging_summary]
+                        .filter((item): item is string => Boolean(item))
+                        .slice(0, 3)
+                        .map((item) => <li key={item}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </section>
           )}
-        </div>
-      )}
 
-      {/* === F. Area Signals (with greenery/openness) === */}
-      {area && (
-        <div className="section-card" data-testid="area-signals-section" style={{ marginBottom: "3rem" }}>
-          <div className="section-card-header">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-              <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z" />
-              <circle cx="12" cy="10" r="3" />
-            </svg>
-            <h2>Area signals &middot; {area.name}</h2>
-          </div>
-
-          <div style={{ display: "flex", alignItems: "baseline", gap: "0.75rem", marginBottom: "1.25rem" }}>
-            <span style={{ fontSize: "1.2rem", fontWeight: 700 }}>
-              {area.median_price_per_sqft.toLocaleString("en-IN")}
-            </span>
-            <span style={{ color: "var(--color-text-muted)", fontSize: "0.85rem" }}>/sqft median</span>
-            <span className={`tag ${area.trend_direction === "up" ? "tag-positive" : "tag-neutral"}`}>
-              {area.trend_direction === "up" ? "\u2197" : "\u2192"} {area.trend_direction}
-            </span>
-          </div>
-
-          <div style={{ display: "grid", gap: "0.75rem" }}>
-            {area.metro_access_summary && <AreaInsight icon="train" text={area.metro_access_summary} />}
-            {area.traffic_summary && <AreaInsight icon="car" text={area.traffic_summary} />}
-            {area.waterlogging_summary && <AreaInsight icon="water" text={area.waterlogging_summary} />}
-
-            {/* Greenery / Openness — from backend themes */}
-            <AreaInsight
-              icon="tree"
-              text={data.themes.greenery.summary}
-            />
-
-            {area.livability_summary && <AreaInsight icon="home" text={area.livability_summary} />}
-          </div>
-
-          {area.community_notes && (
-            <div style={{
-              marginTop: "1rem",
-              padding: "1rem",
-              borderRadius: "var(--radius-sm)",
-              backgroundColor: "var(--color-bg-elevated)",
-              border: "1px solid var(--color-border)",
-            }}>
-              <p style={{
-                margin: 0,
-                fontSize: "0.85rem",
-                color: "var(--color-text-secondary)",
-                fontStyle: "italic",
-                lineHeight: 1.6,
-              }}>
-                &ldquo;{area.community_notes}&rdquo;
-              </p>
-              <p style={{
-                margin: "0.5rem 0 0",
-                fontSize: "0.7rem",
-                color: "var(--color-text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.06em",
-              }}>
-                Community notes
-              </p>
-            </div>
+          {data.similar_properties.length > 0 && (
+            <section className="property-similar-section">
+              <div className="property-section-heading">
+                <span>Alternatives</span>
+                <h2>Keep pressure on this choice</h2>
+              </div>
+              <div className="property-similar-grid">
+                {data.similar_properties.slice(0, 3).map((sp) => (
+                  <Link key={sp.id} to={`/property/${sp.id}`} className="property-similar-card">
+                    <ImageWithFallback
+                      src={sp.hero_image || ""}
+                      alt={sp.title}
+                      className="property-similar-image"
+                    />
+                    <div>
+                      <strong>{sp.title}</strong>
+                      <span>{sp.society_name} · {sp.area}</span>
+                      <b>{formatPrice(sp.price)}</b>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
           )}
-        </div>
-      )}
 
-      {/* === Area Intelligence (Reddit sentiments) === */}
-      {data.area_intelligence && area && (
-        <AreaIntelligenceTile area={area.name} intelligence={data.area_intelligence} />
-      )}
+          {!data.seller && <ClaimSection propertyId={p.id} />}
+        </main>
 
-      {/* === Claim Section — only shown when no seller is linked === */}
-      {!data.seller && <ClaimSection propertyId={p.id} />}
-
-        </div>{/* end property-main */}
-
-        {/* === Sticky sidebar === */}
-        <div className="property-sidebar">
-          {/* Transparency Score — top of sidebar */}
-          <TransparencyScoreTile data={data.transparency_score} />
-
-          {/* Save + Share */}
-          <div className="section-card" style={{ marginBottom: "1rem" }}>
+        <aside className="property-action-rail">
+          <div className="property-action-card">
+            <span>Next action</span>
+            <strong>{decision.nextAction}</strong>
             <button
               onClick={handleSave}
               data-testid="sidebar-save-button"
               className={`btn ${saved ? "btn-primary" : "btn-outline"}`}
-              style={{ width: "100%", justifyContent: "center" }}
             >
-              {saved ? "\u2665 Saved to shortlist" : "\u2661 Save to shortlist"}
+              {saved ? "\u2665 In decision sheet" : "\u2661 Save to sheet"}
             </button>
             <ShareButtons propertyId={p.id} title={p.title} />
           </div>
 
-          {/* "I'm Interested" button */}
           <InterestButton propertyId={p.id} initialCount={data.interest_count ?? 0} />
-
-          {/* Seller info card (if linked) */}
           {data.seller && <SellerInfoCard seller={data.seller} />}
 
-          {/* Price vs Area Median — spectrum gauge */}
-          {pvm && area && (() => {
-            const verdictColor = pvm.verdict_class === "positive" ? "var(--color-positive)"
-              : pvm.verdict_class === "warning" ? "var(--color-warning)"
-              : "var(--color-text-secondary)";
-
-            const rangeLow = data.area_price_range_low ?? area.median_price_per_sqft * 0.8;
-            const rangeHigh = data.area_price_range_high ?? area.median_price_per_sqft * 1.2;
-            const rangeSpan = rangeHigh - rangeLow || 1;
-            const propertyPos = Math.min(Math.max(((p.price_per_sqft - rangeLow) / rangeSpan) * 100, 2), 98);
-            const medianPos = Math.min(Math.max(((area.median_price_per_sqft - rangeLow) / rangeSpan) * 100, 2), 98);
-
-            return (
-            <div className="section-card" data-testid="price-vs-median-section" style={{ marginBottom: "1rem" }}>
-              <div style={{
-                fontSize: "0.62rem",
-                fontWeight: 600,
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: "var(--color-text-muted)",
-                marginBottom: "0.5rem",
-              }}>
-                Price vs {area.name} median
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
-                <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>
-                  {"\u20B9"}{p.price_per_sqft.toLocaleString("en-IN")}
-                </span>
-                <span style={{ fontSize: "0.85rem", color: "var(--color-text-muted)" }}>
-                  vs {"\u20B9"}{area.median_price_per_sqft.toLocaleString("en-IN")}
-                </span>
-              </div>
-
-              {/* Spectrum gauge */}
-              <div className="price-spectrum" style={{ position: "relative", marginBottom: "0.75rem" }}>
-                <div className="price-spectrum-bar" />
-                {/* Median marker */}
-                <div style={{
-                  position: "absolute",
-                  left: `${medianPos}%`,
-                  top: "-2px",
-                  transform: "translateX(-50%)",
-                  width: "2px",
-                  height: "14px",
-                  backgroundColor: "var(--color-text-muted)",
-                  borderRadius: "1px",
-                }} />
-                {/* Property marker */}
-                <div style={{
-                  position: "absolute",
-                  left: `${propertyPos}%`,
-                  top: "-4px",
-                  transform: "translateX(-50%)",
-                  width: "10px",
-                  height: "18px",
-                  borderRadius: "5px",
-                  backgroundColor: verdictColor,
-                  border: "2px solid var(--color-bg-card)",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.15)",
-                  transition: "left 0.8s var(--ease-out)",
-                }} />
-              </div>
-
-              {/* Range labels */}
-              {data.area_price_range_low && data.area_price_range_high && (
-                <div style={{
-                  display: "flex",
-                  justifyContent: "space-between",
-                  fontSize: "0.65rem",
-                  color: "var(--color-text-muted)",
-                  marginBottom: "0.5rem",
-                }}>
-                  <span>{"\u20B9"}{data.area_price_range_low.toLocaleString("en-IN")}</span>
-                  <span>{"\u20B9"}{data.area_price_range_high.toLocaleString("en-IN")}</span>
-                </div>
-              )}
-
-              <div style={{ fontSize: "0.8rem", fontWeight: 600, color: verdictColor }}>
-                {pvm.verdict} ({pvm.pct_diff > 0 ? "+" : ""}{pvm.pct_diff}%)
+          <div className="property-mini-card property-rail-intel">
+            <div>
+              <h3>Risk watchlist</h3>
+              <div className="property-risk-stack">
+                {risks.slice(0, 4).map((risk) => (
+                  <RiskBar key={risk.label} signal={risk} />
+                ))}
               </div>
             </div>
-            );
-          })()}
-
-          {/* Market Activity */}
-          <div className="section-card" data-testid="market-activity-section">
-            <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              <h2 style={{ fontSize: "0.85rem" }}>Market activity</h2>
-            </div>
-            <div style={{ display: "grid", gap: "0.5rem" }}>
-              <MarketRow
-                icon={<InterestDot level={market_activity.interest_level as "high" | "moderate" | "low"} />}
-                label={market_activity.interest_label}
-              />
-              {market_activity.saves_last_7d != null && (
-                <MarketRow
-                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>}
-                  label={`${market_activity.saves_last_7d} saves this week`}
-                />
-              )}
-              {market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0 && (
-                <MarketRow
-                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2" /><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" /></svg>}
-                  label={`${market_activity.offers_last_7d} offer${market_activity.offers_last_7d > 1 ? "s" : ""} this week`}
-                />
-              )}
-              <MarketRow
-                icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>}
-                label={`Listed ${market_activity.days_on_market}d ago \u00B7 ${market_activity.days_on_market_label}`}
-              />
-              {market_activity.area_trend_summary && (
-                <MarketRow
-                  icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18" /><polyline points="17 6 23 6 23 12" /></svg>}
-                  label={market_activity.area_trend_summary}
-                />
-              )}
+            <div>
+              <h3>Market pulse</h3>
+              <div className="property-market-list">
+                {marketRows.map((row) => (
+                  <span key={row}>{row}</span>
+                ))}
+              </div>
             </div>
           </div>
-        </div>{/* end property-sidebar */}
-      </div>{/* end property-layout */}
-
-      {/* Similar properties — embedding-based */}
-      {data.similar_properties.length > 0 && (
-        <div className="card" style={{ marginTop: "1.5rem" }}>
-          <h2 className="section-title">You might also like</h2>
-          <div style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
-            gap: "1rem",
-            marginTop: "1rem",
-          }}>
-            {data.similar_properties.map((sp) => (
-              <Link
-                key={sp.id}
-                to={`/property/${sp.id}`}
-                style={{ textDecoration: "none", color: "inherit" }}
-              >
-                <div style={{
-                  borderRadius: "var(--radius-md)",
-                  border: "1px solid var(--color-border)",
-                  overflow: "hidden",
-                  backgroundColor: "var(--color-bg-elevated)",
-                  transition: "border-color 0.15s",
-                }}>
-                  <ImageWithFallback
-                    src={sp.hero_image || ""}
-                    alt={sp.title}
-                    style={{ width: "100%", height: "140px", objectFit: "cover" }}
-                  />
-                  <div style={{ padding: "0.75rem" }}>
-                    <p style={{
-                      margin: 0,
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                      whiteSpace: "nowrap",
-                      overflow: "hidden",
-                      textOverflow: "ellipsis",
-                    }}>
-                      {sp.title}
-                    </p>
-                    <p style={{
-                      margin: "0.25rem 0 0",
-                      fontSize: "0.8rem",
-                      color: "var(--color-text-muted)",
-                    }}>
-                      {sp.society_name} · {sp.area}
-                    </p>
-                    <p style={{
-                      margin: "0.25rem 0 0",
-                      fontWeight: 600,
-                      fontSize: "0.85rem",
-                      color: "var(--color-primary)",
-                    }}>
-                      {formatPrice(sp.price)}
-                    </p>
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
+        </aside>
+      </div>
     </div>
   );
 }
@@ -866,114 +703,64 @@ function ClaimSection({ propertyId }: { propertyId: string }) {
   );
 }
 
-function Fact({ label, value }: { label: string; value: string }) {
+function DecisionMetric({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string;
+  value: string;
+  detail: string;
+  tone: "good" | "watch" | "risk" | "neutral";
+}) {
   return (
-    <div>
-      <div className="fact-item-label">{label}</div>
-      <div className="fact-item-value">{value}</div>
+    <div className={`property-decision-metric property-decision-metric--${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
     </div>
   );
 }
 
-function SocietyMeta({ label, value }: { label: string; value: string }) {
+function EvidenceRow({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div>
-      <div style={{ fontSize: "0.7rem", color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-        {label}
+    <div className="property-evidence-row">
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </div>
+  );
+}
+
+function CompactList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "watch" }) {
+  if (items.length === 0) return null;
+
+  return (
+    <div className={`property-compact-list property-compact-list--${tone}`}>
+      <h4>{title}</h4>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function RiskBar({ signal }: { signal: RiskSignal }) {
+  const label = riskLabel(signal.value);
+  const tone = signal.value <= 0.24 ? "good" : signal.value <= 0.55 ? "watch" : "risk";
+
+  return (
+    <div className="property-risk-row">
+      <div>
+        <span>{signal.label}</span>
+        <strong className={`property-risk-label property-risk-label--${tone}`}>{label}</strong>
       </div>
-      <div style={{ fontSize: "0.9rem", fontWeight: 500 }}>{value}</div>
-    </div>
-  );
-}
-
-function MarketRow({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <div style={{
-      display: "flex",
-      gap: "0.75rem",
-      alignItems: "center",
-      padding: "0.6rem 0.85rem",
-      borderRadius: "var(--radius-sm)",
-      backgroundColor: "var(--color-bg-elevated)",
-      border: "1px solid var(--color-border)",
-    }}>
-      <span style={{ color: "var(--color-text-muted)", flexShrink: 0 }}>{icon}</span>
-      <span style={{ fontSize: "0.8rem", color: "var(--color-text)", lineHeight: 1.4 }}>{label}</span>
-    </div>
-  );
-}
-
-function InterestDot({ level }: { level: "high" | "moderate" | "low" }) {
-  const color = level === "high" ? "var(--color-positive)" : level === "moderate" ? "var(--color-warning)" : "var(--color-text-muted)";
-  return (
-    <span style={{
-      display: "inline-block",
-      width: "8px",
-      height: "8px",
-      borderRadius: "50%",
-      backgroundColor: color,
-    }} />
-  );
-}
-
-function AreaInsight({ icon, text }: { icon: string; text: string }) {
-  const icons: Record<string, React.ReactNode> = {
-    trending: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-        <polyline points="17 6 23 6 23 12" />
-      </svg>
-    ),
-    train: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <rect x="4" y="3" width="16" height="16" rx="2" />
-        <line x1="4" y1="11" x2="20" y2="11" />
-        <line x1="12" y1="3" x2="12" y2="11" />
-        <line x1="8" y1="23" x2="8" y2="19" />
-        <line x1="16" y1="23" x2="16" y2="19" />
-      </svg>
-    ),
-    car: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M14 16H9m10 0h3v-3.15a1 1 0 0 0-.84-.99L16 11l-2.7-3.6a1 1 0 0 0-.8-.4H5.24a2 2 0 0 0-1.8 1.1l-.8 1.63A6 6 0 0 0 2 12.42V16h2" />
-        <circle cx="6.5" cy="16.5" r="2.5" />
-        <circle cx="16.5" cy="16.5" r="2.5" />
-      </svg>
-    ),
-    home: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      </svg>
-    ),
-    tree: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 22v-7" />
-        <path d="M7 15l5-11 5 11H7z" />
-      </svg>
-    ),
-    water: (
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-        <path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z" />
-      </svg>
-    ),
-  };
-
-  return (
-    <div style={{
-      display: "flex",
-      gap: "0.75rem",
-      alignItems: "flex-start",
-      padding: "0.75rem 1rem",
-      borderRadius: "var(--radius-sm)",
-      backgroundColor: "var(--color-bg-elevated)",
-      border: "1px solid var(--color-border)",
-    }}>
-      <span style={{ color: "var(--color-text-muted)", marginTop: "0.15rem", flexShrink: 0 }}>
-        {icons[icon] || icons.home}
-      </span>
-      <p style={{ margin: 0, fontSize: "0.9rem", color: "var(--color-text)", lineHeight: 1.5 }}>
-        {text}
-      </p>
+      <div className="property-risk-track">
+        <span className={`property-risk-fill property-risk-fill--${tone}`} style={{ width: pct(signal.value) }} />
+      </div>
     </div>
   );
 }

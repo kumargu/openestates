@@ -2,7 +2,7 @@
  * Slide-over side panel for quick property preview.
  * Opens from the right, keeps results grid visible.
  */
-import { useEffect, useState, useRef } from "react";
+import { Fragment, useCallback, useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyDetailResponse, PropertyCard as PropertyCardType } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
@@ -17,6 +17,14 @@ function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
   if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
   return `\u20B9${price.toLocaleString("en-IN")}`;
+}
+
+function hasKnownNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isKnownText(value: string | null | undefined): value is string {
+  return !!value && value.trim().length > 0 && value !== "Not specified";
 }
 
 type ScoreBarProps = { label: string; value: number; color?: string };
@@ -49,24 +57,47 @@ type Props = {
   propertyId: string;
   card: PropertyCardType;
   onClose: () => void;
-  onAddCompare?: (id: string) => void;
-  isComparing?: boolean;
+  onSaveChange?: () => void;
 };
 
-export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isComparing }: Props) {
+export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: Props) {
   const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(() => isShortlisted(propertyId));
   const [closing, setClosing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
+  const specs = [
+    { value: card.bhk.toString(), label: "BHK" },
+    hasKnownNumber(card.sqft) ? { value: card.sqft.toLocaleString("en-IN"), label: "sqft" } : null,
+    hasKnownNumber(card.floor) && hasKnownNumber(card.total_floors)
+      ? { value: `${card.floor}/${card.total_floors}`, label: "Floor" }
+      : null,
+    isKnownText(card.facing) ? { value: card.facing, label: "Facing" } : null,
+  ].filter((spec): spec is { value: string; label: string } => spec !== null);
+
+  const handleClose = useCallback(() => {
+    setClosing(true);
+    setTimeout(onClose, 250);
+  }, [onClose]);
 
   useEffect(() => {
-    setLoading(true);
-    setDetail(null);
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setDetail(null);
+    });
     getProperty(propertyId)
-      .then(setDetail)
+      .then((data) => {
+        if (!cancelled) setDetail(data);
+      })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [propertyId]);
 
   // Close on Escape
@@ -76,18 +107,16 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
     };
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
-  }, []);
-
-  const handleClose = () => {
-    setClosing(true);
-    setTimeout(onClose, 250);
-  };
+  }, [handleClose]);
 
   const handleBackdropClick = (e: React.MouseEvent) => {
     if (e.target === e.currentTarget) handleClose();
   };
 
-  const handleSave = () => setSaved(toggleShortlist(propertyId));
+  const handleSave = () => {
+    setSaved(toggleShortlist(propertyId));
+    onSaveChange?.();
+  };
 
   const p = detail?.property;
   const society = detail?.society;
@@ -170,8 +199,10 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
 
           <div className="side-panel-price-row">
             <span className="side-panel-price">{formatPrice(card.price)}</span>
-            <span className="side-panel-ppsqft">{card.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
-            {area && (
+            {hasKnownNumber(card.price_per_sqft) && (
+              <span className="side-panel-ppsqft">{card.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
+            )}
+            {area && hasKnownNumber(card.price_per_sqft) && (
               <span
                 className="side-panel-vs-median"
                 style={{
@@ -189,25 +220,15 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
 
           {/* Specs row */}
           <div className="side-panel-specs">
-            <div className="side-panel-spec">
-              <span className="side-panel-spec-value">{card.bhk}</span>
-              <span className="side-panel-spec-label">BHK</span>
-            </div>
-            <div className="side-panel-spec-divider" />
-            <div className="side-panel-spec">
-              <span className="side-panel-spec-value">{card.sqft.toLocaleString()}</span>
-              <span className="side-panel-spec-label">sqft</span>
-            </div>
-            <div className="side-panel-spec-divider" />
-            <div className="side-panel-spec">
-              <span className="side-panel-spec-value">{card.floor}/{card.total_floors}</span>
-              <span className="side-panel-spec-label">Floor</span>
-            </div>
-            <div className="side-panel-spec-divider" />
-            <div className="side-panel-spec">
-              <span className="side-panel-spec-value">{card.facing}</span>
-              <span className="side-panel-spec-label">Facing</span>
-            </div>
+            {specs.map((spec, index) => (
+              <Fragment key={spec.label}>
+                {index > 0 && <div className="side-panel-spec-divider" />}
+                <div className="side-panel-spec">
+                  <span className="side-panel-spec-value">{spec.value}</span>
+                  <span className="side-panel-spec-label">{spec.label}</span>
+                </div>
+              </Fragment>
+            ))}
           </div>
 
           {/* Loading state */}
@@ -360,16 +381,20 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
                   {p.possession_status === "ready" ? "Ready to move" : "Under construction"}
                 </span>
               </div>
-              <div className="side-panel-signal-card">
-                <span className="side-panel-signal-icon">{"\u{1F687}"}</span>
-                <span className="side-panel-signal-text">{p.metro_distance_mins} min to metro</span>
-              </div>
-              <div className="side-panel-signal-card">
-                <span className="side-panel-signal-icon">{"\u{1F4B0}"}</span>
-                <span className="side-panel-signal-text">
-                  {"\u20B9"}{p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo
-                </span>
-              </div>
+              {hasKnownNumber(p.metro_distance_mins) && (
+                <div className="side-panel-signal-card">
+                  <span className="side-panel-signal-icon">{"\u{1F687}"}</span>
+                  <span className="side-panel-signal-text">{p.metro_distance_mins} min to metro</span>
+                </div>
+              )}
+              {hasKnownNumber(p.maintenance_cost_monthly) && (
+                <div className="side-panel-signal-card">
+                  <span className="side-panel-signal-icon">{"\u{1F4B0}"}</span>
+                  <span className="side-panel-signal-text">
+                    {"\u20B9"}{p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo
+                  </span>
+                </div>
+              )}
               {p.interest_level && (
                 <div className="side-panel-signal-card">
                   <span className="side-panel-signal-icon">
@@ -393,21 +418,8 @@ export function PropertySidePanel({ propertyId, card, onClose, onAddCompare, isC
             <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
             </svg>
-            {saved ? "Subscribed" : "Subscribe"}
+            {saved ? "In decision sheet" : "Save to sheet"}
           </button>
-          {onAddCompare && (
-            <button
-              className={`side-panel-compare-btn ${isComparing ? "side-panel-compare-btn--active" : ""}`}
-              onClick={() => onAddCompare(propertyId)}
-            >
-              {isComparing ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-              )}
-              {isComparing ? "In compare" : "Compare"}
-            </button>
-          )}
           <Link to={`/property/${propertyId}`} className="side-panel-full-btn">
             Full details
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

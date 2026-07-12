@@ -960,13 +960,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1685-2475",
-          "price_range_lakh": "109-172",
-          "price_per_sqft": "6500-10000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"6500-10000\", \"price_range_lakh\": \"109-172\", \"sqft_range\": \"1685-2475\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1022,7 +1017,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK"
         ]
@@ -1068,11 +1063,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 39,
-          "period": "since 2015 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 39, \"period\": \"since 2015 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1094,7 +1086,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "SKC Wilson Vintage, Hebbal Kempapura",
           "Sterling Pointe, Hebbal Kempapura",
@@ -1134,5 +1126,6 @@
       "display_template": "Shriram Hebbal One offers premium 3BHK apartments in a prime, ready-to-move location in Hebbal. The pricing reflects its established status and amenities, with the locality experiencing significant price appreciation since the project's launch."
     }
   ],
-  "updated_at": "2026-03-13T15:36:31.769164+00:00"
+  "updated_at": "2026-03-13T15:36:31.769164+00:00",
+  "created_at": "2026-03-13T04:57:52.285432+00:00"
 }

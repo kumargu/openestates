@@ -443,13 +443,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "555",
-          "price_range_lakh": "89-95",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"89-95\", \"sqft_range\": \"555\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -476,13 +471,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1370-1470",
-          "price_range_lakh": "220-250",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"220-250\", \"sqft_range\": \"1370-1470\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -509,13 +499,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1640-2420",
-          "price_range_lakh": "260-415",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"260-415\", \"sqft_range\": \"1640-2420\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -542,13 +527,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2360",
-          "price_range_lakh": "375-405",
-          "price_per_sqft": "16000-17000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"16000-17000\", \"price_range_lakh\": \"375-405\", \"sqft_range\": \"2360\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -575,7 +555,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "16000-21000"
       },
       "confidence": 0.7,
@@ -604,7 +584,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -654,11 +634,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 200.93,
-          "period": "since prices were around ₹5,350/sqft up to Q2'2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 200.93, \"period\": \"since prices were around ₹5,350/sqft up to Q2'2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -680,7 +657,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "DNR Arista Phase 2, Bellandur",
           "DNR Arista, Bellandur",

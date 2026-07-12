@@ -1258,13 +1258,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1204-1275",
-          "price_range_lakh": "132-172",
-          "price_per_sqft": "11000-13500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11000-13500\", \"price_range_lakh\": \"132-172\", \"sqft_range\": \"1204-1275\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1291,13 +1286,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1496-2164",
-          "price_range_lakh": "167-239",
-          "price_per_sqft": "11000-12000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11000-12000\", \"price_range_lakh\": \"167-239\", \"sqft_range\": \"1496-2164\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1324,13 +1314,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "2141-2257",
-          "price_range_lakh": "232-276",
-          "price_per_sqft": "10800-12200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"10800-12200\", \"price_range_lakh\": \"232-276\", \"sqft_range\": \"2141-2257\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1357,13 +1342,8 @@
     {
       "key": "pricing_4.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4.5BHK",
-          "sqft_range": "2656-2679",
-          "price_range_lakh": "302-339",
-          "price_per_sqft": "11300-12700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4.5BHK\", \"price_per_sqft\": \"11300-12700\", \"price_range_lakh\": \"302-339\", \"sqft_range\": \"2656-2679\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1419,7 +1399,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1470,11 +1450,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 12,
-          "period": "since launch (November 2024)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 12, \"period\": \"since launch (November 2024)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1496,7 +1473,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sobha Altair",
           "Lodha Elanza",
@@ -1536,5 +1513,6 @@
       "display_template": "Godrej Lakeside Orchard offers competitive pricing, with its price per square foot being among the lowest for new launches in the Sarjapur Road area, indicating strong investment potential in a rapidly developing locality."
     }
   ],
-  "updated_at": "2026-03-13T15:29:21.320140+00:00"
+  "updated_at": "2026-03-13T15:29:21.320140+00:00",
+  "created_at": "2026-03-13T13:25:18.261606+00:00"
 }

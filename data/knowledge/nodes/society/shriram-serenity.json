@@ -1152,13 +1152,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1065-1275",
-          "price_range_lakh": "78.8-110",
-          "price_per_sqft": "7400-8650"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"7400-8650\", \"price_range_lakh\": \"78.8-110\", \"sqft_range\": \"1065-1275\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1185,13 +1180,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1285-1755",
-          "price_range_lakh": "105-147",
-          "price_per_sqft": "8150-8400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"8150-8400\", \"price_range_lakh\": \"105-147\", \"sqft_range\": \"1285-1755\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1247,7 +1237,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK"
@@ -1294,11 +1284,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 3.87,
-          "period": "since early 2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 3.87, \"period\": \"since early 2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1320,7 +1307,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Affinity Sarovar",
           "Casagrand Lorenza",
@@ -1360,5 +1347,6 @@
       "display_template": "Shriram Serenity, being a new launch and under-construction project, offers competitive pricing in the Yelahanka market, with a moderate appreciation observed in the last year as construction progresses."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.867889+00:00"
+  "updated_at": "2026-03-13T15:11:56.867889+00:00",
+  "created_at": "2026-03-13T13:21:15.734386+00:00"
 }

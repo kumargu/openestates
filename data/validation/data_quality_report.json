@@ -9,9 +9,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.391,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -24,9 +24,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -39,9 +39,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -54,11 +54,11 @@
         "identity": 0.5,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.399,
         "consistency": 0.75,
-        "overall": 0.863
+        "overall": 0.772
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "arvind-bel-air",
@@ -69,9 +69,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -84,9 +84,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -99,9 +99,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.394,
         "consistency": 1.0,
-        "overall": 0.716
+        "overall": 0.625
       },
       "tier": "B"
     },
@@ -114,11 +114,41 @@
         "identity": 0.5,
         "rera": 0.938,
         "enrichment": 1.0,
+        "freshness": 0.398,
+        "consistency": 1.0,
+        "overall": 0.794
+      },
+      "tier": "B"
+    },
+    {
+      "slug": "assetz-marq-building-2-tower-5",
+      "name": "Assetz Marq Building 2 - Tower 5",
+      "root_source": "Rera",
+      "num_facts": 21,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
         "freshness": 1.0,
         "consistency": 1.0,
-        "overall": 0.884
+        "overall": 0.734
       },
-      "tier": "A"
+      "tier": "B"
+    },
+    {
+      "slug": "assetz-marq-building-3-tower-6",
+      "name": "Assetz Marq Building 3 - Tower 6",
+      "root_source": "Rera",
+      "num_facts": 20,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "assetz-marq-phase-3a",
@@ -129,9 +159,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -144,11 +174,26 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
+    },
+    {
+      "slug": "avenue",
+      "name": "Avenue",
+      "root_source": "Rera",
+      "num_facts": 21,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "brigade-altair-apartments",
@@ -159,9 +204,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.396,
         "consistency": 1.0,
-        "overall": 0.766
+        "overall": 0.675
       },
       "tier": "B"
     },
@@ -174,9 +219,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.716
+        "overall": 0.625
       },
       "tier": "B"
     },
@@ -189,9 +234,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -204,9 +249,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -219,9 +264,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -234,9 +279,9 @@
         "identity": 0.5,
         "rera": 0.938,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.394,
         "consistency": 1.0,
-        "overall": 0.784
+        "overall": 0.694
       },
       "tier": "B"
     },
@@ -249,9 +294,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -264,11 +309,26 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
+    },
+    {
+      "slug": "century-bliss",
+      "name": "Century Bliss",
+      "root_source": "Rera",
+      "num_facts": 41,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "century-ethos",
@@ -279,11 +339,26 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
+    },
+    {
+      "slug": "century-kindle-phase-1",
+      "name": "Century Kindle Phase 1",
+      "root_source": "Rera",
+      "num_facts": 41,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "century-mirai-ph1",
@@ -294,9 +369,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -309,9 +384,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
     },
@@ -324,9 +399,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -339,11 +414,11 @@
         "identity": 1.0,
         "rera": 0.875,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.869
+        "overall": 0.779
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "dnr-arista-phase-2",
@@ -354,9 +429,9 @@
         "identity": 1.0,
         "rera": 0.875,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.969
+        "overall": 0.878
       },
       "tier": "A"
     },
@@ -369,9 +444,9 @@
         "identity": 1.0,
         "rera": 0.812,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.396,
         "consistency": 1.0,
-        "overall": 0.953
+        "overall": 0.863
       },
       "tier": "A"
     },
@@ -384,9 +459,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -399,9 +474,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -414,11 +489,26 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
+    },
+    {
+      "slug": "garden-residency-whitefield",
+      "name": "Garden Residency - Whitefield",
+      "root_source": "Rera",
+      "num_facts": 20,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "godrej-aveline",
@@ -429,9 +519,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
     },
@@ -444,9 +534,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -459,9 +549,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -474,9 +564,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.396,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -489,11 +579,11 @@
         "identity": 0.5,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.394,
         "consistency": 0.75,
-        "overall": 0.863
+        "overall": 0.772
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "godrej-woods",
@@ -504,9 +594,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -519,9 +609,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -534,11 +624,26 @@
         "identity": 1.0,
         "rera": 0.875,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.969
+        "overall": 0.878
       },
       "tier": "A"
+    },
+    {
+      "slug": "local-square-whitefield",
+      "name": "Local Square Whitefield",
+      "root_source": "Rera",
+      "num_facts": 39,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "lt-elara-celestia",
@@ -549,9 +654,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 0.75,
-        "overall": 0.962
+        "overall": 0.872
       },
       "tier": "A"
     },
@@ -564,9 +669,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -579,9 +684,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -594,9 +699,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -609,11 +714,11 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.884
+        "overall": 0.794
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "nbr-group-apartments-near-wipro-sarjapur-road",
@@ -624,9 +729,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.395,
         "consistency": 1.0,
-        "overall": 0.766
+        "overall": 0.675
       },
       "tier": "B"
     },
@@ -639,9 +744,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -654,11 +759,41 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.396,
         "consistency": 0.75,
-        "overall": 0.947
+        "overall": 0.856
       },
       "tier": "A"
+    },
+    {
+      "slug": "pelican-gardens",
+      "name": "Pelican Gardens",
+      "root_source": "Rera",
+      "num_facts": 40,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
+    },
+    {
+      "slug": "pelican-grove",
+      "name": "Pelican Grove",
+      "root_source": "Rera",
+      "num_facts": 19,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.875,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.719
+      },
+      "tier": "B"
     },
     {
       "slug": "prestige-autumn-leaves",
@@ -669,9 +804,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -684,9 +819,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -699,9 +834,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -714,9 +849,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -729,11 +864,11 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.884
+        "overall": 0.794
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "prestige-lakeside-habitat",
@@ -744,9 +879,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -759,9 +894,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -774,9 +909,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -789,11 +924,11 @@
         "identity": 0.5,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.85
+        "overall": 0.759
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "prestige-pine-wood",
@@ -804,9 +939,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -819,9 +954,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -834,9 +969,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.391,
         "consistency": 0.75,
-        "overall": 0.962
+        "overall": 0.871
       },
       "tier": "A"
     },
@@ -849,9 +984,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -864,9 +999,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -879,9 +1014,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -894,9 +1029,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -909,9 +1044,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -924,9 +1059,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -939,9 +1074,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -954,9 +1089,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -969,9 +1104,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -984,11 +1119,11 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.4,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.834
+        "overall": 0.744
       },
-      "tier": "A"
+      "tier": "B"
     },
     {
       "slug": "sarang-by-sumadhura-phase-2",
@@ -999,9 +1134,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1014,9 +1149,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
     },
@@ -1029,11 +1164,26 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
+    },
+    {
+      "slug": "shriram-earth-whitefield",
+      "name": "Shriram Earth – Whitefield",
+      "root_source": "Rera",
+      "num_facts": 21,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "shriram-esquire",
@@ -1044,9 +1194,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -1059,9 +1209,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
     },
@@ -1074,9 +1224,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -1089,9 +1239,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1104,9 +1254,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1119,9 +1269,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1134,9 +1284,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1149,9 +1299,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1164,9 +1314,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.766
+        "overall": 0.674
       },
       "tier": "B"
     },
@@ -1179,9 +1329,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -1194,9 +1344,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -1209,9 +1359,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.9
+        "overall": 0.81
       },
       "tier": "A"
     },
@@ -1224,9 +1374,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1239,9 +1389,9 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.766
+        "overall": 0.674
       },
       "tier": "B"
     },
@@ -1254,9 +1404,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1269,9 +1419,9 @@
         "identity": 0.5,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 0.75,
-        "overall": 0.797
+        "overall": 0.707
       },
       "tier": "B"
     },
@@ -1284,9 +1434,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1299,9 +1449,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
     },
@@ -1314,9 +1464,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.909
       },
       "tier": "A"
     },
@@ -1329,9 +1479,9 @@
         "identity": 0.5,
         "rera": 0.938,
         "enrichment": 0.6,
-        "freshness": 1.0,
+        "freshness": 0.393,
         "consistency": 1.0,
-        "overall": 0.784
+        "overall": 0.693
       },
       "tier": "B"
     },
@@ -1344,9 +1494,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1359,9 +1509,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -1374,9 +1524,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 0.95
+        "overall": 0.86
       },
       "tier": "A"
     },
@@ -1389,9 +1539,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -1404,9 +1554,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.396,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -1419,9 +1569,9 @@
         "identity": 1.0,
         "rera": 1.0,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.397,
         "consistency": 1.0,
-        "overall": 1.0
+        "overall": 0.91
       },
       "tier": "A"
     },
@@ -1434,9 +1584,9 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.398,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.894
       },
       "tier": "A"
     },
@@ -1449,9 +1599,9 @@
         "identity": 1.0,
         "rera": 0.875,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.969
+        "overall": 0.878
       },
       "tier": "A"
     },
@@ -1464,11 +1614,41 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 1.0,
-        "freshness": 1.0,
+        "freshness": 0.392,
         "consistency": 1.0,
-        "overall": 0.984
+        "overall": 0.893
       },
       "tier": "A"
+    },
+    {
+      "slug": "vdb-willow-farm",
+      "name": "VDB Willow Farm",
+      "root_source": "Rera",
+      "num_facts": 19,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.875,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.719
+      },
+      "tier": "B"
+    },
+    {
+      "slug": "visista-by-vista-spaces-okas",
+      "name": "Visista By Vista Spaces | Okas",
+      "root_source": "Rera",
+      "num_facts": 40,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
+        "freshness": 1.0,
+        "consistency": 1.0,
+        "overall": 0.734
+      },
+      "tier": "B"
     },
     {
       "slug": "vkc-royale-gardenia",
@@ -1479,9 +1659,24 @@
         "identity": 1.0,
         "rera": 0.062,
         "enrichment": 0.8,
+        "freshness": 0.392,
+        "consistency": 1.0,
+        "overall": 0.624
+      },
+      "tier": "B"
+    },
+    {
+      "slug": "whitefield-tower-appl",
+      "name": "Whitefield Tower (APPL)",
+      "root_source": "Rera",
+      "num_facts": 21,
+      "scores": {
+        "identity": 1.0,
+        "rera": 0.938,
+        "enrichment": 0.0,
         "freshness": 1.0,
         "consistency": 1.0,
-        "overall": 0.716
+        "overall": 0.734
       },
       "tier": "B"
     },
@@ -1494,32 +1689,32 @@
         "identity": 1.0,
         "rera": 0.938,
         "enrichment": 0.8,
-        "freshness": 1.0,
+        "freshness": 0.4,
         "consistency": 1.0,
-        "overall": 0.934
+        "overall": 0.844
       },
       "tier": "A"
     }
   ],
   "summary": {
-    "total_societies": 100,
+    "total_societies": 113,
     "tier_distribution": {
-      "A": 90,
-      "B": 10,
+      "A": 82,
+      "B": 31,
       "C": 0,
       "D": 0
     },
     "dimension_averages": {
-      "identity": 0.965,
-      "rera": 0.904,
-      "enrichment": 0.892,
-      "freshness": 1.0,
-      "consistency": 0.985
+      "identity": 0.969,
+      "rera": 0.907,
+      "enrichment": 0.789,
+      "freshness": 0.466,
+      "consistency": 0.987
     },
-    "overall_average": 0.94,
-    "generated_at": "2026-03-13T18:48:27.302584+00:00",
-    "area_nodes": 27,
-    "builder_nodes": 59,
-    "total_edges": 200
+    "overall_average": 0.836,
+    "generated_at": "2026-07-11T20:01:39.747112+00:00",
+    "area_nodes": 28,
+    "builder_nodes": 69,
+    "total_edges": 226
   }
 }

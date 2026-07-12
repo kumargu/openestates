@@ -1221,13 +1221,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1280",
-          "price_range_lakh": "160-166",
-          "price_per_sqft": "12500-13000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"12500-13000\", \"price_range_lakh\": \"160-166\", \"sqft_range\": \"1280\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1254,13 +1249,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1550-1780",
-          "price_range_lakh": "238-294",
-          "price_per_sqft": "13370-18967"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"13370-18967\", \"price_range_lakh\": \"238-294\", \"sqft_range\": \"1550-1780\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1287,13 +1277,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1900-2295",
-          "price_range_lakh": "287-351",
-          "price_per_sqft": "12500-18473"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12500-18473\", \"price_range_lakh\": \"287-351\", \"sqft_range\": \"1900-2295\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1320,7 +1305,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "13000-13500"
       },
       "confidence": 0.7,
@@ -1349,7 +1334,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1398,7 +1383,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sumadhura Edition Phase 1",
           "Sumadhura Solace Phase II",
@@ -1437,5 +1422,6 @@
       "display_template": "Sumadhura Edition Phase-II is a premium residential apartment project offering spacious homes with extensive lifestyle amenities and excellent connectivity to major IT hubs, making it an ideal choice for families and professionals. The project emphasizes a fresh take on residential design, valuing luxury, privacy, community connections, and active living."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.897010+00:00"
+  "updated_at": "2026-03-13T15:11:56.897010+00:00",
+  "created_at": "2026-03-13T13:27:55.718824+00:00"
 }

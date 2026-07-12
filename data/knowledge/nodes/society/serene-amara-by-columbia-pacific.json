@@ -1176,13 +1176,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "918",
-          "price_range_lakh": "65-68",
-          "price_per_sqft": "7080-7407"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"7080-7407\", \"price_range_lakh\": \"65-68\", \"sqft_range\": \"918\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1209,13 +1204,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1250-1315",
-          "price_range_lakh": "85-93.10",
-          "price_per_sqft": "6800-7079"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"6800-7079\", \"price_range_lakh\": \"85-93.10\", \"sqft_range\": \"1250-1315\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1242,13 +1232,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2214-2229",
-          "price_range_lakh": "162-165",
-          "price_per_sqft": "7317-7402"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"7317-7402\", \"price_range_lakh\": \"162-165\", \"sqft_range\": \"2214-2229\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1275,7 +1260,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "7000-7400"
       },
       "confidence": 0.7,
@@ -1304,7 +1289,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1353,11 +1338,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": "N/A",
-          "period": "N/A"
-        }
+        "type": "Text",
+        "data": "{\"pct\": \"N/A\", \"period\": \"N/A\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1379,7 +1361,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Casagrand Promenade",
           "Mahaveer Celesse",
@@ -1418,5 +1400,6 @@
       "display_template": "Serene Amara offers premium senior living apartments with competitive pricing for its spacious layouts and amenities in the rapidly developing Yelahanka region."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.851135+00:00"
+  "updated_at": "2026-03-13T15:11:56.851135+00:00",
+  "created_at": "2026-03-13T13:20:55.243414+00:00"
 }

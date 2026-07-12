@@ -359,7 +359,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -596,13 +596,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2830-2882",
-          "price_range_lakh": "400-550",
-          "price_per_sqft": "13800-19500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"13800-19500\", \"price_range_lakh\": \"400-550\", \"sqft_range\": \"2830-2882\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -629,13 +624,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1655-2321",
-          "price_range_lakh": "250-430",
-          "price_per_sqft": "10700-26000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"10700-26000\", \"price_range_lakh\": \"250-430\", \"sqft_range\": \"1655-2321\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -662,13 +652,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1346",
-          "price_range_lakh": "200-250",
-          "price_per_sqft": "14800-18600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"14800-18600\", \"price_range_lakh\": \"200-250\", \"sqft_range\": \"1346\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -695,13 +680,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1195-1216",
-          "price_range_lakh": "138-250",
-          "price_per_sqft": "11300-20900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11300-20900\", \"price_range_lakh\": \"138-250\", \"sqft_range\": \"1195-1216\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -728,13 +708,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "905",
-          "price_range_lakh": "120-135",
-          "price_per_sqft": "13200-14900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"13200-14900\", \"price_range_lakh\": \"120-135\", \"sqft_range\": \"905\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -859,7 +834,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Serenity Shores",
           "Sobha Windsor",
@@ -882,11 +857,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 150,
-          "period": "since May 2015 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 150, \"period\": \"since May 2015 launch\"}"
       },
       "confidence": 0.6,
       "source": {

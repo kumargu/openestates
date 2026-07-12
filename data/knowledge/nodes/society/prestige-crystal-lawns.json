@@ -1011,7 +1011,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "9000-10000"
       },
       "confidence": 0.7,
@@ -1062,11 +1062,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": "10-15% (expected)",
-          "period": "over next 2 years"
-        }
+        "type": "Text",
+        "data": "{\"pct\": \"10-15% (expected)\", \"period\": \"over next 2 years\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1088,7 +1085,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Embassy Springs, Devanahalli",
           "Magical Springs by SID Infra, Devanahalli",
@@ -1126,5 +1123,6 @@
       "display_template": "Prestige Crystal Lawns is a premium plotted development with competitive launch pricing in Devanahalli, a high-growth corridor near Kempegowda International Airport, indicating strong investment potential."
     }
   ],
-  "updated_at": "2026-03-13T15:31:28.465165+00:00"
+  "updated_at": "2026-03-13T15:31:28.465165+00:00",
+  "created_at": "2026-03-13T07:34:36.407709+00:00"
 }

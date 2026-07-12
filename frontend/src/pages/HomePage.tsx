@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import type { PropertyCard } from "../lib/types.ts";
-import { getProperties } from "../lib/api.ts";
+import { getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 
 function useOnScreen(ref: React.RefObject<HTMLElement | null>) {
@@ -196,6 +196,7 @@ function pickFeatured(props: PropertyCard[]): PropertyCard | null {
 
 export function HomePage() {
   const [properties, setProperties] = useState<PropertyCard[]>([]);
+  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState("");
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
@@ -207,6 +208,9 @@ export function HomePage() {
     getProperties()
       .then(setProperties)
       .catch(() => setLoadError(true));
+    getStats()
+      .then(setPlatformStats)
+      .catch(() => {});
   }, []);
 
   const handleSearch = (e: React.FormEvent) => {
@@ -220,7 +224,15 @@ export function HomePage() {
     navigate(q ? `/results?q=${encodeURIComponent(q)}` : "/results");
   };
 
-  const snapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
+  const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
+  const snapshot = derivedSnapshot && platformStats
+    ? {
+        ...derivedSnapshot,
+        totalProperties: platformStats.properties,
+        totalSocieties: platformStats.societies,
+        totalAreas: platformStats.areas,
+      }
+    : derivedSnapshot;
   const featured = properties.length > 0 ? pickFeatured(properties) : null;
 
   return (
@@ -295,7 +307,7 @@ export function HomePage() {
         </p>
         <form
           onSubmit={handleSearch}
-          className="fade-up fade-up-delay-2 search-container home-search-form"
+          className="search-container home-search-form"
           aria-label="Property search"
           role="search"
         >
@@ -306,7 +318,7 @@ export function HomePage() {
           <input
             className="search-input"
             type="text"
-            placeholder="Try: 3BHK near metro in Whitefield under 1.5Cr"
+            placeholder="Try: 3BHK Whitefield under 1.5Cr"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Describe the property you are looking for"
@@ -450,6 +462,19 @@ export function HomePage() {
           <div
             className="fade-up fade-up-delay-4 home-trending-strip"
           >
+            <span
+              style={{
+                fontSize: "0.68rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.08em",
+                color: "#999",
+                fontWeight: 700,
+                whiteSpace: "nowrap",
+                padding: "0.4rem 0.75rem 0.4rem 0",
+              }}
+            >
+              Area Tracker
+            </span>
             {snapshot.trending.slice(0, 4).map((t, i) => (
               <button
                 key={t.label}
@@ -943,10 +968,10 @@ function MicroMarketsSection({
       <div style={{ maxWidth: "960px", margin: "0 auto" }}>
         <div style={{ marginBottom: "1.5rem" }}>
           <h2 style={{ margin: "0 0 0.25rem", fontSize: "clamp(1.3rem, 1rem + 1vw, 1.8rem)", fontWeight: 600, letterSpacing: "-0.02em" }}>
-            Bengaluru micro-markets
+            Area Tracker
           </h2>
           <p style={{ margin: 0, fontSize: "0.85rem", color: "#888" }}>
-            {markets.length} areas · {properties.length} listings · real-time intelligence
+            {markets.length} Bengaluru areas · {properties.length} listings · price, access, and trust signals
           </p>
         </div>
         <div className="home-micro-grid">

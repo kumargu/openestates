@@ -1363,13 +1363,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "620-700",
-          "price_range_lakh": "75-90",
-          "price_per_sqft": "12000-13000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"12000-13000\", \"price_range_lakh\": \"75-90\", \"sqft_range\": \"620-700\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1396,13 +1391,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1140-1290",
-          "price_range_lakh": "158-178",
-          "price_per_sqft": "13800-13900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13800-13900\", \"price_range_lakh\": \"158-178\", \"sqft_range\": \"1140-1290\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1429,13 +1419,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1317-1386",
-          "price_range_lakh": "147-149",
-          "price_per_sqft": "10750-11160"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"10750-11160\", \"price_range_lakh\": \"147-149\", \"sqft_range\": \"1317-1386\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1462,13 +1447,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1570-1800",
-          "price_range_lakh": "217-249",
-          "price_per_sqft": "13800-13900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"13800-13900\", \"price_range_lakh\": \"217-249\", \"sqft_range\": \"1570-1800\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1495,13 +1475,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1826-1872",
-          "price_range_lakh": "215-225",
-          "price_per_sqft": "11500-12000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"11500-12000\", \"price_range_lakh\": \"215-225\", \"sqft_range\": \"1826-1872\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1528,13 +1503,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2500-2553",
-          "price_range_lakh": "294-346",
-          "price_per_sqft": "11500-13850"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11500-13850\", \"price_range_lakh\": \"294-346\", \"sqft_range\": \"2500-2553\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1590,7 +1560,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1645,11 +1615,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 36.97,
-          "period": "since 2019"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 36.97, \"period\": \"since 2019\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1671,7 +1638,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Shriram Luxor",
           "Ranka Ankura",

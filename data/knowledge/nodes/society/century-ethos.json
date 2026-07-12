@@ -910,13 +910,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2850-3485",
-          "price_range_lakh": "336-600",
-          "price_per_sqft": "12000-18000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12000-18000\", \"price_range_lakh\": \"336-600\", \"sqft_range\": \"2850-3485\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -943,13 +938,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "4235-4940",
-          "price_range_lakh": "485-1000",
-          "price_per_sqft": "12000-20000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12000-20000\", \"price_range_lakh\": \"485-1000\", \"sqft_range\": \"4235-4940\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -976,7 +966,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "12000-20000"
       },
       "confidence": 0.7,
@@ -1005,7 +995,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1053,7 +1043,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "L&T Elara Celestia, Hebbal",
           "Embassy Lake Terraces, Hebbal",

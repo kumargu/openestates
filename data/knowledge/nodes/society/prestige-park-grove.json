@@ -946,7 +946,8 @@
       "scoring_hint": {
         "direction": "TextMatch",
         "weight": 1.0
-      }
+      },
+      "learned_at": "2026-03-13T15:32:42.967394+00:00"
     },
     {
       "key": "embedding_computed",

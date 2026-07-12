@@ -245,8 +245,35 @@ export type SearchIntent = {
   area: string | null;
   bhk: number | null;
   budget_max: number | null;
+  hard_constraints?: HardConstraint[];
   preferences: string[];
+  positive_preferences?: PreferenceSignal[];
+  negative_preferences?: PreferenceSignal[];
+  buyer_archetype?: BuyerArchetype | null;
 };
+
+export type HardConstraint = {
+  field: string;
+  operator: "min";
+  value: number;
+  unit: string;
+  raw_text: string;
+};
+
+export type PreferenceSignal = {
+  raw_text: string;
+  polarity: "positive" | "negative";
+  expanded_keys: string[];
+  weight: number;
+};
+
+export type BuyerArchetype =
+  | "family"
+  | "investor"
+  | "risk_averse"
+  | "value_buyer"
+  | "luxury_buyer"
+  | "end_user";
 
 export type MatchReason = {
   preference: string;

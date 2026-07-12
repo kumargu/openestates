@@ -929,13 +929,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "486",
-          "price_range_lakh": "81.13-90.87",
-          "price_per_sqft": "16700-18700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"16700-18700\", \"price_range_lakh\": \"81.13-90.87\", \"sqft_range\": \"486\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -962,13 +957,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1450",
-          "price_range_lakh": "237",
-          "price_per_sqft": "16310"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"16310\", \"price_range_lakh\": \"237\", \"sqft_range\": \"1450\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -995,13 +985,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1355-2326",
-          "price_range_lakh": "133-317",
-          "price_per_sqft": "9800-13700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"9800-13700\", \"price_range_lakh\": \"133-317\", \"sqft_range\": \"1355-2326\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1028,13 +1013,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2500-2765",
-          "price_range_lakh": "353-462",
-          "price_per_sqft": "14100-16700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"14100-16700\", \"price_range_lakh\": \"353-462\", \"sqft_range\": \"2500-2765\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1090,7 +1070,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1141,11 +1121,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 20,
-          "period": "since 2021 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 20, \"period\": \"since 2021 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1167,7 +1144,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Hoysala Hallmark Lalith",
           "L&T Elara Celestia",

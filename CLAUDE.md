@@ -100,27 +100,30 @@ SourcedFact:
   scoring_hint: { direction: TextMatch, weight: 2.0 }
 ```
 
-### Live Discovery Flow
+### Local Search + Offline Enrichment Flow
 
-When search finds no good matches (score below threshold):
+Search must stay local and deterministic. When search finds no good matches or
+missing evidence, it should return the best local results plus explicit
+knowledge gaps.
 
 ```
-Poor/no matches → trigger Live Discovery
-  → Gemini 2.5 Flash + Google Search grounding
-  → Parse → discovered properties/societies
-  → Ingest into knowledge graph (in-memory + persist to disk)
-  → Return results tagged "Just discovered — verification pending"
-  → Queue background enrichment (Reddit, RERA, photos, embeddings)
+Query → local KG/index recall → deterministic ranking → explanation
+  → log search event + missing evidence
+  → queue offline enrichment (Reddit, RERA, Google reviews, photos, embeddings)
+  → next search improves after the pipeline writes SourcedFacts
 ```
 
 Rules:
-- **Live discovery runs in Rust** — just an HTTP call to Gemini. No shelling out to Python for real-time queries.
-- Cache results — same area + intent hash within TTL = skip Gemini call.
-- Rate limit — max N live discoveries per hour.
-- Trust badges — freshly discovered data gets lower confidence and "verification pending".
-- Only trigger when the query has a recognizable area/location.
+- **No LLM/network calls in `/api/search`**. The Rust request path reads local
+  data only.
+- Python skills may use external APIs or LLMs for offline enrichment, but their
+  output must be structured `SourcedFact`s.
+- Search should surface explicit gaps rather than inventing or live-discovering
+  facts.
+- Newly enriched/crawled data gets lower confidence until RERA/source checks pass.
 
-Every search either returns good data OR triggers discovery that makes the next search better. This is the flywheel.
+Every search either returns good local data or records the evidence needed to
+make the next search better. This is the flywheel.
 
 ### Knowledge Graph Storage
 
@@ -190,10 +193,9 @@ backend/                Rust + Axum (port 4000)
   src/data_loader.rs    Startup: load seed + KG into memory
   src/models/           Serde structs
   src/routes/           Thin HTTP handlers
-  src/search/           Intent parsing, text scoring, semantic boost
+  src/search/           Intent parsing, local recall, deterministic scoring
   src/scoring/          Theme computation (KG-facts-first)
   src/knowledge/        Graph nodes, edges, facts, embeddings
-  src/discovery/        Live discovery — Gemini client, cache, ingestion
   src/cache/            LRU + TTL caches
   src/storage/          StorageBackend trait (local FS → S3)
 pipeline/               Python data collection

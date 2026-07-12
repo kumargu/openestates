@@ -1221,13 +1221,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "2167-2413",
-          "price_range_lakh": "353-401",
-          "price_per_sqft": "14600-18500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"14600-18500\", \"price_range_lakh\": \"353-401\", \"sqft_range\": \"2167-2413\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1254,13 +1249,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3056-3064",
-          "price_range_lakh": "480-527",
-          "price_per_sqft": "15600-17300"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15600-17300\", \"price_range_lakh\": \"480-527\", \"sqft_range\": \"3056-3064\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1316,7 +1306,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1363,11 +1353,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 5.12,
-          "period": "since last year"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 5.12, \"period\": \"since last year\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1389,7 +1376,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Acropolis, Koramangala",
           "Prestige PineWood, Koramangala",

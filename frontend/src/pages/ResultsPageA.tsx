@@ -1,6 +1,7 @@
 /**
- * Results page with inline subscribe actions and backend search integration.
- * All data comes from the backend API — no client-side fallbacks.
+ * Results page with inline decision-sheet actions and backend search integration.
+ * In local development, the API layer can serve checked-in fixtures when the
+ * Rust backend is unavailable so product review does not render a blank shell.
  */
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
@@ -14,22 +15,26 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { PreferencePill } from "../components/PreferencePill.tsx";
 import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
-import { CompareBar } from "../components/CompareBar.tsx";
-import { ComparePanel } from "../components/ComparePanel.tsx";
 import { TrustBadge } from "../components/TrustBadge.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
 import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
-import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { getShortlistedIds, isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
-
-const MAX_COMPARE = 3;
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
   if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
   return `\u20B9${price.toLocaleString("en-IN")}`;
+}
+
+function hasKnownNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isKnownText(value: string | null | undefined): value is string {
+  return !!value && value.trim().length > 0 && value !== "Not specified";
 }
 
 const LABEL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -240,21 +245,29 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 /* ---------- Property Card ---------- */
 
-function CardA({ property, match, explanation, confidenceScore, onQuickView, isComparing, onToggleCompare }: {
+function CardA({ property, match, explanation, confidenceScore, onQuickView, onSaveChange }: {
   property: PropertyCardType;
   match?: MatchResult;
   explanation?: MatchExplanation;
   confidenceScore?: import("../lib/types.ts").ConfidenceScore;
   onQuickView?: (id: string) => void;
-  isComparing?: boolean;
-  onToggleCompare?: (id: string) => void;
+  onSaveChange?: () => void;
 }) {
   const [saved, setSaved] = useState(() => isShortlisted(property.id));
+  const specs = [
+    `${property.bhk} BHK`,
+    hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
+    isKnownText(property.facing) ? property.facing : null,
+    hasKnownNumber(property.floor) && hasKnownNumber(property.total_floors)
+      ? `Floor ${property.floor}/${property.total_floors}`
+      : null,
+  ].filter((spec): spec is string => spec !== null);
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setSaved(toggleShortlist(property.id));
+    onSaveChange?.();
   };
 
   const handleQuickView = (e: React.MouseEvent) => {
@@ -263,26 +276,10 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, isC
     onQuickView?.(property.id);
   };
 
-  const handleCompare = () => {
-    onToggleCompare?.(property.id);
-  };
-
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
 
   return (
     <div className="card-a">
-      {/* Compare toggle button — outside Link to avoid invalid <button> inside <a> */}
-      <button
-        className={`card-a-compare-btn ${isComparing ? "card-a-compare-btn--active" : ""}`}
-        onClick={handleCompare}
-        title={isComparing ? "Remove from compare" : "Add to compare"}
-      >
-        {isComparing ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><polyline points="20 6 9 17 4 12" /></svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-        )}
-      </button>
       <Link to={`/property/${property.id}`} className="card-a-link">
         <div className="card-a-image">
           <ImageWithFallback
@@ -303,22 +300,23 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, isC
         <div className="card-a-body">
           <h3 className="card-a-title">{property.title}</h3>
           <p className="card-a-location">
-            {property.society_name} &middot; {property.area}
+            {property.society_name ? `${property.society_name} · ` : ""}{property.area}
           </p>
 
           <div className="card-a-price-row">
             <span className="card-a-price">{formatPrice(property.price)}</span>
-            <span className="card-a-ppsqft">{property.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
+            {hasKnownNumber(property.price_per_sqft) && (
+              <span className="card-a-ppsqft">{property.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
+            )}
           </div>
 
           <div className="card-a-specs">
-            <span>{property.bhk} BHK</span>
-            <span>&middot;</span>
-            <span>{property.sqft} sqft</span>
-            <span>&middot;</span>
-            <span>{property.facing}</span>
-            <span>&middot;</span>
-            <span>Floor {property.floor}/{property.total_floors}</span>
+            {specs.map((spec, index) => (
+              <span key={spec}>
+                {index > 0 && <span>&middot; </span>}
+                {spec}
+              </span>
+            ))}
           </div>
 
           {match && <p className="card-a-reason">{match.reason}</p>}
@@ -347,8 +345,12 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, isC
               displayText={property.project_status_display}
               possessionStatus={property.possession_status}
             />
-            <span className="property-signal">{property.metro_distance_mins} min to metro</span>
-            <span className="property-signal">{property.builder_name}</span>
+            {hasKnownNumber(property.metro_distance_mins) && (
+              <span className="property-signal">{property.metro_distance_mins} min to metro</span>
+            )}
+            {isKnownText(property.builder_name) && (
+              <span className="property-signal">{property.builder_name}</span>
+            )}
             <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
             <TrustBadge rootSource={property.root_source} compact />
             <DataFreshnessBadge freshness={property.data_freshness} compact />
@@ -403,7 +405,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, isC
           <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-          {saved ? "Subscribed" : "Subscribe"}
+          {saved ? "In decision sheet" : "Save to sheet"}
         </button>
         <button className="card-a-detail-btn" onClick={handleQuickView}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -415,6 +417,25 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, isC
           </svg>
         </button>
       </div>
+    </div>
+  );
+}
+
+function DecisionSheetDock({ count }: { count: number }) {
+  if (count === 0) return null;
+
+  return (
+    <div className="decision-dock">
+      <div className="decision-dock-copy">
+        <span className="decision-dock-kicker">Decision sheet</span>
+        <strong>{count} saved {count === 1 ? "candidate" : "candidates"}</strong>
+      </div>
+      <Link to="/shortlist" className="decision-dock-link">
+        Open workspace
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
+        </svg>
+      </Link>
     </div>
   );
 }
@@ -489,22 +510,8 @@ export function ResultsPageA() {
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
-  const [compareIds, setCompareIds] = useState<string[]>(() => {
-    try {
-      const stored = sessionStorage.getItem("oe_compare_ids");
-      return stored ? JSON.parse(stored) : [];
-    } catch { return []; }
-  });
-  const [showCompare, setShowCompare] = useState(false);
-
-  // Persist compare selections across navigation
-  useEffect(() => {
-    if (compareIds.length > 0) {
-      sessionStorage.setItem("oe_compare_ids", JSON.stringify(compareIds));
-    } else {
-      sessionStorage.removeItem("oe_compare_ids");
-    }
-  }, [compareIds]);
+  const [savedCount, setSavedCount] = useState(() => getShortlistedIds().length);
+  const refreshSavedCount = () => setSavedCount(getShortlistedIds().length);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -538,27 +545,43 @@ export function ResultsPageA() {
 
   // When there's a search query, call the backend search API.
   // When there's no query, load all properties.
-  // No client-side fallback — if the backend is down, show an error.
+  // The API layer owns the development fixture fallback when the backend is down.
   useEffect(() => {
-    setSearchResponse(null);
-    setSearchFailed(false);
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSearchResponse(null);
+      setSearchFailed(false);
+    });
 
     if (query) {
       addRecentSearch(query);
       searchProperties(query)
         .then((data) => {
+          if (cancelled) return;
           setSearchResponse(data);
           setStatus("ok");
         })
         .catch(() => {
+          if (cancelled) return;
           setSearchFailed(true);
           setStatus("error");
         });
     } else {
       getProperties()
-        .then((data) => { setProperties(data); setStatus("ok"); })
-        .catch(() => setStatus("error"));
+        .then((data) => {
+          if (cancelled) return;
+          setProperties(data);
+          setStatus("ok");
+        })
+        .catch(() => {
+          if (!cancelled) setStatus("error");
+        });
     }
+    return () => {
+      cancelled = true;
+    };
   }, [query]);
 
   const useBackendResults = query && searchResponse && !searchFailed;
@@ -625,16 +648,25 @@ export function ResultsPageA() {
     );
   }
 
+  const hardConstraints = intent?.hard_constraints ?? [];
+  const hardConstraintLabels = hardConstraints.map((constraint) => constraint.raw_text);
   const summary = intent
-    ? formatSearchSummary({ query, area: intent.area ?? undefined, bhk: intent.bhk ?? undefined, budgetMax: intent.budget_max ?? undefined, preferences: intent.preferences })
+    ? formatSearchSummary({
+        query,
+        area: intent.area ?? undefined,
+        bhk: intent.bhk ?? undefined,
+        budgetMax: intent.budget_max ?? undefined,
+        hardConstraints,
+        preferences: intent.preferences,
+      })
     : null;
-  const hasSearchChips = intent && (intent.area || intent.bhk || intent.budget_max || intent.preferences.length > 0);
+  const hasSearchChips = intent && (intent.area || intent.bhk || intent.budget_max || hardConstraints.length > 0 || intent.preferences.length > 0);
 
   const helmetTitle = query
     ? `${query} — Property Search | OpenEstates`
     : "All Properties — OpenEstates";
   const helmetDescription = query
-    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
+    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
     : `Browse ${totalCount} properties with full transparency reports on OpenEstates.`;
 
   return (
@@ -703,6 +735,7 @@ export function ResultsPageA() {
                     under {intent.budget_max >= 10_000_000 ? `${(intent.budget_max / 10_000_000).toFixed(1)} Cr` : `${(intent.budget_max / 100_000).toFixed(0)}L`}
                   </span>
                 )}
+                {hardConstraintLabels.map((label) => <span key={label} className="tag tag-neutral">{label}</span>)}
                 {intent.preferences.map((pref) => <span key={pref} className="tag tag-neutral">{pref}</span>)}
               </div>
             )}
@@ -742,7 +775,7 @@ export function ResultsPageA() {
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
 
-      {/* Discovery banner — shown when live discovery found new properties */}
+      {/* Deprecated compatibility banner; backend no longer performs request-time discovery. */}
       {discoveryStatus === "discovered_new" && discoveryCount && discoveryCount > 0 && (
         <div
           className="section-card"
@@ -771,6 +804,8 @@ export function ResultsPageA() {
 
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
+
+      <DecisionSheetDock count={savedCount} />
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
@@ -806,7 +841,7 @@ export function ResultsPageA() {
 
       <div
         className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
-        style={{ paddingBottom: compareIds.length > 0 ? "100px" : 0, transition: "margin-right 0.3s var(--ease-out)" }}
+        style={{ transition: "margin-right 0.3s var(--ease-out)" }}
       >
         {matchResults.map(({ property, match, explanation, confidenceScore }) => (
           <CardA
@@ -816,20 +851,13 @@ export function ResultsPageA() {
             explanation={explanation}
             confidenceScore={confidenceScore}
             onQuickView={setPanelPropertyId}
-            isComparing={compareIds.includes(property.id)}
-            onToggleCompare={(id) => {
-              setCompareIds(prev =>
-                prev.includes(id)
-                  ? prev.filter(x => x !== id)
-                  : prev.length < MAX_COMPARE ? [...prev, id] : prev
-              );
-            }}
+            onSaveChange={refreshSavedCount}
           />
         ))}
       </div>
 
       {/* Side panel — quick view */}
-      {panelPropertyId && !showCompare && (() => {
+      {panelPropertyId && (() => {
         const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property;
         if (!panelCard) return null;
         return (
@@ -837,36 +865,10 @@ export function ResultsPageA() {
             propertyId={panelPropertyId}
             card={panelCard}
             onClose={() => setPanelPropertyId(null)}
-            onAddCompare={(id) => {
-              setCompareIds(prev =>
-                prev.includes(id) ? prev : prev.length < MAX_COMPARE ? [...prev, id] : prev
-              );
-            }}
-            isComparing={compareIds.includes(panelPropertyId)}
+            onSaveChange={refreshSavedCount}
           />
         );
       })()}
-
-      {/* Compare bar — floating tray */}
-      <CompareBar
-        items={compareIds.map(id => matchResults.find(r => r.property.id === id)?.property).filter(Boolean) as PropertyCardType[]}
-        onRemove={(id) => setCompareIds(prev => prev.filter(x => x !== id))}
-        onCompare={() => setShowCompare(true)}
-        onClear={() => { setCompareIds([]); setShowCompare(false); }}
-      />
-
-      {/* Compare panel — side-by-side */}
-      {showCompare && compareIds.length >= 2 && (
-        <ComparePanel
-          cards={compareIds.map(id => matchResults.find(r => r.property.id === id)?.property).filter(Boolean) as PropertyCardType[]}
-          onClose={() => setShowCompare(false)}
-          onRemove={(id) => {
-            const next = compareIds.filter(x => x !== id);
-            setCompareIds(next);
-            if (next.length < 2) setShowCompare(false);
-          }}
-        />
-      )}
     </div>
   );
 }

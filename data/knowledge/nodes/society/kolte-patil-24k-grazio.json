@@ -750,13 +750,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1900-2900",
-          "price_range_lakh": "428-654",
-          "price_per_sqft": "22550"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"22550\", \"price_range_lakh\": \"428-654\", \"sqft_range\": \"1900-2900\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -783,13 +778,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2400-3050",
-          "price_range_lakh": "541-688",
-          "price_per_sqft": "22550"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"22550\", \"price_range_lakh\": \"541-688\", \"sqft_range\": \"2400-3050\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -845,7 +835,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -893,11 +883,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 89,
-          "period": "since Nov 2017 launch to Q4 2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 89, \"period\": \"since Nov 2017 launch to Q4 2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -919,7 +906,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Pine Wood",
           "Sobha Sterling Infinia",

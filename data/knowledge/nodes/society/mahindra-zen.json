@@ -1325,13 +1325,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "915-1081",
-          "price_range_lakh": "100-130",
-          "price_per_sqft": "11000-12000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11000-12000\", \"price_range_lakh\": \"100-130\", \"sqft_range\": \"915-1081\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1358,13 +1353,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1872-1950",
-          "price_range_lakh": "185-238",
-          "price_per_sqft": "11000-12200"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11000-12200\", \"price_range_lakh\": \"185-238\", \"sqft_range\": \"1872-1950\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1391,13 +1381,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "2000-2129",
-          "price_range_lakh": "229-272",
-          "price_per_sqft": "12000-12800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"12000-12800\", \"price_range_lakh\": \"229-272\", \"sqft_range\": \"2000-2129\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1424,13 +1409,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2363-2450",
-          "price_range_lakh": "260-298",
-          "price_per_sqft": "12000-12600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12000-12600\", \"price_range_lakh\": \"260-298\", \"sqft_range\": \"2363-2450\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1486,7 +1466,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1537,11 +1517,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 10,
-          "period": "since Dec 2023 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 10, \"period\": \"since Dec 2023 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1563,7 +1540,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Mahaveer Ranches",
           "MICROPOLIS",
@@ -1603,5 +1580,6 @@
       "display_template": "Mahindra Zen is positioned as a premium under-construction project in Begur, Bengaluru, offering competitive pricing for its modern architecture and amenities. The project has shown a steady appreciation since its launch."
     }
   ],
-  "updated_at": "2026-03-13T15:49:01.038022+00:00"
+  "updated_at": "2026-03-13T15:49:01.038022+00:00",
+  "created_at": "2026-03-13T13:24:06.816950+00:00"
 }

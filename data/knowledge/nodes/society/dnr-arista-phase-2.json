@@ -885,13 +885,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1260-1340",
-          "price_range_lakh": "180-220",
-          "price_per_sqft": "13400-17500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13400-17500\", \"price_range_lakh\": \"180-220\", \"sqft_range\": \"1260-1340\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -918,13 +913,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1665-1750",
-          "price_range_lakh": "210-295",
-          "price_per_sqft": "12000-17700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"12000-17700\", \"price_range_lakh\": \"210-295\", \"sqft_range\": \"1665-1750\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -951,13 +941,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2025-2410",
-          "price_range_lakh": "255-380",
-          "price_per_sqft": "10600-18800"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"10600-18800\", \"price_range_lakh\": \"255-380\", \"sqft_range\": \"2025-2410\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1013,7 +998,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1063,11 +1048,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 11.49,
-          "period": "Q4 2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 11.49, \"period\": \"Q4 2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1089,7 +1071,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Orchid Lakeview, Bellandur",
           "Prestige Ferns Residency, Harlur",

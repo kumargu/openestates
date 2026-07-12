@@ -1163,13 +1163,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1200-1350",
-          "price_range_lakh": "103-152",
-          "price_per_sqft": "8500-11500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"8500-11500\", \"price_range_lakh\": \"103-152\", \"sqft_range\": \"1200-1350\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1196,13 +1191,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1400-2000",
-          "price_range_lakh": "130-220",
-          "price_per_sqft": "8500-11500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"8500-11500\", \"price_range_lakh\": \"130-220\", \"sqft_range\": \"1400-2000\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1258,7 +1248,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK"
@@ -1305,7 +1295,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Mana The Right Life",
           "Sapthagiri Nirvana",

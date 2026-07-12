@@ -975,5 +975,6 @@
       "display_template": "Discussed on Reddit: {value}"
     }
   ],
-  "updated_at": "2026-03-13T15:34:57.934457+00:00"
+  "updated_at": "2026-03-13T15:34:57.934457+00:00",
+  "created_at": "2026-03-13T07:34:49.637887+00:00"
 }

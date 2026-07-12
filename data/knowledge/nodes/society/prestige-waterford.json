@@ -738,13 +738,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "999-1128",
-          "price_range_lakh": "180-270",
-          "price_per_sqft": "16000-27000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"16000-27000\", \"price_range_lakh\": \"180-270\", \"sqft_range\": \"999-1128\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -771,13 +766,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1775-2060",
-          "price_range_lakh": "315-430",
-          "price_per_sqft": "15000-24000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15000-24000\", \"price_range_lakh\": \"315-430\", \"sqft_range\": \"1775-2060\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -804,13 +794,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2525-2555",
-          "price_range_lakh": "420-510",
-          "price_per_sqft": "16000-20000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"16000-20000\", \"price_range_lakh\": \"420-510\", \"sqft_range\": \"2525-2555\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -866,7 +851,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -916,11 +901,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 130,
-          "period": "since 2020 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 130, \"period\": \"since 2020 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -942,7 +924,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Brigade Cosmopolis, Whitefield",
           "Vaswani Exquisite, Hoodi",

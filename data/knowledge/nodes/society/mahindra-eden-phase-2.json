@@ -1069,13 +1069,8 @@
     {
       "key": "pricing_1bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "1BHK",
-          "sqft_range": "420-778",
-          "price_range_lakh": "31.5-66.5",
-          "price_per_sqft": "7500-8500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"1BHK\", \"price_per_sqft\": \"7500-8500\", \"price_range_lakh\": \"31.5-66.5\", \"sqft_range\": \"420-778\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1102,13 +1097,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1200-1285",
-          "price_range_lakh": "90-116",
-          "price_per_sqft": "7000-9150"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"7000-9150\", \"price_range_lakh\": \"90-116\", \"sqft_range\": \"1200-1285\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1135,13 +1125,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1651-1771",
-          "price_range_lakh": "140-165",
-          "price_per_sqft": "7900-10000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"7900-10000\", \"price_range_lakh\": \"140-165\", \"sqft_range\": \"1651-1771\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1168,13 +1153,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "1850-2013",
-          "price_range_lakh": "165-203",
-          "price_per_sqft": "8900-10550"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"8900-10550\", \"price_range_lakh\": \"165-203\", \"sqft_range\": \"1850-2013\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1230,7 +1210,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "1BHK",
           "2BHK",
@@ -1281,7 +1261,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Provident Park Square Phase 5",
           "Soho By Bren",
@@ -1321,5 +1301,6 @@
       "display_template": "Mahindra Eden Phase 2 offers competitive pricing for its luxury segment, focusing on value for money and ample open spaces compared to some competitors. While specific price appreciation percentages since launch are not explicitly stated, market trends suggest moderate appreciation for under-construction projects in this locality."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.767194+00:00"
+  "updated_at": "2026-03-13T15:11:56.767194+00:00",
+  "created_at": "2026-03-13T13:24:20.141889+00:00"
 }

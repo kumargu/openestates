@@ -1016,13 +1016,8 @@
     {
       "key": "pricing_2.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2.5BHK",
-          "sqft_range": "1730-1760",
-          "price_range_lakh": "213-214",
-          "price_per_sqft": "12100-12400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2.5BHK\", \"price_per_sqft\": \"12100-12400\", \"price_range_lakh\": \"213-214\", \"sqft_range\": \"1730-1760\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1049,13 +1044,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1740-2210",
-          "price_range_lakh": "208-263",
-          "price_per_sqft": "11900-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11900-12500\", \"price_range_lakh\": \"208-263\", \"sqft_range\": \"1740-2210\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1082,13 +1072,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2010-2580",
-          "price_range_lakh": "241-312",
-          "price_per_sqft": "12000-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12000-12500\", \"price_range_lakh\": \"241-312\", \"sqft_range\": \"2010-2580\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1144,7 +1129,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2.5BHK",
           "3BHK",
@@ -1193,11 +1178,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 12,
-          "period": "since early 2025 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 12, \"period\": \"since early 2025 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1219,7 +1201,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sumadhura Solace Phase I",
           "DSR Evoq",

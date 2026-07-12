@@ -1085,13 +1085,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1333-1335",
-          "price_range_lakh": "152-154",
-          "price_per_sqft": "11380-11560"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"11380-11560\", \"price_range_lakh\": \"152-154\", \"sqft_range\": \"1333-1335\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1118,13 +1113,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1690-2043",
-          "price_range_lakh": "233-259",
-          "price_per_sqft": "11400-15350"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11400-15350\", \"price_range_lakh\": \"233-259\", \"sqft_range\": \"1690-2043\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1151,13 +1141,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2403-2443",
-          "price_range_lakh": "275-335",
-          "price_per_sqft": "11250-13950"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"11250-13950\", \"price_range_lakh\": \"275-335\", \"sqft_range\": \"2403-2443\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1213,7 +1198,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1262,11 +1247,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 8.34,
-          "period": "in the last 1 year (as of March 2026)"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 8.34, \"period\": \"in the last 1 year (as of March 2026)\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1288,7 +1270,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Svamitva Soul Spring",
           "Misty Meadows",

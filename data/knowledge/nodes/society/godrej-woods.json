@@ -982,13 +982,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1190-1240",
-          "price_range_lakh": "160-175",
-          "price_per_sqft": "12900-13700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"12900-13700\", \"price_range_lakh\": \"160-175\", \"sqft_range\": \"1190-1240\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1015,13 +1010,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1880-2305",
-          "price_range_lakh": "244-331",
-          "price_per_sqft": "13400-14000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"13400-14000\", \"price_range_lakh\": \"244-331\", \"sqft_range\": \"1880-2305\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1048,7 +1038,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "13500-14000"
       },
       "confidence": 0.7,
@@ -1077,7 +1067,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK"
@@ -1124,7 +1114,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Assetz Zen and Sato, Yelahanka",
           "Concorde Mayfair, Yelahanka",
@@ -1163,5 +1153,6 @@
       "display_template": "Godrej Woods is a new launch luxury project in North Bangalore, offering competitive pricing in its segment. Initial launch benefits have expired, and prices are expected to see gradual increases as construction progresses."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.751175+00:00"
+  "updated_at": "2026-03-13T15:11:56.751175+00:00",
+  "created_at": "2026-03-13T13:24:56.985211+00:00"
 }

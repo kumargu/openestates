@@ -1065,13 +1065,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1240-1340",
-          "price_range_lakh": "166-187",
-          "price_per_sqft": "13300-14000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"13300-14000\", \"price_range_lakh\": \"166-187\", \"sqft_range\": \"1240-1340\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1098,13 +1093,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1514-1859",
-          "price_range_lakh": "201-259",
-          "price_per_sqft": "13200-14000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"13200-14000\", \"price_range_lakh\": \"201-259\", \"sqft_range\": \"1514-1859\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1131,13 +1121,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2086",
-          "price_range_lakh": "370",
-          "price_per_sqft": "17737"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"17737\", \"price_range_lakh\": \"370\", \"sqft_range\": \"2086\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1164,7 +1149,7 @@
     {
       "key": "price_per_sqft",
       "value": {
-        "type": "Numeric",
+        "type": "Text",
         "data": "13500-14500"
       },
       "confidence": 0.7,
@@ -1193,7 +1178,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1242,11 +1227,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 25.7,
-          "period": "last quarter"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 25.7, \"period\": \"last quarter\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1268,7 +1250,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Sobha Manhattan Towers Town Park",
           "Sobha Brooklyn Towers Town Park",
@@ -1308,5 +1290,6 @@
       "display_template": "Sobha Madison Heights-Townpark Phase 2 W1 to 4 is an under-construction project by a reputed builder, part of a larger township, offering premium apartments. Prices reflect a recent significant appreciation in the last quarter, with 4BHK units commanding a higher per sqft rate."
     }
   ],
-  "updated_at": "2026-03-13T15:39:45.611058+00:00"
+  "updated_at": "2026-03-13T15:39:45.611058+00:00",
+  "created_at": "2026-03-13T13:25:54.901155+00:00"
 }

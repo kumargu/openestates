@@ -477,13 +477,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1800-2109",
-          "price_range_lakh": "171-210",
-          "price_per_sqft": "8100-11700"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"8100-11700\", \"price_range_lakh\": \"171-210\", \"sqft_range\": \"1800-2109\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -510,13 +505,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "3700-4000",
-          "price_range_lakh": "344-558",
-          "price_per_sqft": "9200-14900"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"9200-14900\", \"price_range_lakh\": \"344-558\", \"sqft_range\": \"3700-4000\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -572,7 +562,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -620,11 +610,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 120,
-          "period": "since 2012 launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 120, \"period\": \"since 2012 launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -646,7 +633,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "DNR Arista Phase 1, Bellandur",
           "Purva Codename Ai, Bellandur",

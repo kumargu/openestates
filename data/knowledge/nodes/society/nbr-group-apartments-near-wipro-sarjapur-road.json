@@ -200,13 +200,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1446-1826",
-          "price_range_lakh": "135-181",
-          "price_per_sqft": "7400-12500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"7400-12500\", \"price_range_lakh\": \"135-181\", \"sqft_range\": \"1446-1826\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -262,7 +257,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK"
         ]
@@ -307,7 +302,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "DSR The Address",
           "Mana Cresta",

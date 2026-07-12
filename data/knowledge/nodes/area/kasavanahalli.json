@@ -17,7 +17,8 @@
         "source_type": "Rera",
         "skill_id": "fix_unknown_areas",
         "collected_at": "2026-03-13T13:14:40.856018+00:00"
-      }
+      },
+      "learned_at": "2026-07-11T19:44:47.850379+00:00"
     },
     {
       "key": "city",
@@ -32,7 +33,10 @@
         "source_type": "Rera",
         "skill_id": "fix_unknown_areas",
         "collected_at": "2026-03-13T13:14:40.856018+00:00"
-      }
+      },
+      "learned_at": "2026-07-11T19:44:47.850379+00:00"
     }
-  ]
+  ],
+  "created_at": "2026-07-11T19:44:47.850379+00:00",
+  "updated_at": "2026-07-11T19:44:47.850379+00:00"
 }

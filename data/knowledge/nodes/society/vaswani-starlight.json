@@ -1015,13 +1015,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1970-2370",
-          "price_range_lakh": "263-387",
-          "price_per_sqft": "11100-19650"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"11100-19650\", \"price_range_lakh\": \"263-387\", \"sqft_range\": \"1970-2370\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1048,13 +1043,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "2560-2730",
-          "price_range_lakh": "340-420",
-          "price_per_sqft": "12450-16400"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"12450-16400\", \"price_range_lakh\": \"340-420\", \"sqft_range\": \"2560-2730\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1110,7 +1100,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "4BHK"
@@ -1157,7 +1147,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Prestige Pine Forest, Whitefield",
           "Alembic Cloud Forest, Whitefield",

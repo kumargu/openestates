@@ -70,42 +70,6 @@ impl KnowledgeGraph {
         scored
     }
 
-    /// Find the top-N most similar nodes to a raw embedding vector.
-    /// Useful for query embedding → similar entity search.
-    pub fn similar_to_vector(
-        &self,
-        query_embedding: &[f32],
-        top_n: usize,
-        node_type_filter: Option<NodeType>,
-    ) -> Vec<SimilarEntity> {
-        let mut scored: Vec<SimilarEntity> = self
-            .nodes
-            .values()
-            .filter(|n| {
-                n.summary_embedding.is_some()
-                    && node_type_filter.is_none_or(|nt| n.node_type == nt)
-            })
-            .filter_map(|n| {
-                let emb = n.summary_embedding.as_ref()?;
-                let sim = cosine_similarity(query_embedding, emb);
-                Some(SimilarEntity {
-                    node_id: n.id.clone(),
-                    name: n.name.clone(),
-                    node_type: format!("{}", n.node_type),
-                    similarity: sim,
-                })
-            })
-            .collect();
-
-        scored.sort_by(|a, b| {
-            b.similarity
-                .partial_cmp(&a.similarity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        scored.truncate(top_n);
-        scored
-    }
-
     /// Count how many nodes have embeddings, by type.
     pub fn embedding_stats(&self) -> Vec<(String, usize, usize)> {
         let mut stats: std::collections::HashMap<String, (usize, usize)> =

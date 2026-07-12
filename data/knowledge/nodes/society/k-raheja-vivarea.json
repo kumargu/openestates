@@ -1250,13 +1250,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1675-2450",
-          "price_range_lakh": "452-658",
-          "price_per_sqft": "26900-27000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"26900-27000\", \"price_range_lakh\": \"452-658\", \"sqft_range\": \"1675-2450\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1283,13 +1278,8 @@
     {
       "key": "pricing_3.5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3.5BHK",
-          "sqft_range": "3740-3860",
-          "price_range_lakh": "985-1015",
-          "price_per_sqft": "26300-27100"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3.5BHK\", \"price_per_sqft\": \"26300-27100\", \"price_range_lakh\": \"985-1015\", \"sqft_range\": \"3740-3860\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1316,13 +1306,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "4815-4820",
-          "price_range_lakh": "1275-1280",
-          "price_per_sqft": "26500"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"26500\", \"price_range_lakh\": \"1275-1280\", \"sqft_range\": \"4815-4820\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1349,13 +1334,8 @@
     {
       "key": "pricing_5bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "5BHK",
-          "sqft_range": "5630-5835",
-          "price_range_lakh": "1527-1579",
-          "price_per_sqft": "26200-28000"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"5BHK\", \"price_per_sqft\": \"26200-28000\", \"price_range_lakh\": \"1527-1579\", \"sqft_range\": \"5630-5835\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1411,7 +1391,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK",
           "3.5BHK",
@@ -1462,11 +1442,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 39.4,
-          "period": "Q3 2025 to Q4 2025"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 39.4, \"period\": \"Q3 2025 to Q4 2025\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1488,7 +1465,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "TVS Cascadia",
           "Sobha Infina",

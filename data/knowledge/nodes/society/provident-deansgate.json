@@ -1160,13 +1160,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1927-2179",
-          "price_range_lakh": "205-300",
-          "price_per_sqft": "9400-15600"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"9400-15600\", \"price_range_lakh\": \"205-300\", \"sqft_range\": \"1927-2179\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1222,7 +1217,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "3BHK"
         ]
@@ -1267,7 +1262,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "Tangled Up In Green (Total Environment)",
           "Embassy Springs (Embassy Group)",
@@ -1305,5 +1300,6 @@
       "display_template": "Provident Deansgate is a luxury 3 BHK villament project in a rapidly developing area of Devanahalli, North Bangalore. While specific project appreciation data is not available, the locality is experiencing steady property value growth due to infrastructure development and proximity to employment hubs."
     }
   ],
-  "updated_at": "2026-03-13T15:50:44.890542+00:00"
+  "updated_at": "2026-03-13T15:50:44.890542+00:00",
+  "created_at": "2026-03-13T13:17:25.881850+00:00"
 }

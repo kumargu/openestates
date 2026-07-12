@@ -1,7 +1,9 @@
+pub mod index;
 pub mod intent;
-pub mod semantic;
+pub mod schema;
 pub mod text;
 
+pub use index::SearchIndex;
 pub use intent::SearchIntent;
 pub use text::TextSearch;
 
@@ -89,7 +91,7 @@ pub struct SearchResultCard {
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
-    /// Cosine similarity score if this result was semantically boosted, None otherwise.
+    /// Reserved for precomputed local similarity scores.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_score: Option<f64>,
     /// Data confidence score — how trustworthy is this result's data?
@@ -128,10 +130,10 @@ pub struct SearchResponse {
     /// Knowledge graph provenance for the results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_context: Option<KnowledgeContext>,
-    /// Whether live discovery was triggered: "discovered_new", "from_cache", "rate_limited", "discovery_failed", or null
+    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_status: Option<String>,
-    /// How many properties were discovered (if discovery happened)
+    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_count: Option<usize>,
 }

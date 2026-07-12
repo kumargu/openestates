@@ -7,7 +7,7 @@ function formatIndianCurrency(value: number): string {
 }
 
 function formatDate(dateStr: string): string {
-  const separators = /[/\-]/;
+  const separators = /[/-]/;
   const parts = dateStr.split(separators);
   if (parts.length === 3) {
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];

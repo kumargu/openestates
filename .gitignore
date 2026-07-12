@@ -44,6 +44,9 @@ data/reddit_cache/
 # Generated/cached data
 data/cache/
 data/lake/
+data/knowledge/search_log/
+data/validation/search_layered_*/
+data/validation/ui_*/
 *.bak
 
 # Pipeline checkpoints and learnings

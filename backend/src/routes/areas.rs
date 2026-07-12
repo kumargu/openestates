@@ -1,8 +1,8 @@
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::Json;
 use serde::Serialize;
 
 use crate::models::AreaProfile;
@@ -20,18 +20,12 @@ pub struct AreaListItem {
 }
 
 /// GET /api/areas — returns lightweight area list for homepage cards.
-pub async fn list_areas(
-    State(state): State<Arc<AppState>>,
-) -> Json<Vec<AreaListItem>> {
+pub async fn list_areas(State(state): State<Arc<AppState>>) -> Json<Vec<AreaListItem>> {
     let items: Vec<AreaListItem> = state
         .areas
         .iter()
         .map(|a| {
-            let primary_signal = a
-                .externality_tags
-                .first()
-                .cloned()
-                .unwrap_or_default();
+            let primary_signal = a.externality_tags.first().cloned().unwrap_or_default();
 
             AreaListItem {
                 id: a.id.clone(),

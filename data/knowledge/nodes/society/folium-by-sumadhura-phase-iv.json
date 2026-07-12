@@ -1249,13 +1249,8 @@
     {
       "key": "pricing_2bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "2BHK",
-          "sqft_range": "1630-1675",
-          "price_range_lakh": "260-268",
-          "price_per_sqft": "15976"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"2BHK\", \"price_per_sqft\": \"15976\", \"price_range_lakh\": \"260-268\", \"sqft_range\": \"1630-1675\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1282,13 +1277,8 @@
     {
       "key": "pricing_3bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "3BHK",
-          "sqft_range": "1630-2120",
-          "price_range_lakh": "245-339",
-          "price_per_sqft": "15976"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"3BHK\", \"price_per_sqft\": \"15976\", \"price_range_lakh\": \"245-339\", \"sqft_range\": \"1630-2120\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1315,13 +1305,8 @@
     {
       "key": "pricing_4bhk",
       "value": {
-        "type": "Object",
-        "data": {
-          "bhk": "4BHK",
-          "sqft_range": "1910-2420",
-          "price_range_lakh": "305-387",
-          "price_per_sqft": "15976"
-        }
+        "type": "Text",
+        "data": "{\"bhk\": \"4BHK\", \"price_per_sqft\": \"15976\", \"price_range_lakh\": \"305-387\", \"sqft_range\": \"1910-2420\"}"
       },
       "confidence": 0.7,
       "source": {
@@ -1377,7 +1362,7 @@
     {
       "key": "configurations",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "2BHK",
           "3BHK",
@@ -1426,11 +1411,8 @@
     {
       "key": "price_appreciation",
       "value": {
-        "type": "Object",
-        "data": {
-          "pct": 0,
-          "period": "since launch"
-        }
+        "type": "Text",
+        "data": "{\"pct\": 0, \"period\": \"since launch\"}"
       },
       "confidence": 0.6,
       "source": {
@@ -1452,7 +1434,7 @@
     {
       "key": "comparable_projects",
       "value": {
-        "type": "List",
+        "type": "Tags",
         "data": [
           "DNR Atmosphere, KR Puram",
           "Prestige Boulevard, Whitefield",
@@ -1490,5 +1472,6 @@
       "display_template": "Folium By Sumadhura Phase-IV is positioned in the premium segment for the Whitefield/KR Puram area, with an average price per sqft of ₹15,976, which is noted to be higher than the market average of ₹14,887 psft for similar options. As a new launch/under construction project with RERA registration in January 2026 and expected possession in March 2028, significant price appreciation data since launch is not yet established."
     }
   ],
-  "updated_at": "2026-03-13T15:11:56.737745+00:00"
+  "updated_at": "2026-03-13T15:11:56.737745+00:00",
+  "created_at": "2026-03-13T13:27:50.513281+00:00"
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyCard as PropertyCardType, PropertyDetailResponse } from "../lib/types.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -13,6 +13,14 @@ function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
   if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
   return `\u20B9${price.toLocaleString("en-IN")}`;
+}
+
+function hasKnownNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function isKnownText(value: string | null | undefined): value is string {
+  return !!value && value.trim().length > 0 && value !== "Not specified";
 }
 
 const LABEL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
@@ -35,6 +43,14 @@ export function PropertyCard({
   const [expanded, setExpanded] = useState(false);
   const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const specs = [
+    `${property.bhk} BHK`,
+    hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
+    isKnownText(property.facing) ? property.facing : null,
+    hasKnownNumber(property.floor) && hasKnownNumber(property.total_floors)
+      ? `Floor ${property.floor}/${property.total_floors}`
+      : null,
+  ].filter((spec): spec is string => spec !== null);
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -47,19 +63,16 @@ export function PropertyCard({
   const handleExpand = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setExpanded(!expanded);
-  };
-
-  // Fetch detail when expanding for the first time
-  useEffect(() => {
-    if (expanded && !detail && !detailLoading) {
+    const shouldExpand = !expanded;
+    setExpanded(shouldExpand);
+    if (shouldExpand && !detail && !detailLoading) {
       setDetailLoading(true);
       getProperty(property.id)
         .then(setDetail)
         .catch(() => {})
         .finally(() => setDetailLoading(false));
     }
-  }, [expanded, detail, detailLoading, property.id]);
+  };
 
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
 
@@ -78,7 +91,7 @@ export function PropertyCard({
           <button
             onClick={handleSave}
             className={`property-card-save ${saved ? "property-card-save--saved" : ""}`}
-            title={saved ? "Remove from shortlist" : "Save to shortlist"}
+            title={saved ? "Remove from decision sheet" : "Save to decision sheet"}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
@@ -106,24 +119,25 @@ export function PropertyCard({
         <div className="property-card-v2-body">
           <h3 className="property-card-v2-title">{property.title}</h3>
           <p className="property-card-v2-location">
-            {property.society_name} &middot; {property.area}
+            {property.society_name ? `${property.society_name} · ` : ""}{property.area}
           </p>
 
           <div className="property-card-v2-price-row">
             <span className="property-card-v2-price">{formatPrice(property.price)}</span>
-            <span className="property-card-v2-ppsqft">
-              {property.price_per_sqft.toLocaleString("en-IN")} /sqft
-            </span>
+            {hasKnownNumber(property.price_per_sqft) && (
+              <span className="property-card-v2-ppsqft">
+                {property.price_per_sqft.toLocaleString("en-IN")} /sqft
+              </span>
+            )}
           </div>
 
           <div className="property-card-v2-specs">
-            <span>{property.bhk} BHK</span>
-            <span>&middot;</span>
-            <span>{property.sqft} sqft</span>
-            <span>&middot;</span>
-            <span>{property.facing}</span>
-            <span>&middot;</span>
-            <span>Floor {property.floor}/{property.total_floors}</span>
+            {specs.map((spec, index) => (
+              <span key={spec}>
+                {index > 0 && <span>&middot; </span>}
+                {spec}
+              </span>
+            ))}
           </div>
 
           {/* Why this property */}
@@ -138,12 +152,16 @@ export function PropertyCard({
               displayText={property.project_status_display}
               possessionStatus={property.possession_status}
             />
-            <span className="property-signal">
-              {property.metro_distance_mins} min to metro
-            </span>
-            <span className="property-signal">
-              {property.builder_name}
-            </span>
+            {hasKnownNumber(property.metro_distance_mins) && (
+              <span className="property-signal">
+                {property.metro_distance_mins} min to metro
+              </span>
+            )}
+            {isKnownText(property.builder_name) && (
+              <span className="property-signal">
+                {property.builder_name}
+              </span>
+            )}
             <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
             <TrustBadge rootSource={property.root_source} compact />
           </div>
@@ -249,7 +267,7 @@ export function PropertyCard({
               <p className="quickview-summary">{detail.property.description_summary}</p>
 
               {/* Price context */}
-              {detail.area && (
+              {detail.area && hasKnownNumber(property.price_per_sqft) && (
                 <div className="quickview-row">
                   <span className="quickview-label">Price vs area median</span>
                   <span className="quickview-value" style={{
@@ -315,7 +333,7 @@ export function PropertyCard({
 
           <div className="quickview-actions">
             <button onClick={handleSave} className={`btn ${saved ? "btn-outline" : "btn-primary"}`} style={{ fontSize: "0.82rem" }}>
-              {saved ? "Saved to shortlist" : "Save to shortlist"}
+              {saved ? "In decision sheet" : "Save to sheet"}
             </button>
             <Link to={`/property/${property.id}`} className="btn btn-outline" style={{ fontSize: "0.82rem", textDecoration: "none" }}>
               Full details

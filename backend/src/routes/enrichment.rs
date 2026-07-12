@@ -66,42 +66,65 @@ pub struct AreaIntelligence {
 // ---------------------------------------------------------------------------
 
 fn get_text_fact(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
-        FactValue::Text(s) => Some(s.clone()),
-        _ => None,
-    })
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .and_then(|f| match &f.value {
+            FactValue::Text(s) => Some(s.clone()),
+            _ => None,
+        })
 }
 
 fn get_numeric_fact(facts: &[SourcedFact], key: &str) -> Option<f64> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
-        FactValue::Numeric(n) => Some(*n),
-        _ => None,
-    })
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .and_then(|f| match &f.value {
+            FactValue::Numeric(n) => Some(*n),
+            _ => None,
+        })
 }
 
 fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
-        FactValue::Bool(b) => Some(*b),
-        _ => None,
-    })
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .and_then(|f| match &f.value {
+            FactValue::Bool(b) => Some(*b),
+            _ => None,
+        })
 }
 
 fn get_fact_display_template(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| {
-        f.display_template.clone()
-    })
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .and_then(|f| f.display_template.clone())
 }
 
 fn get_tags_fact(facts: &[SourcedFact], key: &str) -> Vec<String> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).and_then(|f| match &f.value {
-        FactValue::Tags(tags) => Some(tags.clone()),
-        _ => None,
-    }).unwrap_or_default()
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .and_then(|f| match &f.value {
+            FactValue::Tags(tags) => Some(tags.clone()),
+            _ => None,
+        })
+        .unwrap_or_default()
 }
 
 /// Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
 fn get_fact_timestamp(facts: &[SourcedFact], key: &str) -> Option<String> {
-    facts.iter().filter(|f| f.key == key).max_by_key(|f| f.version).map(|f| f.learned_at.to_rfc3339())
+    facts
+        .iter()
+        .filter(|f| f.key == key)
+        .max_by_key(|f| f.version)
+        .map(|f| f.learned_at.to_rfc3339())
 }
 
 // ---------------------------------------------------------------------------
@@ -195,19 +218,34 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
 
 /// Extract area intelligence from the knowledge graph for a given area.
 /// Returns None if no Reddit-sourced area intelligence facts exist.
-pub fn extract_area_intelligence(graph: &KnowledgeGraph, area_id: &str) -> Option<AreaIntelligence> {
+pub fn extract_area_intelligence(
+    graph: &KnowledgeGraph,
+    area_id: &str,
+) -> Option<AreaIntelligence> {
     let node_id = area_node_id(area_id);
     let node = graph.get_node(&node_id)?;
     let facts = &node.facts;
 
     // Check if we have any area intelligence facts (Reddit-sourced or LLM-sourced)
     let intelligence_keys = [
-        "safety", "commute_reality", "water_supply", "noise_level",
-        "green_cover", "community_vibe", "walkability", "school_quality",
-        "grocery_shopping", "healthcare_access", "recurring_complaints",
-        "hidden_gems", "deal_breakers", "overall_sentiment",
+        "safety",
+        "commute_reality",
+        "water_supply",
+        "noise_level",
+        "green_cover",
+        "community_vibe",
+        "walkability",
+        "school_quality",
+        "grocery_shopping",
+        "healthcare_access",
+        "recurring_complaints",
+        "hidden_gems",
+        "deal_breakers",
+        "overall_sentiment",
     ];
-    let has_intelligence = facts.iter().any(|f| intelligence_keys.contains(&f.key.as_str()));
+    let has_intelligence = facts
+        .iter()
+        .any(|f| intelligence_keys.contains(&f.key.as_str()));
     if !has_intelligence {
         return None;
     }
@@ -259,8 +297,8 @@ fn builder_trust_from_facts(facts: &[SourcedFact]) -> Option<BuilderTrust> {
         return None;
     }
 
-    let delivery_display = get_fact_display_template(facts, "builder_delivery_rate")
-        .and_then(|tmpl| {
+    let delivery_display =
+        get_fact_display_template(facts, "builder_delivery_rate").and_then(|tmpl| {
             if tmpl.contains("{value}") {
                 delivery_rate.map(|r| {
                     let pct = (r * 100.0) as u32;
@@ -271,8 +309,7 @@ fn builder_trust_from_facts(facts: &[SourcedFact]) -> Option<BuilderTrust> {
             }
         });
 
-    let zero_revocations = get_text_fact(facts, "builder_zero_revocations")
-        .map(|v| v == "true");
+    let zero_revocations = get_text_fact(facts, "builder_zero_revocations").map(|v| v == "true");
 
     Some(BuilderTrust {
         delivery_rate,
@@ -332,9 +369,7 @@ pub fn extract_data_freshness(graph: &KnowledgeGraph, society_id: &str) -> Optio
     let node = graph.get_node(&node_id)?;
 
     // Use the most recent learned_at from any fact for freshness, falling back to node updated_at
-    let most_recent_fact_ts = node.facts.iter()
-        .map(|f| f.learned_at)
-        .max();
+    let most_recent_fact_ts = node.facts.iter().map(|f| f.learned_at).max();
     let effective_ts = most_recent_fact_ts.unwrap_or(node.updated_at);
     let last_enriched = effective_ts.to_rfc3339();
     let days_ago = (Utc::now() - effective_ts).num_days().max(0) as u32;
@@ -373,9 +408,7 @@ pub fn extract_data_freshness(graph: &KnowledgeGraph, society_id: &str) -> Optio
 /// Canonical slug: lowercase, hyphens, no "soc-" prefix.
 pub fn to_slug(id: &str) -> String {
     let s = id.to_lowercase().replace(['_', ' '], "-");
-    s.strip_prefix("soc-")
-        .unwrap_or(&s)
-        .to_string()
+    s.strip_prefix("soc-").unwrap_or(&s).to_string()
 }
 
 /// Build a society node ID for KG lookup.
@@ -394,26 +427,35 @@ pub fn area_node_id(area_name: &str) -> String {
 
 pub fn kg_numeric(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<f64> {
     let node = graph.get_node(node_id)?;
-    node.facts.iter().find(|f| f.key == key).and_then(|f| match &f.value {
-        FactValue::Numeric(n) => Some(*n),
-        _ => None,
-    })
+    node.facts
+        .iter()
+        .find(|f| f.key == key)
+        .and_then(|f| match &f.value {
+            FactValue::Numeric(n) => Some(*n),
+            _ => None,
+        })
 }
 
 pub fn kg_text(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<String> {
     let node = graph.get_node(node_id)?;
-    node.facts.iter().find(|f| f.key == key).and_then(|f| match &f.value {
-        FactValue::Text(s) => Some(s.clone()),
-        _ => None,
-    })
+    node.facts
+        .iter()
+        .find(|f| f.key == key)
+        .and_then(|f| match &f.value {
+            FactValue::Text(s) => Some(s.clone()),
+            _ => None,
+        })
 }
 
 pub fn kg_tags(graph: &KnowledgeGraph, node_id: &str, key: &str) -> Option<Vec<String>> {
     let node = graph.get_node(node_id)?;
-    node.facts.iter().find(|f| f.key == key).and_then(|f| match &f.value {
-        FactValue::Tags(tags) => Some(tags.clone()),
-        _ => None,
-    })
+    node.facts
+        .iter()
+        .find(|f| f.key == key)
+        .and_then(|f| match &f.value {
+            FactValue::Tags(tags) => Some(tags.clone()),
+            _ => None,
+        })
 }
 
 fn is_placeholder(s: &str) -> bool {
@@ -455,8 +497,7 @@ pub fn enrich_property_card_with_sellers(
     let node_id = society_node_id(&p.society_id);
 
     let google_rating = kg_numeric(graph, &node_id, "google_rating");
-    let google_review_count = kg_numeric(graph, &node_id, "google_review_count")
-        .map(|n| n as u32);
+    let google_review_count = kg_numeric(graph, &node_id, "google_review_count").map(|n| n as u32);
 
     // Use photo_url from KG if property has no hero_image
     let hero_image = if p.hero_image.is_empty() {
@@ -482,27 +523,28 @@ pub fn enrich_property_card_with_sellers(
         };
 
     // Extract root_source and project_status from the society KG node
-    let (root_source, project_status, project_status_display) = if let Some(node) = graph.get_node(&node_id) {
-        let rs = node.root_source.map(|r| r.as_str().to_string());
-        let ps = get_text_fact(&node.facts, "project_status");
-        let ps_display = get_fact_display_template(&node.facts, "project_status")
-            .and_then(|tmpl| {
-                // Replace {value} placeholder with the actual value
-                let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
-                if tmpl.contains("{value}") {
-                    Some(tmpl.replace("{value}", &val))
-                } else {
-                    Some(tmpl)
-                }
-            });
-        (rs, ps, ps_display)
-    } else {
-        (None, None, None)
-    };
+    let (root_source, project_status, project_status_display) =
+        if let Some(node) = graph.get_node(&node_id) {
+            let rs = node.root_source.map(|r| r.as_str().to_string());
+            let ps = get_text_fact(&node.facts, "project_status");
+            let ps_display =
+                get_fact_display_template(&node.facts, "project_status").and_then(|tmpl| {
+                    // Replace {value} placeholder with the actual value
+                    let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
+                    if tmpl.contains("{value}") {
+                        Some(tmpl.replace("{value}", &val))
+                    } else {
+                        Some(tmpl)
+                    }
+                });
+            (rs, ps, ps_display)
+        } else {
+            (None, None, None)
+        };
 
     // Extract builder delivery display from builder node via BuiltBy edge
-    let builder_delivery_display = extract_builder_trust(graph, &p.society_id)
-        .and_then(|bt| bt.delivery_display);
+    let builder_delivery_display =
+        extract_builder_trust(graph, &p.society_id).and_then(|bt| bt.delivery_display);
 
     // Extract data freshness from the society KG node
     let data_freshness = extract_data_freshness(graph, &p.society_id);
@@ -713,7 +755,10 @@ mod tests {
         // Create orphan builder node with canonical_builder pointing to canonical
         let orphan_id = "builder:orphan-builder";
         let mut orphan = Node::new(orphan_id, NodeType::Builder, "Orphan Builder");
-        orphan.add_fact(make_text_fact("canonical_builder", "builder:canonical-builder"));
+        orphan.add_fact(make_text_fact(
+            "canonical_builder",
+            "builder:canonical-builder",
+        ));
         g.add_node(orphan);
 
         // Create canonical builder node with actual delivery data
