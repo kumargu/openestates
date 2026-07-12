@@ -220,8 +220,22 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
             let area: String = fact_text(node, "area").into();
             let area_slug = area.to_lowercase().replace(' ', "-");
             let bhk = fact_numeric(node, "bhk") as u32;
-            let price = fact_numeric(node, "price") as u64;
-            let carpet_area_sqft = fact_numeric(node, "carpet_area_sqft") as u32;
+            let mut price = fact_numeric(node, "price") as u64;
+            let mut carpet_area_sqft = fact_numeric(node, "carpet_area_sqft") as u32;
+            if let Some(pricing) = market_pricing_for_property(graph, &id, bhk) {
+                let price_confidence = fact_confidence(node, "price");
+                let sqft_confidence = fact_confidence(node, "carpet_area_sqft");
+                if should_use_market_pricing(
+                    price,
+                    carpet_area_sqft,
+                    price_confidence,
+                    sqft_confidence,
+                    pricing,
+                ) {
+                    price = pricing.representative_price();
+                    carpet_area_sqft = pricing.representative_sqft();
+                }
+            }
             let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
                 price / carpet_area_sqft as u64
             } else {
@@ -393,6 +407,98 @@ fn derive_society_id(property_id: &str) -> String {
     format!("soc-{}", slug)
 }
 
+#[derive(Clone, Copy, Debug)]
+struct MarketPricing {
+    price_low: u64,
+    price_high: u64,
+    sqft_low: u32,
+    sqft_high: u32,
+}
+
+impl MarketPricing {
+    fn representative_price(&self) -> u64 {
+        (self.price_low + self.price_high) / 2
+    }
+
+    fn representative_sqft(&self) -> u32 {
+        (self.sqft_low + self.sqft_high) / 2
+    }
+}
+
+fn market_pricing_for_property(
+    graph: &KnowledgeGraph,
+    property_id: &str,
+    bhk: u32,
+) -> Option<MarketPricing> {
+    if bhk == 0 {
+        return None;
+    }
+
+    let society_id = derive_society_id(property_id);
+    let slug = society_id.strip_prefix("soc-")?;
+    let society_node = graph.get_node(&format!("society:{}", slug))?;
+    let pricing_text: String = fact_text(society_node, &format!("pricing_{}bhk", bhk)).into();
+    parse_market_pricing(&pricing_text)
+}
+
+fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
+    if raw.trim().is_empty() {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let price_range = value.get("price_range_lakh")?.as_str()?;
+    let sqft_range = value.get("sqft_range")?.as_str()?;
+    let (price_low_lakh, price_high_lakh) = parse_number_range(price_range)?;
+    let (sqft_low, sqft_high) = parse_number_range(sqft_range)?;
+
+    Some(MarketPricing {
+        price_low: (price_low_lakh * 100_000.0).round() as u64,
+        price_high: (price_high_lakh * 100_000.0).round() as u64,
+        sqft_low: sqft_low.round() as u32,
+        sqft_high: sqft_high.round() as u32,
+    })
+}
+
+fn parse_number_range(raw: &str) -> Option<(f64, f64)> {
+    let numbers: Vec<f64> = raw
+        .split(|c: char| !(c.is_ascii_digit() || c == '.'))
+        .filter(|part| !part.is_empty())
+        .filter_map(|part| part.parse::<f64>().ok())
+        .collect();
+
+    match numbers.as_slice() {
+        [] => None,
+        [single] => Some((*single, *single)),
+        many => Some((many[0], *many.last().unwrap_or(&many[0]))),
+    }
+}
+
+fn should_use_market_pricing(
+    price: u64,
+    sqft: u32,
+    price_confidence: f32,
+    sqft_confidence: f32,
+    pricing: MarketPricing,
+) -> bool {
+    let low_confidence = price_confidence <= 0.65 || sqft_confidence <= 0.65;
+    if !low_confidence {
+        return false;
+    }
+
+    let price_low_floor = pricing.price_low.saturating_mul(3) / 4;
+    let price_high_ceiling = pricing.price_high.saturating_mul(5) / 4;
+    let sqft_low_floor = pricing.sqft_low.saturating_mul(1) / 2;
+    let sqft_high_ceiling = pricing.sqft_high.saturating_mul(3) / 2;
+
+    price == 0
+        || sqft == 0
+        || price < price_low_floor
+        || price > price_high_ceiling
+        || sqft < sqft_low_floor
+        || sqft > sqft_high_ceiling
+}
+
 // --- Fact extraction helpers ---
 
 /// A string wrapper that supports fallback chaining via `.or_fact_text()`.
@@ -459,6 +565,10 @@ fn fact_numeric(node: &knowledge::node::Node, key: &str) -> f64 {
             _ => 0.0,
         })
         .unwrap_or(0.0)
+}
+
+fn fact_confidence(node: &knowledge::node::Node, key: &str) -> f32 {
+    node.get_fact(key).map(|f| f.confidence).unwrap_or(0.0)
 }
 
 /// Extract a tags fact value, returning empty vec if missing.
@@ -593,6 +703,12 @@ mod tests {
         node
     }
 
+    fn low_conf_numeric_fact(key: &str, value: f64) -> SourcedFact {
+        let mut fact = SourcedFact::manual(key, FactValue::Numeric(value));
+        fact.confidence = 0.6;
+        fact
+    }
+
     #[test]
     fn test_properties_from_graph() {
         let mut graph = KnowledgeGraph::new();
@@ -655,6 +771,57 @@ mod tests {
             .contains(&"Discovered via Search".to_string()));
         assert!(p.greenery_score.is_none());
         assert!(p.seller_id.is_none());
+    }
+
+    #[test]
+    fn test_low_confidence_property_uses_society_market_pricing() {
+        let mut graph = KnowledgeGraph::new();
+        let mut society = make_society_node(
+            "prestige-raintree-park",
+            "Prestige Raintree Park",
+            "Whitefield",
+            "Prestige Group",
+        );
+        society.add_fact(SourcedFact::manual(
+            "pricing_3bhk",
+            FactValue::Text(
+                r#"{"bhk":"3BHK","price_range_lakh":"259-353","sqft_range":"2004-2482"}"#.into(),
+            ),
+        ));
+        graph.add_node(society);
+
+        let id = "property:discovered-prestige-raintree-park-3bhk";
+        let mut property = Node::new(id, NodeType::Property, "Prestige Raintree Park");
+        property.add_facts(vec![
+            SourcedFact::manual("area", FactValue::Text("Whitefield".into())),
+            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
+            SourcedFact::manual("builder_name", FactValue::Text("Prestige Group".into())),
+            SourcedFact::manual("bhk", FactValue::Numeric(3.0)),
+            low_conf_numeric_fact("price", 11_500_000.0),
+            low_conf_numeric_fact("carpet_area_sqft", 521.0),
+            SourcedFact::manual(
+                "title",
+                FactValue::Text("3 BHK in Prestige Raintree Park".into()),
+            ),
+        ]);
+        graph.add_node(property);
+        graph.rebuild_indexes();
+
+        let properties = properties_from_graph(&graph);
+        let p = properties
+            .iter()
+            .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
+            .expect("property should be derived");
+        assert_eq!(p.price, 30_600_000);
+        assert_eq!(p.carpet_area_sqft, 2243);
+        assert_eq!(p.price_per_sqft, 13_642);
+    }
+
+    #[test]
+    fn test_parse_number_range() {
+        assert_eq!(parse_number_range("259-353"), Some((259.0, 353.0)));
+        assert_eq!(parse_number_range("2004-2482"), Some((2004.0, 2482.0)));
+        assert_eq!(parse_number_range("200"), Some((200.0, 200.0)));
     }
 
     #[test]

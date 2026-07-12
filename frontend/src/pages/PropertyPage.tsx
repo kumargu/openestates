@@ -5,7 +5,7 @@ import type { BuilderPortfolio, PropertyDetailResponse, SourcePanel } from "../l
 import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { isKeptHome, toggleKeptHome } from "../lib/kept-homes-store.ts";
+import { isOnSheet, toggleSheetItem } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 
@@ -58,7 +58,7 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
   return jsonLd;
 }
 
-type DecisionTone = "keep" | "verify" | "negotiate";
+type DecisionTone = "compare" | "verify" | "negotiate";
 
 type RiskSignal = {
   label: string;
@@ -144,9 +144,9 @@ function buildDecision(data: PropertyDetailResponse): {
   }
 
   return {
-    label: "Keep on sheet",
-    tone: "keep",
-    summary: "Price, source, and risk are balanced enough to keep this on the sheet.",
+    label: "Worth comparing",
+    tone: "compare",
+    summary: "Price, source, and risk are balanced enough to compare against other saved homes.",
   };
 }
 
@@ -159,7 +159,7 @@ export function PropertyPage() {
 
   useEffect(() => {
     if (!id) return;
-    queueMicrotask(() => setSaved(isKeptHome(id)));
+    queueMicrotask(() => setSaved(isOnSheet(id)));
     getProperty(id)
       .then((d) => {
         setData(d);
@@ -210,7 +210,7 @@ export function PropertyPage() {
 
   const handleSave = () => {
     if (!id) return;
-    toggleKeptHome(id);
+    toggleSheetItem(id);
     setSaved(!saved);
   };
 
@@ -338,7 +338,7 @@ export function PropertyPage() {
             onClick={handleSave}
             className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
           >
-            {saved ? "\u2665 Kept" : "\u2661 Keep"}
+            {saved ? "\u2665 On sheet" : "\u2661 Add to sheet"}
           </button>
         </div>
       </section>

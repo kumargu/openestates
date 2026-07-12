@@ -52,13 +52,13 @@
       "key": "price",
       "value": {
         "type": "Numeric",
-        "data": 11500000.0
+        "data": 33000000.0
       },
-      "confidence": 0.6,
+      "confidence": 0.7,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "discover_properties"
+        "skill_id": "fetch_market_pricing"
       },
       "learned_at": "2026-03-09T16:46:35.762189Z",
       "version": 1
@@ -67,13 +67,13 @@
       "key": "carpet_area_sqft",
       "value": {
         "type": "Numeric",
-        "data": 521.0
+        "data": 2482.0
       },
-      "confidence": 0.6,
+      "confidence": 0.7,
       "source": {
         "source_type": "Google",
         "model": "gemini-2.5-flash",
-        "skill_id": "discover_properties"
+        "skill_id": "fetch_market_pricing"
       },
       "learned_at": "2026-03-09T16:46:35.762189Z",
       "version": 1

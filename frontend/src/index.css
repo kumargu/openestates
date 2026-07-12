@@ -1229,7 +1229,7 @@ body {
   }
 }
 
-.kept-tray {
+.sheet-tray {
   margin: 0 0 1.25rem;
   border: 1px solid rgba(201, 107, 79, 0.16);
   border-radius: 14px;
@@ -1238,7 +1238,7 @@ body {
   overflow: hidden;
 }
 
-.kept-tray-toggle {
+.sheet-tray-toggle {
   width: 100%;
   min-height: 64px;
   display: flex;
@@ -1254,18 +1254,18 @@ body {
   cursor: pointer;
 }
 
-.kept-tray-toggle:hover {
+.sheet-tray-toggle:hover {
   background: rgba(201, 107, 79, 0.04);
 }
 
-.kept-tray-copy {
+.sheet-tray-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
 }
 
-.kept-tray-kicker {
+.sheet-tray-kicker {
   font-size: 0.66rem;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -1273,13 +1273,13 @@ body {
   color: var(--color-accent);
 }
 
-.kept-tray-copy strong {
+.sheet-tray-copy strong {
   color: var(--color-text);
   font-size: 0.9rem;
   letter-spacing: 0;
 }
 
-.kept-tray-action {
+.sheet-tray-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1294,7 +1294,7 @@ body {
   font-weight: 700;
 }
 
-.kept-tray-action i {
+.sheet-tray-action i {
   width: 7px;
   height: 7px;
   border-right: 1.5px solid currentColor;
@@ -1303,11 +1303,11 @@ body {
   transition: transform 0.18s ease;
 }
 
-.kept-tray--open .kept-tray-action i {
+.sheet-tray--open .sheet-tray-action i {
   transform: rotate(225deg) translate(-1px, -1px);
 }
 
-.kept-tray-panel {
+.sheet-tray-panel {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 0.65rem;
@@ -1316,7 +1316,7 @@ body {
   background: rgba(249, 245, 242, 0.66);
 }
 
-.kept-tray-item {
+.sheet-tray-item {
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 30px;
@@ -1328,7 +1328,7 @@ body {
   background: rgba(255, 255, 255, 0.86);
 }
 
-.kept-tray-link {
+.sheet-tray-link {
   min-width: 0;
   display: grid;
   grid-template-columns: 48px minmax(0, 1fr);
@@ -1338,15 +1338,15 @@ body {
   text-decoration: none;
 }
 
-.kept-tray-link:hover strong {
+.sheet-tray-link:hover strong {
   color: var(--color-accent);
 }
 
-.kept-tray-link--missing {
+.sheet-tray-link--missing {
   color: var(--color-text-muted);
 }
 
-.kept-tray-image {
+.sheet-tray-image {
   width: 48px;
   height: 48px;
   border-radius: 8px;
@@ -1354,43 +1354,43 @@ body {
   background: linear-gradient(135deg, #f0eeeb, #e8e6e3);
 }
 
-.kept-tray-image img {
+.sheet-tray-image img {
   object-fit: cover;
 }
 
-.kept-tray-item-copy {
+.sheet-tray-item-copy {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.12rem;
 }
 
-.kept-tray-item-copy strong,
-.kept-tray-item-copy > span:not(.kept-tray-meta) {
+.sheet-tray-item-copy strong,
+.sheet-tray-item-copy > span:not(.sheet-tray-meta) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.kept-tray-item-copy strong {
+.sheet-tray-item-copy strong {
   color: var(--color-text);
   font-size: 0.82rem;
   line-height: 1.3;
 }
 
-.kept-tray-item-copy span {
+.sheet-tray-item-copy span {
   color: var(--color-text-secondary);
   font-size: 0.73rem;
 }
 
-.kept-tray-meta {
+.sheet-tray-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 0.22rem;
   margin-top: 0.18rem;
 }
 
-.kept-tray-meta em {
+.sheet-tray-meta em {
   min-height: 20px;
   display: inline-flex;
   align-items: center;
@@ -1405,7 +1405,7 @@ body {
   letter-spacing: 0;
 }
 
-.kept-tray-remove {
+.sheet-tray-remove {
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -1422,13 +1422,13 @@ body {
   transition: all 0.2s ease;
 }
 
-.kept-tray-remove:hover {
+.sheet-tray-remove:hover {
   color: var(--color-negative);
   border-color: rgba(179, 51, 51, 0.24);
   background: var(--color-negative-bg);
 }
 
-.kept-tray-overflow {
+.sheet-tray-overflow {
   grid-column: 1 / -1;
   margin: 0;
   color: var(--color-text-secondary);
@@ -1436,16 +1436,16 @@ body {
 }
 
 @media (max-width: 560px) {
-  .kept-tray-toggle {
+  .sheet-tray-toggle {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .kept-tray-action {
+  .sheet-tray-action {
     width: 100%;
   }
 
-  .kept-tray-panel {
+  .sheet-tray-panel {
     grid-template-columns: 1fr;
   }
 }
@@ -1939,7 +1939,7 @@ body {
   border: 1px solid transparent;
 }
 
-.property-verdict--keep {
+.property-verdict--compare {
   color: var(--color-positive);
   background: var(--color-positive-bg);
   border-color: var(--color-positive-border);

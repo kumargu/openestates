@@ -1,5 +1,5 @@
 /**
- * Results page with inline saved-candidate actions and backend search integration.
+ * Results page with inline sheet actions and backend search integration.
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
@@ -21,12 +21,12 @@ import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
 import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
 import {
-  getKeptHomeItems,
-  isKeptHome,
-  removeKeptHome as removeKeptHomeFromStore,
-  toggleKeptHome,
-  type KeptHomeItem,
-} from "../lib/kept-homes-store.ts";
+  getSheetItems,
+  isOnSheet,
+  removeFromSheet,
+  toggleSheetItem,
+  type SheetItem,
+} from "../lib/sheet-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
 
 function formatPrice(price: number): string {
@@ -271,7 +271,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   onQuickView?: (id: string) => void;
   onSaveChange?: () => void;
 }) {
-  const [saved, setSaved] = useState(() => isKeptHome(property.id));
+  const [onSheet, setOnSheet] = useState(() => isOnSheet(property.id));
   const specs = [
     `${property.bhk} BHK`,
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
@@ -284,7 +284,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setSaved(toggleKeptHome(property.id));
+    setOnSheet(toggleSheetItem(property.id));
     onSaveChange?.();
   };
 
@@ -419,11 +419,11 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
 
       {/* Always-visible action bar */}
       <div className="card-a-actions">
-        <button onClick={handleSave} className={`card-a-save-btn ${saved ? "card-a-save-btn--saved" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <button onClick={handleSave} className={`card-a-save-btn ${onSheet ? "card-a-save-btn--saved" : ""}`}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-          {saved ? "Kept" : "Keep"}
+          {onSheet ? "On sheet" : "Add to sheet"}
         </button>
         <button className="card-a-detail-btn" onClick={handleQuickView}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -446,7 +446,7 @@ function rootSourceLabel(source: string | undefined): string {
   return "Source pending";
 }
 
-function keptHomeSignals(property: PropertyCardType): string[] {
+function sheetSignals(property: PropertyCardType): string[] {
   const signals = [
     rootSourceLabel(property.root_source),
     property.google_rating ? `Google ${property.google_rating.toFixed(1)}` : null,
@@ -457,12 +457,12 @@ function keptHomeSignals(property: PropertyCardType): string[] {
   return signals.slice(0, 4);
 }
 
-function KeptHomesTray({
+function SheetTray({
   items,
   propertiesById,
   onRemove,
 }: {
-  items: KeptHomeItem[];
+  items: SheetItem[];
   propertiesById: Map<string, PropertyCardType>;
   onRemove: (id: string) => void;
 }) {
@@ -472,34 +472,34 @@ function KeptHomesTray({
   const visibleItems = items.slice(0, 6);
 
   return (
-    <div className={`kept-tray${open ? " kept-tray--open" : ""}`}>
-      <button type="button" className="kept-tray-toggle" onClick={() => setOpen((value) => !value)}>
-        <span className="kept-tray-copy">
-          <span className="kept-tray-kicker">Kept homes</span>
-          <strong>{items.length} saved {items.length === 1 ? "candidate" : "candidates"}</strong>
+    <div className={`sheet-tray${open ? " sheet-tray--open" : ""}`}>
+      <button type="button" className="sheet-tray-toggle" onClick={() => setOpen((value) => !value)}>
+        <span className="sheet-tray-copy">
+          <span className="sheet-tray-kicker">Sheet</span>
+          <strong>{items.length} {items.length === 1 ? "home" : "homes"} on sheet</strong>
         </span>
-        <span className="kept-tray-action">
-          {open ? "Hide" : "Review"}
+        <span className="sheet-tray-action">
+          {open ? "Close" : "Open"}
           <i aria-hidden="true" />
         </span>
       </button>
 
       {open && (
-        <div className="kept-tray-panel">
+        <div className="sheet-tray-panel">
           {visibleItems.map((item) => {
             const property = propertiesById.get(item.id);
-            const signals = property ? keptHomeSignals(property) : [];
+            const signals = property ? sheetSignals(property) : [];
             return (
-              <div key={item.id} className="kept-tray-item">
+              <div key={item.id} className="sheet-tray-item">
                 {property ? (
-                  <Link to={`/property/${property.id}`} className="kept-tray-link">
-                    <span className="kept-tray-image">
+                  <Link to={`/property/${property.id}`} className="sheet-tray-link">
+                    <span className="sheet-tray-image">
                       <ImageWithFallback src={property.hero_image} alt={property.title} style={{ width: "100%", height: "100%" }} />
                     </span>
-                    <span className="kept-tray-item-copy">
+                    <span className="sheet-tray-item-copy">
                       <strong>{property.title}</strong>
                       <span>{property.area} · {formatPrice(property.price)}</span>
-                      <span className="kept-tray-meta">
+                      <span className="sheet-tray-meta">
                         {signals.map((signal) => (
                           <em key={signal}>{signal}</em>
                         ))}
@@ -507,15 +507,15 @@ function KeptHomesTray({
                     </span>
                   </Link>
                 ) : (
-                  <span className="kept-tray-link kept-tray-link--missing">
-                    <span className="kept-tray-image" />
-                    <span className="kept-tray-item-copy">
-                      <strong>Saved home</strong>
-                      <span>Refresh results to reload this candidate.</span>
+                  <span className="sheet-tray-link sheet-tray-link--missing">
+                    <span className="sheet-tray-image" />
+                    <span className="sheet-tray-item-copy">
+                      <strong>Sheet item</strong>
+                      <span>Refresh results to reload this home.</span>
                     </span>
                   </span>
                 )}
-                <button type="button" className="kept-tray-remove" onClick={() => onRemove(item.id)} aria-label="Remove saved home">
+                <button type="button" className="sheet-tray-remove" onClick={() => onRemove(item.id)} aria-label="Remove from sheet">
                   -
                 </button>
               </div>
@@ -523,8 +523,8 @@ function KeptHomesTray({
           })}
 
           {items.length > visibleItems.length && (
-            <p className="kept-tray-overflow">
-              {items.length - visibleItems.length} more saved. Refine search to bring them back into view.
+            <p className="sheet-tray-overflow">
+              {items.length - visibleItems.length} more on sheet. Refine search to bring them back into view.
             </p>
           )}
         </div>
@@ -649,8 +649,8 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
-  const [savedItems, setSavedItems] = useState<KeptHomeItem[]>(() => getKeptHomeItems());
-  const refreshSavedItems = () => setSavedItems(getKeptHomeItems());
+  const [sheetItems, setSheetItems] = useState<SheetItem[]>(() => getSheetItems());
+  const refreshSheetItems = () => setSheetItems(getSheetItems());
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -761,9 +761,9 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     return next;
   }, [matchResults, properties]);
 
-  const removeKeptHome = (id: string) => {
-    removeKeptHomeFromStore(id);
-    refreshSavedItems();
+  const removeSheetItem = (id: string) => {
+    removeFromSheet(id);
+    refreshSheetItems();
   };
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
@@ -953,7 +953,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
 
-      <KeptHomesTray items={savedItems} propertiesById={propertiesById} onRemove={removeKeptHome} />
+      <SheetTray items={sheetItems} propertiesById={propertiesById} onRemove={removeSheetItem} />
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
@@ -1009,7 +1009,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
               explanation={explanation}
               confidenceScore={confidenceScore}
               onQuickView={setPanelPropertyId}
-              onSaveChange={refreshSavedItems}
+              onSaveChange={refreshSheetItems}
             />
         ))}
       </div>
@@ -1023,7 +1023,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             propertyId={panelPropertyId}
             card={panelCard}
             onClose={() => setPanelPropertyId(null)}
-            onSaveChange={refreshSavedItems}
+            onSaveChange={refreshSheetItems}
           />
         );
       })()}
