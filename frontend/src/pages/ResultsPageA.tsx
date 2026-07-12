@@ -3,10 +3,10 @@
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, type FormEvent, type ReactNode } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchIntent } from "../lib/types.ts";
+import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchIntent } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -33,6 +33,11 @@ function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
   if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
   return `\u20B9${price.toLocaleString("en-IN")}`;
+}
+
+function formatMetric(value: number | null | undefined, suffix = ""): string {
+  if (!hasKnownNumber(value)) return "—";
+  return `${value.toLocaleString("en-IN")}${suffix}`;
 }
 
 function formatBudgetBrief(price: number | null): string {
@@ -533,6 +538,243 @@ function SheetTray({
   );
 }
 
+type ResultsViewMode = "cards" | "sheet";
+type SheetSortKey = "sheet" | "price" | "sqft" | "ppsqft" | "match";
+
+type SheetCompareRow = {
+  property: PropertyCardType;
+  item?: SheetItem;
+  match?: MatchResult;
+  confidenceScore?: ConfidenceScore;
+  onSheet: boolean;
+};
+
+const SHEET_TAG_LABELS: Record<SheetItem["tag"], string> = {
+  watching: "Watching",
+  finalist: "Finalist",
+  verify: "Verify",
+  stretch: "Stretch",
+};
+
+const MATCH_SORT_ORDER: Record<MatchResult["label"], number> = {
+  "Strong match": 0,
+  "Good match": 1,
+  "Value pick": 2,
+  "Premium match": 2,
+  Candidate: 3,
+  "Similar profile": 4,
+};
+
+function ViewModeSwitch({
+  mode,
+  sheetCount,
+  onChange,
+}: {
+  mode: ResultsViewMode;
+  sheetCount: number;
+  onChange: (mode: ResultsViewMode) => void;
+}) {
+  return (
+    <div className="results-view-switch" aria-label="Results view">
+      <button
+        type="button"
+        className={mode === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
+        onClick={() => onChange("cards")}
+        aria-pressed={mode === "cards"}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <rect x="3" y="3" width="7" height="7" rx="1.5" />
+          <rect x="14" y="3" width="7" height="7" rx="1.5" />
+          <rect x="3" y="14" width="7" height="7" rx="1.5" />
+          <rect x="14" y="14" width="7" height="7" rx="1.5" />
+        </svg>
+        Discovery
+      </button>
+      <button
+        type="button"
+        className={mode === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
+        onClick={() => onChange("sheet")}
+        aria-pressed={mode === "sheet"}
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 6h16" />
+          <path d="M4 12h16" />
+          <path d="M4 18h16" />
+          <path d="M9 4v16" />
+          <path d="M15 4v16" />
+        </svg>
+        Sheet
+        {sheetCount > 0 && <span>{sheetCount}</span>}
+      </button>
+    </div>
+  );
+}
+
+function sortValue(row: SheetCompareRow, key: SheetSortKey): number {
+  if (key === "price") return row.property.price || Number.MAX_SAFE_INTEGER;
+  if (key === "sqft") return row.property.sqft || Number.MAX_SAFE_INTEGER;
+  if (key === "ppsqft") return row.property.price_per_sqft || Number.MAX_SAFE_INTEGER;
+  if (key === "match") return row.match ? MATCH_SORT_ORDER[row.match.label] : Number.MAX_SAFE_INTEGER;
+  return row.onSheet ? 0 : 1;
+}
+
+function SheetSortButton({
+  sortKey,
+  active,
+  onSort,
+  children,
+}: {
+  sortKey: SheetSortKey;
+  active: boolean;
+  onSort: (key: SheetSortKey) => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={active ? "comparison-sort-btn comparison-sort-btn--active" : "comparison-sort-btn"}
+      onClick={() => onSort(sortKey)}
+    >
+      {children}
+    </button>
+  );
+}
+
+function SheetCompareView({
+  rows,
+  missingSheetCount,
+  showingSaved,
+  sortKey,
+  onSortChange,
+  onQuickView,
+  onSheetToggle,
+}: {
+  rows: SheetCompareRow[];
+  missingSheetCount: number;
+  showingSaved: boolean;
+  sortKey: SheetSortKey;
+  onSortChange: (key: SheetSortKey) => void;
+  onQuickView: (id: string) => void;
+  onSheetToggle: (id: string) => void;
+}) {
+  const sortedRows = useMemo(() => {
+    return rows
+      .map((row, index) => ({ row, index }))
+      .sort((a, b) => {
+        const diff = sortValue(a.row, sortKey) - sortValue(b.row, sortKey);
+        return diff || a.index - b.index;
+      })
+      .map(({ row }) => row);
+  }, [rows, sortKey]);
+
+  if (rows.length === 0) {
+    return (
+      <section className="comparison-sheet comparison-sheet--empty">
+        <div>
+          <span className="comparison-sheet-kicker">Sheet</span>
+          <h2>No homes on sheet yet</h2>
+        </div>
+        <p>Add homes from discovery to compare price, area, source, and status in one place.</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="comparison-sheet" aria-label="Comparison sheet">
+      <div className="comparison-sheet-toolbar">
+        <div className="comparison-sheet-heading">
+          <span className="comparison-sheet-kicker">{showingSaved ? "Sheet homes" : "Current results"}</span>
+          <h2>{sortedRows.length} {sortedRows.length === 1 ? "home" : "homes"} compared</h2>
+        </div>
+        <div className="comparison-sort-group" aria-label="Sort comparison sheet">
+          <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Sheet</SheetSortButton>
+          <SheetSortButton sortKey="match" active={sortKey === "match"} onSort={onSortChange}>Fit</SheetSortButton>
+          <SheetSortButton sortKey="price" active={sortKey === "price"} onSort={onSortChange}>Price</SheetSortButton>
+          <SheetSortButton sortKey="sqft" active={sortKey === "sqft"} onSort={onSortChange}>Sqft</SheetSortButton>
+          <SheetSortButton sortKey="ppsqft" active={sortKey === "ppsqft"} onSort={onSortChange}>/sqft</SheetSortButton>
+        </div>
+      </div>
+
+      <div className="comparison-table-scroll">
+        <table className="comparison-table">
+          <thead>
+            <tr>
+              <th className="comparison-table-home">Home</th>
+              <th>Area</th>
+              <th>BHK</th>
+              <th>Price</th>
+              <th>Sqft</th>
+              <th>₹/sqft</th>
+              <th>Status</th>
+              <th>Source</th>
+              <th>Signal</th>
+              <th aria-label="Actions" />
+            </tr>
+          </thead>
+          <tbody>
+            {sortedRows.map(({ property, item, match, confidenceScore, onSheet }) => (
+              <tr key={property.id}>
+                <td className="comparison-table-home">
+                  <Link to={`/property/${property.id}`} className="comparison-home-link">
+                    <strong>{property.title}</strong>
+                    <span>{isKnownText(property.builder_name) ? property.builder_name : "Builder pending"}</span>
+                  </Link>
+                </td>
+                <td>{property.area || "—"}</td>
+                <td>{property.bhk ? `${property.bhk}` : "—"}</td>
+                <td className="comparison-num">{property.price ? formatPrice(property.price) : "—"}</td>
+                <td className="comparison-num">{formatMetric(property.sqft)}</td>
+                <td className="comparison-num">{formatMetric(property.price_per_sqft)}</td>
+                <td>
+                  <ProjectStatusTag
+                    status={property.project_status}
+                    possessionStatus={property.possession_status}
+                  />
+                </td>
+                <td>
+                  <span className="comparison-source-stack">
+                    <TrustBadge rootSource={property.root_source} compact />
+                    <DataFreshnessBadge freshness={property.data_freshness} compact />
+                  </span>
+                </td>
+                <td>
+                  <span className="comparison-signal-stack">
+                    {item && <em className="comparison-sheet-chip">{SHEET_TAG_LABELS[item.tag]}</em>}
+                    {match ? <em>{match.label}</em> : <em>{rootSourceLabel(property.root_source)}</em>}
+                    <ConfidenceMeter confidence={confidenceScore} compact />
+                  </span>
+                </td>
+                <td className="comparison-actions">
+                  <button type="button" className="comparison-icon-btn" onClick={() => onQuickView(property.id)} aria-label={`Quick view ${property.title}`}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M12 16v-4" />
+                      <path d="M12 8h.01" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    className={onSheet ? "comparison-sheet-toggle comparison-sheet-toggle--on" : "comparison-sheet-toggle"}
+                    onClick={() => onSheetToggle(property.id)}
+                  >
+                    {onSheet ? "On sheet" : "Add"}
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {missingSheetCount > 0 && (
+        <p className="comparison-sheet-footnote">
+          {missingSheetCount} saved {missingSheetCount === 1 ? "home is" : "homes are"} outside the loaded catalog.
+        </p>
+      )}
+    </section>
+  );
+}
+
 /* ---------- Match Explanation Block ---------- */
 
 function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation }) {
@@ -645,47 +887,80 @@ type SearchExperienceProps = {
 export function SearchExperience({ variant = "page", onSearchCommit }: SearchExperienceProps) {
   const isEmbedded = variant === "embedded";
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
+  const [catalogProperties, setCatalogProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
   const [sheetItems, setSheetItems] = useState<SheetItem[]>(() => getSheetItems());
+  const [sheetSortKey, setSheetSortKey] = useState<SheetSortKey>("sheet");
   const refreshSheetItems = () => setSheetItems(getSheetItems());
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
+  const viewMode: ResultsViewMode = searchParams.get("view") === "sheet" ? "sheet" : "cards";
   const [searchInput, setSearchInput] = useState(query);
 
   useEffect(() => {
     setSearchInput(query);
   }, [query]);
 
-  const handleSearch = (e: React.FormEvent) => {
+  const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     const q = searchInput.trim();
+    const nextParams = new URLSearchParams();
+    if (viewMode === "sheet") nextParams.set("view", "sheet");
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
       onSearchCommit?.(q);
-      setSearchParams({ q });
+      nextParams.set("q", q);
+      setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
       // Preserve area filter if present
-      if (areaFilter) {
-        setSearchParams({ area: areaFilter });
-      } else {
-        setSearchParams({});
-      }
+      if (areaFilter) nextParams.set("area", areaFilter);
+      setSearchParams(nextParams);
     }
   };
 
   const clearAreaFilter = () => {
-    if (query) {
-      setSearchParams({ q: query });
-    } else {
-      setSearchParams({});
-    }
+    const nextParams = new URLSearchParams();
+    if (viewMode === "sheet") nextParams.set("view", "sheet");
+    if (query) nextParams.set("q", query);
+    setSearchParams(nextParams);
   };
+
+  const setViewMode = (mode: ResultsViewMode) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (mode === "sheet") {
+      nextParams.set("view", "sheet");
+    } else {
+      nextParams.delete("view");
+    }
+    setSearchParams(nextParams);
+  };
+
+  const setQueryPreservingView = (nextQuery: string) => {
+    const nextParams = new URLSearchParams();
+    if (viewMode === "sheet") nextParams.set("view", "sheet");
+    if (nextQuery) nextParams.set("q", nextQuery);
+    setSearchParams(nextParams);
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    getProperties()
+      .then((data) => {
+        if (!cancelled) setCatalogProperties(data);
+      })
+      .catch(() => {
+        if (!cancelled) setCatalogProperties([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // When there's a search query, call the backend search API.
   // When there's no query, load all properties.
@@ -738,7 +1013,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; confidenceScore?: import("../lib/types.ts").ConfidenceScore }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; confidenceScore?: ConfidenceScore }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -756,22 +1031,71 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
   const propertiesById = useMemo(() => {
     const next = new Map<string, PropertyCardType>();
+    for (const property of catalogProperties) next.set(property.id, property);
     for (const property of properties) next.set(property.id, property);
     for (const { property } of matchResults) next.set(property.id, property);
     return next;
-  }, [matchResults, properties]);
+  }, [catalogProperties, matchResults, properties]);
+
+  const sheetIds = useMemo(() => new Set(sheetItems.map((item) => item.id)), [sheetItems]);
 
   const removeSheetItem = (id: string) => {
     removeFromSheet(id);
     refreshSheetItems();
   };
 
+  const toggleSheetFromComparison = (id: string) => {
+    toggleSheetItem(id);
+    refreshSheetItems();
+  };
+
+  const matchById = useMemo(() => {
+    const next = new Map<string, { match?: MatchResult; confidenceScore?: ConfidenceScore }>();
+    for (const result of matchResults) {
+      next.set(result.property.id, {
+        match: result.match,
+        confidenceScore: result.confidenceScore,
+      });
+    }
+    return next;
+  }, [matchResults]);
+
+  const sheetCompareRows = useMemo<SheetCompareRow[]>(() => {
+    const savedRows: SheetCompareRow[] = [];
+    for (const item of sheetItems) {
+      const property = propertiesById.get(item.id);
+      if (!property) continue;
+      const matchData = matchById.get(item.id);
+      savedRows.push({
+        property,
+        item,
+        match: matchData?.match,
+        confidenceScore: matchData?.confidenceScore,
+        onSheet: true,
+      });
+    }
+
+    if (savedRows.length > 0) return savedRows;
+
+    return matchResults.map(({ property, match, confidenceScore }) => ({
+      property,
+      match,
+      confidenceScore,
+      onSheet: sheetIds.has(property.id),
+    }));
+  }, [matchById, matchResults, propertiesById, sheetIds, sheetItems]);
+
+  const missingSheetCount = useMemo(() => {
+    return sheetItems.filter((item) => !propertiesById.has(item.id)).length;
+  }, [propertiesById, sheetItems]);
+  const sheetViewShowsSaved = sheetItems.length > 0 && sheetCompareRows.some((row) => row.onSheet);
+
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
   const totalCount = useBackendResults ? searchResponse.total_results : filtered.length;
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
-  const containerClass = isEmbedded ? "inline-results-shell" : "page-container";
+  const containerClass = isEmbedded ? "inline-results-shell" : viewMode === "sheet" ? "page-container-wide" : "page-container";
   const headerClass = isEmbedded ? "inline-results-header" : "page-header";
   const title = isEmbedded && query ? "Ranked matches" : "Properties";
 
@@ -953,7 +1277,13 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
 
-      <SheetTray items={sheetItems} propertiesById={propertiesById} onRemove={removeSheetItem} />
+      <div className="results-view-row">
+        <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
+      </div>
+
+      {viewMode === "cards" && (
+        <SheetTray items={sheetItems} propertiesById={propertiesById} onRemove={removeSheetItem} />
+      )}
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
@@ -963,20 +1293,20 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
           <p>Try broadening your search or explore one of these suggestions.</p>
           <div className="empty-state-chips">
             {intent?.area && (
-              <button className="empty-state-chip" onClick={() => setSearchParams({ q: intent.area! })}>
+              <button className="empty-state-chip" onClick={() => setQueryPreservingView(intent.area!)}>
                 Just {intent.area}
               </button>
             )}
             {intent?.bhk && (
               <button className="empty-state-chip" onClick={() => {
                 const without = query.replace(/\d+\s*bhk/i, "").trim();
-                if (without) setSearchParams({ q: without });
+                if (without) setQueryPreservingView(without);
               }}>
                 Without BHK filter
               </button>
             )}
             {["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
-              <button key={s} className="empty-state-chip" onClick={() => setSearchParams({ q: s })}>
+              <button key={s} className="empty-state-chip" onClick={() => setQueryPreservingView(s)}>
                 {s}
               </button>
             ))}
@@ -997,26 +1327,38 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         </div>
       )}
 
-      <div
-        className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
-        style={{ transition: "margin-right 0.3s var(--ease-out)" }}
-      >
-        {matchResults.map(({ property, match, explanation, confidenceScore }) => (
-            <CardA
-              key={property.id}
-              property={property}
-              match={match}
-              explanation={explanation}
-              confidenceScore={confidenceScore}
-              onQuickView={setPanelPropertyId}
-              onSaveChange={refreshSheetItems}
-            />
-        ))}
-      </div>
+      {viewMode === "sheet" ? (
+        <SheetCompareView
+          rows={sheetCompareRows}
+          missingSheetCount={missingSheetCount}
+          showingSaved={sheetViewShowsSaved}
+          sortKey={sheetSortKey}
+          onSortChange={setSheetSortKey}
+          onQuickView={setPanelPropertyId}
+          onSheetToggle={toggleSheetFromComparison}
+        />
+      ) : (
+        <div
+          className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
+          style={{ transition: "margin-right 0.3s var(--ease-out)" }}
+        >
+          {matchResults.map(({ property, match, explanation, confidenceScore }) => (
+              <CardA
+                key={property.id}
+                property={property}
+                match={match}
+                explanation={explanation}
+                confidenceScore={confidenceScore}
+                onQuickView={setPanelPropertyId}
+                onSaveChange={refreshSheetItems}
+              />
+          ))}
+        </div>
+      )}
 
       {/* Side panel — quick view */}
       {panelPropertyId && (() => {
-        const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property;
+        const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property ?? propertiesById.get(panelPropertyId);
         if (!panelCard) return null;
         return (
           <PropertySidePanel
