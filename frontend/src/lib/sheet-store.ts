@@ -1,4 +1,5 @@
 const STORAGE_KEY = "openestates_shortlist";
+export const SHEET_UPDATED_EVENT = "oe-sheet-changed";
 
 export type SheetTag = "watching" | "finalist" | "verify" | "stretch";
 
@@ -77,6 +78,9 @@ function parseStoredSheet(): StoredSheet {
 
 function persistSheet(sheet: StoredSheet): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(sheet));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(SHEET_UPDATED_EVENT));
+  }
 }
 
 export function getSheetItems(): SheetItem[] {

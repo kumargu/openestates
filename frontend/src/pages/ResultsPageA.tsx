@@ -3,7 +3,7 @@
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
-import { useEffect, useState, useMemo, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, useMemo, useCallback, type FormEvent, type ReactNode } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
@@ -24,6 +24,7 @@ import {
   getSheetItems,
   isOnSheet,
   removeFromSheet,
+  SHEET_UPDATED_EVENT,
   toggleSheetItem,
   type SheetItem,
 } from "../lib/sheet-store.ts";
@@ -558,7 +559,7 @@ function ViewModeSwitch({
           <rect x="3" y="14" width="7" height="7" rx="1.5" />
           <rect x="14" y="14" width="7" height="7" rx="1.5" />
         </svg>
-        Discover
+        Results
       </button>
       <button
         type="button"
@@ -842,7 +843,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
   const [sheetItems, setSheetItems] = useState<SheetItem[]>(() => getSheetItems());
   const [sheetSortKey, setSheetSortKey] = useState<SheetSortKey>("sheet");
-  const refreshSheetItems = () => setSheetItems(getSheetItems());
+  const refreshSheetItems = useCallback(() => setSheetItems(getSheetItems()), []);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -853,6 +854,15 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   useEffect(() => {
     setSearchInput(query);
   }, [query]);
+
+  useEffect(() => {
+    window.addEventListener("storage", refreshSheetItems);
+    window.addEventListener(SHEET_UPDATED_EVENT, refreshSheetItems);
+    return () => {
+      window.removeEventListener("storage", refreshSheetItems);
+      window.removeEventListener(SHEET_UPDATED_EVENT, refreshSheetItems);
+    };
+  }, [refreshSheetItems]);
 
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -1023,7 +1033,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const containerClass = isEmbedded ? "inline-results-shell" : viewMode === "sheet" ? "page-container-wide" : "page-container";
   const headerClass = isEmbedded ? "inline-results-header" : "page-header";
   const showEmbeddedSwitch = isEmbedded && (Boolean(query) || viewMode === "sheet");
-  const kicker = viewMode === "sheet" && !query ? "OpenEstates saved" : "OpenEstates search";
+  const kicker = viewMode === "sheet" && !query ? "Saved homes" : "Search results";
   const title = !isEmbedded && viewMode === "sheet" ? "Saved" : "Properties";
 
   if (status === "loading") return (

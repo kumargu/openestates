@@ -3,6 +3,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import type { PropertyCard } from "../lib/types.ts";
 import { getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
+import { getSheetItems, SHEET_UPDATED_EVENT } from "../lib/sheet-store.ts";
 
 const InlineSearchExperience = lazy(() =>
   import("./ResultsPageA.tsx").then((m) => ({ default: m.SearchExperience }))
@@ -209,6 +210,7 @@ export function HomePage() {
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
+  const [sheetCount, setSheetCount] = useState(() => getSheetItems().length);
   const pulseRef = useRef<HTMLElement | null>(null);
   const inlineResultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
@@ -226,6 +228,26 @@ export function HomePage() {
   useEffect(() => {
     setQuery(activeSearchQuery);
   }, [activeSearchQuery]);
+
+  useEffect(() => {
+    const refreshSheetCount = () => setSheetCount(getSheetItems().length);
+    const refreshOnVisible = () => {
+      if (!document.hidden) refreshSheetCount();
+    };
+
+    refreshSheetCount();
+    window.addEventListener("focus", refreshSheetCount);
+    window.addEventListener("storage", refreshSheetCount);
+    window.addEventListener(SHEET_UPDATED_EVENT, refreshSheetCount);
+    document.addEventListener("visibilitychange", refreshOnVisible);
+
+    return () => {
+      window.removeEventListener("focus", refreshSheetCount);
+      window.removeEventListener("storage", refreshSheetCount);
+      window.removeEventListener(SHEET_UPDATED_EVENT, refreshSheetCount);
+      document.removeEventListener("visibilitychange", refreshOnVisible);
+    };
+  }, []);
 
   useEffect(() => {
     if (!hasInlinePane || !shouldScrollToResultsRef.current) return;
@@ -261,7 +283,7 @@ export function HomePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    commitSearch(query, { view: activeView });
+    commitSearch(query, { view: "cards" });
   };
 
   const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
@@ -355,42 +377,41 @@ export function HomePage() {
           aria-label="Property search"
           role="search"
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Try: 3BHK Whitefield under 1.5Cr"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            aria-label="Describe the property you are looking for"
-          />
-          <div className="results-view-switch results-view-switch--compact home-search-mode" aria-label="Home search mode">
+          <div className="home-search-input-shell">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              className="search-input"
+              type="text"
+              placeholder="Try: 3BHK Whitefield under 1.5Cr"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              aria-label="Describe the property you are looking for"
+            />
+          </div>
+          <div className="home-search-actions">
             <button
-              type="button"
-              className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
-              onClick={() => commitSearch(query, { view: "cards", scroll: hasActiveSearch })}
-              aria-pressed={activeView === "cards"}
+              type="submit"
+              className="home-search-submit"
             >
-              Discover
+              Search
             </button>
             <button
               type="button"
-              className={activeView === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
-              onClick={() => commitSearch(query, { view: "sheet", scroll: true })}
+              className={`home-saved-shortcut ${activeView === "sheet" ? "home-saved-shortcut--active" : ""}`}
+              onClick={() => commitSearch("", { view: "sheet", scroll: true })}
               aria-pressed={activeView === "sheet"}
+              aria-label={sheetCount > 0 ? `Open saved homes, ${sheetCount} saved` : "Open saved homes"}
             >
-              Saved
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>Saved</span>
+              {sheetCount > 0 && <strong>{sheetCount}</strong>}
             </button>
           </div>
-          <button
-            type="submit"
-            className="home-search-submit"
-          >
-            {activeView === "sheet" ? "Open saved" : "Search"}
-          </button>
         </form>
 
         {/* Error banner — non-blocking */}
@@ -575,10 +596,10 @@ export function HomePage() {
               <div className="inline-results-shell">
                 <div className="inline-results-header">
                   <span className="inline-results-kicker">
-                    {activeView === "sheet" && !activeSearchQuery ? "OpenEstates saved" : "OpenEstates search"}
+                    {activeView === "sheet" && !activeSearchQuery ? "Saved homes" : "Search results"}
                   </span>
                   <div className="results-view-switch" aria-hidden="true">
-                    <span className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Discover</span>
+                    <span className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Results</span>
                     <span className={activeView === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Saved</span>
                   </div>
                   <div className="skeleton-search-bar skeleton-bar" />
