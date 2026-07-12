@@ -5,7 +5,7 @@ type Variant = "loading" | "error" | "empty" | "not_found" | "backend_unavailabl
 interface PageStateProps {
   variant: Variant;
   message?: string;
-  context?: "results" | "shortlist" | "property" | "society" | "generic";
+  context?: "results" | "property" | "society" | "generic";
 }
 
 const contextMessages: Record<string, Record<Variant, { title: string; subtitle: string; actions?: { label: string; path: string }[] }>> = {
@@ -28,28 +28,6 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       ],
     },
     empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse properties", path: "/results" }] },
-    not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
-  },
-  shortlist: {
-    loading: { title: "Loading your decision sheet...", subtitle: "Retrieving your saved candidates." },
-    error: {
-      title: "Decision sheet unavailable",
-      subtitle: "We couldn't load property details right now. Your saved candidates are stored locally on this device.",
-      actions: [{ label: "Browse properties", path: "/results" }],
-    },
-    backend_unavailable: {
-      title: "Decision sheet unavailable",
-      subtitle: "We couldn't load property details right now. Your saved candidates are stored locally on this device.",
-      actions: [{ label: "Browse properties", path: "/results" }],
-    },
-    empty: {
-      title: "Your decision sheet is empty",
-      subtitle: "Save a few homes to benchmark value, commute, openness, and risk in one place.",
-      actions: [
-        { label: "Browse properties", path: "/results" },
-        { label: "Return home", path: "/" },
-      ],
-    },
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {

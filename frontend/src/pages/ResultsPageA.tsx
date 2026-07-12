@@ -1,5 +1,5 @@
 /**
- * Results page with inline decision-sheet actions and backend search integration.
+ * Results page with inline saved-candidate actions and backend search integration.
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
@@ -20,7 +20,13 @@ import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
 import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
-import { getShortlistedIds, isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import {
+  getKeptHomeItems,
+  isKeptHome,
+  removeKeptHome as removeKeptHomeFromStore,
+  toggleKeptHome,
+  type KeptHomeItem,
+} from "../lib/kept-homes-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
 
 function formatPrice(price: number): string {
@@ -265,7 +271,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   onQuickView?: (id: string) => void;
   onSaveChange?: () => void;
 }) {
-  const [saved, setSaved] = useState(() => isShortlisted(property.id));
+  const [saved, setSaved] = useState(() => isKeptHome(property.id));
   const specs = [
     `${property.bhk} BHK`,
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
@@ -278,7 +284,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setSaved(toggleShortlist(property.id));
+    setSaved(toggleKeptHome(property.id));
     onSaveChange?.();
   };
 
@@ -417,7 +423,7 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
           <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
           </svg>
-          {saved ? "In decision sheet" : "Save to sheet"}
+          {saved ? "Kept" : "Keep"}
         </button>
         <button className="card-a-detail-btn" onClick={handleQuickView}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -433,21 +439,96 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   );
 }
 
-function DecisionSheetDock({ count }: { count: number }) {
-  if (count === 0) return null;
+function rootSourceLabel(source: string | undefined): string {
+  if (source === "rera") return "RERA";
+  if (source === "seller") return "Seller source";
+  if (source === "discovery") return "Discovered";
+  return "Source pending";
+}
+
+function keptHomeSignals(property: PropertyCardType): string[] {
+  const signals = [
+    rootSourceLabel(property.root_source),
+    property.google_rating ? `Google ${property.google_rating.toFixed(1)}` : null,
+    property.project_status_display,
+    property.data_freshness?.fact_count ? `${property.data_freshness.fact_count} facts` : null,
+  ].filter((signal): signal is string => !!signal && signal.trim().length > 0);
+
+  return signals.slice(0, 4);
+}
+
+function KeptHomesTray({
+  items,
+  propertiesById,
+  onRemove,
+}: {
+  items: KeptHomeItem[];
+  propertiesById: Map<string, PropertyCardType>;
+  onRemove: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  if (items.length === 0) return null;
+
+  const visibleItems = items.slice(0, 6);
 
   return (
-    <div className="decision-dock">
-      <div className="decision-dock-copy">
-        <span className="decision-dock-kicker">Decision sheet</span>
-        <strong>{count} saved {count === 1 ? "candidate" : "candidates"}</strong>
-      </div>
-      <Link to="/shortlist" className="decision-dock-link">
-        Open workspace
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <line x1="5" y1="12" x2="19" y2="12" /><polyline points="12 5 19 12 12 19" />
-        </svg>
-      </Link>
+    <div className={`kept-tray${open ? " kept-tray--open" : ""}`}>
+      <button type="button" className="kept-tray-toggle" onClick={() => setOpen((value) => !value)}>
+        <span className="kept-tray-copy">
+          <span className="kept-tray-kicker">Kept homes</span>
+          <strong>{items.length} saved {items.length === 1 ? "candidate" : "candidates"}</strong>
+        </span>
+        <span className="kept-tray-action">
+          {open ? "Hide" : "Review"}
+          <i aria-hidden="true" />
+        </span>
+      </button>
+
+      {open && (
+        <div className="kept-tray-panel">
+          {visibleItems.map((item) => {
+            const property = propertiesById.get(item.id);
+            const signals = property ? keptHomeSignals(property) : [];
+            return (
+              <div key={item.id} className="kept-tray-item">
+                {property ? (
+                  <Link to={`/property/${property.id}`} className="kept-tray-link">
+                    <span className="kept-tray-image">
+                      <ImageWithFallback src={property.hero_image} alt={property.title} style={{ width: "100%", height: "100%" }} />
+                    </span>
+                    <span className="kept-tray-item-copy">
+                      <strong>{property.title}</strong>
+                      <span>{property.area} · {formatPrice(property.price)}</span>
+                      <span className="kept-tray-meta">
+                        {signals.map((signal) => (
+                          <em key={signal}>{signal}</em>
+                        ))}
+                      </span>
+                    </span>
+                  </Link>
+                ) : (
+                  <span className="kept-tray-link kept-tray-link--missing">
+                    <span className="kept-tray-image" />
+                    <span className="kept-tray-item-copy">
+                      <strong>Saved home</strong>
+                      <span>Refresh results to reload this candidate.</span>
+                    </span>
+                  </span>
+                )}
+                <button type="button" className="kept-tray-remove" onClick={() => onRemove(item.id)} aria-label="Remove saved home">
+                  -
+                </button>
+              </div>
+            );
+          })}
+
+          {items.length > visibleItems.length && (
+            <p className="kept-tray-overflow">
+              {items.length - visibleItems.length} more saved. Refine search to bring them back into view.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -568,8 +649,8 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
-  const [savedCount, setSavedCount] = useState(() => getShortlistedIds().length);
-  const refreshSavedCount = () => setSavedCount(getShortlistedIds().length);
+  const [savedItems, setSavedItems] = useState<KeptHomeItem[]>(() => getKeptHomeItems());
+  const refreshSavedItems = () => setSavedItems(getKeptHomeItems());
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
@@ -672,6 +753,18 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     // No query — show all properties without match labels
     return filtered.map((p) => ({ property: p }));
   }, [useBackendResults, searchResponse, filtered]);
+
+  const propertiesById = useMemo(() => {
+    const next = new Map<string, PropertyCardType>();
+    for (const property of properties) next.set(property.id, property);
+    for (const { property } of matchResults) next.set(property.id, property);
+    return next;
+  }, [matchResults, properties]);
+
+  const removeKeptHome = (id: string) => {
+    removeKeptHomeFromStore(id);
+    refreshSavedItems();
+  };
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
   const totalCount = useBackendResults ? searchResponse.total_results : filtered.length;
@@ -860,7 +953,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
 
-      <DecisionSheetDock count={savedCount} />
+      <KeptHomesTray items={savedItems} propertiesById={propertiesById} onRemove={removeKeptHome} />
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
@@ -909,15 +1002,15 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         style={{ transition: "margin-right 0.3s var(--ease-out)" }}
       >
         {matchResults.map(({ property, match, explanation, confidenceScore }) => (
-          <CardA
-            key={property.id}
-            property={property}
-            match={match}
-            explanation={explanation}
-            confidenceScore={confidenceScore}
-            onQuickView={setPanelPropertyId}
-            onSaveChange={refreshSavedCount}
-          />
+            <CardA
+              key={property.id}
+              property={property}
+              match={match}
+              explanation={explanation}
+              confidenceScore={confidenceScore}
+              onQuickView={setPanelPropertyId}
+              onSaveChange={refreshSavedItems}
+            />
         ))}
       </div>
 
@@ -930,7 +1023,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             propertyId={panelPropertyId}
             card={panelCard}
             onClose={() => setPanelPropertyId(null)}
-            onSaveChange={refreshSavedCount}
+            onSaveChange={refreshSavedItems}
           />
         );
       })()}

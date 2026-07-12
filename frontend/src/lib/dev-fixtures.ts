@@ -241,7 +241,7 @@ const areaContexts: Record<string, SearchAreaContext> = {
     livability_summary: "Strong schools, offices, malls, and hospital access make the area resilient for family demand.",
     externality_tags: ["traffic-sensitive", "monsoon-check"],
     infrastructure_tags: ["metro-corridor", "office-demand"],
-    community_notes: "Shortlist homes by exact approach road, not only society name.",
+    community_notes: "Keep homes by exact approach road, not only society name.",
   },
   "sarjapur road": {
     id: "sarjapur-road",

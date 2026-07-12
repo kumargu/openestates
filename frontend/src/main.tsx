@@ -11,10 +11,6 @@ const ResultsPageA = lazy(() => import("./pages/ResultsPageA.tsx").then(m => ({ 
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const SocietySearchPage = lazy(() => import("./pages/SocietySearchPage.tsx").then(m => ({ default: m.SocietySearchPage })));
 const SocietyDetailPage = lazy(() => import("./pages/SocietyDetailPage.tsx").then(m => ({ default: m.SocietyDetailPage })));
-const ShortlistPage = lazy(() => import("./pages/ShortlistPage.tsx").then(m => ({ default: m.ShortlistPage })));
-const SellerDashboardPage = lazy(() => import("./pages/SellerDashboardPage.tsx").then(m => ({ default: m.SellerDashboardPage })));
-const SellerRegistrationPage = lazy(() => import("./pages/SellerRegistrationPage.tsx").then(m => ({ default: m.SellerRegistrationPage })));
-const SellerLandingPage = lazy(() => import("./pages/SellerLandingPage.tsx").then(m => ({ default: m.SellerLandingPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -63,8 +59,6 @@ export function NavLink({ to, label, active }: { to: string; label: string; acti
 const NAV_ITEMS = [
   { to: "/results", label: "Properties", matchFn: (p: string) => p === "/results" || p.startsWith("/property/") },
   { to: "/societies", label: "Societies", matchFn: (p: string) => p === "/societies" || p.startsWith("/society/") },
-  { to: "/shortlist", label: "Decision Sheet", matchFn: (p: string) => p === "/shortlist" },
-  { to: "/sell", label: "List Property", matchFn: (p: string) => p === "/sell" || p === "/register" },
 ];
 
 export function Nav() {
@@ -190,7 +184,6 @@ export function SiteFooter() {
       <div className="site-footer-links">
         <Link to="/results">Properties</Link>
         <Link to="/societies">Societies</Link>
-        <Link to="/shortlist">Decision Sheet</Link>
       </div>
       <div className="site-footer-wordmark">OpenEstates</div>
       <p className="site-footer-tagline">Transparent property discovery</p>
@@ -234,10 +227,6 @@ export function App() {
                 <Route path="/property/:id" element={<PropertyPage />} />
                 <Route path="/societies" element={<SocietySearchPage />} />
                 <Route path="/society/:slug" element={<SocietyDetailPage />} />
-                <Route path="/shortlist" element={<ShortlistPage />} />
-                <Route path="/seller/:id" element={<SellerDashboardPage />} />
-                <Route path="/sell" element={<SellerLandingPage />} />
-                <Route path="/register" element={<SellerRegistrationPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>

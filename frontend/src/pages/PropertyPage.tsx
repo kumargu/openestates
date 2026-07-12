@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse, SellerSummary, SourcePanel } from "../lib/types.ts";
-import { getProperty, expressInterest } from "../lib/api.ts";
+import type { BuilderPortfolio, PropertyDetailResponse, SourcePanel } from "../lib/types.ts";
+import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
+import { isKeptHome, toggleKeptHome } from "../lib/kept-homes-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 
@@ -159,7 +159,7 @@ export function PropertyPage() {
 
   useEffect(() => {
     if (!id) return;
-    queueMicrotask(() => setSaved(isShortlisted(id)));
+    queueMicrotask(() => setSaved(isKeptHome(id)));
     getProperty(id)
       .then((d) => {
         setData(d);
@@ -210,7 +210,7 @@ export function PropertyPage() {
 
   const handleSave = () => {
     if (!id) return;
-    toggleShortlist(id);
+    toggleKeptHome(id);
     setSaved(!saved);
   };
 
@@ -338,7 +338,7 @@ export function PropertyPage() {
             onClick={handleSave}
             className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
           >
-            {saved ? "\u2665 In decision sheet" : "\u2661 Save to sheet"}
+            {saved ? "\u2665 Kept" : "\u2661 Keep"}
           </button>
         </div>
       </section>
@@ -525,9 +525,6 @@ export function PropertyPage() {
         </main>
 
         <aside className="property-action-rail">
-          <InterestButton propertyId={p.id} initialCount={data.interest_count ?? 0} />
-          {data.seller && <SellerInfoCard seller={data.seller} />}
-
           <div className="property-mini-card property-rail-intel">
             <div>
               <h3>Risk list</h3>
@@ -775,231 +772,6 @@ function RiskBar({ signal }: { signal: RiskSignal }) {
       <div className="property-risk-track">
         <span className={`property-risk-fill property-risk-fill--${tone}`} style={{ width: pct(signal.value) }} />
       </div>
-    </div>
-  );
-}
-
-const INTEREST_KEY_PREFIX = "oe_interest_";
-
-function InterestButton({ propertyId, initialCount }: { propertyId: string; initialCount: number }) {
-  const storageKey = `${INTEREST_KEY_PREFIX}${propertyId}`;
-  const alreadySent = localStorage.getItem(storageKey) === "1";
-
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "already_expressed" | "error">(
-    alreadySent ? "already_expressed" : "idle"
-  );
-  const [count, setCount] = useState(initialCount);
-
-  const handleClick = async () => {
-    if (status !== "idle" && status !== "error") return;
-    setStatus("submitting");
-    try {
-      await expressInterest({ property_id: propertyId });
-      localStorage.setItem(storageKey, "1");
-      setStatus("success");
-      setCount((c) => c + 1);
-    } catch {
-      setStatus("error");
-      setTimeout(() => setStatus("idle"), 3000);
-    }
-  };
-
-  const isDisabled = status === "submitting" || status === "success" || status === "already_expressed";
-  const buttonLabel =
-    status === "submitting" ? "Sending..." :
-    status === "success" || status === "already_expressed" ? "Interest sent" :
-    status === "error" ? "Try Again" :
-    "I'm Interested";
-
-  return (
-    <div style={{ marginBottom: "1rem" }}>
-      <button
-        onClick={handleClick}
-        disabled={isDisabled}
-        className={`btn ${isDisabled ? "btn-primary" : "btn-outline"}`}
-        style={{
-          width: "100%",
-          justifyContent: "center",
-          opacity: status === "submitting" ? 0.7 : 1,
-        }}
-      >
-        {status === "success" || status === "already_expressed" ? (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginRight: "0.4rem" }}>
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-        ) : (
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" style={{ marginRight: "0.4rem" }}>
-            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-          </svg>
-        )}
-        {buttonLabel}
-      </button>
-      {status === "error" && (
-        <div style={{
-          marginTop: "0.5rem",
-          fontSize: "0.78rem",
-          color: "var(--color-negative, #ef4444)",
-          textAlign: "center",
-          lineHeight: 1.4,
-        }}>
-          Something went wrong. You can try again.
-        </div>
-      )}
-      {count > 0 && (
-        <div style={{
-          marginTop: "0.5rem",
-          fontSize: "0.78rem",
-          color: "var(--color-text-muted)",
-          textAlign: "center",
-        }}>
-          {count} buyer{count !== 1 ? "s" : ""} interested
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SellerInfoCard({ seller }: { seller: SellerSummary }) {
-  const completenessColor =
-    seller.completeness_pct >= 70 ? "var(--color-positive)" :
-    seller.completeness_pct >= 42 ? "var(--color-warning)" :
-    "var(--color-negative)";
-
-  return (
-    <div className="section-card" style={{ marginBottom: "1rem" }}>
-      <div className="section-card-header" style={{ marginBottom: "0.5rem" }}>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round">
-          <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-          <circle cx="12" cy="7" r="4" />
-        </svg>
-        <h2 style={{ fontSize: "0.85rem" }}>Listed by</h2>
-      </div>
-
-      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
-        <span style={{ fontWeight: 600, fontSize: "0.95rem" }}>{seller.name}</span>
-        {seller.verified && (
-          <span style={{
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.2rem",
-            fontSize: "0.68rem",
-            fontWeight: 600,
-            padding: "0.1rem 0.45rem",
-            borderRadius: "var(--radius-xl)",
-            backgroundColor: "var(--color-positive-bg)",
-            color: "var(--color-positive)",
-            border: "1px solid var(--color-positive-border)",
-          }}>
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-              <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-              <polyline points="22 4 12 14.01 9 11.01" />
-            </svg>
-            Verified
-          </span>
-        )}
-      </div>
-
-      {/* Completeness bar */}
-      <div style={{ marginBottom: "0.75rem" }}>
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          fontSize: "0.72rem",
-          color: "var(--color-text-muted)",
-          marginBottom: "0.25rem",
-        }}>
-          <span>Profile completeness</span>
-          <span style={{ fontWeight: 600, color: completenessColor }}>{seller.completeness_pct}%</span>
-        </div>
-        <div style={{
-          height: "4px",
-          borderRadius: "2px",
-          backgroundColor: "var(--color-border)",
-          overflow: "hidden",
-        }}>
-          <div style={{
-            height: "100%",
-            width: `${seller.completeness_pct}%`,
-            backgroundColor: completenessColor,
-            borderRadius: "2px",
-            transition: "width 0.5s var(--ease-out)",
-          }} />
-        </div>
-      </div>
-
-      {/* Property prompt */}
-      {seller.property_prompt && (
-        <div style={{
-          padding: "0.75rem",
-          borderRadius: "var(--radius-sm)",
-          backgroundColor: "var(--color-bg-elevated)",
-          border: "1px solid var(--color-border)",
-          marginBottom: "0.75rem",
-        }}>
-          <p style={{
-            margin: 0,
-            fontSize: "0.82rem",
-            color: "var(--color-text-secondary)",
-            fontStyle: "italic",
-            lineHeight: 1.5,
-          }}>
-            &ldquo;{seller.property_prompt}&rdquo;
-          </p>
-          <p style={{
-            margin: "0.4rem 0 0",
-            fontSize: "0.65rem",
-            color: "var(--color-text-muted)",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}>
-            Seller's note
-          </p>
-        </div>
-      )}
-
-      {/* Documents provided */}
-      {seller.documents_provided.length > 0 && (
-        <div style={{ marginBottom: "0.75rem" }}>
-          <div style={{
-            fontSize: "0.68rem",
-            fontWeight: 600,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-            color: "var(--color-text-muted)",
-            marginBottom: "0.35rem",
-          }}>
-            Documents provided
-          </div>
-          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
-            {seller.documents_provided.map((doc) => (
-              <span key={doc} className="tag tag-neutral" style={{ fontSize: "0.72rem" }}>
-                {doc}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* View seller profile link */}
-      <Link
-        to={`/seller/${seller.id}`}
-        style={{
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "0.35rem",
-          fontSize: "0.82rem",
-          fontWeight: 600,
-          color: "var(--color-accent, #c96b4f)",
-          textDecoration: "none",
-          marginTop: "0.25rem",
-        }}
-      >
-        View seller profile
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <path d="M5 12h14M12 5l7 7-7 7" />
-        </svg>
-      </Link>
     </div>
   );
 }
