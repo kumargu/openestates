@@ -1,8 +1,12 @@
-import { useEffect, useState, useRef } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import type { PropertyCard } from "../lib/types.ts";
 import { getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
+
+const InlineSearchExperience = lazy(() =>
+  import("./ResultsPageA.tsx").then((m) => ({ default: m.SearchExperience }))
+);
 
 function useOnScreen(ref: React.RefObject<HTMLElement | null>) {
   const [visible, setVisible] = useState(false);
@@ -195,13 +199,17 @@ function pickFeatured(props: PropertyCard[]): PropertyCard | null {
 }
 
 export function HomePage() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeSearchQuery = searchParams.get("q") || "";
+  const hasActiveSearch = activeSearchQuery.trim().length > 0;
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [loadError, setLoadError] = useState(false);
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
-  const navigate = useNavigate();
   const pulseRef = useRef<HTMLElement | null>(null);
+  const inlineResultsRef = useRef<HTMLElement | null>(null);
+  const shouldScrollToResultsRef = useRef(false);
   const pulseVisible = useOnScreen(pulseRef);
 
   useEffect(() => {
@@ -213,15 +221,42 @@ export function HomePage() {
       .catch(() => {});
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    const q = query.trim();
+  useEffect(() => {
+    setQuery(activeSearchQuery);
+  }, [activeSearchQuery]);
+
+  useEffect(() => {
+    if (!hasActiveSearch || !shouldScrollToResultsRef.current) return;
+    shouldScrollToResultsRef.current = false;
+    window.setTimeout(() => {
+      inlineResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 90);
+  }, [activeSearchQuery, hasActiveSearch]);
+
+  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean } = {}) => {
+    const q = rawQuery.trim();
+    setQuery(q);
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
       addRecentSearch(q);
       setRecents(getRecentSearches());
+      shouldScrollToResultsRef.current = options.scroll ?? true;
+      setSearchParams({ q });
+    } else {
+      sessionStorage.removeItem("oe_search_query");
+      shouldScrollToResultsRef.current = false;
+      setSearchParams({});
     }
-    navigate(q ? `/results?q=${encodeURIComponent(q)}` : "/results");
+  }, [setSearchParams]);
+
+  const handleInlineSearchCommit = useCallback((q: string) => {
+    addRecentSearch(q);
+    setRecents(getRecentSearches());
+  }, []);
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    commitSearch(query);
   };
 
   const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
@@ -239,15 +274,19 @@ export function HomePage() {
     <div>
       {/* Hero */}
       <section
+        className={`home-hero ${hasActiveSearch ? "home-hero--search-active" : ""}`}
         style={{
-          minHeight: "100vh",
+          minHeight: hasActiveSearch ? "min(72vh, 640px)" : "96vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: "0 clamp(1.5rem, 4vw, 4rem)",
+          padding: hasActiveSearch
+            ? "7rem clamp(1.5rem, 4vw, 4rem) 5rem"
+            : "0 clamp(1.5rem, 4vw, 4rem)",
           position: "relative",
           overflow: "hidden",
+          transition: "min-height 0.7s var(--ease-out), padding 0.7s var(--ease-out)",
         }}
       >
         <div
@@ -402,10 +441,7 @@ export function HomePage() {
             <button
               key={s}
               onClick={() => {
-                sessionStorage.setItem("oe_search_query", s);
-                addRecentSearch(s);
-                setRecents(getRecentSearches());
-                navigate(`/results?q=${encodeURIComponent(s)}`);
+                commitSearch(s);
               }}
               style={{
                 border: "1px solid rgba(0,0,0,0.08)",
@@ -441,8 +477,7 @@ export function HomePage() {
                 key={s}
                 className="empty-state-chip"
                 onClick={() => {
-                  sessionStorage.setItem("oe_search_query", s);
-                  navigate(`/results?q=${encodeURIComponent(s)}`);
+                  commitSearch(s);
                 }}
               >
                 {s}
@@ -479,8 +514,7 @@ export function HomePage() {
               <button
                 key={t.label}
                 onClick={() => {
-                  sessionStorage.setItem("oe_search_query", t.searchQuery);
-                  navigate(`/results?q=${encodeURIComponent(t.searchQuery)}`);
+                  commitSearch(t.searchQuery);
                 }}
                 style={{
                   display: "flex",
@@ -524,9 +558,30 @@ export function HomePage() {
         )}
       </section>
 
+      {hasActiveSearch && (
+        <section ref={inlineResultsRef} className="home-inline-results-anchor" aria-label="Search results">
+          <Suspense
+            fallback={
+              <div className="inline-results-shell">
+                <div className="inline-results-header">
+                  <span className="inline-results-kicker">OpenEstates search</span>
+                  <h1>Ranked matches</h1>
+                  <div className="skeleton-search-bar skeleton-bar" />
+                </div>
+              </div>
+            }
+          >
+            <InlineSearchExperience
+              variant="embedded"
+              onSearchCommit={handleInlineSearchCommit}
+            />
+          </Suspense>
+        </section>
+      )}
+
       {/* Micro-market intelligence cards */}
       {snapshot && properties.length > 0 && (
-        <MicroMarketsSection properties={properties} navigate={navigate} />
+        <MicroMarketsSection properties={properties} onSearch={commitSearch} />
       )}
 
       {/* Market Pulse — real data snapshot */}
@@ -589,7 +644,7 @@ export function HomePage() {
                     .map(([bhk, count]) => (
                       <button
                         key={bhk}
-                        onClick={() => navigate(`/results?q=${encodeURIComponent(`${bhk}BHK`)}`)}
+                        onClick={() => commitSearch(`${bhk}BHK`)}
                         style={{
                           padding: "0.3rem 0.7rem",
                           borderRadius: "8px",
@@ -626,7 +681,7 @@ export function HomePage() {
                   {snapshot.topBuilders.map((b) => (
                     <button
                       key={b.name}
-                      onClick={() => navigate(`/results?q=${encodeURIComponent(b.name)}`)}
+                      onClick={() => commitSearch(b.name)}
                       style={{
                         display: "flex",
                         justifyContent: "space-between",
@@ -822,11 +877,11 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
 function MicroMarketCard({
   m,
   maxAvg,
-  navigate,
+  onSearch,
 }: {
   m: MicroMarket;
   maxAvg: number;
-  navigate: (path: string) => void;
+  onSearch: (query: string) => void;
 }) {
   const pct = (m.avgPriceSqft / maxAvg) * 100;
   const barColor =
@@ -834,7 +889,7 @@ function MicroMarketCard({
 
   return (
     <button
-      onClick={() => navigate(`/results?q=${encodeURIComponent(m.area)}`)}
+      onClick={() => onSearch(m.area)}
       style={{
         padding: "1.25rem 1.4rem",
         borderRadius: "12px",
@@ -947,10 +1002,10 @@ function chipStyle(bg: string, color: string): React.CSSProperties {
 
 function MicroMarketsSection({
   properties,
-  navigate,
+  onSearch,
 }: {
   properties: PropertyCard[];
-  navigate: (path: string) => void;
+  onSearch: (query: string) => void;
 }) {
   const markets = deriveMicroMarkets(properties);
   if (markets.length < 2) return null;
@@ -976,7 +1031,7 @@ function MicroMarketsSection({
         </div>
         <div className="home-micro-grid">
           {markets.map((m) => (
-            <MicroMarketCard key={m.area} m={m} maxAvg={maxAvg} navigate={navigate} />
+            <MicroMarketCard key={m.area} m={m} maxAvg={maxAvg} onSearch={onSearch} />
           ))}
         </div>
       </div>

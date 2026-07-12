@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
+import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchIntent } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -27,6 +27,18 @@ function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
   if (price >= 100_000) return `\u20B9${(price / 100_000).toFixed(1)} L`;
   return `\u20B9${price.toLocaleString("en-IN")}`;
+}
+
+function formatBudgetBrief(price: number | null): string {
+  if (!price) return "Open budget";
+  return `Under ${formatPrice(price)}`;
+}
+
+function compactSignalList(values: string[], fallback: string): string {
+  if (values.length === 0) return fallback;
+  const visible = values.slice(0, 2).join(", ");
+  const remaining = values.length - 2;
+  return remaining > 0 ? `${visible} +${remaining}` : visible;
 }
 
 function hasKnownNumber(value: number | null | undefined): value is number {
@@ -502,9 +514,55 @@ function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation 
   );
 }
 
-/* ---------- Results Page ---------- */
+function SearchBrief({
+  query,
+  intent,
+  totalCount,
+}: {
+  query: string;
+  intent: SearchIntent;
+  totalCount: number;
+}) {
+  const hardConstraints = intent.hard_constraints ?? [];
+  const signals = [
+    ...hardConstraints.map((constraint) => constraint.raw_text),
+    ...intent.preferences,
+  ];
+  const items = [
+    { label: "Location", value: intent.area ?? "Open market" },
+    { label: "Home", value: intent.bhk ? `${intent.bhk} BHK` : "Any BHK" },
+    { label: "Budget", value: formatBudgetBrief(intent.budget_max) },
+    { label: "Signals", value: compactSignalList(signals, "Fit + transparency") },
+    { label: "Matches", value: `${totalCount} ranked` },
+  ];
 
-export function ResultsPageA() {
+  return (
+    <section className="search-brief" aria-label="Search brief">
+      <div className="search-brief-query">
+        <span>Search brief</span>
+        <strong>{query}</strong>
+      </div>
+      <div className="search-brief-grid">
+        {items.map((item) => (
+          <div key={item.label} className="search-brief-item">
+            <span>{item.label}</span>
+            <strong>{item.value}</strong>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/* ---------- Search Experience ---------- */
+
+type SearchExperienceProps = {
+  variant?: "page" | "embedded";
+  onSearchCommit?: (query: string) => void;
+};
+
+export function SearchExperience({ variant = "page", onSearchCommit }: SearchExperienceProps) {
+  const isEmbedded = variant === "embedded";
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
@@ -518,11 +576,16 @@ export function ResultsPageA() {
   const areaFilter = searchParams.get("area") || "";
   const [searchInput, setSearchInput] = useState(query);
 
+  useEffect(() => {
+    setSearchInput(query);
+  }, [query]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     const q = searchInput.trim();
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
+      onSearchCommit?.(q);
       setSearchParams({ q });
     } else {
       sessionStorage.removeItem("oe_search_query");
@@ -557,6 +620,7 @@ export function ResultsPageA() {
 
     if (query) {
       addRecentSearch(query);
+      onSearchCommit?.(query);
       searchProperties(query)
         .then((data) => {
           if (cancelled) return;
@@ -582,7 +646,7 @@ export function ResultsPageA() {
     return () => {
       cancelled = true;
     };
-  }, [query]);
+  }, [query, onSearchCommit]);
 
   const useBackendResults = query && searchResponse && !searchFailed;
 
@@ -593,7 +657,7 @@ export function ResultsPageA() {
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match: MatchResult; explanation?: MatchExplanation; confidenceScore?: import("../lib/types.ts").ConfidenceScore }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; confidenceScore?: import("../lib/types.ts").ConfidenceScore }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -606,7 +670,7 @@ export function ResultsPageA() {
       }));
     }
     // No query — show all properties without match labels
-    return filtered.map((p) => ({ property: p, match: undefined as unknown as MatchResult }));
+    return filtered.map((p) => ({ property: p }));
   }, [useBackendResults, searchResponse, filtered]);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
@@ -614,11 +678,15 @@ export function ResultsPageA() {
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
+  const containerClass = isEmbedded ? "inline-results-shell" : "page-container";
+  const headerClass = isEmbedded ? "inline-results-header" : "page-header";
+  const title = isEmbedded && query ? "Ranked matches" : "Properties";
 
   if (status === "loading") return (
-    <div className="page-container">
-      <div className="page-header">
-        <h1>Properties</h1>
+    <div className={containerClass}>
+      <div className={headerClass}>
+        {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
+        <h1>{title}</h1>
         <div className="skeleton-search-bar skeleton-bar" />
       </div>
       <div className="results-grid">
@@ -642,7 +710,7 @@ export function ResultsPageA() {
   );
   if (status === "error") {
     return (
-      <div className="page-container">
+      <div className={containerClass}>
         <PageState variant="error" context="results" />
       </div>
     );
@@ -670,7 +738,7 @@ export function ResultsPageA() {
     : `Browse ${totalCount} properties with full transparency reports on OpenEstates.`;
 
   return (
-    <div className="page-container">
+    <div className={containerClass}>
       <Helmet>
         <title>{helmetTitle}</title>
         <meta name="description" content={helmetDescription} />
@@ -679,52 +747,39 @@ export function ResultsPageA() {
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="OpenEstates" />
       </Helmet>
-      <div className="page-header">
-        <h1>Properties</h1>
+      <div className={headerClass}>
+        {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
+        <h1>{title}</h1>
 
         {/* Inline search bar for refining */}
         <form
           onSubmit={handleSearch}
-          className="results-search-bar"
+          className={`results-search-bar ${isEmbedded ? "results-search-bar--embedded" : ""}`}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
           <input
+            className="results-search-input"
             type="text"
             placeholder="Refine: area, BHK, budget, preferences..."
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            style={{
-              flex: 1,
-              border: "none",
-              outline: "none",
-              background: "transparent",
-              fontSize: "0.88rem",
-              fontFamily: "inherit",
-              color: "var(--color-text)",
-            }}
           />
           <button
+            className="results-search-submit"
             type="submit"
-            style={{
-              border: "none",
-              background: "#1a1a1a",
-              color: "#fff",
-              padding: "0.4rem 1rem",
-              borderRadius: "8px",
-              fontSize: "0.82rem",
-              cursor: "pointer",
-              fontFamily: "inherit",
-              whiteSpace: "nowrap",
-            }}
           >
             Search
           </button>
         </form>
 
-        {query && intent && (
+        {isEmbedded && query && intent && (
+          <SearchBrief query={query} intent={intent} totalCount={totalCount} />
+        )}
+
+        {!isEmbedded && query && intent && (
           <div style={{ marginTop: "0.5rem" }}>
             {hasSearchChips && (
               <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
@@ -833,9 +888,19 @@ export function ResultsPageA() {
               </button>
             ))}
           </div>
-          <Link to="/results" style={{ color: "var(--color-accent)", fontSize: "0.88rem", fontWeight: 500 }}>
-            Browse all properties
-          </Link>
+          {isEmbedded ? (
+            <button
+              type="button"
+              className="inline-results-clear"
+              onClick={() => setSearchParams({})}
+            >
+              Browse all properties
+            </button>
+          ) : (
+            <Link to="/results" style={{ color: "var(--color-accent)", fontSize: "0.88rem", fontWeight: 500 }}>
+              Browse all properties
+            </Link>
+          )}
         </div>
       )}
 
@@ -871,4 +936,10 @@ export function ResultsPageA() {
       })()}
     </div>
   );
+}
+
+/* ---------- Results Page ---------- */
+
+export function ResultsPageA() {
+  return <SearchExperience variant="page" />;
 }

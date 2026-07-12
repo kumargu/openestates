@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -15,6 +16,7 @@ use crate::search::ConfidenceScore;
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
+use crate::knowledge::{FactValue, SourcedFact};
 
 use super::enrichment::{
     enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
@@ -75,12 +77,70 @@ pub struct PropertyDetail {
     /// Builder delivery track record from knowledge graph
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_trust: Option<BuilderTrust>,
+    /// Other locally tracked projects tied to the same builder/promoter name.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_portfolio: Option<BuilderPortfolio>,
+    /// Source-backed facts grouped for the detail page.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_panels: Vec<SourcePanel>,
     /// Data freshness — how recently and richly the society data was updated
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
     /// Data confidence score — how trustworthy is this property's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct BuilderPortfolio {
+    pub builder_name: String,
+    pub tracked_projects: usize,
+    pub rera_registered_projects: usize,
+    pub delayed_projects: usize,
+    pub complaint_projects: usize,
+    pub revocations: Option<i32>,
+    pub projects: Vec<BuilderProjectRecord>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct BuilderProjectRecord {
+    pub property_id: String,
+    pub project_name: String,
+    pub area: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rera_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rera_portal_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rera_status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_months: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub complaints_count: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_status_display: Option<String>,
+    pub current: bool,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct SourcePanel {
+    pub title: String,
+    pub subtitle: String,
+    pub items: Vec<SourceItem>,
+    pub missing: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct SourceItem {
+    pub label: String,
+    pub value: String,
+    pub source_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub confidence_pct: u8,
+    pub learned_at: String,
 }
 
 #[derive(Serialize)]
@@ -90,12 +150,377 @@ pub struct ErrorResponse {
 
 fn canonical_property_id(id: &str) -> &str {
     match id {
+        "discovered" => "discovered-sumadhura-eden-garden-3bhk",
         "fixture-prestige-lakeside-3bhk" => "discovered-prestige-lakeside-habitat-3bhk",
         "fixture-samadhura-capitol-3bhk" => "discovered-sumadhura-capitol-residences-3bhk",
         "fixture-vaswani-starlight-3bhk" => "discovered-vaswani-starlight-3bhk",
         "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
         _ => id,
     }
+}
+
+fn normalized_builder_key(name: &str) -> String {
+    const CORPORATE_SUFFIXES: &[&str] = &[
+        "private",
+        "pvt",
+        "limited",
+        "ltd",
+        "llp",
+        "inc",
+        "corp",
+        "corporation",
+        "company",
+        "co",
+    ];
+
+    name.to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|token| !token.is_empty() && !CORPORATE_SUFFIXES.contains(token))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn project_name_for(property: &crate::models::Property) -> String {
+    let prefix = format!("{} BHK in ", property.bhk);
+    property
+        .title
+        .strip_prefix(&prefix)
+        .unwrap_or(&property.title)
+        .to_string()
+}
+
+fn project_status_display_for(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+) -> Option<String> {
+    let soc_node_id = society_node_id(society_id);
+    let node = graph.get_node(&soc_node_id)?;
+    node.facts
+        .iter()
+        .filter(|f| f.key == "project_status")
+        .max_by_key(|f| f.version)
+        .and_then(|f| {
+            f.display_template.clone().map(|tmpl| {
+                if tmpl.contains("{value}") {
+                    if let crate::knowledge::FactValue::Text(ref val) = f.value {
+                        tmpl.replace("{value}", val)
+                    } else {
+                        tmpl
+                    }
+                } else {
+                    tmpl
+                }
+            })
+        })
+}
+
+fn area_lookup_key(id_or_name: &str) -> String {
+    let normalized = id_or_name.to_lowercase().replace(['_', ' '], "-");
+    normalized
+        .strip_prefix("area-")
+        .unwrap_or(&normalized)
+        .to_string()
+}
+
+fn fact_value_display(value: &FactValue) -> String {
+    match value {
+        FactValue::Numeric(n) => {
+            if n.fract().abs() < f64::EPSILON {
+                format!("{}", *n as i64)
+            } else {
+                format!("{n:.1}")
+            }
+        }
+        FactValue::Text(text) => text.clone(),
+        FactValue::Bool(value) => {
+            if *value {
+                "Yes".to_string()
+            } else {
+                "No".to_string()
+            }
+        }
+        FactValue::Tags(tags) => tags.join(", "),
+        FactValue::Score { value, explanation } => format!("{value:.1}: {explanation}"),
+    }
+}
+
+fn fact_display(fact: &SourcedFact) -> String {
+    let value = fact_value_display(&fact.value);
+    fact.display_template
+        .as_ref()
+        .map(|template| template.replace("{value}", &value))
+        .unwrap_or(value)
+}
+
+fn latest_fact<'a>(
+    graph: &'a crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    key: &str,
+) -> Option<&'a SourcedFact> {
+    graph.get_node(node_id)?.get_fact(key)
+}
+
+fn source_item(
+    graph: &crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let fact = latest_fact(graph, node_id, key)?;
+    let value = match (&fact.value, key) {
+        (FactValue::Numeric(n), "rera_complaints_count") if (*n - 1.0).abs() < f64::EPSILON => {
+            "1 complaint filed".to_string()
+        }
+        (FactValue::Numeric(n), "rera_complaints_count") => {
+            format!("{} complaints filed", *n as i64)
+        }
+        (FactValue::Numeric(n), "rera_delay_months") if (*n - 1.0).abs() < f64::EPSILON => {
+            "1 month delay".to_string()
+        }
+        (FactValue::Numeric(n), "rera_delay_months") => {
+            format!("{} month delay", *n as i64)
+        }
+        (FactValue::Numeric(n), "rera_builder_revocations") if (*n - 1.0).abs() < f64::EPSILON => {
+            "1 revocation".to_string()
+        }
+        (FactValue::Numeric(n), "rera_builder_revocations") => {
+            format!("{} revocations", *n as i64)
+        }
+        (FactValue::Numeric(n), "reddit_thread_count") if (*n - 1.0).abs() < f64::EPSILON => {
+            "1 thread".to_string()
+        }
+        (FactValue::Numeric(n), "reddit_thread_count") => {
+            format!("{} threads", *n as i64)
+        }
+        (FactValue::Numeric(n), "reddit_total_comments") if (*n - 1.0).abs() < f64::EPSILON => {
+            "1 comment counted".to_string()
+        }
+        (FactValue::Numeric(n), "reddit_total_comments") => {
+            format!("{} comments counted", *n as i64)
+        }
+        (FactValue::Numeric(n), "reddit_total_score") => {
+            format!("{} community score", *n as i64)
+        }
+        (FactValue::Tags(tags), "reddit_threads") => tags.join("\n"),
+        _ => fact_display(fact),
+    };
+    Some(SourceItem {
+        label: label.to_string(),
+        value,
+        source_type: format!("{:?}", fact.source.source_type),
+        source_url: fact.source.url.clone(),
+        confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
+        learned_at: fact.learned_at.to_rfc3339(),
+    })
+}
+
+fn collect_source_items(
+    graph: &crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    keys: &[(&str, &str)],
+) -> Vec<SourceItem> {
+    keys.iter()
+        .filter_map(|(key, label)| source_item(graph, node_id, key, label))
+        .collect()
+}
+
+fn build_source_panels(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+) -> Vec<SourcePanel> {
+    let society_id = society_node_id(&property.society_id);
+    let area_id = super::enrichment::area_node_id(&property.area);
+
+    let mut panels = Vec::new();
+
+    let rera_items = collect_source_items(
+        graph,
+        &society_id,
+        &[
+            ("rera_status", "Status"),
+            ("rera_number", "Registration"),
+            ("rera_completion_date", "Completion"),
+            ("rera_delay_months", "Delay"),
+            ("rera_complaints_count", "Complaints"),
+            ("rera_builder_revocations", "Builder revocations"),
+        ],
+    );
+    if !rera_items.is_empty() {
+        panels.push(SourcePanel {
+            title: "RERA trail".to_string(),
+            subtitle: "Government project file and builder record.".to_string(),
+            items: rera_items,
+            missing: vec![],
+        });
+    }
+
+    let reddit_items = collect_source_items(
+        graph,
+        &society_id,
+        &[
+            ("reddit_thread_count", "Threads found"),
+            ("reddit_total_comments", "Comments found"),
+            ("reddit_total_score", "Community score"),
+            ("reddit_threads", "Thread title"),
+        ],
+    );
+    panels.push(SourcePanel {
+        title: "Reddit trail".to_string(),
+        subtitle: "Community mentions tied to this society.".to_string(),
+        items: reddit_items,
+        missing: vec![
+            "Comment text is not captured yet.".to_string(),
+            "Comment-level sentiment is not extracted yet.".to_string(),
+        ],
+    });
+
+    let market_items = collect_source_items(
+        graph,
+        &society_id,
+        &[
+            ("pricing_3bhk", "3BHK pricing"),
+            ("price_per_sqft", "Market rate"),
+            ("price_appreciation", "Price movement"),
+            ("comparable_projects", "Nearby comparables"),
+        ],
+    );
+    panels.push(SourcePanel {
+        title: "Market trail".to_string(),
+        subtitle: "Google-sourced pricing and comparable-project signals.".to_string(),
+        items: market_items,
+        missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
+    });
+
+    let area_items = collect_source_items(
+        graph,
+        &area_id,
+        &[
+            ("metro_details", "Metro access"),
+            ("traffic_reality", "Traffic"),
+            ("waterlogging_detail", "Waterlogging"),
+            ("school_quality", "Schools"),
+        ],
+    );
+    panels.push(SourcePanel {
+        title: "Area trail".to_string(),
+        subtitle: "Neighbourhood evidence around daily life.".to_string(),
+        items: area_items,
+        missing: vec![
+            "Gate-level commute timings are not measured yet.".to_string(),
+            "Upcoming infrastructure status needs a fresh source check.".to_string(),
+        ],
+    });
+
+    let review_items = collect_source_items(
+        graph,
+        &society_id,
+        &[
+            ("google_rating", "Google rating"),
+            ("google_review_count", "Review count"),
+            ("google_common_themes", "Common themes"),
+            ("google_top_positives", "Review positives"),
+            ("google_top_negatives", "Review concerns"),
+        ],
+    );
+    panels.push(SourcePanel {
+        title: "Review trail".to_string(),
+        subtitle: "Google review evidence for the society.".to_string(),
+        items: review_items,
+        missing: vec![
+            "Google review snippets are not stored for this society yet.".to_string(),
+            "Maintenance and resident-service themes need review extraction.".to_string(),
+        ],
+    });
+
+    panels
+        .into_iter()
+        .filter(|panel| !panel.items.is_empty() || !panel.missing.is_empty())
+        .collect()
+}
+
+fn build_builder_portfolio(
+    graph: &crate::knowledge::KnowledgeGraph,
+    properties: &[crate::models::Property],
+    current: &crate::models::Property,
+) -> Option<BuilderPortfolio> {
+    let builder_key = normalized_builder_key(&current.builder_name);
+    if builder_key.is_empty() {
+        return None;
+    }
+
+    let mut seen_societies = HashSet::new();
+    let mut projects = Vec::new();
+    let mut rera_registered_projects = 0;
+    let mut delayed_projects = 0;
+    let mut complaint_projects = 0;
+    let mut revocations: Option<i32> = None;
+
+    for property in properties {
+        if normalized_builder_key(&property.builder_name) != builder_key {
+            continue;
+        }
+        if !seen_societies.insert(property.society_id.clone()) {
+            continue;
+        }
+
+        let rera = extract_rera_info(graph, &property.society_id);
+        if rera.as_ref().is_some_and(|r| r.registered) {
+            rera_registered_projects += 1;
+        }
+        if rera
+            .as_ref()
+            .and_then(|r| r.delay_months)
+            .is_some_and(|months| months > 0)
+        {
+            delayed_projects += 1;
+        }
+        if rera
+            .as_ref()
+            .and_then(|r| r.complaints_count)
+            .is_some_and(|count| count > 0)
+        {
+            complaint_projects += 1;
+        }
+        if let Some(builder_revocations) = rera.as_ref().and_then(|r| r.builder_revocations) {
+            revocations = Some(revocations.unwrap_or(0).max(builder_revocations));
+        }
+
+        projects.push(BuilderProjectRecord {
+            property_id: property.id.clone(),
+            project_name: project_name_for(property),
+            area: property.area.clone(),
+            rera_number: rera.as_ref().and_then(|r| r.registration_number.clone()),
+            rera_portal_url: rera.as_ref().and_then(|r| r.rera_portal_url.clone()),
+            rera_status: rera.as_ref().and_then(|r| r.status.clone()),
+            completion_date: rera.as_ref().and_then(|r| r.completion_date.clone()),
+            delay_months: rera.as_ref().and_then(|r| r.delay_months),
+            complaints_count: rera.as_ref().and_then(|r| r.complaints_count),
+            project_status_display: project_status_display_for(graph, &property.society_id),
+            current: property.society_id == current.society_id,
+        });
+    }
+
+    if projects.len() <= 1 && rera_registered_projects == 0 {
+        return None;
+    }
+
+    projects.sort_by(|a, b| {
+        b.current
+            .cmp(&a.current)
+            .then_with(|| a.project_name.cmp(&b.project_name))
+    });
+    let tracked_projects = projects.len();
+    projects.truncate(8);
+
+    Some(BuilderPortfolio {
+        builder_name: current.builder_name.clone(),
+        tracked_projects,
+        rera_registered_projects,
+        delayed_projects,
+        complaint_projects,
+        revocations,
+        projects,
+    })
 }
 
 /// GET /api/properties/:id — returns joined property + society + area,
@@ -122,20 +547,22 @@ pub async fn get_property(
     let graph = state.knowledge.read().await;
 
     // Enrich society from KG
+    let society_key = super::enrichment::to_slug(&property.society_id);
     let mut society = state
         .societies
         .iter()
-        .find(|s| s.id == property.society_id)
+        .find(|s| super::enrichment::to_slug(&s.id) == society_key)
         .cloned();
     if let Some(ref mut soc) = society {
         enrich_society(soc, &graph);
     }
 
     // Enrich area from KG
+    let area_key = area_lookup_key(&property.area_id);
     let mut area = state
         .areas
         .iter()
-        .find(|a| a.id == property.area_id)
+        .find(|a| area_lookup_key(&a.id) == area_key || area_lookup_key(&a.name) == area_key)
         .cloned();
     if let Some(ref mut ap) = area {
         enrich_area(ap, &graph);
@@ -183,7 +610,7 @@ pub async fn get_property(
     let rera = extract_rera_info(&graph, &property.society_id);
 
     // Extract area intelligence from the area's KG node
-    let area_intelligence = extract_area_intelligence(&graph, &property.area_id);
+    let area_intelligence = extract_area_intelligence(&graph, &property.area);
 
     // Compute transparency score
     let transparency_score = compute_transparency_score(&property, rera.as_ref());
@@ -272,6 +699,8 @@ pub async fn get_property(
 
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
+    let builder_portfolio = build_builder_portfolio(&graph, &properties, &property);
+    let source_panels = build_source_panels(&graph, &property);
 
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);
@@ -298,6 +727,8 @@ pub async fn get_property(
         project_status_display,
         project_status,
         builder_trust,
+        builder_portfolio,
+        source_panels,
         data_freshness,
         confidence_score,
     }))

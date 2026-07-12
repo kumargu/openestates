@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { PropertyDetailResponse, SellerSummary } from "../lib/types.ts";
-import { getProperty, submitClaim, expressInterest } from "../lib/api.ts";
+import type { BuilderPortfolio, PropertyDetailResponse, SellerSummary, SourcePanel } from "../lib/types.ts";
+import { getProperty, expressInterest } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isShortlisted, toggleShortlist } from "../lib/shortlist-store.ts";
-import { ShareButtons } from "../components/ShareButtons.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 
@@ -110,7 +109,6 @@ function buildDecision(data: PropertyDetailResponse): {
   label: string;
   tone: DecisionTone;
   summary: string;
-  nextAction: string;
 } {
   const p = data.property;
   const delta = normalizedDelta(data.market_activity.price_vs_median?.pct_diff);
@@ -121,10 +119,11 @@ function buildDecision(data: PropertyDetailResponse): {
 
   if (trust < 60) {
     return {
-      label: "Verify before shortlisting",
+      label: "Needs document review",
       tone: "verify",
-      summary: "The home may fit, but the source chain is not strong enough yet.",
-      nextAction: "Verify seller source and documents before scheduling a final visit.",
+      summary: data.rera?.registered
+        ? "RERA is verified. Unit-level seller proof still needs review."
+        : "Regulatory and seller documents are not complete enough yet.",
     };
   }
 
@@ -133,35 +132,22 @@ function buildDecision(data: PropertyDetailResponse): {
       label: "Verify risk before visit",
       tone: "verify",
       summary: `${topRisk.label} risk is the main blocker. Clear that before treating this as a finalist.`,
-      nextAction: `Resolve ${topRisk.label.toLowerCase()} evidence before final visit.`,
     };
   }
 
   if (delta !== null && delta > 8) {
     return {
-      label: "Negotiate before final visit",
+      label: "Price needs support",
       tone: "negotiate",
-      summary: "The home is above the local benchmark, so it needs a sharper comp-backed price conversation.",
-      nextAction: "Use area median and recent comps as the negotiation anchor.",
+      summary: "Ask is above the local benchmark; compare recent resale prices before a visit.",
     };
   }
 
   return {
-    label: "Good shortlist candidate",
+    label: "Keep on sheet",
     tone: "keep",
-    summary: "Price, trust, and risk are balanced enough to keep this in the decision sheet.",
-    nextAction: "Verify tower documents and access-road conditions before final visit.",
+    summary: "Price, source, and risk are balanced enough to keep this on the sheet.",
   };
-}
-
-function shortlistChecks(data: PropertyDetailResponse): string[] {
-  const p = data.property;
-  const riskChecks = riskSignalsFor(p)
-    .filter((risk) => risk.value >= 0.25)
-    .slice(0, 2)
-    .map((risk) => `Check ${risk.label.toLowerCase()} evidence`);
-  const explicit = data.tradeoffs.cautions.slice(0, 2);
-  return Array.from(new Set([...explicit, ...riskChecks])).slice(0, 3);
 }
 
 export function PropertyPage() {
@@ -219,7 +205,7 @@ export function PropertyPage() {
   if (status === "error") return <PageState variant="error" context="property" />;
   if (!data) return null;
 
-  const { property: p, society, area, tradeoffs, market_activity } = data;
+  const { property: p, society, area, market_activity } = data;
   const pvm = market_activity.price_vs_median;
 
   const handleSave = () => {
@@ -231,6 +217,9 @@ export function PropertyPage() {
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
+    : null;
+  const areaMedianLabel = area && hasKnownNumber(area.median_price_per_sqft)
+    ? `${area.name} median ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft`
     : null;
   const sizeLabel = hasKnownNumber(p.carpet_area_sqft)
     ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
@@ -249,8 +238,16 @@ export function PropertyPage() {
   const trustLabel = data.confidence_score?.label ?? (trust >= 75 ? "High" : trust >= 55 ? "Medium" : "Low");
   const risks = riskSignalsFor(p);
   const topRisk = risks[0];
-  const checks = shortlistChecks(data);
-  const sourceLabel = data.root_source === "rera" ? "RERA-rooted source" : data.root_source === "seller" ? "Seller source" : "Source pending";
+  const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
+  const sourcePanels = data.source_panels ?? [];
+  const sourceFactCount = sourcePanels.reduce((sum, panel) => sum + panel.items.length, 0);
+  const sourceTypes = data.data_freshness?.source_breakdown
+    ? Object.entries(data.data_freshness.source_breakdown)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([source]) => source)
+        .join(", ")
+    : sourceLabel;
   const marketRows = [
     market_activity.interest_label,
     market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
@@ -350,15 +347,15 @@ export function PropertyPage() {
         <main className="property-decision-main">
           <section className="property-decision-card property-decision-card--lead">
             <div className="property-section-heading">
-              <span>Decision brief</span>
-              <h2>What this means for a buyer</h2>
+              <span>At a glance</span>
+              <h2>Current read</h2>
             </div>
 
             <div className="property-decision-metrics">
               <DecisionMetric
                 label="Value"
                 value={formatMedianDelta(medianDelta)}
-                detail={area ? `Area median ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft` : "Area benchmark unavailable"}
+                detail={areaMedianLabel ?? "Area benchmark unavailable"}
                 tone={medianDelta !== null && medianDelta <= 0 ? "good" : medianDelta !== null && medianDelta > 8 ? "watch" : "neutral"}
               />
               <DecisionMetric
@@ -374,56 +371,44 @@ export function PropertyPage() {
                 tone={topRisk.value <= 0.24 ? "good" : topRisk.value <= 0.55 ? "watch" : "risk"}
               />
               <DecisionMetric
-                label="Next action"
-                value={decision.nextAction}
-                detail="Use this before scheduling or negotiating."
-                tone={decision.tone === "keep" ? "good" : "watch"}
+                label="Sources"
+                value={sourceFactCount > 0 ? `${sourceFactCount} facts` : "Sparse"}
+                detail={sourceTypes || "Source mix not available"}
+                tone={sourceFactCount >= 10 ? "good" : sourceFactCount >= 4 ? "watch" : "risk"}
               />
             </div>
 
-            <div className="property-brief-columns">
-              <div>
-                <h3>Why keep it</h3>
-                <ul className="property-check-list property-check-list--positive">
-                  {(tradeoffs.strengths.length > 0 ? tradeoffs.strengths : ["Fits the active shortlist profile."]).slice(0, 3).map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-              <div>
-                <h3>Verify before moving</h3>
-                <ul className="property-check-list property-check-list--watch">
-                  {checks.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
           </section>
 
           <section className="property-evidence-section">
             <div className="property-section-heading">
-              <span>Evidence</span>
-              <h2>What supports the decision</h2>
+              <span>Paper trail</span>
+              <h2>Records behind this listing</h2>
             </div>
 
             <div className="property-evidence-grid">
               <div className="property-evidence-card">
                 <h3>Price and market</h3>
                 <EvidenceRow label="Ask" value={formatPrice(p.price)} detail={pricePerSqftLabel ?? "Rate per sqft not available"} />
-                <EvidenceRow label="Benchmark" value={formatMedianDelta(medianDelta)} detail={area ? `${area.name} median: ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft` : "No area benchmark"} />
+                <EvidenceRow label="Benchmark" value={formatMedianDelta(medianDelta)} detail={areaMedianLabel ?? "No area benchmark"} />
                 <EvidenceRow label="Demand" value={market_activity.interest_label} detail={`${market_activity.days_on_market} days on market`} />
               </div>
 
               <div className="property-evidence-card">
-                <h3>Source and documents</h3>
-                <EvidenceRow label="Trust" value={`${trust}/100`} detail={sourceLabel} />
-                <EvidenceRow label="RERA" value={data.rera?.registered ? "Registered" : "Verification pending"} detail={data.rera?.registration_number ?? "Confirm before token or legal review"} />
+                <h3>RERA file</h3>
+                <EvidenceRow label="Status" value={data.rera?.registered ? data.rera.status ?? "Registered" : "Not linked yet"} detail={data.rera?.registration_number ?? "Registration number not available"} />
+                <EvidenceRow label="Timeline" value={data.rera?.completion_date ?? "Completion not available"} detail={data.rera?.delay_months ? `${data.rera.delay_months} month delay against original date` : data.rera?.original_completion_date ? `Original date: ${data.rera.original_completion_date}` : "Original date not available"} />
+                <EvidenceRow label="Complaints" value={data.rera?.complaints_count != null ? String(data.rera.complaints_count) : "Not available"} detail={data.rera?.complaints_resolved_pct != null ? `${Math.round(data.rera.complaints_resolved_pct)}% resolved in file` : "Resolution data not available"} />
                 <EvidenceRow
                   label="Documents"
                   value={`${Math.round(p.document_completeness_score * 100)}% complete`}
-                  detail={data.rera ? "RERA and source documents are available for legal review." : "Ask for sale deed, khata, OC/CC, and dues before token."}
+                  detail={data.rera ? "RERA file is linked; seller-level documents still need review." : "Ask for sale deed, khata, OC/CC, and dues before token."}
                 />
+                {data.rera?.rera_portal_url && (
+                  <a className="property-text-link" href={data.rera.rera_portal_url} target="_blank" rel="noreferrer">
+                    Open RERA source
+                  </a>
+                )}
                 {data.builder_trust?.delivery_display && (
                   <BuilderTrustBadge
                     deliveryDisplay={data.builder_trust.delivery_display}
@@ -454,24 +439,32 @@ export function PropertyPage() {
                 />
               </div>
             </div>
+
+            {data.builder_portfolio && (
+              <BuilderRecordPanel portfolio={data.builder_portfolio} />
+            )}
           </section>
+
+          <SourcePanelsSection panels={sourcePanels} />
 
           {(society || area) && (
             <section className="property-context-panel">
               <div className="property-section-heading">
-                <span>Context</span>
-                <h2>What changes the lived experience</h2>
+                <span>Local context</span>
+                <h2>Neighbourhood and society</h2>
               </div>
 
               <div className="property-context-grid">
                 {society && (
                   <div>
                     <h3>{society.name}</h3>
-                    <p>{society.review_summary || society.summary}</p>
+                    {(society.review_summary || society.summary) && (
+                      <p>{society.review_summary || society.summary}</p>
+                    )}
                     <div className="property-context-pills">
-                      <span>Builder: {society.builder_name}</span>
-                      <span>{society.year_built}</span>
-                      <span>{society.maintenance_sentiment}</span>
+                      {isKnownText(society.builder_name) && <span>Builder: {society.builder_name}</span>}
+                      {hasKnownNumber(society.year_built) && <span>{society.year_built}</span>}
+                      {isKnownText(society.maintenance_sentiment) && <span>{society.maintenance_sentiment}</span>}
                     </div>
                     <div className="property-context-lists">
                       <CompactList title="Resident positives" items={society.common_positives.slice(0, 3)} tone="good" />
@@ -483,10 +476,14 @@ export function PropertyPage() {
                 {area && (
                   <div>
                     <h3>{area.name}</h3>
-                    <p>{area.trend_summary}</p>
+                    {(area.trend_summary || area.livability_summary) && (
+                      <p>{area.trend_summary || area.livability_summary}</p>
+                    )}
                     <div className="property-context-pills">
-                      <span>₹{area.median_price_per_sqft.toLocaleString("en-IN")} /sqft median</span>
-                      <span>{area.trend_direction}</span>
+                      {hasKnownNumber(area.median_price_per_sqft) && (
+                        <span>₹{area.median_price_per_sqft.toLocaleString("en-IN")} /sqft median</span>
+                      )}
+                      {isKnownText(area.trend_direction) && <span>{area.trend_direction}</span>}
                     </div>
                     <ul className="property-context-notes">
                       {[area.metro_access_summary, area.traffic_summary, area.waterlogging_summary]
@@ -503,8 +500,8 @@ export function PropertyPage() {
           {data.similar_properties.length > 0 && (
             <section className="property-similar-section">
               <div className="property-section-heading">
-                <span>Alternatives</span>
-                <h2>Keep pressure on this choice</h2>
+                <span>Compared with</span>
+                <h2>Nearby alternatives</h2>
               </div>
               <div className="property-similar-grid">
                 {data.similar_properties.slice(0, 3).map((sp) => (
@@ -525,29 +522,15 @@ export function PropertyPage() {
             </section>
           )}
 
-          {!data.seller && <ClaimSection propertyId={p.id} />}
         </main>
 
         <aside className="property-action-rail">
-          <div className="property-action-card">
-            <span>Next action</span>
-            <strong>{decision.nextAction}</strong>
-            <button
-              onClick={handleSave}
-              data-testid="sidebar-save-button"
-              className={`btn ${saved ? "btn-primary" : "btn-outline"}`}
-            >
-              {saved ? "\u2665 In decision sheet" : "\u2661 Save to sheet"}
-            </button>
-            <ShareButtons propertyId={p.id} title={p.title} />
-          </div>
-
           <InterestButton propertyId={p.id} initialCount={data.interest_count ?? 0} />
           {data.seller && <SellerInfoCard seller={data.seller} />}
 
           <div className="property-mini-card property-rail-intel">
             <div>
-              <h3>Risk watchlist</h3>
+              <h3>Risk list</h3>
               <div className="property-risk-stack">
                 {risks.slice(0, 4).map((risk) => (
                   <RiskBar key={risk.label} signal={risk} />
@@ -565,140 +548,6 @@ export function PropertyPage() {
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function ClaimSection({ propertyId }: { propertyId: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const [name, setName] = useState("");
-  const [phone, setPhone] = useState("");
-  const [email, setEmail] = useState("");
-  const [status, setStatus] = useState<"idle" | "submitting" | "success" | "error">("idle");
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStatus("submitting");
-    setErrorMsg("");
-    try {
-      await submitClaim({
-        property_id: propertyId,
-        name: name.trim(),
-        phone: phone.trim() || undefined,
-        email: email.trim() || undefined,
-      });
-      setStatus("success");
-    } catch (err: unknown) {
-      setStatus("error");
-      setErrorMsg(err instanceof Error ? err.message : "Something went wrong");
-    }
-  };
-
-  if (status === "success") {
-    return (
-      <div className="claim-section" style={{ marginTop: "1.5rem" }}>
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: "0.5rem",
-          color: "var(--color-positive)",
-          fontWeight: 600,
-          fontSize: "0.95rem",
-        }}>
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-            <polyline points="22 4 12 14.01 9 11.01" />
-          </svg>
-          Claim submitted. We'll be in touch.
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="claim-section" style={{ marginTop: "1.5rem" }}>
-      {!expanded ? (
-        <div style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "0.75rem",
-        }}>
-          <div>
-            <div style={{ fontWeight: 600, fontSize: "0.95rem", color: "var(--color-text)" }}>
-              Is this your property?
-            </div>
-            <div style={{ fontSize: "0.82rem", color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
-              Verify ownership and manage your listing
-            </div>
-          </div>
-          <button
-            onClick={() => setExpanded(true)}
-            className="btn btn-outline"
-            style={{ flexShrink: 0 }}
-          >
-            Claim it
-          </button>
-        </div>
-      ) : (
-        <form onSubmit={handleSubmit}>
-          <div style={{ fontWeight: 600, fontSize: "0.95rem", marginBottom: "0.75rem", color: "var(--color-text)" }}>
-            Claim this property
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-            <input
-              type="text"
-              className="claim-input"
-              placeholder="Your name *"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-              autoFocus
-            />
-            <input
-              type="tel"
-              className="claim-input"
-              placeholder="Phone number"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-            />
-            <input
-              type="email"
-              className="claim-input"
-              placeholder="Email address"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-          </div>
-          {status === "error" && (
-            <div style={{
-              marginTop: "0.5rem",
-              fontSize: "0.82rem",
-              color: "var(--color-negative)",
-            }}>
-              {errorMsg || "Failed to submit claim. Please try again."}
-            </div>
-          )}
-          <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.85rem" }}>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={status === "submitting" || !name.trim() || (!phone.trim() && !email.trim())}
-            >
-              {status === "submitting" ? "Submitting..." : "Submit claim"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline"
-              onClick={() => { setExpanded(false); setStatus("idle"); setErrorMsg(""); }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      )}
     </div>
   );
 }
@@ -729,6 +578,171 @@ function EvidenceRow({ label, value, detail }: { label: string; value: string; d
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
+    </div>
+  );
+}
+
+function formatSourceDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Date not available";
+  return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
+function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
+  if (panels.length === 0) return null;
+
+  return (
+    <section className="property-source-section">
+      <div className="property-section-heading">
+        <span>Source trail</span>
+        <h2>What people and records say</h2>
+      </div>
+
+      <div className="source-panel-grid">
+        {panels.map((panel, index) => (
+          <details key={panel.title} className="source-panel" open={index === 0}>
+            <summary>
+              <i className="source-chevron" aria-hidden="true" />
+              <div>
+                <h3>{panel.title}</h3>
+                <p>{panel.subtitle}</p>
+              </div>
+              <strong className="source-panel-count">{panel.items.length} stored</strong>
+            </summary>
+
+            <div className="source-panel-body">
+              {panel.items.map((item) => (
+                <details
+                  key={`${panel.title}-${item.label}`}
+                  className="source-fact-disclosure"
+                >
+                  <summary className="source-fact-row">
+                    <i className="source-chevron" aria-hidden="true" />
+                    <div>
+                      <span>{item.label}</span>
+                      <strong>{item.value}</strong>
+                    </div>
+                    <div className="source-fact-meta">
+                      <span>{item.source_type} · {item.confidence_pct}% · {formatSourceDate(item.learned_at)}</span>
+                    </div>
+                  </summary>
+
+                  <div className="source-fact-detail">
+                    <blockquote>{item.value}</blockquote>
+                    <dl>
+                      <div>
+                        <dt>Type</dt>
+                        <dd>{item.source_type}</dd>
+                      </div>
+                      <div>
+                        <dt>Confidence</dt>
+                        <dd>{item.confidence_pct}%</dd>
+                      </div>
+                      <div>
+                        <dt>Stored</dt>
+                        <dd>{formatSourceDate(item.learned_at)}</dd>
+                      </div>
+                    </dl>
+                    {item.source_url && (
+                      <a className="source-fact-link" href={item.source_url} target="_blank" rel="noreferrer">
+                        Open source
+                      </a>
+                    )}
+                  </div>
+                </details>
+              ))}
+
+              {panel.missing.length > 0 && (
+                <div className="source-missing-list">
+                  <span>Not captured</span>
+                  {panel.missing.map((item) => (
+                    <p key={item}>{item}</p>
+                  ))}
+                </div>
+              )}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
+  const revocationText = portfolio.revocations == null
+    ? "Revocations not available"
+    : `${portfolio.revocations} revocation${portfolio.revocations === 1 ? "" : "s"}`;
+
+  return (
+    <div className="builder-record-panel">
+      <div className="builder-record-header">
+        <div>
+          <span>Builder record</span>
+          <h3>{portfolio.builder_name}</h3>
+        </div>
+        <div className="builder-record-summary">
+          <strong>{portfolio.rera_registered_projects}/{portfolio.tracked_projects}</strong>
+          <span>tracked projects with RERA files</span>
+        </div>
+      </div>
+
+      <div className="builder-record-stats">
+        <div>
+          <span>Delayed</span>
+          <strong>{portfolio.delayed_projects}</strong>
+        </div>
+        <div>
+          <span>Complaints</span>
+          <strong>{portfolio.complaint_projects}</strong>
+        </div>
+        <div>
+          <span>Revocations</span>
+          <strong>{revocationText}</strong>
+        </div>
+      </div>
+
+      <div className="builder-project-list">
+        {portfolio.projects.map((project) => {
+          const hasDelay = project.delay_months != null && project.delay_months > 0;
+          const hasComplaints = project.complaints_count != null && project.complaints_count > 0;
+
+          return (
+            <div
+              key={`${project.property_id}-${project.project_name}`}
+              className={`builder-project-row ${project.current ? "builder-project-row--current" : ""}`}
+            >
+              <Link to={`/property/${project.property_id}`} className="builder-project-main">
+                <div>
+                  <strong>{project.project_name}</strong>
+                  <span>{project.area}{project.current ? " · current file" : ""}</span>
+                </div>
+                <div>
+                  <b>{project.rera_status ?? "RERA pending"}</b>
+                  <span>{project.rera_number ?? project.project_status_display ?? "No registration linked"}</span>
+                </div>
+              </Link>
+              <div className="builder-project-actions">
+                <div className="builder-project-flags">
+                  {hasDelay && (
+                    <span>{project.delay_months} mo delay</span>
+                  )}
+                  {hasComplaints && (
+                    <span>{project.complaints_count} complaint{project.complaints_count === 1 ? "" : "s"}</span>
+                  )}
+                  {!hasDelay && !hasComplaints && (
+                    <span>No flags in file</span>
+                  )}
+                </div>
+                {project.rera_portal_url && (
+                  <a className="builder-project-source" href={project.rera_portal_url} target="_blank" rel="noreferrer">
+                    RERA source
+                  </a>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

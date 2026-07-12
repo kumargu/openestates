@@ -163,7 +163,8 @@ fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
                     .or_fact_text(node, "price_trend")
                     .into(),
                 trend_summary: fact_text(node, "trend_summary").into(),
-                metro_access_summary: fact_text(node, "metro_access")
+                metro_access_summary: fact_text(node, "metro_details")
+                    .or_fact_text(node, "metro_access")
                     .or_fact_text(node, "metro_status")
                     .into(),
                 airport_noise_summary: fact_text(node, "airport_noise_summary").into(),

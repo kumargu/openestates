@@ -124,8 +124,50 @@ export type PropertyDetailResponse = {
     delivery_display?: string;
     zero_revocations?: boolean;
   };
+  builder_portfolio?: BuilderPortfolio;
+  source_panels?: SourcePanel[];
   data_freshness?: DataFreshness;
   confidence_score?: ConfidenceScore;
+};
+
+export type SourcePanel = {
+  title: string;
+  subtitle: string;
+  items: SourceItem[];
+  missing: string[];
+};
+
+export type SourceItem = {
+  label: string;
+  value: string;
+  source_type: string;
+  source_url?: string;
+  confidence_pct: number;
+  learned_at: string;
+};
+
+export type BuilderPortfolio = {
+  builder_name: string;
+  tracked_projects: number;
+  rera_registered_projects: number;
+  delayed_projects: number;
+  complaint_projects: number;
+  revocations?: number;
+  projects: BuilderProjectRecord[];
+};
+
+export type BuilderProjectRecord = {
+  property_id: string;
+  project_name: string;
+  area: string;
+  rera_number?: string;
+  rera_portal_url?: string;
+  rera_status?: string;
+  completion_date?: string;
+  delay_months?: number;
+  complaints_count?: number;
+  project_status_display?: string;
+  current: boolean;
 };
 
 export type SellerSummary = {
