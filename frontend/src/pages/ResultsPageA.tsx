@@ -573,7 +573,7 @@ function ViewModeSwitch({
           <path d="M9 4v16" />
           <path d="M15 4v16" />
         </svg>
-        Compare
+        Saved
         {sheetCount > 0 && <span>{sheetCount}</span>}
       </button>
     </div>
@@ -649,7 +649,6 @@ function SheetSortButton({
 function SheetCompareView({
   rows,
   missingSheetCount,
-  showingSaved,
   sortKey,
   onSortChange,
   onQuickView,
@@ -657,7 +656,6 @@ function SheetCompareView({
 }: {
   rows: SheetCompareRow[];
   missingSheetCount: number;
-  showingSaved: boolean;
   sortKey: SheetSortKey;
   onSortChange: (key: SheetSortKey) => void;
   onQuickView: (id: string) => void;
@@ -677,7 +675,6 @@ function SheetCompareView({
     return (
       <section className="comparison-sheet comparison-sheet--empty">
         <div>
-          <span className="comparison-sheet-kicker">Compare</span>
           <h2>No saved homes yet</h2>
         </div>
         <p>Save homes from discovery to compare price, area, and usable space in one place.</p>
@@ -686,14 +683,10 @@ function SheetCompareView({
   }
 
   return (
-    <section className="comparison-sheet" aria-label="Comparison sheet">
+    <section className="comparison-sheet" aria-label="Saved homes">
       <div className="comparison-sheet-toolbar">
-        <div className="comparison-sheet-heading">
-          <span className="comparison-sheet-kicker">{showingSaved ? "Saved homes" : "Current results"}</span>
-          <h2>{sortedRows.length} {sortedRows.length === 1 ? "home" : "homes"} compared</h2>
-        </div>
-        <div className="comparison-sort-group" aria-label="Sort comparison sheet">
-          <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Saved</SheetSortButton>
+        <div className="comparison-sort-group" aria-label="Sort saved homes">
+          <SheetSortButton sortKey="sheet" active={sortKey === "sheet"} onSort={onSortChange}>Added</SheetSortButton>
           <SheetSortButton sortKey="price" active={sortKey === "price"} onSort={onSortChange}>Price</SheetSortButton>
           <SheetSortButton sortKey="carpet" active={sortKey === "carpet"} onSort={onSortChange}>Carpet</SheetSortButton>
           <SheetSortButton sortKey="efficiency" active={sortKey === "efficiency"} onSort={onSortChange}>Eff.</SheetSortButton>
@@ -992,8 +985,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     return next;
   }, [catalogProperties, matchResults, properties]);
 
-  const sheetIds = useMemo(() => new Set(sheetItems.map((item) => item.id)), [sheetItems]);
-
   const removeSheetItem = (id: string) => {
     removeFromSheet(id);
     refreshSheetItems();
@@ -1015,19 +1006,14 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         onSheet: true,
       });
     }
-
-    if (savedRows.length > 0) return savedRows;
-
-    return matchResults.map(({ property }) => ({
-      property,
-      onSheet: sheetIds.has(property.id),
-    }));
-  }, [matchResults, propertiesById, sheetIds, sheetItems]);
+    return savedRows;
+  }, [propertiesById, sheetItems]);
 
   const missingSheetCount = useMemo(() => {
     return sheetItems.filter((item) => !propertiesById.has(item.id)).length;
   }, [propertiesById, sheetItems]);
-  const sheetViewShowsSaved = sheetItems.length > 0 && sheetCompareRows.some((row) => row.onSheet);
+  const savedCount = sheetCompareRows.length;
+  const savedCountLabel = `${savedCount} ${savedCount === 1 ? "saved home" : "saved homes"}`;
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
   const totalCount = useBackendResults ? searchResponse.total_results : filtered.length;
@@ -1036,13 +1022,15 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const intent = useBackendResults ? searchResponse.intent : null;
   const containerClass = isEmbedded ? "inline-results-shell" : viewMode === "sheet" ? "page-container-wide" : "page-container";
   const headerClass = isEmbedded ? "inline-results-header" : "page-header";
-  const title = "Properties";
+  const showEmbeddedSwitch = isEmbedded && (Boolean(query) || viewMode === "sheet");
+  const kicker = viewMode === "sheet" && !query ? "OpenEstates saved" : "OpenEstates search";
+  const title = !isEmbedded && viewMode === "sheet" ? "Saved" : "Properties";
 
   if (status === "loading") return (
     <div className={containerClass}>
       <div className={headerClass}>
-        {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
-        {isEmbedded && query ? (
+        {showEmbeddedSwitch && <span className="inline-results-kicker">{kicker}</span>}
+        {showEmbeddedSwitch ? (
           <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
         ) : (
           <h1>{title}</h1>
@@ -1108,8 +1096,8 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         <meta property="og:site_name" content="OpenEstates" />
       </Helmet>
       <div className={headerClass}>
-        {isEmbedded && query && <span className="inline-results-kicker">OpenEstates search</span>}
-        {isEmbedded && query ? (
+        {showEmbeddedSwitch && <span className="inline-results-kicker">{kicker}</span>}
+        {showEmbeddedSwitch ? (
           <ViewModeSwitch mode={viewMode} sheetCount={sheetItems.length} onChange={setViewMode} />
         ) : (
           <h1>{title}</h1>
@@ -1164,7 +1152,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
         {!query && (
           <div>
-            {areaFilter && (
+            {viewMode !== "sheet" && areaFilter && (
               <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
                 <span
                   className="tag tag-neutral"
@@ -1178,14 +1166,24 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
                 </span>
               </div>
             )}
-            <p>{totalCount} {areaFilter ? `listings in ${areaFilter}` : "listings with full transparency reports"}</p>
+            <p>
+              {viewMode === "sheet"
+                ? savedCount > 0
+                  ? `${savedCountLabel} ready to compare.`
+                  : "Your saved homes will stay here while you keep browsing."
+                : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "listings with full transparency reports"}`}
+            </p>
           </div>
         )}
       </div>
 
       {/* Accessible live region — announces result count to screen readers */}
       <div aria-live="polite" className="sr-only">
-        {query
+        {viewMode === "sheet" && !query
+          ? savedCount > 0
+            ? `${savedCountLabel} ready to compare.`
+            : "No saved homes yet."
+          : query
           ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
@@ -1276,7 +1274,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         <SheetCompareView
           rows={sheetCompareRows}
           missingSheetCount={missingSheetCount}
-          showingSaved={sheetViewShowsSaved}
           sortKey={sheetSortKey}
           onSortChange={setSheetSortKey}
           onQuickView={setPanelPropertyId}

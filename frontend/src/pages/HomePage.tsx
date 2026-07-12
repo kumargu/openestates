@@ -202,6 +202,8 @@ export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
+  const activeView = searchParams.get("view") === "sheet" ? "sheet" : "cards";
+  const hasInlinePane = hasActiveSearch || activeView === "sheet";
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [loadError, setLoadError] = useState(false);
@@ -226,26 +228,29 @@ export function HomePage() {
   }, [activeSearchQuery]);
 
   useEffect(() => {
-    if (!hasActiveSearch || !shouldScrollToResultsRef.current) return;
+    if (!hasInlinePane || !shouldScrollToResultsRef.current) return;
     shouldScrollToResultsRef.current = false;
     window.setTimeout(() => {
       inlineResultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
     }, 90);
-  }, [activeSearchQuery, hasActiveSearch]);
+  }, [activeSearchQuery, hasInlinePane]);
 
-  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean } = {}) => {
+  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean; view?: "cards" | "sheet" } = {}) => {
     const q = rawQuery.trim();
+    const nextParams = new URLSearchParams();
+    if (options.view === "sheet") nextParams.set("view", "sheet");
     setQuery(q);
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
       addRecentSearch(q);
       setRecents(getRecentSearches());
       shouldScrollToResultsRef.current = options.scroll ?? true;
-      setSearchParams({ q });
+      nextParams.set("q", q);
+      setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
-      shouldScrollToResultsRef.current = false;
-      setSearchParams({});
+      shouldScrollToResultsRef.current = options.scroll ?? options.view === "sheet";
+      setSearchParams(nextParams);
     }
   }, [setSearchParams]);
 
@@ -256,7 +261,7 @@ export function HomePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    commitSearch(query);
+    commitSearch(query, { view: activeView });
   };
 
   const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
@@ -274,14 +279,14 @@ export function HomePage() {
     <div>
       {/* Hero */}
       <section
-        className={`home-hero ${hasActiveSearch ? "home-hero--search-active" : ""}`}
+        className={`home-hero ${hasInlinePane ? "home-hero--search-active" : ""}`}
         style={{
-          minHeight: hasActiveSearch ? "min(72vh, 640px)" : "96vh",
+          minHeight: hasInlinePane ? "min(72vh, 640px)" : "96vh",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: hasActiveSearch
+          padding: hasInlinePane
             ? "7rem clamp(1.5rem, 4vw, 4rem) 5rem"
             : "0 clamp(1.5rem, 4vw, 4rem)",
           position: "relative",
@@ -362,24 +367,29 @@ export function HomePage() {
             onChange={(e) => setQuery(e.target.value)}
             aria-label="Describe the property you are looking for"
           />
+          <div className="results-view-switch results-view-switch--compact home-search-mode" aria-label="Home search mode">
+            <button
+              type="button"
+              className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
+              onClick={() => commitSearch(query, { view: "cards", scroll: hasActiveSearch })}
+              aria-pressed={activeView === "cards"}
+            >
+              Discover
+            </button>
+            <button
+              type="button"
+              className={activeView === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
+              onClick={() => commitSearch(query, { view: "sheet", scroll: true })}
+              aria-pressed={activeView === "sheet"}
+            >
+              Saved
+            </button>
+          </div>
           <button
             type="submit"
-            style={{
-              border: "none",
-              background: "#1a1a1a",
-              color: "#fff",
-              padding: "0.6rem 1.5rem",
-              borderRadius: "10px",
-              fontSize: "0.9rem",
-              cursor: "pointer",
-              whiteSpace: "nowrap",
-              fontFamily: "inherit",
-              transition: "background 0.2s ease",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "#333")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "#1a1a1a")}
+            className="home-search-submit"
           >
-            Search
+            {activeView === "sheet" ? "Open saved" : "Search"}
           </button>
         </form>
 
@@ -558,16 +568,18 @@ export function HomePage() {
         )}
       </section>
 
-      {hasActiveSearch && (
+      {hasInlinePane && (
         <section ref={inlineResultsRef} className="home-inline-results-anchor" aria-label="Search results">
           <Suspense
             fallback={
               <div className="inline-results-shell">
                 <div className="inline-results-header">
-                  <span className="inline-results-kicker">OpenEstates search</span>
+                  <span className="inline-results-kicker">
+                    {activeView === "sheet" && !activeSearchQuery ? "OpenEstates saved" : "OpenEstates search"}
+                  </span>
                   <div className="results-view-switch" aria-hidden="true">
-                    <span className="results-view-switch-btn results-view-switch-btn--active">Discover</span>
-                    <span className="results-view-switch-btn">Compare</span>
+                    <span className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Discover</span>
+                    <span className={activeView === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Saved</span>
                   </div>
                   <div className="skeleton-search-bar skeleton-bar" />
                 </div>

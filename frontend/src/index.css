@@ -1311,8 +1311,7 @@ body {
   padding: 1rem 1.1rem;
 }
 
-.comparison-sheet--empty h2,
-.comparison-sheet-heading h2 {
+.comparison-sheet--empty h2 {
   margin: 0;
   color: var(--color-text);
   font-size: 0.95rem;
@@ -1329,29 +1328,13 @@ body {
 }
 
 .comparison-sheet-toolbar {
-  min-height: 64px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 1rem;
   padding: 0.8rem 1rem;
   border-bottom: 1px solid rgba(26, 26, 26, 0.07);
   background: rgba(249, 245, 242, 0.72);
-}
-
-.comparison-sheet-heading {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.12rem;
-}
-
-.comparison-sheet-kicker {
-  color: var(--color-accent);
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
 }
 
 .comparison-sort-group {
@@ -1934,7 +1917,7 @@ body {
 /* --- Homepage CSS classes for responsive overrides --- */
 .home-search-form {
   width: 100%;
-  max-width: 600px;
+  max-width: 760px;
   display: flex;
   align-items: center;
   gap: 0.75rem;
@@ -1943,6 +1926,45 @@ body {
   background-color: #fff;
   border: 1px solid rgba(0,0,0,0.08);
   box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+}
+
+.home-search-form .search-input {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.home-search-mode {
+  flex-shrink: 0;
+}
+
+.results-view-switch--compact {
+  padding: 0.2rem;
+  background: rgba(26, 26, 26, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.results-view-switch--compact .results-view-switch-btn {
+  min-width: 90px;
+  min-height: 38px;
+  padding: 0 0.7rem;
+  font-size: 0.76rem;
+}
+
+.home-search-submit {
+  border: none;
+  background: #1a1a1a;
+  color: #fff;
+  padding: 0.7rem 1.35rem;
+  border-radius: 10px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  white-space: nowrap;
+  font-family: inherit;
+  transition: background 0.2s ease;
+}
+
+.home-search-submit:hover {
+  background: #333;
 }
 
 .home-stats-row {
@@ -2749,8 +2771,14 @@ body {
   line-height: 1.45;
 }
 
-.source-panel-count {
+.source-panel-actions {
   justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.source-panel-count {
   color: var(--color-accent);
   font-size: 0.74rem;
   font-weight: 800;
@@ -2758,21 +2786,42 @@ body {
   white-space: nowrap;
 }
 
-.source-chevron {
-  display: inline-block;
-  width: 7px;
-  height: 7px;
-  margin-top: 0.25rem;
-  border-right: 1.5px solid currentColor;
-  border-bottom: 1.5px solid currentColor;
-  color: var(--color-accent);
-  transform: rotate(-45deg);
-  transition: transform 0.18s ease;
+.source-disclosure-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 58px;
+  min-height: 28px;
+  padding: 0 0.62rem;
+  border: 1px solid rgba(26, 26, 26, 0.09);
+  border-radius: 999px;
+  background: rgba(246, 239, 234, 0.92);
+  color: rgba(26, 26, 26, 0.7);
+  font-size: 0.7rem;
+  font-weight: 800;
+  line-height: 1;
+  white-space: nowrap;
 }
 
-.source-panel[open] > summary > .source-chevron,
-.source-fact-disclosure[open] .source-fact-row > .source-chevron {
-  transform: rotate(45deg);
+.source-disclosure-toggle-open {
+  display: none;
+}
+
+.source-panel[open] > summary .source-disclosure-toggle,
+.source-fact-disclosure[open] .source-disclosure-toggle {
+  background: rgba(26, 26, 26, 0.92);
+  border-color: rgba(26, 26, 26, 0.92);
+  color: #fff;
+}
+
+.source-panel[open] > summary .source-disclosure-toggle-open,
+.source-fact-disclosure[open] .source-disclosure-toggle-open {
+  display: inline;
+}
+
+.source-panel[open] > summary .source-disclosure-toggle-closed,
+.source-fact-disclosure[open] .source-disclosure-toggle-closed {
+  display: none;
 }
 
 .source-panel-body {
@@ -2801,7 +2850,7 @@ body {
 
 .source-fact-row {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(150px, auto);
+  grid-template-columns: minmax(0, 1fr) minmax(180px, auto);
   gap: 0.65rem;
   width: 100%;
   min-width: 0;
@@ -2835,6 +2884,7 @@ body {
 .source-fact-meta {
   display: inline-flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-items: end;
   align-content: start;
   gap: 0.55rem;
@@ -3439,7 +3489,12 @@ body {
     min-width: 0;
   }
 
-  .home-search-form button[type="submit"] {
+  .home-search-form .results-view-switch {
+    width: 100%;
+  }
+
+  .home-search-form .results-view-switch-btn,
+  .home-search-form .home-search-submit {
     width: 100%;
     text-align: center;
     padding: 0.65rem 1rem;

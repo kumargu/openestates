@@ -599,12 +599,17 @@ function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
         {panels.map((panel, index) => (
           <details key={panel.title} className="source-panel" open={index === 0}>
             <summary>
-              <i className="source-chevron" aria-hidden="true" />
               <div>
                 <h3>{panel.title}</h3>
                 <p>{panel.subtitle}</p>
               </div>
-              <strong className="source-panel-count">{panel.items.length} stored</strong>
+              <div className="source-panel-actions">
+                <strong className="source-panel-count">{panel.items.length} stored</strong>
+                <span className="source-disclosure-toggle" aria-hidden="true">
+                  <span className="source-disclosure-toggle-open">Hide</span>
+                  <span className="source-disclosure-toggle-closed">Open</span>
+                </span>
+              </div>
             </summary>
 
             <div className="source-panel-body">
@@ -614,13 +619,16 @@ function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
                   className="source-fact-disclosure"
                 >
                   <summary className="source-fact-row">
-                    <i className="source-chevron" aria-hidden="true" />
                     <div>
                       <span>{item.label}</span>
                       <strong>{item.value}</strong>
                     </div>
                     <div className="source-fact-meta">
                       <span>{item.source_type} · {item.confidence_pct}% · {formatSourceDate(item.learned_at)}</span>
+                      <span className="source-disclosure-toggle" aria-hidden="true">
+                        <span className="source-disclosure-toggle-open">Hide</span>
+                        <span className="source-disclosure-toggle-closed">Open</span>
+                      </span>
                     </div>
                   </summary>
 
