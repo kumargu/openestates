@@ -40,7 +40,7 @@ REQUIRED_FACTS = {
     "area": [
         # Bootstrap facts
         "city", "median_price_per_sqft",
-        # Enrichment facts (from learn_area)
+        # Area intelligence facts
         "metro_status", "traffic_reality", "waterlogging_risk",
         "price_trend", "livability_summary",
     ],
@@ -60,7 +60,16 @@ EXPECTED_FACTS = {
     "society": ["google_rating", "google_sentiment"],
 }
 
-VALID_SOURCE_TYPES = {"Manual", "Reddit", "Google", "Rera", "Bbmp", "News", "Computed", "Llm"}
+VALID_SOURCE_TYPES = {
+    "Manual",
+    "Reddit",
+    "Google",
+    "Rera",
+    "Bbmp",
+    "News",
+    "Computed",
+    "Llm",  # Legacy KG compatibility only; active enrichment should not emit this.
+}
 VALID_VALUE_TYPES = {"Text", "Numeric", "Bool", "Tags", "Score"}
 
 

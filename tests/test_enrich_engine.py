@@ -74,6 +74,23 @@ class TestSkillRegistry(unittest.TestCase):
             self.assertIn(skill_id, FRESHNESS_SOURCE_MAP,
                           f"{skill_id} missing from FRESHNESS_SOURCE_MAP")
 
+    def test_llm_skills_are_not_registered(self):
+        removed = {
+            "fetch_google_reviews",
+            "learn_society",
+            "learn_area",
+            "score_society",
+            "embed_entity",
+            "fetch_market_pricing",
+            "rank_for_intent",
+            "discover_properties",
+        }
+        self.assertTrue(removed.isdisjoint(SKILL_REGISTRY.keys()))
+
+    def test_registry_has_no_llm_or_embedding_pools(self):
+        for skill_id, config in SKILL_REGISTRY.items():
+            self.assertNotIn(config["pool"], {"llm", "embedding"}, skill_id)
+
 
 class TestOutputKeys(unittest.TestCase):
     """Verify all registered skills declare output_keys."""
@@ -146,7 +163,7 @@ class TestGapDetection(unittest.TestCase):
         """Should find work for entities that have gaps in any skill."""
         work = detect_gaps(self.resolver, self.tracker,
                            node_filter="society:sobha-insignia")
-        # There should always be some work (at minimum embed_entity, score_society, etc.)
+        # There should always be some deterministic work for stale/missing sources.
         self.assertGreater(len(work), 0)
         skill_ids = set(w.skill_id for w in work)
         # At least one skill should be detected as needing work
@@ -186,13 +203,13 @@ class TestGapDetection(unittest.TestCase):
         for item in work_forced:
             self.assertEqual(item.reason, "forced")
 
-    def test_dependency_info_in_work_items(self):
+    def test_identify_gaps_depends_on_source_fetches(self):
         work = detect_gaps(self.resolver, self.tracker,
                            node_filter="society:sobha-insignia")
-        score_items = [w for w in work if w.skill_id == "score_society"]
-        if score_items:
-            deps = SKILL_REGISTRY["score_society"]["depends_on"]
-            self.assertGreater(len(deps), 0)
+        gap_items = [w for w in work if w.skill_id == "identify_gaps"]
+        if gap_items:
+            deps = SKILL_REGISTRY["identify_gaps"]["depends_on"]
+            self.assertEqual(set(deps), {"search_reddit", "fetch_rera"})
 
 
 class TestBuildInput(unittest.TestCase):
@@ -211,14 +228,15 @@ class TestBuildInput(unittest.TestCase):
         self.assertIn("project_name", inp)
         self.assertIn("entity_id", inp)
 
-    def test_learn_area_input(self):
-        inp = _build_input("learn_area", "area:whitefield", self.resolver)
-        self.assertIn("area_name", inp)
-
-    def test_embed_entity_input(self):
-        inp = _build_input("embed_entity", "society:sobha-insignia", self.resolver)
+    def test_fetch_images_input(self):
+        inp = _build_input("fetch_images", "society:sobha-insignia", self.resolver)
         self.assertEqual(inp["entity_type"], "society")
         self.assertIn("name", inp)
+        self.assertIn("area", inp)
+
+    def test_identify_gaps_input(self):
+        inp = _build_input("identify_gaps", "society:sobha-insignia", self.resolver)
+        self.assertEqual(inp["society_id"], "soc-sobha-insignia")
 
 
 class TestExecution(unittest.TestCase):
@@ -331,11 +349,11 @@ class TestExecution(unittest.TestCase):
 
         work = [
             WorkItem("society:x", "search_reddit", "missing", 1, "free"),
-            WorkItem("society:x", "learn_society", "missing", 2, "cheap"),  # depends on search_reddit
+            WorkItem("society:x", "identify_gaps", "missing", 4, "free"),
         ]
 
         stats = execute(work, self.resolver, self.tracker)
-        # Both should execute: search_reddit in pass 1, learn_society in pass 2
+        # Both should execute: search_reddit in pass 1, identify_gaps in pass 2
         self.assertEqual(stats.executed, 2)
 
 
@@ -363,7 +381,7 @@ class TestPrintOutput(unittest.TestCase):
     def test_print_plan_with_items(self):
         work = [
             WorkItem("society:test", "search_reddit", "missing", 1, "free"),
-            WorkItem("society:test", "score_society", "stale (15 days)", 3, "moderate"),
+            WorkItem("society:test", "identify_gaps", "stale (15 days)", 4, "free"),
         ]
         print_plan(work)
 
@@ -432,8 +450,22 @@ class TestRepopulateAfterFactRemoval(unittest.TestCase):
         self.assertEqual(len(reddit_items), 1, "Should detect search_reddit as missing")
         self.assertEqual(reddit_items[0].node_id, self.TARGET)
 
-        # 5. Execute enrichment
-        stats = execute(work, resolver, tracker, force=False)
+        # 5. Execute enrichment with deterministic mocked Reddit output.
+        work = reddit_items
+        with patch("pipeline.enrich._make_skill") as mock_make:
+            from pipeline.skills.base import SkillResult, SkillCost, SourcedFact, FactSource
+            mock_skill = MagicMock()
+            mock_skill.run.return_value = SkillResult(
+                facts=[SourcedFact(
+                    key="reddit_thread_count",
+                    value={"type": "Numeric", "data": 1},
+                    confidence=0.7,
+                    source=FactSource(source_type="Reddit", skill_id="search_reddit"),
+                )],
+                cost=SkillCost(api_calls=1),
+            )
+            mock_make.return_value = mock_skill
+            stats = execute(work, resolver, tracker, force=False)
         self.assertGreater(stats.executed, 0)
         self.assertEqual(stats.failed, 0)
 
@@ -472,8 +504,22 @@ class TestRepopulateAfterFactRemoval(unittest.TestCase):
         rera_items = [w for w in work if w.skill_id == "fetch_rera"]
         self.assertEqual(len(rera_items), 1, "Should detect fetch_rera as missing")
 
-        # Execute
-        stats = execute(work, resolver, tracker, force=False)
+        # Execute with deterministic mocked RERA output.
+        work = rera_items
+        with patch("pipeline.enrich._make_skill") as mock_make:
+            from pipeline.skills.base import SkillResult, SkillCost, SourcedFact, FactSource
+            mock_skill = MagicMock()
+            mock_skill.run.return_value = SkillResult(
+                facts=[SourcedFact(
+                    key="rera_registered",
+                    value={"type": "Bool", "data": True},
+                    confidence=1.0,
+                    source=FactSource(source_type="Rera", skill_id="fetch_rera"),
+                )],
+                cost=SkillCost(api_calls=1),
+            )
+            mock_make.return_value = mock_skill
+            stats = execute(work, resolver, tracker, force=False)
         self.assertEqual(stats.failed, 0)
 
         # Verify rera facts are back

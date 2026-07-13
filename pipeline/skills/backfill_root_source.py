@@ -3,7 +3,7 @@ One-shot backfill: set root_source on all existing knowledge graph nodes.
 
 Classification rules:
 - If node has any fact with source.source_type == "Rera" or skill_id containing "rera" -> "Rera"
-- If node has any fact with skill_id == "discover_properties" -> "Discovered"
+- If node has any legacy discovery fact -> "Discovered"
 - Else -> "Legacy"
 
 Atomic writes: write to .tmp, rename.
@@ -18,6 +18,7 @@ from pathlib import Path
 
 
 KNOWLEDGE_DIR = Path("data/knowledge/nodes")
+LEGACY_DISCOVERY_SKILL_ID = "discover_properties"
 
 
 def classify_root_source(node: dict) -> str:
@@ -34,7 +35,7 @@ def classify_root_source(node: dict) -> str:
         source = fact.get("source", {})
         skill_id = source.get("skill_id", "") or ""
 
-        if skill_id == "discover_properties":
+        if skill_id == LEGACY_DISCOVERY_SKILL_ID:
             return "Discovered"
 
     return "Legacy"

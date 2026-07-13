@@ -1,0 +1,217 @@
+use std::sync::Arc;
+
+use arrow::array::StringArray;
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
+use backend::assets::{
+    default_openestates_registry, ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition,
+    AssetPathBuilder, AssetPlanner, AssetStage, MaterializationRecord, PlanReason, SourceWatermark,
+};
+use backend::lake::{LakeKey, LakeStore};
+use chrono::Utc;
+use parquet::arrow::ArrowWriter;
+use parquet::basic::{Compression, ZstdLevel};
+use parquet::file::properties::WriterProperties;
+use serde_json::json;
+use tempfile::tempdir;
+
+#[tokio::test]
+async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake.clone());
+
+    let rera_asset = AssetId::new("rera_registry_monthly").unwrap();
+    let rera_partition = AssetPartition::new([("state", "ka"), ("dt", "2026-07")]);
+    let rera_key = AssetPathBuilder::raw_snapshot_key(
+        "rera",
+        &rera_partition,
+        "run-rera-2026-07",
+        "projects/part-00000.parquet",
+    );
+
+    let rera_meta = lake
+        .put_bytes(
+            &rera_key,
+            single_string_column_parquet("project", "Prestige Lakeside"),
+        )
+        .await
+        .unwrap();
+    let rera_record = MaterializationRecord::succeeded(
+        rera_asset.clone(),
+        AssetStage::Raw,
+        rera_partition.clone(),
+        "2026-07",
+        vec![ArtifactRef::parquet(rera_meta)],
+    )
+    .with_source_watermarks(vec![SourceWatermark {
+        source: "rera".to_string(),
+        high_watermark: "2026-07".to_string(),
+    }])
+    .with_row_count(1);
+
+    materializations
+        .write_materialization(&rera_record)
+        .await
+        .unwrap();
+    materializations
+        .promote_current(&rera_record)
+        .await
+        .unwrap();
+
+    let facts_asset = AssetId::new("rera_legal_facts").unwrap();
+    let fact_partition = AssetPartition::new([("dt", "2026-07")]);
+    let fact_key = AssetPathBuilder::silver_fact_key(
+        "society",
+        "rera_registration_number",
+        "rera",
+        &fact_partition,
+        "part-00000.parquet",
+    );
+    let fact_meta = lake
+        .put_bytes(
+            &fact_key,
+            single_string_column_parquet("rera_registration_number", "PRM/KA/RERA/1251/446"),
+        )
+        .await
+        .unwrap();
+    let fact_record = MaterializationRecord::succeeded(
+        facts_asset.clone(),
+        AssetStage::Silver,
+        fact_partition.clone(),
+        "2026-07",
+        vec![ArtifactRef::parquet(fact_meta)],
+    )
+    .with_parent_materializations(vec![rera_record.materialization_id.clone()])
+    .with_row_count(1);
+
+    materializations
+        .write_materialization(&fact_record)
+        .await
+        .unwrap();
+    materializations
+        .promote_current(&fact_record)
+        .await
+        .unwrap();
+
+    let serving_asset = AssetId::new("search_serving_bundle").unwrap();
+    let serving_partition = AssetPartition::global();
+    let serving_key = AssetPathBuilder::serving_bundle_key("2026-07-12T10:00Z", "manifest.json");
+    let serving_meta = lake
+        .put_json(
+            &serving_key,
+            &json!({
+                "bundleVersion": "2026-07-12T10:00Z",
+                "kgVersion": "2026-07",
+                "sourceWatermarks": {
+                    "rera": "2026-07"
+                }
+            }),
+        )
+        .await
+        .unwrap();
+    let serving_record = MaterializationRecord::succeeded(
+        serving_asset.clone(),
+        AssetStage::Serving,
+        serving_partition.clone(),
+        "2026-07-12T10:00Z",
+        vec![ArtifactRef::json(serving_meta)],
+    )
+    .with_parent_materializations(vec![fact_record.materialization_id.clone()])
+    .with_source_watermarks(vec![SourceWatermark {
+        source: "rera".to_string(),
+        high_watermark: "2026-07".to_string(),
+    }])
+    .with_row_count(1);
+
+    materializations
+        .write_materialization(&serving_record)
+        .await
+        .unwrap();
+    materializations
+        .promote_current(&serving_record)
+        .await
+        .unwrap();
+
+    let current_serving = materializations
+        .current_record(&serving_asset, &serving_partition)
+        .await
+        .unwrap();
+    assert_eq!(current_serving.version, "2026-07-12T10:00Z");
+    assert_eq!(
+        current_serving.parent_materializations,
+        vec![fact_record.materialization_id.clone()]
+    );
+    assert_eq!(
+        current_serving.artifacts[0].key,
+        "serving/search_bundle/version=2026-07-12t10-00z/manifest.json"
+    );
+
+    let current_facts = materializations
+        .current_record(&facts_asset, &fact_partition)
+        .await
+        .unwrap();
+    assert_eq!(
+        current_facts.parent_materializations,
+        vec![rera_record.materialization_id.clone()]
+    );
+
+    let raw_body = lake.get_bytes(&rera_key).await.unwrap();
+    assert_is_parquet(&raw_body);
+
+    let current_pointer_key =
+        LakeKey::new("manifests/assets/search_serving_bundle/partition=global/current.json")
+            .unwrap();
+    let pointer_body = lake.get_text(&current_pointer_key).await.unwrap();
+    assert!(pointer_body.contains("2026-07-12T10:00Z"));
+}
+
+#[tokio::test]
+async fn planner_returns_missing_default_assets_in_dependency_order() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake);
+    let registry = default_openestates_registry();
+    let expected_count = registry.definitions().len();
+    let planner = AssetPlanner::new(registry, materializations);
+
+    let plan = planner.plan_global(Utc::now()).await.unwrap();
+
+    assert_eq!(plan.len(), expected_count);
+    assert_eq!(
+        plan[0].asset_id,
+        AssetId::new("rera_registry_monthly").unwrap()
+    );
+    assert_eq!(plan[0].reason, PlanReason::Missing);
+    assert_eq!(
+        plan.last().unwrap().asset_id,
+        AssetId::new("search_serving_bundle").unwrap()
+    );
+}
+
+fn single_string_column_parquet(column_name: &str, value: &str) -> Vec<u8> {
+    let schema = Arc::new(Schema::new(vec![Field::new(
+        column_name,
+        DataType::Utf8,
+        false,
+    )]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![Arc::new(StringArray::from(vec![value.to_string()]))],
+    )
+    .unwrap();
+    let props = WriterProperties::builder()
+        .set_compression(Compression::ZSTD(ZstdLevel::default()))
+        .build();
+    let mut bytes = Vec::new();
+    let mut writer = ArrowWriter::try_new(&mut bytes, schema, Some(props)).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+    bytes
+}
+
+fn assert_is_parquet(bytes: &[u8]) {
+    assert!(bytes.len() > 8);
+    assert_eq!(&bytes[..4], b"PAR1");
+    assert_eq!(&bytes[bytes.len() - 4..], b"PAR1");
+}

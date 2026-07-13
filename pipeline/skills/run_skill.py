@@ -3,13 +3,12 @@
 run_skill.py — CLI to run skills and push results to the knowledge graph.
 
 Usage:
-    python3 -m pipeline.skills.run_skill learn_society \
-        --society "Prestige Lakeside Habitat" \
-        --area Whitefield \
-        --node-id "society:soc-prestige-lakeside"
-
     python3 -m pipeline.skills.run_skill search_reddit \
         --query "Prestige Lakeside Habitat Whitefield"
+
+    python3 -m pipeline.skills.run_skill fetch_rera \
+        --project "Prestige Lakeside Habitat" \
+        --node-id "society:prestige-lakeside-habitat"
 """
 
 import argparse
@@ -18,7 +17,8 @@ import logging
 import sys
 
 from pipeline.skills.graph_client import GraphClient
-from pipeline.skills.learn_society import LearnSocietySkill
+from pipeline.skills.fetch_rera import FetchReraSkill
+from pipeline.skills.identify_gaps import IdentifyGapsSkill
 from pipeline.skills.search_reddit import SearchRedditSkill
 
 logging.basicConfig(
@@ -28,18 +28,18 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 SKILLS = {
-    "learn_society": LearnSocietySkill,
     "search_reddit": SearchRedditSkill,
+    "fetch_rera": FetchReraSkill,
+    "identify_gaps": IdentifyGapsSkill,
 }
 
 
 def main():
     parser = argparse.ArgumentParser(description="Run a skill and push results to the graph")
     parser.add_argument("skill", choices=SKILLS.keys(), help="Skill to run")
-    parser.add_argument("--society", help="Society name (for learn_society)")
-    parser.add_argument("--area", help="Area name")
-    parser.add_argument("--city", default="Bengaluru", help="City name")
+    parser.add_argument("--project", help="Project name (for fetch_rera)")
     parser.add_argument("--query", help="Search query (for search_reddit)")
+    parser.add_argument("--society-id", help="Society ID (for identify_gaps)")
     parser.add_argument("--node-id", help="Graph node ID to push facts to")
     parser.add_argument("--api-base", default="http://localhost:4000", help="API base URL")
     parser.add_argument("--force", action="store_true", help="Skip cache")
@@ -49,18 +49,21 @@ def main():
     args = parser.parse_args()
 
     # Build input based on skill
-    if args.skill == "learn_society":
-        if not args.society or not args.area:
-            parser.error("learn_society requires --society and --area")
-        input_data = {
-            "society_name": args.society,
-            "area": args.area,
-            "city": args.city,
-        }
-    elif args.skill == "search_reddit":
+    if args.skill == "search_reddit":
         if not args.query:
             parser.error("search_reddit requires --query")
         input_data = {"query": args.query}
+    elif args.skill == "fetch_rera":
+        if not args.project:
+            parser.error("fetch_rera requires --project")
+        input_data = {"project_name": args.project, "entity_id": args.node_id}
+    elif args.skill == "identify_gaps":
+        society_id = args.society_id or args.node_id
+        if not society_id:
+            parser.error("identify_gaps requires --society-id or --node-id")
+        if society_id.startswith("society:"):
+            society_id = f"soc-{society_id.split(':', 1)[1]}"
+        input_data = {"society_id": society_id}
     else:
         parser.error(f"Unknown skill: {args.skill}")
         return
@@ -75,7 +78,7 @@ def main():
     print(f"Skill: {args.skill}")
     print(f"Facts: {len(result.facts)}")
     print(f"Confidence: {result.confidence:.2f}")
-    print(f"Cost: {result.cost.llm_tokens} tokens, ${result.cost.estimated_usd:.4f}")
+    print(f"Cost: {result.cost.api_calls} API calls, ${result.cost.estimated_usd:.4f}")
     print(f"Cached: {result.cached}")
     print(f"{'='*60}")
 

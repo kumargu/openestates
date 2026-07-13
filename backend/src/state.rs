@@ -7,6 +7,7 @@ use tokio::sync::RwLock;
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::search::SearchIndex;
+use crate::serving::LoadedServingBundle;
 
 pub struct AppState {
     /// In-memory hot data loaded at startup. Routes can read directly from here
@@ -14,6 +15,8 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     /// Local recall index rebuilt from app-owned property data.
     pub search_index: RwLock<SearchIndex>,
+    /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
+    pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,

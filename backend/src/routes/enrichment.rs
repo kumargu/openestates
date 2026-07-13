@@ -527,16 +527,15 @@ pub fn enrich_property_card_with_sellers(
         if let Some(node) = graph.get_node(&node_id) {
             let rs = node.root_source.map(|r| r.as_str().to_string());
             let ps = get_text_fact(&node.facts, "project_status");
-            let ps_display =
-                get_fact_display_template(&node.facts, "project_status").and_then(|tmpl| {
-                    // Replace {value} placeholder with the actual value
-                    let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
-                    if tmpl.contains("{value}") {
-                        Some(tmpl.replace("{value}", &val))
-                    } else {
-                        Some(tmpl)
-                    }
-                });
+            let ps_display = get_fact_display_template(&node.facts, "project_status").map(|tmpl| {
+                // Replace {value} placeholder with the actual value
+                let val = get_text_fact(&node.facts, "project_status").unwrap_or_default();
+                if tmpl.contains("{value}") {
+                    tmpl.replace("{value}", &val)
+                } else {
+                    tmpl
+                }
+            });
             (rs, ps, ps_display)
         } else {
             (None, None, None)

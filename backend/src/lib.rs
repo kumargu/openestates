@@ -1,9 +1,12 @@
+pub mod assets;
 pub mod data_loader;
 pub mod enrichment_queue;
 pub mod knowledge;
+pub mod lake;
 pub mod models;
 pub mod routes;
 pub mod scoring;
 pub mod search;
+pub mod serving;
 pub mod state;
 pub mod utils;

@@ -1,0 +1,380 @@
+use std::collections::HashMap;
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+use chrono::Utc;
+
+use crate::assets::{
+    AssetPathBuilder, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
+};
+use crate::knowledge::KnowledgeGraph;
+use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
+use crate::search::schema;
+
+use super::parquet::{
+    write_entities_parquet, write_facts_parquet, write_search_metadata_parquet, ParquetWriteError,
+};
+use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
+use super::{
+    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingEntityRecord,
+    ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy,
+};
+
+#[derive(Clone)]
+pub struct ServingBundleBuilder {
+    lake: LakeStore,
+}
+
+impl ServingBundleBuilder {
+    pub fn new(lake: LakeStore) -> Self {
+        Self { lake }
+    }
+
+    pub async fn build_from_graph(
+        &self,
+        graph: &KnowledgeGraph,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
+        let records = KgViewRecords::from_graph(graph)?;
+        self.build_from_kg_view_records(&records, bundle_version)
+            .await
+    }
+
+    pub async fn build_from_kg_view_records(
+        &self,
+        records: &KgViewRecords,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
+        let entities = serving_entity_records(records);
+        let facts = serving_fact_records(&records.facts);
+        let search_metadata = serving_search_metadata_records(&records.fact_annotations);
+        self.build_from_serving_records(entities, facts, search_metadata, bundle_version)
+            .await
+    }
+
+    async fn build_from_serving_records(
+        &self,
+        entities: Vec<ServingEntityRecord>,
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
+        let bundle_version = bundle_version.into();
+        let mut artifacts = Vec::new();
+
+        let entity_key =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "entities/part-00000.parquet");
+        let entity_bytes = write_entities_parquet(&entities)?;
+        let entity_meta = self.lake.put_bytes(&entity_key, entity_bytes).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::EntitiesParquet,
+            entity_meta,
+            "application/vnd.apache.parquet",
+            Some(entities.len() as u64),
+        ));
+
+        let fact_key =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "facts/part-00000.parquet");
+        let fact_bytes = write_facts_parquet(&facts)?;
+        let fact_meta = self.lake.put_bytes(&fact_key, fact_bytes).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::FactsParquet,
+            fact_meta,
+            "application/vnd.apache.parquet",
+            Some(facts.len() as u64),
+        ));
+
+        let search_metadata_key = AssetPathBuilder::serving_bundle_key(
+            &bundle_version,
+            "search_metadata/part-00000.parquet",
+        );
+        let search_metadata_bytes = write_search_metadata_parquet(&search_metadata)?;
+        let search_metadata_meta = self
+            .lake
+            .put_bytes(&search_metadata_key, search_metadata_bytes)
+            .await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::SearchMetadataParquet,
+            search_metadata_meta,
+            "application/vnd.apache.parquet",
+            Some(search_metadata.len() as u64),
+        ));
+
+        let schema_key = AssetPathBuilder::serving_bundle_key(&bundle_version, "schema.json");
+        let schema_meta = self.lake.put_json(&schema_key, schema::registry()).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::SchemaJson,
+            schema_meta,
+            "application/json",
+            None,
+        ));
+
+        let trust_policy = TrustPolicy::default();
+        let trust_policy_key =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "trust_policy.json");
+        let trust_policy_meta = self.lake.put_json(&trust_policy_key, &trust_policy).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::TrustPolicyJson,
+            trust_policy_meta,
+            "application/json",
+            None,
+        ));
+
+        let tantivy_prefix =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "tantivy_index").to_string();
+        let temp_index_dir = temp_index_dir(&bundle_version);
+        if temp_index_dir.exists() {
+            std::fs::remove_dir_all(&temp_index_dir).map_err(ServingBundleError::Io)?;
+        }
+        TantivyRecallIndex::build_in_dir(&temp_index_dir, &entities, &facts, &search_metadata)?;
+        artifacts.extend(upload_tantivy_dir(&self.lake, &temp_index_dir, &tantivy_prefix).await?);
+        let _ = std::fs::remove_dir_all(&temp_index_dir);
+
+        let manifest = ServingBundleManifest {
+            bundle_version,
+            format_version: 1,
+            created_at: Utc::now(),
+            entity_count: entities.len() as u64,
+            fact_count: facts.len() as u64,
+            search_metadata_count: search_metadata.len() as u64,
+            entity_parquet_key: entity_key.to_string(),
+            fact_parquet_key: fact_key.to_string(),
+            search_metadata_parquet_key: search_metadata_key.to_string(),
+            schema_key: schema_key.to_string(),
+            trust_policy_key: trust_policy_key.to_string(),
+            tantivy_index_prefix: tantivy_prefix,
+            artifacts,
+        };
+
+        let manifest_key =
+            AssetPathBuilder::serving_bundle_key(&manifest.bundle_version, "manifest.json");
+        self.lake.put_json(&manifest_key, &manifest).await?;
+        Ok(manifest)
+    }
+}
+
+fn serving_entity_records(records: &KgViewRecords) -> Vec<ServingEntityRecord> {
+    let fact_text_by_entity = serving_fact_text_by_entity(&records.facts);
+    records
+        .entities
+        .iter()
+        .map(|node| ServingEntityRecord {
+            entity_id: node.entity_id.clone(),
+            entity_type: node.entity_type.clone(),
+            name: node.name.clone(),
+            root_source: node.root_source.clone(),
+            searchable_text: format!(
+                "{} {} {} {}",
+                node.entity_id,
+                node.entity_type,
+                node.name,
+                fact_text_by_entity
+                    .get(&node.entity_id)
+                    .map(String::as_str)
+                    .unwrap_or("")
+            ),
+        })
+        .collect()
+}
+
+fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, String> {
+    let mut by_entity = HashMap::<String, String>::new();
+    for fact in facts {
+        let entry = by_entity.entry(fact.entity_id.clone()).or_default();
+        entry.push(' ');
+        entry.push_str(&fact.fact_key);
+        if let Some(value) = &fact.value_text {
+            entry.push(' ');
+            entry.push_str(value);
+        }
+    }
+    by_entity
+}
+
+fn serving_fact_records(facts: &[KgViewFactRecord]) -> Vec<ServingFactRecord> {
+    facts
+        .iter()
+        .map(|fact| ServingFactRecord {
+            entity_id: fact.entity_id.clone(),
+            fact_key: fact.fact_key.clone(),
+            value_type: fact.value_type.clone(),
+            value_text: fact.value_text.clone(),
+            value_json: fact.value_json.clone(),
+            confidence: fact.confidence,
+            source_type: fact.source_type.clone(),
+            source_url: fact.source_url.clone(),
+            model: fact.model.clone(),
+            skill_id: fact.skill_id.clone(),
+            learned_at: fact.learned_at,
+        })
+        .collect()
+}
+
+fn serving_search_metadata_records(
+    annotations: &[KgViewFactAnnotationRecord],
+) -> Vec<ServingSearchMetadataRecord> {
+    annotations
+        .iter()
+        .map(|annotation| ServingSearchMetadataRecord {
+            entity_id: annotation.entity_id.clone(),
+            fact_key: annotation.fact_key.clone(),
+            display_template: annotation.display_template.clone(),
+            answers_preferences_json: annotation.answers_preferences_json.clone(),
+            scoring_direction: annotation.scoring_direction.clone(),
+            scoring_weight: annotation.scoring_weight,
+        })
+        .collect()
+}
+
+async fn upload_tantivy_dir(
+    lake: &LakeStore,
+    dir: &Path,
+    prefix: &str,
+) -> Result<Vec<BundleArtifact>, ServingBundleError> {
+    let mut files = Vec::new();
+    collect_files(dir, &mut files)?;
+    files.sort();
+
+    let mut artifacts = Vec::new();
+    for path in files {
+        let relative = path
+            .strip_prefix(dir)
+            .map_err(|_| ServingBundleError::InvalidIndexPath(path.clone()))?;
+        let relative_key = relative.to_string_lossy().replace('\\', "/");
+        let key = LakeKey::new(format!("{}/{}", prefix.trim_end_matches('/'), relative_key))?;
+        let bytes = std::fs::read(&path).map_err(ServingBundleError::Io)?;
+        let meta = lake.put_bytes(&key, bytes).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::TantivyIndexFile,
+            meta,
+            "application/octet-stream",
+            None,
+        ));
+    }
+
+    Ok(artifacts)
+}
+
+fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), ServingBundleError> {
+    for entry in std::fs::read_dir(dir).map_err(ServingBundleError::Io)? {
+        let entry = entry.map_err(ServingBundleError::Io)?;
+        let path = entry.path();
+        if path.is_dir() {
+            collect_files(&path, out)?;
+        } else if path.is_file() {
+            out.push(path);
+        }
+    }
+    Ok(())
+}
+
+fn artifact(
+    kind: BundleArtifactKind,
+    meta: ArtifactMetadata,
+    format: &str,
+    row_count: Option<u64>,
+) -> BundleArtifact {
+    BundleArtifact {
+        kind,
+        key: meta.key.to_string(),
+        format: format.to_string(),
+        content_hash: meta.content_hash,
+        hash_algorithm: meta.hash_algorithm,
+        size_bytes: meta.size_bytes,
+        row_count,
+    }
+}
+
+fn temp_index_dir(bundle_version: &str) -> PathBuf {
+    std::env::temp_dir().join(format!(
+        "openestates-tantivy-{}-{}",
+        slug(bundle_version),
+        uuid::Uuid::new_v4()
+    ))
+}
+
+fn slug(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' {
+                ch.to_ascii_lowercase()
+            } else {
+                '-'
+            }
+        })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+#[derive(Debug)]
+pub enum ServingBundleError {
+    Io(std::io::Error),
+    Json(serde_json::Error),
+    Lake(LakeError),
+    Key(crate::lake::keys::KeyError),
+    Parquet(ParquetWriteError),
+    Tantivy(TantivyIndexError),
+    InvalidIndexPath(PathBuf),
+}
+
+impl fmt::Display for ServingBundleError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io(err) => write!(f, "serving bundle IO error: {err}"),
+            Self::Json(err) => write!(f, "serving bundle JSON error: {err}"),
+            Self::Lake(err) => write!(f, "serving bundle lake error: {err}"),
+            Self::Key(err) => write!(f, "serving bundle key error: {err}"),
+            Self::Parquet(err) => write!(f, "serving bundle Parquet error: {err}"),
+            Self::Tantivy(err) => write!(f, "serving bundle Tantivy error: {err}"),
+            Self::InvalidIndexPath(path) => {
+                write!(
+                    f,
+                    "Tantivy index path is outside index dir: {}",
+                    path.display()
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for ServingBundleError {}
+
+impl From<std::io::Error> for ServingBundleError {
+    fn from(err: std::io::Error) -> Self {
+        Self::Io(err)
+    }
+}
+
+impl From<serde_json::Error> for ServingBundleError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Json(err)
+    }
+}
+
+impl From<LakeError> for ServingBundleError {
+    fn from(err: LakeError) -> Self {
+        Self::Lake(err)
+    }
+}
+
+impl From<crate::lake::keys::KeyError> for ServingBundleError {
+    fn from(err: crate::lake::keys::KeyError) -> Self {
+        Self::Key(err)
+    }
+}
+
+impl From<ParquetWriteError> for ServingBundleError {
+    fn from(err: ParquetWriteError) -> Self {
+        Self::Parquet(err)
+    }
+}
+
+impl From<TantivyIndexError> for ServingBundleError {
+    fn from(err: TantivyIndexError) -> Self {
+        Self::Tantivy(err)
+    }
+}

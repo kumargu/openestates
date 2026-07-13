@@ -9,7 +9,9 @@ use crate::knowledge::edge::Relation;
 use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{store as kg_store, KnowledgeGraph, SearchEvent};
-use crate::search::{intent, schema, KnowledgeContext, SearchResponse, SourcedClaim, TextSearch};
+use crate::search::{
+    intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SourcedClaim, TextSearch,
+};
 use crate::state::AppState;
 
 use super::enrichment::society_node_id;
@@ -72,9 +74,11 @@ pub async fn search_properties(
         let properties = state.properties.read().await;
         let search_index = state.search_index.read().await;
         let sellers = state.sellers.read().await;
-        TextSearch::search_with_index_and_intent_and_sellers(
+        let serving_candidate_ids = serving_candidate_ids(&state, &query, &search_index).await;
+        TextSearch::search_with_index_and_extra_recall_and_intent_and_sellers(
             &properties,
             Some(&*search_index),
+            serving_candidate_ids.as_deref(),
             &society_names,
             &state.societies,
             &query,
@@ -152,6 +156,27 @@ pub async fn search_properties(
         discovery_status: None,
         discovery_count: None,
     })
+}
+
+async fn serving_candidate_ids(
+    state: &Arc<AppState>,
+    query: &str,
+    search_index: &SearchIndex,
+) -> Option<Vec<String>> {
+    let serving_bundle = state.serving_bundle.read().await.clone()?;
+    let hits = match serving_bundle.recall_index.search(query, 128) {
+        Ok(hits) => hits,
+        Err(err) => {
+            eprintln!("WARN: Serving bundle recall failed; using local recall only: {err}");
+            return None;
+        }
+    };
+    let ids = search_index.property_ids_for_entity_hits(&hits);
+    if ids.is_empty() {
+        None
+    } else {
+        Some(ids)
+    }
 }
 
 // ---------------------------------------------------------------------------

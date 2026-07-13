@@ -12,7 +12,9 @@ use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::search::SearchIndex;
+use crate::serving::{LoadedServingBundle, ServingBundleLoader};
 use crate::state::AppState;
+use crate::{lake::LakeStore, serving::ServingBundleLoadError};
 
 /// Load all data and construct the full AppState.
 ///
@@ -51,6 +53,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         "Built local search index for {} properties",
         properties.len()
     );
+    let serving_bundle = load_serving_bundle(project_root).await;
 
     // --- Sellers ---
     let sellers_path = project_root
@@ -77,6 +80,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     AppState {
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
+        serving_bundle: RwLock::new(serving_bundle),
         areas,
         societies,
         sellers: RwLock::new(sellers),
@@ -88,6 +92,49 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         registration_rate_limiter: RwLock::new((Instant::now(), 0)),
         publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
+}
+
+async fn load_serving_bundle(project_root: &Path) -> Option<Arc<LoadedServingBundle>> {
+    let lake_root = project_root.join("data").join("lake");
+    let cache_root = project_root.join("data").join("cache").join("serving");
+    let lake = match LakeStore::local(&lake_root) {
+        Ok(lake) => lake,
+        Err(err) => {
+            eprintln!(
+                "WARN: Serving bundle lake unavailable at {}: {}",
+                lake_root.display(),
+                err
+            );
+            return None;
+        }
+    };
+
+    match ServingBundleLoader::new(lake, cache_root)
+        .load_current_search_bundle()
+        .await
+    {
+        Ok(Some(bundle)) => {
+            println!(
+                "Loaded serving bundle {} with {} entities and {} facts",
+                bundle.manifest.bundle_version,
+                bundle.manifest.entity_count,
+                bundle.manifest.fact_count
+            );
+            Some(Arc::new(bundle))
+        }
+        Ok(None) => {
+            println!("No promoted serving bundle found; using local property recall only");
+            None
+        }
+        Err(err) => {
+            log_serving_load_error(err);
+            None
+        }
+    }
+}
+
+fn log_serving_load_error(err: ServingBundleLoadError) {
+    eprintln!("WARN: Failed to load serving bundle; using local property recall only: {err}");
 }
 
 /// Derive Society structs from KG society nodes.

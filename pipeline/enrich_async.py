@@ -5,9 +5,9 @@ Watches `data/knowledge/enrichment_pending.jsonl` for requests written by the
 Rust backend after each search. Processes them in progressive waves:
 
   Wave 1: Exact matches, free skills (Reddit, RERA) — 5s delays
-  Wave 2: Exact matches, LLM skills (learn, score) — 10s delays
+  Wave 2: Exact matches, non-free deterministic skills — 10s delays
   Wave 3: Area neighbors, free skills — 15s delays
-  Wave 4: Area neighbors, LLM skills (budget-capped) — 20s delays
+  Wave 4: Area neighbors, non-free deterministic skills — 20s delays
 
 Usage:
     python3 -m pipeline.enrich_async                  # daemon mode (loop)
@@ -131,10 +131,30 @@ def deduplicate_requests(requests: List[dict]) -> Dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 def find_area_neighbors(area: str, exclude: List[str]) -> List[str]:
-    """Find all society entity IDs in the same area, excluding already-targeted ones.
+    """Find all society entity IDs in the same area, excluding already-targeted ones."""
+    exclude_set = set(exclude)
+    neighbors = []
 
-    Uses seed data (data/seed/societies.json) as the source of truth for area mapping.
-    """
+    kg_dir = Path("data/knowledge/nodes/society")
+    if kg_dir.exists():
+        for node_path in sorted(kg_dir.glob("*.json")):
+            try:
+                node = json.loads(node_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                continue
+
+            node_area = node.get("area") or _fact_text(node, "area")
+            if not node_area or node_area.lower() != area.lower():
+                continue
+
+            node_id = node.get("id") or f"society:{node_path.stem}"
+            if node_id not in exclude_set:
+                neighbors.append(node_id)
+
+    if neighbors:
+        return neighbors
+
+    # Legacy fallback for older checkouts.
     societies_path = Path("data/seed/societies.json")
     if not societies_path.exists():
         return []
@@ -143,9 +163,6 @@ def find_area_neighbors(area: str, exclude: List[str]) -> List[str]:
         societies = json.loads(societies_path.read_text())
     except (json.JSONDecodeError, OSError):
         return []
-
-    exclude_set = set(exclude)
-    neighbors = []
 
     for soc in societies:
         soc_area = soc.get("area", "")
@@ -166,6 +183,16 @@ def find_area_neighbors(area: str, exclude: List[str]) -> List[str]:
             neighbors.append(node_id)
 
     return neighbors
+
+
+def _fact_text(node: dict, key: str) -> str:
+    for fact in node.get("facts", []):
+        if fact.get("key") != key:
+            continue
+        value = fact.get("value", {})
+        data = value.get("data") if isinstance(value, dict) else value
+        return str(data or "")
+    return ""
 
 
 # ---------------------------------------------------------------------------
@@ -310,7 +337,7 @@ async def process_requests(
         w1 = await run_wave(1, entities, preferences, resolver, tracker, failures, delay_multiplier, dry_run)
         logger.info("  Wave 1 complete: %d executed, %d succeeded, %d facts", w1["executed"], w1["succeeded"], w1["facts"])
 
-        # Wave 2: exact matches, LLM skills
+        # Wave 2: exact matches, non-free deterministic skills
         w2 = await run_wave(2, entities, preferences, resolver, tracker, failures, delay_multiplier, dry_run)
         logger.info("  Wave 2 complete: %d executed, %d succeeded, %d facts", w2["executed"], w2["succeeded"], w2["facts"])
 
@@ -323,7 +350,7 @@ async def process_requests(
         else:
             w3 = {"executed": 0, "succeeded": 0, "failed": 0, "facts": 0}
 
-        # Wave 4: area neighbors, LLM skills (budget-capped)
+        # Wave 4: area neighbors, non-free deterministic skills
         if neighbors:
             w4 = await run_wave(4, neighbors[:5], preferences, resolver, tracker, failures, delay_multiplier, dry_run)
             logger.info("  Wave 4 complete: %d executed, %d succeeded, %d facts", w4["executed"], w4["succeeded"], w4["facts"])

@@ -1,6 +1,6 @@
 //! Theme, tradeoff, and market activity computation.
 //! KG-facts-first: when the knowledge graph has pre-scored facts from skills
-//! (e.g., score_society's overall_score, top_signals, top_cautions), use them
+//! (e.g., overall_score, top_signals, top_cautions), use them
 //! directly. Fall back to Property struct field thresholds only when KG facts are absent.
 //!
 //! TODO(Phase 2): The Property-struct fallback paths (value, commute, society, greenery,
@@ -121,7 +121,7 @@ fn label_is_weak_or_mixed(l: &ThemeLabel) -> bool {
 fn compute_value(p: &Property, area: Option<&AreaProfile>, graph: &KnowledgeGraph) -> ThemeResult {
     let node_id = society_node_id(&p.society_id);
 
-    // KG-first: score_value_for_money from score_society skill (0-100)
+    // KG-first: precomputed value-for-money score (0-100)
     if let Some(score) = kg_numeric(graph, &node_id, "score_value_for_money") {
         let normalized = score / 100.0;
         let summary = kg_text(graph, &node_id, "value_reasoning")
@@ -197,7 +197,7 @@ fn fallback_value_summary(p: &Property, area: Option<&AreaProfile>) -> String {
 fn compute_commute(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
     let node_id = society_node_id(&p.society_id);
 
-    // KG-first: score_connectivity from score_society skill (0-100)
+    // KG-first: precomputed connectivity score (0-100)
     if let Some(score) = kg_numeric(graph, &node_id, "score_connectivity") {
         let normalized = score / 100.0;
         let summary = kg_text(graph, &node_id, "connectivity_reasoning").unwrap_or_else(|| {
@@ -263,7 +263,7 @@ fn compute_commute(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
 fn compute_society(p: &Property, society: Option<&Society>, graph: &KnowledgeGraph) -> ThemeResult {
     let node_id = society_node_id(&p.society_id);
 
-    // KG-first: overall_score from score_society skill (0-100)
+    // KG-first: precomputed overall society score (0-100)
     if let Some(score) = kg_numeric(graph, &node_id, "overall_score") {
         let normalized = score / 100.0;
         let summary = kg_text(graph, &node_id, "one_line_verdict")
@@ -358,7 +358,7 @@ fn compute_greenery(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
 fn compute_risk(p: &Property, graph: &KnowledgeGraph) -> ThemeResult {
     let node_id = society_node_id(&p.society_id);
 
-    // KG-first: score_safety from score_society skill (0-100, higher = safer)
+    // KG-first: precomputed safety score (0-100, higher = safer)
     if let Some(score) = kg_numeric(graph, &node_id, "score_safety") {
         let normalized = score / 100.0;
         let summary = kg_text(graph, &node_id, "safety_reasoning")
@@ -497,7 +497,7 @@ pub fn compute_tradeoffs(
 ) -> TradeoffsResponse {
     let node_id = society_node_id(&p.society_id);
 
-    // KG-first: top_signals and top_cautions from score_society skill
+    // KG-first: precomputed top_signals and top_cautions
     let kg_signals = kg_tags(graph, &node_id, "top_signals");
     let kg_cautions = kg_tags(graph, &node_id, "top_cautions");
 

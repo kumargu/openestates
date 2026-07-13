@@ -1,6 +1,6 @@
 import unittest
 
-from pipeline.skills.fetch_market_pricing import pricing_to_facts
+from pipeline.skills.market_pricing_facts import pricing_to_facts
 
 
 class MarketPricingFactTests(unittest.TestCase):

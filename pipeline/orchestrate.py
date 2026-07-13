@@ -11,6 +11,42 @@ import sys
 logger = logging.getLogger(__name__)
 
 
+def enrich_entity(entity_id, resolver=None, tracker=None, **kwargs):
+    """Backward-compatible single-entity enrichment entry point."""
+    if entity_id.startswith("society:"):
+        return enrich_society(entity_id, resolver=resolver, tracker=tracker, **kwargs)
+    if entity_id.startswith("area:"):
+        return enrich_area(entity_id, resolver=resolver, tracker=tracker, **kwargs)
+    if entity_id.startswith("builder:"):
+        return enrich_builder(entity_id, resolver=resolver, tracker=tracker, **kwargs)
+
+    logger.warning("Unsupported entity type for enrichment: %s", entity_id)
+    return None
+
+
+def enrich_society(entity_id, resolver=None, tracker=None, **kwargs):
+    """Run deterministic enrichment for one society node."""
+    from pipeline.enrich import detect_gaps, execute
+    from pipeline.entity_resolver import EntityResolver, FreshnessTracker
+
+    resolver = resolver or EntityResolver()
+    tracker = tracker or FreshnessTracker()
+    work = detect_gaps(resolver, tracker, node_filter=entity_id, **kwargs)
+    return execute(work, resolver, tracker)
+
+
+def enrich_area(entity_id, resolver=None, tracker=None, **kwargs):
+    """Area LLM enrichment was retired; keep a no-op compatibility hook."""
+    logger.warning("Area enrichment is not registered for %s", entity_id)
+    return None
+
+
+def enrich_builder(entity_id, resolver=None, tracker=None, **kwargs):
+    """Builder enrichment is not registered in the deterministic runner yet."""
+    logger.warning("Builder enrichment is not registered for %s", entity_id)
+    return None
+
+
 def main():
     print("WARNING: orchestrate.py is deprecated. Use `python3 -m pipeline.enrich` instead.\n")
     from pipeline.enrich import main as enrich_main

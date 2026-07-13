@@ -1269,7 +1269,7 @@ pub async fn publish_registration(
                 scoring_hint: None,
             });
         }
-        if !property.seller_id.as_ref().map_or(true, |s| s.is_empty()) {
+        if !property.seller_id.as_ref().is_none_or(|s| s.is_empty()) {
             facts.push(SourcedFact {
                 key: "seller_id".to_string(),
                 value: FactValue::Text(property.seller_id.clone().unwrap_or_default()),

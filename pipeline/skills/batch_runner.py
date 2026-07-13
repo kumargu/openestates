@@ -8,10 +8,10 @@ Features:
 - CLI with --all-societies, --all-properties, --resume, --dry-run
 
 Usage:
-    python3 -m pipeline.skills.batch_runner learn_society --all-societies
+    python3 -m pipeline.skills.batch_runner search_reddit --all-societies
     python3 -m pipeline.skills.batch_runner search_reddit --all-societies --dry-run
-    python3 -m pipeline.skills.batch_runner learn_society --all-societies --resume
-    python3 -m pipeline.skills.batch_runner fetch_images --all-societies --force
+    python3 -m pipeline.skills.batch_runner fetch_rera --all-societies --resume
+    python3 -m pipeline.skills.batch_runner identify_gaps --all-societies --force
 """
 
 import argparse
@@ -308,14 +308,12 @@ def load_society_inputs(skill_id: str) -> Dict[str, dict]:
 
 def _society_input(skill_id: str, name: str, area: str, city: str, slug: str) -> dict:
     """Build skill-appropriate input for a society."""
-    if skill_id == "learn_society":
-        return {"society_name": name, "area": area, "city": city}
-    elif skill_id == "search_reddit":
+    if skill_id == "search_reddit":
         return {"query": f"{name} {area}", "subreddit": "bangalore"}
-    elif skill_id == "score_society":
-        return {"society_slug": slug, "society_name": name}
+    elif skill_id == "fetch_rera":
+        return {"project_name": name, "entity_id": f"society:{slug}"}
     elif skill_id == "identify_gaps":
-        return {"society_slug": slug, "society_name": name}
+        return {"society_id": f"soc-{slug}", "society_name": name}
     elif skill_id == "fetch_images":
         return {"society_name": name, "area": area, "city": city, "slug": slug}
     else:
@@ -366,22 +364,12 @@ def load_property_inputs(skill_id: str) -> Dict[str, dict]:
 
 def get_skill_instance(skill_id: str) -> BaseSkill:
     """Instantiate a skill by ID."""
-    if skill_id == "learn_society":
-        from pipeline.skills.learn_society import LearnSocietySkill
-        return LearnSocietySkill()
-    elif skill_id == "search_reddit":
+    if skill_id == "search_reddit":
         from pipeline.skills.search_reddit import SearchRedditSkill
         return SearchRedditSkill()
-    elif skill_id == "fetch_images":
-        from pipeline.skills.fetch_images import FetchImagesSkill
-        # fetch_images doesn't have a BaseSkill subclass, use a wrapper
-        raise ValueError(
-            "fetch_images has its own __main__ — use: "
-            "python3 -m pipeline.skills.fetch_images"
-        )
-    elif skill_id == "score_society":
-        from pipeline.skills.score_society import ScoreSocietySkill
-        return ScoreSocietySkill()
+    elif skill_id == "fetch_rera":
+        from pipeline.skills.fetch_rera import FetchReraSkill
+        return FetchReraSkill()
     elif skill_id == "identify_gaps":
         from pipeline.skills.identify_gaps import IdentifyGapsSkill
         return IdentifyGapsSkill()
@@ -389,7 +377,7 @@ def get_skill_instance(skill_id: str) -> BaseSkill:
         raise ValueError(f"Unknown skill: {skill_id}")
 
 
-AVAILABLE_SKILLS = ["learn_society", "search_reddit", "score_society", "identify_gaps"]
+AVAILABLE_SKILLS = ["search_reddit", "fetch_rera", "identify_gaps"]
 
 
 # ──────────────────────────────────────────────────────────────
@@ -401,10 +389,10 @@ def main():
         description="Run a skill in batch across all societies or properties",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""Examples:
-  python3 -m pipeline.skills.batch_runner learn_society --all-societies
+  python3 -m pipeline.skills.batch_runner search_reddit --all-societies
   python3 -m pipeline.skills.batch_runner search_reddit --all-societies --dry-run
-  python3 -m pipeline.skills.batch_runner learn_society --all-societies --resume
-  python3 -m pipeline.skills.batch_runner score_society --all-societies --force
+  python3 -m pipeline.skills.batch_runner fetch_rera --all-societies --resume
+  python3 -m pipeline.skills.batch_runner identify_gaps --all-societies --force
 """,
     )
     parser.add_argument("skill", choices=AVAILABLE_SKILLS, help="Skill to run")

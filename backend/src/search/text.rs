@@ -68,9 +68,36 @@ impl TextSearch {
     }
 
     /// Indexed local recall followed by deterministic ranking and explanation.
+    #[allow(clippy::too_many_arguments)]
     pub fn search_with_index_and_intent_and_sellers(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+        sellers: &[Seller],
+    ) -> Vec<SearchResultCard> {
+        Self::search_with_index_and_extra_recall_and_intent_and_sellers(
+            properties,
+            search_index,
+            None,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+            sellers,
+        )
+    }
+
+    /// Indexed local recall plus optional serving-bundle recall, followed by deterministic ranking.
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_index_and_extra_recall_and_intent_and_sellers(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+        extra_candidate_ids: Option<&[String]>,
         society_names: &std::collections::HashMap<String, String>,
         societies: &[Society],
         query: &str,
@@ -85,7 +112,10 @@ impl TextSearch {
         let has_explainable_signals = !positive_preferences.is_empty()
             || !negative_preferences.is_empty()
             || !intent.hard_constraints.is_empty();
-        let candidate_ids = search_index.map(|index| index.recall_ids(query, intent));
+        let candidate_ids = merged_candidate_ids(
+            search_index.map(|index| index.recall_ids(query, intent)),
+            extra_candidate_ids,
+        );
 
         let mut results: Vec<SearchResultCard> = properties
             .iter()
@@ -419,6 +449,26 @@ impl TextSearch {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
         results
+    }
+}
+
+fn merged_candidate_ids(
+    local_candidate_ids: Option<Vec<String>>,
+    extra_candidate_ids: Option<&[String]>,
+) -> Option<Vec<String>> {
+    let mut merged = local_candidate_ids.unwrap_or_default();
+    if let Some(extra_candidate_ids) = extra_candidate_ids {
+        for id in extra_candidate_ids {
+            if !merged.iter().any(|existing| existing == id) {
+                merged.push(id.clone());
+            }
+        }
+    }
+
+    if merged.is_empty() {
+        None
+    } else {
+        Some(merged)
     }
 }
 
@@ -830,6 +880,10 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
     let mut reasons = Vec::new();
 
     for term in terms {
+        if is_scoring_stopword(term) {
+            continue;
+        }
+
         let mut term_matched = false;
 
         for (field_value, weight, field_name) in &fields {
@@ -856,6 +910,41 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
     }
 
     (total_score, reasons)
+}
+
+fn is_scoring_stopword(token: &str) -> bool {
+    matches!(
+        token,
+        "a" | "an"
+            | "and"
+            | "are"
+            | "at"
+            | "above"
+            | "below"
+            | "by"
+            | "for"
+            | "from"
+            | "in"
+            | "is"
+            | "near"
+            | "no"
+            | "not"
+            | "of"
+            | "or"
+            | "over"
+            | "the"
+            | "to"
+            | "under"
+            | "with"
+            | "without"
+            | "acre"
+            | "acres"
+            | "bhk"
+            | "cr"
+            | "crore"
+            | "lakh"
+            | "lakhs"
+    )
 }
 
 /// Legacy hardcoded preference scoring — used when the graph doesn't have
@@ -1355,10 +1444,11 @@ fn graph_area_match(society_id: &str, intent_area: &str, graph: Option<&Knowledg
         if area_lower == intent_lower {
             return true;
         }
-        if area_lower.len() >= 4 && intent_lower.len() >= 4 {
-            if area_lower.contains(&intent_lower) || intent_lower.contains(&area_lower) {
-                return true;
-            }
+        if area_lower.len() >= 4
+            && intent_lower.len() >= 4
+            && (area_lower.contains(&intent_lower) || intent_lower.contains(&area_lower))
+        {
+            return true;
         }
     }
 
@@ -1948,6 +2038,58 @@ mod tests {
 
         let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
         assert_eq!(ids, vec!["whitefield-fit"]);
+    }
+
+    #[test]
+    fn test_serving_recall_expands_candidates_but_keeps_hard_filters() {
+        let indexed_fit = local_property(
+            "indexed-fit",
+            "Whitefield",
+            "indexed-fit",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let bundle_fit = local_property(
+            "bundle-fit",
+            "Whitefield",
+            "bundle-fit",
+            3,
+            18_000_000,
+            8,
+            0.2,
+        );
+        let bundle_over_budget = local_property(
+            "bundle-over-budget",
+            "Whitefield",
+            "bundle-over-budget",
+            3,
+            21_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![indexed_fit.clone(), bundle_fit, bundle_over_budget];
+        let society_names = local_society_names(&properties);
+        let stale_local_index = crate::search::SearchIndex::build(&[indexed_fit]);
+        let serving_candidate_ids =
+            vec!["bundle-fit".to_string(), "bundle-over-budget".to_string()];
+        let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
+
+        let results = TextSearch::search_with_index_and_extra_recall_and_intent_and_sellers(
+            &properties,
+            Some(&stale_local_index),
+            Some(&serving_candidate_ids),
+            &society_names,
+            &[],
+            "3BHK Whitefield under 2Cr",
+            &intent,
+            None,
+            &[],
+        );
+
+        let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
+        assert_eq!(ids, vec!["indexed-fit", "bundle-fit"]);
     }
 
     #[test]

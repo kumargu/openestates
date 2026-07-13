@@ -110,7 +110,8 @@ pub enum SourceType {
     Computed,
     /// Seed data, hand-curated — static until manually updated
     Manual,
-    /// AI-generated synthesis — dynamic, refresh with new data
+    /// Legacy AI-generated synthesis. Retained so older KG facts still load.
+    /// New enrichment code should not emit this source type.
     Llm,
 }
 

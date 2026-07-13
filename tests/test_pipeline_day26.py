@@ -392,44 +392,32 @@ class TestFetchReraSkill(unittest.TestCase):
         self.assertGreater(cost.api_calls, 0)
 
 
-class TestLearnAreaSkill(unittest.TestCase):
-    """Test the enhanced learn_area skill."""
+class TestLlmSkillsDeleted(unittest.TestCase):
+    """Verify executable LLM enrichment modules are absent."""
 
-    def test_import(self):
-        """learn_area should import cleanly."""
-        from pipeline.skills.learn_area import LearnAreaSkill
-        skill = LearnAreaSkill()
-        self.assertEqual(skill.skill_id, "learn_area")
+    DELETED_MODULES = [
+        "learn_area",
+        "learn_society",
+        "score_society",
+        "embed_entity",
+        "fetch_google_reviews",
+        "fetch_market_pricing",
+        "discover_properties",
+        "rank_for_intent",
+    ]
 
-    def test_version_v2(self):
-        """Should be v2.0 (Reddit-first)."""
-        from pipeline.skills.learn_area import LearnAreaSkill
-        skill = LearnAreaSkill()
-        self.assertEqual(skill.version, "2.0")
+    def test_files_do_not_exist(self):
+        root = Path(__file__).parent.parent / "pipeline" / "skills"
+        for module in self.DELETED_MODULES:
+            with self.subTest(module=module):
+                self.assertFalse((root / f"{module}.py").exists())
 
-    def test_fetch_area_threads_function_exists(self):
-        """Should have the area-focused Reddit fetcher."""
-        from pipeline.skills.learn_area import fetch_area_reddit_threads
-        # Just verify the function exists and is callable
-        self.assertTrue(callable(fetch_area_reddit_threads))
-
-    def test_fetch_thread_comments_function_exists(self):
-        """Should have the comment fetcher."""
-        from pipeline.skills.learn_area import fetch_thread_comments
-        self.assertTrue(callable(fetch_thread_comments))
-
-    def test_empty_area_name(self):
-        """Should return empty result for empty area name."""
-        from pipeline.skills.learn_area import LearnAreaSkill
-        skill = LearnAreaSkill()
-        result = skill.execute({"area_name": ""})
-        self.assertEqual(result.confidence, 0.0)
-
-    def test_is_base_skill_subclass(self):
-        """LearnAreaSkill should inherit from BaseSkill."""
-        from pipeline.skills.learn_area import LearnAreaSkill
-        from pipeline.skills.base import BaseSkill
-        self.assertTrue(issubclass(LearnAreaSkill, BaseSkill))
+    def test_imports_fail(self):
+        import importlib
+        for module in self.DELETED_MODULES:
+            with self.subTest(module=module):
+                with self.assertRaises((ModuleNotFoundError, ImportError)):
+                    importlib.import_module(f"pipeline.skills.{module}")
 
 
 class TestVerifyReraDeleted(unittest.TestCase):

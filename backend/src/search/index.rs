@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::models::Property;
+use crate::routes::enrichment::society_node_id;
+use crate::serving::TantivyRecallHit;
 
 use super::intent::{SearchIntent, AREA_ALIASES};
 
@@ -14,6 +16,7 @@ pub struct SearchIndex {
     all_ids: Vec<String>,
     by_area: HashMap<String, Vec<String>>,
     by_bhk: HashMap<u32, Vec<String>>,
+    by_society_node: HashMap<String, Vec<String>>,
     by_token: HashMap<String, Vec<String>>,
     price_by_id: HashMap<String, u64>,
 }
@@ -34,6 +37,12 @@ impl SearchIndex {
             &property.id,
         );
         push_unique(self.by_bhk.entry(property.bhk).or_default(), &property.id);
+        push_unique(
+            self.by_society_node
+                .entry(society_node_id(&property.society_id))
+                .or_default(),
+            &property.id,
+        );
         self.price_by_id.insert(property.id.clone(), property.price);
 
         let text = format!(
@@ -95,6 +104,21 @@ impl SearchIndex {
             .filter(|id| candidate.contains(*id))
             .cloned()
             .collect()
+    }
+
+    pub fn property_ids_for_entity_hits(&self, hits: &[TantivyRecallHit]) -> Vec<String> {
+        let mut ids = Vec::new();
+        for hit in hits {
+            if !hit.entity_id.starts_with("society:") {
+                continue;
+            }
+            if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
+                for property_id in property_ids {
+                    push_unique(&mut ids, property_id);
+                }
+            }
+        }
+        ids
     }
 
     fn area_candidates(&self, area: &str) -> HashSet<String> {

@@ -1,7 +1,7 @@
 """
 fetch_rera — scrape Karnataka RERA portal for real project data.
 
-Replaces verify_rera.py which used Claude to guess RERA data.
+Replaces the old guessed RERA verifier.
 This skill fetches actual government-sourced data with confidence=1.0.
 
 Karnataka RERA portal flow:
@@ -1129,13 +1129,13 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
 class FetchReraSkill(BaseSkill):
     """Scrape Karnataka RERA portal for real project registration data.
 
-    Replaces VerifyReraSkill (verify_rera.py) which used Claude to guess
-    RERA data. This skill fetches actual government-sourced data.
+    Replaces the old guessed RERA verifier. This skill fetches actual
+    government-sourced data.
     """
 
     skill_id = "fetch_rera"
     description = "Scrape Karnataka RERA portal for real project registration data"
-    version = "2.0"  # v2 = real scraping, v1 was verify_rera.py with Claude
+    version = "2.0"  # v2 = real scraping; v1 was a guessed verifier.
     output_keys = [
         "rera_registered", "rera_number", "rera_ack_number", "rera_status",
         "rera_promoter_name", "rera_approved_on", "rera_completion_date",

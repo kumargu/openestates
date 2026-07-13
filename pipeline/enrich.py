@@ -54,61 +54,21 @@ SKILL_REGISTRY: Dict[str, dict] = {
         "priority": 1,
         "depends_on": [],
     },
-    "fetch_google_reviews": {
-        "node_types": ["society"],
-        "pool": "google",
-        "max_age_days": 30,
-        "cost_tier": "cheap",
-        "priority": 2,
-        "depends_on": [],
-    },
-    "learn_society": {
-        "node_types": ["society"],
-        "pool": "llm",
-        "max_age_days": 30,
-        "cost_tier": "cheap",
-        "priority": 2,
-        "depends_on": ["search_reddit"],
-    },
-    "learn_area": {
-        "node_types": ["area"],
-        "pool": "llm",
-        "max_age_days": 30,
-        "cost_tier": "cheap",
-        "priority": 2,
-        "depends_on": [],
-    },
-    "score_society": {
-        "node_types": ["society"],
-        "pool": "llm",
-        "max_age_days": 7,
-        "cost_tier": "moderate",
-        "priority": 3,
-        "depends_on": ["learn_society", "fetch_rera"],
-    },
-    "embed_entity": {
-        "node_types": ["society", "area", "property"],
-        "pool": "embedding",
-        "max_age_days": 30,
-        "cost_tier": "cheap",
-        "priority": 3,
-        "depends_on": [],
-    },
-    "fetch_market_pricing": {
-        "node_types": ["society"],
-        "pool": "llm",
-        "max_age_days": 14,
-        "cost_tier": "cheap",
-        "priority": 3,
-        "depends_on": ["fetch_rera"],
-    },
     "fetch_images": {
         "node_types": ["society"],
         "pool": "serpapi",
         "max_age_days": 30,
+        "cost_tier": "cheap",
+        "priority": 3,
+        "depends_on": [],
+    },
+    "identify_gaps": {
+        "node_types": ["society"],
+        "pool": "local",
+        "max_age_days": 7,
         "cost_tier": "free",
         "priority": 4,
-        "depends_on": [],
+        "depends_on": ["search_reddit", "fetch_rera"],
     },
 }
 
@@ -117,13 +77,8 @@ SKILL_REGISTRY: Dict[str, dict] = {
 FRESHNESS_SOURCE_MAP = {
     "search_reddit": "reddit",
     "fetch_rera": "rera",
-    "fetch_google_reviews": "google_reviews",
-    "learn_society": "learn_society",
-    "learn_area": "reddit_area",
-    "score_society": "score_society",
-    "embed_entity": "embed_entity",
-    "fetch_market_pricing": "market_pricing",
     "fetch_images": "fetch_images",
+    "identify_gaps": "identify_gaps",
 }
 
 COST_TIER_ORDER = {"free": 0, "cheap": 1, "moderate": 2, "expensive": 3}
@@ -286,27 +241,12 @@ def _make_skill(skill_id: str):
     elif skill_id == "fetch_rera":
         from pipeline.skills.fetch_rera import FetchReraSkill
         return FetchReraSkill()
-    elif skill_id == "fetch_google_reviews":
-        from pipeline.skills.fetch_google_reviews import FetchGoogleReviewsSkill
-        return FetchGoogleReviewsSkill()
-    elif skill_id == "learn_society":
-        from pipeline.skills.learn_society import LearnSocietySkill
-        return LearnSocietySkill()
-    elif skill_id == "learn_area":
-        from pipeline.skills.learn_area import LearnAreaSkill
-        return LearnAreaSkill()
-    elif skill_id == "score_society":
-        from pipeline.skills.score_society import ScoreSocietySkill
-        return ScoreSocietySkill()
-    elif skill_id == "embed_entity":
-        from pipeline.skills.embed_entity import EmbedEntitySkill
-        return EmbedEntitySkill()
-    elif skill_id == "fetch_market_pricing":
-        from pipeline.skills.fetch_market_pricing import FetchMarketPricingSkill
-        return FetchMarketPricingSkill()
     elif skill_id == "fetch_images":
         from pipeline.skills.fetch_images import FetchImagesSkill
         return FetchImagesSkill()
+    elif skill_id == "identify_gaps":
+        from pipeline.skills.identify_gaps import IdentifyGapsSkill
+        return IdentifyGapsSkill()
     else:
         raise ValueError(f"Unknown skill: {skill_id}")
 
@@ -379,21 +319,6 @@ def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dic
         return {"query": name, "subreddit": "bangalore"}
     elif skill_id == "fetch_rera":
         return {"project_name": name, "entity_id": entity_id}
-    elif skill_id == "fetch_google_reviews":
-        return {"society_name": name, "area": area, "city": "Bengaluru"}
-    elif skill_id == "learn_society":
-        return {"society_name": name, "entity_id": entity_id, "area": area}
-    elif skill_id == "learn_area":
-        return {"area_name": name, "entity_id": entity_id}
-    elif skill_id == "score_society":
-        # score_society expects soc-* format, not society:* format
-        slug = entity_id.split(":", 1)[-1]
-        return {"society_id": f"soc-{slug}"}
-    elif skill_id == "embed_entity":
-        return {"entity_id": entity_id, "entity_type": entity_id.split(":")[0], "name": name}
-    elif skill_id == "fetch_market_pricing":
-        slug = entity_id.split(":", 1)[-1]
-        return {"society_slug": slug}
     elif skill_id == "fetch_images":
         area = _resolve_area(entity_id) if entity_id.startswith("society:") else ""
         return {
@@ -402,6 +327,9 @@ def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dic
             "name": name,
             "area": area,
         }
+    elif skill_id == "identify_gaps":
+        slug = entity_id.split(":", 1)[-1]
+        return {"society_id": f"soc-{slug}"}
     else:
         return {"entity_id": entity_id}
 
@@ -473,10 +401,12 @@ def _push_facts(entity_id: str, result):
     try:
         from pipeline.skills.graph_client import GraphClient
         client = GraphClient()
-        client.push_skill_result(entity_id, result)
+        if client.push_skill_result(entity_id, result):
+            return
+        logger.debug("Backend push returned no response, persisting locally")
     except Exception as e:
         logger.debug("Backend push skipped (%s), persisting locally", e)
-        _persist_facts_locally(entity_id, result)
+    _persist_facts_locally(entity_id, result)
 
 
 # ---------------------------------------------------------------------------

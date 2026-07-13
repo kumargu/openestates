@@ -1,18 +1,9 @@
-mod data_loader;
-mod enrichment_queue;
-mod knowledge;
-mod models;
-mod routes;
-mod scoring;
-mod search;
-mod state;
-mod utils;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use backend::{data_loader, routes};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
 

@@ -4,7 +4,7 @@ BaseSkill — the skill abstraction for knowledge graph construction.
 Every skill:
 - Takes a typed input
 - Produces SourcedFact entries with provenance
-- Reports cost (LLM tokens, API calls, estimated USD)
+- Reports API calls and estimated USD
 - Is cacheable (same input + same version = skip)
 - Is auditable (every fact traces to which skill produced it)
 """
@@ -53,7 +53,7 @@ class SkillExecutionError(Exception):
 @dataclass
 class FactSource:
     """Where a fact came from — the provenance chain."""
-    source_type: str  # "Reddit", "Google", "Rera", "Manual", "Llm", "Computed"
+    source_type: str  # "Reddit", "Google", "Rera", "Manual", "Computed", etc.
     url: Optional[str] = None
     model: Optional[str] = None
     skill_id: Optional[str] = None
@@ -103,7 +103,11 @@ class SourcedFact:
 
 @dataclass
 class SkillCost:
-    """Cost tracking for a skill execution."""
+    """Cost tracking for a skill execution.
+
+    `llm_tokens` is retained for backward-compatible cache deserialization; the
+    active pipeline no longer runs LLM skills.
+    """
     llm_tokens: int = 0
     api_calls: int = 0
     estimated_usd: float = 0.0
@@ -191,7 +195,7 @@ class BaseSkill(ABC):
                 value=f["value"],
                 confidence=f["confidence"],
                 source=FactSource(
-                    source_type=src.get("source_type", "Llm"),
+                    source_type=src.get("source_type", "Manual"),
                     url=src.get("url"),
                     model=src.get("model"),
                     skill_id=src.get("skill_id"),

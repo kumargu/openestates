@@ -4,9 +4,9 @@
 //! Phase 2: FAISS IVF index when >5000 vectors.
 //! Phase 3: Rust-native HNSW or pgvector.
 //!
-//! Embeddings are computed by the Python `embed_entity` skill and stored
-//! on each Node's `summary_embedding` field. This module provides in-memory
-//! search over those embeddings.
+//! Embeddings, when present, are produced by an offline job and stored on each
+//! Node's `summary_embedding` field. This module provides in-memory search over
+//! those embeddings without making external API calls.
 
 use serde::Serialize;
 

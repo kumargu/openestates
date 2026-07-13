@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::knowledge::fact::SourceType;
 use crate::knowledge::FactValue;
@@ -13,7 +13,7 @@ pub const SQM_PER_ACRE: f64 = 4046.8564224;
 const FACT_SCHEMA_REGISTRY_JSON: &str =
     include_str!("../../../data/search/fact_schema_registry.json");
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct SearchSchemaConfig {
     pub version: u32,
@@ -27,7 +27,7 @@ pub struct SearchSchemaConfig {
     pub text_evidence: Vec<TextEvidenceSchema>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub struct ThemeLayer {
     pub rank: u32,
@@ -42,14 +42,14 @@ pub struct ThemeLayer {
     pub source_priority: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryUnit {
     pub unit: String,
     pub aliases: Vec<String>,
     pub to_canonical: f64,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NumericConstraintSchema {
     pub dimension: String,
     pub label: String,
@@ -59,7 +59,7 @@ pub struct NumericConstraintSchema {
     pub scoring_method: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PreferencePatternSpec {
     pub rank: u32,
     pub patterns: Vec<String>,
@@ -68,7 +68,7 @@ pub struct PreferencePatternSpec {
     pub weight: f32,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TextEvidenceSchema {
     pub dimension: String,
     pub label: String,

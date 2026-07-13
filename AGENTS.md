@@ -41,7 +41,7 @@ You are allowed to suggest deleting or deprecating anything no longer aligned wi
 | Backend API | Rust + Axum | Port 4000 |
 | Data pipeline | Python | Scraping, enrichment, skills |
 | Storage | S3-ready local FS | `data/` — migrate to S3 with zero path changes |
-| Scoring engine | Python (`engine/`) | Multi-dimensional scoring + vector search |
+| Scoring/search | Rust (`backend/src/search`, `backend/src/scoring`) | Hot-path ranking, scoring, and explanations |
 
 **The Python/Rust boundary is firm:**
 - Python: fast iteration for scraping and enrichment. Treat as throwaway-friendly.
@@ -94,7 +94,7 @@ SourcedFact:
   key: "maintenance_quality"
   value: Text("good")
   confidence: 0.6
-  source: { source_type: Llm, skill_id: "learn_society", ... }
+  source: { source_type: Reddit, skill_id: "search_reddit", ... }
   display_template: "Maintenance is {value}"
   answers_preferences: ["good society", "maintenance"]
   scoring_hint: { direction: TextMatch, weight: 2.0 }
@@ -116,8 +116,9 @@ Query → local KG/index recall → deterministic ranking → explanation
 Rules:
 - **No LLM/network calls in `/api/search`**. The Rust request path reads local
   data only.
-- Python skills may use external APIs or LLMs for offline enrichment, but their
-  output must be structured `SourcedFact`s.
+- Python skills may use external APIs for offline enrichment, but their output
+  must be structured `SourcedFact`s. Do not add Gemini/Claude/LLM executable
+  flows without an explicit product/security decision.
 - Search should surface explicit gaps rather than inventing or live-discovering
   facts.
 - Newly enriched/crawled data gets lower confidence until RERA/source checks pass.
@@ -199,10 +200,9 @@ backend/                Rust + Axum (port 4000)
   src/cache/            LRU + TTL caches
   src/storage/          StorageBackend trait (local FS → S3)
 pipeline/               Python data collection
-  pipeline/skills/      Codex/Gemini skills → SourcedFacts
+  pipeline/skills/      Deterministic adapters and fact normalizers → SourcedFacts
   pipeline/crawlers/    BaseCrawler, CrawlCache, RateLimiter
-  pipeline/enrichment/  BaseEnricher, ClaudeEnricher, Embedder
-engine/                 Scoring engine (scorer, ranker, dimensions, vector_search)
+  pipeline/enrichment/  Offline enrichment adapters
 data/seed/              Flat JSON seed data
 data/knowledge/         Knowledge graph (nodes, edges, search logs)
 data/cache/             Pipeline skill result cache

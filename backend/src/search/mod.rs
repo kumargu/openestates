@@ -24,7 +24,7 @@ pub struct MatchReason {
     pub score: f64,
     /// Fact confidence (1.0 for RERA, 0.6 for Reddit, etc.)
     pub confidence: f32,
-    /// Source type: "Reddit", "Rera", "Llm", "Seed", etc.
+    /// Source type: "Reddit", "Rera", "Computed", "Manual", etc.
     pub source_type: String,
     /// "graph" or "legacy"
     pub scoring_method: String,

@@ -35,35 +35,26 @@ DESIRED_FACTS = [
     ("area", 1, "Area/locality", "seed_data"),
     ("builder_name", 1, "Builder/developer name", "seed_data"),
 
-    # Priority 2: Trust signals (high impact on scoring)
-    ("google_rating", 2, "Google Maps rating", "fetch_google_reviews"),
-    ("google_review_count", 2, "Number of Google reviews", "fetch_google_reviews"),
-    ("google_sentiment", 2, "Google review sentiment summary", "fetch_google_reviews"),
-    ("google_top_positives", 2, "Top positive themes from reviews", "fetch_google_reviews"),
-    ("google_top_negatives", 2, "Top negative themes from reviews", "fetch_google_reviews"),
-    ("rera_verified", 2, "RERA compliance status", "verify_rera"),
+    # Priority 2: Root-of-truth signals
+    ("rera_registered", 2, "RERA registration status", "fetch_rera"),
+    ("rera_number", 2, "RERA registration number", "fetch_rera"),
+    ("rera_status", 2, "RERA project status", "fetch_rera"),
 
     # Priority 3: Community intelligence (moderate impact)
     ("reddit_threads", 3, "Reddit discussion threads", "search_reddit"),
     ("reddit_thread_count", 3, "Number of Reddit threads", "search_reddit"),
 
-    # Priority 4: Structured enrichment (from LLM synthesis)
-    ("maintenance_quality", 4, "Maintenance quality assessment", "learn_society"),
-    ("family_suitability", 4, "Family suitability assessment", "learn_society"),
-    ("noise_level", 4, "Noise level assessment", "learn_society"),
-    ("security_quality", 4, "Security quality assessment", "learn_society"),
-    ("resident_sentiment", 4, "Overall resident sentiment", "learn_society"),
-
-    # Priority 5: Scoring (from score_society skill)
-    ("score_maintenance_quality", 5, "Maintenance dimension score", "score_society"),
-    ("score_family_friendly", 5, "Family friendly dimension score", "score_society"),
-    ("score_builder_trust", 5, "Builder trust dimension score", "score_society"),
-    ("overall_score", 5, "Overall livability score", "score_society"),
+    # Priority 4: Media and sourced market context
+    ("hero_image", 4, "Primary property image", "fetch_images"),
+    ("gallery", 4, "Property image gallery", "fetch_images"),
+    ("pricing_source", 4, "Marketplace price source", "marketplace_crawler"),
+    ("price_per_sqft", 4, "Sourced marketplace rate", "marketplace_crawler"),
 
     # Priority 3: Metadata (nice to have)
     ("year_built", 3, "Year of construction/completion", "seed_data"),
     ("total_units", 3, "Total number of units", "seed_data"),
-    ("embedding_computed", 4, "Vector embedding for search", "embed_entity"),
+    ("project_status", 3, "Computed project delivery status", "classify_project_status"),
+    ("builder_delivery_rate", 4, "Computed builder delivery reliability", "compute_builder_delivery_rate"),
 ]
 
 
@@ -106,14 +97,14 @@ def analyze_gaps(society_id: str) -> dict:
     coverage = present / total_desired if total_desired > 0 else 0
 
     # Determine readiness level
-    has_google = "google_rating" in existing_keys
+    has_rera = "rera_registered" in existing_keys or "rera_number" in existing_keys
     has_reddit = "reddit_threads" in existing_keys
-    has_scores = "overall_score" in existing_keys
+    has_pricing = "pricing_source" in existing_keys or "price_per_sqft" in existing_keys
     has_identity = "name" in existing_keys
 
-    if has_scores and has_google and has_reddit:
+    if has_rera and has_reddit and has_pricing:
         readiness = "ready"
-    elif has_google or has_reddit:
+    elif has_rera or has_reddit:
         readiness = "partial"
     elif has_identity:
         readiness = "minimal"
@@ -169,7 +160,13 @@ def analyze_gaps(society_id: str) -> dict:
 class IdentifyGapsSkill(BaseSkill):
     skill_id = "identify_gaps"
     description = "Analyze knowledge gaps for a society and recommend enrichment priorities"
-    version = "1.0"
+    version = "2.0"
+    output_keys = [
+        "knowledge_coverage",
+        "knowledge_readiness",
+        "enrichment_gaps",
+        "next_enrichment_action",
+    ]
 
     def execute(self, input_data: dict) -> SkillResult:
         society_id = input_data.get("society_id", "")

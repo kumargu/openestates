@@ -147,16 +147,11 @@ def generate_report(society_audits: list[dict], area_audits: list[dict]) -> str:
     total_area = len(area_audits)
     soc_with_gaps = sum(1 for a in society_audits if a["gap_score"] > 0)
     area_with_gaps = sum(1 for a in area_audits if a["gap_score"] > 0)
-    no_embedding = sum(1 for a in society_audits if not a["has_embedding"])
-    no_aspects = sum(1 for a in society_audits if not a["has_aspect_embeddings"])
-
     lines.append("## Summary\n")
     lines.append(f"| Metric | Societies | Areas |")
     lines.append(f"|--------|-----------|-------|")
     lines.append(f"| Total nodes | {total_soc} | {total_area} |")
     lines.append(f"| With any gap | {soc_with_gaps} | {area_with_gaps} |")
-    lines.append(f"| Missing summary embedding | {no_embedding} | - |")
-    lines.append(f"| Missing aspect embeddings | {no_aspects} | - |")
 
     # Society gap detail
     lines.append("\n## Society Gaps (sorted by gap score)\n")
@@ -186,10 +181,6 @@ def generate_report(society_audits: list[dict], area_audits: list[dict]) -> str:
             lines.append(f"   - Missing facts: {', '.join(a['missing_facts'])}")
         if a["missing_scoring_hints"]:
             lines.append(f"   - Missing scoring_hints: {', '.join(a['missing_scoring_hints'])}")
-        if not a["has_embedding"]:
-            lines.append(f"   - No embedding — run embed_entity")
-        if not a["has_aspect_embeddings"]:
-            lines.append(f"   - No aspect embeddings — run reembed_all")
 
     # Fix commands
     lines.append("\n## Fix Commands\n")
@@ -197,10 +188,7 @@ def generate_report(society_audits: list[dict], area_audits: list[dict]) -> str:
     lines.append("# Fix scoring_hints and answers_preferences on existing facts")
     lines.append("python3 -m pipeline.scripts.fix_scoring_hints")
     lines.append("")
-    lines.append("# Re-embed all society nodes with updated facts + aspect embeddings")
-    lines.append("python3 -m pipeline.scripts.reembed_all --type all")
-    lines.append("")
-    lines.append("# Re-run evaluation after fixes")
+    lines.append("# Re-run search evaluation after fixes")
     lines.append("python3 -m pipeline.eval_search --output docs/eval_search_v2.md")
     lines.append("```")
 

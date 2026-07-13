@@ -633,11 +633,11 @@ fn query_contains_pattern(q: &str, pattern: &str) -> bool {
         let before_ok = q[..start]
             .chars()
             .next_back()
-            .map_or(true, |ch| !ch.is_ascii_alphanumeric());
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
         let after_ok = q[end..]
             .chars()
             .next()
-            .map_or(true, |ch| !ch.is_ascii_alphanumeric());
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
 
         if before_ok && after_ok {
             return true;
