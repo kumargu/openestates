@@ -8,6 +8,7 @@
 //! files. JSON is reserved for small control-plane files such as manifests,
 //! schema descriptors, trust policy, and current pointers.
 
+pub mod executor;
 pub mod kg_view;
 pub mod materialization;
 pub mod paths;
@@ -18,6 +19,9 @@ pub mod run_manifest;
 pub mod skill_facts;
 pub mod types;
 
+pub use executor::{
+    AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
+};
 pub use kg_view::{
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
     KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord, KgViewEntityRecord,

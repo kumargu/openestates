@@ -1,0 +1,563 @@
+use std::collections::HashMap;
+use std::fmt;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+use crate::knowledge::KnowledgeGraph;
+use crate::lake::{LakeError, LakeStore};
+use crate::serving::{
+    SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
+    SearchServingBundleMaterializer, SEARCH_SERVING_BUNDLE_ASSET_ID,
+};
+
+use super::{
+    AssetDagRunManifest, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
+    AssetRunManifestStore, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
+    KgSocietyViewMaterializer, MaterializationId, MaterializationRecord, PlanDecision,
+    PlannerError, RunManifestError, SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
+};
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetDagExecutionOptions {
+    pub partition: AssetPartition,
+    pub planned_at: DateTime<Utc>,
+    pub version: String,
+    pub dry_run: bool,
+}
+
+impl AssetDagExecutionOptions {
+    pub fn new(partition: AssetPartition, planned_at: DateTime<Utc>) -> Self {
+        Self {
+            partition,
+            planned_at,
+            version: default_asset_version(planned_at),
+            dry_run: false,
+        }
+    }
+
+    pub fn dry_run(mut self, dry_run: bool) -> Self {
+        self.dry_run = dry_run;
+        self
+    }
+
+    pub fn with_version(mut self, version: impl Into<String>) -> Self {
+        self.version = version.into();
+        self
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AssetDagExecutionReport {
+    pub dry_run: bool,
+    pub manifest: AssetDagRunManifest,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run_manifest_key: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_pointer_key: Option<String>,
+    pub executed_assets: Vec<AssetId>,
+}
+
+#[derive(Clone)]
+pub struct AssetDagExecutor {
+    lake: LakeStore,
+    registry: super::AssetRegistry,
+    executors: BuiltInAssetExecutorRegistry,
+    materializations: AssetMaterializationStore,
+    run_manifests: AssetRunManifestStore,
+}
+
+impl AssetDagExecutor {
+    pub fn new(registry: super::AssetRegistry, lake: LakeStore) -> Self {
+        let materializations = AssetMaterializationStore::new(lake.clone());
+        let run_manifests = AssetRunManifestStore::new(lake.clone());
+        Self {
+            lake,
+            registry,
+            executors: BuiltInAssetExecutorRegistry::default_openestates(),
+            materializations,
+            run_manifests,
+        }
+    }
+
+    pub async fn execute(
+        &self,
+        graph: &KnowledgeGraph,
+        options: AssetDagExecutionOptions,
+    ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
+        let planner = AssetPlanner::new(self.registry.clone(), self.materializations.clone());
+        let plan = planner
+            .plan_partition_details(&options.partition, options.planned_at)
+            .await?;
+        let mut manifest = AssetDagRunManifest::from_plan(&plan);
+
+        if options.dry_run {
+            return Ok(AssetDagExecutionReport {
+                dry_run: true,
+                manifest,
+                run_manifest_key: None,
+                current_pointer_key: None,
+                executed_assets: Vec::new(),
+            });
+        }
+
+        self.persist_manifest(&manifest, false).await?;
+        let mut executed_assets = Vec::new();
+        let mut records_by_asset = HashMap::new();
+        let mut kg_view: Option<KgSocietyViewMaterialization> = None;
+
+        for entry in plan.entries.iter() {
+            if entry.decision == PlanDecision::Skip {
+                continue;
+            }
+
+            let asset_id = entry.asset_id.clone();
+            let started_at = Utc::now();
+            manifest.mark_step_running(&asset_id, started_at)?;
+            self.persist_manifest(&manifest, false).await?;
+
+            match self
+                .execute_asset(
+                    graph,
+                    &options,
+                    &manifest.run_id,
+                    &asset_id,
+                    &records_by_asset,
+                    kg_view.as_ref(),
+                )
+                .await
+            {
+                Ok(executed) => {
+                    let completed_at = Utc::now();
+                    let record = executed.record().clone();
+                    let success_result = self
+                        .prepare_successful_step(
+                            &manifest,
+                            asset_id.clone(),
+                            &record,
+                            &records_by_asset,
+                            started_at,
+                            completed_at,
+                        )
+                        .await;
+                    let next_manifest = match success_result {
+                        Ok(next_manifest) => next_manifest,
+                        Err(err) => {
+                            manifest.mark_step_failed(
+                                &asset_id,
+                                started_at,
+                                completed_at,
+                                err.to_string(),
+                            )?;
+                            manifest.finish(completed_at)?;
+                            self.persist_manifest(&manifest, true).await?;
+                            return Err(err);
+                        }
+                    };
+
+                    manifest = next_manifest;
+                    self.persist_manifest(&manifest, false).await?;
+                    records_by_asset.insert(asset_id.clone(), record);
+                    if let ExecutedAsset::KgSocietyView(materialization) = executed {
+                        kg_view = Some(materialization);
+                    }
+                    executed_assets.push(asset_id);
+                }
+                Err(err) => {
+                    let completed_at = Utc::now();
+                    manifest.mark_step_failed(
+                        &asset_id,
+                        started_at,
+                        completed_at,
+                        err.to_string(),
+                    )?;
+                    manifest.finish(completed_at)?;
+                    self.persist_manifest(&manifest, true).await?;
+                    return Err(err);
+                }
+            }
+        }
+
+        let completed_at = Utc::now();
+        manifest.finish(completed_at)?;
+        let persisted = self.persist_manifest(&manifest, true).await?;
+
+        Ok(AssetDagExecutionReport {
+            dry_run: false,
+            manifest,
+            run_manifest_key: Some(persisted.run_manifest_key),
+            current_pointer_key: Some(persisted.current_pointer_key),
+            executed_assets,
+        })
+    }
+
+    async fn execute_asset(
+        &self,
+        graph: &KnowledgeGraph,
+        options: &AssetDagExecutionOptions,
+        run_id: &MaterializationId,
+        asset_id: &AssetId,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        kg_view: Option<&KgSocietyViewMaterialization>,
+    ) -> Result<ExecutedAsset, AssetDagExecutorError> {
+        let executor =
+            self.executors
+                .get(asset_id)
+                .ok_or_else(|| AssetDagExecutorError::NoExecutor {
+                    asset_id: asset_id.clone(),
+                })?;
+        let context = AssetExecutionContext {
+            dag: self,
+            graph,
+            options,
+            run_id,
+            asset_id,
+            records_by_asset,
+            kg_view,
+        };
+        executor.execute(context).await
+    }
+
+    async fn dependency_materializations(
+        &self,
+        asset_id: &AssetId,
+        partition: &AssetPartition,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<Vec<MaterializationId>, AssetDagExecutorError> {
+        let definition =
+            self.registry
+                .get(asset_id)
+                .ok_or_else(|| AssetDagExecutorError::UnknownAsset {
+                    asset_id: asset_id.clone(),
+                })?;
+        let mut parents = Vec::with_capacity(definition.dependencies.len());
+
+        for dependency in &definition.dependencies {
+            if let Some(record) = records_by_asset.get(dependency) {
+                parents.push(record.materialization_id.clone());
+                continue;
+            }
+
+            let current = self
+                .materializations
+                .current_record(dependency, partition)
+                .await
+                .map_err(|err| {
+                    if err.is_not_found() {
+                        AssetDagExecutorError::MissingDependency {
+                            asset_id: asset_id.clone(),
+                            dependency: dependency.clone(),
+                        }
+                    } else {
+                        AssetDagExecutorError::Lake(err)
+                    }
+                })?;
+            parents.push(current.materialization_id);
+        }
+
+        Ok(parents)
+    }
+
+    async fn prepare_successful_step(
+        &self,
+        manifest: &AssetDagRunManifest,
+        asset_id: AssetId,
+        record: &MaterializationRecord,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        started_at: DateTime<Utc>,
+        completed_at: DateTime<Utc>,
+    ) -> Result<AssetDagRunManifest, AssetDagExecutorError> {
+        self.validate_record(asset_id.clone(), record, records_by_asset)
+            .await?;
+
+        let mut next_manifest = manifest.clone();
+        next_manifest.mark_step_succeeded(&asset_id, record, started_at, completed_at)?;
+        self.materializations.promote_current(record).await?;
+        Ok(next_manifest)
+    }
+
+    async fn validate_record(
+        &self,
+        asset_id: AssetId,
+        record: &MaterializationRecord,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<(), AssetDagExecutorError> {
+        let expected = self
+            .dependency_materializations(&asset_id, &record.partition, records_by_asset)
+            .await?;
+        if record.parent_materializations != expected {
+            return Err(AssetDagExecutorError::ParentLineageMismatch {
+                asset_id,
+                expected,
+                actual: record.parent_materializations.clone(),
+            });
+        }
+        Ok(())
+    }
+
+    async fn persist_manifest(
+        &self,
+        manifest: &AssetDagRunManifest,
+        promote_current: bool,
+    ) -> Result<PersistedManifest, AssetDagExecutorError> {
+        let meta = self.run_manifests.write_manifest(manifest).await?;
+        if promote_current {
+            self.run_manifests.promote_current(manifest).await?;
+        }
+        Ok(PersistedManifest {
+            run_manifest_key: meta.key.to_string(),
+            current_pointer_key: super::AssetPathBuilder::current_dag_run_pointer_key(
+                &manifest.partition,
+            )
+            .to_string(),
+        })
+    }
+}
+
+#[derive(Debug)]
+struct PersistedManifest {
+    run_manifest_key: String,
+    current_pointer_key: String,
+}
+
+#[derive(Clone)]
+struct BuiltInAssetExecutorRegistry {
+    executors: HashMap<AssetId, BuiltInAssetExecutor>,
+}
+
+impl BuiltInAssetExecutorRegistry {
+    fn default_openestates() -> Self {
+        let mut executors = HashMap::new();
+        executors.insert(
+            static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
+            BuiltInAssetExecutor::KgSocietyView,
+        );
+        executors.insert(
+            static_asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
+            BuiltInAssetExecutor::SearchServingBundle,
+        );
+        Self { executors }
+    }
+
+    fn get(&self, asset_id: &AssetId) -> Option<&BuiltInAssetExecutor> {
+        self.executors.get(asset_id)
+    }
+}
+
+#[derive(Clone, Copy)]
+enum BuiltInAssetExecutor {
+    KgSocietyView,
+    SearchServingBundle,
+}
+
+impl BuiltInAssetExecutor {
+    async fn execute(
+        &self,
+        context: AssetExecutionContext<'_>,
+    ) -> Result<ExecutedAsset, AssetDagExecutorError> {
+        ensure_global_partition(context.asset_id, &context.options.partition)?;
+
+        match self {
+            Self::KgSocietyView => {
+                let parent_materializations = context
+                    .dag
+                    .dependency_materializations(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let materialization = KgSocietyViewMaterializer::new(context.dag.lake.clone())
+                    .materialize_for_run(
+                        context.graph,
+                        context.options.version.clone(),
+                        vec![knowledge_graph_watermark(context.graph)],
+                        parent_materializations,
+                        context.run_id.clone(),
+                        context.options.partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::KgSocietyView(materialization))
+            }
+            Self::SearchServingBundle => {
+                let kg_view = context
+                    .kg_view
+                    .ok_or(AssetDagExecutorError::MissingRuntimeKgView)?;
+                let materialization =
+                    SearchServingBundleMaterializer::new(context.dag.lake.clone())
+                        .materialize_from_kg_view_for_run(
+                            kg_view,
+                            context.options.version.clone(),
+                            context.run_id.clone(),
+                            context.options.partition.clone(),
+                        )
+                        .await?;
+                Ok(ExecutedAsset::SearchServingBundle(materialization))
+            }
+        }
+    }
+}
+
+struct AssetExecutionContext<'a> {
+    dag: &'a AssetDagExecutor,
+    graph: &'a KnowledgeGraph,
+    options: &'a AssetDagExecutionOptions,
+    run_id: &'a MaterializationId,
+    asset_id: &'a AssetId,
+    records_by_asset: &'a HashMap<AssetId, MaterializationRecord>,
+    kg_view: Option<&'a KgSocietyViewMaterialization>,
+}
+
+enum ExecutedAsset {
+    KgSocietyView(KgSocietyViewMaterialization),
+    SearchServingBundle(SearchServingBundleMaterialization),
+}
+
+impl ExecutedAsset {
+    fn record(&self) -> &MaterializationRecord {
+        match self {
+            Self::KgSocietyView(materialization) => &materialization.record,
+            Self::SearchServingBundle(materialization) => &materialization.record,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum AssetDagExecutorError {
+    Planner(PlannerError),
+    Manifest(RunManifestError),
+    Lake(LakeError),
+    KgSocietyView(KgSocietyViewMaterializeError),
+    SearchServingBundle(SearchServingBundleMaterializeError),
+    NoExecutor {
+        asset_id: AssetId,
+    },
+    MissingDependency {
+        asset_id: AssetId,
+        dependency: AssetId,
+    },
+    MissingRuntimeKgView,
+    ParentLineageMismatch {
+        asset_id: AssetId,
+        expected: Vec<MaterializationId>,
+        actual: Vec<MaterializationId>,
+    },
+    UnsupportedPartition {
+        asset_id: AssetId,
+        partition: AssetPartition,
+    },
+    UnknownAsset {
+        asset_id: AssetId,
+    },
+}
+
+impl fmt::Display for AssetDagExecutorError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Planner(err) => write!(f, "asset DAG planning failed: {err}"),
+            Self::Manifest(err) => write!(f, "asset DAG manifest update failed: {err}"),
+            Self::Lake(err) => write!(f, "asset DAG lake operation failed: {err}"),
+            Self::KgSocietyView(err) => write!(f, "KG society view execution failed: {err}"),
+            Self::SearchServingBundle(err) => {
+                write!(f, "search serving bundle execution failed: {err}")
+            }
+            Self::NoExecutor { asset_id } => {
+                write!(f, "no executor registered for planned asset {asset_id}")
+            }
+            Self::MissingDependency {
+                asset_id,
+                dependency,
+            } => write!(
+                f,
+                "asset {asset_id} cannot run because dependency {dependency} has no current materialization"
+            ),
+            Self::MissingRuntimeKgView => write!(
+                f,
+                "search serving bundle requires kg_society_view to run in the same DAG run"
+            ),
+            Self::ParentLineageMismatch {
+                asset_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "asset {asset_id} returned parent lineage {actual:?}, expected {expected:?}"
+            ),
+            Self::UnsupportedPartition {
+                asset_id,
+                partition,
+            } => write!(
+                f,
+                "asset {asset_id} cannot execute for non-global partition {partition:?}"
+            ),
+            Self::UnknownAsset { asset_id } => {
+                write!(f, "asset {asset_id} is not registered in the DAG")
+            }
+        }
+    }
+}
+
+impl std::error::Error for AssetDagExecutorError {}
+
+impl From<PlannerError> for AssetDagExecutorError {
+    fn from(err: PlannerError) -> Self {
+        Self::Planner(err)
+    }
+}
+
+impl From<RunManifestError> for AssetDagExecutorError {
+    fn from(err: RunManifestError) -> Self {
+        Self::Manifest(err)
+    }
+}
+
+impl From<LakeError> for AssetDagExecutorError {
+    fn from(err: LakeError) -> Self {
+        Self::Lake(err)
+    }
+}
+
+impl From<KgSocietyViewMaterializeError> for AssetDagExecutorError {
+    fn from(err: KgSocietyViewMaterializeError) -> Self {
+        Self::KgSocietyView(err)
+    }
+}
+
+impl From<SearchServingBundleMaterializeError> for AssetDagExecutorError {
+    fn from(err: SearchServingBundleMaterializeError) -> Self {
+        Self::SearchServingBundle(err)
+    }
+}
+
+fn ensure_global_partition(
+    asset_id: &AssetId,
+    partition: &AssetPartition,
+) -> Result<(), AssetDagExecutorError> {
+    if partition.is_global() {
+        Ok(())
+    } else {
+        Err(AssetDagExecutorError::UnsupportedPartition {
+            asset_id: asset_id.clone(),
+            partition: partition.clone(),
+        })
+    }
+}
+
+fn knowledge_graph_watermark(graph: &KnowledgeGraph) -> SourceWatermark {
+    let stats = graph.stats();
+    SourceWatermark {
+        source: "knowledge_graph".to_string(),
+        high_watermark: format!(
+            "nodes={} edges={} facts={}",
+            stats.total_nodes, stats.total_edges, stats.total_facts
+        ),
+    }
+}
+
+fn static_asset_id(id: &str) -> AssetId {
+    AssetId::new(id).expect("static asset id is valid")
+}
+
+fn default_asset_version(planned_at: DateTime<Utc>) -> String {
+    planned_at.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}

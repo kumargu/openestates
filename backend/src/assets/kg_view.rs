@@ -262,6 +262,76 @@ impl KgSocietyViewMaterializer {
         source_watermarks: Vec<SourceWatermark>,
         parent_materializations: Vec<MaterializationId>,
     ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        let materialization = self
+            .materialize_for_run(
+                graph,
+                view_version,
+                source_watermarks,
+                parent_materializations,
+                MaterializationId::new(),
+                AssetPartition::global(),
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    pub async fn materialize_and_promote_for_run(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        let materialization = self
+            .materialize_for_run(
+                graph,
+                view_version,
+                source_watermarks,
+                parent_materializations,
+                run_id,
+                partition,
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    pub async fn materialize_for_run(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        self.materialize_for_run_inner(
+            graph,
+            view_version,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            partition,
+        )
+        .await
+    }
+
+    async fn materialize_for_run_inner(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
         let view_version = view_version.into();
         let records = KgViewRecords::from_graph(graph)?;
 
@@ -377,10 +447,11 @@ impl KgSocietyViewMaterializer {
             AssetId::new(KG_SOCIETY_VIEW_ASSET_ID)
                 .expect("static KG society view asset id is valid"),
             AssetStage::Gold,
-            AssetPartition::global(),
+            partition,
             view_version,
             artifact_refs,
         )
+        .with_run_id(run_id)
         .with_parent_materializations(parent_materializations)
         .with_source_watermarks(record_watermarks)
         .with_row_count(

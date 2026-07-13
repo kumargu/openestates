@@ -54,7 +54,39 @@ impl SearchServingBundleMaterializer {
         kg_view: &KgSocietyViewMaterialization,
         bundle_version: impl Into<String>,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
-        self.materialize_and_promote_with_parents(
+        self.materialize_and_promote_from_kg_view_for_run(
+            kg_view,
+            bundle_version,
+            MaterializationId::new(),
+            AssetPartition::global(),
+        )
+        .await
+    }
+
+    pub async fn materialize_and_promote_from_kg_view_for_run(
+        &self,
+        kg_view: &KgSocietyViewMaterialization,
+        bundle_version: impl Into<String>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        let materialization = self
+            .materialize_from_kg_view_for_run(kg_view, bundle_version, run_id, partition)
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    pub async fn materialize_from_kg_view_for_run(
+        &self,
+        kg_view: &KgSocietyViewMaterialization,
+        bundle_version: impl Into<String>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        self.materialize_with_parents_for_run(
             &kg_view.records,
             bundle_version,
             vec![SourceWatermark {
@@ -62,6 +94,8 @@ impl SearchServingBundleMaterializer {
                 high_watermark: kg_view.record.materialization_id.to_string(),
             }],
             vec![kg_view.record.materialization_id.clone()],
+            run_id,
+            partition,
         )
         .await
     }
@@ -72,6 +106,76 @@ impl SearchServingBundleMaterializer {
         bundle_version: impl Into<String>,
         source_watermarks: Vec<SourceWatermark>,
         parent_materializations: Vec<MaterializationId>,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        let materialization = self
+            .materialize_with_parents_for_run(
+                records,
+                bundle_version,
+                source_watermarks,
+                parent_materializations,
+                MaterializationId::new(),
+                AssetPartition::global(),
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    pub async fn materialize_and_promote_with_parents_for_run(
+        &self,
+        records: &KgViewRecords,
+        bundle_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        let materialization = self
+            .materialize_with_parents_for_run(
+                records,
+                bundle_version,
+                source_watermarks,
+                parent_materializations,
+                run_id,
+                partition,
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    pub async fn materialize_with_parents_for_run(
+        &self,
+        records: &KgViewRecords,
+        bundle_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        self.materialize_with_parents_for_run_inner(
+            records,
+            bundle_version,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            partition,
+        )
+        .await
+    }
+
+    async fn materialize_with_parents_for_run_inner(
+        &self,
+        records: &KgViewRecords,
+        bundle_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
     ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
         let manifest = ServingBundleBuilder::new(self.lake.clone())
             .build_from_kg_view_records(records, bundle_version)
@@ -86,10 +190,11 @@ impl SearchServingBundleMaterializer {
             AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID)
                 .expect("static search serving bundle asset id is valid"),
             AssetStage::Serving,
-            AssetPartition::global(),
+            partition,
             manifest.bundle_version.clone(),
             vec![ArtifactRef::json(manifest_meta)],
         )
+        .with_run_id(run_id)
         .with_parent_materializations(parent_materializations)
         .with_source_watermarks(source_watermarks)
         .with_row_count(manifest.entity_count);
