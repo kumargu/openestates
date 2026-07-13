@@ -1,9 +1,12 @@
 use std::fmt;
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, Float32Array, StringArray};
+use arrow::array::{Array, ArrayRef, Float32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use bytes::Bytes;
+use chrono::{DateTime, Utc};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
@@ -126,6 +129,77 @@ pub fn write_search_metadata_parquet(
     write_batch(batch)
 }
 
+pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let value_type = string_column(&batch, "value_type")?;
+        let value_text = string_column(&batch, "value_text")?;
+        let value_json = string_column(&batch, "value_json")?;
+        let confidence = float32_column(&batch, "confidence")?;
+        let source_type = string_column(&batch, "source_type")?;
+        let source_url = string_column(&batch, "source_url")?;
+        let model = string_column(&batch, "model")?;
+        let skill_id = string_column(&batch, "skill_id")?;
+        let learned_at = string_column(&batch, "learned_at")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(ServingFactRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                value_type: required_string(value_type, row, "value_type")?,
+                value_text: optional_string(value_text, row),
+                value_json: required_string(value_json, row, "value_json")?,
+                confidence: required_f32(confidence, row, "confidence")?,
+                source_type: required_string(source_type, row, "source_type")?,
+                source_url: optional_string(source_url, row),
+                model: optional_string(model, row),
+                skill_id: optional_string(skill_id, row),
+                learned_at: DateTime::parse_from_rfc3339(&required_string(
+                    learned_at,
+                    row,
+                    "learned_at",
+                )?)?
+                .with_timezone(&Utc),
+            });
+        }
+    }
+    Ok(records)
+}
+
+pub fn read_search_metadata_parquet(
+    bytes: &[u8],
+) -> Result<Vec<ServingSearchMetadataRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let display_template = string_column(&batch, "display_template")?;
+        let answers_preferences_json = string_column(&batch, "answers_preferences_json")?;
+        let scoring_direction = string_column(&batch, "scoring_direction")?;
+        let scoring_weight = float32_column(&batch, "scoring_weight")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(ServingSearchMetadataRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                display_template: optional_string(display_template, row),
+                answers_preferences_json: required_string(
+                    answers_preferences_json,
+                    row,
+                    "answers_preferences_json",
+                )?,
+                scoring_direction: optional_string(scoring_direction, row),
+                scoring_weight: optional_f32(scoring_weight, row),
+            });
+        }
+    }
+    Ok(records)
+}
+
 fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, ParquetWriteError> {
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
@@ -146,6 +220,76 @@ fn optional_string_array(values: Vec<Option<String>>) -> ArrayRef {
     Arc::new(StringArray::from(values))
 }
 
+fn string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a StringArray, ParquetReadError> {
+    let index = batch.schema().index_of(name)?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or_else(|| ParquetReadError::InvalidColumn {
+            name: name.to_string(),
+            expected: "Utf8",
+        })
+}
+
+fn float32_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a Float32Array, ParquetReadError> {
+    let index = batch.schema().index_of(name)?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<Float32Array>()
+        .ok_or_else(|| ParquetReadError::InvalidColumn {
+            name: name.to_string(),
+            expected: "Float32",
+        })
+}
+
+fn required_string(
+    array: &StringArray,
+    row: usize,
+    column: &str,
+) -> Result<String, ParquetReadError> {
+    if array.is_null(row) {
+        return Err(ParquetReadError::UnexpectedNull {
+            column: column.to_string(),
+            row,
+        });
+    }
+    Ok(array.value(row).to_string())
+}
+
+fn optional_string(array: &StringArray, row: usize) -> Option<String> {
+    if array.is_null(row) {
+        None
+    } else {
+        Some(array.value(row).to_string())
+    }
+}
+
+fn required_f32(array: &Float32Array, row: usize, column: &str) -> Result<f32, ParquetReadError> {
+    if array.is_null(row) {
+        return Err(ParquetReadError::UnexpectedNull {
+            column: column.to_string(),
+            row,
+        });
+    }
+    Ok(array.value(row))
+}
+
+fn optional_f32(array: &Float32Array, row: usize) -> Option<f32> {
+    if array.is_null(row) {
+        None
+    } else {
+        Some(array.value(row))
+    }
+}
+
 #[derive(Debug)]
 pub enum ParquetWriteError {
     Arrow(arrow::error::ArrowError),
@@ -162,3 +306,54 @@ impl fmt::Display for ParquetWriteError {
 }
 
 impl std::error::Error for ParquetWriteError {}
+
+#[derive(Debug)]
+pub enum ParquetReadError {
+    Arrow(arrow::error::ArrowError),
+    Chrono(chrono::ParseError),
+    InvalidColumn {
+        name: String,
+        expected: &'static str,
+    },
+    Parquet(parquet::errors::ParquetError),
+    UnexpectedNull {
+        column: String,
+        row: usize,
+    },
+}
+
+impl fmt::Display for ParquetReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Arrow(err) => write!(f, "Arrow record batch error: {err}"),
+            Self::Chrono(err) => write!(f, "timestamp parse error: {err}"),
+            Self::InvalidColumn { name, expected } => {
+                write!(f, "column {name} is not {expected}")
+            }
+            Self::Parquet(err) => write!(f, "Parquet read error: {err}"),
+            Self::UnexpectedNull { column, row } => {
+                write!(f, "column {column} is unexpectedly null at row {row}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for ParquetReadError {}
+
+impl From<arrow::error::ArrowError> for ParquetReadError {
+    fn from(err: arrow::error::ArrowError) -> Self {
+        Self::Arrow(err)
+    }
+}
+
+impl From<chrono::ParseError> for ParquetReadError {
+    fn from(err: chrono::ParseError) -> Self {
+        Self::Chrono(err)
+    }
+}
+
+impl From<parquet::errors::ParquetError> for ParquetReadError {
+    fn from(err: parquet::errors::ParquetError) -> Self {
+        Self::Parquet(err)
+    }
+}

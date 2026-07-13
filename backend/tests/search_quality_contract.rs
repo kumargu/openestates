@@ -1,15 +1,22 @@
 use std::collections::HashMap;
 
+use backend::assets::{
+    read_skill_fact_artifact_rows, KgSocietyViewMaterializer, SkillFactAnnotationRecord,
+    SkillFactMaterializer, SkillFactRecord,
+};
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
+use backend::lake::LakeStore;
 use backend::models::{Property, Society};
 use backend::search::intent::parse_intent;
 use backend::search::{SearchIndex, SearchResultCard, TextSearch};
+use backend::serving::{SearchServingBundleMaterializer, ServingBundleLoader, ServingFactIndex};
 use chrono::Utc;
+use tempfile::tempdir;
 
 const SQM_PER_ACRE: f64 = 4046.8564224;
 
@@ -108,6 +115,83 @@ fn proof_first_acreage_query_requires_rera_and_uses_greenery_as_support() {
         !results[1].match_reason.contains("greenery"),
         "no-data support evidence must not be advertised as a greenery match: {}",
         results[1].match_reason
+    );
+}
+
+#[tokio::test]
+async fn fanned_in_serving_support_facts_rank_and_explain_search() {
+    let world = large_acreage_world();
+    let fact_index =
+        serving_index_with_resident_fact(&world.graph, r#"["greenery","trees","open space"]"#)
+            .await;
+
+    let results = world.run_with_serving_facts(
+        "3bhk with greenery in whitefield above 10 acres",
+        &fact_index,
+    );
+
+    assert_eq!(result_ids(&results), vec!["large-green", "large-plain"]);
+    assert_reason(
+        &results[0],
+        "above 10 acres",
+        "rera_total_land_area_sqm",
+        "rera-proof",
+        Some("Rera"),
+    );
+    assert_reason(
+        &results[0],
+        "greenery",
+        "resident_greenery_signal",
+        "serving-fact",
+        Some("Reddit"),
+    );
+    assert_coverage(&results[1], "greenery", "no_data");
+}
+
+#[tokio::test]
+async fn fanned_in_serving_support_facts_need_search_annotation_to_rank() {
+    let world = large_acreage_world();
+    let fact_index = serving_index_with_resident_fact(&world.graph, "[]").await;
+
+    let results = world.run_with_serving_facts(
+        "3bhk with greenery in whitefield above 10 acres",
+        &fact_index,
+    );
+    let large_green = results
+        .iter()
+        .find(|result| result.card.id == "large-green")
+        .expect("large-green should survive RERA acreage constraint");
+
+    assert_coverage(large_green, "greenery", "no_data");
+    assert!(
+        !has_reason(large_green, "greenery", "resident_greenery_signal"),
+        "serving facts must not answer new search dimensions without skill-declared answers_preferences"
+    );
+}
+
+#[tokio::test]
+async fn fanned_in_serving_support_facts_need_text_match_scoring_direction() {
+    let world = large_acreage_world();
+    let fact_index = serving_index_with_resident_fact_metadata(
+        &world.graph,
+        r#"["greenery","trees","open space"]"#,
+        Some("HigherIsBetter"),
+    )
+    .await;
+
+    let results = world.run_with_serving_facts(
+        "3bhk with greenery in whitefield above 10 acres",
+        &fact_index,
+    );
+    let large_green = results
+        .iter()
+        .find(|result| result.card.id == "large-green")
+        .expect("large-green should survive RERA acreage constraint");
+
+    assert_coverage(large_green, "greenery", "no_data");
+    assert!(
+        !has_reason(large_green, "greenery", "resident_greenery_signal"),
+        "serving overlay must not score unsupported numeric directions as text evidence"
     );
 }
 
@@ -294,6 +378,26 @@ impl SearchWorld {
         )
     }
 
+    fn run_with_serving_facts(
+        &self,
+        query: &str,
+        serving_facts: &ServingFactIndex,
+    ) -> Vec<SearchResultCard> {
+        let intent = parse_intent(query);
+        TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+            &self.properties,
+            Some(&self.index),
+            None,
+            Some(serving_facts),
+            &self.society_names,
+            &self.societies,
+            query,
+            &intent,
+            Some(&self.graph),
+            &[],
+        )
+    }
+
     fn add_society(&mut self, slug: &str, root_source: RootSource, facts: Vec<SourcedFact>) {
         let mut node = Node::new(format!("society:{slug}"), NodeType::Society, slug);
         node.root_source = Some(root_source);
@@ -362,6 +466,129 @@ fn result_ids(results: &[SearchResultCard]) -> Vec<&str> {
         .iter()
         .map(|result| result.card.id.as_str())
         .collect()
+}
+
+fn has_reason(result: &SearchResultCard, preference: &str, fact_key: &str) -> bool {
+    result
+        .match_explanation
+        .as_ref()
+        .is_some_and(|explanation| {
+            explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.preference == preference && reason.fact_key == fact_key)
+        })
+}
+
+fn large_acreage_world() -> SearchWorld {
+    let mut world = SearchWorld::new(vec![
+        property("large-green", "Whitefield", "large-green", 3, 19_000_000),
+        property("large-plain", "Whitefield", "large-plain", 3, 18_500_000),
+    ]);
+    for property in &mut world.properties {
+        property.greenery_score = None;
+        property.open_space_score = None;
+    }
+    world.add_society(
+        "large-green",
+        RootSource::Rera,
+        vec![rera_numeric_fact(
+            "rera_total_land_area_sqm",
+            12.0 * SQM_PER_ACRE,
+        )],
+    );
+    world.add_society(
+        "large-plain",
+        RootSource::Rera,
+        vec![rera_numeric_fact(
+            "rera_total_land_area_sqm",
+            11.0 * SQM_PER_ACRE,
+        )],
+    );
+    world
+}
+
+async fn serving_index_with_resident_fact(
+    graph: &KnowledgeGraph,
+    answers_preferences_json: &str,
+) -> ServingFactIndex {
+    serving_index_with_resident_fact_metadata(graph, answers_preferences_json, Some("TextMatch"))
+        .await
+}
+
+async fn serving_index_with_resident_fact_metadata(
+    graph: &KnowledgeGraph,
+    answers_preferences_json: &str,
+    scoring_direction: Option<&str>,
+) -> ServingFactIndex {
+    let lake_root = tempdir().unwrap();
+    let cache_root = tempdir().unwrap();
+    let lake = LakeStore::local(lake_root.path()).unwrap();
+    let support_materialization = SkillFactMaterializer::new(lake.clone())
+        .materialize_and_promote(
+            "reddit_resident_facts",
+            "reddit",
+            "2026-07-13",
+            "run-reddit-support-2026-07-13",
+            &[SkillFactRecord {
+                entity_id: "society:large-green".to_string(),
+                fact_key: "resident_greenery_signal".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(
+                    "Residents mention many trees and open internal space".to_string(),
+                ))
+                .unwrap(),
+                confidence: 0.72,
+                source_type: "Reddit".to_string(),
+                source_url: Some(
+                    "https://reddit.com/r/BangaloreRealEstates/comments/green".to_string(),
+                ),
+                model: None,
+                skill_id: Some("reddit_resident_fact_extractor".to_string()),
+                triggered_by: Some("3bhk whitefield greenery".to_string()),
+                learned_at: Utc::now(),
+                run_id: "run-reddit-support-2026-07-13".to_string(),
+                input_hash: "sha256:reddit-green".to_string(),
+            }],
+            &[SkillFactAnnotationRecord {
+                entity_id: "society:large-green".to_string(),
+                fact_key: "resident_greenery_signal".to_string(),
+                display_template: Some("Resident signal: {value}".to_string()),
+                answers_preferences_json: answers_preferences_json.to_string(),
+                scoring_direction: scoring_direction.map(str::to_string),
+                scoring_weight: Some(1.4),
+                scoring_thresholds_json: "[]".to_string(),
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let support_rows =
+        read_skill_fact_artifact_rows(&lake, std::slice::from_ref(&support_materialization.record))
+            .await
+            .unwrap();
+    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote_with_skill_facts(
+            graph,
+            "2026-07-13T06:00Z",
+            Vec::new(),
+            vec![support_materialization.record.materialization_id.clone()],
+            &support_rows.facts,
+            &support_rows.fact_annotations,
+        )
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
+        .await
+        .unwrap();
+    ServingBundleLoader::new(lake, cache_root.path())
+        .load_current_search_bundle()
+        .await
+        .unwrap()
+        .expect("serving bundle should load")
+        .fact_index
 }
 
 fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Property {

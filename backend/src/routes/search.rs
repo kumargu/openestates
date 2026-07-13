@@ -12,6 +12,7 @@ use crate::knowledge::{store as kg_store, KnowledgeGraph, SearchEvent};
 use crate::search::{
     intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SourcedClaim, TextSearch,
 };
+use crate::serving::LoadedServingBundle;
 use crate::state::AppState;
 
 use super::enrichment::society_node_id;
@@ -74,11 +75,15 @@ pub async fn search_properties(
         let properties = state.properties.read().await;
         let search_index = state.search_index.read().await;
         let sellers = state.sellers.read().await;
-        let serving_candidate_ids = serving_candidate_ids(&state, &query, &search_index).await;
-        TextSearch::search_with_index_and_extra_recall_and_intent_and_sellers(
+        let serving_bundle = state.serving_bundle.read().await.clone();
+        let serving_candidate_ids =
+            serving_candidate_ids(serving_bundle.as_deref(), &query, &search_index);
+        let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+        TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
             &properties,
             Some(&*search_index),
             serving_candidate_ids.as_deref(),
+            serving_facts,
             &society_names,
             &state.societies,
             &query,
@@ -158,12 +163,12 @@ pub async fn search_properties(
     })
 }
 
-async fn serving_candidate_ids(
-    state: &Arc<AppState>,
+fn serving_candidate_ids(
+    serving_bundle: Option<&LoadedServingBundle>,
     query: &str,
     search_index: &SearchIndex,
 ) -> Option<Vec<String>> {
-    let serving_bundle = state.serving_bundle.read().await.clone()?;
+    let serving_bundle = serving_bundle?;
     let hits = match serving_bundle.recall_index.search(query, 128) {
         Ok(hits) => hits,
         Err(err) => {

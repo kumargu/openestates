@@ -17,10 +17,12 @@ pub use materializer::{
     SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
     SearchServingBundleMaterializer,
 };
+pub use parquet::{read_facts_parquet, read_search_metadata_parquet, ParquetReadError};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use types::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingEntityRecord,
-    ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

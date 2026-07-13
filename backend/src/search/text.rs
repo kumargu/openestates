@@ -3,6 +3,7 @@ use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{Property, Seller, Society};
 use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
 use crate::routes::search::graph_preference_score_detailed;
+use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
 
 use super::index::SearchIndex;
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
@@ -98,6 +99,38 @@ impl TextSearch {
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+        sellers: &[Seller],
+    ) -> Vec<SearchResultCard> {
+        Self::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+            properties,
+            search_index,
+            extra_candidate_ids,
+            None,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+            sellers,
+        )
+    }
+
+    /// Indexed local recall plus optional serving-bundle recall/facts.
+    ///
+    /// The in-memory KG remains the first ranking source. Serving facts are a
+    /// read-optimized overlay for recently materialized DAG facts that have not
+    /// yet been folded back into per-entity KG JSON files.
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+        extra_candidate_ids: Option<&[String]>,
+        serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         societies: &[Society],
         query: &str,
@@ -236,6 +269,38 @@ impl TextSearch {
 
                         if let Some(evidence) =
                             graph_textual_preference_evidence(g, &p.society_id, pref)
+                        {
+                            total_facts_consulted += 1;
+                            score += evidence.score_delta;
+                            reasons.push(evidence.reason.clone());
+
+                            match_reasons.push(MatchReason {
+                                preference: pref.clone(),
+                                fact_key: evidence.fact_key.clone(),
+                                display: evidence.display,
+                                score: evidence.normalized_score,
+                                confidence: evidence.confidence,
+                                source_type: evidence.source_type,
+                                scoring_method: evidence.scoring_method,
+                            });
+                            pref_coverage.push(PreferenceCoverage {
+                                preference: pref.clone(),
+                                status: if evidence.normalized_score > 0.5 {
+                                    "matched"
+                                } else {
+                                    "partial"
+                                }
+                                .into(),
+                                fact_key: Some(evidence.fact_key),
+                            });
+                            graph_count += 1;
+                            continue;
+                        }
+                    }
+
+                    if let Some(serving_facts) = serving_facts {
+                        if let Some(evidence) =
+                            serving_preference_evidence(serving_facts, &p.society_id, pref)
                         {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -598,6 +663,117 @@ fn graph_textual_preference_evidence(
     }
 
     None
+}
+
+fn serving_preference_evidence(
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+    preference: &str,
+) -> Option<EvidenceMatch> {
+    let node_id = society_node_id(society_id);
+    let rows = serving_facts.entity(&node_id)?;
+
+    for fact in &rows.facts {
+        let Some(metadata) = rows.search_metadata.iter().find(|metadata| {
+            metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
+                && metadata_supports_text_match(metadata)
+                && metadata_answers_preference(metadata, preference)
+        }) else {
+            continue;
+        };
+
+        let value = serving_fact_value(fact)?;
+        let score_delta = f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
+        return Some(EvidenceMatch {
+            preference: preference.to_string(),
+            fact_key: fact.fact_key.clone(),
+            display: render_serving_fact_display(fact, metadata, &value),
+            normalized_score: (score_delta / 2.0).min(1.0),
+            score_delta,
+            confidence: fact.confidence,
+            source_type: fact.source_type.clone(),
+            scoring_method: "serving-fact".into(),
+            reason: format!("matches preference: {}", preference),
+        });
+    }
+
+    let schema = schema::text_evidence_schema(preference)?;
+    for fact in &rows.facts {
+        if !schema::fact_answers_text_schema(&fact.fact_key, &[], schema) {
+            continue;
+        }
+
+        let value = serving_fact_value(fact)?;
+        if let Some(snippet) = schema::text_support_snippet(&value, schema) {
+            return Some(EvidenceMatch {
+                preference: preference.to_string(),
+                fact_key: fact.fact_key.clone(),
+                display: format!("{}: {}", schema.display_label, snippet),
+                normalized_score: 0.7,
+                score_delta: schema.score_delta,
+                confidence: fact.confidence,
+                source_type: fact.source_type.clone(),
+                scoring_method: "serving-text".into(),
+                reason: format!("matches preference: {}", preference),
+            });
+        }
+    }
+
+    None
+}
+
+fn metadata_supports_text_match(metadata: &ServingSearchMetadataRecord) -> bool {
+    metadata
+        .scoring_direction
+        .as_deref()
+        .is_none_or(|direction| {
+            direction.eq_ignore_ascii_case("TextMatch")
+                || direction.eq_ignore_ascii_case("text_match")
+        })
+}
+
+fn metadata_answers_preference(metadata: &ServingSearchMetadataRecord, preference: &str) -> bool {
+    let Ok(answers) = serde_json::from_str::<Vec<String>>(&metadata.answers_preferences_json)
+    else {
+        return false;
+    };
+    let preference = preference.to_lowercase();
+    answers.iter().any(|answer| {
+        let answer = answer.to_lowercase();
+        answer == preference || answer.contains(&preference) || preference.contains(&answer)
+    })
+}
+
+fn serving_fact_value(fact: &ServingFactRecord) -> Option<FactValue> {
+    serde_json::from_str(&fact.value_json).ok()
+}
+
+fn render_serving_fact_display(
+    fact: &ServingFactRecord,
+    metadata: &ServingSearchMetadataRecord,
+    value: &FactValue,
+) -> String {
+    let value = fact
+        .value_text
+        .clone()
+        .unwrap_or_else(|| fact_value_display(value));
+    metadata
+        .display_template
+        .as_deref()
+        .unwrap_or("{value}")
+        .replace("{value}", &value)
+}
+
+fn fact_value_display(value: &FactValue) -> String {
+    match value {
+        FactValue::Numeric(value) => format_measurement(*value),
+        FactValue::Text(value) => value.clone(),
+        FactValue::Bool(value) => value.to_string(),
+        FactValue::Tags(values) => values.join(", "),
+        FactValue::Score { value, explanation } => {
+            format!("{}: {}", format_measurement(*value), explanation)
+        }
+    }
 }
 
 fn format_measurement(value: f64) -> String {

@@ -8,7 +8,8 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    hydrate_tantivy_index, ServingBundleManifest, TantivyIndexError, TantivyRecallIndex,
+    hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, ParquetReadError,
+    ServingBundleManifest, ServingFactIndex, TantivyIndexError, TantivyRecallIndex,
     SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
@@ -22,6 +23,7 @@ pub struct ServingBundleLoader {
 pub struct LoadedServingBundle {
     pub manifest: ServingBundleManifest,
     pub recall_index: TantivyRecallIndex,
+    pub fact_index: ServingFactIndex,
     pub cache_dir: PathBuf,
 }
 
@@ -67,9 +69,11 @@ impl ServingBundleLoader {
         }
 
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
+        let fact_index = load_fact_index(&self.lake, &manifest).await?;
         Ok(Some(LoadedServingBundle {
             manifest,
             recall_index,
+            fact_index,
             cache_dir,
         }))
     }
@@ -80,6 +84,21 @@ impl ServingBundleLoader {
             .join(format!("materialization={}", record.materialization_id))
             .join("tantivy_index")
     }
+}
+
+async fn load_fact_index(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+) -> Result<ServingFactIndex, ServingBundleLoadError> {
+    let fact_key =
+        LakeKey::new(manifest.fact_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let search_metadata_key = LakeKey::new(manifest.search_metadata_parquet_key.clone())
+        .map_err(ServingBundleLoadError::Key)?;
+    let fact_bytes = lake.get_bytes(&fact_key).await?;
+    let search_metadata_bytes = lake.get_bytes(&search_metadata_key).await?;
+    let facts = read_facts_parquet(&fact_bytes)?;
+    let search_metadata = read_search_metadata_parquet(&search_metadata_bytes)?;
+    Ok(ServingFactIndex::from_records(facts, search_metadata))
 }
 
 fn manifest_key_for_record(
@@ -134,6 +153,7 @@ pub enum ServingBundleLoadError {
     Io(std::io::Error),
     Key(crate::lake::keys::KeyError),
     Lake(LakeError),
+    Parquet(ParquetReadError),
     Tantivy(TantivyIndexError),
     CurrentMaterializationNotSucceeded {
         asset_id: String,
@@ -147,6 +167,7 @@ impl fmt::Display for ServingBundleLoadError {
             Self::Io(err) => write!(f, "serving bundle load IO error: {err}"),
             Self::Key(err) => write!(f, "serving bundle manifest key error: {err}"),
             Self::Lake(err) => write!(f, "serving bundle load lake error: {err}"),
+            Self::Parquet(err) => write!(f, "serving bundle Parquet load error: {err}"),
             Self::Tantivy(err) => write!(f, "serving bundle recall index error: {err}"),
             Self::CurrentMaterializationNotSucceeded { asset_id, status } => write!(
                 f,
@@ -173,5 +194,11 @@ impl From<LakeError> for ServingBundleLoadError {
 impl From<TantivyIndexError> for ServingBundleLoadError {
     fn from(err: TantivyIndexError) -> Self {
         Self::Tantivy(err)
+    }
+}
+
+impl From<ParquetReadError> for ServingBundleLoadError {
+    fn from(err: ParquetReadError) -> Self {
+        Self::Parquet(err)
     }
 }

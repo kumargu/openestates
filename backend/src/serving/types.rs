@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -38,6 +40,49 @@ pub struct ServingSearchMetadataRecord {
     pub answers_preferences_json: String,
     pub scoring_direction: Option<String>,
     pub scoring_weight: Option<f32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ServingFactIndex {
+    by_entity: HashMap<String, ServingEntityFactRows>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ServingEntityFactRows {
+    pub facts: Vec<ServingFactRecord>,
+    pub search_metadata: Vec<ServingSearchMetadataRecord>,
+}
+
+impl ServingFactIndex {
+    pub fn from_records(
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+    ) -> Self {
+        let mut by_entity = HashMap::<String, ServingEntityFactRows>::new();
+        for fact in facts {
+            by_entity
+                .entry(fact.entity_id.clone())
+                .or_default()
+                .facts
+                .push(fact);
+        }
+        for metadata in search_metadata {
+            by_entity
+                .entry(metadata.entity_id.clone())
+                .or_default()
+                .search_metadata
+                .push(metadata);
+        }
+        Self { by_entity }
+    }
+
+    pub fn entity(&self, entity_id: &str) -> Option<&ServingEntityFactRows> {
+        self.by_entity.get(entity_id)
+    }
+
+    pub fn entity_count(&self) -> usize {
+        self.by_entity.len()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
