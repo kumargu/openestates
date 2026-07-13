@@ -31,6 +31,7 @@ pub enum AssetRunStepStatus {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetRunStep {
     pub asset_id: AssetId,
+    pub partition: AssetPartition,
     pub stage: AssetStage,
     pub dependencies: Vec<AssetId>,
     pub refresh: RefreshCadence,
@@ -83,6 +84,7 @@ impl AssetDagRunManifest {
             .iter()
             .map(|entry| AssetRunStep {
                 asset_id: entry.asset_id.clone(),
+                partition: entry.partition.clone(),
                 stage: entry.stage,
                 dependencies: entry.dependencies.clone(),
                 refresh: entry.refresh,
@@ -158,14 +160,13 @@ impl AssetDagRunManifest {
                 actual: record.run_id.clone(),
             });
         }
-        if record.partition != self.partition {
+        let step = self.step_mut(asset_id)?;
+        validate_runnable_step(step)?;
+        if record.partition != step.partition {
             return Err(RunManifestError::PartitionMismatch {
                 asset_id: asset_id.clone(),
             });
         }
-
-        let step = self.step_mut(asset_id)?;
-        validate_runnable_step(step)?;
         step.status = AssetRunStepStatus::Succeeded;
         step.materialization_id = Some(record.materialization_id.clone());
         step.parent_materializations = record.parent_materializations.clone();

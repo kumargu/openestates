@@ -125,6 +125,17 @@ impl AssetPartition {
             .collect()
     }
 
+    pub fn parts(&self) -> &[(String, String)] {
+        &self.parts
+    }
+
+    pub fn value(&self, key: &str) -> Option<&str> {
+        self.parts
+            .iter()
+            .find(|(part_key, _)| part_key == key)
+            .map(|(_, value)| value.as_str())
+    }
+
     pub fn is_global(&self) -> bool {
         self.parts.is_empty()
     }

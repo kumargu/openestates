@@ -175,7 +175,12 @@ async fn planner_returns_missing_default_assets_in_dependency_order() {
     let expected_count = registry.definitions().len();
     let planner = AssetPlanner::new(registry, materializations);
 
-    let plan = planner.plan_global(Utc::now()).await.unwrap();
+    let partition =
+        AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+    let plan = planner
+        .plan_partition(&partition, Utc::now())
+        .await
+        .unwrap();
 
     assert_eq!(plan.len(), expected_count);
     assert_eq!(

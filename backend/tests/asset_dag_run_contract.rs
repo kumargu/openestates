@@ -2,8 +2,8 @@ use backend::assets::{
     default_openestates_registry, ArtifactRef, AssetDagRunManifest, AssetDefinition, AssetId,
     AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRunManifestStore,
     AssetRunStepStatus, AssetStage, CostTier, DagRunStatus, FreshnessReferenceKind,
-    MaterializationRecord, PlanDecision, PlanReason, RefreshCadence, RunManifestError,
-    SourceWatermark, TrustTier,
+    MaterializationRecord, PartitionResolutionError, PlanDecision, PlanReason, PlannerError,
+    RefreshCadence, RunManifestError, SourceWatermark, TrustTier,
 };
 use backend::lake::{LakeKey, LakeStore};
 use chrono::{Duration, TimeZone, Utc};
@@ -18,7 +18,8 @@ async fn dag_plan_captures_freshness_and_dependency_propagation() {
     let registry = default_openestates_registry();
     let planner = AssetPlanner::new(registry.clone(), materializations.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let partition = AssetPartition::global();
+    let partition =
+        AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
 
     let rera_record = materialization(
         "rera_registry_monthly",
@@ -42,7 +43,10 @@ async fn dag_plan_captures_freshness_and_dependency_propagation() {
     );
     write_current(&materializations, &canonical_record).await;
 
-    let plan = planner.plan_global_details(now).await.unwrap();
+    let plan = planner
+        .plan_partition_details(&partition, now)
+        .await
+        .unwrap();
     assert_eq!(plan.entries.len(), registry.definitions().len());
 
     let rera = plan_entry(&plan, "rera_registry_monthly");
@@ -135,6 +139,140 @@ async fn dag_plan_skips_current_assets_with_parent_lineage_intact() {
 }
 
 #[tokio::test]
+async fn dag_plan_resolves_current_records_by_asset_partition() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake);
+    let registry = default_openestates_registry();
+    let planner = AssetPlanner::new(registry, materializations.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition =
+        AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+    let reddit_thread_partition =
+        AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+    let reddit_fact_partition = AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")]);
+    let google_fact_partition = AssetPartition::new([("dt", "2026-07-13"), ("source", "google")]);
+
+    let rera = materialization_in_partition(
+        "rera_registry_monthly",
+        AssetStage::Raw,
+        "2026-07",
+        Vec::new(),
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &rera).await;
+    let canonical = materialization_in_partition(
+        "canonical_society_nodes",
+        AssetStage::Gold,
+        "2026-07-13",
+        vec![rera.materialization_id.clone()],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &canonical).await;
+    let rera_facts = materialization_in_partition(
+        "rera_legal_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            rera.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &rera_facts).await;
+    let reddit_threads = materialization_in_partition(
+        "reddit_threads_daily",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        reddit_thread_partition.clone(),
+    );
+    write_current(&materializations, &reddit_threads).await;
+    let reddit_facts = materialization_in_partition(
+        "reddit_resident_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            reddit_threads.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        reddit_fact_partition.clone(),
+    );
+    write_current(&materializations, &reddit_facts).await;
+    let google_facts = materialization_in_partition(
+        "google_review_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        google_fact_partition.clone(),
+    );
+    write_current(&materializations, &google_facts).await;
+
+    let plan = planner
+        .plan_partition_details(&run_partition, now)
+        .await
+        .unwrap();
+
+    let reddit_threads_entry = plan_entry(&plan, "reddit_threads_daily");
+    assert_eq!(reddit_threads_entry.partition, reddit_thread_partition);
+    assert_eq!(reddit_threads_entry.decision, PlanDecision::Skip);
+    assert_eq!(
+        reddit_threads_entry.current_materialization_id,
+        Some(reddit_threads.materialization_id.clone())
+    );
+
+    let reddit_facts_entry = plan_entry(&plan, "reddit_resident_facts");
+    assert_eq!(reddit_facts_entry.partition, reddit_fact_partition);
+    assert_eq!(reddit_facts_entry.decision, PlanDecision::Skip);
+    assert_eq!(
+        reddit_facts_entry.current_parent_materializations,
+        vec![
+            reddit_threads.materialization_id.clone(),
+            canonical.materialization_id.clone()
+        ]
+    );
+
+    let google_facts_entry = plan_entry(&plan, "google_review_facts");
+    assert_eq!(google_facts_entry.partition, google_fact_partition);
+    assert_eq!(google_facts_entry.decision, PlanDecision::Skip);
+
+    let kg_entry = plan_entry(&plan, "kg_society_view");
+    assert_eq!(kg_entry.partition, AssetPartition::global());
+    assert_eq!(kg_entry.decision, PlanDecision::Run);
+    assert_eq!(kg_entry.reason, Some(PlanReason::Missing));
+}
+
+#[tokio::test]
+async fn dag_plan_errors_when_partition_policy_requires_missing_run_key() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake);
+    let planner = AssetPlanner::new(default_openestates_registry(), materializations);
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
+
+    let err = planner
+        .plan_partition_details(&run_partition, now)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        PlannerError::Partition(PartitionResolutionError::MissingRunPartitionKey {
+            asset_id: ref missing_asset_id,
+            ref key,
+            ..
+        }) if missing_asset_id == &asset_id("reddit_threads_daily") && key == "subreddit"
+    ));
+}
+
+#[tokio::test]
 async fn dag_run_manifest_round_trips_with_counts_duration_and_current_pointer() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
@@ -203,6 +341,57 @@ async fn dag_run_manifest_round_trips_with_counts_duration_and_current_pointer()
     assert_eq!(current.run_id, manifest.run_id);
     assert_eq!(current.status, DagRunStatus::Succeeded);
     assert_eq!(current.steps[0].artifacts.len(), 1);
+}
+
+#[tokio::test]
+async fn dag_run_manifest_validates_step_partition_not_run_partition() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materializations = AssetMaterializationStore::new(lake);
+    let registry = one_asset_registry();
+    let planner = AssetPlanner::new(registry, materializations);
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
+    let plan = planner
+        .plan_partition_details(&run_partition, now)
+        .await
+        .unwrap();
+    assert_eq!(plan.entries[0].partition, AssetPartition::global());
+
+    let asset_id = asset_id("root_snapshot");
+    let mut manifest = AssetDagRunManifest::from_plan(&plan);
+    let record = MaterializationRecord::succeeded(
+        asset_id.clone(),
+        AssetStage::Raw,
+        AssetPartition::global(),
+        "2026-07",
+        Vec::new(),
+    )
+    .with_run_id(manifest.run_id.clone());
+
+    manifest
+        .mark_step_succeeded(&asset_id, &record, now, now + Duration::milliseconds(10))
+        .unwrap();
+
+    let mut mismatch_manifest = AssetDagRunManifest::from_plan(&plan);
+    let wrong_partition_record = MaterializationRecord::succeeded(
+        asset_id.clone(),
+        AssetStage::Raw,
+        run_partition,
+        "2026-07",
+        Vec::new(),
+    )
+    .with_run_id(mismatch_manifest.run_id.clone());
+
+    assert!(matches!(
+        mismatch_manifest.mark_step_succeeded(
+            &asset_id,
+            &wrong_partition_record,
+            now,
+            now + Duration::milliseconds(10),
+        ),
+        Err(RunManifestError::PartitionMismatch { .. })
+    ));
 }
 
 #[tokio::test]
@@ -308,15 +497,28 @@ fn materialization(
     parents: Vec<backend::assets::MaterializationId>,
     created_at: chrono::DateTime<Utc>,
 ) -> MaterializationRecord {
-    let mut record = MaterializationRecord::succeeded(
-        asset_id(id),
+    materialization_in_partition(
+        id,
         stage,
-        AssetPartition::global(),
         version,
-        Vec::new(),
+        parents,
+        created_at,
+        AssetPartition::global(),
     )
-    .with_parent_materializations(parents)
-    .with_row_count(1);
+}
+
+fn materialization_in_partition(
+    id: &str,
+    stage: AssetStage,
+    version: &str,
+    parents: Vec<backend::assets::MaterializationId>,
+    created_at: chrono::DateTime<Utc>,
+    partition: AssetPartition,
+) -> MaterializationRecord {
+    let mut record =
+        MaterializationRecord::succeeded(asset_id(id), stage, partition, version, Vec::new())
+            .with_parent_materializations(parents)
+            .with_row_count(1);
     record.created_at = created_at;
     record
 }

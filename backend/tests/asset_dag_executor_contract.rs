@@ -28,10 +28,11 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
 
-    let upstreams = seed_current_upstreams(&store, now).await;
+    let run_partition = source_run_partition();
+    let upstreams = seed_current_upstreams_for_partition(&store, now, &run_partition).await;
 
-    let options = AssetDagExecutionOptions::new(AssetPartition::global(), now)
-        .with_version("2026-07-13T06:00Z");
+    let options =
+        AssetDagExecutionOptions::new(run_partition.clone(), now).with_version("2026-07-13T06:00Z");
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -79,10 +80,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     );
 
     let run_store = AssetRunManifestStore::new(lake);
-    let current_run = run_store
-        .current_manifest(&AssetPartition::global())
-        .await
-        .unwrap();
+    let current_run = run_store.current_manifest(&run_partition).await.unwrap();
     assert_eq!(current_run.run_id, report.manifest.run_id);
     assert_eq!(current_run.status, DagRunStatus::Succeeded);
     assert_eq!(
@@ -101,9 +99,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = source_run_partition();
 
     let upstreams = seed_authoritative_upstreams(&store, now, &AssetPartition::global()).await;
-    let options = AssetDagExecutionOptions::new(AssetPartition::global(), now)
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
         .with_source_inputs(mock_source_inputs(now));
 
@@ -113,6 +112,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    assert_eq!(report.manifest.partition, run_partition);
     assert_eq!(report.manifest.planned_count, 5);
     assert_eq!(report.executed_assets.len(), 5);
     for id in [
@@ -141,7 +141,13 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
             < executed_position(&report.executed_assets, SEARCH_SERVING_BUNDLE_ASSET_ID)
     );
 
-    let reddit_threads = current_record(&store, REDDIT_THREADS_DAILY_ASSET_ID).await;
+    let reddit_threads = current_record(
+        &store,
+        REDDIT_THREADS_DAILY_ASSET_ID,
+        &reddit_thread_partition(),
+    )
+    .await;
+    assert_eq!(reddit_threads.partition, reddit_thread_partition());
     assert_eq!(reddit_threads.run_id, report.manifest.run_id);
     assert_eq!(
         reddit_threads.parent_materializations,
@@ -154,7 +160,13 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         1
     );
 
-    let reddit_facts = current_record(&store, REDDIT_RESIDENT_FACTS_ASSET_ID).await;
+    let reddit_facts = current_record(
+        &store,
+        REDDIT_RESIDENT_FACTS_ASSET_ID,
+        &reddit_fact_partition(),
+    )
+    .await;
+    assert_eq!(reddit_facts.partition, reddit_fact_partition());
     assert_eq!(reddit_facts.run_id, report.manifest.run_id);
     assert_eq!(
         reddit_facts.parent_materializations,
@@ -170,7 +182,13 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         1
     );
 
-    let google_facts = current_record(&store, GOOGLE_REVIEW_FACTS_ASSET_ID).await;
+    let google_facts = current_record(
+        &store,
+        GOOGLE_REVIEW_FACTS_ASSET_ID,
+        &google_fact_partition(),
+    )
+    .await;
+    assert_eq!(google_facts.partition, google_fact_partition());
     assert_eq!(google_facts.run_id, report.manifest.run_id);
     assert_eq!(
         google_facts.parent_materializations,
@@ -183,7 +201,9 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         1
     );
 
-    let kg_record = current_record(&store, KG_SOCIETY_VIEW_ASSET_ID).await;
+    let kg_record =
+        current_record(&store, KG_SOCIETY_VIEW_ASSET_ID, &AssetPartition::global()).await;
+    assert_eq!(kg_record.partition, AssetPartition::global());
     assert!(kg_record
         .parent_materializations
         .contains(&reddit_facts.materialization_id));
@@ -193,6 +213,28 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
+
+    let run_store = AssetRunManifestStore::new(lake);
+    let current_run = run_store.current_manifest(&run_partition).await.unwrap();
+    assert_eq!(current_run.run_id, report.manifest.run_id);
+    assert_eq!(
+        current_run
+            .steps
+            .iter()
+            .find(|step| step.asset_id == asset_id(REDDIT_THREADS_DAILY_ASSET_ID))
+            .unwrap()
+            .partition,
+        reddit_thread_partition()
+    );
+    assert_eq!(
+        current_run
+            .steps
+            .iter()
+            .find(|step| step.asset_id == asset_id(KG_SOCIETY_VIEW_ASSET_ID))
+            .unwrap()
+            .partition,
+        AssetPartition::global()
+    );
 }
 
 #[tokio::test]
@@ -203,7 +245,8 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     seed_authoritative_upstreams(&store, now, &AssetPartition::global()).await;
 
-    let options = AssetDagExecutionOptions::new(AssetPartition::global(), now);
+    let run_partition = source_run_partition();
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
     let err = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -213,8 +256,14 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
         AssetDagExecutorError::SourceInputMissing { asset_id } => asset_id,
         other => panic!("expected missing source input, got {other:?}"),
     };
+    let missing_partition = match missing_asset_id.as_str() {
+        REDDIT_THREADS_DAILY_ASSET_ID => reddit_thread_partition(),
+        REDDIT_RESIDENT_FACTS_ASSET_ID => reddit_fact_partition(),
+        GOOGLE_REVIEW_FACTS_ASSET_ID => google_fact_partition(),
+        other => panic!("unexpected missing source asset {other}"),
+    };
     assert!(store
-        .current_record(&missing_asset_id, &AssetPartition::global())
+        .current_record(&missing_asset_id, &missing_partition)
         .await
         .unwrap_err()
         .is_not_found());
@@ -225,7 +274,8 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let options = AssetDagExecutionOptions::new(AssetPartition::global(), now);
+    let run_partition = source_run_partition();
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
 
     let err = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
@@ -239,7 +289,7 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     ));
 
     let failed_run = AssetRunManifestStore::new(lake)
-        .current_manifest(&AssetPartition::global())
+        .current_manifest(&run_partition)
         .await
         .unwrap();
     assert_eq!(failed_run.status, DagRunStatus::Failed);
@@ -262,7 +312,8 @@ async fn executor_dry_run_does_not_write_run_manifest() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let options = AssetDagExecutionOptions::new(AssetPartition::global(), now).dry_run(true);
+    let run_partition = source_run_partition();
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now).dry_run(true);
 
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&KnowledgeGraph::new(), options)
@@ -273,38 +324,47 @@ async fn executor_dry_run_does_not_write_run_manifest() {
     assert_eq!(report.manifest.status, DagRunStatus::Planned);
     assert_eq!(report.executed_assets.len(), 0);
     assert!(AssetRunManifestStore::new(lake)
-        .current_manifest(&AssetPartition::global())
+        .current_manifest(&run_partition)
         .await
         .is_err());
 }
 
 #[tokio::test]
-async fn executor_rejects_non_global_runtime_assets_until_artifact_paths_are_partitioned() {
+async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    let partition = AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")]);
-    seed_current_upstreams_for_partition(&store, now, &partition).await;
+    let run_partition = source_run_partition();
+    seed_current_upstreams_for_partition(&store, now, &run_partition).await;
 
-    let options = AssetDagExecutionOptions::new(partition, now);
-    let err = AssetDagExecutor::new(default_openestates_registry(), lake)
+    let options = AssetDagExecutionOptions::new(run_partition, now);
+    let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
-        .unwrap_err();
+        .unwrap();
 
-    assert!(matches!(
-        err,
-        AssetDagExecutorError::UnsupportedPartition { asset_id: ref returned_asset_id, .. }
-            if returned_asset_id == &asset_id(KG_SOCIETY_VIEW_ASSET_ID)
-    ));
-}
-
-async fn seed_current_upstreams(
-    store: &AssetMaterializationStore,
-    now: chrono::DateTime<Utc>,
-) -> std::collections::HashMap<&'static str, MaterializationRecord> {
-    seed_current_upstreams_for_partition(store, now, &AssetPartition::global()).await
+    assert_eq!(
+        report.executed_assets,
+        vec![
+            asset_id(KG_SOCIETY_VIEW_ASSET_ID),
+            asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
+        ]
+    );
+    assert!(store
+        .current_record(
+            &asset_id(KG_SOCIETY_VIEW_ASSET_ID),
+            &AssetPartition::global()
+        )
+        .await
+        .is_ok());
+    assert!(store
+        .current_record(
+            &asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
+            &AssetPartition::global()
+        )
+        .await
+        .is_ok());
 }
 
 async fn seed_authoritative_upstreams(
@@ -358,14 +418,14 @@ async fn seed_authoritative_upstreams(
 async fn seed_current_upstreams_for_partition(
     store: &AssetMaterializationStore,
     now: chrono::DateTime<Utc>,
-    partition: &AssetPartition,
+    run_partition: &AssetPartition,
 ) -> std::collections::HashMap<&'static str, MaterializationRecord> {
     let rera = materialization(
         "rera_registry_monthly",
         AssetStage::Raw,
         "2026-07",
         now,
-        partition,
+        &AssetPartition::global(),
     )
     .with_source_watermarks(vec![SourceWatermark {
         source: "rera".to_string(),
@@ -378,7 +438,7 @@ async fn seed_current_upstreams_for_partition(
         AssetStage::Gold,
         "2026-07-13",
         now,
-        partition,
+        &AssetPartition::global(),
     )
     .with_parent_materializations(vec![rera.materialization_id.clone()]);
     write_current(store, &canonical).await;
@@ -388,7 +448,7 @@ async fn seed_current_upstreams_for_partition(
         AssetStage::Silver,
         "2026-07-13",
         now,
-        partition,
+        &AssetPartition::global(),
     )
     .with_parent_materializations(vec![
         rera.materialization_id.clone(),
@@ -401,7 +461,7 @@ async fn seed_current_upstreams_for_partition(
         AssetStage::Raw,
         "2026-07-13",
         now - Duration::hours(1),
-        partition,
+        &reddit_thread_partition_for(run_partition),
     )
     .with_parent_materializations(vec![canonical.materialization_id.clone()])
     .with_source_watermarks(vec![SourceWatermark {
@@ -415,7 +475,7 @@ async fn seed_current_upstreams_for_partition(
         AssetStage::Silver,
         "2026-07-13",
         now,
-        partition,
+        &reddit_fact_partition_for(run_partition),
     )
     .with_parent_materializations(vec![
         reddit_threads.materialization_id.clone(),
@@ -428,7 +488,7 @@ async fn seed_current_upstreams_for_partition(
         AssetStage::Silver,
         "2026-07-13",
         now,
-        partition,
+        &google_fact_partition_for(run_partition),
     )
     .with_parent_materializations(vec![canonical.materialization_id.clone()]);
     write_current(store, &google_facts).await;
@@ -446,9 +506,10 @@ async fn seed_current_upstreams_for_partition(
 async fn current_record(
     store: &AssetMaterializationStore,
     asset_id_value: &str,
+    partition: &AssetPartition,
 ) -> MaterializationRecord {
     store
-        .current_record(&asset_id(asset_id_value), &AssetPartition::global())
+        .current_record(&asset_id(asset_id_value), partition)
         .await
         .unwrap()
 }
@@ -564,6 +625,43 @@ fn fact(
 
 fn asset_id(id: &str) -> AssetId {
     AssetId::new(id).unwrap()
+}
+
+fn source_run_partition() -> AssetPartition {
+    AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
+}
+
+fn reddit_thread_partition() -> AssetPartition {
+    AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
+}
+
+fn reddit_fact_partition() -> AssetPartition {
+    AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")])
+}
+
+fn google_fact_partition() -> AssetPartition {
+    AssetPartition::new([("dt", "2026-07-13"), ("source", "google")])
+}
+
+fn reddit_thread_partition_for(run_partition: &AssetPartition) -> AssetPartition {
+    match (run_partition.value("dt"), run_partition.value("subreddit")) {
+        (Some(dt), Some(subreddit)) => AssetPartition::new([("dt", dt), ("subreddit", subreddit)]),
+        _ => AssetPartition::global(),
+    }
+}
+
+fn reddit_fact_partition_for(run_partition: &AssetPartition) -> AssetPartition {
+    match run_partition.value("dt") {
+        Some(dt) => AssetPartition::new([("dt", dt), ("source", "reddit")]),
+        None => AssetPartition::global(),
+    }
+}
+
+fn google_fact_partition_for(run_partition: &AssetPartition) -> AssetPartition {
+    match run_partition.value("dt") {
+        Some(dt) => AssetPartition::new([("dt", dt), ("source", "google")]),
+        None => AssetPartition::global(),
+    }
 }
 
 fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {

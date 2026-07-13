@@ -4,7 +4,7 @@ use daggy::petgraph::algo::toposort;
 use daggy::{Dag, NodeIndex};
 use serde::{Deserialize, Serialize};
 
-use super::{AssetId, AssetStage};
+use super::{AssetId, AssetPartition, AssetStage};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -36,6 +36,136 @@ pub enum TrustTier {
     Serving,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum AssetPartitionPolicy {
+    #[default]
+    Global,
+    RunPartition,
+    Composite {
+        coordinates: Vec<PartitionCoordinate>,
+    },
+}
+
+impl AssetPartitionPolicy {
+    pub fn global() -> Self {
+        Self::Global
+    }
+
+    pub fn run_partition() -> Self {
+        Self::RunPartition
+    }
+
+    pub fn from_run_keys(keys: &[&str]) -> Self {
+        Self::Composite {
+            coordinates: keys
+                .iter()
+                .map(|key| PartitionCoordinate::from_run(*key))
+                .collect(),
+        }
+    }
+
+    pub fn from_run_keys_with_static(
+        run_keys: &[&str],
+        static_coordinates: &[(&str, &str)],
+    ) -> Self {
+        let mut coordinates: Vec<PartitionCoordinate> = run_keys
+            .iter()
+            .map(|key| PartitionCoordinate::from_run(*key))
+            .collect();
+        coordinates.extend(
+            static_coordinates
+                .iter()
+                .map(|(key, value)| PartitionCoordinate::static_value(*key, *value)),
+        );
+        Self::Composite { coordinates }
+    }
+
+    pub fn resolve(
+        &self,
+        asset_id: &AssetId,
+        run_partition: &AssetPartition,
+    ) -> Result<AssetPartition, PartitionResolutionError> {
+        match self {
+            Self::Global => Ok(AssetPartition::global()),
+            Self::RunPartition => Ok(run_partition.clone()),
+            Self::Composite { coordinates } => {
+                let mut parts = Vec::with_capacity(coordinates.len());
+                for coordinate in coordinates {
+                    match coordinate {
+                        PartitionCoordinate::FromRun { key } => {
+                            let Some(value) = run_partition.value(key) else {
+                                return Err(PartitionResolutionError::MissingRunPartitionKey {
+                                    asset_id: asset_id.clone(),
+                                    key: key.clone(),
+                                    run_partition: run_partition.clone(),
+                                });
+                            };
+                            parts.push((key.clone(), value.to_string()));
+                        }
+                        PartitionCoordinate::Static { key, value } => {
+                            parts.push((key.clone(), value.clone()));
+                        }
+                    }
+                }
+                Ok(AssetPartition::new(parts))
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum PartitionCoordinate {
+    FromRun { key: String },
+    Static { key: String, value: String },
+}
+
+impl PartitionCoordinate {
+    pub fn from_run(key: impl Into<String>) -> Self {
+        Self::FromRun { key: key.into() }
+    }
+
+    pub fn static_value(key: impl Into<String>, value: impl Into<String>) -> Self {
+        Self::Static {
+            key: key.into(),
+            value: value.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PartitionResolutionError {
+    UnknownAsset {
+        asset_id: AssetId,
+    },
+    MissingRunPartitionKey {
+        asset_id: AssetId,
+        key: String,
+        run_partition: AssetPartition,
+    },
+}
+
+impl std::fmt::Display for PartitionResolutionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::UnknownAsset { asset_id } => {
+                write!(f, "asset {asset_id} is not registered in the DAG")
+            }
+            Self::MissingRunPartitionKey {
+                asset_id,
+                key,
+                run_partition,
+            } => write!(
+                f,
+                "asset {asset_id} requires run partition key {key}, got {run_partition:?}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for PartitionResolutionError {}
+
 /// Durable definition for a data product in the OpenEstates DAG.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetDefinition {
@@ -46,6 +176,8 @@ pub struct AssetDefinition {
     pub refresh: RefreshCadence,
     pub cost_tier: CostTier,
     pub trust_tier: TrustTier,
+    #[serde(default)]
+    pub partition_policy: AssetPartitionPolicy,
 }
 
 impl AssetDefinition {
@@ -66,7 +198,13 @@ impl AssetDefinition {
             refresh,
             cost_tier,
             trust_tier,
+            partition_policy: AssetPartitionPolicy::default(),
         }
+    }
+
+    pub fn with_partition_policy(mut self, partition_policy: AssetPartitionPolicy) -> Self {
+        self.partition_policy = partition_policy;
+        self
     }
 }
 
@@ -100,6 +238,19 @@ impl AssetRegistry {
             .into_iter()
             .map(|node| dag.graph()[node].clone())
             .collect())
+    }
+
+    pub fn partition_for(
+        &self,
+        asset_id: &AssetId,
+        run_partition: &AssetPartition,
+    ) -> Result<AssetPartition, PartitionResolutionError> {
+        let definition =
+            self.get(asset_id)
+                .ok_or_else(|| PartitionResolutionError::UnknownAsset {
+                    asset_id: asset_id.clone(),
+                })?;
+        definition.partition_policy.resolve(asset_id, run_partition)
     }
 
     fn validate(&self) -> Result<(), RegistryError> {
@@ -230,7 +381,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
             RefreshCadence::Daily,
             CostTier::Free,
             TrustTier::Support,
-        ),
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["dt", "subreddit"])),
         asset(
             "reddit_resident_facts",
             AssetStage::Silver,
@@ -239,7 +391,11 @@ pub fn default_openestates_registry() -> AssetRegistry {
             RefreshCadence::OnChange,
             CostTier::Cheap,
             TrustTier::Support,
-        ),
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &["dt"],
+            &[("source", "reddit")],
+        )),
         asset(
             "google_review_facts",
             AssetStage::Silver,
@@ -248,7 +404,11 @@ pub fn default_openestates_registry() -> AssetRegistry {
             RefreshCadence::Weekly,
             CostTier::Cheap,
             TrustTier::Support,
-        ),
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &["dt"],
+            &[("source", "google")],
+        )),
         asset(
             "kg_society_view",
             AssetStage::Gold,
@@ -313,6 +473,81 @@ mod tests {
 
         assert!(rera_pos < kg_pos);
         assert!(kg_pos < serving_pos);
+    }
+
+    #[test]
+    fn default_registry_resolves_mixed_asset_partitions() {
+        let registry = default_openestates_registry();
+        let run_partition =
+            AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("canonical_society_nodes").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::global()
+        );
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("reddit_threads_daily").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
+        );
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("reddit_resident_facts").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")])
+        );
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("google_review_facts").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::new([("dt", "2026-07-13"), ("source", "google")])
+        );
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("search_serving_bundle").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::global()
+        );
+    }
+
+    #[test]
+    fn partition_policy_missing_run_key_is_error() {
+        let registry = default_openestates_registry();
+        let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
+        let err = registry
+            .partition_for(
+                &AssetId::new("reddit_threads_daily").unwrap(),
+                &run_partition,
+            )
+            .unwrap_err();
+
+        assert!(matches!(
+            err,
+            PartitionResolutionError::MissingRunPartitionKey {
+                ref asset_id,
+                ref key,
+                ..
+            } if asset_id == &AssetId::new("reddit_threads_daily").unwrap()
+                && key == "subreddit"
+        ));
     }
 
     #[test]

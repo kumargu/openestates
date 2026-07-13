@@ -41,8 +41,8 @@ pub use reddit::{
     RedditThreadSnapshotRecord, REDDIT_THREADS_DAILY_ASSET_ID,
 };
 pub use registry::{
-    default_openestates_registry, AssetDefinition, AssetRegistry, CostTier, RefreshCadence,
-    RegistryError, TrustTier,
+    default_openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
+    PartitionCoordinate, PartitionResolutionError, RefreshCadence, RegistryError, TrustTier,
 };
 pub use run_manifest::{
     AssetDagRunManifest, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,

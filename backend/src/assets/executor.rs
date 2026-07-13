@@ -15,11 +15,11 @@ use super::{
     AssetDagRunManifest, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
     AssetRunManifestStore, AssetSourceInputs, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
-    MaterializationRecord, PlanDecision, PlannerError, RedditThreadSnapshotMaterializeError,
-    RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, RunManifestError,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID,
+    MaterializationRecord, PartitionResolutionError, PlanDecision, PlannerError,
+    RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
+    RedditThreadsDailyInput, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
+    SkillFactsInput, SourceWatermark, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,19 +124,22 @@ impl AssetDagExecutor {
             }
 
             let asset_id = entry.asset_id.clone();
+            let asset_partition = entry.partition.clone();
             let started_at = Utc::now();
             manifest.mark_step_running(&asset_id, started_at)?;
             self.persist_manifest(&manifest, false).await?;
 
             match self
-                .execute_asset(
+                .execute_asset(AssetExecutionContext {
+                    dag: self,
                     graph,
-                    &options,
-                    &manifest.run_id,
-                    &asset_id,
-                    &records_by_asset,
-                    kg_view.as_ref(),
-                )
+                    options: &options,
+                    run_id: &manifest.run_id,
+                    asset_id: &asset_id,
+                    asset_partition: &asset_partition,
+                    records_by_asset: &records_by_asset,
+                    kg_view: kg_view.as_ref(),
+                })
                 .await
             {
                 Ok(executed) => {
@@ -148,8 +151,11 @@ impl AssetDagExecutor {
                             asset_id.clone(),
                             &record,
                             &records_by_asset,
-                            started_at,
-                            completed_at,
+                            &options.partition,
+                            StepTiming {
+                                started_at,
+                                completed_at,
+                            },
                         )
                         .await;
                     let next_manifest = match success_result {
@@ -205,35 +211,20 @@ impl AssetDagExecutor {
 
     async fn execute_asset(
         &self,
-        graph: &KnowledgeGraph,
-        options: &AssetDagExecutionOptions,
-        run_id: &MaterializationId,
-        asset_id: &AssetId,
-        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
-        kg_view: Option<&KgSocietyViewMaterialization>,
+        context: AssetExecutionContext<'_>,
     ) -> Result<ExecutedAsset, AssetDagExecutorError> {
-        let executor =
-            self.executors
-                .get(asset_id)
-                .ok_or_else(|| AssetDagExecutorError::NoExecutor {
-                    asset_id: asset_id.clone(),
-                })?;
-        let context = AssetExecutionContext {
-            dag: self,
-            graph,
-            options,
-            run_id,
-            asset_id,
-            records_by_asset,
-            kg_view,
-        };
+        let executor = self.executors.get(context.asset_id).ok_or_else(|| {
+            AssetDagExecutorError::NoExecutor {
+                asset_id: context.asset_id.clone(),
+            }
+        })?;
         executor.execute(context).await
     }
 
     async fn dependency_materializations(
         &self,
         asset_id: &AssetId,
-        partition: &AssetPartition,
+        run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
     ) -> Result<Vec<MaterializationId>, AssetDagExecutorError> {
         let definition =
@@ -250,9 +241,10 @@ impl AssetDagExecutor {
                 continue;
             }
 
+            let dependency_partition = self.asset_partition(dependency, run_partition)?;
             let current = self
                 .materializations
-                .current_record(dependency, partition)
+                .current_record(dependency, &dependency_partition)
                 .await
                 .map_err(|err| {
                     if err.is_not_found() {
@@ -270,20 +262,35 @@ impl AssetDagExecutor {
         Ok(parents)
     }
 
+    fn asset_partition(
+        &self,
+        asset_id: &AssetId,
+        run_partition: &AssetPartition,
+    ) -> Result<AssetPartition, AssetDagExecutorError> {
+        self.registry
+            .partition_for(asset_id, run_partition)
+            .map_err(AssetDagExecutorError::Partition)
+    }
+
     async fn prepare_successful_step(
         &self,
         manifest: &AssetDagRunManifest,
         asset_id: AssetId,
         record: &MaterializationRecord,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
-        started_at: DateTime<Utc>,
-        completed_at: DateTime<Utc>,
+        run_partition: &AssetPartition,
+        timing: StepTiming,
     ) -> Result<AssetDagRunManifest, AssetDagExecutorError> {
-        self.validate_record(asset_id.clone(), record, records_by_asset)
+        self.validate_record(asset_id.clone(), record, records_by_asset, run_partition)
             .await?;
 
         let mut next_manifest = manifest.clone();
-        next_manifest.mark_step_succeeded(&asset_id, record, started_at, completed_at)?;
+        next_manifest.mark_step_succeeded(
+            &asset_id,
+            record,
+            timing.started_at,
+            timing.completed_at,
+        )?;
         self.materializations.promote_current(record).await?;
         Ok(next_manifest)
     }
@@ -293,9 +300,18 @@ impl AssetDagExecutor {
         asset_id: AssetId,
         record: &MaterializationRecord,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        run_partition: &AssetPartition,
     ) -> Result<(), AssetDagExecutorError> {
+        let expected_partition = self.asset_partition(&asset_id, run_partition)?;
+        if record.partition != expected_partition {
+            return Err(AssetDagExecutorError::AssetPartitionMismatch {
+                asset_id,
+                expected: expected_partition,
+                actual: record.partition.clone(),
+            });
+        }
         let expected = self
-            .dependency_materializations(&asset_id, &record.partition, records_by_asset)
+            .dependency_materializations(&asset_id, run_partition, records_by_asset)
             .await?;
         if record.parent_materializations != expected {
             return Err(AssetDagExecutorError::ParentLineageMismatch {
@@ -330,6 +346,12 @@ impl AssetDagExecutor {
 struct PersistedManifest {
     run_manifest_key: String,
     current_pointer_key: String,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct StepTiming {
+    started_at: DateTime<Utc>,
+    completed_at: DateTime<Utc>,
 }
 
 #[derive(Clone)]
@@ -410,7 +432,7 @@ impl BuiltInAssetExecutor {
                             parent_materializations,
                             reddit_thread_watermarks(input),
                             context.run_id.clone(),
-                            context.options.partition.clone(),
+                            context.asset_partition.clone(),
                         )
                         .await?;
                 Ok(ExecutedAsset::RedditThreadsDaily(materialization.record))
@@ -440,7 +462,7 @@ impl BuiltInAssetExecutor {
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
             Self::KgSocietyView => {
-                ensure_global_partition(context.asset_id, &context.options.partition)?;
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_materializations = context
                     .dag
                     .dependency_materializations(
@@ -456,13 +478,13 @@ impl BuiltInAssetExecutor {
                         vec![knowledge_graph_watermark(context.graph)],
                         parent_materializations,
                         context.run_id.clone(),
-                        context.options.partition.clone(),
+                        context.asset_partition.clone(),
                     )
                     .await?;
                 Ok(ExecutedAsset::KgSocietyView(materialization))
             }
             Self::SearchServingBundle => {
-                ensure_global_partition(context.asset_id, &context.options.partition)?;
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let kg_view = context
                     .kg_view
                     .ok_or(AssetDagExecutorError::MissingRuntimeKgView)?;
@@ -472,7 +494,7 @@ impl BuiltInAssetExecutor {
                             kg_view,
                             context.options.version.clone(),
                             context.run_id.clone(),
-                            context.options.partition.clone(),
+                            context.asset_partition.clone(),
                         )
                         .await?;
                 Ok(ExecutedAsset::SearchServingBundle(materialization))
@@ -487,6 +509,7 @@ struct AssetExecutionContext<'a> {
     options: &'a AssetDagExecutionOptions,
     run_id: &'a MaterializationId,
     asset_id: &'a AssetId,
+    asset_partition: &'a AssetPartition,
     records_by_asset: &'a HashMap<AssetId, MaterializationRecord>,
     kg_view: Option<&'a KgSocietyViewMaterialization>,
 }
@@ -514,7 +537,7 @@ async fn execute_skill_fact_asset(
             parent_materializations,
             skill_fact_watermarks(input),
             context.run_id.clone(),
-            context.options.partition.clone(),
+            context.asset_partition.clone(),
         )
         .await?;
     Ok(materialization.record)
@@ -578,6 +601,7 @@ pub enum AssetDagExecutorError {
     Planner(PlannerError),
     Manifest(RunManifestError),
     Lake(LakeError),
+    Partition(PartitionResolutionError),
     KgSocietyView(KgSocietyViewMaterializeError),
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
     SearchServingBundle(SearchServingBundleMaterializeError),
@@ -598,6 +622,11 @@ pub enum AssetDagExecutorError {
         expected: Vec<MaterializationId>,
         actual: Vec<MaterializationId>,
     },
+    AssetPartitionMismatch {
+        asset_id: AssetId,
+        expected: AssetPartition,
+        actual: AssetPartition,
+    },
     UnsupportedPartition {
         asset_id: AssetId,
         partition: AssetPartition,
@@ -613,6 +642,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Planner(err) => write!(f, "asset DAG planning failed: {err}"),
             Self::Manifest(err) => write!(f, "asset DAG manifest update failed: {err}"),
             Self::Lake(err) => write!(f, "asset DAG lake operation failed: {err}"),
+            Self::Partition(err) => write!(f, "asset partition resolution failed: {err}"),
             Self::KgSocietyView(err) => write!(f, "KG society view execution failed: {err}"),
             Self::RedditThreadSnapshot(err) => {
                 write!(f, "reddit thread source execution failed: {err}")
@@ -645,6 +675,14 @@ impl fmt::Display for AssetDagExecutorError {
             } => write!(
                 f,
                 "asset {asset_id} returned parent lineage {actual:?}, expected {expected:?}"
+            ),
+            Self::AssetPartitionMismatch {
+                asset_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "asset {asset_id} materialized partition {actual:?}, expected {expected:?}"
             ),
             Self::UnsupportedPartition {
                 asset_id,

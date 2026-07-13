@@ -7,7 +7,8 @@ use crate::lake::LakeError;
 
 use super::{
     AssetId, AssetMaterializationStore, AssetPartition, AssetRegistry, AssetStage, CostTier,
-    MaterializationId, MaterializationRecord, RefreshCadence, RegistryError, TrustTier,
+    MaterializationId, MaterializationRecord, PartitionResolutionError, RefreshCadence,
+    RegistryError, TrustTier,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,6 +42,7 @@ impl AssetDagPlan {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetPlanEntry {
     pub asset_id: AssetId,
+    pub partition: AssetPartition,
     pub stage: AssetStage,
     pub dependencies: Vec<AssetId>,
     pub refresh: RefreshCadence,
@@ -132,6 +134,7 @@ impl FreshnessPolicy {
 #[derive(Debug)]
 pub enum PlannerError {
     Registry(RegistryError),
+    Partition(PartitionResolutionError),
     Lake(LakeError),
 }
 
@@ -192,9 +195,13 @@ impl AssetPlanner {
 
         for asset_id in ordered {
             let definition = self.registry.get(&asset_id).expect("registry order asset");
+            let asset_partition = definition
+                .partition_policy
+                .resolve(&asset_id, partition)
+                .map_err(PlannerError::Partition)?;
             let current = self
                 .materializations
-                .current_record(&asset_id, partition)
+                .current_record(&asset_id, &asset_partition)
                 .await;
             let current = match current {
                 Ok(record) => Some(record),
@@ -207,7 +214,13 @@ impl AssetPlanner {
                 planned_ids.insert(asset_id.clone());
             }
 
-            entries.push(plan_entry(definition, current.as_ref(), reason, now));
+            entries.push(plan_entry(
+                definition,
+                asset_partition,
+                current.as_ref(),
+                reason,
+                now,
+            ));
             records.insert(asset_id, current);
         }
 
@@ -222,6 +235,7 @@ impl AssetPlanner {
 
 fn plan_entry(
     definition: &super::AssetDefinition,
+    partition: AssetPartition,
     current: Option<&MaterializationRecord>,
     reason: Option<PlanReason>,
     now: DateTime<Utc>,
@@ -235,6 +249,7 @@ fn plan_entry(
 
     AssetPlanEntry {
         asset_id: definition.id.clone(),
+        partition,
         stage: definition.stage,
         dependencies: definition.dependencies.clone(),
         refresh: definition.refresh,
@@ -280,7 +295,6 @@ fn plan_reason(
                 })
             }
         };
-
         if !current
             .parent_materializations
             .contains(&dependency_record.materialization_id)
@@ -390,6 +404,7 @@ impl std::fmt::Display for PlannerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Registry(err) => write!(f, "asset registry error: {err}"),
+            Self::Partition(err) => write!(f, "asset partition resolution error: {err}"),
             Self::Lake(err) => write!(f, "asset lake error: {err}"),
         }
     }
