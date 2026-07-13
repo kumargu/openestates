@@ -115,6 +115,20 @@ impl AssetPathBuilder {
         parts.push("current.json".to_string());
         LakeKey::new(parts.join("/")).expect("valid current pointer key")
     }
+
+    pub fn dag_run_manifest_key(partition: &AssetPartition, run_id: &MaterializationId) -> LakeKey {
+        let mut parts = vec!["manifests".to_string(), "runs".to_string()];
+        parts.extend(partition_or_global(partition));
+        parts.push(format!("{run_id}.json"));
+        LakeKey::new(parts.join("/")).expect("valid DAG run manifest key")
+    }
+
+    pub fn current_dag_run_pointer_key(partition: &AssetPartition) -> LakeKey {
+        let mut parts = vec!["manifests".to_string(), "runs".to_string()];
+        parts.extend(partition_or_global(partition));
+        parts.push("current.json".to_string());
+        LakeKey::new(parts.join("/")).expect("valid current DAG run pointer key")
+    }
 }
 
 fn partition_or_global(partition: &AssetPartition) -> Vec<String> {
@@ -168,6 +182,24 @@ mod tests {
         assert_eq!(
             key.as_str(),
             "serving/search_bundle/version=2026-07-12t10-00z/manifest.json"
+        );
+    }
+
+    #[test]
+    fn dag_run_manifest_keys_are_control_plane_json() {
+        let run_id = MaterializationId::fixed("00000000-0000-0000-0000-000000000001");
+
+        assert_eq!(
+            AssetPathBuilder::dag_run_manifest_key(&AssetPartition::global(), &run_id).as_str(),
+            "manifests/runs/partition=global/00000000-0000-0000-0000-000000000001.json"
+        );
+        assert_eq!(
+            AssetPathBuilder::current_dag_run_pointer_key(&AssetPartition::new([(
+                "dt",
+                "2026-07-13",
+            )]))
+            .as_str(),
+            "manifests/runs/dt=2026-07-13/current.json"
         );
     }
 }

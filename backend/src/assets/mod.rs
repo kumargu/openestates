@@ -14,6 +14,7 @@ pub mod paths;
 pub mod planner;
 pub mod reddit;
 pub mod registry;
+pub mod run_manifest;
 pub mod skill_facts;
 pub mod types;
 
@@ -25,7 +26,10 @@ pub use kg_view::{
 };
 pub use materialization::AssetMaterializationStore;
 pub use paths::AssetPathBuilder;
-pub use planner::{AssetPlanner, PlanReason, PlannedAsset, PlannerError};
+pub use planner::{
+    AssetDagPlan, AssetFreshness, AssetPlanEntry, AssetPlanner, FreshnessPolicy,
+    FreshnessReferenceKind, PlanDecision, PlanReason, PlannedAsset, PlannerError,
+};
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,
     RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
@@ -34,6 +38,10 @@ pub use reddit::{
 pub use registry::{
     default_openestates_registry, AssetDefinition, AssetRegistry, CostTier, RefreshCadence,
     RegistryError, TrustTier,
+};
+pub use run_manifest::{
+    AssetDagRunManifest, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,
+    CurrentDagRunPointer, DagRunStatus, RunManifestError,
 };
 pub use skill_facts::{
     SkillFactAnnotationRecord, SkillFactManifest, SkillFactMaterialization,

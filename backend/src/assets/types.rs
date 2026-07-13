@@ -229,6 +229,11 @@ impl MaterializationRecord {
         self
     }
 
+    pub fn with_run_id(mut self, run_id: MaterializationId) -> Self {
+        self.run_id = run_id;
+        self
+    }
+
     pub fn with_source_watermarks(mut self, watermarks: Vec<SourceWatermark>) -> Self {
         self.source_watermarks = watermarks;
         self
