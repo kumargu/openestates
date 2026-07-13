@@ -14,6 +14,12 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::lake::{LakeError, LakeKey, LakeStore};
+use crate::parquet_data::{
+    float64_list_array, float64_list_field, optional_f64_list_column_value,
+    optional_string_list_column_value, string_list_array, string_list_field, typed_value_arrays,
+    typed_value_fields, typed_value_from_batch, OptionalListColumn, TypedFactValue,
+    ANSWERS_PREFERENCES_COLUMN, SCORING_THRESHOLDS_COLUMN,
+};
 
 use super::types::AssetIdError;
 use super::{
@@ -23,6 +29,7 @@ use super::{
 
 pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
 pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
+const SKILL_FACT_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkillFactRecord {
@@ -201,7 +208,7 @@ impl SkillFactMaterializer {
         ];
         let manifest = SkillFactManifest {
             asset_id: asset_id.clone(),
-            format_version: 1,
+            format_version: SKILL_FACT_FORMAT_VERSION,
             source: source.clone(),
             snapshot_date: snapshot_date.clone(),
             run_id,
@@ -255,11 +262,22 @@ pub async fn read_skill_fact_artifact_rows(
 }
 
 fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMaterializeError> {
-    let schema = Arc::new(Schema::new(vec![
+    let typed_values = facts
+        .iter()
+        .map(|fact| {
+            let value = serde_json::from_str(&fact.value_json)?;
+            validate_fact_value_type(&fact.value_type, &value)?;
+            Ok(TypedFactValue::from_fact_value(&value))
+        })
+        .collect::<Result<Vec<_>, SkillFactMaterializeError>>()?;
+
+    let mut fields = vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("fact_key", DataType::Utf8, false),
         Field::new("value_type", DataType::Utf8, false),
-        Field::new("value_json", DataType::Utf8, false),
+    ];
+    fields.extend(typed_value_fields(true));
+    fields.extend([
         Field::new("confidence", DataType::Float32, false),
         Field::new("source_type", DataType::Utf8, false),
         Field::new("source_url", DataType::Utf8, true),
@@ -269,29 +287,31 @@ fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMa
         Field::new("learned_at", DataType::Utf8, false),
         Field::new("run_id", DataType::Utf8, false),
         Field::new("input_hash", DataType::Utf8, false),
-    ]));
+    ]);
+    let schema = Arc::new(Schema::new(fields));
 
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            string_array(facts.iter().map(|fact| fact.entity_id.clone())),
-            string_array(facts.iter().map(|fact| fact.fact_key.clone())),
-            string_array(facts.iter().map(|fact| fact.value_type.clone())),
-            string_array(facts.iter().map(|fact| fact.value_json.clone())),
-            Arc::new(Float32Array::from(
-                facts.iter().map(|fact| fact.confidence).collect::<Vec<_>>(),
-            )),
-            string_array(facts.iter().map(|fact| fact.source_type.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.source_url.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.model.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
-            string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
-            string_array(facts.iter().map(|fact| fact.run_id.clone())),
-            string_array(facts.iter().map(|fact| fact.input_hash.clone())),
-        ],
-    )
-    .map_err(SkillFactMaterializeError::Arrow)?;
+    let mut columns = vec![
+        string_array(facts.iter().map(|fact| fact.entity_id.clone())),
+        string_array(facts.iter().map(|fact| fact.fact_key.clone())),
+        string_array(facts.iter().map(|fact| fact.value_type.clone())),
+    ];
+    columns.extend(typed_value_arrays(&typed_values, true));
+    columns.extend([
+        Arc::new(Float32Array::from(
+            facts.iter().map(|fact| fact.confidence).collect::<Vec<_>>(),
+        )) as ArrayRef,
+        string_array(facts.iter().map(|fact| fact.source_type.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.source_url.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.model.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
+        string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+        string_array(facts.iter().map(|fact| fact.run_id.clone())),
+        string_array(facts.iter().map(|fact| fact.input_hash.clone())),
+    ]);
+
+    let batch =
+        RecordBatch::try_new(schema.clone(), columns).map_err(SkillFactMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
@@ -305,7 +325,7 @@ fn read_facts_parquet_records(
         let entity_id = string_column(&batch, "entity_id")?;
         let fact_key = string_column(&batch, "fact_key")?;
         let value_type = string_column(&batch, "value_type")?;
-        let value_json = string_column(&batch, "value_json")?;
+        let value_json = optional_string_column(&batch, "value_json")?;
         let confidence = float32_column(&batch, "confidence")?;
         let source_type = string_column(&batch, "source_type")?;
         let source_url = string_column(&batch, "source_url")?;
@@ -317,11 +337,16 @@ fn read_facts_parquet_records(
         let input_hash = string_column(&batch, "input_hash")?;
 
         for row in 0..batch.num_rows() {
+            let value_type = required_string(value_type, row, "value_type")?;
+            let value_json = match value_json {
+                Some(value_json) => required_string(value_json, row, "value_json")?,
+                None => typed_value_json_from_batch(&batch, row, &value_type)?,
+            };
             records.push(SkillFactRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
-                value_type: required_string(value_type, row, "value_type")?,
-                value_json: required_string(value_json, row, "value_json")?,
+                value_type,
+                value_json,
                 confidence: required_f32(confidence, row, "confidence")?,
                 source_type: required_string(source_type, row, "source_type")?,
                 source_url: optional_string(source_url, row),
@@ -345,14 +370,23 @@ fn read_facts_parquet_records(
 fn write_fact_annotations_parquet(
     annotations: &[SkillFactAnnotationRecord],
 ) -> Result<Vec<u8>, SkillFactMaterializeError> {
+    let answers_preferences = annotations
+        .iter()
+        .map(|record| parse_string_vec(&record.answers_preferences_json).map(Some))
+        .collect::<Result<Vec<_>, SkillFactMaterializeError>>()?;
+    let scoring_thresholds = annotations
+        .iter()
+        .map(|record| parse_f64_vec(&record.scoring_thresholds_json).map(Some))
+        .collect::<Result<Vec<_>, SkillFactMaterializeError>>()?;
+
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("fact_key", DataType::Utf8, false),
         Field::new("display_template", DataType::Utf8, true),
-        Field::new("answers_preferences_json", DataType::Utf8, false),
+        string_list_field(ANSWERS_PREFERENCES_COLUMN, false),
         Field::new("scoring_direction", DataType::Utf8, true),
         Field::new("scoring_weight", DataType::Float32, true),
-        Field::new("scoring_thresholds_json", DataType::Utf8, false),
+        float64_list_field(SCORING_THRESHOLDS_COLUMN, false),
     ]));
 
     let batch = RecordBatch::try_new(
@@ -365,11 +399,7 @@ fn write_fact_annotations_parquet(
                     .iter()
                     .map(|record| record.display_template.clone()),
             ),
-            string_array(
-                annotations
-                    .iter()
-                    .map(|record| record.answers_preferences_json.clone()),
-            ),
+            string_list_array(answers_preferences.into_iter()),
             optional_string_array(
                 annotations
                     .iter()
@@ -381,11 +411,7 @@ fn write_fact_annotations_parquet(
                     .map(|record| record.scoring_weight)
                     .collect::<Vec<_>>(),
             )),
-            string_array(
-                annotations
-                    .iter()
-                    .map(|record| record.scoring_thresholds_json.clone()),
-            ),
+            float64_list_array(scoring_thresholds.into_iter()),
         ],
     )
     .map_err(SkillFactMaterializeError::Arrow)?;
@@ -402,27 +428,28 @@ fn read_fact_annotation_records(
         let entity_id = string_column(&batch, "entity_id")?;
         let fact_key = string_column(&batch, "fact_key")?;
         let display_template = string_column(&batch, "display_template")?;
-        let answers_preferences_json = string_column(&batch, "answers_preferences_json")?;
+        let answers_preferences_json = optional_string_column(&batch, "answers_preferences_json")?;
         let scoring_direction = string_column(&batch, "scoring_direction")?;
         let scoring_weight = float32_column(&batch, "scoring_weight")?;
-        let scoring_thresholds_json = string_column(&batch, "scoring_thresholds_json")?;
+        let scoring_thresholds_json = optional_string_column(&batch, "scoring_thresholds_json")?;
 
         for row in 0..batch.num_rows() {
             records.push(SkillFactAnnotationRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 display_template: optional_string(display_template, row),
-                answers_preferences_json: required_string(
+                answers_preferences_json: list_json_from_batch(
+                    &batch,
                     answers_preferences_json,
+                    ANSWERS_PREFERENCES_COLUMN,
                     row,
-                    "answers_preferences_json",
                 )?,
                 scoring_direction: optional_string(scoring_direction, row),
                 scoring_weight: optional_f32(scoring_weight, row),
-                scoring_thresholds_json: required_string(
+                scoring_thresholds_json: thresholds_json_from_batch(
+                    &batch,
                     scoring_thresholds_json,
                     row,
-                    "scoring_thresholds_json",
                 )?,
             });
         }
@@ -450,6 +477,88 @@ fn string_array(values: impl Iterator<Item = String>) -> ArrayRef {
 
 fn optional_string_array(values: impl Iterator<Item = Option<String>>) -> ArrayRef {
     Arc::new(StringArray::from(values.collect::<Vec<_>>()))
+}
+
+fn parse_string_vec(value: &str) -> Result<Vec<String>, SkillFactMaterializeError> {
+    Ok(serde_json::from_str(value)?)
+}
+
+fn parse_f64_vec(value: &str) -> Result<Vec<f64>, SkillFactMaterializeError> {
+    Ok(serde_json::from_str(value)?)
+}
+
+fn typed_value_json_from_batch(
+    batch: &RecordBatch,
+    row: usize,
+    value_type: &str,
+) -> Result<String, SkillFactMaterializeError> {
+    let typed = typed_value_from_batch(batch, row).ok_or_else(|| {
+        SkillFactMaterializeError::InvalidParquet(format!(
+            "missing typed fact value columns at row {row}"
+        ))
+    })?;
+    let value = typed.to_fact_value(value_type).ok_or_else(|| {
+        SkillFactMaterializeError::InvalidParquet(format!(
+            "typed fact value columns do not match value_type {value_type} at row {row}"
+        ))
+    })?;
+    Ok(serde_json::to_string(&value)?)
+}
+
+fn validate_fact_value_type(
+    value_type: &str,
+    value: &crate::knowledge::FactValue,
+) -> Result<(), SkillFactMaterializeError> {
+    if TypedFactValue::value_type_matches(value_type, value) {
+        return Ok(());
+    }
+    Err(SkillFactMaterializeError::InvalidParquet(format!(
+        "value_type {value_type} does not match fact value type {}",
+        TypedFactValue::value_type_for(value)
+    )))
+}
+
+fn list_json_from_batch(
+    batch: &RecordBatch,
+    legacy_json: Option<&StringArray>,
+    typed_column: &str,
+    row: usize,
+) -> Result<String, SkillFactMaterializeError> {
+    if let Some(legacy_json) = legacy_json {
+        return required_string(legacy_json, row, typed_column);
+    }
+    let values = match optional_string_list_column_value(batch, typed_column, row) {
+        Ok(OptionalListColumn::Values(values)) => values,
+        Ok(OptionalListColumn::Null) => Vec::new(),
+        Ok(OptionalListColumn::Missing) => {
+            return Err(SkillFactMaterializeError::InvalidParquet(format!(
+                "missing typed list column {typed_column}"
+            )));
+        }
+        Err(message) => return Err(SkillFactMaterializeError::InvalidParquet(message)),
+    };
+    Ok(serde_json::to_string(&values)?)
+}
+
+fn thresholds_json_from_batch(
+    batch: &RecordBatch,
+    legacy_json: Option<&StringArray>,
+    row: usize,
+) -> Result<String, SkillFactMaterializeError> {
+    if let Some(legacy_json) = legacy_json {
+        return required_string(legacy_json, row, "scoring_thresholds_json");
+    }
+    let values = match optional_f64_list_column_value(batch, SCORING_THRESHOLDS_COLUMN, row) {
+        Ok(OptionalListColumn::Values(values)) => values,
+        Ok(OptionalListColumn::Null) => Vec::new(),
+        Ok(OptionalListColumn::Missing) => {
+            return Err(SkillFactMaterializeError::InvalidParquet(format!(
+                "missing typed list column {SCORING_THRESHOLDS_COLUMN}"
+            )));
+        }
+        Err(message) => return Err(SkillFactMaterializeError::InvalidParquet(message)),
+    };
+    Ok(serde_json::to_string(&values)?)
 }
 
 async fn read_artifact_bytes(
@@ -603,6 +712,23 @@ fn string_column<'a>(
         })
 }
 
+fn optional_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a StringArray>, SkillFactMaterializeError> {
+    let Ok(index) = batch.schema().index_of(name) else {
+        return Ok(None);
+    };
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .map(Some)
+        .ok_or_else(|| {
+            SkillFactMaterializeError::InvalidParquet(format!("column {name} is not Utf8"))
+        })
+}
+
 fn float32_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
@@ -671,6 +797,7 @@ pub enum SkillFactMaterializeError {
         message: String,
     },
     InvalidParquet(String),
+    Json(serde_json::Error),
     Key(crate::lake::keys::KeyError),
     Lake(LakeError),
     MissingArtifact {
@@ -696,6 +823,7 @@ impl fmt::Display for SkillFactMaterializeError {
                 "invalid skill facts artifact metadata for {asset_id} at {key}: {message}"
             ),
             Self::InvalidParquet(message) => write!(f, "invalid skill facts Parquet: {message}"),
+            Self::Json(err) => write!(f, "skill facts JSON compatibility error: {err}"),
             Self::Key(err) => write!(f, "skill facts artifact key error: {err}"),
             Self::Lake(err) => write!(f, "skill facts lake error: {err}"),
             Self::MissingArtifact { asset_id, suffix } => write!(
@@ -724,6 +852,12 @@ impl From<arrow::error::ArrowError> for SkillFactMaterializeError {
 impl From<chrono::ParseError> for SkillFactMaterializeError {
     fn from(err: chrono::ParseError) -> Self {
         Self::Chrono(err)
+    }
+}
+
+impl From<serde_json::Error> for SkillFactMaterializeError {
+    fn from(err: serde_json::Error) -> Self {
+        Self::Json(err)
     }
 }
 

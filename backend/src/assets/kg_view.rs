@@ -15,6 +15,11 @@ use sha2::{Digest, Sha256};
 
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
+use crate::parquet_data::{
+    float64_list_array, float64_list_field, string_list_array, string_list_field,
+    typed_value_arrays, typed_value_fields, TypedFactValue, ANSWERS_PREFERENCES_COLUMN,
+    SCORING_THRESHOLDS_COLUMN,
+};
 
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
@@ -23,6 +28,7 @@ use super::{
 };
 
 pub const KG_SOCIETY_VIEW_ASSET_ID: &str = "kg_society_view";
+const KG_SOCIETY_VIEW_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct KgViewEntityRecord {
@@ -547,7 +553,7 @@ impl KgSocietyViewMaterializer {
 
         let manifest = KgViewManifest {
             view_version: view_version.clone(),
-            format_version: 1,
+            format_version: KG_SOCIETY_VIEW_FORMAT_VERSION,
             created_at: Utc::now(),
             graph_content_hash: records.content_hash.clone(),
             entity_count: records.entities.len() as u64,
@@ -649,13 +655,23 @@ fn write_entities_parquet(
 fn write_facts_parquet(
     facts: &[KgViewFactRecord],
 ) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
-    let schema = Arc::new(Schema::new(vec![
+    let typed_values = facts
+        .iter()
+        .map(|fact| {
+            let value = serde_json::from_str(&fact.value_json)?;
+            validate_fact_value_type(&fact.value_type, &value)?;
+            Ok(TypedFactValue::from_fact_value(&value))
+        })
+        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+
+    let mut fields = vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("fact_key", DataType::Utf8, false),
         Field::new("fact_version", DataType::UInt32, false),
         Field::new("value_type", DataType::Utf8, false),
-        Field::new("value_text", DataType::Utf8, true),
-        Field::new("value_json", DataType::Utf8, false),
+    ];
+    fields.extend(typed_value_fields(true));
+    fields.extend([
         Field::new("confidence", DataType::Float32, false),
         Field::new("source_type", DataType::Utf8, false),
         Field::new("source_url", DataType::Utf8, true),
@@ -663,34 +679,35 @@ fn write_facts_parquet(
         Field::new("skill_id", DataType::Utf8, true),
         Field::new("triggered_by", DataType::Utf8, true),
         Field::new("learned_at", DataType::Utf8, false),
-    ]));
+    ]);
+    let schema = Arc::new(Schema::new(fields));
 
-    let batch = RecordBatch::try_new(
-        schema.clone(),
-        vec![
-            string_array(facts.iter().map(|fact| fact.entity_id.clone())),
-            string_array(facts.iter().map(|fact| fact.fact_key.clone())),
-            Arc::new(UInt32Array::from(
-                facts
-                    .iter()
-                    .map(|fact| fact.fact_version)
-                    .collect::<Vec<_>>(),
-            )),
-            string_array(facts.iter().map(|fact| fact.value_type.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.value_text.clone())),
-            string_array(facts.iter().map(|fact| fact.value_json.clone())),
-            Arc::new(Float32Array::from(
-                facts.iter().map(|fact| fact.confidence).collect::<Vec<_>>(),
-            )),
-            string_array(facts.iter().map(|fact| fact.source_type.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.source_url.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.model.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
-            optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
-            string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
-        ],
-    )
-    .map_err(KgSocietyViewMaterializeError::Arrow)?;
+    let mut columns = vec![
+        string_array(facts.iter().map(|fact| fact.entity_id.clone())),
+        string_array(facts.iter().map(|fact| fact.fact_key.clone())),
+        Arc::new(UInt32Array::from(
+            facts
+                .iter()
+                .map(|fact| fact.fact_version)
+                .collect::<Vec<_>>(),
+        )) as ArrayRef,
+        string_array(facts.iter().map(|fact| fact.value_type.clone())),
+    ];
+    columns.extend(typed_value_arrays(&typed_values, true));
+    columns.extend([
+        Arc::new(Float32Array::from(
+            facts.iter().map(|fact| fact.confidence).collect::<Vec<_>>(),
+        )) as ArrayRef,
+        string_array(facts.iter().map(|fact| fact.source_type.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.source_url.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.model.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.skill_id.clone())),
+        optional_string_array(facts.iter().map(|fact| fact.triggered_by.clone())),
+        string_array(facts.iter().map(|fact| fact.learned_at.to_rfc3339())),
+    ]);
+
+    let batch = RecordBatch::try_new(schema.clone(), columns)
+        .map_err(KgSocietyViewMaterializeError::Arrow)?;
 
     write_batch(batch)
 }
@@ -698,14 +715,23 @@ fn write_facts_parquet(
 fn write_fact_annotations_parquet(
     annotations: &[KgViewFactAnnotationRecord],
 ) -> Result<Vec<u8>, KgSocietyViewMaterializeError> {
+    let answers_preferences = annotations
+        .iter()
+        .map(|record| parse_string_vec(&record.answers_preferences_json).map(Some))
+        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+    let scoring_thresholds = annotations
+        .iter()
+        .map(|record| parse_f64_vec(&record.scoring_thresholds_json).map(Some))
+        .collect::<Result<Vec<_>, KgSocietyViewMaterializeError>>()?;
+
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("fact_key", DataType::Utf8, false),
         Field::new("display_template", DataType::Utf8, true),
-        Field::new("answers_preferences_json", DataType::Utf8, false),
+        string_list_field(ANSWERS_PREFERENCES_COLUMN, false),
         Field::new("scoring_direction", DataType::Utf8, true),
         Field::new("scoring_weight", DataType::Float32, true),
-        Field::new("scoring_thresholds_json", DataType::Utf8, false),
+        float64_list_field(SCORING_THRESHOLDS_COLUMN, false),
     ]));
 
     let batch = RecordBatch::try_new(
@@ -718,11 +744,7 @@ fn write_fact_annotations_parquet(
                     .iter()
                     .map(|record| record.display_template.clone()),
             ),
-            string_array(
-                annotations
-                    .iter()
-                    .map(|record| record.answers_preferences_json.clone()),
-            ),
+            string_list_array(answers_preferences.into_iter()),
             optional_string_array(
                 annotations
                     .iter()
@@ -734,11 +756,7 @@ fn write_fact_annotations_parquet(
                     .map(|record| record.scoring_weight)
                     .collect::<Vec<_>>(),
             )),
-            string_array(
-                annotations
-                    .iter()
-                    .map(|record| record.scoring_thresholds_json.clone()),
-            ),
+            float64_list_array(scoring_thresholds.into_iter()),
         ],
     )
     .map_err(KgSocietyViewMaterializeError::Arrow)?;
@@ -806,6 +824,27 @@ fn string_array(values: impl Iterator<Item = String>) -> ArrayRef {
 
 fn optional_string_array(values: impl Iterator<Item = Option<String>>) -> ArrayRef {
     Arc::new(StringArray::from(values.collect::<Vec<_>>()))
+}
+
+fn parse_string_vec(value: &str) -> Result<Vec<String>, KgSocietyViewMaterializeError> {
+    Ok(serde_json::from_str(value)?)
+}
+
+fn parse_f64_vec(value: &str) -> Result<Vec<f64>, KgSocietyViewMaterializeError> {
+    Ok(serde_json::from_str(value)?)
+}
+
+fn validate_fact_value_type(
+    value_type: &str,
+    value: &FactValue,
+) -> Result<(), KgSocietyViewMaterializeError> {
+    if TypedFactValue::value_type_matches(value_type, value) {
+        return Ok(());
+    }
+    Err(KgSocietyViewMaterializeError::InvalidFactValueType {
+        value_type: value_type.to_string(),
+        actual_type: TypedFactValue::value_type_for(value).to_string(),
+    })
 }
 
 fn artifact(
@@ -967,6 +1006,10 @@ fn content_hash(
 #[derive(Debug)]
 pub enum KgSocietyViewMaterializeError {
     Arrow(arrow::error::ArrowError),
+    InvalidFactValueType {
+        value_type: String,
+        actual_type: String,
+    },
     Json(serde_json::Error),
     Lake(LakeError),
     Parquet(parquet::errors::ParquetError),
@@ -976,6 +1019,13 @@ impl fmt::Display for KgSocietyViewMaterializeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Arrow(err) => write!(f, "KG view Arrow record batch error: {err}"),
+            Self::InvalidFactValueType {
+                value_type,
+                actual_type,
+            } => write!(
+                f,
+                "KG view fact value_type {value_type} does not match fact value type {actual_type}"
+            ),
             Self::Json(err) => write!(f, "KG view JSON error: {err}"),
             Self::Lake(err) => write!(f, "KG view lake error: {err}"),
             Self::Parquet(err) => write!(f, "KG view Parquet error: {err}"),

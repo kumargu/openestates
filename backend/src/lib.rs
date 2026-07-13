@@ -4,6 +4,7 @@ pub mod enrichment_queue;
 pub mod knowledge;
 pub mod lake;
 pub mod models;
+pub(crate) mod parquet_data;
 pub mod routes;
 pub mod scoring;
 pub mod search;

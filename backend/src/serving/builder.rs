@@ -20,6 +20,8 @@ use super::{
     ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy,
 };
 
+const SERVING_BUNDLE_FORMAT_VERSION: u32 = 2;
+
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
     lake: LakeStore,
@@ -132,7 +134,7 @@ impl ServingBundleBuilder {
 
         let manifest = ServingBundleManifest {
             bundle_version,
-            format_version: 1,
+            format_version: SERVING_BUNDLE_FORMAT_VERSION,
             created_at: Utc::now(),
             entity_count: entities.len() as u64,
             fact_count: facts.len() as u64,

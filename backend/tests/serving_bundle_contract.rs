@@ -62,15 +62,20 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(parquet_rows(&entity_bytes), 2);
     assert_eq!(parquet_rows(&fact_bytes), 4);
     assert_eq!(parquet_rows(&search_metadata_bytes), 4);
-    assert!(!parquet_columns(&fact_bytes).contains(&"answers_preferences_json".to_string()));
-    assert!(
-        parquet_columns(&search_metadata_bytes).contains(&"answers_preferences_json".to_string())
-    );
+    let fact_columns = parquet_columns(&fact_bytes);
+    let search_metadata_columns = parquet_columns(&search_metadata_bytes);
+    assert!(fact_columns.contains(&"value_text".to_string()));
+    assert!(fact_columns.contains(&"value_number".to_string()));
+    assert!(fact_columns.contains(&"value_tags".to_string()));
+    assert!(!fact_columns.contains(&"value_json".to_string()));
+    assert!(!fact_columns.contains(&"answers_preferences_json".to_string()));
+    assert!(search_metadata_columns.contains(&"answers_preferences".to_string()));
+    assert!(!search_metadata_columns.contains(&"answers_preferences_json".to_string()));
 
     let manifest_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
-    assert!(manifest_body.contains("\"format_version\": 1"));
+    assert!(manifest_body.contains("\"format_version\": 2"));
 
     let hydrated = tempdir().unwrap();
     hydrate_tantivy_index(&lake, &manifest, hydrated.path())
@@ -181,17 +186,17 @@ fn parquet_rows(bytes: &[u8]) -> i64 {
 }
 
 fn parquet_columns(bytes: &[u8]) -> Vec<String> {
-    let dir = tempdir().unwrap();
-    let path = dir.path().join("table.parquet");
-    std::fs::write(&path, bytes).unwrap();
-    let file = File::open(path).unwrap();
-    let reader = SerializedFileReader::new(file).unwrap();
-    reader
-        .metadata()
-        .file_metadata()
-        .schema_descr()
-        .columns()
+    let mut reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
+        bytes::Bytes::copy_from_slice(bytes),
+    )
+    .unwrap()
+    .build()
+    .unwrap();
+    let batch = reader.next().unwrap().unwrap();
+    batch
+        .schema()
+        .fields()
         .iter()
-        .map(|column| column.name().to_string())
+        .map(|field| field.name().to_string())
         .collect()
 }

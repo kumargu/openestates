@@ -28,6 +28,7 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
         .unwrap();
 
     assert_eq!(kg_materialization.manifest.entity_count, 2);
+    assert_eq!(kg_materialization.manifest.format_version, 2);
     assert_eq!(kg_materialization.manifest.fact_count, 3);
     assert_eq!(kg_materialization.manifest.fact_annotation_count, 3);
     assert_eq!(kg_materialization.manifest.edge_count, 1);
@@ -81,11 +82,18 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
     assert_eq!(parquet_rows(&fact_bytes), 3);
     assert_eq!(parquet_rows(&fact_annotation_bytes), 3);
     assert_eq!(parquet_rows(&edge_bytes), 1);
-    assert!(parquet_columns(&fact_bytes).contains(&"triggered_by".to_string()));
-    assert!(!parquet_columns(&fact_bytes).contains(&"answers_preferences_json".to_string()));
-    assert!(
-        parquet_columns(&fact_annotation_bytes).contains(&"answers_preferences_json".to_string())
-    );
+    let fact_columns = parquet_columns(&fact_bytes);
+    let fact_annotation_columns = parquet_columns(&fact_annotation_bytes);
+    assert!(fact_columns.contains(&"triggered_by".to_string()));
+    assert!(fact_columns.contains(&"value_text".to_string()));
+    assert!(fact_columns.contains(&"value_number".to_string()));
+    assert!(fact_columns.contains(&"value_tags".to_string()));
+    assert!(!fact_columns.contains(&"value_json".to_string()));
+    assert!(!fact_columns.contains(&"answers_preferences_json".to_string()));
+    assert!(fact_annotation_columns.contains(&"answers_preferences".to_string()));
+    assert!(fact_annotation_columns.contains(&"scoring_thresholds".to_string()));
+    assert!(!fact_annotation_columns.contains(&"answers_preferences_json".to_string()));
+    assert!(!fact_annotation_columns.contains(&"scoring_thresholds_json".to_string()));
 
     let materializations = AssetMaterializationStore::new(lake.clone());
     let current_kg = materializations
@@ -323,17 +331,17 @@ fn parquet_rows(bytes: &[u8]) -> i64 {
 }
 
 fn parquet_columns(bytes: &[u8]) -> Vec<String> {
-    let dir = tempdir().unwrap();
-    let path = dir.path().join("table.parquet");
-    std::fs::write(&path, bytes).unwrap();
-    let file = File::open(path).unwrap();
-    let reader = SerializedFileReader::new(file).unwrap();
-    reader
-        .metadata()
-        .file_metadata()
-        .schema_descr()
-        .columns()
+    let mut reader = parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder::try_new(
+        bytes::Bytes::copy_from_slice(bytes),
+    )
+    .unwrap()
+    .build()
+    .unwrap();
+    let batch = reader.next().unwrap().unwrap();
+    batch
+        .schema()
+        .fields()
         .iter()
-        .map(|column| column.name().to_string())
+        .map(|field| field.name().to_string())
         .collect()
 }
