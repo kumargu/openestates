@@ -7,6 +7,7 @@ export type PlanInputs = {
   rentInflation: number;
   appreciation: number;
   equityReturn: number;
+  monthlyExtraInvestmentThousands: number;
   holdingPeriodYears: number;
   purchaseYear: number;
 };
@@ -36,6 +37,24 @@ export type SensitivityCell = {
   appreciation: number;
   equityReturn: number;
   difference: number;
+};
+
+export type LoanJourneyPoint = {
+  year: number;
+  balance: number;
+  interestPaid: number;
+  principalPaid: number;
+  extraPaid: number;
+};
+
+export type LoanJourney = {
+  monthlyEmi: number;
+  annualPrepayment: number;
+  loanFreeMonths: number;
+  monthsSaved: number;
+  interestSaved: number;
+  totalInterest: number;
+  points: LoanJourneyPoint[];
 };
 
 const MONTHS_IN_YEAR = 12;
@@ -69,6 +88,73 @@ function remainingBalance(
   const payment = monthlyPayment(principal, annualRate, years);
   const growth = (1 + monthlyRate) ** paidMonths;
   return principal * growth - payment * ((growth - 1) / monthlyRate);
+}
+
+export function calculateLoanJourney(
+  inputs: PlanInputs,
+  extraEmisPerYear: number,
+): LoanJourney {
+  const propertyPrice = inputs.propertyPriceLakh * LAKH;
+  const downPayment = inputs.downPaymentLakh * LAKH;
+  const purchasePrice = compound(propertyPrice, inputs.appreciation, inputs.purchaseYear);
+  const principal = Math.max(0, purchasePrice - downPayment);
+  const monthlyEmi = monthlyPayment(principal, inputs.loanRate, inputs.loanTenureYears);
+  const totalMonths = inputs.loanTenureYears * MONTHS_IN_YEAR;
+  const monthlyRate = inputs.loanRate / 100 / MONTHS_IN_YEAR;
+  const annualPrepayment = monthlyEmi * extraEmisPerYear;
+  const points: LoanJourneyPoint[] = [{ year: 0, balance: principal, interestPaid: 0, principalPaid: 0, extraPaid: 0 }];
+
+  let balance = principal;
+  let month = 0;
+  let totalInterest = 0;
+  let yearlyInterest = 0;
+  let yearlyPrincipal = 0;
+  let yearlyExtra = 0;
+
+  while (balance > 0.5 && month < totalMonths) {
+    month += 1;
+    const interest = balance * monthlyRate;
+    const regularPayment = Math.min(monthlyEmi, balance + interest);
+    const principalPayment = Math.max(0, regularPayment - interest);
+    balance = Math.max(0, balance - principalPayment);
+    totalInterest += interest;
+    yearlyInterest += interest;
+    yearlyPrincipal += principalPayment;
+
+    if (month % MONTHS_IN_YEAR === 0 && balance > 0 && extraEmisPerYear > 0) {
+      yearlyExtra = Math.min(balance, annualPrepayment);
+      balance -= yearlyExtra;
+    }
+
+    if (month % MONTHS_IN_YEAR === 0 || balance <= 0.5) {
+      points.push({
+        year: Math.ceil(month / MONTHS_IN_YEAR),
+        balance,
+        interestPaid: yearlyInterest,
+        principalPaid: yearlyPrincipal,
+        extraPaid: yearlyExtra,
+      });
+      yearlyInterest = 0;
+      yearlyPrincipal = 0;
+      yearlyExtra = 0;
+    }
+  }
+
+  for (let year = points.at(-1)?.year ?? 0; year < inputs.loanTenureYears; year += 1) {
+    points.push({ year: year + 1, balance: 0, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
+  }
+
+  const originalInterest = monthlyEmi * totalMonths - principal;
+
+  return {
+    monthlyEmi,
+    annualPrepayment,
+    loanFreeMonths: month,
+    monthsSaved: Math.max(0, totalMonths - month),
+    interestSaved: Math.max(0, originalInterest - totalInterest),
+    totalInterest,
+    points,
+  };
 }
 
 function calculatePoints(inputs: PlanInputs): ProjectionPoint[] {
@@ -118,7 +204,8 @@ function calculatePoints(inputs: PlanInputs): ProjectionPoint[] {
       buyerPortfolio *= returnFactor;
       rentPortfolio *= returnFactor;
       const monthlyDifference = Math.max(0, annualEmi / MONTHS_IN_YEAR - monthlyRent);
-      rentPortfolio += monthlyDifference * MONTHS_IN_YEAR;
+      const monthlyExtraInvestment = inputs.monthlyExtraInvestmentThousands * 1_000;
+      rentPortfolio += (monthlyDifference + monthlyExtraInvestment) * MONTHS_IN_YEAR;
     }
   }
 
@@ -172,6 +259,12 @@ export function calculateProjection(inputs: PlanInputs): PlanProjection {
   };
 }
 
+export function calculateScenarioGap(inputs: PlanInputs, year: number): number {
+  const points = calculatePoints(inputs);
+  const point = points[Math.min(year, points.length - 1)];
+  return point.buyNetWorth - point.rentNetWorth;
+}
+
 export const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
   downPaymentLakh: 40,
@@ -181,6 +274,7 @@ export const BASE_INPUTS: PlanInputs = {
   rentInflation: 6,
   appreciation: 6.5,
   equityReturn: 10,
+  monthlyExtraInvestmentThousands: 0,
   holdingPeriodYears: 15,
   purchaseYear: 0,
 };
