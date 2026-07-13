@@ -12,8 +12,10 @@ use crate::serving::{
 };
 
 use super::{
-    AssetDagRunManifest, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, AssetSourceInputs, KgSocietyViewMaterialization,
+    all_current_materialization_records_for_dependency, read_skill_fact_artifact_rows,
+    sort_materialization_records, AssetDagRunManifest, AssetDefinition, AssetFanInError, AssetId,
+    AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRunManifestStore,
+    AssetSourceInputs, DependencyFanInPolicy, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
     MaterializationRecord, PartitionResolutionError, PlanDecision, PlannerError,
     RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
@@ -227,39 +229,125 @@ impl AssetDagExecutor {
         run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
     ) -> Result<Vec<MaterializationId>, AssetDagExecutorError> {
+        Ok(self
+            .dependency_materialization_records(asset_id, run_partition, records_by_asset)
+            .await?
+            .into_iter()
+            .map(|record| record.materialization_id)
+            .collect())
+    }
+
+    async fn dependency_materialization_records(
+        &self,
+        asset_id: &AssetId,
+        run_partition: &AssetPartition,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
         let definition =
             self.registry
                 .get(asset_id)
                 .ok_or_else(|| AssetDagExecutorError::UnknownAsset {
                     asset_id: asset_id.clone(),
                 })?;
-        let mut parents = Vec::with_capacity(definition.dependencies.len());
+        let mut parents = Vec::new();
 
         for dependency in &definition.dependencies {
-            if let Some(record) = records_by_asset.get(dependency) {
-                parents.push(record.materialization_id.clone());
-                continue;
-            }
-
-            let dependency_partition = self.asset_partition(dependency, run_partition)?;
-            let current = self
-                .materializations
-                .current_record(dependency, &dependency_partition)
-                .await
-                .map_err(|err| {
-                    if err.is_not_found() {
-                        AssetDagExecutorError::MissingDependency {
-                            asset_id: asset_id.clone(),
-                            dependency: dependency.clone(),
-                        }
-                    } else {
-                        AssetDagExecutorError::Lake(err)
-                    }
-                })?;
-            parents.push(current.materialization_id);
+            let dependency_records = self
+                .dependency_records(
+                    definition,
+                    asset_id,
+                    dependency,
+                    run_partition,
+                    records_by_asset,
+                )
+                .await?;
+            parents.extend(dependency_records);
         }
 
         Ok(parents)
+    }
+
+    async fn dependency_records(
+        &self,
+        definition: &super::AssetDefinition,
+        asset_id: &AssetId,
+        dependency: &AssetId,
+        run_partition: &AssetPartition,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
+        let records = match definition.dependency_fan_in_policy(dependency) {
+            DependencyFanInPolicy::ResolvedPartition => {
+                vec![
+                    self.resolved_dependency_record(
+                        asset_id,
+                        dependency,
+                        run_partition,
+                        records_by_asset,
+                    )
+                    .await?,
+                ]
+            }
+            DependencyFanInPolicy::AllCurrentPartitions => {
+                self.all_current_dependency_records(dependency, records_by_asset)
+                    .await?
+            }
+        };
+
+        if records.is_empty() {
+            return Err(AssetDagExecutorError::MissingDependency {
+                asset_id: asset_id.clone(),
+                dependency: dependency.clone(),
+            });
+        }
+        Ok(records)
+    }
+
+    async fn resolved_dependency_record(
+        &self,
+        asset_id: &AssetId,
+        dependency: &AssetId,
+        run_partition: &AssetPartition,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<MaterializationRecord, AssetDagExecutorError> {
+        if let Some(record) = records_by_asset.get(dependency) {
+            return Ok(record.clone());
+        }
+
+        let dependency_partition = self.asset_partition(dependency, run_partition)?;
+        self.materializations
+            .current_record(dependency, &dependency_partition)
+            .await
+            .map_err(|err| {
+                if err.is_not_found() {
+                    AssetDagExecutorError::MissingDependency {
+                        asset_id: asset_id.clone(),
+                        dependency: dependency.clone(),
+                    }
+                } else {
+                    AssetDagExecutorError::Lake(err)
+                }
+            })
+    }
+
+    async fn all_current_dependency_records(
+        &self,
+        dependency: &AssetId,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
+        let mut records = all_current_materialization_records_for_dependency(
+            &self.registry,
+            &self.materializations,
+            dependency,
+        )
+        .await?;
+
+        if let Some(run_record) = records_by_asset.get(dependency) {
+            records.retain(|record| record.partition != run_record.partition);
+            records.push(run_record.clone());
+        }
+
+        sort_materialization_records(&mut records);
+        Ok(records)
     }
 
     fn asset_partition(
@@ -463,22 +551,36 @@ impl BuiltInAssetExecutor {
             }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
-                let parent_materializations = context
+                let parent_records = context
                     .dag
-                    .dependency_materializations(
+                    .dependency_materialization_records(
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
                     )
                     .await?;
+                let definition = context.dag.registry.get(context.asset_id).ok_or_else(|| {
+                    AssetDagExecutorError::UnknownAsset {
+                        asset_id: context.asset_id.clone(),
+                    }
+                })?;
+                let support_records = support_fact_records(definition, &parent_records);
+                let support_rows =
+                    read_skill_fact_artifact_rows(&context.dag.lake, &support_records).await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
                 let materialization = KgSocietyViewMaterializer::new(context.dag.lake.clone())
-                    .materialize_for_run(
+                    .materialize_for_run_with_skill_facts(
                         context.graph,
                         context.options.version.clone(),
                         vec![knowledge_graph_watermark(context.graph)],
                         parent_materializations,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
+                        &support_rows.facts,
+                        &support_rows.fact_annotations,
                     )
                     .await?;
                 Ok(ExecutedAsset::KgSocietyView(materialization))
@@ -579,6 +681,20 @@ fn skill_fact_watermarks(input: &SkillFactsInput) -> Vec<SourceWatermark> {
     }]
 }
 
+fn support_fact_records(
+    definition: &AssetDefinition,
+    parent_records: &[MaterializationRecord],
+) -> Vec<MaterializationRecord> {
+    parent_records
+        .iter()
+        .filter(|record| {
+            definition.dependency_fan_in_policy(&record.asset_id)
+                == DependencyFanInPolicy::AllCurrentPartitions
+        })
+        .cloned()
+        .collect()
+}
+
 enum ExecutedAsset {
     RedditThreadsDaily(MaterializationRecord),
     SkillFacts(MaterializationRecord),
@@ -601,6 +717,7 @@ pub enum AssetDagExecutorError {
     Planner(PlannerError),
     Manifest(RunManifestError),
     Lake(LakeError),
+    FanIn(AssetFanInError),
     Partition(PartitionResolutionError),
     KgSocietyView(KgSocietyViewMaterializeError),
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
@@ -642,6 +759,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Planner(err) => write!(f, "asset DAG planning failed: {err}"),
             Self::Manifest(err) => write!(f, "asset DAG manifest update failed: {err}"),
             Self::Lake(err) => write!(f, "asset DAG lake operation failed: {err}"),
+            Self::FanIn(err) => write!(f, "asset DAG fan-in failed: {err}"),
             Self::Partition(err) => write!(f, "asset partition resolution failed: {err}"),
             Self::KgSocietyView(err) => write!(f, "KG society view execution failed: {err}"),
             Self::RedditThreadSnapshot(err) => {
@@ -718,6 +836,12 @@ impl From<LakeError> for AssetDagExecutorError {
     }
 }
 
+impl From<AssetFanInError> for AssetDagExecutorError {
+    fn from(err: AssetFanInError) -> Self {
+        Self::FanIn(err)
+    }
+}
+
 impl From<KgSocietyViewMaterializeError> for AssetDagExecutorError {
     fn from(err: KgSocietyViewMaterializeError) -> Self {
         Self::KgSocietyView(err)
@@ -779,4 +903,48 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
     source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
         && source_inputs.google_review_facts.is_none()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::assets::{AssetStage, CostTier, RefreshCadence, TrustTier};
+
+    #[test]
+    fn support_fact_records_follow_registry_fan_in_policy() {
+        let custom_support_asset = AssetId::new("custom_support_facts").unwrap();
+        let resolved_asset = AssetId::new("resolved_dependency").unwrap();
+        let definition = AssetDefinition::new(
+            AssetId::new("kg_society_view").unwrap(),
+            AssetStage::Gold,
+            "test KG",
+            vec![custom_support_asset.clone(), resolved_asset.clone()],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        )
+        .with_dependency_fan_in_policy(
+            "custom_support_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        );
+        let custom_record = MaterializationRecord::succeeded(
+            custom_support_asset.clone(),
+            AssetStage::Silver,
+            AssetPartition::new([("dt", "2026-07-13"), ("source", "custom")]),
+            "2026-07-13",
+            Vec::new(),
+        );
+        let resolved_record = MaterializationRecord::succeeded(
+            resolved_asset,
+            AssetStage::Silver,
+            AssetPartition::global(),
+            "2026-07-13",
+            Vec::new(),
+        );
+
+        let support_records =
+            support_fact_records(&definition, &[custom_record.clone(), resolved_record]);
+
+        assert_eq!(support_records, vec![custom_record]);
+    }
 }

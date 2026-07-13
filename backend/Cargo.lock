@@ -318,8 +318,10 @@ version = "0.1.0"
 dependencies = [
  "arrow",
  "axum",
+ "bytes",
  "chrono",
  "daggy",
+ "futures-util",
  "object_store",
  "parquet",
  "serde",

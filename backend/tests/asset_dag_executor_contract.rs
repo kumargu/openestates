@@ -5,9 +5,9 @@ use backend::assets::{
     AssetDagExecutorError, AssetId, AssetMaterializationStore, AssetPartition,
     AssetRunManifestStore, AssetRunStepStatus, AssetSourceInputs, AssetStage, DagRunStatus,
     MaterializationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID,
+    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
+    SourceWatermark, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -16,7 +16,7 @@ use backend::knowledge::fact::{
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
-use backend::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
+use backend::serving::{ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID};
 use chrono::{Duration, TimeZone, Utc};
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use tempfile::tempdir;
@@ -29,7 +29,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
 
     let run_partition = source_run_partition();
-    let upstreams = seed_current_upstreams_for_partition(&store, now, &run_partition).await;
+    let upstreams = seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
 
     let options =
         AssetDagExecutionOptions::new(run_partition.clone(), now).with_version("2026-07-13T06:00Z");
@@ -102,6 +102,40 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     let run_partition = source_run_partition();
 
     let upstreams = seed_authoritative_upstreams(&store, now, &AssetPartition::global()).await;
+    let older_reddit_facts = seed_skill_fact_current(
+        &lake,
+        &store,
+        REDDIT_RESIDENT_FACTS_ASSET_ID,
+        "reddit",
+        "2026-07-12",
+        &AssetPartition::new([("dt", "2026-07-12"), ("source", "reddit")]),
+        vec![upstreams["canonical_society_nodes"]
+            .materialization_id
+            .clone()],
+        now - Duration::days(1),
+        "resident_clubhouse_signal",
+        "Residents mention a maintained clubhouse",
+        "Reddit",
+        "legacy-reddit-clubhouse",
+    )
+    .await;
+    let older_google_facts = seed_skill_fact_current(
+        &lake,
+        &store,
+        GOOGLE_REVIEW_FACTS_ASSET_ID,
+        "google",
+        "2026-07-06",
+        &AssetPartition::new([("dt", "2026-07-06"), ("source", "google")]),
+        vec![upstreams["canonical_society_nodes"]
+            .materialization_id
+            .clone()],
+        now - Duration::days(7),
+        "google_rating_signal",
+        "Reviews mention well maintained amenities",
+        "Google",
+        "legacy-google-rating",
+    )
+    .await;
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
         .with_source_inputs(mock_source_inputs(now));
@@ -209,10 +243,29 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         .contains(&reddit_facts.materialization_id));
     assert!(kg_record
         .parent_materializations
+        .contains(&older_reddit_facts.materialization_id));
+    assert!(kg_record
+        .parent_materializations
         .contains(&google_facts.materialization_id));
     assert!(kg_record
         .parent_materializations
+        .contains(&older_google_facts.materialization_id));
+    assert!(kg_record
+        .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
+    assert_eq!(kg_record.parent_materializations.len(), 6);
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
+        7
+    );
+
+    let serving_record = current_record(
+        &store,
+        SEARCH_SERVING_BUNDLE_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 7);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -336,7 +389,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
-    seed_current_upstreams_for_partition(&store, now, &run_partition).await;
+    seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
 
     let options = AssetDagExecutionOptions::new(run_partition, now);
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
@@ -416,6 +469,7 @@ async fn seed_authoritative_upstreams(
 }
 
 async fn seed_current_upstreams_for_partition(
+    lake: &LakeStore,
     store: &AssetMaterializationStore,
     now: chrono::DateTime<Utc>,
     run_partition: &AssetPartition,
@@ -470,28 +524,40 @@ async fn seed_current_upstreams_for_partition(
     }]);
     write_current(store, &reddit_threads).await;
 
-    let reddit_facts = materialization(
+    let reddit_facts = seed_skill_fact_current(
+        lake,
+        store,
         "reddit_resident_facts",
-        AssetStage::Silver,
+        "reddit",
         "2026-07-13",
-        now,
         &reddit_fact_partition_for(run_partition),
-    )
-    .with_parent_materializations(vec![
-        reddit_threads.materialization_id.clone(),
-        canonical.materialization_id.clone(),
-    ]);
-    write_current(store, &reddit_facts).await;
-
-    let google_facts = materialization(
-        "google_review_facts",
-        AssetStage::Silver,
-        "2026-07-13",
+        vec![
+            reddit_threads.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
         now,
-        &google_fact_partition_for(run_partition),
+        "resident_greenery_signal",
+        "Residents mention trees and open space",
+        "Reddit",
+        "seed-reddit-greenery",
     )
-    .with_parent_materializations(vec![canonical.materialization_id.clone()]);
-    write_current(store, &google_facts).await;
+    .await;
+
+    let google_facts = seed_skill_fact_current(
+        lake,
+        store,
+        "google_review_facts",
+        "google",
+        "2026-07-13",
+        &google_fact_partition_for(run_partition),
+        vec![canonical.materialization_id.clone()],
+        now,
+        "google_reviews_url",
+        "https://maps.google.com/?cid=green-acre",
+        "Google",
+        "seed-google-review-link",
+    )
+    .await;
 
     std::collections::HashMap::from([
         ("rera_registry_monthly", rera),
@@ -517,6 +583,67 @@ async fn current_record(
 async fn write_current(store: &AssetMaterializationStore, record: &MaterializationRecord) {
     store.write_materialization(record).await.unwrap();
     store.promote_current(record).await.unwrap();
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn seed_skill_fact_current(
+    lake: &LakeStore,
+    store: &AssetMaterializationStore,
+    asset_id_value: &str,
+    source: &str,
+    snapshot_date: &str,
+    partition: &AssetPartition,
+    parent_materializations: Vec<backend::assets::MaterializationId>,
+    learned_at: chrono::DateTime<Utc>,
+    fact_key: &str,
+    value: &str,
+    source_type: &str,
+    run_id: &str,
+) -> MaterializationRecord {
+    let fact = SkillFactRecord {
+        entity_id: "society:green-acre-whitefield".to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: "text".to_string(),
+        value_json: serde_json::to_string(&FactValue::Text(value.to_string())).unwrap(),
+        confidence: if source == "google" { 0.82 } else { 0.72 },
+        source_type: source_type.to_string(),
+        source_url: Some(format!("https://example.com/{run_id}")),
+        model: None,
+        skill_id: Some(format!("{source}_support_fact_extractor")),
+        triggered_by: Some("3bhk whitefield greenery".to_string()),
+        learned_at,
+        run_id: run_id.to_string(),
+        input_hash: format!("sha256:{run_id}"),
+    };
+    let annotation = SkillFactAnnotationRecord {
+        entity_id: "society:green-acre-whitefield".to_string(),
+        fact_key: fact_key.to_string(),
+        display_template: Some(format!("{fact_key}: {{value}}")),
+        answers_preferences_json: r#"["greenery","amenities","reviews"]"#.to_string(),
+        scoring_direction: Some("TextMatch".to_string()),
+        scoring_weight: Some(1.0),
+        scoring_thresholds_json: "[]".to_string(),
+    };
+    let materialization = SkillFactMaterializer::new(lake.clone())
+        .materialize_for_run(
+            asset_id_value,
+            source,
+            snapshot_date,
+            run_id,
+            &[fact],
+            &[annotation],
+            parent_materializations,
+            Vec::new(),
+            backend::assets::MaterializationId::new(),
+            partition.clone(),
+        )
+        .await
+        .unwrap();
+    store
+        .promote_current(&materialization.record)
+        .await
+        .unwrap();
+    materialization.record
 }
 
 fn materialization(
@@ -780,4 +907,21 @@ fn parquet_rows(bytes: &[u8]) -> i64 {
     std::fs::write(file.path(), bytes).unwrap();
     let reader = SerializedFileReader::new(File::open(file.path()).unwrap()).unwrap();
     reader.metadata().file_metadata().num_rows()
+}
+
+async fn serving_fact_rows(lake: &LakeStore, record: &MaterializationRecord) -> i64 {
+    let manifest_artifact = record
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.key.ends_with("manifest.json"))
+        .expect("serving record has manifest artifact");
+    let manifest: ServingBundleManifest = lake
+        .get_json(&LakeKey::new(manifest_artifact.key.clone()).unwrap())
+        .await
+        .unwrap();
+    let bytes = lake
+        .get_bytes(&LakeKey::new(manifest.fact_parquet_key).unwrap())
+        .await
+        .unwrap();
+    parquet_rows(&bytes)
 }

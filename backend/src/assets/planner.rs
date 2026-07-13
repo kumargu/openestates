@@ -7,8 +7,8 @@ use crate::lake::LakeError;
 
 use super::{
     AssetId, AssetMaterializationStore, AssetPartition, AssetRegistry, AssetStage, CostTier,
-    MaterializationId, MaterializationRecord, PartitionResolutionError, RefreshCadence,
-    RegistryError, TrustTier,
+    DependencyFanInPolicy, MaterializationId, MaterializationRecord, PartitionResolutionError,
+    RefreshCadence, RegistryError, TrustTier,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -209,7 +209,16 @@ impl AssetPlanner {
                 Err(err) => return Err(PlannerError::Lake(err)),
             };
 
-            let reason = plan_reason(definition, current.as_ref(), &records, &planned_ids, now);
+            let reason = plan_reason(
+                definition,
+                current.as_ref(),
+                &records,
+                &planned_ids,
+                &self.registry,
+                &self.materializations,
+                now,
+            )
+            .await?;
             if reason.is_some() {
                 planned_ids.insert(asset_id.clone());
             }
@@ -267,42 +276,48 @@ fn plan_entry(
     }
 }
 
-fn plan_reason(
+async fn plan_reason(
     definition: &super::AssetDefinition,
     current: Option<&MaterializationRecord>,
     records: &HashMap<AssetId, Option<MaterializationRecord>>,
     planned_ids: &HashSet<AssetId>,
+    registry: &AssetRegistry,
+    materializations: &AssetMaterializationStore,
     now: DateTime<Utc>,
-) -> Option<PlanReason> {
+) -> Result<Option<PlanReason>, PlannerError> {
     let current = match current {
         Some(record) => record,
-        None => return Some(PlanReason::Missing),
+        None => return Ok(Some(PlanReason::Missing)),
     };
 
+    let mut expected_by_dependency = Vec::new();
+    let mut expected_parent_materializations = Vec::new();
     for dependency in &definition.dependencies {
         if planned_ids.contains(dependency) {
-            return Some(PlanReason::DependencyPending {
+            return Ok(Some(PlanReason::DependencyPending {
                 asset_id: dependency.clone(),
-            });
+            }));
         }
 
-        let dependency_record = records.get(dependency).and_then(|record| record.as_ref());
-        let dependency_record = match dependency_record {
-            Some(record) => record,
-            None => {
-                return Some(PlanReason::DependencyPending {
-                    asset_id: dependency.clone(),
-                })
-            }
-        };
-        if !current
-            .parent_materializations
-            .contains(&dependency_record.materialization_id)
-        {
-            return Some(PlanReason::DependencyChanged {
+        let dependency_records =
+            dependency_records(definition, dependency, records, registry, materializations).await?;
+        if dependency_records.is_empty() {
+            return Ok(Some(PlanReason::DependencyPending {
                 asset_id: dependency.clone(),
-            });
+            }));
         }
+        let dependency_parent_materializations: Vec<_> = dependency_records
+            .into_iter()
+            .map(|record| record.materialization_id)
+            .collect();
+        expected_parent_materializations.extend(dependency_parent_materializations.clone());
+        expected_by_dependency.push((dependency.clone(), dependency_parent_materializations));
+    }
+
+    if current.parent_materializations != expected_parent_materializations {
+        return Ok(Some(PlanReason::DependencyChanged {
+            asset_id: changed_dependency(definition, current, &expected_by_dependency),
+        }));
     }
 
     let freshness = asset_freshness(definition.refresh, Some(current), now);
@@ -311,14 +326,72 @@ fn plan_reason(
         freshness.current_age_seconds,
         freshness.max_age_seconds,
     ) {
-        return Some(PlanReason::Stale {
+        return Ok(Some(PlanReason::Stale {
             cadence: definition.refresh,
             age_seconds,
             max_age_seconds,
-        });
+        }));
     }
 
-    None
+    Ok(None)
+}
+
+async fn dependency_records(
+    definition: &super::AssetDefinition,
+    dependency: &AssetId,
+    records: &HashMap<AssetId, Option<MaterializationRecord>>,
+    registry: &AssetRegistry,
+    materializations: &AssetMaterializationStore,
+) -> Result<Vec<MaterializationRecord>, PlannerError> {
+    match definition.dependency_fan_in_policy(dependency) {
+        DependencyFanInPolicy::ResolvedPartition => Ok(records
+            .get(dependency)
+            .and_then(|record| record.clone())
+            .into_iter()
+            .collect()),
+        DependencyFanInPolicy::AllCurrentPartitions => {
+            let dependency_definition = registry
+                .get(dependency)
+                .expect("validated dependency exists in registry");
+            Ok(materializations
+                .current_records_for_asset(dependency)
+                .await
+                .map_err(PlannerError::Lake)?
+                .into_iter()
+                .filter(|record| {
+                    dependency_definition
+                        .partition_policy
+                        .matches_materialized_partition(&record.partition)
+                })
+                .collect())
+        }
+    }
+}
+
+fn changed_dependency(
+    definition: &super::AssetDefinition,
+    current: &MaterializationRecord,
+    expected_by_dependency: &[(AssetId, Vec<MaterializationId>)],
+) -> AssetId {
+    for (dependency, expected_parents) in expected_by_dependency {
+        if !expected_parents
+            .iter()
+            .all(|parent| current.parent_materializations.contains(parent))
+        {
+            return dependency.clone();
+        }
+    }
+    if let Some(dependency) = definition.dependencies.iter().find(|dependency| {
+        definition.dependency_fan_in_policy(dependency)
+            == DependencyFanInPolicy::AllCurrentPartitions
+    }) {
+        return dependency.clone();
+    }
+    definition
+        .dependencies
+        .first()
+        .cloned()
+        .unwrap_or_else(|| definition.id.clone())
 }
 
 fn asset_freshness(

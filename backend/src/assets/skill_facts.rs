@@ -1,16 +1,19 @@
 use std::fmt;
 use std::sync::Arc;
 
-use arrow::array::{ArrayRef, Float32Array, StringArray};
+use arrow::array::{Array, ArrayRef, Float32Array, StringArray};
 use arrow::datatypes::{DataType, Field, Schema};
 use arrow::record_batch::RecordBatch;
+use bytes::Bytes;
 use chrono::{DateTime, Utc};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
-use crate::lake::{LakeError, LakeStore};
+use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::types::AssetIdError;
 use super::{
@@ -69,6 +72,12 @@ pub struct SkillFactManifest {
 pub struct SkillFactMaterialization {
     pub manifest: SkillFactManifest,
     pub record: MaterializationRecord,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct SkillFactArtifactRows {
+    pub facts: Vec<SkillFactRecord>,
+    pub fact_annotations: Vec<SkillFactAnnotationRecord>,
 }
 
 #[derive(Clone)]
@@ -226,6 +235,25 @@ impl SkillFactMaterializer {
     }
 }
 
+pub async fn read_skill_fact_artifact_rows(
+    lake: &LakeStore,
+    materializations: &[MaterializationRecord],
+) -> Result<SkillFactArtifactRows, SkillFactMaterializeError> {
+    let mut rows = SkillFactArtifactRows::default();
+
+    for materialization in materializations {
+        rows.facts.extend(read_facts_parquet_records(
+            read_artifact_bytes(lake, materialization, "facts/part-00000.parquet").await?,
+        )?);
+        rows.fact_annotations.extend(read_fact_annotation_records(
+            read_artifact_bytes(lake, materialization, "fact_annotations/part-00000.parquet")
+                .await?,
+        )?);
+    }
+
+    Ok(rows)
+}
+
 fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMaterializeError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
@@ -266,6 +294,52 @@ fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMa
     .map_err(SkillFactMaterializeError::Arrow)?;
 
     write_batch(batch)
+}
+
+fn read_facts_parquet_records(
+    bytes: Vec<u8>,
+) -> Result<Vec<SkillFactRecord>, SkillFactMaterializeError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()? {
+        let batch = batch?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let value_type = string_column(&batch, "value_type")?;
+        let value_json = string_column(&batch, "value_json")?;
+        let confidence = float32_column(&batch, "confidence")?;
+        let source_type = string_column(&batch, "source_type")?;
+        let source_url = string_column(&batch, "source_url")?;
+        let model = string_column(&batch, "model")?;
+        let skill_id = string_column(&batch, "skill_id")?;
+        let triggered_by = string_column(&batch, "triggered_by")?;
+        let learned_at = string_column(&batch, "learned_at")?;
+        let run_id = string_column(&batch, "run_id")?;
+        let input_hash = string_column(&batch, "input_hash")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(SkillFactRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                value_type: required_string(value_type, row, "value_type")?,
+                value_json: required_string(value_json, row, "value_json")?,
+                confidence: required_f32(confidence, row, "confidence")?,
+                source_type: required_string(source_type, row, "source_type")?,
+                source_url: optional_string(source_url, row),
+                model: optional_string(model, row),
+                skill_id: optional_string(skill_id, row),
+                triggered_by: optional_string(triggered_by, row),
+                learned_at: DateTime::parse_from_rfc3339(&required_string(
+                    learned_at,
+                    row,
+                    "learned_at",
+                )?)?
+                .with_timezone(&Utc),
+                run_id: required_string(run_id, row, "run_id")?,
+                input_hash: required_string(input_hash, row, "input_hash")?,
+            });
+        }
+    }
+    Ok(records)
 }
 
 fn write_fact_annotations_parquet(
@@ -319,6 +393,43 @@ fn write_fact_annotations_parquet(
     write_batch(batch)
 }
 
+fn read_fact_annotation_records(
+    bytes: Vec<u8>,
+) -> Result<Vec<SkillFactAnnotationRecord>, SkillFactMaterializeError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()? {
+        let batch = batch?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let fact_key = string_column(&batch, "fact_key")?;
+        let display_template = string_column(&batch, "display_template")?;
+        let answers_preferences_json = string_column(&batch, "answers_preferences_json")?;
+        let scoring_direction = string_column(&batch, "scoring_direction")?;
+        let scoring_weight = float32_column(&batch, "scoring_weight")?;
+        let scoring_thresholds_json = string_column(&batch, "scoring_thresholds_json")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(SkillFactAnnotationRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                fact_key: required_string(fact_key, row, "fact_key")?,
+                display_template: optional_string(display_template, row),
+                answers_preferences_json: required_string(
+                    answers_preferences_json,
+                    row,
+                    "answers_preferences_json",
+                )?,
+                scoring_direction: optional_string(scoring_direction, row),
+                scoring_weight: optional_f32(scoring_weight, row),
+                scoring_thresholds_json: required_string(
+                    scoring_thresholds_json,
+                    row,
+                    "scoring_thresholds_json",
+                )?,
+            });
+        }
+    }
+    Ok(records)
+}
+
 fn write_batch(batch: RecordBatch) -> Result<Vec<u8>, SkillFactMaterializeError> {
     let props = WriterProperties::builder()
         .set_compression(Compression::ZSTD(ZstdLevel::default()))
@@ -341,12 +452,231 @@ fn optional_string_array(values: impl Iterator<Item = Option<String>>) -> ArrayR
     Arc::new(StringArray::from(values.collect::<Vec<_>>()))
 }
 
+async fn read_artifact_bytes(
+    lake: &LakeStore,
+    materialization: &MaterializationRecord,
+    suffix: &str,
+) -> Result<Vec<u8>, SkillFactMaterializeError> {
+    let artifact = artifact_ref(materialization, suffix)?;
+    validate_artifact_ref(materialization, artifact, suffix)?;
+    let key = LakeKey::new(artifact.key.clone()).map_err(SkillFactMaterializeError::Key)?;
+    let bytes = lake.get_bytes(&key).await?;
+    validate_artifact_bytes(materialization, artifact, &bytes)?;
+    Ok(bytes)
+}
+
+fn artifact_ref<'a>(
+    materialization: &'a MaterializationRecord,
+    suffix: &str,
+) -> Result<&'a ArtifactRef, SkillFactMaterializeError> {
+    materialization
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.key.ends_with(suffix))
+        .ok_or_else(|| SkillFactMaterializeError::MissingArtifact {
+            asset_id: materialization.asset_id.clone(),
+            suffix: suffix.to_string(),
+        })
+}
+
+fn validate_artifact_ref(
+    materialization: &MaterializationRecord,
+    artifact: &ArtifactRef,
+    suffix: &str,
+) -> Result<(), SkillFactMaterializeError> {
+    let expected_prefix = format!("silver/{}/", materialization.asset_id);
+    if !artifact.key.starts_with(&expected_prefix) {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            format!("expected key to start with {expected_prefix}"),
+        ));
+    }
+    if !artifact.key.ends_with(suffix) {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            format!("expected key to end with {suffix}"),
+        ));
+    }
+    if artifact.content_type != "application/vnd.apache.parquet" {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            format!(
+                "expected Parquet content type, got {}",
+                artifact.content_type
+            ),
+        ));
+    }
+    if artifact.hash_algorithm != "sha256" {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            format!("expected sha256 hash, got {}", artifact.hash_algorithm),
+        ));
+    }
+    if artifact.size_bytes == 0 {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            "artifact size cannot be zero",
+        ));
+    }
+    if artifact.content_hash.len() != 64
+        || !artifact
+            .content_hash
+            .chars()
+            .all(|ch| ch.is_ascii_hexdigit())
+    {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            "artifact hash must be 64 hex characters",
+        ));
+    }
+    Ok(())
+}
+
+fn validate_artifact_bytes(
+    materialization: &MaterializationRecord,
+    artifact: &ArtifactRef,
+    bytes: &[u8],
+) -> Result<(), SkillFactMaterializeError> {
+    if artifact.size_bytes != bytes.len() {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            format!(
+                "artifact size {} does not match bytes {}",
+                artifact.size_bytes,
+                bytes.len()
+            ),
+        ));
+    }
+    let actual_hash = sha256_hex(bytes);
+    if artifact.content_hash != actual_hash {
+        return Err(invalid_artifact_metadata(
+            materialization,
+            artifact,
+            "artifact content hash does not match bytes",
+        ));
+    }
+    Ok(())
+}
+
+fn invalid_artifact_metadata(
+    materialization: &MaterializationRecord,
+    artifact: &ArtifactRef,
+    message: impl Into<String>,
+) -> SkillFactMaterializeError {
+    SkillFactMaterializeError::InvalidArtifactMetadata {
+        asset_id: materialization.asset_id.clone(),
+        key: artifact.key.clone(),
+        message: message.into(),
+    }
+}
+
+fn sha256_hex(bytes: &[u8]) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for byte in digest {
+        use std::fmt::Write as _;
+        let _ = write!(&mut hex, "{byte:02x}");
+    }
+    hex
+}
+
+fn string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a StringArray, SkillFactMaterializeError> {
+    let index = batch.schema().index_of(name)?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<StringArray>()
+        .ok_or_else(|| {
+            SkillFactMaterializeError::InvalidParquet(format!("column {name} is not Utf8"))
+        })
+}
+
+fn float32_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<&'a Float32Array, SkillFactMaterializeError> {
+    let index = batch.schema().index_of(name)?;
+    batch
+        .column(index)
+        .as_any()
+        .downcast_ref::<Float32Array>()
+        .ok_or_else(|| {
+            SkillFactMaterializeError::InvalidParquet(format!("column {name} is not Float32"))
+        })
+}
+
+fn required_string(
+    array: &StringArray,
+    row: usize,
+    column: &str,
+) -> Result<String, SkillFactMaterializeError> {
+    if array.is_null(row) {
+        return Err(SkillFactMaterializeError::InvalidParquet(format!(
+            "column {column} is unexpectedly null at row {row}"
+        )));
+    }
+    Ok(array.value(row).to_string())
+}
+
+fn optional_string(array: &StringArray, row: usize) -> Option<String> {
+    if array.is_null(row) {
+        None
+    } else {
+        Some(array.value(row).to_string())
+    }
+}
+
+fn required_f32(
+    array: &Float32Array,
+    row: usize,
+    column: &str,
+) -> Result<f32, SkillFactMaterializeError> {
+    if array.is_null(row) {
+        return Err(SkillFactMaterializeError::InvalidParquet(format!(
+            "column {column} is unexpectedly null at row {row}"
+        )));
+    }
+    Ok(array.value(row))
+}
+
+fn optional_f32(array: &Float32Array, row: usize) -> Option<f32> {
+    if array.is_null(row) {
+        None
+    } else {
+        Some(array.value(row))
+    }
+}
+
 #[derive(Debug)]
 pub enum SkillFactMaterializeError {
     Arrow(arrow::error::ArrowError),
     AssetId(AssetIdError),
+    Chrono(chrono::ParseError),
     EmptyFacts,
+    InvalidArtifactMetadata {
+        asset_id: AssetId,
+        key: String,
+        message: String,
+    },
+    InvalidParquet(String),
+    Key(crate::lake::keys::KeyError),
     Lake(LakeError),
+    MissingArtifact {
+        asset_id: AssetId,
+        suffix: String,
+    },
     Parquet(parquet::errors::ParquetError),
 }
 
@@ -355,8 +685,23 @@ impl fmt::Display for SkillFactMaterializeError {
         match self {
             Self::Arrow(err) => write!(f, "skill facts Arrow record batch error: {err}"),
             Self::AssetId(err) => write!(f, "invalid skill facts asset id: {err}"),
+            Self::Chrono(err) => write!(f, "skill facts timestamp parse error: {err}"),
             Self::EmptyFacts => f.write_str("skill facts batch cannot be empty"),
+            Self::InvalidArtifactMetadata {
+                asset_id,
+                key,
+                message,
+            } => write!(
+                f,
+                "invalid skill facts artifact metadata for {asset_id} at {key}: {message}"
+            ),
+            Self::InvalidParquet(message) => write!(f, "invalid skill facts Parquet: {message}"),
+            Self::Key(err) => write!(f, "skill facts artifact key error: {err}"),
             Self::Lake(err) => write!(f, "skill facts lake error: {err}"),
+            Self::MissingArtifact { asset_id, suffix } => write!(
+                f,
+                "skill facts materialization {asset_id} is missing artifact ending in {suffix}"
+            ),
             Self::Parquet(err) => write!(f, "skill facts Parquet error: {err}"),
         }
     }
@@ -367,5 +712,23 @@ impl std::error::Error for SkillFactMaterializeError {}
 impl From<LakeError> for SkillFactMaterializeError {
     fn from(err: LakeError) -> Self {
         Self::Lake(err)
+    }
+}
+
+impl From<arrow::error::ArrowError> for SkillFactMaterializeError {
+    fn from(err: arrow::error::ArrowError) -> Self {
+        Self::Arrow(err)
+    }
+}
+
+impl From<chrono::ParseError> for SkillFactMaterializeError {
+    fn from(err: chrono::ParseError) -> Self {
+        Self::Chrono(err)
+    }
+}
+
+impl From<parquet::errors::ParquetError> for SkillFactMaterializeError {
+    fn from(err: parquet::errors::ParquetError) -> Self {
+        Self::Parquet(err)
     }
 }

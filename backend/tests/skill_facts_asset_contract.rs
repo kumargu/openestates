@@ -1,9 +1,9 @@
 use std::fs::File;
 
 use backend::assets::{
-    AssetId, AssetMaterializationStore, AssetPartition, RedditThreadSnapshotMaterializer,
-    RedditThreadSnapshotRecord, SkillFactAnnotationRecord, SkillFactMaterializeError,
-    SkillFactMaterializer, SkillFactRecord, SourceWatermark,
+    read_skill_fact_artifact_rows, AssetId, AssetMaterializationStore, AssetPartition,
+    RedditThreadSnapshotMaterializer, RedditThreadSnapshotRecord, SkillFactAnnotationRecord,
+    SkillFactMaterializeError, SkillFactMaterializer, SkillFactRecord, SourceWatermark,
 };
 use backend::lake::{LakeKey, LakeStore};
 use chrono::{TimeZone, Utc};
@@ -160,6 +160,64 @@ async fn empty_skill_fact_batches_do_not_promote_current_pointer() {
         )
         .await;
     assert!(current.unwrap_err().is_not_found());
+}
+
+#[tokio::test]
+async fn skill_fact_reader_rejects_corrupt_artifact_metadata() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let materialization = SkillFactMaterializer::new(lake.clone())
+        .materialize_and_promote(
+            "reddit_resident_facts",
+            "reddit",
+            "2026-07-13",
+            "run-reddit-facts-2026-07-13",
+            &[SkillFactRecord {
+                entity_id: "society:large-green".to_string(),
+                fact_key: "resident_greenery_signal".to_string(),
+                value_type: "text".to_string(),
+                value_json: r#"{"type":"Text","data":"Residents mention trees"}"#.to_string(),
+                confidence: 0.7,
+                source_type: "Reddit".to_string(),
+                source_url: Some(
+                    "https://reddit.com/r/BangaloreRealEstates/comments/alpha".to_string(),
+                ),
+                model: None,
+                skill_id: Some("reddit_resident_fact_extractor".to_string()),
+                triggered_by: Some("3bhk whitefield greenery".to_string()),
+                learned_at: Utc.with_ymd_and_hms(2026, 7, 13, 4, 35, 0).unwrap(),
+                run_id: "run-reddit-facts-2026-07-13".to_string(),
+                input_hash: "sha256:reddit-alpha".to_string(),
+            }],
+            &[SkillFactAnnotationRecord {
+                entity_id: "society:large-green".to_string(),
+                fact_key: "resident_greenery_signal".to_string(),
+                display_template: Some("Resident greenery signal: {value}".to_string()),
+                answers_preferences_json: r#"["greenery"]"#.to_string(),
+                scoring_direction: Some("TextMatch".to_string()),
+                scoring_weight: Some(1.4),
+                scoring_thresholds_json: "[]".to_string(),
+            }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let mut corrupt_record = materialization.record.clone();
+    let fact_artifact = corrupt_record
+        .artifacts
+        .iter_mut()
+        .find(|artifact| artifact.key.ends_with("facts/part-00000.parquet"))
+        .unwrap();
+    fact_artifact.content_type = "application/json".to_string();
+
+    let err = read_skill_fact_artifact_rows(&lake, &[corrupt_record])
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        SkillFactMaterializeError::InvalidArtifactMetadata { .. }
+    ));
 }
 
 fn assert_is_parquet(bytes: &[u8]) {

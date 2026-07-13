@@ -1,6 +1,10 @@
 use std::path::PathBuf;
 
-use backend::assets::{KgSocietyViewMaterializer, SourceWatermark};
+use backend::assets::{
+    all_current_partition_dependency_records_for_asset, default_openestates_registry,
+    read_skill_fact_artifact_rows, AssetId, AssetMaterializationStore, KgSocietyViewMaterializer,
+    SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
+};
 use backend::knowledge::store as kg_store;
 use backend::lake::LakeStore;
 use backend::serving::SearchServingBundleMaterializer;
@@ -23,6 +27,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lake_root = project_root.join("data").join("lake");
     let lake = LakeStore::local(&lake_root)?;
+    let registry = default_openestates_registry();
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let kg_asset_id = AssetId::new(KG_SOCIETY_VIEW_ASSET_ID)?;
+    let support_records = all_current_partition_dependency_records_for_asset(
+        &registry,
+        &materializations,
+        &kg_asset_id,
+    )
+    .await?;
+    let support_rows = read_skill_fact_artifact_rows(&lake, &support_records).await?;
+    let support_parent_materializations = support_records
+        .iter()
+        .map(|record| record.materialization_id.clone())
+        .collect();
     let source_watermarks = vec![SourceWatermark {
         source: "knowledge_graph".to_string(),
         high_watermark: format!(
@@ -31,11 +49,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ),
     }];
     let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
-        .materialize_and_promote(
+        .materialize_and_promote_with_skill_facts(
             &graph,
             version.clone(),
             source_watermarks.clone(),
-            Vec::new(),
+            support_parent_materializations,
+            &support_rows.facts,
+            &support_rows.fact_annotations,
         )
         .await?;
     let materialization = SearchServingBundleMaterializer::new(lake)
@@ -56,6 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  content hash: {}",
         kg_materialization.manifest.graph_content_hash
     );
+    println!("  support fact materializations: {}", support_records.len());
     println!(
         "Promoted search serving bundle {}",
         materialization.manifest.bundle_version

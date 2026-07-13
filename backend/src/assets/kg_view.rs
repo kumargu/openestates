@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt;
 use std::fmt::Write as _;
 use std::sync::Arc;
@@ -18,7 +18,8 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
 
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
-    MaterializationId, MaterializationRecord, SourceWatermark,
+    MaterializationId, MaterializationRecord, SkillFactAnnotationRecord, SkillFactRecord,
+    SourceWatermark,
 };
 
 pub const KG_SOCIETY_VIEW_ASSET_ID: &str = "kg_society_view";
@@ -147,19 +148,8 @@ impl KgViewRecords {
                 });
             }
         }
-        facts.sort_by(|left, right| {
-            left.entity_id
-                .cmp(&right.entity_id)
-                .then(left.fact_key.cmp(&right.fact_key))
-                .then(left.fact_version.cmp(&right.fact_version))
-                .then(left.source_type.cmp(&right.source_type))
-                .then(left.learned_at.cmp(&right.learned_at))
-        });
-        fact_annotations.sort_by(|left, right| {
-            left.entity_id
-                .cmp(&right.entity_id)
-                .then(left.fact_key.cmp(&right.fact_key))
-        });
+        sort_facts(&mut facts);
+        sort_fact_annotations(&mut fact_annotations);
 
         let mut edges: Vec<_> = graph
             .edges
@@ -192,6 +182,102 @@ impl KgViewRecords {
             edges,
             content_hash,
         })
+    }
+
+    pub fn from_graph_with_skill_facts(
+        graph: &KnowledgeGraph,
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<Self, KgSocietyViewMaterializeError> {
+        let mut records = Self::from_graph(graph)?;
+        records.merge_skill_facts(support_facts, support_annotations)?;
+        Ok(records)
+    }
+
+    fn merge_skill_facts(
+        &mut self,
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<(), KgSocietyViewMaterializeError> {
+        let known_entities: HashSet<_> = self
+            .entities
+            .iter()
+            .map(|entity| entity.entity_id.as_str())
+            .collect();
+
+        let mut support_fact_records = Vec::new();
+        let mut support_fact_keys = HashSet::<(String, String)>::new();
+
+        for fact in support_facts
+            .iter()
+            .filter(|fact| known_entities.contains(fact.entity_id.as_str()))
+        {
+            let fact_value: FactValue = serde_json::from_str(&fact.value_json)?;
+            let record = KgViewFactRecord {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                fact_version: 1,
+                value_type: fact.value_type.clone(),
+                value_text: fact_value_text(&fact_value),
+                value_json: fact.value_json.clone(),
+                confidence: fact.confidence,
+                source_type: fact.source_type.clone(),
+                source_url: fact.source_url.clone(),
+                model: fact.model.clone(),
+                skill_id: fact.skill_id.clone(),
+                triggered_by: fact.triggered_by.clone(),
+                learned_at: fact.learned_at,
+            };
+            support_fact_keys.insert((record.entity_id.clone(), record.fact_key.clone()));
+            support_fact_records.push(record);
+        }
+
+        let mut support_annotation_records = Vec::new();
+        for annotation in support_annotations
+            .iter()
+            .filter(|annotation| known_entities.contains(annotation.entity_id.as_str()))
+            .filter(|annotation| {
+                support_fact_keys
+                    .contains(&(annotation.entity_id.clone(), annotation.fact_key.clone()))
+            })
+        {
+            support_annotation_records.push(KgViewFactAnnotationRecord {
+                entity_id: annotation.entity_id.clone(),
+                fact_key: annotation.fact_key.clone(),
+                display_template: annotation.display_template.clone(),
+                answers_preferences_json: annotation.answers_preferences_json.clone(),
+                scoring_direction: annotation.scoring_direction.clone(),
+                scoring_weight: annotation.scoring_weight,
+                scoring_thresholds_json: annotation.scoring_thresholds_json.clone(),
+            });
+        }
+
+        self.facts.extend(dedupe_facts(support_fact_records));
+        sort_facts(&mut self.facts);
+        self.fact_annotations
+            .extend(dedupe_fact_annotations(support_annotation_records));
+        sort_fact_annotations(&mut self.fact_annotations);
+        self.update_entity_fact_counts();
+        self.content_hash = content_hash(
+            &self.entities,
+            &self.facts,
+            &self.fact_annotations,
+            &self.edges,
+        )?;
+        Ok(())
+    }
+
+    fn update_entity_fact_counts(&mut self) {
+        let mut fact_counts = HashMap::<&str, u32>::new();
+        for fact in &self.facts {
+            *fact_counts.entry(fact.entity_id.as_str()).or_default() += 1;
+        }
+        for entity in &mut self.entities {
+            entity.fact_count = fact_counts
+                .get(entity.entity_id.as_str())
+                .copied()
+                .unwrap_or(0);
+        }
     }
 }
 
@@ -262,14 +348,37 @@ impl KgSocietyViewMaterializer {
         source_watermarks: Vec<SourceWatermark>,
         parent_materializations: Vec<MaterializationId>,
     ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        self.materialize_and_promote_with_skill_facts(
+            graph,
+            view_version,
+            source_watermarks,
+            parent_materializations,
+            &[],
+            &[],
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_and_promote_with_skill_facts(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
         let materialization = self
-            .materialize_for_run(
+            .materialize_for_run_with_skill_facts(
                 graph,
                 view_version,
                 source_watermarks,
                 parent_materializations,
                 MaterializationId::new(),
                 AssetPartition::global(),
+                support_facts,
+                support_annotations,
             )
             .await?;
         self.materializations
@@ -319,10 +428,38 @@ impl KgSocietyViewMaterializer {
             parent_materializations,
             run_id,
             partition,
+            &[],
+            &[],
         )
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_for_run_with_skill_facts(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        self.materialize_for_run_inner(
+            graph,
+            view_version,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            partition,
+            support_facts,
+            support_annotations,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn materialize_for_run_inner(
         &self,
         graph: &KnowledgeGraph,
@@ -331,9 +468,12 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
         let view_version = view_version.into();
-        let records = KgViewRecords::from_graph(graph)?;
+        let records =
+            KgViewRecords::from_graph_with_skill_facts(graph, support_facts, support_annotations)?;
 
         let entity_key = AssetPathBuilder::gold_asset_key(
             KG_SOCIETY_VIEW_ASSET_ID,
@@ -707,6 +847,104 @@ fn fact_value_text(value: &FactValue) -> Option<String> {
 
 fn metadata_json(metadata: &HashMap<String, String>) -> String {
     serde_json::to_string(metadata).expect("edge metadata should serialize")
+}
+
+fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
+    let mut by_key = BTreeMap::<FactDedupeKey, KgViewFactRecord>::new();
+    for fact in facts {
+        let key = FactDedupeKey {
+            entity_id: fact.entity_id.clone(),
+            fact_key: fact.fact_key.clone(),
+            source_type: fact.source_type.clone(),
+            source_url: fact.source_url.clone(),
+            skill_id: fact.skill_id.clone(),
+        };
+        match by_key.get(&key) {
+            Some(existing) if better_fact(existing, &fact) => {
+                by_key.insert(key, fact);
+            }
+            None => {
+                by_key.insert(key, fact);
+            }
+            Some(_) => {}
+        }
+    }
+
+    let mut facts = by_key.into_values().collect::<Vec<_>>();
+    sort_facts(&mut facts);
+    facts
+}
+
+fn sort_facts(facts: &mut [KgViewFactRecord]) {
+    facts.sort_by(|left, right| {
+        left.entity_id
+            .cmp(&right.entity_id)
+            .then(left.fact_key.cmp(&right.fact_key))
+            .then(left.fact_version.cmp(&right.fact_version))
+            .then(left.source_type.cmp(&right.source_type))
+            .then(left.source_url.cmp(&right.source_url))
+            .then(left.skill_id.cmp(&right.skill_id))
+            .then(left.learned_at.cmp(&right.learned_at))
+    });
+}
+
+fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> bool {
+    candidate.confidence > existing.confidence
+        || ((candidate.confidence - existing.confidence).abs() < f32::EPSILON
+            && candidate.learned_at > existing.learned_at)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct FactDedupeKey {
+    entity_id: String,
+    fact_key: String,
+    source_type: String,
+    source_url: Option<String>,
+    skill_id: Option<String>,
+}
+
+fn dedupe_fact_annotations(
+    annotations: Vec<KgViewFactAnnotationRecord>,
+) -> Vec<KgViewFactAnnotationRecord> {
+    let mut by_key = BTreeMap::<(String, String), KgViewFactAnnotationRecord>::new();
+    for annotation in annotations {
+        let key = (annotation.entity_id.clone(), annotation.fact_key.clone());
+        match by_key.get(&key) {
+            Some(existing) if annotation_quality(&annotation) > annotation_quality(existing) => {
+                by_key.insert(key, annotation);
+            }
+            None => {
+                by_key.insert(key, annotation);
+            }
+            Some(_) => {}
+        }
+    }
+
+    let mut annotations = by_key.into_values().collect::<Vec<_>>();
+    sort_fact_annotations(&mut annotations);
+    annotations
+}
+
+fn sort_fact_annotations(annotations: &mut [KgViewFactAnnotationRecord]) {
+    annotations.sort_by(|left, right| {
+        left.entity_id
+            .cmp(&right.entity_id)
+            .then(left.fact_key.cmp(&right.fact_key))
+    });
+}
+
+fn annotation_quality(annotation: &KgViewFactAnnotationRecord) -> i32 {
+    let mut quality = 0;
+    if annotation.display_template.is_some() {
+        quality += 1;
+    }
+    if annotation.scoring_direction.is_some() {
+        quality += 1;
+    }
+    if annotation.scoring_weight.is_some() {
+        quality += 1;
+    }
+    quality + annotation.answers_preferences_json.len() as i32
 }
 
 fn content_hash(

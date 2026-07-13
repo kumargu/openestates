@@ -9,6 +9,7 @@
 //! schema descriptors, trust policy, and current pointers.
 
 pub mod executor;
+pub mod fan_in;
 pub mod kg_view;
 pub mod materialization;
 pub mod paths;
@@ -22,6 +23,11 @@ pub mod types;
 
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
+};
+pub use fan_in::{
+    all_current_materialization_records_for_dependency,
+    all_current_partition_dependency_records_for_asset, sort_materialization_records,
+    AssetFanInError,
 };
 pub use kg_view::{
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
@@ -42,16 +48,17 @@ pub use reddit::{
 };
 pub use registry::{
     default_openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
-    PartitionCoordinate, PartitionResolutionError, RefreshCadence, RegistryError, TrustTier,
+    DependencyFanInPolicy, DependencyFanInRule, PartitionCoordinate, PartitionResolutionError,
+    RefreshCadence, RegistryError, TrustTier,
 };
 pub use run_manifest::{
     AssetDagRunManifest, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,
     CurrentDagRunPointer, DagRunStatus, RunManifestError,
 };
 pub use skill_facts::{
-    SkillFactAnnotationRecord, SkillFactManifest, SkillFactMaterialization,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactRecord,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactArtifactRows,
+    SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
+    SkillFactRecord, GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
 pub use source_inputs::{AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput};
 pub use types::{

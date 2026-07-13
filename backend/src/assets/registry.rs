@@ -112,6 +112,24 @@ impl AssetPartitionPolicy {
             }
         }
     }
+
+    pub fn matches_materialized_partition(&self, partition: &AssetPartition) -> bool {
+        match self {
+            Self::Global => partition.is_global(),
+            Self::RunPartition => true,
+            Self::Composite { coordinates } => {
+                if partition.parts().len() != coordinates.len() {
+                    return false;
+                }
+                coordinates.iter().all(|coordinate| match coordinate {
+                    PartitionCoordinate::FromRun { key } => partition.value(key).is_some(),
+                    PartitionCoordinate::Static { key, value } => {
+                        partition.value(key) == Some(value.as_str())
+                    }
+                })
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -166,6 +184,19 @@ impl std::fmt::Display for PartitionResolutionError {
 
 impl std::error::Error for PartitionResolutionError {}
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DependencyFanInPolicy {
+    ResolvedPartition,
+    AllCurrentPartitions,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DependencyFanInRule {
+    pub dependency: AssetId,
+    pub policy: DependencyFanInPolicy,
+}
+
 /// Durable definition for a data product in the OpenEstates DAG.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetDefinition {
@@ -178,6 +209,8 @@ pub struct AssetDefinition {
     pub trust_tier: TrustTier,
     #[serde(default)]
     pub partition_policy: AssetPartitionPolicy,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_fan_in: Vec<DependencyFanInRule>,
 }
 
 impl AssetDefinition {
@@ -199,12 +232,33 @@ impl AssetDefinition {
             cost_tier,
             trust_tier,
             partition_policy: AssetPartitionPolicy::default(),
+            dependency_fan_in: Vec::new(),
         }
     }
 
     pub fn with_partition_policy(mut self, partition_policy: AssetPartitionPolicy) -> Self {
         self.partition_policy = partition_policy;
         self
+    }
+
+    pub fn with_dependency_fan_in_policy(
+        mut self,
+        dependency: &str,
+        policy: DependencyFanInPolicy,
+    ) -> Self {
+        self.dependency_fan_in.push(DependencyFanInRule {
+            dependency: AssetId::new(dependency).expect("valid static dependency id"),
+            policy,
+        });
+        self
+    }
+
+    pub fn dependency_fan_in_policy(&self, dependency: &AssetId) -> DependencyFanInPolicy {
+        self.dependency_fan_in
+            .iter()
+            .find(|rule| &rule.dependency == dependency)
+            .map(|rule| rule.policy)
+            .unwrap_or(DependencyFanInPolicy::ResolvedPartition)
     }
 }
 
@@ -268,6 +322,25 @@ impl AssetRegistry {
                     });
                 }
             }
+
+            let mut dependency_fan_in = HashMap::new();
+            for rule in &definition.dependency_fan_in {
+                if !definition.dependencies.contains(&rule.dependency) {
+                    return Err(RegistryError::UnknownDependencyFanInRule {
+                        asset_id: definition.id.clone(),
+                        dependency: rule.dependency.clone(),
+                    });
+                }
+                if dependency_fan_in
+                    .insert(rule.dependency.clone(), rule.policy)
+                    .is_some()
+                {
+                    return Err(RegistryError::DuplicateDependencyFanInRule {
+                        asset_id: definition.id.clone(),
+                        dependency: rule.dependency.clone(),
+                    });
+                }
+            }
         }
 
         self.build_dag()?;
@@ -324,6 +397,14 @@ pub enum RegistryError {
         asset_id: AssetId,
         dependency: AssetId,
     },
+    UnknownDependencyFanInRule {
+        asset_id: AssetId,
+        dependency: AssetId,
+    },
+    DuplicateDependencyFanInRule {
+        asset_id: AssetId,
+        dependency: AssetId,
+    },
     SelfDependency(AssetId),
     Cycle(AssetId),
 }
@@ -336,6 +417,20 @@ impl std::fmt::Display for RegistryError {
                 asset_id,
                 dependency,
             } => write!(f, "asset {asset_id} depends on unknown asset {dependency}"),
+            Self::UnknownDependencyFanInRule {
+                asset_id,
+                dependency,
+            } => write!(
+                f,
+                "asset {asset_id} declares fan-in for non-dependency {dependency}"
+            ),
+            Self::DuplicateDependencyFanInRule {
+                asset_id,
+                dependency,
+            } => write!(
+                f,
+                "asset {asset_id} declares duplicate fan-in policy for dependency {dependency}"
+            ),
             Self::SelfDependency(asset_id) => write!(f, "asset {asset_id} depends on itself"),
             Self::Cycle(asset_id) => write!(f, "asset cycle detected at {asset_id}"),
         }
@@ -422,6 +517,14 @@ pub fn default_openestates_registry() -> AssetRegistry {
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
+        )
+        .with_dependency_fan_in_policy(
+            "reddit_resident_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
+            "google_review_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
         ),
         asset(
             "search_serving_bundle",
@@ -529,6 +632,52 @@ mod tests {
     }
 
     #[test]
+    fn default_registry_fans_support_facts_into_global_kg() {
+        let registry = default_openestates_registry();
+        let kg = registry
+            .get(&AssetId::new("kg_society_view").unwrap())
+            .unwrap();
+
+        assert_eq!(
+            kg.dependency_fan_in_policy(&AssetId::new("reddit_resident_facts").unwrap()),
+            DependencyFanInPolicy::AllCurrentPartitions
+        );
+        assert_eq!(
+            kg.dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
+            DependencyFanInPolicy::AllCurrentPartitions
+        );
+        assert_eq!(
+            kg.dependency_fan_in_policy(&AssetId::new("rera_legal_facts").unwrap()),
+            DependencyFanInPolicy::ResolvedPartition
+        );
+    }
+
+    #[test]
+    fn partition_policy_matches_materialized_partition_shape() {
+        let policy =
+            AssetPartitionPolicy::from_run_keys_with_static(&["dt"], &[("source", "reddit")]);
+
+        assert!(policy.matches_materialized_partition(&AssetPartition::new([
+            ("dt", "2026-07-13"),
+            ("source", "reddit"),
+        ])));
+        assert!(!policy.matches_materialized_partition(&AssetPartition::global()));
+        assert!(
+            !policy.matches_materialized_partition(&AssetPartition::new([
+                ("dt", "2026-07-13"),
+                ("source", "google"),
+            ]))
+        );
+        assert!(
+            !policy.matches_materialized_partition(&AssetPartition::new([
+                ("city", "bengaluru"),
+                ("dt", "2026-07-13"),
+                ("source", "reddit"),
+            ]))
+        );
+    }
+
+    #[test]
     fn partition_policy_missing_run_key_is_error() {
         let registry = default_openestates_registry();
         let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
@@ -565,6 +714,39 @@ mod tests {
         assert!(matches!(
             result,
             Err(RegistryError::MissingDependency { .. })
+        ));
+    }
+
+    #[test]
+    fn registry_rejects_fan_in_rule_for_non_dependency() {
+        let result = AssetRegistry::new(vec![
+            asset(
+                "root_snapshot",
+                AssetStage::Raw,
+                "root",
+                &[],
+                RefreshCadence::Monthly,
+                CostTier::Free,
+                TrustTier::Root,
+            ),
+            asset(
+                "derived_view",
+                AssetStage::Gold,
+                "bad fan-in",
+                &["root_snapshot"],
+                RefreshCadence::OnChange,
+                CostTier::Free,
+                TrustTier::Derived,
+            )
+            .with_dependency_fan_in_policy(
+                "missing_dependency",
+                DependencyFanInPolicy::AllCurrentPartitions,
+            ),
+        ]);
+
+        assert!(matches!(
+            result,
+            Err(RegistryError::UnknownDependencyFanInRule { .. })
         ));
     }
 

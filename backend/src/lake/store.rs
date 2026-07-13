@@ -3,11 +3,13 @@ use std::fmt::Write as _;
 use std::path::Path as FsPath;
 use std::sync::Arc;
 
+use futures_util::StreamExt;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjectPath;
 use object_store::{ObjectStore, ObjectStoreExt};
 use sha2::{Digest, Sha256};
 
+use super::keys::KeyError;
 use super::{LakeKey, LakePrefix};
 
 /// Object-store facade using the same logical keys for local development and S3.
@@ -27,8 +29,10 @@ pub struct ArtifactMetadata {
 
 #[derive(Debug)]
 pub enum LakeError {
+    InvalidMetadata(String),
     Io(std::io::Error),
     Json(serde_json::Error),
+    Key(KeyError),
     ObjectStore(object_store::Error),
     Utf8(std::string::FromUtf8Error),
 }
@@ -105,6 +109,24 @@ impl LakeStore {
             .map_err(LakeError::ObjectStore)
     }
 
+    pub async fn list_keys(&self, prefix: &LakePrefix) -> Result<Vec<LakeKey>, LakeError> {
+        let object_prefix = if prefix.as_str().is_empty() {
+            None
+        } else {
+            Some(ObjectPath::from(prefix.as_str()))
+        };
+        let mut stream = self.store.list(object_prefix.as_ref());
+        let mut keys = Vec::new();
+
+        while let Some(meta) = stream.next().await {
+            let meta = meta.map_err(LakeError::ObjectStore)?;
+            keys.push(LakeKey::new(meta.location.to_string()).map_err(LakeError::Key)?);
+        }
+
+        keys.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        Ok(keys)
+    }
+
     pub async fn delete(&self, key: &LakeKey) -> Result<(), LakeError> {
         match self.store.delete(&object_path(key)).await {
             Ok(()) => Ok(()),
@@ -129,8 +151,10 @@ impl LakeStore {
 impl fmt::Display for LakeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::InvalidMetadata(message) => write!(f, "lake metadata error: {message}"),
             Self::Io(err) => write!(f, "lake IO error: {err}"),
             Self::Json(err) => write!(f, "lake JSON error: {err}"),
+            Self::Key(err) => write!(f, "lake key error: {err}"),
             Self::ObjectStore(err) => write!(f, "lake object-store error: {err}"),
             Self::Utf8(err) => write!(f, "invalid UTF-8 artifact: {err}"),
         }
@@ -183,5 +207,46 @@ mod tests {
         assert_eq!(meta.size_bytes, body.len());
         assert_eq!(meta.hash_algorithm, "sha256");
         assert_eq!(meta.content_hash.len(), 64);
+    }
+
+    #[tokio::test]
+    async fn local_store_lists_keys_by_prefix_in_stable_order() {
+        let root = tempdir().unwrap();
+        let store = LakeStore::local(root.path()).unwrap();
+
+        store
+            .put_text(
+                &LakeKey::new("manifests/assets/a/dt=2/current.json").unwrap(),
+                "{}",
+            )
+            .await
+            .unwrap();
+        store
+            .put_text(
+                &LakeKey::new("manifests/assets/a/dt=1/current.json").unwrap(),
+                "{}",
+            )
+            .await
+            .unwrap();
+        store
+            .put_text(
+                &LakeKey::new("manifests/assets/b/current.json").unwrap(),
+                "{}",
+            )
+            .await
+            .unwrap();
+
+        let keys = store
+            .list_keys(&LakePrefix::new("manifests/assets/a").unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            keys.iter().map(LakeKey::as_str).collect::<Vec<_>>(),
+            vec![
+                "manifests/assets/a/dt=1/current.json",
+                "manifests/assets/a/dt=2/current.json"
+            ]
+        );
     }
 }

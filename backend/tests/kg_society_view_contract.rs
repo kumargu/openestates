@@ -2,7 +2,7 @@ use std::fs::File;
 
 use backend::assets::{
     AssetId, AssetMaterializationStore, AssetPartition, KgSocietyViewMaterializer,
-    KG_SOCIETY_VIEW_ASSET_ID,
+    SkillFactAnnotationRecord, SkillFactRecord, KG_SOCIETY_VIEW_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -123,6 +123,103 @@ async fn kg_society_view_materializes_gold_parquet_and_serving_lineage() {
                 && watermark.high_watermark
                     == kg_materialization.record.materialization_id.to_string()
         }));
+}
+
+#[tokio::test]
+async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let mut graph = KnowledgeGraph::new();
+    let mut society = Node::new(
+        "society:green-acre-whitefield",
+        NodeType::Society,
+        "Green Acre Whitefield",
+    );
+    let mut older_fact = fact(
+        "maintenance_quality",
+        FactValue::Text("good".to_string()),
+        SourceType::Manual,
+        &["maintenance"],
+    );
+    older_fact.version = 1;
+    older_fact.confidence = 0.9;
+    let mut corrected_fact = older_fact.clone();
+    corrected_fact.version = 2;
+    corrected_fact.confidence = 0.6;
+    corrected_fact.value = FactValue::Text("mixed".to_string());
+    society.add_fact(older_fact);
+    society.add_fact(corrected_fact);
+    graph.add_node(society);
+
+    let support_fact = SkillFactRecord {
+        entity_id: "society:green-acre-whitefield".to_string(),
+        fact_key: "resident_greenery_signal".to_string(),
+        value_type: "text".to_string(),
+        value_json: serde_json::to_string(&FactValue::Text(
+            "Residents mention trees and open space".to_string(),
+        ))
+        .unwrap(),
+        confidence: 0.7,
+        source_type: "Reddit".to_string(),
+        source_url: Some("https://reddit.com/r/BangaloreRealEstates/comments/alpha".to_string()),
+        model: None,
+        skill_id: Some("reddit_resident_fact_extractor".to_string()),
+        triggered_by: Some("3bhk whitefield greenery".to_string()),
+        learned_at: Utc::now(),
+        run_id: "run-reddit-facts-2026-07-13".to_string(),
+        input_hash: "sha256:reddit-alpha".to_string(),
+    };
+    let support_annotations = vec![
+        SkillFactAnnotationRecord {
+            entity_id: "society:green-acre-whitefield".to_string(),
+            fact_key: "resident_greenery_signal".to_string(),
+            display_template: Some("Resident greenery signal: {value}".to_string()),
+            answers_preferences_json: r#"["greenery"]"#.to_string(),
+            scoring_direction: Some("TextMatch".to_string()),
+            scoring_weight: Some(1.4),
+            scoring_thresholds_json: "[]".to_string(),
+        },
+        SkillFactAnnotationRecord {
+            entity_id: "society:green-acre-whitefield".to_string(),
+            fact_key: "orphan_support_annotation".to_string(),
+            display_template: Some("Orphan: {value}".to_string()),
+            answers_preferences_json: r#"["orphan"]"#.to_string(),
+            scoring_direction: Some("TextMatch".to_string()),
+            scoring_weight: Some(1.0),
+            scoring_thresholds_json: "[]".to_string(),
+        },
+    ];
+
+    let materialization = KgSocietyViewMaterializer::new(lake)
+        .materialize_and_promote_with_skill_facts(
+            &graph,
+            "2026-07-13T00:00Z",
+            Vec::new(),
+            Vec::new(),
+            &[support_fact],
+            &support_annotations,
+        )
+        .await
+        .unwrap();
+
+    let canonical_versions = materialization
+        .records
+        .facts
+        .iter()
+        .filter(|record| record.fact_key == "maintenance_quality")
+        .map(|record| record.fact_version)
+        .collect::<Vec<_>>();
+    assert_eq!(canonical_versions, vec![1, 2]);
+    assert!(materialization
+        .records
+        .facts
+        .iter()
+        .any(|record| record.fact_key == "resident_greenery_signal"));
+    assert!(!materialization
+        .records
+        .fact_annotations
+        .iter()
+        .any(|record| record.fact_key == "orphan_support_annotation"));
 }
 
 fn mock_graph() -> KnowledgeGraph {
