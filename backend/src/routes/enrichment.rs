@@ -7,7 +7,7 @@ use chrono::Utc;
 use serde::Serialize;
 
 use crate::knowledge::edge::Relation;
-use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact};
+use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
 use crate::models::{AreaProfile, Property, PropertyCard, Seller, Society};
 
 // ---------------------------------------------------------------------------
@@ -498,6 +498,9 @@ pub fn enrich_property_card_with_sellers(
 
     let google_rating = kg_numeric(graph, &node_id, "google_rating");
     let google_review_count = kg_numeric(graph, &node_id, "google_review_count").map(|n| n as u32);
+    let google_reviews_url = graph
+        .get_node(&node_id)
+        .and_then(|node| google_reviews_url_from_facts(&node.facts, &node.name));
 
     // Use photo_url from KG if property has no hero_image
     let hero_image = if p.hero_image.is_empty() {
@@ -570,6 +573,7 @@ pub fn enrich_property_card_with_sellers(
         facing: p.facing.clone(),
         google_rating,
         google_review_count,
+        google_reviews_url,
         seller_id: p.seller_id.clone(),
         seller_completeness_pct,
         documents_provided,
@@ -592,6 +596,13 @@ pub fn enrich_society(society: &mut Society, graph: &KnowledgeGraph) {
 
     if graph.get_node(&node_id).is_none() {
         return;
+    }
+
+    if let Some(node) = graph.get_node(&node_id) {
+        society.google_reviews_url = google_reviews_url_from_facts(&node.facts, &node.name);
+        if society.future_google_place_id.is_none() {
+            society.future_google_place_id = kg_text(graph, &node_id, "google_place_id");
+        }
     }
 
     if is_placeholder(&society.review_summary) {

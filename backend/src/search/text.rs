@@ -396,6 +396,7 @@ impl TextSearch {
                         facing: p.facing.clone(),
                         google_rating: None,
                         google_review_count: None,
+                        google_reviews_url: None,
                         seller_id: p.seller_id.clone(),
                         seller_completeness_pct: None,
                         documents_provided: Vec::new(),

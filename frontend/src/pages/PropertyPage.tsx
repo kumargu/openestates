@@ -468,6 +468,11 @@ export function PropertyPage() {
                       {isKnownText(society.builder_name) && <span>Builder: {society.builder_name}</span>}
                       {hasKnownNumber(society.year_built) && <span>{society.year_built}</span>}
                       {isKnownText(society.maintenance_sentiment) && <span>{society.maintenance_sentiment}</span>}
+                      {society.google_reviews_url && (
+                        <a href={society.google_reviews_url} target="_blank" rel="noreferrer">
+                          Google reviews
+                        </a>
+                      )}
                     </div>
                     <div className="property-context-lists">
                       <CompactList title="Resident positives" items={society.common_positives.slice(0, 3)} tone="good" />

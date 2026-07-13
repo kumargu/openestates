@@ -15,6 +15,8 @@ pub struct Society {
     pub common_positives: Vec<String>,
     pub common_complaints: Vec<String>,
     pub review_summary: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_reviews_url: Option<String>,
     pub future_google_place_name: String,
     pub future_google_place_id: Option<String>,
     pub future_review_enrichment_status: String,

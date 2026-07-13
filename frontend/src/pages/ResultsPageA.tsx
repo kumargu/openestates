@@ -289,6 +289,21 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
   };
 
   const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
+  const googleSignalContent = property.google_rating ? (
+    <>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
+        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+      </svg>
+      {property.google_rating.toFixed(1)}
+      {property.google_review_count && (
+        <span style={{ color: "var(--color-text-muted)", fontSize: "0.72rem" }}>
+          ({property.google_review_count})
+        </span>
+      )}
+    </>
+  ) : property.google_reviews_url ? (
+    <>Google reviews</>
+  ) : null;
 
   return (
     <div className="card-a">
@@ -339,18 +354,8 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
           )}
 
           <div className="card-a-signals">
-            {property.google_rating && (
-              <span className="property-signal" style={{ display: "inline-flex", alignItems: "center", gap: "0.2rem" }}>
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                </svg>
-                {property.google_rating.toFixed(1)}
-                {property.google_review_count && (
-                  <span style={{ color: "var(--color-text-muted)", fontSize: "0.72rem" }}>
-                    ({property.google_review_count})
-                  </span>
-                )}
-              </span>
+            {googleSignalContent && (
+              <span className="property-signal">{googleSignalContent}</span>
             )}
             <ProjectStatusTag
               status={property.project_status}
@@ -419,6 +424,18 @@ function CardA({ property, match, explanation, confidenceScore, onQuickView, onS
           </svg>
           {onSheet ? "Saved" : "Save"}
         </button>
+        {property.google_reviews_url && (
+          <button
+            className="card-a-review-btn"
+            onClick={() => window.open(property.google_reviews_url, "_blank", "noopener,noreferrer")}
+            aria-label={`Open Google reviews for ${property.society_name}`}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+            </svg>
+            <span className="card-a-detail-btn-label">Reviews</span>
+          </button>
+        )}
         <button className="card-a-detail-btn" onClick={handleQuickView}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />

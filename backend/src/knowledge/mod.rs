@@ -17,6 +17,6 @@ pub mod query;
 pub mod search_event;
 pub mod store;
 
-pub use fact::{FactValue, SourcedFact};
+pub use fact::{google_reviews_url_from_facts, FactValue, SourcedFact};
 pub use graph::{GraphStats, KnowledgeGraph};
 pub use search_event::SearchEvent;

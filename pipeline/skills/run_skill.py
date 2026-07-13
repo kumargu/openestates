@@ -18,6 +18,7 @@ import sys
 
 from pipeline.skills.graph_client import GraphClient
 from pipeline.skills.fetch_rera import FetchReraSkill
+from pipeline.skills.fetch_google_review_links import FetchGoogleReviewLinksSkill
 from pipeline.skills.identify_gaps import IdentifyGapsSkill
 from pipeline.skills.search_reddit import SearchRedditSkill
 
@@ -30,6 +31,7 @@ logger = logging.getLogger(__name__)
 SKILLS = {
     "search_reddit": SearchRedditSkill,
     "fetch_rera": FetchReraSkill,
+    "fetch_google_review_links": FetchGoogleReviewLinksSkill,
     "identify_gaps": IdentifyGapsSkill,
 }
 
@@ -39,6 +41,8 @@ def main():
     parser.add_argument("skill", choices=SKILLS.keys(), help="Skill to run")
     parser.add_argument("--project", help="Project name (for fetch_rera)")
     parser.add_argument("--query", help="Search query (for search_reddit)")
+    parser.add_argument("--area", help="Area/locality for Google review link lookup")
+    parser.add_argument("--city", default="Bengaluru", help="City for Google review link lookup")
     parser.add_argument("--society-id", help="Society ID (for identify_gaps)")
     parser.add_argument("--node-id", help="Graph node ID to push facts to")
     parser.add_argument("--api-base", default="http://localhost:4000", help="API base URL")
@@ -57,6 +61,16 @@ def main():
         if not args.project:
             parser.error("fetch_rera requires --project")
         input_data = {"project_name": args.project, "entity_id": args.node_id}
+    elif args.skill == "fetch_google_review_links":
+        name = args.project or args.query
+        if not name:
+            parser.error("fetch_google_review_links requires --project or --query")
+        input_data = {
+            "society_name": name,
+            "area": args.area or "",
+            "city": args.city or "Bengaluru",
+            "entity_id": args.node_id,
+        }
     elif args.skill == "identify_gaps":
         society_id = args.society_id or args.node_id
         if not society_id:

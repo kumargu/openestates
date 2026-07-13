@@ -27,9 +27,10 @@ from pipeline.enrich import (
     print_summary,
     _make_skill,
     _build_input,
+    _should_mark_fresh,
 )
 from pipeline.entity_resolver import EntityResolver, FreshnessTracker
-from pipeline.skills.base import BaseSkill
+from pipeline.skills.base import BaseSkill, FactSource, SkillResult, SourcedFact
 
 
 class TestSkillRegistry(unittest.TestCase):
@@ -211,6 +212,12 @@ class TestGapDetection(unittest.TestCase):
             deps = SKILL_REGISTRY["identify_gaps"]["depends_on"]
             self.assertEqual(set(deps), {"search_reddit", "fetch_rera"})
 
+    def test_google_review_links_use_separate_freshness_source(self):
+        self.assertEqual(
+            FRESHNESS_SOURCE_MAP["fetch_google_review_links"],
+            "google_review_links",
+        )
+
 
 class TestBuildInput(unittest.TestCase):
     """Test input construction for each skill."""
@@ -234,9 +241,38 @@ class TestBuildInput(unittest.TestCase):
         self.assertIn("name", inp)
         self.assertIn("area", inp)
 
+    def test_fetch_google_review_links_input(self):
+        inp = _build_input("fetch_google_review_links", "society:sobha-insignia", self.resolver)
+        self.assertEqual(inp["entity_type"], "society")
+        self.assertIn("society_name", inp)
+        self.assertIn("area", inp)
+        self.assertEqual(inp["city"], "Bengaluru")
+
     def test_identify_gaps_input(self):
         inp = _build_input("identify_gaps", "society:sobha-insignia", self.resolver)
         self.assertEqual(inp["society_id"], "soc-sobha-insignia")
+
+
+class TestFreshnessMarking(unittest.TestCase):
+    def test_google_review_fallback_is_not_marked_fresh(self):
+        result = SkillResult(facts=[SourcedFact(
+            key="google_reviews_url",
+            value={"type": "Text", "data": "https://www.google.com/maps/search/?api=1&query=x"},
+            confidence=0.45,
+            source=FactSource(source_type="Google", skill_id="fetch_google_review_links"),
+        )])
+
+        self.assertFalse(_should_mark_fresh("fetch_google_review_links", result))
+
+    def test_precise_google_review_link_is_marked_fresh(self):
+        result = SkillResult(facts=[SourcedFact(
+            key="google_place_id",
+            value={"type": "Text", "data": "ChIJ123"},
+            confidence=0.85,
+            source=FactSource(source_type="Google", skill_id="fetch_google_review_links"),
+        )])
+
+        self.assertTrue(_should_mark_fresh("fetch_google_review_links", result))
 
 
 class TestExecution(unittest.TestCase):

@@ -1386,6 +1386,7 @@ mod tests {
             common_positives: Vec::new(),
             common_complaints: Vec::new(),
             review_summary: String::new(),
+            google_reviews_url: None,
             future_google_place_name: String::new(),
             future_google_place_id: None,
             future_review_enrichment_status: String::new(),

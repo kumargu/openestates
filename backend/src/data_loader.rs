@@ -6,7 +6,7 @@ use std::time::Instant;
 use tokio::sync::RwLock;
 
 use crate::knowledge;
-use crate::knowledge::fact::FactValue;
+use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
@@ -154,6 +154,7 @@ pub fn societies_from_graph(graph: &KnowledgeGraph) -> Vec<Society> {
                 .unwrap_or(&node.id)
                 .to_string();
 
+            let google_place_id: Option<String> = fact_text(node, "google_place_id").into_option();
             Society {
                 id,
                 name: node.name.clone(),
@@ -176,8 +177,9 @@ pub fn societies_from_graph(graph: &KnowledgeGraph) -> Vec<Society> {
                 review_summary: fact_text(node, "review_summary")
                     .or_fact_text(node, "google_common_themes")
                     .into(),
+                google_reviews_url: google_reviews_url_from_facts(&node.facts, &node.name),
                 future_google_place_name: node.name.clone(),
-                future_google_place_id: None,
+                future_google_place_id: google_place_id,
                 future_review_enrichment_status: String::from("kg_derived"),
             }
         })
@@ -558,6 +560,14 @@ impl FactStr {
             fact_text(node, key)
         } else {
             self
+        }
+    }
+
+    fn into_option(self) -> Option<String> {
+        if self.0.is_empty() {
+            None
+        } else {
+            Some(self.0)
         }
     }
 }

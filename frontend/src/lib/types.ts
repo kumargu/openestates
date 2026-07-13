@@ -20,6 +20,7 @@ export type PropertyCard = {
   facing: string;
   google_rating?: number;
   google_review_count?: number;
+  google_reviews_url?: string;
   seller_id?: string;
   seller_completeness_pct?: number;
   documents_provided?: string[];
@@ -90,6 +91,7 @@ export type PropertyDetailResponse = {
     common_positives: string[];
     common_complaints: string[];
     review_summary: string;
+    google_reviews_url?: string;
   } | null;
   area: {
     id: string;

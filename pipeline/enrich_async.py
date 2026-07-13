@@ -33,6 +33,7 @@ from pipeline.enrich import (
     _build_input,
     _make_skill,
     _push_facts,
+    _should_mark_fresh,
     is_backed_off,
     load_failures,
     record_failure,
@@ -287,8 +288,9 @@ async def run_wave(
                 if result.facts:
                     _push_facts(entity_id, result)
 
-                freshness_source = FRESHNESS_SOURCE_MAP.get(skill_id, skill_id)
-                tracker.mark_fresh(entity_id, freshness_source, {"fact_count": len(result.facts)})
+                if _should_mark_fresh(skill_id, result):
+                    freshness_source = FRESHNESS_SOURCE_MAP.get(skill_id, skill_id)
+                    tracker.mark_fresh(entity_id, freshness_source, {"fact_count": len(result.facts)})
                 record_success(failures, pool)
 
             except Exception as e:

@@ -282,8 +282,8 @@ def load_society_inputs(skill_id: str) -> Dict[str, dict]:
                 node = json.loads(f.read_text())
                 slug = f.stem
                 name = node.get("name", slug.replace("-", " ").title())
-                area = node.get("area", "")
-                city = node.get("city", "Bengaluru")
+                area = node.get("area", "") or _node_fact_text(node, "area")
+                city = node.get("city", "") or _node_fact_text(node, "city") or "Bengaluru"
                 inputs[slug] = _society_input(skill_id, name, area, city, slug)
             except (json.JSONDecodeError, KeyError):
                 continue
@@ -306,6 +306,16 @@ def load_society_inputs(skill_id: str) -> Dict[str, dict]:
     return inputs
 
 
+def _node_fact_text(node: dict, key: str) -> str:
+    for fact in node.get("facts", []):
+        if fact.get("key") != key:
+            continue
+        value = fact.get("value", {})
+        data = value.get("data") if isinstance(value, dict) else value
+        return str(data or "").strip()
+    return ""
+
+
 def _society_input(skill_id: str, name: str, area: str, city: str, slug: str) -> dict:
     """Build skill-appropriate input for a society."""
     if skill_id == "search_reddit":
@@ -315,6 +325,8 @@ def _society_input(skill_id: str, name: str, area: str, city: str, slug: str) ->
     elif skill_id == "identify_gaps":
         return {"society_id": f"soc-{slug}", "society_name": name}
     elif skill_id == "fetch_images":
+        return {"society_name": name, "area": area, "city": city, "slug": slug}
+    elif skill_id == "fetch_google_review_links":
         return {"society_name": name, "area": area, "city": city, "slug": slug}
     else:
         # Generic: pass everything
@@ -373,11 +385,19 @@ def get_skill_instance(skill_id: str) -> BaseSkill:
     elif skill_id == "identify_gaps":
         from pipeline.skills.identify_gaps import IdentifyGapsSkill
         return IdentifyGapsSkill()
+    elif skill_id == "fetch_google_review_links":
+        from pipeline.skills.fetch_google_review_links import FetchGoogleReviewLinksSkill
+        return FetchGoogleReviewLinksSkill()
     else:
         raise ValueError(f"Unknown skill: {skill_id}")
 
 
-AVAILABLE_SKILLS = ["search_reddit", "fetch_rera", "identify_gaps"]
+AVAILABLE_SKILLS = [
+    "search_reddit",
+    "fetch_rera",
+    "fetch_google_review_links",
+    "identify_gaps",
+]
 
 
 # ──────────────────────────────────────────────────────────────
