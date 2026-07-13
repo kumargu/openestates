@@ -14,7 +14,7 @@ use crate::lake::{LakeError, LakeStore};
 
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
-    MaterializationRecord, SourceWatermark,
+    MaterializationId, MaterializationRecord, SourceWatermark,
 };
 
 pub const REDDIT_THREADS_DAILY_ASSET_ID: &str = "reddit_threads_daily";
@@ -84,10 +84,46 @@ impl RedditThreadSnapshotMaterializer {
             ("dt", snapshot_date.as_str()),
             ("subreddit", subreddit.as_str()),
         ]);
+        let materialization = self
+            .materialize_for_run(
+                snapshot_date,
+                subreddit,
+                run_id,
+                records,
+                Vec::new(),
+                source_watermarks,
+                MaterializationId::new(),
+                partition,
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_for_run(
+        &self,
+        snapshot_date: impl Into<String>,
+        subreddit: impl Into<String>,
+        run_id: impl Into<String>,
+        records: &[RedditThreadSnapshotRecord],
+        parent_materializations: Vec<MaterializationId>,
+        source_watermarks: Vec<SourceWatermark>,
+        dag_run_id: MaterializationId,
+        record_partition: AssetPartition,
+    ) -> Result<RedditThreadSnapshotMaterialization, RedditThreadSnapshotMaterializeError> {
+        let snapshot_date = snapshot_date.into();
+        let subreddit = subreddit.into();
+        let run_id = run_id.into();
+        let artifact_partition = AssetPartition::new([
+            ("dt", snapshot_date.as_str()),
+            ("subreddit", subreddit.as_str()),
+        ]);
         let thread_key = AssetPathBuilder::raw_snapshot_key(
             "reddit",
-            &partition,
+            &artifact_partition,
             &run_id,
             "threads/part-00000.parquet",
         );
@@ -96,8 +132,12 @@ impl RedditThreadSnapshotMaterializer {
             .put_bytes(&thread_key, write_threads_parquet(records)?)
             .await?;
 
-        let manifest_key =
-            AssetPathBuilder::raw_snapshot_key("reddit", &partition, &run_id, "manifest.json");
+        let manifest_key = AssetPathBuilder::raw_snapshot_key(
+            "reddit",
+            &artifact_partition,
+            &run_id,
+            "manifest.json",
+        );
         let mut artifacts = vec![ArtifactRef::parquet(thread_meta)];
         let manifest = RedditThreadSnapshotManifest {
             asset_id: REDDIT_THREADS_DAILY_ASSET_ID.to_string(),
@@ -119,15 +159,16 @@ impl RedditThreadSnapshotMaterializer {
             AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID)
                 .expect("static reddit threads asset id is valid"),
             AssetStage::Raw,
-            partition,
+            record_partition,
             snapshot_date,
             artifacts,
         )
+        .with_run_id(dag_run_id)
+        .with_parent_materializations(parent_materializations)
         .with_source_watermarks(source_watermarks)
         .with_row_count(records.len() as u64);
 
         self.materializations.write_materialization(&record).await?;
-        self.materializations.promote_current(&record).await?;
 
         Ok(RedditThreadSnapshotMaterialization { manifest, record })
     }

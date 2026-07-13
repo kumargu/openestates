@@ -17,6 +17,7 @@ pub mod reddit;
 pub mod registry;
 pub mod run_manifest;
 pub mod skill_facts;
+pub mod source_inputs;
 pub mod types;
 
 pub use executor::{
@@ -50,7 +51,9 @@ pub use run_manifest::{
 pub use skill_facts::{
     SkillFactAnnotationRecord, SkillFactManifest, SkillFactMaterialization,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactRecord,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
+pub use source_inputs::{AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput};
 pub use types::{
     ArtifactRef, AssetId, AssetPartition, AssetStage, CurrentAssetPointer, MaterializationId,
     MaterializationRecord, MaterializationStatus, SourceWatermark,

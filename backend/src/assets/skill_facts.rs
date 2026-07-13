@@ -18,6 +18,9 @@ use super::{
     MaterializationId, MaterializationRecord, SourceWatermark,
 };
 
+pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
+pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SkillFactRecord {
     pub entity_id: String,
@@ -103,9 +106,51 @@ impl SkillFactMaterializer {
         let source = source.into();
         let snapshot_date = snapshot_date.into();
         let run_id = run_id.into();
-        let asset = AssetId::new(asset_id.clone()).map_err(SkillFactMaterializeError::AssetId)?;
         let partition =
             AssetPartition::new([("dt", snapshot_date.as_str()), ("source", source.as_str())]);
+        let materialization = self
+            .materialize_for_run(
+                asset_id,
+                source,
+                snapshot_date,
+                run_id,
+                facts,
+                fact_annotations,
+                parent_materializations,
+                source_watermarks,
+                MaterializationId::new(),
+                partition,
+            )
+            .await?;
+        self.materializations
+            .promote_current(&materialization.record)
+            .await?;
+        Ok(materialization)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_for_run(
+        &self,
+        asset_id: impl Into<String>,
+        source: impl Into<String>,
+        snapshot_date: impl Into<String>,
+        run_id: impl Into<String>,
+        facts: &[SkillFactRecord],
+        fact_annotations: &[SkillFactAnnotationRecord],
+        parent_materializations: Vec<MaterializationId>,
+        source_watermarks: Vec<SourceWatermark>,
+        dag_run_id: MaterializationId,
+        record_partition: AssetPartition,
+    ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
+        if facts.is_empty() {
+            return Err(SkillFactMaterializeError::EmptyFacts);
+        }
+
+        let asset_id = asset_id.into();
+        let source = source.into();
+        let snapshot_date = snapshot_date.into();
+        let run_id = run_id.into();
+        let asset = AssetId::new(asset_id.clone()).map_err(SkillFactMaterializeError::AssetId)?;
 
         let fact_key = AssetPathBuilder::silver_asset_key(
             &asset_id,
@@ -166,16 +211,16 @@ impl SkillFactMaterializer {
         let record = MaterializationRecord::succeeded(
             asset,
             AssetStage::Silver,
-            partition,
+            record_partition,
             snapshot_date,
             artifacts,
         )
+        .with_run_id(dag_run_id)
         .with_parent_materializations(parent_materializations)
         .with_source_watermarks(source_watermarks)
         .with_row_count(facts.len() as u64);
 
         self.materializations.write_materialization(&record).await?;
-        self.materializations.promote_current(&record).await?;
 
         Ok(SkillFactMaterialization { manifest, record })
     }

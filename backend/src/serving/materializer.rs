@@ -200,7 +200,6 @@ impl SearchServingBundleMaterializer {
         .with_row_count(manifest.entity_count);
 
         self.materializations.write_materialization(&record).await?;
-        self.materializations.promote_current(&record).await?;
 
         Ok(SearchServingBundleMaterialization { manifest, record })
     }

@@ -462,7 +462,6 @@ impl KgSocietyViewMaterializer {
         );
 
         self.materializations.write_materialization(&record).await?;
-        self.materializations.promote_current(&record).await?;
 
         Ok(KgSocietyViewMaterialization {
             manifest,

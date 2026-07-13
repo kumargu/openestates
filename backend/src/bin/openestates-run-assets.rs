@@ -2,9 +2,10 @@ use std::path::PathBuf;
 
 use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetPartition,
+    AssetSourceInputs,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
-use backend::lake::LakeStore;
+use backend::lake::{LakeKey, LakeStore};
 use chrono::Utc;
 
 #[tokio::main]
@@ -15,12 +16,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .project_root
         .clone()
         .unwrap_or_else(default_project_root);
-    let planned_at = Utc::now();
-    let mut options = AssetDagExecutionOptions::new(partition, planned_at).dry_run(cli.dry_run);
-    if let Some(version) = cli.version {
-        options = options.with_version(version);
-    }
-
     let graph = if cli.dry_run {
         KnowledgeGraph::new()
     } else {
@@ -35,6 +30,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lake_root = project_root.join("data").join("lake");
     let lake = LakeStore::local(&lake_root)?;
+    let planned_at = Utc::now();
+    let mut options = AssetDagExecutionOptions::new(partition, planned_at).dry_run(cli.dry_run);
+    if let Some(version) = cli.version.clone() {
+        options = options.with_version(version);
+    }
+    if let Some(source_inputs) = cli.load_source_inputs(&lake).await? {
+        options = options.with_source_inputs(source_inputs);
+    }
+
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake);
     let report = executor.execute(&graph, options).await?;
 
@@ -54,6 +58,8 @@ struct CliOptions {
     project_root: Option<PathBuf>,
     partition_parts: Vec<(String, String)>,
     version: Option<String>,
+    source_inputs_path: Option<PathBuf>,
+    source_inputs_key: Option<String>,
     dry_run: bool,
 }
 
@@ -82,6 +88,18 @@ impl CliOptions {
                         .ok_or_else(|| "--version requires a value".to_string())?;
                     options.version = Some(value);
                 }
+                "--source-inputs" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-inputs requires a path".to_string())?;
+                    options.source_inputs_path = Some(PathBuf::from(value));
+                }
+                "--source-input-key" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-input-key requires a lake key".to_string())?;
+                    options.source_inputs_key = Some(value);
+                }
                 "--dry-run" => {
                     options.dry_run = true;
                 }
@@ -93,6 +111,10 @@ impl CliOptions {
             }
         }
 
+        if options.source_inputs_path.is_some() && options.source_inputs_key.is_some() {
+            return Err("use either --source-inputs or --source-input-key, not both".to_string());
+        }
+
         Ok(options)
     }
 
@@ -102,6 +124,25 @@ impl CliOptions {
         } else {
             AssetPartition::new(self.partition_parts.clone())
         }
+    }
+
+    async fn load_source_inputs(
+        &self,
+        lake: &LakeStore,
+    ) -> Result<Option<AssetSourceInputs>, Box<dyn std::error::Error>> {
+        if let Some(path) = &self.source_inputs_path {
+            let bytes = std::fs::read(path)?;
+            let inputs = serde_json::from_slice(&bytes)?;
+            return Ok(Some(inputs));
+        }
+
+        if let Some(key) = &self.source_inputs_key {
+            let lake_key = LakeKey::new(key.clone())?;
+            let inputs = lake.get_json(&lake_key).await?;
+            return Ok(Some(inputs));
+        }
+
+        Ok(None)
     }
 }
 
@@ -138,4 +179,6 @@ fn print_help() {
     println!(
         "  --version       Artifact version for runnable assets; defaults to current UTC time"
     );
+    println!("  --source-inputs Read source executor inputs from a local JSON file");
+    println!("  --source-input-key Read source executor inputs from a lake object key");
 }

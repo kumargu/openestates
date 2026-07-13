@@ -13,9 +13,13 @@ use crate::serving::{
 
 use super::{
     AssetDagRunManifest, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
-    KgSocietyViewMaterializer, MaterializationId, MaterializationRecord, PlanDecision,
-    PlannerError, RunManifestError, SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
+    AssetRunManifestStore, AssetSourceInputs, KgSocietyViewMaterialization,
+    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
+    MaterializationRecord, PlanDecision, PlannerError, RedditThreadSnapshotMaterializeError,
+    RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, RunManifestError,
+    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -24,6 +28,8 @@ pub struct AssetDagExecutionOptions {
     pub planned_at: DateTime<Utc>,
     pub version: String,
     pub dry_run: bool,
+    #[serde(default, skip_serializing_if = "is_default_source_inputs")]
+    pub source_inputs: AssetSourceInputs,
 }
 
 impl AssetDagExecutionOptions {
@@ -33,6 +39,7 @@ impl AssetDagExecutionOptions {
             planned_at,
             version: default_asset_version(planned_at),
             dry_run: false,
+            source_inputs: AssetSourceInputs::default(),
         }
     }
 
@@ -43,6 +50,11 @@ impl AssetDagExecutionOptions {
 
     pub fn with_version(mut self, version: impl Into<String>) -> Self {
         self.version = version.into();
+        self
+    }
+
+    pub fn with_source_inputs(mut self, source_inputs: AssetSourceInputs) -> Self {
+        self.source_inputs = source_inputs;
         self
     }
 }
@@ -329,6 +341,18 @@ impl BuiltInAssetExecutorRegistry {
     fn default_openestates() -> Self {
         let mut executors = HashMap::new();
         executors.insert(
+            static_asset_id(REDDIT_THREADS_DAILY_ASSET_ID),
+            BuiltInAssetExecutor::RedditThreadsDaily,
+        );
+        executors.insert(
+            static_asset_id(REDDIT_RESIDENT_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::RedditResidentFacts,
+        );
+        executors.insert(
+            static_asset_id(GOOGLE_REVIEW_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::GoogleReviewFacts,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -346,6 +370,9 @@ impl BuiltInAssetExecutorRegistry {
 
 #[derive(Clone, Copy)]
 enum BuiltInAssetExecutor {
+    RedditThreadsDaily,
+    RedditResidentFacts,
+    GoogleReviewFacts,
     KgSocietyView,
     SearchServingBundle,
 }
@@ -355,10 +382,65 @@ impl BuiltInAssetExecutor {
         &self,
         context: AssetExecutionContext<'_>,
     ) -> Result<ExecutedAsset, AssetDagExecutorError> {
-        ensure_global_partition(context.asset_id, &context.options.partition)?;
-
         match self {
+            Self::RedditThreadsDaily => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .reddit_threads_daily
+                    .as_ref()
+                    .ok_or(AssetDagExecutorError::SourceInputMissing {
+                        asset_id: context.asset_id.clone(),
+                    })?;
+                let parent_materializations = context
+                    .dag
+                    .dependency_materializations(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let materialization =
+                    RedditThreadSnapshotMaterializer::new(context.dag.lake.clone())
+                        .materialize_for_run(
+                            input.snapshot_date.clone(),
+                            input.subreddit.clone(),
+                            context.run_id.to_string(),
+                            &input.records,
+                            parent_materializations,
+                            reddit_thread_watermarks(input),
+                            context.run_id.clone(),
+                            context.options.partition.clone(),
+                        )
+                        .await?;
+                Ok(ExecutedAsset::RedditThreadsDaily(materialization.record))
+            }
+            Self::RedditResidentFacts => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .reddit_resident_facts
+                    .as_ref()
+                    .ok_or(AssetDagExecutorError::SourceInputMissing {
+                        asset_id: context.asset_id.clone(),
+                    })?;
+                let materialization = execute_skill_fact_asset(context, input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::GoogleReviewFacts => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .google_review_facts
+                    .as_ref()
+                    .ok_or(AssetDagExecutorError::SourceInputMissing {
+                        asset_id: context.asset_id.clone(),
+                    })?;
+                let materialization = execute_skill_fact_asset(context, input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::KgSocietyView => {
+                ensure_global_partition(context.asset_id, &context.options.partition)?;
                 let parent_materializations = context
                     .dag
                     .dependency_materializations(
@@ -380,6 +462,7 @@ impl BuiltInAssetExecutor {
                 Ok(ExecutedAsset::KgSocietyView(materialization))
             }
             Self::SearchServingBundle => {
+                ensure_global_partition(context.asset_id, &context.options.partition)?;
                 let kg_view = context
                     .kg_view
                     .ok_or(AssetDagExecutorError::MissingRuntimeKgView)?;
@@ -408,7 +491,74 @@ struct AssetExecutionContext<'a> {
     kg_view: Option<&'a KgSocietyViewMaterialization>,
 }
 
+async fn execute_skill_fact_asset(
+    context: AssetExecutionContext<'_>,
+    input: &SkillFactsInput,
+) -> Result<MaterializationRecord, AssetDagExecutorError> {
+    let parent_materializations = context
+        .dag
+        .dependency_materializations(
+            context.asset_id,
+            &context.options.partition,
+            context.records_by_asset,
+        )
+        .await?;
+    let materialization = SkillFactMaterializer::new(context.dag.lake.clone())
+        .materialize_for_run(
+            context.asset_id.as_str(),
+            input.source.clone(),
+            input.snapshot_date.clone(),
+            context.run_id.to_string(),
+            &input.facts,
+            &input.fact_annotations,
+            parent_materializations,
+            skill_fact_watermarks(input),
+            context.run_id.clone(),
+            context.options.partition.clone(),
+        )
+        .await?;
+    Ok(materialization.record)
+}
+
+fn reddit_thread_watermarks(input: &RedditThreadsDailyInput) -> Vec<SourceWatermark> {
+    if !input.source_watermarks.is_empty() {
+        return input.source_watermarks.clone();
+    }
+
+    let high_watermark = input
+        .records
+        .iter()
+        .map(|record| record.fetched_at)
+        .max()
+        .map(|time| time.to_rfc3339())
+        .unwrap_or_else(|| input.snapshot_date.clone());
+    vec![SourceWatermark {
+        source: format!("reddit:{}", input.subreddit),
+        high_watermark,
+    }]
+}
+
+fn skill_fact_watermarks(input: &SkillFactsInput) -> Vec<SourceWatermark> {
+    if !input.source_watermarks.is_empty() {
+        return input.source_watermarks.clone();
+    }
+
+    let high_watermark = input
+        .facts
+        .iter()
+        .map(|fact| fact.learned_at)
+        .max()
+        .map(|time| time.to_rfc3339())
+        .unwrap_or_else(|| input.snapshot_date.clone());
+    vec![SourceWatermark {
+        source: input.source.clone(),
+        high_watermark,
+    }]
+}
+
 enum ExecutedAsset {
+    RedditThreadsDaily(MaterializationRecord),
+    SkillFacts(MaterializationRecord),
     KgSocietyView(KgSocietyViewMaterialization),
     SearchServingBundle(SearchServingBundleMaterialization),
 }
@@ -416,6 +566,7 @@ enum ExecutedAsset {
 impl ExecutedAsset {
     fn record(&self) -> &MaterializationRecord {
         match self {
+            Self::RedditThreadsDaily(record) | Self::SkillFacts(record) => record,
             Self::KgSocietyView(materialization) => &materialization.record,
             Self::SearchServingBundle(materialization) => &materialization.record,
         }
@@ -428,8 +579,13 @@ pub enum AssetDagExecutorError {
     Manifest(RunManifestError),
     Lake(LakeError),
     KgSocietyView(KgSocietyViewMaterializeError),
+    RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
     SearchServingBundle(SearchServingBundleMaterializeError),
+    SkillFact(SkillFactMaterializeError),
     NoExecutor {
+        asset_id: AssetId,
+    },
+    SourceInputMissing {
         asset_id: AssetId,
     },
     MissingDependency {
@@ -458,11 +614,18 @@ impl fmt::Display for AssetDagExecutorError {
             Self::Manifest(err) => write!(f, "asset DAG manifest update failed: {err}"),
             Self::Lake(err) => write!(f, "asset DAG lake operation failed: {err}"),
             Self::KgSocietyView(err) => write!(f, "KG society view execution failed: {err}"),
+            Self::RedditThreadSnapshot(err) => {
+                write!(f, "reddit thread source execution failed: {err}")
+            }
             Self::SearchServingBundle(err) => {
                 write!(f, "search serving bundle execution failed: {err}")
             }
+            Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
             Self::NoExecutor { asset_id } => {
                 write!(f, "no executor registered for planned asset {asset_id}")
+            }
+            Self::SourceInputMissing { asset_id } => {
+                write!(f, "source input payload is required to execute asset {asset_id}")
             }
             Self::MissingDependency {
                 asset_id,
@@ -523,9 +686,21 @@ impl From<KgSocietyViewMaterializeError> for AssetDagExecutorError {
     }
 }
 
+impl From<RedditThreadSnapshotMaterializeError> for AssetDagExecutorError {
+    fn from(err: RedditThreadSnapshotMaterializeError) -> Self {
+        Self::RedditThreadSnapshot(err)
+    }
+}
+
 impl From<SearchServingBundleMaterializeError> for AssetDagExecutorError {
     fn from(err: SearchServingBundleMaterializeError) -> Self {
         Self::SearchServingBundle(err)
+    }
+}
+
+impl From<SkillFactMaterializeError> for AssetDagExecutorError {
+    fn from(err: SkillFactMaterializeError) -> Self {
+        Self::SkillFact(err)
     }
 }
 
@@ -560,4 +735,10 @@ fn static_asset_id(id: &str) -> AssetId {
 
 fn default_asset_version(planned_at: DateTime<Utc>) -> String {
     planned_at.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
+    source_inputs.reddit_threads_daily.is_none()
+        && source_inputs.reddit_resident_facts.is_none()
+        && source_inputs.google_review_facts.is_none()
 }
