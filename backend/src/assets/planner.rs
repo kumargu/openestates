@@ -58,6 +58,8 @@ pub struct AssetPlanEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_created_at: Option<DateTime<Utc>>,
     pub current_parent_materializations: Vec<MaterializationId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_snapshot: Vec<MaterializationId>,
     pub freshness: AssetFreshness,
 }
 
@@ -238,11 +240,20 @@ impl AssetPlanner {
                 planned_ids.insert(asset_id.clone());
             }
 
+            let dependency_snapshot = dependency_snapshot(
+                definition,
+                partition,
+                &records,
+                &self.registry,
+                &self.materializations,
+            )
+            .await?;
             entries.push(plan_entry(
                 definition,
                 asset_partition,
                 current.as_ref(),
                 reason,
+                dependency_snapshot,
                 now,
             ));
             records.insert(asset_id, current);
@@ -262,6 +273,7 @@ fn plan_entry(
     partition: AssetPartition,
     current: Option<&MaterializationRecord>,
     reason: Option<PlanReason>,
+    dependency_snapshot: Vec<MaterializationId>,
     now: DateTime<Utc>,
 ) -> AssetPlanEntry {
     let freshness = asset_freshness(definition.refresh, current, now);
@@ -287,8 +299,52 @@ fn plan_entry(
         current_parent_materializations: current
             .map(|record| record.parent_materializations.clone())
             .unwrap_or_default(),
+        dependency_snapshot,
         freshness,
     }
+}
+
+async fn dependency_snapshot(
+    definition: &super::AssetDefinition,
+    run_partition: &AssetPartition,
+    records: &HashMap<AssetId, Option<MaterializationRecord>>,
+    registry: &AssetRegistry,
+    materializations: &AssetMaterializationStore,
+) -> Result<Vec<MaterializationId>, PlannerError> {
+    let mut snapshot = Vec::new();
+    for dependency in &definition.dependencies {
+        match definition.dependency_fan_in_policy(dependency) {
+            DependencyFanInPolicy::ResolvedPartition => {
+                let dependency_partition = registry
+                    .partition_for(dependency, run_partition)
+                    .map_err(PlannerError::Partition)?;
+                if let Some(record) = records.get(dependency).and_then(Option::as_ref) {
+                    if record.partition == dependency_partition {
+                        snapshot.push(record.materialization_id.clone());
+                    }
+                }
+            }
+            DependencyFanInPolicy::AllCurrentPartitions => {
+                let dependency_definition = registry
+                    .get(dependency)
+                    .expect("asset registry validates dependency references");
+                snapshot.extend(
+                    materializations
+                        .current_records_for_asset(dependency)
+                        .await
+                        .map_err(PlannerError::Lake)?
+                        .into_iter()
+                        .filter(|record| {
+                            dependency_definition
+                                .partition_policy
+                                .matches_materialized_partition(&record.partition)
+                        })
+                        .map(|record| record.materialization_id),
+                );
+            }
+        }
+    }
+    Ok(snapshot)
 }
 
 async fn plan_reason(

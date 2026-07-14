@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::fmt;
+use std::time::Duration;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -12,19 +13,18 @@ use crate::serving::{
 };
 
 use super::{
-    all_current_materialization_records_for_dependency, read_skill_fact_artifact_rows,
-    sort_materialization_records, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
-    AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy, GooglePlaceAssetError,
-    GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
-    KgSocietyViewMaterializer, MaterializationId, MaterializationRecord, PartitionResolutionError,
-    PlanDecision, PlannerError, RedditThreadSnapshotMaterializeError,
-    RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
-    ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactsInput, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    read_skill_fact_artifact_rows, sort_materialization_records, AssetDagPlan, AssetDagRunManifest,
+    AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
+    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy,
+    GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
+    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
+    MaterializationId, MaterializationRecord, PartitionResolutionError, PlannerError,
+    RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
+    RedditThreadsDailyInput, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
+    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -37,6 +37,25 @@ pub struct AssetDagExecutionOptions {
     pub source_inputs: AssetSourceInputs,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub force_assets: Vec<AssetId>,
+    #[serde(default)]
+    pub retry_policy: AssetRetryPolicy,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetRetryPolicy {
+    pub max_attempts: u32,
+    pub initial_delay_ms: u64,
+    pub max_delay_ms: u64,
+}
+
+impl Default for AssetRetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_attempts: 3,
+            initial_delay_ms: 100,
+            max_delay_ms: 2_000,
+        }
+    }
 }
 
 impl AssetDagExecutionOptions {
@@ -48,6 +67,7 @@ impl AssetDagExecutionOptions {
             dry_run: false,
             source_inputs: AssetSourceInputs::default(),
             force_assets: Vec::new(),
+            retry_policy: AssetRetryPolicy::default(),
         }
     }
 
@@ -68,6 +88,11 @@ impl AssetDagExecutionOptions {
 
     pub fn with_forced_assets(mut self, force_assets: Vec<AssetId>) -> Self {
         self.force_assets = force_assets;
+        self
+    }
+
+    pub fn with_retry_policy(mut self, retry_policy: AssetRetryPolicy) -> Self {
+        self.retry_policy = retry_policy;
         self
     }
 }
@@ -141,7 +166,7 @@ impl AssetDagExecutor {
                 &options.force_assets,
             )
             .await?;
-        let mut manifest = AssetDagRunManifest::from_plan(&plan);
+        let manifest = AssetDagRunManifest::from_plan_with_version(&plan, options.version.clone());
 
         if options.dry_run {
             return Ok(AssetDagExecutionReport {
@@ -153,85 +178,288 @@ impl AssetDagExecutor {
             });
         }
 
+        let dependency_snapshot = self.load_dependency_snapshot(&manifest).await?;
+        self.execute_manifest(
+            graph,
+            options,
+            manifest,
+            HashMap::new(),
+            dependency_snapshot,
+        )
+        .await
+    }
+
+    pub async fn resume(
+        &self,
+        graph: &KnowledgeGraph,
+        options: AssetDagExecutionOptions,
+        run_id: MaterializationId,
+    ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
+        if options.dry_run {
+            return Err(AssetDagExecutorError::ResumeDryRunUnsupported);
+        }
+        let mut manifest = self
+            .run_manifests
+            .manifest(&options.partition, &run_id)
+            .await?;
+        if manifest.partition != options.partition {
+            return Err(AssetDagExecutorError::ResumePartitionMismatch {
+                run_id,
+                expected: manifest.partition,
+                actual: options.partition,
+            });
+        }
+        manifest.ensure_resumable()?;
+        let mut options = options;
+        options.planned_at = manifest.created_at;
+        if !manifest.execution_version.is_empty() {
+            options.version.clone_from(&manifest.execution_version);
+        }
+        let dependency_snapshot = self.load_dependency_snapshot(&manifest).await?;
+        let records_by_asset = self.restore_succeeded_records(&manifest).await?;
+        if self
+            .recover_interrupted_materialization(
+                &mut manifest,
+                &records_by_asset,
+                &dependency_snapshot,
+                &options.partition,
+                &options.retry_policy,
+            )
+            .await?
+        {
+            self.persist_manifest(&manifest, false).await?;
+        }
+        let mut manifest = manifest.prepare_resume(Utc::now())?;
+        for asset_id in &options.force_assets {
+            manifest.replay_step(asset_id)?;
+        }
+        let records_by_asset = self.restore_succeeded_records(&manifest).await?;
+        self.execute_manifest(
+            graph,
+            options,
+            manifest,
+            records_by_asset,
+            dependency_snapshot,
+        )
+        .await
+    }
+
+    async fn recover_interrupted_materialization(
+        &self,
+        manifest: &mut AssetDagRunManifest,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
+        run_partition: &AssetPartition,
+        retry_policy: &AssetRetryPolicy,
+    ) -> Result<bool, AssetDagExecutorError> {
+        let Some(step) = manifest
+            .steps
+            .iter()
+            .find(|step| step.status == super::AssetRunStepStatus::Running)
+            .cloned()
+        else {
+            return Ok(false);
+        };
+        let started_at = step
+            .attempts
+            .last()
+            .map_or(manifest.created_at, |attempt| attempt.started_at);
+        let Some(record) = self
+            .materializations
+            .record_for_run_attempt(
+                &step.asset_id,
+                &step.partition,
+                &manifest.run_id,
+                started_at,
+            )
+            .await?
+        else {
+            return Ok(false);
+        };
+        self.validate_record_with_retry(
+            step.asset_id.clone(),
+            &record,
+            records_by_asset,
+            dependency_snapshot,
+            run_partition,
+            retry_policy,
+        )
+        .await?;
+        manifest.mark_step_materialized(&step.asset_id, &record, started_at, Utc::now())?;
+        Ok(true)
+    }
+
+    async fn execute_manifest(
+        &self,
+        graph: &KnowledgeGraph,
+        options: AssetDagExecutionOptions,
+        mut manifest: AssetDagRunManifest,
+        mut records_by_asset: HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: HashMap<AssetId, Vec<MaterializationRecord>>,
+    ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
         self.persist_manifest(&manifest, false).await?;
         let mut executed_assets = Vec::new();
-        let mut records_by_asset = HashMap::new();
-        let mut kg_view: Option<KgSocietyViewMaterialization> = None;
+        let mut kg_view = self
+            .restore_kg_view_runtime(graph, &records_by_asset)
+            .await?;
+        let mut first_error = None;
 
-        for entry in plan.entries.iter() {
-            if entry.decision == PlanDecision::Skip {
+        for step in manifest.steps.clone() {
+            if step.status == super::AssetRunStepStatus::Materialized {
+                let record = self.record_for_manifest_step(&step).await?;
+                match self
+                    .promote_materialization_with_retry(
+                        &record,
+                        manifest.created_at,
+                        step.current_materialization_id.as_ref(),
+                        &options.retry_policy,
+                    )
+                    .await
+                {
+                    Ok(()) => {
+                        manifest.mark_step_promoted(&step.asset_id, Utc::now())?;
+                        self.persist_manifest(&manifest, false).await?;
+                        records_by_asset.insert(step.asset_id.clone(), record);
+                        if step.asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
+                            kg_view = self
+                                .restore_kg_view_runtime(graph, &records_by_asset)
+                                .await?;
+                        }
+                    }
+                    Err(err) => {
+                        manifest.mark_materialized_step_failed(
+                            &step.asset_id,
+                            Utc::now(),
+                            err.to_string(),
+                        )?;
+                        self.persist_manifest(&manifest, false).await?;
+                        first_error.get_or_insert(err);
+                    }
+                }
+                continue;
+            }
+            if step.status != super::AssetRunStepStatus::Planned {
                 continue;
             }
 
-            let asset_id = entry.asset_id.clone();
-            let asset_partition = entry.partition.clone();
-            let started_at = Utc::now();
-            manifest.mark_step_running(&asset_id, started_at)?;
-            self.persist_manifest(&manifest, false).await?;
+            let blocked_by = blocked_dependencies(&manifest, &step.dependencies);
+            if !blocked_by.is_empty() {
+                manifest.mark_step_blocked(&step.asset_id, Utc::now(), blocked_by)?;
+                self.persist_manifest(&manifest, false).await?;
+                continue;
+            }
 
-            match self
-                .execute_asset(AssetExecutionContext {
-                    dag: self,
-                    graph,
-                    options: &options,
-                    run_id: &manifest.run_id,
-                    asset_id: &asset_id,
-                    asset_partition: &asset_partition,
-                    records_by_asset: &records_by_asset,
-                    kg_view: kg_view.as_ref(),
-                })
-                .await
-            {
-                Ok(executed) => {
-                    let completed_at = Utc::now();
-                    let record = executed.record().clone();
-                    let success_result = self
-                        .prepare_successful_step(
-                            &manifest,
-                            asset_id.clone(),
-                            &record,
-                            &records_by_asset,
-                            &options.partition,
-                            StepTiming {
-                                started_at,
-                                completed_at,
-                            },
-                        )
-                        .await;
-                    let next_manifest = match success_result {
-                        Ok(next_manifest) => next_manifest,
-                        Err(err) => {
+            let asset_id = step.asset_id;
+            let asset_partition = step.partition;
+            let mut attempt = 0;
+            loop {
+                attempt += 1;
+                let started_at = Utc::now();
+                manifest.mark_step_running(&asset_id, started_at)?;
+                self.persist_manifest(&manifest, false).await?;
+
+                match self
+                    .execute_asset(AssetExecutionContext {
+                        dag: self,
+                        graph,
+                        options: &options,
+                        run_id: &manifest.run_id,
+                        asset_id: &asset_id,
+                        asset_partition: &asset_partition,
+                        records_by_asset: &records_by_asset,
+                        dependency_snapshot: &dependency_snapshot,
+                        kg_view: kg_view.as_ref(),
+                    })
+                    .await
+                {
+                    Ok(executed) => {
+                        let completed_at = Utc::now();
+                        let record = executed.record().clone();
+                        if let Err(err) = self
+                            .validate_record_with_retry(
+                                asset_id.clone(),
+                                &record,
+                                &records_by_asset,
+                                &dependency_snapshot,
+                                &options.partition,
+                                &options.retry_policy,
+                            )
+                            .await
+                        {
                             manifest.mark_step_failed(
                                 &asset_id,
                                 started_at,
                                 completed_at,
                                 err.to_string(),
                             )?;
-                            manifest.finish(completed_at)?;
-                            self.persist_manifest(&manifest, true).await?;
-                            return Err(err);
+                            self.persist_manifest(&manifest, false).await?;
+                            first_error.get_or_insert(err);
+                            break;
                         }
-                    };
-
-                    manifest = next_manifest;
-                    self.persist_manifest(&manifest, false).await?;
-                    records_by_asset.insert(asset_id.clone(), record);
-                    if let ExecutedAsset::KgSocietyView(materialization) = executed {
-                        kg_view = Some(materialization);
+                        manifest.mark_step_materialized(
+                            &asset_id,
+                            &record,
+                            started_at,
+                            completed_at,
+                        )?;
+                        self.persist_manifest(&manifest, false).await?;
+                        match self
+                            .promote_materialization_with_retry(
+                                &record,
+                                manifest.created_at,
+                                step.current_materialization_id.as_ref(),
+                                &options.retry_policy,
+                            )
+                            .await
+                        {
+                            Ok(()) => {
+                                manifest.mark_step_promoted(&asset_id, Utc::now())?;
+                                self.persist_manifest(&manifest, false).await?;
+                                records_by_asset.insert(asset_id.clone(), record);
+                                if asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
+                                    kg_view = self
+                                        .restore_kg_view_runtime(graph, &records_by_asset)
+                                        .await?;
+                                }
+                                executed_assets.push(asset_id.clone());
+                            }
+                            Err(err) => {
+                                manifest.mark_materialized_step_failed(
+                                    &asset_id,
+                                    Utc::now(),
+                                    err.to_string(),
+                                )?;
+                                self.persist_manifest(&manifest, false).await?;
+                                first_error.get_or_insert(err);
+                            }
+                        }
+                        break;
                     }
-                    executed_assets.push(asset_id);
-                }
-                Err(err) => {
-                    let completed_at = Utc::now();
-                    manifest.mark_step_failed(
-                        &asset_id,
-                        started_at,
-                        completed_at,
-                        err.to_string(),
-                    )?;
-                    manifest.finish(completed_at)?;
-                    self.persist_manifest(&manifest, true).await?;
-                    return Err(err);
+                    Err(err) => {
+                        let completed_at = Utc::now();
+                        let should_retry = err.is_retryable()
+                            && attempt < options.retry_policy.max_attempts.max(1);
+                        if should_retry {
+                            manifest.mark_step_attempt_failed(
+                                &asset_id,
+                                started_at,
+                                completed_at,
+                                err.to_string(),
+                            )?;
+                            self.persist_manifest(&manifest, false).await?;
+                            tokio::time::sleep(retry_delay(&options.retry_policy, attempt)).await;
+                            continue;
+                        }
+                        manifest.mark_step_failed(
+                            &asset_id,
+                            started_at,
+                            completed_at,
+                            err.to_string(),
+                        )?;
+                        self.persist_manifest(&manifest, false).await?;
+                        first_error.get_or_insert(err);
+                        break;
+                    }
                 }
             }
         }
@@ -240,6 +468,10 @@ impl AssetDagExecutor {
         manifest.finish(completed_at)?;
         let persisted = self.persist_manifest(&manifest, true).await?;
 
+        if let Some(err) = first_error {
+            return Err(err);
+        }
+
         Ok(AssetDagExecutionReport {
             dry_run: false,
             manifest,
@@ -247,6 +479,225 @@ impl AssetDagExecutor {
             current_pointer_key: Some(persisted.current_pointer_key),
             executed_assets,
         })
+    }
+
+    async fn record_for_manifest_step(
+        &self,
+        step: &super::AssetRunStep,
+    ) -> Result<MaterializationRecord, AssetDagExecutorError> {
+        let materialization_id = step.materialization_id.as_ref().ok_or_else(|| {
+            AssetDagExecutorError::ResumeMissingMaterialization {
+                asset_id: step.asset_id.clone(),
+            }
+        })?;
+        Ok(self
+            .materializations
+            .record(&step.asset_id, &step.partition, materialization_id)
+            .await?)
+    }
+
+    async fn promote_materialization_with_retry(
+        &self,
+        record: &MaterializationRecord,
+        run_created_at: DateTime<Utc>,
+        expected_current: Option<&MaterializationId>,
+        policy: &AssetRetryPolicy,
+    ) -> Result<(), AssetDagExecutorError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            match self
+                .materializations
+                .promote_current_for_run_if_current(record, run_created_at, expected_current)
+                .await
+            {
+                Ok(_) => return Ok(()),
+                Err(err) if err.is_retryable() && attempt < policy.max_attempts.max(1) => {
+                    tokio::time::sleep(retry_delay(policy, attempt)).await;
+                }
+                Err(err) => return Err(err.into()),
+            }
+        }
+    }
+
+    async fn restore_succeeded_records(
+        &self,
+        manifest: &AssetDagRunManifest,
+    ) -> Result<HashMap<AssetId, MaterializationRecord>, AssetDagExecutorError> {
+        let mut records = HashMap::new();
+        for step in manifest
+            .steps
+            .iter()
+            .filter(|step| step.status == super::AssetRunStepStatus::Succeeded)
+        {
+            let materialization_id = step.materialization_id.as_ref().ok_or_else(|| {
+                AssetDagExecutorError::ResumeMissingMaterialization {
+                    asset_id: step.asset_id.clone(),
+                }
+            })?;
+            let record = self
+                .materializations
+                .record(&step.asset_id, &step.partition, materialization_id)
+                .await?;
+            if record.run_id != manifest.run_id {
+                return Err(AssetDagExecutorError::ResumeMaterializationRunMismatch {
+                    asset_id: step.asset_id.clone(),
+                    expected: manifest.run_id.clone(),
+                    actual: record.run_id,
+                });
+            }
+            self.validate_restored_artifacts(&step.asset_id, &record)
+                .await?;
+            records.insert(step.asset_id.clone(), record);
+        }
+        Ok(records)
+    }
+
+    async fn validate_restored_artifacts(
+        &self,
+        asset_id: &AssetId,
+        record: &MaterializationRecord,
+    ) -> Result<(), AssetDagExecutorError> {
+        for artifact in &record.artifacts {
+            let key = crate::lake::LakeKey::new(artifact.key.clone()).map_err(LakeError::Key)?;
+            let actual = match self.lake.artifact_metadata(&key).await {
+                Ok(actual) => actual,
+                Err(err) if err.is_not_found() => {
+                    return Err(AssetDagExecutorError::ResumeArtifactIntegrity {
+                        asset_id: asset_id.clone(),
+                        key: artifact.key.clone(),
+                        reason: "artifact is missing".to_string(),
+                    });
+                }
+                Err(err) => return Err(err.into()),
+            };
+            if artifact.hash_algorithm != actual.hash_algorithm
+                || artifact.content_hash != actual.content_hash
+                || artifact.size_bytes != actual.size_bytes
+            {
+                return Err(AssetDagExecutorError::ResumeArtifactIntegrity {
+                    asset_id: asset_id.clone(),
+                    key: artifact.key.clone(),
+                    reason: format!(
+                        "expected {}:{} ({} bytes), got {}:{} ({} bytes)",
+                        artifact.hash_algorithm,
+                        artifact.content_hash,
+                        artifact.size_bytes,
+                        actual.hash_algorithm,
+                        actual.content_hash,
+                        actual.size_bytes
+                    ),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    async fn load_dependency_snapshot(
+        &self,
+        manifest: &AssetDagRunManifest,
+    ) -> Result<HashMap<AssetId, Vec<MaterializationRecord>>, AssetDagExecutorError> {
+        let mut snapshot: HashMap<AssetId, Vec<MaterializationRecord>> = HashMap::new();
+        for step in &manifest.steps {
+            if let Some(materialization_id) = &step.current_materialization_id {
+                let record = self
+                    .materializations
+                    .record(&step.asset_id, &step.partition, materialization_id)
+                    .await?;
+                insert_snapshot_record(&mut snapshot, record);
+            }
+            for dependency in &step.dependencies {
+                for materialization_id in &step.dependency_snapshot {
+                    if let Some(record) = self
+                        .materializations
+                        .record_by_id_for_asset(dependency, materialization_id)
+                        .await?
+                    {
+                        insert_snapshot_record(&mut snapshot, record);
+                    }
+                }
+            }
+        }
+        for records in snapshot.values_mut() {
+            sort_materialization_records(records);
+        }
+        Ok(snapshot)
+    }
+
+    async fn restore_kg_view_runtime(
+        &self,
+        graph: &KnowledgeGraph,
+        records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+    ) -> Result<Option<KgSocietyViewMaterialization>, AssetDagExecutorError> {
+        let asset_id = static_asset_id(KG_SOCIETY_VIEW_ASSET_ID);
+        let Some(record) = records_by_asset.get(&asset_id) else {
+            return Ok(None);
+        };
+        let definition =
+            self.registry
+                .get(&asset_id)
+                .ok_or_else(|| AssetDagExecutorError::UnknownAsset {
+                    asset_id: asset_id.clone(),
+                })?;
+        let mut parent_records = Vec::new();
+        for parent_id in &record.parent_materializations {
+            let mut found = None;
+            for dependency in &definition.dependencies {
+                match self
+                    .materializations
+                    .record_by_id_for_asset(dependency, parent_id)
+                    .await
+                {
+                    Ok(Some(parent)) => {
+                        found = Some(parent);
+                        break;
+                    }
+                    Ok(None) => continue,
+                    Err(err) => return Err(err.into()),
+                }
+            }
+            parent_records.push(found.ok_or_else(|| {
+                AssetDagExecutorError::ResumeMissingParentMaterialization {
+                    asset_id: asset_id.clone(),
+                    parent_id: parent_id.clone(),
+                }
+            })?);
+        }
+        let support_records = support_fact_records(definition, &parent_records);
+        let support_rows = read_skill_fact_artifact_rows(&self.lake, &support_records).await?;
+        let canonical_record =
+            dependency_record(&asset_id, &parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
+        let canonical_rows =
+            super::read_canonical_society_rows(&self.lake, canonical_record).await?;
+        let records = KgViewRecords::from_graph_with_asset_rows(
+            graph,
+            &canonical_rows.entities,
+            &canonical_rows.edges,
+            &support_rows.facts,
+            &support_rows.fact_annotations,
+        )?;
+        let manifest_artifact = record
+            .artifacts
+            .iter()
+            .find(|artifact| artifact.key.ends_with("manifest.json"))
+            .ok_or_else(|| AssetDagExecutorError::ResumeMissingKgViewManifest {
+                materialization_id: record.materialization_id.clone(),
+            })?;
+        let manifest_key =
+            crate::lake::LakeKey::new(manifest_artifact.key.clone()).map_err(LakeError::Key)?;
+        let manifest: KgViewManifest = self.lake.get_json(&manifest_key).await?;
+        if manifest.graph_content_hash != records.content_hash {
+            return Err(AssetDagExecutorError::ResumeKgViewContentMismatch {
+                materialization_id: record.materialization_id.clone(),
+                expected: manifest.graph_content_hash,
+                actual: records.content_hash,
+            });
+        }
+        Ok(Some(KgSocietyViewMaterialization {
+            manifest,
+            record: record.clone(),
+            records,
+        }))
     }
 
     async fn execute_asset(
@@ -266,9 +717,15 @@ impl AssetDagExecutor {
         asset_id: &AssetId,
         run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<Vec<MaterializationId>, AssetDagExecutorError> {
         Ok(self
-            .dependency_materialization_records(asset_id, run_partition, records_by_asset)
+            .dependency_materialization_records(
+                asset_id,
+                run_partition,
+                records_by_asset,
+                dependency_snapshot,
+            )
             .await?
             .into_iter()
             .map(|record| record.materialization_id)
@@ -280,6 +737,7 @@ impl AssetDagExecutor {
         asset_id: &AssetId,
         run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
         let definition =
             self.registry
@@ -297,6 +755,7 @@ impl AssetDagExecutor {
                     dependency,
                     run_partition,
                     records_by_asset,
+                    dependency_snapshot,
                 )
                 .await?;
             parents.extend(dependency_records);
@@ -312,6 +771,7 @@ impl AssetDagExecutor {
         dependency: &AssetId,
         run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
         let records = match definition.dependency_fan_in_policy(dependency) {
             DependencyFanInPolicy::ResolvedPartition => {
@@ -321,13 +781,18 @@ impl AssetDagExecutor {
                         dependency,
                         run_partition,
                         records_by_asset,
+                        dependency_snapshot,
                     )
                     .await?,
                 ]
             }
             DependencyFanInPolicy::AllCurrentPartitions => {
-                self.all_current_dependency_records(dependency, records_by_asset)
-                    .await?
+                self.all_current_dependency_records(
+                    dependency,
+                    records_by_asset,
+                    dependency_snapshot,
+                )
+                .await?
             }
         };
 
@@ -346,24 +811,24 @@ impl AssetDagExecutor {
         dependency: &AssetId,
         run_partition: &AssetPartition,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<MaterializationRecord, AssetDagExecutorError> {
         if let Some(record) = records_by_asset.get(dependency) {
             return Ok(record.clone());
         }
 
         let dependency_partition = self.asset_partition(dependency, run_partition)?;
-        self.materializations
-            .current_record(dependency, &dependency_partition)
-            .await
-            .map_err(|err| {
-                if err.is_not_found() {
-                    AssetDagExecutorError::MissingDependency {
-                        asset_id: asset_id.clone(),
-                        dependency: dependency.clone(),
-                    }
-                } else {
-                    AssetDagExecutorError::Lake(err)
-                }
+        dependency_snapshot
+            .get(dependency)
+            .and_then(|records| {
+                records
+                    .iter()
+                    .find(|record| record.partition == dependency_partition)
+            })
+            .cloned()
+            .ok_or_else(|| AssetDagExecutorError::MissingDependency {
+                asset_id: asset_id.clone(),
+                dependency: dependency.clone(),
             })
     }
 
@@ -371,13 +836,12 @@ impl AssetDagExecutor {
         &self,
         dependency: &AssetId,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<Vec<MaterializationRecord>, AssetDagExecutorError> {
-        let mut records = all_current_materialization_records_for_dependency(
-            &self.registry,
-            &self.materializations,
-            dependency,
-        )
-        .await?;
+        let mut records = dependency_snapshot
+            .get(dependency)
+            .cloned()
+            .unwrap_or_default();
 
         if let Some(run_record) = records_by_asset.get(dependency) {
             records.retain(|record| record.partition != run_record.partition);
@@ -398,27 +862,35 @@ impl AssetDagExecutor {
             .map_err(AssetDagExecutorError::Partition)
     }
 
-    async fn prepare_successful_step(
+    async fn validate_record_with_retry(
         &self,
-        manifest: &AssetDagRunManifest,
         asset_id: AssetId,
         record: &MaterializationRecord,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
         run_partition: &AssetPartition,
-        timing: StepTiming,
-    ) -> Result<AssetDagRunManifest, AssetDagExecutorError> {
-        self.validate_record(asset_id.clone(), record, records_by_asset, run_partition)
-            .await?;
-
-        let mut next_manifest = manifest.clone();
-        next_manifest.mark_step_succeeded(
-            &asset_id,
-            record,
-            timing.started_at,
-            timing.completed_at,
-        )?;
-        self.materializations.promote_current(record).await?;
-        Ok(next_manifest)
+        policy: &AssetRetryPolicy,
+    ) -> Result<(), AssetDagExecutorError> {
+        let mut attempt = 0;
+        loop {
+            attempt += 1;
+            match self
+                .validate_record(
+                    asset_id.clone(),
+                    record,
+                    records_by_asset,
+                    dependency_snapshot,
+                    run_partition,
+                )
+                .await
+            {
+                Ok(()) => return Ok(()),
+                Err(err) if err.is_retryable() && attempt < policy.max_attempts.max(1) => {
+                    tokio::time::sleep(retry_delay(policy, attempt)).await;
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 
     async fn validate_record(
@@ -426,6 +898,7 @@ impl AssetDagExecutor {
         asset_id: AssetId,
         record: &MaterializationRecord,
         records_by_asset: &HashMap<AssetId, MaterializationRecord>,
+        dependency_snapshot: &HashMap<AssetId, Vec<MaterializationRecord>>,
         run_partition: &AssetPartition,
     ) -> Result<(), AssetDagExecutorError> {
         let expected_partition = self.asset_partition(&asset_id, run_partition)?;
@@ -437,7 +910,12 @@ impl AssetDagExecutor {
             });
         }
         let expected = self
-            .dependency_materializations(&asset_id, run_partition, records_by_asset)
+            .dependency_materializations(
+                &asset_id,
+                run_partition,
+                records_by_asset,
+                dependency_snapshot,
+            )
             .await?;
         if record.parent_materializations != expected {
             return Err(AssetDagExecutorError::ParentLineageMismatch {
@@ -472,12 +950,6 @@ impl AssetDagExecutor {
 struct PersistedManifest {
     run_manifest_key: String,
     current_pointer_key: String,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct StepTiming {
-    started_at: DateTime<Utc>,
-    completed_at: DateTime<Utc>,
 }
 
 #[derive(Clone)]
@@ -532,7 +1004,7 @@ impl BuiltInAssetExecutorRegistry {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 enum BuiltInAssetExecutor {
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
@@ -543,6 +1015,8 @@ enum BuiltInAssetExecutor {
     GoogleReviewFacts,
     KgSocietyView,
     SearchServingBundle,
+    #[cfg(test)]
+    TestFailOnce(std::sync::Arc<std::sync::atomic::AtomicUsize>),
 }
 
 impl BuiltInAssetExecutor {
@@ -578,6 +1052,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let rera_record = dependency_record(
@@ -603,6 +1078,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let rera_record = dependency_record(
@@ -640,6 +1116,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let materialization =
@@ -684,6 +1161,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let canonical_record = dependency_record(
@@ -720,6 +1198,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let google_record = dependency_record(
@@ -744,6 +1223,7 @@ impl BuiltInAssetExecutor {
                         context.asset_id,
                         &context.options.partition,
                         context.records_by_asset,
+                        context.dependency_snapshot,
                     )
                     .await?;
                 let definition = context.dag.registry.get(context.asset_id).ok_or_else(|| {
@@ -797,6 +1277,33 @@ impl BuiltInAssetExecutor {
                         .await?;
                 Ok(ExecutedAsset::SearchServingBundle(materialization))
             }
+            #[cfg(test)]
+            Self::TestFailOnce(attempts) => {
+                use std::sync::atomic::Ordering;
+
+                if attempts.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(AssetDagExecutorError::Lake(LakeError::Io(
+                        std::io::Error::new(
+                            std::io::ErrorKind::TimedOut,
+                            "injected transient timeout",
+                        ),
+                    )));
+                }
+                let record = MaterializationRecord::succeeded(
+                    context.asset_id.clone(),
+                    super::AssetStage::Raw,
+                    context.asset_partition.clone(),
+                    context.options.version.clone(),
+                    Vec::new(),
+                )
+                .with_run_id(context.run_id.clone());
+                context
+                    .dag
+                    .materializations
+                    .write_materialization(&record)
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
         }
     }
 }
@@ -809,6 +1316,7 @@ struct AssetExecutionContext<'a> {
     asset_id: &'a AssetId,
     asset_partition: &'a AssetPartition,
     records_by_asset: &'a HashMap<AssetId, MaterializationRecord>,
+    dependency_snapshot: &'a HashMap<AssetId, Vec<MaterializationRecord>>,
     kg_view: Option<&'a KgSocietyViewMaterialization>,
 }
 
@@ -822,6 +1330,7 @@ async fn execute_skill_fact_asset(
             context.asset_id,
             &context.options.partition,
             context.records_by_asset,
+            context.dependency_snapshot,
         )
         .await?;
     let materialization = SkillFactMaterializer::new(context.dag.lake.clone())
@@ -890,6 +1399,19 @@ fn support_fact_records(
         })
         .cloned()
         .collect()
+}
+
+fn insert_snapshot_record(
+    snapshot: &mut HashMap<AssetId, Vec<MaterializationRecord>>,
+    record: MaterializationRecord,
+) {
+    let records = snapshot.entry(record.asset_id.clone()).or_default();
+    if records
+        .iter()
+        .all(|existing| existing.materialization_id != record.materialization_id)
+    {
+        records.push(record);
+    }
 }
 
 fn dependency_record<'a>(
@@ -967,6 +1489,37 @@ pub enum AssetDagExecutorError {
     UnknownAsset {
         asset_id: AssetId,
     },
+    ResumeDryRunUnsupported,
+    ResumePartitionMismatch {
+        run_id: MaterializationId,
+        expected: AssetPartition,
+        actual: AssetPartition,
+    },
+    ResumeMissingMaterialization {
+        asset_id: AssetId,
+    },
+    ResumeMaterializationRunMismatch {
+        asset_id: AssetId,
+        expected: MaterializationId,
+        actual: MaterializationId,
+    },
+    ResumeMissingParentMaterialization {
+        asset_id: AssetId,
+        parent_id: MaterializationId,
+    },
+    ResumeMissingKgViewManifest {
+        materialization_id: MaterializationId,
+    },
+    ResumeKgViewContentMismatch {
+        materialization_id: MaterializationId,
+        expected: String,
+        actual: String,
+    },
+    ResumeArtifactIntegrity {
+        asset_id: AssetId,
+        key: String,
+        reason: String,
+    },
 }
 
 impl fmt::Display for AssetDagExecutorError {
@@ -1030,11 +1583,79 @@ impl fmt::Display for AssetDagExecutorError {
             Self::UnknownAsset { asset_id } => {
                 write!(f, "asset {asset_id} is not registered in the DAG")
             }
+            Self::ResumeDryRunUnsupported => {
+                f.write_str("resuming a DAG run is not supported in dry-run mode")
+            }
+            Self::ResumePartitionMismatch {
+                run_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "DAG run {run_id} belongs to partition {expected:?}, not {actual:?}"
+            ),
+            Self::ResumeMissingMaterialization { asset_id } => write!(
+                f,
+                "succeeded asset {asset_id} has no materialization to restore during resume"
+            ),
+            Self::ResumeMaterializationRunMismatch {
+                asset_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "asset {asset_id} materialization belongs to run {actual}, expected {expected}"
+            ),
+            Self::ResumeMissingParentMaterialization {
+                asset_id,
+                parent_id,
+            } => write!(
+                f,
+                "asset {asset_id} cannot restore parent materialization {parent_id}"
+            ),
+            Self::ResumeMissingKgViewManifest { materialization_id } => write!(
+                f,
+                "KG view materialization {materialization_id} has no manifest artifact"
+            ),
+            Self::ResumeKgViewContentMismatch {
+                materialization_id,
+                expected,
+                actual,
+            } => write!(
+                f,
+                "KG view materialization {materialization_id} content hash changed during resume: expected {expected}, got {actual}"
+            ),
+            Self::ResumeArtifactIntegrity {
+                asset_id,
+                key,
+                reason,
+            } => write!(
+                f,
+                "asset {asset_id} cannot resume because artifact {key} failed integrity validation: {reason}"
+            ),
         }
     }
 }
 
 impl std::error::Error for AssetDagExecutorError {}
+
+impl AssetDagExecutorError {
+    pub fn is_retryable(&self) -> bool {
+        match self {
+            Self::Lake(err) => err.is_retryable(),
+            Self::RedditThreadSnapshot(RedditThreadSnapshotMaterializeError::Lake(err))
+            | Self::GooglePlace(GooglePlaceAssetError::Lake(err))
+            | Self::SkillFact(SkillFactMaterializeError::Lake(err))
+            | Self::Rera(ReraAssetError::Lake(err))
+            | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
+            | Self::SearchServingBundle(SearchServingBundleMaterializeError::Lake(err)) => {
+                err.is_retryable()
+            }
+            Self::FanIn(AssetFanInError::Lake(err)) => err.is_retryable(),
+            _ => false,
+        }
+    }
+}
 
 impl From<PlannerError> for AssetDagExecutorError {
     fn from(err: PlannerError) -> Self {
@@ -1110,6 +1731,33 @@ fn ensure_global_partition(
     }
 }
 
+fn blocked_dependencies(manifest: &AssetDagRunManifest, dependencies: &[AssetId]) -> Vec<AssetId> {
+    dependencies
+        .iter()
+        .filter(|dependency| {
+            manifest.steps.iter().any(|step| {
+                &step.asset_id == *dependency
+                    && matches!(
+                        step.status,
+                        super::AssetRunStepStatus::Failed | super::AssetRunStepStatus::Blocked
+                    )
+            })
+        })
+        .cloned()
+        .collect()
+}
+
+fn retry_delay(policy: &AssetRetryPolicy, failed_attempt: u32) -> Duration {
+    let exponent = failed_attempt.saturating_sub(1).min(31);
+    let multiplier = 1_u64 << exponent;
+    Duration::from_millis(
+        policy
+            .initial_delay_ms
+            .saturating_mul(multiplier)
+            .min(policy.max_delay_ms),
+    )
+}
+
 fn knowledge_graph_watermark(graph: &KnowledgeGraph) -> SourceWatermark {
     let stats = graph.stats();
     SourceWatermark {
@@ -1139,7 +1787,68 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::assets::{AssetStage, CostTier, RefreshCadence, TrustTier};
+    use crate::assets::{AssetRegistry, AssetStage, CostTier, RefreshCadence, TrustTier};
+    use chrono::TimeZone;
+    use std::sync::atomic::AtomicUsize;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn transient_asset_failure_retries_and_records_both_attempts() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let asset_id = AssetId::new("transient_root").unwrap();
+        let registry = AssetRegistry::new(vec![AssetDefinition::new(
+            asset_id.clone(),
+            AssetStage::Raw,
+            "transient test root",
+            Vec::new(),
+            RefreshCadence::Daily,
+            CostTier::Free,
+            TrustTier::Root,
+        )])
+        .unwrap();
+        let attempts = Arc::new(AtomicUsize::new(0));
+        let mut executors = HashMap::new();
+        executors.insert(
+            asset_id.clone(),
+            BuiltInAssetExecutor::TestFailOnce(attempts.clone()),
+        );
+        let executor = AssetDagExecutor {
+            materializations: AssetMaterializationStore::new(lake.clone()),
+            run_manifests: AssetRunManifestStore::new(lake.clone()),
+            lake,
+            registry,
+            executors: BuiltInAssetExecutorRegistry { executors },
+        };
+        let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+
+        let report = executor
+            .execute(
+                &KnowledgeGraph::new(),
+                AssetDagExecutionOptions::new(AssetPartition::global(), now).with_retry_policy(
+                    AssetRetryPolicy {
+                        max_attempts: 2,
+                        initial_delay_ms: 0,
+                        max_delay_ms: 0,
+                    },
+                ),
+            )
+            .await
+            .unwrap();
+
+        let step = report
+            .manifest
+            .steps
+            .iter()
+            .find(|step| step.asset_id == asset_id)
+            .unwrap();
+        assert_eq!(attempts.load(std::sync::atomic::Ordering::SeqCst), 2);
+        assert_eq!(step.status, super::super::AssetRunStepStatus::Succeeded);
+        assert_eq!(step.attempts.len(), 2);
+        assert!(step.attempts[0].error.is_some());
+        assert!(step.attempts[1].error.is_none());
+    }
 
     #[test]
     fn support_fact_records_follow_registry_fan_in_policy() {

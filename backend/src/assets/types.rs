@@ -86,6 +86,14 @@ impl std::fmt::Display for MaterializationId {
     }
 }
 
+impl std::str::FromStr for MaterializationId {
+    type Err = uuid::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        Uuid::parse_str(value).map(Self)
+    }
+}
+
 /// Coarse lifecycle stage for an asset artifact.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -263,6 +271,10 @@ pub struct CurrentAssetPointer {
     pub materialization_id: MaterializationId,
     pub materialization_key: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_id: Option<MaterializationId>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_created_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
 }
 

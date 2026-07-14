@@ -4,15 +4,15 @@ use arrow::array::{Array, StringArray};
 use backend::assets::{
     default_openestates_registry, rera_legal_facts_input, AssetDagExecutionOptions,
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
-    AssetPartition, AssetRegistry, AssetRunManifestStore, AssetRunStepStatus, AssetSourceInputs,
-    AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus, GooglePlaceSnapshotRecord,
-    GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord, RedditThreadSnapshotRecord,
-    RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
-    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord,
-    SkillFactsInput, SourceWatermark, TrustTier, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
+    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
+    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
+    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -476,6 +476,366 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
 }
 
 #[tokio::test]
+async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_successes() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
+    let run_partition = source_run_partition();
+    let mut partial_inputs = mock_source_inputs(now);
+    partial_inputs.reddit_threads_daily = None;
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+
+    let err = executor
+        .execute(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition.clone(), now)
+                .with_version("resilient-run")
+                .with_source_inputs(partial_inputs),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(
+        err,
+        AssetDagExecutorError::SourceInputMissing { asset_id: ref failed_asset }
+            if failed_asset == &asset_id(REDDIT_THREADS_DAILY_ASSET_ID)
+    ));
+
+    let run_store = AssetRunManifestStore::new(lake.clone());
+    let failed = run_store.current_manifest(&run_partition).await.unwrap();
+    assert_eq!(failed.status, DagRunStatus::Failed);
+    assert_eq!(failed.failed_count, 1);
+    assert_eq!(failed.blocked_count, 3);
+    assert_eq!(
+        run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID).status,
+        AssetRunStepStatus::Failed
+    );
+    assert_eq!(
+        run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
+            .attempts
+            .len(),
+        1
+    );
+    assert_eq!(
+        run_step(&failed, REDDIT_RESIDENT_FACTS_ASSET_ID).status,
+        AssetRunStepStatus::Blocked
+    );
+    assert_eq!(
+        run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID).status,
+        AssetRunStepStatus::Succeeded
+    );
+    assert_eq!(
+        run_step(&failed, GOOGLE_REVIEW_FACTS_ASSET_ID).status,
+        AssetRunStepStatus::Succeeded
+    );
+    assert_eq!(
+        run_step(&failed, KG_SOCIETY_VIEW_ASSET_ID).status,
+        AssetRunStepStatus::Blocked
+    );
+    assert_eq!(
+        run_step(&failed, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
+        AssetRunStepStatus::Blocked
+    );
+    let google_materialization = run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID)
+        .materialization_id
+        .clone()
+        .unwrap();
+    let original_canonical_id = run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
+        .dependency_snapshot
+        .iter()
+        .find_map(|materialization_id| {
+            (materialization_id
+                == &run_step(&failed, CANONICAL_SOCIETY_NODES_ASSET_ID)
+                    .current_materialization_id
+                    .clone()
+                    .unwrap())
+                .then_some(materialization_id.clone())
+        })
+        .unwrap();
+    let mut advanced_canonical = store
+        .record(
+            &asset_id(CANONICAL_SOCIETY_NODES_ASSET_ID),
+            &AssetPartition::global(),
+            &original_canonical_id,
+        )
+        .await
+        .unwrap();
+    advanced_canonical.materialization_id = MaterializationId::new();
+    advanced_canonical.run_id = MaterializationId::new();
+    advanced_canonical.created_at = now + Duration::hours(1);
+    store
+        .write_materialization(&advanced_canonical)
+        .await
+        .unwrap();
+    store
+        .promote_current_for_run(&advanced_canonical, now + Duration::hours(1))
+        .await
+        .unwrap();
+
+    let resumed = executor
+        .resume(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition.clone(), now + Duration::days(1))
+                .with_version("must-not-replace-original-version")
+                .with_source_inputs(mock_source_inputs(now)),
+            failed.run_id.clone(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resumed.manifest.run_id, failed.run_id);
+    assert_eq!(resumed.manifest.status, DagRunStatus::Succeeded);
+    assert!(resumed
+        .executed_assets
+        .contains(&asset_id(REDDIT_THREADS_DAILY_ASSET_ID)));
+    assert!(resumed
+        .executed_assets
+        .contains(&asset_id(REDDIT_RESIDENT_FACTS_ASSET_ID)));
+    assert!(resumed
+        .executed_assets
+        .contains(&asset_id(KG_SOCIETY_VIEW_ASSET_ID)));
+    assert!(resumed
+        .executed_assets
+        .contains(&asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)));
+    assert!(!resumed
+        .executed_assets
+        .contains(&asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID)));
+    assert_eq!(
+        run_step(&resumed.manifest, GOOGLE_PLACES_WEEKLY_ASSET_ID).materialization_id,
+        Some(google_materialization)
+    );
+    assert_eq!(
+        run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID)
+            .attempts
+            .len(),
+        2
+    );
+    let reddit_record = store
+        .record(
+            &asset_id(REDDIT_THREADS_DAILY_ASSET_ID),
+            &reddit_thread_partition(),
+            run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID)
+                .materialization_id
+                .as_ref()
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        reddit_record.parent_materializations,
+        vec![original_canonical_id]
+    );
+    assert_eq!(
+        store
+            .record(
+                &asset_id(KG_SOCIETY_VIEW_ASSET_ID),
+                &AssetPartition::global(),
+                run_step(&resumed.manifest, KG_SOCIETY_VIEW_ASSET_ID)
+                    .materialization_id
+                    .as_ref()
+                    .unwrap(),
+            )
+            .await
+            .unwrap()
+            .version,
+        "resilient-run"
+    );
+}
+
+#[tokio::test]
+async fn executor_rejects_tampered_artifacts_before_resuming_successful_steps() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
+    let run_partition = source_run_partition();
+    let mut partial_inputs = mock_source_inputs(now);
+    partial_inputs.reddit_threads_daily = None;
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    executor
+        .execute(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition.clone(), now)
+                .with_version("tampered-resume")
+                .with_source_inputs(partial_inputs),
+        )
+        .await
+        .unwrap_err();
+    let failed = AssetRunManifestStore::new(lake.clone())
+        .current_manifest(&run_partition)
+        .await
+        .unwrap();
+    let google_step = run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID);
+    let google_record = store
+        .record(
+            &google_step.asset_id,
+            &google_step.partition,
+            google_step.materialization_id.as_ref().unwrap(),
+        )
+        .await
+        .unwrap();
+    let artifact = google_record.artifacts.first().unwrap();
+    lake.put_text(&LakeKey::new(artifact.key.clone()).unwrap(), "tampered")
+        .await
+        .unwrap();
+
+    let err = executor
+        .resume(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition, now + Duration::minutes(5))
+                .with_source_inputs(mock_source_inputs(now)),
+            failed.run_id,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(matches!(
+        err,
+        AssetDagExecutorError::ResumeArtifactIntegrity {
+            asset_id: restored_asset_id,
+            ..
+        } if restored_asset_id == asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID)
+    ));
+}
+
+#[tokio::test]
+async fn facts_only_resume_replays_raw_companion_and_records_exact_lineage() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
+    let run_partition = source_run_partition();
+    let mut partial_inputs = mock_source_inputs(now);
+    partial_inputs.reddit_resident_facts = None;
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    executor
+        .execute(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition.clone(), now)
+                .with_version("facts-only-resume")
+                .with_source_inputs(partial_inputs),
+        )
+        .await
+        .unwrap_err();
+    let failed = AssetRunManifestStore::new(lake.clone())
+        .current_manifest(&run_partition)
+        .await
+        .unwrap();
+    let old_raw_id = run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
+        .materialization_id
+        .clone()
+        .unwrap();
+    let collection = AssetSourceInputs::resume_collection_plan(&failed);
+
+    let resumed = executor
+        .resume(
+            &mock_graph(),
+            AssetDagExecutionOptions::new(run_partition, now + Duration::minutes(5))
+                .with_source_inputs(mock_source_inputs(now))
+                .with_forced_assets(collection.force_assets),
+            failed.run_id,
+        )
+        .await
+        .unwrap();
+
+    let raw_step = run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID);
+    let new_raw_id = raw_step.materialization_id.clone().unwrap();
+    assert_ne!(new_raw_id, old_raw_id);
+    assert_eq!(raw_step.attempts.len(), 2);
+    assert_eq!(
+        run_step(&resumed.manifest, REDDIT_RESIDENT_FACTS_ASSET_ID).parent_materializations[0],
+        new_raw_id
+    );
+    assert_eq!(
+        run_step(&resumed.manifest, GOOGLE_PLACES_WEEKLY_ASSET_ID)
+            .attempts
+            .len(),
+        1
+    );
+}
+
+#[tokio::test]
+async fn executor_resumes_interrupted_serving_step_from_exact_succeeded_kg_view() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = source_run_partition();
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    let graph = mock_graph();
+    let completed = executor
+        .execute(
+            &graph,
+            AssetDagExecutionOptions::new(run_partition.clone(), now)
+                .with_version("interrupted-serving")
+                .with_source_inputs(mock_source_inputs(now)),
+        )
+        .await
+        .unwrap();
+    let kg_materialization = run_step(&completed.manifest, KG_SOCIETY_VIEW_ASSET_ID)
+        .materialization_id
+        .clone()
+        .unwrap();
+    let serving_materialization = run_step(&completed.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID)
+        .materialization_id
+        .clone();
+    let mut interrupted = completed.manifest;
+    interrupted.status = DagRunStatus::Running;
+    interrupted.completed_at = None;
+    let interrupted_at = now + Duration::minutes(10);
+    let serving_step = interrupted
+        .steps
+        .iter_mut()
+        .find(|step| step.asset_id == asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID))
+        .unwrap();
+    serving_step.status = AssetRunStepStatus::Running;
+    serving_step.materialization_id = None;
+    serving_step.row_count = None;
+    serving_step.artifacts.clear();
+    serving_step.completed_at = None;
+    serving_step.duration_ms = None;
+    serving_step.error = None;
+    serving_step.attempts.push(AssetRunAttempt {
+        attempt: serving_step.attempts.len() as u32 + 1,
+        started_at: interrupted_at,
+        completed_at: None,
+        error: None,
+    });
+    let run_store = AssetRunManifestStore::new(lake);
+    run_store.write_manifest(&interrupted).await.unwrap();
+    run_store.promote_current(&interrupted).await.unwrap();
+
+    let resumed = executor
+        .resume(
+            &graph,
+            AssetDagExecutionOptions::new(run_partition, interrupted_at + Duration::minutes(1))
+                .with_version("interrupted-serving"),
+            interrupted.run_id.clone(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(resumed.manifest.status, DagRunStatus::Succeeded);
+    assert!(resumed.executed_assets.is_empty());
+    assert_eq!(
+        run_step(&resumed.manifest, KG_SOCIETY_VIEW_ASSET_ID).materialization_id,
+        Some(kg_materialization)
+    );
+    let serving = run_step(&resumed.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID);
+    assert_eq!(serving.status, AssetRunStepStatus::Succeeded);
+    assert_eq!(serving.materialization_id, serving_materialization);
+    assert_eq!(
+        serving
+            .attempts
+            .last()
+            .and_then(|attempt| attempt.error.as_deref()),
+        None
+    );
+}
+
+#[tokio::test]
 async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
@@ -516,6 +876,7 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
         .find(|step| step.asset_id == asset_id("unwired_asset"))
         .unwrap();
     assert_eq!(failed_step.status, AssetRunStepStatus::Failed);
+    assert_eq!(failed_step.attempts.len(), 1);
     assert!(failed_step
         .error
         .as_deref()
@@ -917,6 +1278,17 @@ fn fact(
 
 fn asset_id(id: &str) -> AssetId {
     AssetId::new(id).unwrap()
+}
+
+fn run_step<'a>(
+    manifest: &'a backend::assets::AssetDagRunManifest,
+    id: &str,
+) -> &'a backend::assets::AssetRunStep {
+    manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id == asset_id(id))
+        .expect("asset step should be present")
 }
 
 fn source_run_partition() -> AssetPartition {

@@ -23,9 +23,21 @@ pub enum DagRunStatus {
 pub enum AssetRunStepStatus {
     Planned,
     Running,
+    Materialized,
     Skipped,
     Succeeded,
     Failed,
+    Blocked,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetRunAttempt {
+    pub attempt: u32,
+    pub started_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completed_at: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,6 +58,8 @@ pub struct AssetRunStep {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub materialization_id: Option<MaterializationId>,
     pub parent_materializations: Vec<MaterializationId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dependency_snapshot: Vec<MaterializationId>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub row_count: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -58,6 +72,10 @@ pub struct AssetRunStep {
     pub duration_ms: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attempts: Vec<AssetRunAttempt>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_by: Vec<AssetId>,
     pub freshness: AssetFreshness,
 }
 
@@ -65,6 +83,8 @@ pub struct AssetRunStep {
 pub struct AssetDagRunManifest {
     pub run_id: MaterializationId,
     pub partition: AssetPartition,
+    #[serde(default)]
+    pub execution_version: String,
     pub status: DagRunStatus,
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,11 +94,20 @@ pub struct AssetDagRunManifest {
     pub skipped_count: usize,
     pub succeeded_count: usize,
     pub failed_count: usize,
+    #[serde(default)]
+    pub blocked_count: usize,
     pub steps: Vec<AssetRunStep>,
 }
 
 impl AssetDagRunManifest {
     pub fn from_plan(plan: &AssetDagPlan) -> Self {
+        Self::from_plan_with_version(plan, "")
+    }
+
+    pub fn from_plan_with_version(
+        plan: &AssetDagPlan,
+        execution_version: impl Into<String>,
+    ) -> Self {
         let steps = plan
             .entries
             .iter()
@@ -99,12 +128,15 @@ impl AssetDagRunManifest {
                 current_materialization_id: entry.current_materialization_id.clone(),
                 materialization_id: None,
                 parent_materializations: entry.current_parent_materializations.clone(),
+                dependency_snapshot: entry.dependency_snapshot.clone(),
                 row_count: None,
                 artifacts: Vec::new(),
                 started_at: None,
                 completed_at: None,
                 duration_ms: None,
                 error: None,
+                attempts: Vec::new(),
+                blocked_by: Vec::new(),
                 freshness: entry.freshness.clone(),
             })
             .collect();
@@ -112,6 +144,7 @@ impl AssetDagRunManifest {
         let mut manifest = Self {
             run_id: plan.run_id.clone(),
             partition: plan.partition.clone(),
+            execution_version: execution_version.into(),
             status: DagRunStatus::Planned,
             created_at: plan.planned_at,
             completed_at: None,
@@ -120,6 +153,7 @@ impl AssetDagRunManifest {
             skipped_count: 0,
             succeeded_count: 0,
             failed_count: 0,
+            blocked_count: 0,
             steps,
         };
         manifest.recount();
@@ -134,13 +168,34 @@ impl AssetDagRunManifest {
         let step = self.step_mut(asset_id)?;
         validate_runnable_step(step)?;
         step.status = AssetRunStepStatus::Running;
-        step.started_at = Some(started_at);
+        step.started_at.get_or_insert(started_at);
+        step.completed_at = None;
+        step.duration_ms = None;
+        step.error = None;
+        step.blocked_by.clear();
+        step.attempts.push(AssetRunAttempt {
+            attempt: step.attempts.len() as u32 + 1,
+            started_at,
+            completed_at: None,
+            error: None,
+        });
         self.status = DagRunStatus::Running;
         self.recount();
         Ok(())
     }
 
     pub fn mark_step_succeeded(
+        &mut self,
+        asset_id: &AssetId,
+        record: &MaterializationRecord,
+        started_at: DateTime<Utc>,
+        completed_at: DateTime<Utc>,
+    ) -> Result<(), RunManifestError> {
+        self.mark_step_materialized(asset_id, record, started_at, completed_at)?;
+        self.mark_step_promoted(asset_id, completed_at)
+    }
+
+    pub fn mark_step_materialized(
         &mut self,
         asset_id: &AssetId,
         record: &MaterializationRecord,
@@ -167,15 +222,65 @@ impl AssetDagRunManifest {
                 asset_id: asset_id.clone(),
             });
         }
-        step.status = AssetRunStepStatus::Succeeded;
+        step.status = AssetRunStepStatus::Materialized;
         step.materialization_id = Some(record.materialization_id.clone());
         step.parent_materializations = record.parent_materializations.clone();
         step.row_count = Some(record.row_count);
         step.artifacts = record.artifacts.clone();
-        step.started_at = Some(started_at);
+        step.started_at.get_or_insert(started_at);
         step.completed_at = Some(completed_at);
-        step.duration_ms = Some(duration_ms(started_at, completed_at));
+        step.duration_ms = step
+            .started_at
+            .map(|first_started| duration_ms(first_started, completed_at));
         step.error = None;
+        step.blocked_by.clear();
+        close_or_add_successful_attempt(step, started_at, completed_at)?;
+        self.status = DagRunStatus::Running;
+        self.recount();
+        Ok(())
+    }
+
+    pub fn mark_step_promoted(
+        &mut self,
+        asset_id: &AssetId,
+        completed_at: DateTime<Utc>,
+    ) -> Result<(), RunManifestError> {
+        let step = self.step_mut(asset_id)?;
+        if step.decision != PlanDecision::Run
+            || step.status != AssetRunStepStatus::Materialized
+            || step.materialization_id.is_none()
+        {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        step.status = AssetRunStepStatus::Succeeded;
+        step.completed_at = Some(completed_at);
+        step.error = None;
+        self.status = DagRunStatus::Running;
+        self.recount();
+        Ok(())
+    }
+
+    pub fn mark_materialized_step_failed(
+        &mut self,
+        asset_id: &AssetId,
+        completed_at: DateTime<Utc>,
+        error: impl Into<String>,
+    ) -> Result<(), RunManifestError> {
+        let step = self.step_mut(asset_id)?;
+        if step.status != AssetRunStepStatus::Materialized {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        step.status = AssetRunStepStatus::Failed;
+        step.completed_at = Some(completed_at);
+        step.error = Some(error.into());
         self.status = DagRunStatus::Running;
         self.recount();
         Ok(())
@@ -188,21 +293,172 @@ impl AssetDagRunManifest {
         completed_at: DateTime<Utc>,
         error: impl Into<String>,
     ) -> Result<(), RunManifestError> {
+        if self
+            .steps
+            .iter()
+            .find(|step| &step.asset_id == asset_id)
+            .is_some_and(|step| step.status == AssetRunStepStatus::Planned)
+        {
+            self.mark_step_running(asset_id, started_at)?;
+        }
+        let error = error.into();
         let step = self.step_mut(asset_id)?;
         validate_runnable_step(step)?;
+        let attempt = step
+            .attempts
+            .last_mut()
+            .filter(|attempt| attempt.completed_at.is_none() && attempt.started_at == started_at)
+            .ok_or_else(|| RunManifestError::NoRunningAttempt(asset_id.clone()))?;
+        attempt.completed_at = Some(completed_at);
+        attempt.error = Some(error.clone());
         step.status = AssetRunStepStatus::Failed;
-        step.started_at = Some(started_at);
         step.completed_at = Some(completed_at);
-        step.duration_ms = Some(duration_ms(started_at, completed_at));
-        step.error = Some(error.into());
+        step.duration_ms = step
+            .started_at
+            .map(|first_started| duration_ms(first_started, completed_at));
+        step.error = Some(error);
         self.status = DagRunStatus::Running;
         self.recount();
         Ok(())
     }
 
+    pub fn mark_step_attempt_failed(
+        &mut self,
+        asset_id: &AssetId,
+        started_at: DateTime<Utc>,
+        completed_at: DateTime<Utc>,
+        error: impl Into<String>,
+    ) -> Result<(), RunManifestError> {
+        let error = error.into();
+        let step = self.step_mut(asset_id)?;
+        validate_runnable_step(step)?;
+        let attempt = step
+            .attempts
+            .last_mut()
+            .filter(|attempt| attempt.completed_at.is_none() && attempt.started_at == started_at)
+            .ok_or_else(|| RunManifestError::NoRunningAttempt(asset_id.clone()))?;
+        attempt.completed_at = Some(completed_at);
+        attempt.error = Some(error.clone());
+        step.error = Some(error);
+        self.status = DagRunStatus::Running;
+        self.recount();
+        Ok(())
+    }
+
+    pub fn mark_step_blocked(
+        &mut self,
+        asset_id: &AssetId,
+        completed_at: DateTime<Utc>,
+        blocked_by: Vec<AssetId>,
+    ) -> Result<(), RunManifestError> {
+        if blocked_by.is_empty() {
+            return Err(RunManifestError::MissingBlockedDependencies(
+                asset_id.clone(),
+            ));
+        }
+        let step = self.step_mut(asset_id)?;
+        if step.decision != PlanDecision::Run || step.status != AssetRunStepStatus::Planned {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        step.status = AssetRunStepStatus::Blocked;
+        step.blocked_by = blocked_by;
+        step.completed_at = Some(completed_at);
+        step.error = Some(format!(
+            "blocked by failed dependencies: {}",
+            step.blocked_by
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+        self.status = DagRunStatus::Running;
+        self.recount();
+        Ok(())
+    }
+
+    pub fn prepare_resume(mut self, resumed_at: DateTime<Utc>) -> Result<Self, RunManifestError> {
+        self.ensure_resumable()?;
+
+        for step in &mut self.steps {
+            match step.status {
+                AssetRunStepStatus::Succeeded
+                | AssetRunStepStatus::Skipped
+                | AssetRunStepStatus::Materialized => continue,
+                AssetRunStepStatus::Running => {
+                    if let Some(attempt) = step
+                        .attempts
+                        .last_mut()
+                        .filter(|attempt| attempt.completed_at.is_none())
+                    {
+                        attempt.completed_at = Some(resumed_at);
+                        attempt.error = Some("run interrupted before completion".to_string());
+                    }
+                }
+                AssetRunStepStatus::Failed if step.materialization_id.is_some() => {
+                    step.status = AssetRunStepStatus::Materialized;
+                    step.error = None;
+                    step.blocked_by.clear();
+                    continue;
+                }
+                AssetRunStepStatus::Planned
+                | AssetRunStepStatus::Failed
+                | AssetRunStepStatus::Blocked => {}
+            }
+            step.status = AssetRunStepStatus::Planned;
+            step.materialization_id = None;
+            step.parent_materializations.clear();
+            step.row_count = None;
+            step.artifacts.clear();
+            step.started_at = None;
+            step.completed_at = None;
+            step.duration_ms = None;
+            step.error = None;
+            step.blocked_by.clear();
+        }
+        self.status = DagRunStatus::Running;
+        self.completed_at = None;
+        self.recount();
+        Ok(self)
+    }
+
+    pub fn replay_step(&mut self, asset_id: &AssetId) -> Result<(), RunManifestError> {
+        let step = self.step_mut(asset_id)?;
+        if step.decision != PlanDecision::Run {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        if step.status == AssetRunStepStatus::Planned {
+            return Ok(());
+        }
+        if step.status != AssetRunStepStatus::Succeeded {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        reset_step_for_resume(step);
+        self.recount();
+        Ok(())
+    }
+
+    pub fn ensure_resumable(&self) -> Result<(), RunManifestError> {
+        match self.status {
+            DagRunStatus::Failed | DagRunStatus::Running => Ok(()),
+            status => Err(RunManifestError::RunNotResumable(status)),
+        }
+    }
+
     pub fn finish(&mut self, completed_at: DateTime<Utc>) -> Result<(), RunManifestError> {
         self.recount();
-        if self.failed_count > 0 {
+        if self.failed_count > 0 || self.blocked_count > 0 {
             self.completed_at = Some(completed_at);
             self.status = DagRunStatus::Failed;
             return Ok(());
@@ -249,7 +505,25 @@ impl AssetDagRunManifest {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Failed)
             .count();
+        self.blocked_count = self
+            .steps
+            .iter()
+            .filter(|step| step.status == AssetRunStepStatus::Blocked)
+            .count();
     }
+}
+
+fn reset_step_for_resume(step: &mut AssetRunStep) {
+    step.status = AssetRunStepStatus::Planned;
+    step.materialization_id = None;
+    step.parent_materializations.clear();
+    step.row_count = None;
+    step.artifacts.clear();
+    step.started_at = None;
+    step.completed_at = None;
+    step.duration_ms = None;
+    step.error = None;
+    step.blocked_by.clear();
 }
 
 fn validate_runnable_step(step: &AssetRunStep) -> Result<(), RunManifestError> {
@@ -296,6 +570,9 @@ pub enum RunManifestError {
         succeeded: usize,
         failed: usize,
     },
+    NoRunningAttempt(AssetId),
+    MissingBlockedDependencies(AssetId),
+    RunNotResumable(DagRunStatus),
 }
 
 impl std::fmt::Display for RunManifestError {
@@ -332,6 +609,15 @@ impl std::fmt::Display for RunManifestError {
                 f,
                 "DAG run is incomplete: planned={planned}, succeeded={succeeded}, failed={failed}"
             ),
+            Self::NoRunningAttempt(asset_id) => {
+                write!(f, "asset {asset_id} has no running attempt to complete")
+            }
+            Self::MissingBlockedDependencies(asset_id) => {
+                write!(f, "asset {asset_id} cannot be blocked without failed dependencies")
+            }
+            Self::RunNotResumable(status) => {
+                write!(f, "DAG run with status {status:?} cannot be resumed")
+            }
         }
     }
 }
@@ -343,6 +629,8 @@ pub struct CurrentDagRunPointer {
     pub run_id: MaterializationId,
     pub run_manifest_key: String,
     pub status: DagRunStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub run_created_at: Option<DateTime<Utc>>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -364,10 +652,7 @@ impl AssetRunManifestStore {
         self.lake.put_json(&key, manifest).await
     }
 
-    pub async fn promote_current(
-        &self,
-        manifest: &AssetDagRunManifest,
-    ) -> Result<ArtifactMetadata, LakeError> {
+    pub async fn promote_current(&self, manifest: &AssetDagRunManifest) -> Result<bool, LakeError> {
         let pointer = CurrentDagRunPointer {
             run_id: manifest.run_id.clone(),
             run_manifest_key: AssetPathBuilder::dag_run_manifest_key(
@@ -376,10 +661,19 @@ impl AssetRunManifestStore {
             )
             .to_string(),
             status: manifest.status,
+            run_created_at: Some(manifest.created_at),
             updated_at: Utc::now(),
         };
         let key = AssetPathBuilder::current_dag_run_pointer_key(&manifest.partition);
-        self.lake.put_json(&key, &pointer).await
+        self.lake
+            .put_json_if(&key, &pointer, |current: &CurrentDagRunPointer| {
+                let current_time = current.run_created_at.unwrap_or(current.updated_at);
+                current.run_id == manifest.run_id
+                    || manifest.created_at > current_time
+                    || (manifest.created_at == current_time
+                        && manifest.run_id.to_string() > current.run_id.to_string())
+            })
+            .await
     }
 
     pub async fn current_pointer(
@@ -398,6 +692,41 @@ impl AssetRunManifestStore {
         let key = LakeKey::new(pointer.run_manifest_key).expect("stored DAG run key");
         self.lake.get_json(&key).await
     }
+
+    pub async fn manifest(
+        &self,
+        partition: &AssetPartition,
+        run_id: &MaterializationId,
+    ) -> Result<AssetDagRunManifest, LakeError> {
+        let key = AssetPathBuilder::dag_run_manifest_key(partition, run_id);
+        self.lake.get_json(&key).await
+    }
+}
+
+fn close_or_add_successful_attempt(
+    step: &mut AssetRunStep,
+    started_at: DateTime<Utc>,
+    completed_at: DateTime<Utc>,
+) -> Result<(), RunManifestError> {
+    if let Some(attempt) = step
+        .attempts
+        .last_mut()
+        .filter(|attempt| attempt.completed_at.is_none())
+    {
+        attempt.completed_at = Some(completed_at);
+        attempt.error = None;
+        return Ok(());
+    }
+    if step.attempts.is_empty() {
+        step.attempts.push(AssetRunAttempt {
+            attempt: 1,
+            started_at,
+            completed_at: Some(completed_at),
+            error: None,
+        });
+        return Ok(());
+    }
+    Err(RunManifestError::NoRunningAttempt(step.asset_id.clone()))
 }
 
 fn duration_ms(started_at: DateTime<Utc>, completed_at: DateTime<Utc>) -> u64 {

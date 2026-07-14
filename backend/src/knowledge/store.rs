@@ -164,7 +164,7 @@ pub fn load_graph(knowledge_dir: &Path) -> Option<KnowledgeGraph> {
         }
         // Indexes are built by add_node/add_edge, but rebuild to be safe
         graph.rebuild_indexes();
-        println!(
+        eprintln!(
             "Loaded knowledge graph: {} nodes, {} edges (per-entity files)",
             graph.nodes.len(),
             graph.edges.len()

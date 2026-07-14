@@ -641,6 +641,117 @@ async fn dag_run_manifest_rejects_loose_step_transitions() {
 }
 
 #[tokio::test]
+async fn dag_run_manifest_records_attempts_blocks_dependents_and_prepares_exact_resume() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let run_store = AssetRunManifestStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let plan = AssetPlanner::new(resilience_registry(), AssetMaterializationStore::new(lake))
+        .plan_global_details(now)
+        .await
+        .unwrap();
+    let mut manifest = AssetDagRunManifest::from_plan(&plan);
+    let stable = asset_id("stable_root");
+    let flaky = asset_id("flaky_root");
+    let joined = asset_id("joined_view");
+
+    let first_started = now + Duration::seconds(1);
+    manifest.mark_step_running(&stable, first_started).unwrap();
+    manifest
+        .mark_step_attempt_failed(
+            &stable,
+            first_started,
+            first_started + Duration::milliseconds(50),
+            "temporary object-store timeout",
+        )
+        .unwrap();
+    let second_started = now + Duration::seconds(2);
+    manifest.mark_step_running(&stable, second_started).unwrap();
+    let stable_record = MaterializationRecord::succeeded(
+        stable.clone(),
+        AssetStage::Raw,
+        AssetPartition::global(),
+        "2026-07",
+        Vec::new(),
+    )
+    .with_run_id(manifest.run_id.clone());
+    manifest
+        .mark_step_succeeded(
+            &stable,
+            &stable_record,
+            second_started,
+            second_started + Duration::milliseconds(25),
+        )
+        .unwrap();
+
+    let failed_started = now + Duration::seconds(3);
+    manifest.mark_step_running(&flaky, failed_started).unwrap();
+    manifest
+        .mark_step_failed(
+            &flaky,
+            failed_started,
+            failed_started + Duration::milliseconds(10),
+            "invalid source payload",
+        )
+        .unwrap();
+    manifest
+        .mark_step_blocked(&joined, now + Duration::seconds(4), vec![flaky.clone()])
+        .unwrap();
+    manifest.finish(now + Duration::seconds(5)).unwrap();
+
+    assert_eq!(manifest.status, DagRunStatus::Failed);
+    assert_eq!(manifest.failed_count, 1);
+    assert_eq!(manifest.blocked_count, 1);
+    let stable_step = manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id == stable)
+        .unwrap();
+    assert_eq!(stable_step.attempts.len(), 2);
+    assert_eq!(stable_step.attempts[0].attempt, 1);
+    assert_eq!(stable_step.attempts[1].attempt, 2);
+    let joined_step = manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id == joined)
+        .unwrap();
+    assert_eq!(joined_step.status, AssetRunStepStatus::Blocked);
+    assert_eq!(joined_step.blocked_by, vec![flaky.clone()]);
+
+    run_store.write_manifest(&manifest).await.unwrap();
+    let loaded = run_store
+        .manifest(&manifest.partition, &manifest.run_id)
+        .await
+        .unwrap();
+    assert_eq!(loaded, manifest);
+
+    let resumed = loaded.prepare_resume(now + Duration::seconds(6)).unwrap();
+    assert_eq!(resumed.run_id, manifest.run_id);
+    assert_eq!(resumed.status, DagRunStatus::Running);
+    let resumed_stable = resumed
+        .steps
+        .iter()
+        .find(|step| step.asset_id == stable)
+        .unwrap();
+    assert_eq!(resumed_stable.status, AssetRunStepStatus::Succeeded);
+    assert_eq!(resumed_stable.attempts.len(), 2);
+    let resumed_flaky = resumed
+        .steps
+        .iter()
+        .find(|step| step.asset_id == flaky)
+        .unwrap();
+    assert_eq!(resumed_flaky.status, AssetRunStepStatus::Planned);
+    assert_eq!(resumed_flaky.attempts.len(), 1);
+    let resumed_joined = resumed
+        .steps
+        .iter()
+        .find(|step| step.asset_id == joined)
+        .unwrap();
+    assert_eq!(resumed_joined.status, AssetRunStepStatus::Planned);
+    assert!(resumed_joined.blocked_by.is_empty());
+}
+
+#[tokio::test]
 async fn dag_run_current_pointers_are_partition_scoped() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
@@ -679,6 +790,66 @@ async fn dag_run_current_pointers_are_partition_scoped() {
     assert_eq!(current_global.run_id, global_manifest.run_id);
     assert_eq!(current_reddit.run_id, reddit_manifest.run_id);
     assert_ne!(current_global.run_id, current_reddit.run_id);
+}
+
+#[tokio::test]
+async fn older_completed_run_cannot_replace_newer_current_run() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let run_store = AssetRunManifestStore::new(lake);
+    let older_time = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let newer_time = older_time + Duration::hours(1);
+    let partition = AssetPartition::global();
+    let mut older = AssetDagRunManifest::from_plan(&backend::assets::AssetDagPlan {
+        run_id: backend::assets::MaterializationId::new(),
+        partition: partition.clone(),
+        planned_at: older_time,
+        entries: Vec::new(),
+    });
+    older.finish(older_time).unwrap();
+    let mut newer = AssetDagRunManifest::from_plan(&backend::assets::AssetDagPlan {
+        run_id: backend::assets::MaterializationId::new(),
+        partition: partition.clone(),
+        planned_at: newer_time,
+        entries: Vec::new(),
+    });
+    newer.finish(newer_time).unwrap();
+    run_store.write_manifest(&older).await.unwrap();
+    run_store.write_manifest(&newer).await.unwrap();
+
+    assert!(run_store.promote_current(&newer).await.unwrap());
+    assert!(!run_store.promote_current(&older).await.unwrap());
+    assert_eq!(
+        run_store.current_manifest(&partition).await.unwrap().run_id,
+        newer.run_id
+    );
+}
+
+#[tokio::test]
+async fn resumed_run_can_replace_its_own_failed_current_pointer() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let run_store = AssetRunManifestStore::new(lake);
+    let created_at = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let partition = AssetPartition::global();
+    let mut manifest = AssetDagRunManifest::from_plan(&backend::assets::AssetDagPlan {
+        run_id: backend::assets::MaterializationId::new(),
+        partition: partition.clone(),
+        planned_at: created_at,
+        entries: Vec::new(),
+    });
+    manifest.status = DagRunStatus::Failed;
+    manifest.completed_at = Some(created_at);
+    run_store.write_manifest(&manifest).await.unwrap();
+    assert!(run_store.promote_current(&manifest).await.unwrap());
+
+    manifest.status = DagRunStatus::Succeeded;
+    run_store.write_manifest(&manifest).await.unwrap();
+    assert!(run_store.promote_current(&manifest).await.unwrap());
+    assert_eq!(
+        run_store.current_manifest(&partition).await.unwrap().status,
+        DagRunStatus::Succeeded
+    );
 }
 
 async fn write_current(store: &AssetMaterializationStore, record: &MaterializationRecord) {
@@ -741,6 +912,20 @@ fn two_asset_registry() -> backend::assets::AssetRegistry {
             "derived_view",
             AssetStage::Gold,
             &["root_snapshot"],
+            RefreshCadence::OnChange,
+        ),
+    ])
+    .unwrap()
+}
+
+fn resilience_registry() -> backend::assets::AssetRegistry {
+    backend::assets::AssetRegistry::new(vec![
+        asset("stable_root", AssetStage::Raw, &[], RefreshCadence::Daily),
+        asset("flaky_root", AssetStage::Raw, &[], RefreshCadence::Daily),
+        asset(
+            "joined_view",
+            AssetStage::Gold,
+            &["stable_root", "flaky_root"],
             RefreshCadence::OnChange,
         ),
     ])

@@ -9,7 +9,7 @@ use backend::assets::{
     PlanReason, SourceWatermark,
 };
 use backend::lake::{LakeKey, LakeStore};
-use chrono::Utc;
+use chrono::{TimeZone, Utc};
 use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
@@ -55,6 +55,19 @@ async fn mock_rera_to_serving_bundle_materializes_with_stable_local_keys() {
         .write_materialization(&rera_record)
         .await
         .unwrap();
+    assert!(lake
+        .get_json::<serde_json::Value>(&AssetPathBuilder::materialization_lookup_key(
+            &rera_record.materialization_id,
+        ))
+        .await
+        .is_ok());
+    assert_eq!(
+        materializations
+            .record_by_id_for_asset(&rera_asset, &rera_record.materialization_id)
+            .await
+            .unwrap(),
+        Some(rera_record.clone())
+    );
     materializations
         .promote_current(&rera_record)
         .await
@@ -293,6 +306,8 @@ async fn materialization_store_lists_current_records_for_all_asset_partitions() 
             )
             .to_string(),
             version: other_asset.version.clone(),
+            run_id: None,
+            run_created_at: None,
             updated_at: Utc::now(),
         },
     )
@@ -306,6 +321,50 @@ async fn materialization_store_lists_current_records_for_all_asset_partitions() 
     assert!(err
         .to_string()
         .contains("belongs to asset google_review_facts"));
+}
+
+#[tokio::test]
+async fn older_run_cannot_roll_back_current_asset_pointer() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake);
+    let asset_id = AssetId::new("kg_society_view").unwrap();
+    let partition = AssetPartition::global();
+    let older_time = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let newer_time = older_time + chrono::Duration::hours(1);
+    let older = MaterializationRecord::succeeded(
+        asset_id.clone(),
+        AssetStage::Gold,
+        partition.clone(),
+        "older",
+        Vec::new(),
+    );
+    let newer = MaterializationRecord::succeeded(
+        asset_id.clone(),
+        AssetStage::Gold,
+        partition.clone(),
+        "newer",
+        Vec::new(),
+    );
+    store.write_materialization(&older).await.unwrap();
+    store.write_materialization(&newer).await.unwrap();
+
+    assert!(store
+        .promote_current_for_run(&newer, newer_time)
+        .await
+        .unwrap());
+    assert!(!store
+        .promote_current_for_run(&older, older_time)
+        .await
+        .unwrap());
+    assert_eq!(
+        store
+            .current_record(&asset_id, &partition)
+            .await
+            .unwrap()
+            .materialization_id,
+        newer.materialization_id
+    );
 }
 
 #[tokio::test]
@@ -340,6 +399,8 @@ async fn materialization_store_rejects_pointer_to_wrong_asset_record() {
             )
             .to_string(),
             version: other_record.version.clone(),
+            run_id: None,
+            run_created_at: None,
             updated_at: Utc::now(),
         },
     )

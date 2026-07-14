@@ -1,15 +1,15 @@
 use std::fs;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDefinition,
-    AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy, AssetRegistry,
-    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CommandSourceInputProvider,
-    CostTier, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    MaterializationId, MaterializationRecord, RedditThreadSnapshotMaterializer,
-    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
-    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord,
-    SkillFactsInput, SourceInputProvider, SourceInputProviderError, SourceInputRequest,
-    SourceWatermark, TrustTier,
+    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
+    AssetDefinition, AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy,
+    AssetRegistry, AssetRunStepStatus, AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer,
+    CommandSourceInputProvider, CostTier, GooglePlaceSnapshotMaterializer,
+    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
+    RedditThreadSnapshotMaterializer, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
+    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceInputProvider,
+    SourceInputProviderError, SourceInputRequest, SourceWatermark, TrustTier,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
@@ -284,6 +284,50 @@ async fn stale_source_assets_are_marked_for_collector_cache_bypass() {
     let collection = AssetSourceInputs::collection_plan(&plan);
     assert_eq!(collection.requested_assets, vec![raw_id.clone()]);
     assert_eq!(collection.force_refresh_assets, vec![raw_id]);
+}
+
+#[tokio::test]
+async fn resume_collection_replays_only_the_raw_companion_needed_for_exact_lineage() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let partition =
+        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+    let plan = AssetDagExecutor::new(default_openestates_registry(), lake)
+        .plan(
+            &partition,
+            Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut manifest = AssetDagRunManifest::from_plan(&plan);
+    for step in &mut manifest.steps {
+        step.status = AssetRunStepStatus::Succeeded;
+    }
+    manifest
+        .steps
+        .iter_mut()
+        .find(|step| step.asset_id.as_str() == "reddit_resident_facts")
+        .unwrap()
+        .status = AssetRunStepStatus::Failed;
+
+    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
+
+    assert_eq!(
+        collection.requested_assets,
+        vec![
+            AssetId::new("reddit_resident_facts").unwrap(),
+            AssetId::new("reddit_threads_daily").unwrap(),
+        ]
+    );
+    assert_eq!(
+        collection.force_assets,
+        vec![AssetId::new("reddit_threads_daily").unwrap()]
+    );
+    assert!(collection.force_refresh_assets.is_empty());
+    assert!(!collection
+        .requested_assets
+        .iter()
+        .any(|asset_id| asset_id.as_str().starts_with("google_")));
 }
 
 #[cfg(unix)]

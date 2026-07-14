@@ -393,6 +393,7 @@ impl AssetRegistry {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegistryError {
     DuplicateAsset(AssetId),
+    UnknownAsset(AssetId),
     MissingDependency {
         asset_id: AssetId,
         dependency: AssetId,
@@ -413,6 +414,7 @@ impl std::fmt::Display for RegistryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::DuplicateAsset(asset_id) => write!(f, "duplicate asset id: {asset_id}"),
+            Self::UnknownAsset(asset_id) => write!(f, "unknown asset id: {asset_id}"),
             Self::MissingDependency {
                 asset_id,
                 dependency,

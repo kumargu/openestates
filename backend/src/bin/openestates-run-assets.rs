@@ -5,9 +5,10 @@ use std::time::Duration;
 
 use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetId,
-    AssetMaterializationStore, AssetPartition, AssetSourceInputs, CommandSourceInputProvider,
-    LakeObjectSourceInputProvider, LocalFileSourceInputProvider, SourceEntitySeed,
-    SourceInputProvider, SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
+    CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
+    MaterializationId, SourceEntitySeed, SourceInputProvider, SourceInputRequest,
+    CANONICAL_SOCIETY_NODES_ASSET_ID,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore};
@@ -35,17 +36,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lake_root = project_root.join("data").join("lake");
     let lake = LakeStore::local(&lake_root)?;
-    let planned_at = Utc::now();
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    let requested_at = Utc::now();
+    let resume_manifest = if let Some(run_id) = &cli.resume_run_id {
+        let manifest = AssetRunManifestStore::new(lake.clone())
+            .manifest(&partition, run_id)
+            .await?;
+        if manifest.partition != partition {
+            return Err(format!(
+                "DAG run {run_id} belongs to partition {:?}, not {:?}",
+                manifest.partition, partition
+            )
+            .into());
+        }
+        manifest.ensure_resumable()?;
+        Some(manifest)
+    } else {
+        None
+    };
+    let planned_at = resume_manifest
+        .as_ref()
+        .map_or(requested_at, |manifest| manifest.created_at);
     let mut options = AssetDagExecutionOptions::new(partition, planned_at).dry_run(cli.dry_run);
-    if let Some(version) = cli.version.clone() {
+    if let Some(manifest) = &resume_manifest {
+        if !manifest.execution_version.is_empty() {
+            options = options.with_version(manifest.execution_version.clone());
+        }
+    } else if let Some(version) = cli.version.clone() {
         options = options.with_version(version);
     }
-    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
     if cli.dry_run && cli.source_command.is_some() {
         eprintln!("Skipping source collector command during dry-run.");
     } else if let Some(provider) = cli.source_input_provider()? {
-        let plan = executor.plan(&options.partition, planned_at).await?;
-        let collection_plan = AssetSourceInputs::collection_plan(&plan);
+        let collection_plan = if let Some(manifest) = &resume_manifest {
+            AssetSourceInputs::resume_collection_plan(manifest)
+        } else {
+            let plan = executor.plan(&options.partition, planned_at).await?;
+            AssetSourceInputs::collection_plan(&plan)
+        };
         let request = SourceInputRequest {
             project_root: project_root.clone(),
             partition: options.partition.clone(),
@@ -61,7 +89,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    let report = executor.execute(&graph, options).await?;
+    let execution_partition = options.partition.clone();
+    let resume_run_id = cli.resume_run_id.clone();
+    let execution = match resume_run_id.clone() {
+        Some(run_id) => executor.resume(&graph, options, run_id).await,
+        None => executor.execute(&graph, options).await,
+    };
+    let report = match execution {
+        Ok(report) => report,
+        Err(err) => {
+            let run_store = AssetRunManifestStore::new(lake.clone());
+            let failed_manifest = match resume_run_id {
+                Some(run_id) => run_store.manifest(&execution_partition, &run_id).await.ok(),
+                None => run_store.current_manifest(&execution_partition).await.ok(),
+            };
+            if let Some(manifest) = failed_manifest.filter(|manifest| {
+                manifest.created_at == planned_at
+                    && matches!(
+                        manifest.status,
+                        backend::assets::DagRunStatus::Failed
+                            | backend::assets::DagRunStatus::Running
+                    )
+            }) {
+                eprintln!(
+                    "Asset DAG run {} failed; resume with --resume-run {}",
+                    manifest.run_id, manifest.run_id
+                );
+            }
+            return Err(Box::new(err) as Box<dyn std::error::Error>);
+        }
+    };
 
     if report.dry_run {
         eprintln!("Planned asset DAG run without writing manifests.");
@@ -128,6 +185,7 @@ struct CliOptions {
     source_command: Option<PathBuf>,
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
+    resume_run_id: Option<MaterializationId>,
     dry_run: bool,
 }
 
@@ -194,6 +252,14 @@ impl CliOptions {
                     }
                     options.source_timeout_seconds = Some(seconds);
                 }
+                "--resume-run" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--resume-run requires a run UUID".to_string())?;
+                    options.resume_run_id = Some(value.parse().map_err(|_| {
+                        format!("--resume-run requires a valid UUID, got: {value}")
+                    })?);
+                }
                 "--dry-run" => {
                     options.dry_run = true;
                 }
@@ -224,6 +290,9 @@ impl CliOptions {
         }
         if options.source_timeout_seconds.is_some() && options.source_command.is_none() {
             return Err("--source-timeout-seconds requires --source-command".to_string());
+        }
+        if options.dry_run && options.resume_run_id.is_some() {
+            return Err("--resume-run cannot be combined with --dry-run".to_string());
         }
 
         Ok(options)
@@ -286,7 +355,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--source-command <program> [--source-arg <arg>]... [--source-timeout-seconds <seconds>]] [--dry-run]"
+        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--source-command <program> [--source-arg <arg>]... [--source-timeout-seconds <seconds>]] [--resume-run <uuid>] [--dry-run]"
     );
     println!();
     println!("Options:");
@@ -300,4 +369,5 @@ fn print_help() {
     println!("  --source-command Run a collector that reads SourceInputRequest JSON on stdin");
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
+    println!("  --resume-run Resume one failed or interrupted run by UUID");
 }

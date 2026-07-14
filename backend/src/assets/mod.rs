@@ -26,6 +26,7 @@ pub mod types;
 
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
+    AssetRetryPolicy,
 };
 pub use fan_in::{
     all_current_materialization_records_for_dependency,
@@ -67,7 +68,7 @@ pub use rera::{
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 pub use run_manifest::{
-    AssetDagRunManifest, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,
+    AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,
     CurrentDagRunPointer, DagRunStatus, RunManifestError,
 };
 pub use skill_facts::{

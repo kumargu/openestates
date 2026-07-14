@@ -105,6 +105,15 @@ impl AssetPathBuilder {
         LakeKey::new(parts.join("/")).expect("valid materialization key")
     }
 
+    pub fn materialization_lookup_key(materialization_id: &MaterializationId) -> LakeKey {
+        LakeKey::join(&[
+            "manifests",
+            "materializations",
+            &format!("{materialization_id}.json"),
+        ])
+        .expect("valid materialization lookup key")
+    }
+
     pub fn current_pointer_key(asset_id: &AssetId, partition: &AssetPartition) -> LakeKey {
         let mut parts = vec![
             "manifests".to_string(),

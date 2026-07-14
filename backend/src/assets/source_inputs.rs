@@ -1,10 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AssetDagPlan, AssetId, GooglePlacesWeeklyInput, PlanReason, RedditThreadSnapshotRecord,
-    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, GooglePlacesWeeklyInput,
+    PlanReason, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactRecord, SourceWatermark, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -96,6 +96,37 @@ impl AssetSourceInputs {
             requested_assets,
             force_assets,
             force_refresh_assets,
+        }
+    }
+
+    pub fn resume_collection_plan(manifest: &AssetDagRunManifest) -> SourceInputCollectionPlan {
+        let mut requested_assets: Vec<_> = manifest
+            .steps
+            .iter()
+            .filter(|step| {
+                !matches!(
+                    step.status,
+                    AssetRunStepStatus::Succeeded | AssetRunStepStatus::Skipped
+                ) && Self::supports_asset(&step.asset_id)
+            })
+            .map(|step| step.asset_id.clone())
+            .collect();
+        let mut force_assets = Vec::new();
+        let reddit_facts_requested = requested_assets
+            .iter()
+            .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
+        add_forced_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            reddit_facts_requested,
+            REDDIT_THREADS_DAILY_ASSET_ID,
+        );
+        requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        requested_assets.dedup();
+        SourceInputCollectionPlan {
+            requested_assets,
+            force_assets,
+            force_refresh_assets: Vec::new(),
         }
     }
 }
