@@ -36,6 +36,8 @@ pub struct SourceInputRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SourceEntitySeed {
     pub entity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub alias_entity_id: Option<String>,
     pub name: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub area: Option<String>,

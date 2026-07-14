@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -81,7 +81,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             planned_at,
             requested_assets: collection_plan.requested_assets,
             force_refresh_assets: collection_plan.force_refresh_assets,
-            source_entities: current_source_entities(&lake, resume_manifest.as_ref()).await?,
+            source_entities: current_source_entities(
+                &lake,
+                resume_manifest.as_ref(),
+                &cli.source_entity_ids,
+            )
+            .await?,
         };
         if let Some(manifest) = resume_manifest.as_mut() {
             let lease_id = MaterializationId::new();
@@ -187,20 +192,35 @@ async fn release_cli_resume_lease(
 async fn current_source_entities(
     lake: &LakeStore,
     resume_manifest: Option<&AssetDagRunManifest>,
+    selected_entity_ids: &[String],
 ) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
     let store = AssetMaterializationStore::new(lake.clone());
     let asset_id = AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)?;
     let record = match resume_manifest {
         Some(manifest) => {
             let Some(step) = manifest.steps.iter().find(|step| step.asset_id == asset_id) else {
-                return Ok(Vec::new());
+                if selected_entity_ids.is_empty() {
+                    return Ok(Vec::new());
+                }
+                return Err(
+                    "--source-entity requires an existing canonical society snapshot"
+                        .to_string()
+                        .into(),
+                );
             };
             let Some(materialization_id) = step
                 .materialization_id
                 .as_ref()
                 .or(step.current_materialization_id.as_ref())
             else {
-                return Ok(Vec::new());
+                if selected_entity_ids.is_empty() {
+                    return Ok(Vec::new());
+                }
+                return Err(
+                    "--source-entity requires an existing canonical society snapshot"
+                        .to_string()
+                        .into(),
+                );
             };
             store
                 .record(&asset_id, &step.partition, materialization_id)
@@ -211,7 +231,16 @@ async fn current_source_entities(
             .await
         {
             Ok(record) => record,
-            Err(err) if err.is_not_found() => return Ok(Vec::new()),
+            Err(err) if err.is_not_found() && selected_entity_ids.is_empty() => {
+                return Ok(Vec::new())
+            }
+            Err(err) if err.is_not_found() => {
+                return Err(
+                    "--source-entity requires an existing canonical society snapshot"
+                        .to_string()
+                        .into(),
+                )
+            }
             Err(err) => return Err(Box::new(err)),
         },
     };
@@ -232,16 +261,40 @@ async fn current_source_entities(
         })
         .collect();
     let mut seeds = BTreeMap::new();
+    let mut unmatched: BTreeSet<_> = selected_entity_ids.iter().cloned().collect();
     for mapping in rows.mappings {
+        let identifiers = [
+            Some(mapping.canonical_entity_id.as_str()),
+            mapping.alias_entity_id.as_deref(),
+            Some(mapping.project_key.as_str()),
+        ];
+        let selected = selected_entity_ids.is_empty()
+            || identifiers
+                .iter()
+                .flatten()
+                .fold(false, |matched, identifier| {
+                    unmatched.remove(*identifier) || matched
+                });
+        if !selected {
+            continue;
+        }
         seeds
             .entry(mapping.canonical_entity_id.clone())
             .or_insert_with(|| SourceEntitySeed {
                 entity_id: mapping.canonical_entity_id.clone(),
+                alias_entity_id: mapping.alias_entity_id,
                 name: mapping.project_name,
                 area: areas.get(mapping.canonical_entity_id.as_str()).cloned(),
                 city: Some("Bengaluru".to_string()),
                 project_key: Some(mapping.project_key),
             });
+    }
+    if !unmatched.is_empty() {
+        return Err(format!(
+            "unknown --source-entity selector(s): {}",
+            unmatched.into_iter().collect::<Vec<_>>().join(", ")
+        )
+        .into());
     }
     Ok(seeds.into_values().collect())
 }
@@ -256,6 +309,7 @@ struct CliOptions {
     source_command: Option<PathBuf>,
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
+    source_entity_ids: Vec<String>,
     resume_run_id: Option<MaterializationId>,
     dry_run: bool,
 }
@@ -322,6 +376,16 @@ impl CliOptions {
                         );
                     }
                     options.source_timeout_seconds = Some(seconds);
+                }
+                "--source-entity" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-entity requires an entity id".to_string())?;
+                    let value = value.trim();
+                    if value.is_empty() {
+                        return Err("--source-entity requires an entity id".to_string());
+                    }
+                    options.source_entity_ids.push(value.to_string());
                 }
                 "--resume-run" => {
                     let value = args
@@ -426,7 +490,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--source-command <program> [--source-arg <arg>]... [--source-timeout-seconds <seconds>]] [--resume-run <uuid>] [--dry-run]"
+        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--source-command <program> [--source-arg <arg>]... [--source-timeout-seconds <seconds>]] [--source-entity <entity-id>]... [--resume-run <uuid>] [--dry-run]"
     );
     println!();
     println!("Options:");
@@ -440,6 +504,7 @@ fn print_help() {
     println!("  --source-command Run a collector that reads SourceInputRequest JSON on stdin");
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
+    println!("  --source-entity Limit source collection to one entity, alias, or project key");
     println!("  --resume-run Resume one failed or interrupted run by UUID");
     println!(
         "  {env_name:<18} Lake URL: file:///absolute/path or s3://bucket/optional/prefix",
@@ -456,6 +521,79 @@ mod tests {
     };
     use chrono::TimeZone;
     use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn source_entity_selection_fails_closed_without_a_canonical_snapshot() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+
+        let error =
+            current_source_entities(&lake, None, &["society:prestige-raintree-park".to_string()])
+                .await
+                .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("requires an existing canonical society snapshot"));
+    }
+
+    #[tokio::test]
+    async fn resumed_source_entity_selection_fails_closed_without_a_canonical_step() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let run_partition =
+            AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+        let plan = executor.plan(&run_partition, now).await.unwrap();
+        let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
+        manifest
+            .steps
+            .retain(|step| step.asset_id.as_str() != CANONICAL_SOCIETY_NODES_ASSET_ID);
+
+        let error = current_source_entities(
+            &lake,
+            Some(&manifest),
+            &["society:prestige-raintree-park".to_string()],
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("requires an existing canonical society snapshot"));
+    }
+
+    #[tokio::test]
+    async fn resumed_source_entity_selection_fails_closed_without_a_snapshot_id() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let run_partition =
+            AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+        let plan = executor.plan(&run_partition, now).await.unwrap();
+        let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
+        let canonical = manifest
+            .steps
+            .iter_mut()
+            .find(|step| step.asset_id.as_str() == CANONICAL_SOCIETY_NODES_ASSET_ID)
+            .unwrap();
+        canonical.materialization_id = None;
+        canonical.current_materialization_id = None;
+
+        let error = current_source_entities(
+            &lake,
+            Some(&manifest),
+            &["society:prestige-raintree-park".to_string()],
+        )
+        .await
+        .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("requires an existing canonical society snapshot"));
+    }
 
     #[tokio::test]
     async fn resumed_collection_seeds_entities_from_the_run_snapshot() {
@@ -482,15 +620,51 @@ mod tests {
             .unwrap()
             .current_materialization_id = Some(old_canonical.materialization_id.clone());
 
-        let resumed = current_source_entities(&lake, Some(&manifest))
+        let resumed = current_source_entities(&lake, Some(&manifest), &[])
             .await
             .unwrap();
-        let live = current_source_entities(&lake, None).await.unwrap();
+        let live = current_source_entities(&lake, None, &[]).await.unwrap();
 
         assert_eq!(resumed.len(), 1);
         assert_eq!(resumed[0].name, "Old Snapshot Society");
+        assert!(resumed[0].entity_id.starts_with("society:rera-"));
+        assert_eq!(
+            resumed[0].alias_entity_id.as_deref(),
+            Some("society:old-snapshot-society")
+        );
         assert_eq!(live.len(), 1);
         assert_eq!(live[0].name, "Current Pointer Society");
+        assert!(live[0].entity_id.starts_with("society:rera-"));
+        assert_eq!(
+            live[0].alias_entity_id.as_deref(),
+            Some("society:current-pointer-society")
+        );
+
+        let selected = current_source_entities(
+            &lake,
+            Some(&manifest),
+            &["society:old-snapshot-society".to_string()],
+        )
+        .await
+        .unwrap();
+        assert_eq!(selected.len(), 1);
+        assert!(selected[0].entity_id.starts_with("society:rera-"));
+        assert_eq!(
+            selected[0].alias_entity_id.as_deref(),
+            Some("society:old-snapshot-society")
+        );
+        assert_eq!(selected[0].project_key.as_deref(), Some("PRM-old"));
+
+        let excluded = current_source_entities(
+            &lake,
+            Some(&manifest),
+            &["society:not-in-this-run".to_string()],
+        )
+        .await
+        .unwrap_err();
+        assert!(excluded
+            .to_string()
+            .contains("unknown --source-entity selector"));
 
         manifest
             .steps
@@ -498,7 +672,7 @@ mod tests {
             .find(|step| step.asset_id.as_str() == CANONICAL_SOCIETY_NODES_ASSET_ID)
             .unwrap()
             .current_materialization_id = Some(MaterializationId::new());
-        assert!(current_source_entities(&lake, Some(&manifest))
+        assert!(current_source_entities(&lake, Some(&manifest), &[])
             .await
             .is_err());
     }

@@ -1,17 +1,168 @@
 import unittest
+from io import BytesIO
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
+from urllib.error import HTTPError
 
 from pipeline.collect_asset_sources import (
     collect_asset_sources,
     collect_google_places,
     collect_reddit_assets,
     google_society_inputs,
+    reddit_society_inputs,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
-from pipeline.skills.search_reddit import threads_to_skill_result
+from pipeline.skills.search_reddit import (
+    RedditSourceBlocked,
+    RedditSourceInvalidResponse,
+    RedditSourceUnavailable,
+    fetch_reddit_threads,
+    fetch_reddit_threads_with_retry,
+    threads_to_skill_result,
+)
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
+    def test_reddit_inputs_use_only_requested_source_entities(self):
+        inputs = reddit_society_inputs(
+            {
+                "partition": {
+                    "parts": [["subreddit", "BangaloreRealEstates"]]
+                },
+                "source_entities": [
+                    {
+                        "entity_id": "society:rera-raintree",
+                        "alias_entity_id": "society:prestige-raintree-park",
+                        "name": "Prestige Raintree Park",
+                        "area": "Whitefield",
+                        "city": "Bengaluru",
+                        "project_key": "PRM-RAINTREE",
+                    },
+                    {
+                        "entity_id": "society:rera-park-grove",
+                        "alias_entity_id": "society:prestige-park-grove",
+                        "name": "Prestige Park Grove",
+                        "area": "Whitefield",
+                        "city": "Bengaluru",
+                        "project_key": "PRM-PARK-GROVE",
+                    },
+                ],
+            },
+            rera_input={
+                "projects": [
+                    {
+                        "registration_number": "PRM-UNREQUESTED",
+                        "project_name": "Unrequested Society",
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(
+            set(inputs),
+            {
+                "society:rera-raintree",
+                "society:rera-park-grove",
+            },
+        )
+        self.assertEqual(
+            inputs["society:rera-raintree"]["query"],
+            "Prestige Raintree Park Whitefield Bengaluru",
+        )
+        self.assertEqual(
+            inputs["society:rera-raintree"]["subreddit"],
+            "BangaloreRealEstates",
+        )
+        self.assertEqual(
+            inputs["society:rera-raintree"]["alias_entity_id"],
+            "society:prestige-raintree-park",
+        )
+
+    def test_reddit_transport_block_is_not_reported_as_zero_threads(self):
+        error = HTTPError(
+            "https://www.reddit.com/search.json",
+            403,
+            "Blocked",
+            {},
+            BytesIO(b"blocked"),
+        )
+        with patch("pipeline.skills.search_reddit.urlopen", side_effect=error):
+            with self.assertRaisesRegex(RedditSourceBlocked, "HTTP 403"):
+                fetch_reddit_threads("Prestige Raintree Park", "bangalore")
+
+    def test_reddit_collection_rejects_missing_entity_scope(self):
+        request = {
+            "partition": {
+                "parts": [
+                    ["dt", "2026-07-14"],
+                    ["subreddit", "BangaloreRealEstates"],
+                ]
+            },
+            "planned_at": "2026-07-14T09:30:00Z",
+            "requested_assets": ["reddit_threads_daily"],
+        }
+
+        with self.assertRaisesRegex(ValueError, "requires scoped source_entities"):
+            collect_asset_sources(request)
+
+    def test_reddit_transient_failure_retries_before_returning_empty(self):
+        unavailable = RedditSourceUnavailable("temporary failure")
+        with patch(
+            "pipeline.skills.search_reddit.fetch_reddit_threads",
+            side_effect=[unavailable, []],
+        ) as fetch:
+            threads = fetch_reddit_threads_with_retry(
+                "Prestige Raintree Park",
+                "bangalore",
+                sleep=lambda _seconds: None,
+            )
+
+        self.assertEqual(threads, [])
+        self.assertEqual(fetch.call_count, 2)
+
+    def test_reddit_schema_invalid_json_is_classified(self):
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.read.return_value = b"null"
+        with patch("pipeline.skills.search_reddit.urlopen", return_value=response):
+            with self.assertRaisesRegex(
+                RedditSourceInvalidResponse, "unexpected response shape"
+            ):
+                fetch_reddit_threads("Prestige Raintree Park", "bangalore")
+
+    def test_reddit_fact_rows_preserve_explicit_entity_id(self):
+        request = {
+            "partition": {
+                "parts": [
+                    ["dt", "2026-07-14"],
+                    ["subreddit", "BangaloreRealEstates"],
+                ]
+            },
+            "planned_at": "2026-07-14T09:30:00Z",
+        }
+        _, facts = collect_reddit_assets(
+            request,
+            society_inputs={
+                "input-key": {
+                    "entity_id": "society:rera-raintree",
+                    "alias_entity_id": "society:prestige-raintree-park",
+                    "query": "Prestige Raintree Park Whitefield",
+                    "subreddit": "BangaloreRealEstates",
+                }
+            },
+            thread_fetch=lambda _query, _subreddit: [],
+            result_builder=threads_to_skill_result,
+        )
+
+        self.assertEqual(
+            facts["facts"][0]["entity_id"],
+            "society:rera-raintree",
+        )
+        self.assertEqual(
+            facts["facts"][1]["entity_id"],
+            "society:prestige-raintree-park",
+        )
+
     def test_google_inputs_use_canonical_request_seeds(self):
         inputs = google_society_inputs(
             {
@@ -165,9 +316,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 "selftext": "Quiet and green.",
             }
         ]
-        reddit_collect = lambda reddit_request: collect_reddit_assets(
+        reddit_collect = lambda reddit_request, society_inputs=None: collect_reddit_assets(
             reddit_request,
-            society_inputs={
+            society_inputs=society_inputs
+            or {
                 "example-green": {
                     "query": "Example Green Whitefield",
                     "subreddit": "BangaloreRealEstates",

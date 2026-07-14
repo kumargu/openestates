@@ -11,15 +11,38 @@ LLM-backed search fallback.
 
 import json
 import logging
+import socket
+import time
 from typing import List, Optional
-from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
 
 from pipeline.skills.base import BaseSkill, SkillResult, SkillCost, SourcedFact, FactSource
 
 logger = logging.getLogger(__name__)
 
 REDDIT_SEARCH_URL = "https://www.reddit.com/r/{subreddit}/search.json?q={query}&restrict_sr=1&sort=relevance&limit=15"
+
+
+class RedditSourceError(RuntimeError):
+    """A Reddit source failure that must not be interpreted as an empty result."""
+
+    status = "error"
+
+
+class RedditSourceBlocked(RedditSourceError):
+    status = "blocked"
+
+
+class RedditSourceInvalidResponse(RedditSourceError):
+    status = "invalid_response"
+
+
+class RedditSourceUnavailable(OSError):
+    """A transient Reddit source failure eligible for BaseSkill retries."""
+
+    status = "unavailable"
 
 
 def _search_via_reddit_api(query: str, subreddit: str = "bangalore", limit: int = 15) -> List[dict]:
@@ -35,13 +58,47 @@ def _search_via_reddit_api(query: str, subreddit: str = "bangalore", limit: int 
     try:
         with urlopen(req, timeout=10) as resp:
             data = json.loads(resp.read().decode())
-    except Exception as e:
-        logger.debug("Reddit direct API failed for '%s': %s", query, e)
-        return []
+    except HTTPError as error:
+        if error.code in (401, 403):
+            raise RedditSourceBlocked(
+                "Reddit search blocked with HTTP {} for '{}'".format(error.code, query)
+            ) from error
+        if error.code == 429 or error.code >= 500:
+            raise RedditSourceUnavailable(
+                "Reddit search unavailable with HTTP {} for '{}'".format(
+                    error.code, query
+                )
+            ) from error
+        raise RedditSourceError(
+            "Reddit search failed with HTTP {} for '{}'".format(error.code, query)
+        ) from error
+    except (TimeoutError, socket.timeout) as error:
+        raise RedditSourceUnavailable(
+            "Reddit search timed out for '{}'".format(query)
+        ) from error
+    except URLError as error:
+        raise RedditSourceUnavailable(
+            "Reddit search transport failed for '{}': {}".format(query, error.reason)
+        ) from error
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RedditSourceInvalidResponse(
+            "Reddit search returned an invalid response for '{}'".format(query)
+        ) from error
+
+    listing = data.get("data") if isinstance(data, dict) else None
+    children = listing.get("children") if isinstance(listing, dict) else None
+    if not isinstance(children, list):
+        raise RedditSourceInvalidResponse(
+            "Reddit search returned an unexpected response shape for '{}'".format(query)
+        )
 
     threads = []
-    for child in data.get("data", {}).get("children", [])[:limit]:
+    for child in children[:limit]:
+        if not isinstance(child, dict):
+            continue
         post = child.get("data", {})
+        if not isinstance(post, dict):
+            continue
         threads.append({
             "id": post.get("id") or post.get("name") or "",
             "title": post.get("title", ""),
@@ -62,6 +119,25 @@ def fetch_reddit_threads(query: str, subreddit: str = "bangalore", limit: int = 
     if threads:
         logger.info("Found %d threads via Reddit API for '%s'", len(threads), query)
     return threads
+
+
+def fetch_reddit_threads_with_retry(
+    query: str,
+    subreddit: str = "bangalore",
+    limit: int = 15,
+    max_attempts: int = 3,
+    sleep=time.sleep,
+) -> List[dict]:
+    """Retry only transient Reddit failures; blocking and invalid data fail fast."""
+    attempts = max(1, max_attempts)
+    for attempt in range(1, attempts + 1):
+        try:
+            return fetch_reddit_threads(query, subreddit, limit)
+        except RedditSourceUnavailable:
+            if attempt == attempts:
+                raise
+            sleep(min(2 ** (attempt - 1), 4))
+    return []
 
 
 def threads_to_skill_result(input_data: dict, threads: List[dict]) -> SkillResult:

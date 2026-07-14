@@ -34,7 +34,7 @@ SUPPORTED_ASSETS = frozenset(
 def collect_asset_sources(
     request: Dict[str, Any],
     rera_fetch: Callable[[], Any] = None,
-    reddit_collect: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], Dict[str, Any]]] = None,
+    reddit_collect: Callable[..., Tuple[Dict[str, Any], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     requested = [asset_id for asset_id in request.get("requested_assets", []) if asset_id]
     unsupported = sorted(set(requested) - SUPPORTED_ASSETS)
@@ -46,17 +46,32 @@ def collect_asset_sources(
         output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
     if REDDIT_THREADS_DAILY in requested or REDDIT_RESIDENT_FACTS in requested:
         collect_reddit = reddit_collect or collect_reddit_assets
-        reddit_threads, reddit_facts = collect_reddit(request)
+        reddit_inputs = reddit_society_inputs(
+            request, output.get(RERA_REGISTRY_MONTHLY)
+        )
+        if not reddit_inputs:
+            raise ValueError(
+                "Reddit collection requires scoped source_entities or RERA projects"
+            )
+        reddit_threads, reddit_facts = collect_reddit(
+            request,
+            society_inputs=reddit_inputs,
+        )
         if REDDIT_THREADS_DAILY in requested:
             output[REDDIT_THREADS_DAILY] = reddit_threads
         if REDDIT_RESIDENT_FACTS in requested:
             output[REDDIT_RESIDENT_FACTS] = reddit_facts
     if GOOGLE_PLACES_WEEKLY in requested:
+        google_inputs = google_society_inputs(
+            request, output.get(RERA_REGISTRY_MONTHLY)
+        )
+        if not google_inputs:
+            raise ValueError(
+                "Google collection requires scoped source_entities or RERA projects"
+            )
         output[GOOGLE_PLACES_WEEKLY] = collect_google_places(
             request,
-            society_inputs=google_society_inputs(
-                request, output.get(RERA_REGISTRY_MONTHLY)
-            ),
+            society_inputs=google_inputs,
         )
     return output
 
@@ -131,6 +146,23 @@ def collect_google_places(
 def google_society_inputs(
     request: Dict[str, Any], rera_input: Dict[str, Any] = None
 ) -> Dict[str, Dict[str, Any]]:
+    return source_society_inputs(request, rera_input)
+
+
+def reddit_society_inputs(
+    request: Dict[str, Any], rera_input: Dict[str, Any] = None
+) -> Dict[str, Dict[str, Any]]:
+    subreddit = partition_values(request).get("subreddit") or "bangalore"
+    inputs = source_society_inputs(request, rera_input)
+    for input_data in inputs.values():
+        input_data["query"] = society_query(input_data)
+        input_data["subreddit"] = subreddit
+    return inputs
+
+
+def source_society_inputs(
+    request: Dict[str, Any], rera_input: Dict[str, Any] = None
+) -> Dict[str, Dict[str, Any]]:
     inputs = {}  # type: Dict[str, Dict[str, Any]]
     for seed in request.get("source_entities", []):
         entity_id = str(seed.get("entity_id") or "").strip()
@@ -139,12 +171,13 @@ def google_society_inputs(
             continue
         inputs[entity_id] = {
             "entity_id": entity_id,
+            "alias_entity_id": optional_string(seed.get("alias_entity_id")),
             "project_key": optional_string(seed.get("project_key")),
             "society_name": name,
             "area": optional_string(seed.get("area")),
             "city": optional_string(seed.get("city")) or "Bengaluru",
         }
-    if not rera_input:
+    if inputs or not rera_input:
         return inputs
 
     known_project_keys = {
@@ -169,6 +202,22 @@ def google_society_inputs(
         }
         known_project_keys.add(project_key)
     return inputs
+
+
+def society_query(input_data: Dict[str, Any]) -> str:
+    name = optional_string(
+        input_data.get("society_name")
+        or input_data.get("name")
+        or input_data.get("project_name")
+    )
+    if not name:
+        return ""
+    parts = [name]
+    for key in ("area", "city"):
+        value = optional_string(input_data.get(key))
+        if value and value.lower() not in name.lower():
+            parts.append(value)
+    return " ".join(parts)
 
 
 def fact_data(fact: Any) -> Any:
@@ -247,7 +296,10 @@ def collect_reddit_assets(
     result_builder: Callable[[Dict[str, Any], List[Dict[str, Any]]], Any] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
     from pipeline.skills.batch_runner import load_society_inputs
-    from pipeline.skills.search_reddit import fetch_reddit_threads, threads_to_skill_result
+    from pipeline.skills.search_reddit import (
+        fetch_reddit_threads_with_retry,
+        threads_to_skill_result,
+    )
 
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
@@ -262,15 +314,18 @@ def collect_reddit_assets(
     latest_created = None
     if society_inputs is None:
         society_inputs = load_society_inputs("search_reddit")
-    fetch_threads = thread_fetch or fetch_reddit_threads
+    fetch_threads = thread_fetch or fetch_reddit_threads_with_retry
     build_result = result_builder or threads_to_skill_result
     for slug, input_data in sorted(society_inputs.items()):
         query = input_data.get("query") or ""
         query_subreddit = input_data.get("subreddit") or subreddit
         threads = fetch_threads(query, query_subreddit)
         result = build_result(input_data, threads)
+        entity_id = optional_string(input_data.get("entity_id")) or "society:{}".format(
+            slug
+        )
         result_facts, result_annotations = skill_result_rows(
-            "society:{}".format(slug),
+            entity_id,
             "search_reddit",
             snapshot_date,
             input_data,
@@ -278,6 +333,17 @@ def collect_reddit_assets(
         )
         facts.extend(result_facts)
         annotations.extend(result_annotations)
+        alias_entity_id = optional_string(input_data.get("alias_entity_id"))
+        if alias_entity_id and alias_entity_id != entity_id:
+            alias_facts, alias_annotations = skill_result_rows(
+                alias_entity_id,
+                "search_reddit",
+                snapshot_date,
+                input_data,
+                result,
+            )
+            facts.extend(alias_facts)
+            annotations.extend(alias_annotations)
 
         for thread in threads:
             thread_id = str(thread.get("id") or "").strip()
