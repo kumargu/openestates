@@ -5,13 +5,14 @@ use backend::assets::{
     default_openestates_registry, rera_legal_facts_input, AssetDagExecutionOptions,
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
     AssetPartition, AssetRegistry, AssetRunManifestStore, AssetRunStepStatus, AssetSourceInputs,
-    AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus, MaterializationId,
-    MaterializationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence,
-    ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, TrustTier, CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus, GooglePlaceSnapshotRecord,
+    GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord, RedditThreadSnapshotRecord,
+    RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
+    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord,
+    SkillFactsInput, SourceWatermark, TrustTier, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -97,7 +98,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        6
+        7
     );
 }
 
@@ -156,11 +157,12 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 5);
-    assert_eq!(report.executed_assets.len(), 5);
+    assert_eq!(report.manifest.planned_count, 6);
+    assert_eq!(report.executed_assets.len(), 6);
     for id in [
         REDDIT_THREADS_DAILY_ASSET_ID,
         REDDIT_RESIDENT_FACTS_ASSET_ID,
+        GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
@@ -225,6 +227,17 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         1
     );
 
+    let google_places = current_record(
+        &store,
+        GOOGLE_PLACES_WEEKLY_ASSET_ID,
+        &google_fact_partition(),
+    )
+    .await;
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &google_places, "places/part-00000.parquet").await,
+        1
+    );
+
     let google_facts = current_record(
         &store,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
@@ -235,13 +248,16 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(google_facts.run_id, report.manifest.run_id);
     assert_eq!(
         google_facts.parent_materializations,
-        vec![upstreams["canonical_society_nodes"]
-            .materialization_id
-            .clone()]
+        vec![
+            google_places.materialization_id.clone(),
+            upstreams["canonical_society_nodes"]
+                .materialization_id
+                .clone()
+        ]
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &google_facts, "facts/part-00000.parquet").await,
-        1
+        4
     );
 
     let kg_record =
@@ -256,16 +272,16 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&google_facts.materialization_id));
-    assert!(kg_record
+    assert!(!kg_record
         .parent_materializations
         .contains(&older_google_facts.materialization_id));
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 6);
+    assert_eq!(kg_record.parent_materializations.len(), 5);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        39
+        41
     );
 
     let serving_record = current_record(
@@ -274,7 +290,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 39);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 41);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -316,14 +332,15 @@ async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 8);
-    assert_eq!(report.executed_assets.len(), 8);
+    assert_eq!(report.manifest.planned_count, 9);
+    assert_eq!(report.executed_assets.len(), 9);
     for id in [
         RERA_REGISTRY_MONTHLY_ASSET_ID,
         CANONICAL_SOCIETY_NODES_ASSET_ID,
         RERA_LEGAL_FACTS_ASSET_ID,
         REDDIT_THREADS_DAILY_ASSET_ID,
         REDDIT_RESIDENT_FACTS_ASSET_ID,
+        GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
@@ -448,7 +465,7 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
     let missing_partition = match missing_asset_id.as_str() {
         REDDIT_THREADS_DAILY_ASSET_ID => reddit_thread_partition(),
         REDDIT_RESIDENT_FACTS_ASSET_ID => reddit_fact_partition(),
-        GOOGLE_REVIEW_FACTS_ASSET_ID => google_fact_partition(),
+        GOOGLE_PLACES_WEEKLY_ASSET_ID => google_fact_partition(),
         other => panic!("unexpected missing source asset {other}"),
     };
     assert!(store
@@ -670,6 +687,20 @@ async fn seed_current_upstreams_for_partition(
     )
     .await;
 
+    let google_places = materialization(
+        GOOGLE_PLACES_WEEKLY_ASSET_ID,
+        AssetStage::Raw,
+        "2026-07-13",
+        now,
+        &google_fact_partition_for(run_partition),
+    )
+    .with_parent_materializations(vec![canonical.materialization_id.clone()])
+    .with_source_watermarks(vec![SourceWatermark {
+        source: "fetch_google_review_links".to_string(),
+        high_watermark: now.to_rfc3339(),
+    }]);
+    write_current(store, &google_places).await;
+
     let google_facts = seed_skill_fact_current(
         lake,
         store,
@@ -677,7 +708,10 @@ async fn seed_current_upstreams_for_partition(
         "google",
         "2026-07-13",
         &google_fact_partition_for(run_partition),
-        vec![canonical.materialization_id.clone()],
+        vec![
+            google_places.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
         now,
         "google_reviews_url",
         "https://maps.google.com/?cid=green-acre",
@@ -692,6 +726,7 @@ async fn seed_current_upstreams_for_partition(
         ("rera_legal_facts", rera_facts),
         ("reddit_threads_daily", reddit_threads),
         ("reddit_resident_facts", reddit_facts),
+        ("google_places_weekly", google_places),
         ("google_review_facts", google_facts),
     ])
 }
@@ -897,7 +932,7 @@ fn reddit_fact_partition() -> AssetPartition {
 }
 
 fn google_fact_partition() -> AssetPartition {
-    AssetPartition::new([("dt", "2026-07-13"), ("source", "google")])
+    AssetPartition::new([("source", "google")])
 }
 
 fn reddit_thread_partition_for(run_partition: &AssetPartition) -> AssetPartition {
@@ -915,10 +950,8 @@ fn reddit_fact_partition_for(run_partition: &AssetPartition) -> AssetPartition {
 }
 
 fn google_fact_partition_for(run_partition: &AssetPartition) -> AssetPartition {
-    match run_partition.value("dt") {
-        Some(dt) => AssetPartition::new([("dt", dt), ("source", "google")]),
-        None => AssetPartition::global(),
-    }
+    let _ = run_partition;
+    AssetPartition::new([("source", "google")])
 }
 
 fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
@@ -983,33 +1016,21 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
-        google_review_facts: Some(SkillFactsInput {
-            source: "google".to_string(),
+        google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),
-            facts: vec![SkillFactRecord {
-                entity_id: "society:green-acre-whitefield".to_string(),
-                fact_key: "google_reviews_url".to_string(),
-                value_type: "text".to_string(),
-                value_json: r#"{"type":"Text","data":"https://maps.google.com/?cid=green-acre"}"#
-                    .to_string(),
+            records: vec![GooglePlaceSnapshotRecord {
+                entity_id: String::new(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                query: "green acre whitefield reviews".to_string(),
+                place_name: Some("Green Acre Whitefield".to_string()),
+                place_id: Some("green-acre".to_string()),
+                reviews_url: "https://maps.google.com/?cid=green-acre".to_string(),
+                rating: Some(4.4),
+                review_count: Some(321),
+                address: Some("Whitefield, Bengaluru".to_string()),
                 confidence: 0.82,
-                source_type: "Google".to_string(),
-                source_url: Some("https://maps.google.com/?cid=green-acre".to_string()),
-                model: None,
-                skill_id: Some("fetch_google_review_links".to_string()),
-                triggered_by: Some("green acre whitefield reviews".to_string()),
-                learned_at: now + Duration::minutes(2),
-                run_id: "skill-run-google-review-link".to_string(),
-                input_hash: "sha256:google-green-acre".to_string(),
-            }],
-            fact_annotations: vec![SkillFactAnnotationRecord {
-                entity_id: "society:green-acre-whitefield".to_string(),
-                fact_key: "google_reviews_url".to_string(),
-                display_template: Some("Google reviews: {value}".to_string()),
-                answers_preferences_json: r#"["google reviews","resident reviews"]"#.to_string(),
-                scoring_direction: Some("TextMatch".to_string()),
-                scoring_weight: Some(0.8),
-                scoring_thresholds_json: "[]".to_string(),
+                fetched_at: now + Duration::minutes(2),
+                fetch_source: "mock_google_places".to_string(),
             }],
             source_watermarks: Vec::new(),
         }),

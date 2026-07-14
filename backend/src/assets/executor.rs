@@ -15,13 +15,14 @@ use super::{
     all_current_materialization_records_for_dependency, read_skill_fact_artifact_rows,
     sort_materialization_records, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
     AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy, KgSocietyViewMaterialization,
-    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
-    MaterializationRecord, PartitionResolutionError, PlanDecision, PlannerError,
-    RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
-    RedditThreadsDailyInput, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy, GooglePlaceAssetError,
+    GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization, KgSocietyViewMaterializeError,
+    KgSocietyViewMaterializer, MaterializationId, MaterializationRecord, PartitionResolutionError,
+    PlanDecision, PlannerError, RedditThreadSnapshotMaterializeError,
+    RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
+    ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
+    SkillFactsInput, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
     REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
@@ -508,6 +509,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::RedditResidentFacts,
         );
         executors.insert(
+            static_asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID),
+            BuiltInAssetExecutor::GooglePlacesWeekly,
+        );
+        executors.insert(
             static_asset_id(GOOGLE_REVIEW_FACTS_ASSET_ID),
             BuiltInAssetExecutor::GoogleReviewFacts,
         );
@@ -534,6 +539,7 @@ enum BuiltInAssetExecutor {
     ReraLegalFacts,
     RedditThreadsDaily,
     RedditResidentFacts,
+    GooglePlacesWeekly,
     GoogleReviewFacts,
     KgSocietyView,
     SearchServingBundle,
@@ -663,16 +669,71 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
-            Self::GoogleReviewFacts => {
+            Self::GooglePlacesWeekly => {
                 let input = context
                     .options
                     .source_inputs
-                    .google_review_facts
+                    .google_places_weekly
                     .as_ref()
                     .ok_or(AssetDagExecutorError::SourceInputMissing {
                         asset_id: context.asset_id.clone(),
                     })?;
-                let materialization = execute_skill_fact_asset(context, input).await?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::canonicalize_google_places_input(
+                    &context.dag.lake,
+                    input,
+                    canonical_record,
+                )
+                .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let materialization =
+                    GooglePlaceSnapshotMaterializer::new(context.dag.lake.clone())
+                        .materialize_for_run(
+                            &input,
+                            context.run_id.to_string(),
+                            parent_materializations,
+                            context.run_id.clone(),
+                            context.asset_partition.clone(),
+                        )
+                        .await?;
+                Ok(ExecutedAsset::Record(materialization.record))
+            }
+            Self::GoogleReviewFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let google_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    GOOGLE_PLACES_WEEKLY_ASSET_ID,
+                )?;
+                let input = super::google_review_facts_input(
+                    &context.dag.lake,
+                    google_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
             Self::KgSocietyView => {
@@ -874,6 +935,7 @@ pub enum AssetDagExecutorError {
     Partition(PartitionResolutionError),
     KgSocietyView(KgSocietyViewMaterializeError),
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
+    GooglePlace(GooglePlaceAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
     Rera(ReraAssetError),
@@ -919,6 +981,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::RedditThreadSnapshot(err) => {
                 write!(f, "reddit thread source execution failed: {err}")
             }
+            Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::SearchServingBundle(err) => {
                 write!(f, "search serving bundle execution failed: {err}")
             }
@@ -1009,6 +1072,12 @@ impl From<RedditThreadSnapshotMaterializeError> for AssetDagExecutorError {
     }
 }
 
+impl From<GooglePlaceAssetError> for AssetDagExecutorError {
+    fn from(err: GooglePlaceAssetError) -> Self {
+        Self::GooglePlace(err)
+    }
+}
+
 impl From<SearchServingBundleMaterializeError> for AssetDagExecutorError {
     fn from(err: SearchServingBundleMaterializeError) -> Self {
         Self::SearchServingBundle(err)
@@ -1064,7 +1133,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
     source_inputs.rera_registry_monthly.is_none()
         && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
-        && source_inputs.google_review_facts.is_none()
+        && source_inputs.google_places_weekly.is_none()
 }
 
 #[cfg(test)]

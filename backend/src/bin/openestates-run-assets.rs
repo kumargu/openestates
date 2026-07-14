@@ -1,11 +1,13 @@
+use std::collections::{BTreeMap, HashMap};
 use std::ffi::OsString;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetPartition,
-    AssetSourceInputs, CommandSourceInputProvider, LakeObjectSourceInputProvider,
-    LocalFileSourceInputProvider, SourceInputProvider, SourceInputRequest,
+    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetId,
+    AssetMaterializationStore, AssetPartition, AssetSourceInputs, CommandSourceInputProvider,
+    LakeObjectSourceInputProvider, LocalFileSourceInputProvider, SourceEntitySeed,
+    SourceInputProvider, SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore};
@@ -49,6 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             partition: options.partition.clone(),
             planned_at,
             requested_assets: collection_plan.requested_assets,
+            force_refresh_assets: collection_plan.force_refresh_assets,
+            source_entities: current_source_entities(&lake).await?,
         };
         if let Some(source_inputs) = provider.load(&request, &lake).await? {
             options = options
@@ -68,6 +72,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", serde_json::to_string_pretty(&report)?);
 
     Ok(())
+}
+
+async fn current_source_entities(
+    lake: &LakeStore,
+) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
+    let store = AssetMaterializationStore::new(lake.clone());
+    let asset_id = AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)?;
+    let record = match store
+        .current_record(&asset_id, &AssetPartition::global())
+        .await
+    {
+        Ok(record) => record,
+        Err(err) if err.is_not_found() => return Ok(Vec::new()),
+        Err(err) => return Err(Box::new(err)),
+    };
+    let rows = backend::assets::read_canonical_society_rows(lake, &record).await?;
+    let names: HashMap<_, _> = rows
+        .entities
+        .iter()
+        .map(|entity| (entity.entity_id.as_str(), entity.name.as_str()))
+        .collect();
+    let areas: HashMap<_, _> = rows
+        .edges
+        .iter()
+        .filter(|edge| edge.relation == "SocietyInArea")
+        .filter_map(|edge| {
+            names
+                .get(edge.to_entity_id.as_str())
+                .map(|area| (edge.from_entity_id.as_str(), (*area).to_string()))
+        })
+        .collect();
+    let mut seeds = BTreeMap::new();
+    for mapping in rows.mappings {
+        seeds
+            .entry(mapping.canonical_entity_id.clone())
+            .or_insert_with(|| SourceEntitySeed {
+                entity_id: mapping.canonical_entity_id.clone(),
+                name: mapping.project_name,
+                area: areas.get(mapping.canonical_entity_id.as_str()).cloned(),
+                city: Some("Bengaluru".to_string()),
+                project_key: Some(mapping.project_key),
+            });
+    }
+    Ok(seeds.into_values().collect())
 }
 
 #[derive(Default)]

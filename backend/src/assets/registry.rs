@@ -492,16 +492,29 @@ pub fn default_openestates_registry() -> AssetRegistry {
             &[("source", "reddit")],
         )),
         asset(
-            "google_review_facts",
-            AssetStage::Silver,
-            "Review-derived support facts for maintenance, amenities, and liveability.",
+            "google_places_weekly",
+            AssetStage::Raw,
+            "Weekly Google Maps place and review metadata with navigable source links.",
             &["canonical_society_nodes"],
             RefreshCadence::Weekly,
             CostTier::Cheap,
             TrustTier::Support,
         )
         .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &["dt"],
+            &[],
+            &[("source", "google")],
+        )),
+        asset(
+            "google_review_facts",
+            AssetStage::Silver,
+            "Review-derived support facts for maintenance, amenities, and liveability.",
+            &["google_places_weekly", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
             &[("source", "google")],
         )),
         asset(
@@ -618,7 +631,7 @@ mod tests {
                     &run_partition
                 )
                 .unwrap(),
-            AssetPartition::new([("dt", "2026-07-13"), ("source", "google")])
+            AssetPartition::new([("source", "google")])
         );
         assert_eq!(
             registry

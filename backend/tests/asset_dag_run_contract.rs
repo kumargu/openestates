@@ -151,7 +151,7 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
     let reddit_thread_partition =
         AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
     let reddit_fact_partition = AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")]);
-    let google_fact_partition = AssetPartition::new([("dt", "2026-07-13"), ("source", "google")]);
+    let google_fact_partition = AssetPartition::new([("source", "google")]);
 
     let rera = materialization_in_partition(
         "rera_registry_monthly",
@@ -204,11 +204,23 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
         reddit_fact_partition.clone(),
     );
     write_current(&materializations, &reddit_facts).await;
+    let google_places = materialization_in_partition(
+        "google_places_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        google_fact_partition.clone(),
+    );
+    write_current(&materializations, &google_places).await;
     let google_facts = materialization_in_partition(
         "google_review_facts",
         AssetStage::Silver,
         "2026-07-13",
-        vec![canonical.materialization_id.clone()],
+        vec![
+            google_places.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
         now,
         google_fact_partition.clone(),
     );
@@ -241,6 +253,28 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
     let google_facts_entry = plan_entry(&plan, "google_review_facts");
     assert_eq!(google_facts_entry.partition, google_fact_partition);
     assert_eq!(google_facts_entry.decision, PlanDecision::Skip);
+    assert_eq!(
+        google_facts_entry.current_parent_materializations,
+        vec![
+            google_places.materialization_id.clone(),
+            canonical.materialization_id.clone()
+        ]
+    );
+
+    let next_day_partition =
+        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+    let next_day_plan = planner
+        .plan_partition_details(&next_day_partition, now + Duration::days(1))
+        .await
+        .unwrap();
+    assert_eq!(
+        plan_entry(&next_day_plan, "google_places_weekly").decision,
+        PlanDecision::Skip
+    );
+    assert_eq!(
+        plan_entry(&next_day_plan, "google_review_facts").decision,
+        PlanDecision::Skip
+    );
 
     let kg_entry = plan_entry(&plan, "kg_society_view");
     assert_eq!(kg_entry.partition, AssetPartition::global());
@@ -328,13 +362,25 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &legacy_global_reddit_facts).await;
+    let google_places = materialization_in_partition(
+        "google_places_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::new([("source", "google")]),
+    );
+    write_current(&materializations, &google_places).await;
     let google_facts = materialization_in_partition(
         "google_review_facts",
         AssetStage::Silver,
         "2026-07-13",
-        vec![canonical.materialization_id.clone()],
+        vec![
+            google_places.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
         now,
-        AssetPartition::new([("dt", "2026-07-13"), ("source", "google")]),
+        AssetPartition::new([("source", "google")]),
     );
     write_current(&materializations, &google_facts).await;
 

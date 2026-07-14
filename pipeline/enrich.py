@@ -62,14 +62,6 @@ SKILL_REGISTRY: Dict[str, dict] = {
         "priority": 3,
         "depends_on": [],
     },
-    "fetch_google_review_links": {
-        "node_types": ["society"],
-        "pool": "serpapi",
-        "max_age_days": 7,
-        "cost_tier": "cheap",
-        "priority": 3,
-        "depends_on": [],
-    },
     "identify_gaps": {
         "node_types": ["society"],
         "pool": "local",
@@ -86,7 +78,6 @@ FRESHNESS_SOURCE_MAP = {
     "search_reddit": "reddit",
     "fetch_rera": "rera",
     "fetch_images": "fetch_images",
-    "fetch_google_review_links": "google_review_links",
     "identify_gaps": "identify_gaps",
 }
 
@@ -253,9 +244,6 @@ def _make_skill(skill_id: str):
     elif skill_id == "fetch_images":
         from pipeline.skills.fetch_images import FetchImagesSkill
         return FetchImagesSkill()
-    elif skill_id == "fetch_google_review_links":
-        from pipeline.skills.fetch_google_review_links import FetchGoogleReviewLinksSkill
-        return FetchGoogleReviewLinksSkill()
     elif skill_id == "identify_gaps":
         from pipeline.skills.identify_gaps import IdentifyGapsSkill
         return IdentifyGapsSkill()
@@ -326,7 +314,6 @@ def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dic
     """Build the input dict a skill expects from an entity ID."""
     name = resolver.get_name(entity_id) or entity_id.split(":", 1)[-1]
     area = _resolve_area(entity_id) if entity_id.startswith("society:") else ""
-    city = _get_node_fact(entity_id, "city") or "Bengaluru"
 
     if skill_id == "search_reddit":
         return {"query": name, "subreddit": "bangalore"}
@@ -339,16 +326,6 @@ def _build_input(skill_id: str, entity_id: str, resolver: EntityResolver) -> dic
             "entity_type": entity_id.split(":")[0],
             "name": name,
             "area": area,
-        }
-    elif skill_id == "fetch_google_review_links":
-        area = _resolve_area(entity_id) if entity_id.startswith("society:") else ""
-        return {
-            "entity_id": entity_id,
-            "entity_type": entity_id.split(":")[0],
-            "society_name": name,
-            "area": area,
-            "city": city,
-            "google_place_id": _get_node_fact(entity_id, "google_place_id"),
         }
     elif skill_id == "identify_gaps":
         slug = entity_id.split(":", 1)[-1]
@@ -436,18 +413,7 @@ def _push_facts(entity_id: str, result):
 
 def _should_mark_fresh(skill_id: str, result) -> bool:
     """Decide whether a skill result is good enough to suppress near-term reruns."""
-    if not result.facts:
-        return False
-    if skill_id != "fetch_google_review_links":
-        return True
-
-    precise_keys = {"google_place_id", "google_rating", "google_review_count"}
-    for fact in result.facts:
-        if fact.key in precise_keys:
-            return True
-        if fact.key == "google_reviews_url" and fact.confidence >= 0.6:
-            return True
-    return False
+    return bool(result.facts)
 
 
 # ---------------------------------------------------------------------------

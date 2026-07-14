@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AssetDagPlan, AssetId, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    AssetDagPlan, AssetId, GooglePlacesWeeklyInput, PlanReason, RedditThreadSnapshotRecord,
+    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -19,13 +20,14 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_resident_facts: Option<SkillFactsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub google_review_facts: Option<SkillFactsInput>,
+    pub google_places_weekly: Option<GooglePlacesWeeklyInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SourceInputCollectionPlan {
     pub requested_assets: Vec<AssetId>,
     pub force_assets: Vec<AssetId>,
+    pub force_refresh_assets: Vec<AssetId>,
 }
 
 impl AssetSourceInputs {
@@ -34,7 +36,7 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID,
             REDDIT_THREADS_DAILY_ASSET_ID,
             REDDIT_RESIDENT_FACTS_ASSET_ID,
-            GOOGLE_REVIEW_FACTS_ASSET_ID,
+            GOOGLE_PLACES_WEEKLY_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -47,7 +49,7 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID
                 | REDDIT_THREADS_DAILY_ASSET_ID
                 | REDDIT_RESIDENT_FACTS_ASSET_ID
-                | GOOGLE_REVIEW_FACTS_ASSET_ID
+                | GOOGLE_PLACES_WEEKLY_ASSET_ID
         )
     }
 
@@ -61,6 +63,12 @@ impl AssetSourceInputs {
     pub fn collection_plan(plan: &AssetDagPlan) -> SourceInputCollectionPlan {
         let mut requested_assets = Self::requested_asset_ids(plan);
         let mut force_assets = Vec::new();
+        let mut force_refresh_assets: Vec<AssetId> = plan
+            .run_entries()
+            .filter(|entry| matches!(entry.reason, Some(PlanReason::Stale { .. })))
+            .filter(|entry| Self::supports_asset(&entry.asset_id))
+            .map(|entry| entry.asset_id.clone())
+            .collect();
         let resident_facts_requested = requested_assets
             .iter()
             .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
@@ -73,11 +81,38 @@ impl AssetSourceInputs {
             requested_assets.push(raw_asset.clone());
             force_assets.push(raw_asset);
         }
+        let google_facts_requested = plan
+            .run_entries()
+            .any(|entry| entry.asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
+        add_forced_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            google_facts_requested,
+            GOOGLE_PLACES_WEEKLY_ASSET_ID,
+        );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        force_refresh_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         SourceInputCollectionPlan {
             requested_assets,
             force_assets,
+            force_refresh_assets,
         }
+    }
+}
+
+fn add_forced_raw_companion(
+    requested_assets: &mut Vec<AssetId>,
+    force_assets: &mut Vec<AssetId>,
+    derived_requested: bool,
+    raw_asset_id: &str,
+) {
+    let raw_requested = requested_assets
+        .iter()
+        .any(|asset_id| asset_id.as_str() == raw_asset_id);
+    if derived_requested && !raw_requested {
+        let raw_asset = AssetId::new(raw_asset_id).expect("static raw asset id is valid");
+        requested_assets.push(raw_asset.clone());
+        force_assets.push(raw_asset);
     }
 }
 

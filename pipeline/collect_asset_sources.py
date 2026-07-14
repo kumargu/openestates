@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
 REDDIT_RESIDENT_FACTS = "reddit_resident_facts"
-GOOGLE_REVIEW_FACTS = "google_review_facts"
+GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
         REDDIT_THREADS_DAILY,
         REDDIT_RESIDENT_FACTS,
-        GOOGLE_REVIEW_FACTS,
+        GOOGLE_PLACES_WEEKLY,
     )
 )
 
@@ -35,7 +35,6 @@ def collect_asset_sources(
     request: Dict[str, Any],
     rera_fetch: Callable[[], Any] = None,
     reddit_collect: Callable[[Dict[str, Any]], Tuple[Dict[str, Any], Dict[str, Any]]] = None,
-    skill_collect: Callable[[Dict[str, Any], str, str], Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     requested = [asset_id for asset_id in request.get("requested_assets", []) if asset_id]
     unsupported = sorted(set(requested) - SUPPORTED_ASSETS)
@@ -52,12 +51,138 @@ def collect_asset_sources(
             output[REDDIT_THREADS_DAILY] = reddit_threads
         if REDDIT_RESIDENT_FACTS in requested:
             output[REDDIT_RESIDENT_FACTS] = reddit_facts
-    collect_skills = skill_collect or collect_skill_facts
-    if GOOGLE_REVIEW_FACTS in requested:
-        output[GOOGLE_REVIEW_FACTS] = collect_skills(
-            request, "fetch_google_review_links", "google"
+    if GOOGLE_PLACES_WEEKLY in requested:
+        output[GOOGLE_PLACES_WEEKLY] = collect_google_places(
+            request,
+            society_inputs=google_society_inputs(
+                request, output.get(RERA_REGISTRY_MONTHLY)
+            ),
         )
     return output
+
+
+def collect_google_places(
+    request: Dict[str, Any],
+    society_inputs: Dict[str, Dict[str, Any]] = None,
+    skill: Any = None,
+) -> Dict[str, Any]:
+    from pipeline.skills.batch_runner import get_skill_instance
+    from pipeline.skills.fetch_google_review_links import build_place_query
+
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    inputs = society_inputs or {}
+    google_skill = skill or get_skill_instance("fetch_google_review_links")
+    force_refresh = GOOGLE_PLACES_WEEKLY in request.get("force_refresh_assets", [])
+    records = []  # type: List[Dict[str, Any]]
+
+    for slug, input_data in sorted(inputs.items()):
+        query = build_place_query(input_data)
+        result = google_skill.run(input_data, force=force_refresh)
+        values = {fact.key: fact for fact in result.facts}
+        url_fact = values.get("google_reviews_url")
+        if not query or url_fact is None:
+            logger.warning("Skipping Google place row without query/link for %s", slug)
+            continue
+        reviews_url = fact_data(url_fact)
+        if not isinstance(reviews_url, str) or not reviews_url.strip():
+            logger.warning("Skipping Google place row with invalid link for %s", slug)
+            continue
+        learned_at = max(
+            (fact.learned_at for fact in result.facts if fact.learned_at),
+            default=planned_at,
+        )
+        records.append(
+            {
+                "entity_id": str(input_data.get("entity_id") or ""),
+                "project_key": optional_string(input_data.get("project_key")),
+                "query": query,
+                "place_name": optional_string(
+                    input_data.get("society_name")
+                    or input_data.get("name")
+                    or input_data.get("project_name")
+                ),
+                "place_id": optional_string(fact_data(values.get("google_place_id"))),
+                "reviews_url": reviews_url,
+                "rating": optional_float(fact_data(values.get("google_rating"))),
+                "review_count": optional_int(fact_data(values.get("google_review_count"))),
+                "address": optional_string(input_data.get("address")),
+                "confidence": float(result.confidence),
+                "fetched_at": learned_at,
+                "fetch_source": google_fetch_source(result),
+            }
+        )
+
+    logger.info("Collected %d Google place snapshots", len(records))
+    return {
+        "snapshot_date": snapshot_date,
+        "records": records,
+        "source_watermarks": [
+            {
+                "source": "fetch_google_review_links",
+                "high_watermark": max(
+                    (record["fetched_at"] for record in records), default=planned_at
+                ),
+            }
+        ],
+    }
+
+
+def google_society_inputs(
+    request: Dict[str, Any], rera_input: Dict[str, Any] = None
+) -> Dict[str, Dict[str, Any]]:
+    inputs = {}  # type: Dict[str, Dict[str, Any]]
+    for seed in request.get("source_entities", []):
+        entity_id = str(seed.get("entity_id") or "").strip()
+        name = str(seed.get("name") or "").strip()
+        if not entity_id or not name:
+            continue
+        inputs[entity_id] = {
+            "entity_id": entity_id,
+            "project_key": optional_string(seed.get("project_key")),
+            "society_name": name,
+            "area": optional_string(seed.get("area")),
+            "city": optional_string(seed.get("city")) or "Bengaluru",
+        }
+    if not rera_input:
+        return inputs
+
+    known_project_keys = {
+        input_data.get("project_key")
+        for input_data in inputs.values()
+        if input_data.get("project_key")
+    }
+    for project in rera_input.get("projects", []):
+        project_key = optional_string(project.get("registration_number")) or optional_string(
+            project.get("ack_number")
+        )
+        name = optional_string(project.get("project_name"))
+        if not project_key or not name or project_key in known_project_keys:
+            continue
+        inputs[project_key] = {
+            "entity_id": "",
+            "project_key": project_key,
+            "society_name": name,
+            "area": optional_string(project.get("area_name")),
+            "city": "Bengaluru",
+            "address": optional_string(project.get("project_address")),
+        }
+        known_project_keys.add(project_key)
+    return inputs
+
+
+def fact_data(fact: Any) -> Any:
+    if fact is None or not isinstance(fact.value, dict):
+        return None
+    return fact.value.get("data")
+
+
+def google_fetch_source(result: Any) -> str:
+    if result.cached:
+        return "fetch_google_review_links_cache"
+    if result.cost.api_calls:
+        return "serpapi_google_maps"
+    return "google_maps_search_fallback"
 
 
 def collect_rera_registry(
@@ -210,46 +335,6 @@ def collect_reddit_assets(
     return thread_input, fact_input
 
 
-def collect_skill_facts(
-    request: Dict[str, Any], skill_id: str, source: str
-) -> Dict[str, Any]:
-    from pipeline.skills.batch_runner import get_skill_instance, load_society_inputs
-
-    planned_at = normalized_planned_at(request)
-    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
-    inputs = load_society_inputs(skill_id)
-    skill = get_skill_instance(skill_id)
-    facts = []  # type: List[Dict[str, Any]]
-    annotations = []  # type: List[Dict[str, Any]]
-    total_cost = 0.0
-
-    for slug, input_data in sorted(inputs.items()):
-        result = skill.run(input_data)
-        total_cost += result.cost.estimated_usd
-        result_facts, result_annotations = skill_result_rows(
-            "society:{}".format(slug), skill_id, snapshot_date, input_data, result
-        )
-        facts.extend(result_facts)
-        annotations.extend(result_annotations)
-
-    logger.info(
-        "Collected %d %s facts for %d societies (estimated cost $%.4f)",
-        len(facts),
-        source,
-        len(inputs),
-        total_cost,
-    )
-    return {
-        "source": source,
-        "snapshot_date": snapshot_date,
-        "facts": facts,
-        "fact_annotations": annotations,
-        "source_watermarks": [
-            {"source": skill_id, "high_watermark": planned_at}
-        ],
-    }
-
-
 def skill_result_rows(
     entity_id: str,
     skill_id: str,
@@ -334,6 +419,17 @@ def optional_int(value: Any):
     if value is None or value == "":
         return None
     return int(float(value))
+
+
+def optional_float(value: Any):
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
 
 
 def main() -> int:

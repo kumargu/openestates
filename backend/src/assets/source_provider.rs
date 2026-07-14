@@ -27,6 +27,22 @@ pub struct SourceInputRequest {
     pub planned_at: DateTime<Utc>,
     #[serde(default)]
     pub requested_assets: Vec<AssetId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub force_refresh_assets: Vec<AssetId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_entities: Vec<SourceEntitySeed>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SourceEntitySeed {
+    pub entity_id: String,
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub area: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub city: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_key: Option<String>,
 }
 
 /// Loads ephemeral source records for one asset DAG run.

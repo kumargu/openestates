@@ -10,6 +10,7 @@
 
 pub mod executor;
 pub mod fan_in;
+pub mod google;
 pub mod kg_view;
 pub mod materialization;
 pub mod paths;
@@ -30,6 +31,12 @@ pub use fan_in::{
     all_current_materialization_records_for_dependency,
     all_current_partition_dependency_records_for_asset, sort_materialization_records,
     AssetFanInError,
+};
+pub use google::{
+    canonicalize_google_places_input, google_review_facts_input, read_google_place_rows,
+    GooglePlaceAssetError, GooglePlaceSnapshotManifest, GooglePlaceSnapshotMaterialization,
+    GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID,
 };
 pub use kg_view::{
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
@@ -73,7 +80,7 @@ pub use source_inputs::{
 };
 pub use source_provider::{
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
-    SourceInputProvider, SourceInputProviderError, SourceInputRequest,
+    SourceEntitySeed, SourceInputProvider, SourceInputProviderError, SourceInputRequest,
 };
 pub use types::{
     ArtifactRef, AssetId, AssetPartition, AssetStage, CurrentAssetPointer, MaterializationId,

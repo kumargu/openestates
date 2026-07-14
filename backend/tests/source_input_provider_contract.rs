@@ -3,11 +3,13 @@ use std::fs;
 use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDefinition,
     AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy, AssetRegistry,
-    AssetSourceInputs, AssetStage, CommandSourceInputProvider, CostTier, MaterializationId,
-    RedditThreadSnapshotMaterializer, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceInputProvider,
-    SourceInputProviderError, SourceInputRequest, TrustTier,
+    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CommandSourceInputProvider,
+    CostTier, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    MaterializationId, MaterializationRecord, RedditThreadSnapshotMaterializer,
+    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord,
+    SkillFactsInput, SourceInputProvider, SourceInputProviderError, SourceInputRequest,
+    SourceWatermark, TrustTier,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
@@ -50,6 +52,8 @@ printf '%s' '{"reddit_threads_daily":{"snapshot_date":"2026-07-14","subreddit":"
         ]),
         planned_at: Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
         requested_assets: vec![AssetId::new("reddit_threads_daily").unwrap()],
+        force_refresh_assets: Vec::new(),
+        source_entities: Vec::new(),
     };
 
     let inputs = provider
@@ -183,6 +187,8 @@ fn request(project_root: &std::path::Path) -> SourceInputRequest {
         partition: AssetPartition::global(),
         planned_at: Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
         requested_assets: Vec::new(),
+        force_refresh_assets: Vec::new(),
+        source_entities: Vec::new(),
     }
 }
 
@@ -234,6 +240,52 @@ async fn requested_assets_follow_the_dag_plan_and_skip_fresh_rera() {
         .any(|asset_id| asset_id.as_str() == "reddit_threads_daily"));
 }
 
+#[tokio::test]
+async fn stale_source_assets_are_marked_for_collector_cache_bypass() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let raw_id = AssetId::new("google_places_weekly").unwrap();
+    let partition = AssetPartition::new([("source", "google")]);
+    let store = AssetMaterializationStore::new(lake.clone());
+    let old = MaterializationRecord::succeeded(
+        raw_id.clone(),
+        AssetStage::Raw,
+        partition.clone(),
+        "2026-07-01",
+        Vec::new(),
+    )
+    .with_source_watermarks(vec![SourceWatermark {
+        source: "fetch_google_review_links".to_string(),
+        high_watermark: "2026-07-01T00:00:00Z".to_string(),
+    }]);
+    store.write_materialization(&old).await.unwrap();
+    store.promote_current(&old).await.unwrap();
+    let registry = AssetRegistry::new(vec![AssetDefinition::new(
+        raw_id.clone(),
+        AssetStage::Raw,
+        "Google stale refresh fixture",
+        Vec::new(),
+        RefreshCadence::Weekly,
+        CostTier::Cheap,
+        TrustTier::Support,
+    )
+    .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+        &[],
+        &[("source", "google")],
+    ))])
+    .unwrap();
+    let plan = AssetDagExecutor::new(registry, lake)
+        .plan(
+            &AssetPartition::new([("dt", "2026-07-14")]),
+            Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+    let collection = AssetSourceInputs::collection_plan(&plan);
+    assert_eq!(collection.requested_assets, vec![raw_id.clone()]);
+    assert_eq!(collection.force_refresh_assets, vec![raw_id]);
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn command_provider_output_executes_through_the_rera_asset() {
@@ -262,6 +314,8 @@ printf '%s' '{"rera_registry_monthly":{"snapshot_date":"2026-07","projects":[{"a
         partition: AssetPartition::global(),
         planned_at: now,
         requested_assets: vec![AssetId::new("rera_registry_monthly").unwrap()],
+        force_refresh_assets: Vec::new(),
+        source_entities: Vec::new(),
     };
     let source_inputs = CommandSourceInputProvider::new("/bin/sh")
         .with_arg(collector_path.as_os_str().to_owned())
@@ -427,6 +481,169 @@ async fn facts_only_retry_rematerializes_the_exact_reddit_parent() {
     );
 }
 
+#[tokio::test]
+async fn facts_only_retry_rematerializes_the_exact_google_parent() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let now = Utc::now();
+    let run_partition = AssetPartition::new([("dt", "2026-07-14")]);
+    let materializations = AssetMaterializationStore::new(lake.clone());
+    let rera_record = ReraRegistryMaterializer::new(lake.clone())
+        .materialize_for_run(
+            &ReraRegistryMonthlyInput {
+                snapshot_date: "2026-07".to_string(),
+                projects: vec![ReraProjectSnapshotRecord {
+                    ack_number: Some("ACK-GOOGLE-RETRY".to_string()),
+                    registration_number: Some("PRM-GOOGLE-RETRY".to_string()),
+                    project_name: "Google Retry Proof".to_string(),
+                    promoter_name: None,
+                    status: Some("Approved".to_string()),
+                    project_type: None,
+                    project_address: None,
+                    area_name: Some("Whitefield".to_string()),
+                    district: None,
+                    taluk: None,
+                    total_land_area_sqm: None,
+                    land_litigation: None,
+                    source_url: "https://rera.karnataka.gov.in/retry".to_string(),
+                    fetched_at: now,
+                }],
+                source_watermarks: Vec::new(),
+            },
+            MaterializationId::new(),
+            AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    let canonical = CanonicalSocietyMaterializer::new(lake.clone())
+        .materialize_from_rera_for_run(
+            &rera_record,
+            "google-retry-canonical",
+            MaterializationId::new(),
+            AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    materializations
+        .promote_current(&rera_record)
+        .await
+        .unwrap();
+    materializations.promote_current(&canonical).await.unwrap();
+    let canonical_rows = backend::assets::read_canonical_society_rows(&lake, &canonical)
+        .await
+        .unwrap();
+    let canonical_id = canonical_rows.mappings[0].canonical_entity_id.clone();
+    let old_raw = GooglePlaceSnapshotMaterializer::new(lake.clone())
+        .materialize_for_run(
+            &GooglePlacesWeeklyInput {
+                snapshot_date: "2026-07-14".to_string(),
+                records: vec![google_record(&canonical_id, "old-place", now)],
+                source_watermarks: Vec::new(),
+            },
+            "old-google-raw",
+            vec![canonical.materialization_id.clone()],
+            MaterializationId::new(),
+            AssetPartition::new([("source", "google")]),
+        )
+        .await
+        .unwrap();
+    materializations
+        .promote_current(&old_raw.record)
+        .await
+        .unwrap();
+    let rera_id_asset = AssetId::new("rera_registry_monthly").unwrap();
+    let canonical_id_asset = AssetId::new("canonical_society_nodes").unwrap();
+    let raw_id = AssetId::new("google_places_weekly").unwrap();
+    let facts_id = AssetId::new("google_review_facts").unwrap();
+    let registry = AssetRegistry::new(vec![
+        AssetDefinition::new(
+            rera_id_asset.clone(),
+            AssetStage::Raw,
+            "RERA retry fixture",
+            Vec::new(),
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Root,
+        ),
+        AssetDefinition::new(
+            canonical_id_asset.clone(),
+            AssetStage::Gold,
+            "Canonical society retry fixture",
+            vec![rera_id_asset],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Authoritative,
+        ),
+        AssetDefinition::new(
+            raw_id.clone(),
+            AssetStage::Raw,
+            "Google raw retry fixture",
+            vec![canonical_id_asset],
+            RefreshCadence::Weekly,
+            CostTier::Cheap,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "google")],
+        )),
+        AssetDefinition::new(
+            facts_id.clone(),
+            AssetStage::Silver,
+            "Google facts retry fixture",
+            vec![raw_id.clone()],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "google")],
+        )),
+    ])
+    .unwrap();
+    let executor = AssetDagExecutor::new(registry, lake.clone());
+    let plan = executor.plan(&run_partition, now).await.unwrap();
+    let collection_plan = AssetSourceInputs::collection_plan(&plan);
+
+    assert_eq!(collection_plan.force_assets, vec![raw_id.clone()]);
+    executor
+        .execute(
+            &KnowledgeGraph::new(),
+            AssetDagExecutionOptions::new(run_partition, now)
+                .with_source_inputs(AssetSourceInputs {
+                    google_places_weekly: Some(GooglePlacesWeeklyInput {
+                        snapshot_date: "2026-07-14".to_string(),
+                        records: vec![google_record(&canonical_id, "new-place", now)],
+                        source_watermarks: Vec::new(),
+                    }),
+                    ..AssetSourceInputs::default()
+                })
+                .with_forced_assets(collection_plan.force_assets),
+        )
+        .await
+        .unwrap();
+
+    let materializations = AssetMaterializationStore::new(lake);
+    let partition = AssetPartition::new([("source", "google")]);
+    let new_raw = materializations
+        .current_record(&raw_id, &partition)
+        .await
+        .unwrap();
+    let facts = materializations
+        .current_record(&facts_id, &partition)
+        .await
+        .unwrap();
+    assert_ne!(
+        new_raw.materialization_id,
+        old_raw.record.materialization_id
+    );
+    assert_eq!(
+        facts.parent_materializations,
+        vec![new_raw.materialization_id]
+    );
+}
+
 fn reddit_record(
     thread_id: &str,
     title: &str,
@@ -444,5 +661,26 @@ fn reddit_record(
         selftext: Some(title.to_string()),
         fetched_at,
         fetch_source: "mock_reddit".to_string(),
+    }
+}
+
+fn google_record(
+    entity_id: &str,
+    place_id: &str,
+    fetched_at: chrono::DateTime<Utc>,
+) -> GooglePlaceSnapshotRecord {
+    GooglePlaceSnapshotRecord {
+        entity_id: entity_id.to_string(),
+        project_key: None,
+        query: "retry proof whitefield".to_string(),
+        place_name: Some("Retry Proof".to_string()),
+        place_id: Some(place_id.to_string()),
+        reviews_url: format!("https://www.google.com/maps/search/?query_place_id={place_id}"),
+        rating: Some(4.3),
+        review_count: Some(100),
+        address: None,
+        confidence: 0.8,
+        fetched_at,
+        fetch_source: "mock_google".to_string(),
     }
 }
