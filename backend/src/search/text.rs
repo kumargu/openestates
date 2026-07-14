@@ -2,7 +2,7 @@ use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{Property, Seller, Society};
 use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
-use crate::routes::search::graph_preference_score_detailed;
+use crate::routes::search::graph_preference_score_for_keys;
 use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
 
 use super::index::SearchIndex;
@@ -235,11 +235,15 @@ impl TextSearch {
                 }
 
                 for pref in &positive_preferences {
+                    let candidate_fact_keys = positive_preference_keys(intent, pref);
                     // Graph-first: check if the society's facts declare scoring for this preference
                     if let Some(g) = graph {
-                        if let Some((gs, detail)) =
-                            graph_preference_score_detailed(g, &p.society_id, pref)
-                        {
+                        if let Some((gs, detail)) = graph_preference_score_for_keys(
+                            g,
+                            &p.society_id,
+                            pref,
+                            candidate_fact_keys,
+                        ) {
                             total_facts_consulted += 1;
                             score += gs;
                             reasons.push(format!("matches preference: {}", pref));
@@ -301,9 +305,12 @@ impl TextSearch {
                     }
 
                     if let Some(serving_facts) = serving_facts {
-                        if let Some(evidence) =
-                            serving_preference_evidence(serving_facts, &p.society_id, pref)
-                        {
+                        if let Some(evidence) = serving_preference_evidence(
+                            serving_facts,
+                            &p.society_id,
+                            pref,
+                            candidate_fact_keys,
+                        ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
                             reasons.push(evidence.reason.clone());
@@ -803,15 +810,24 @@ fn serving_preference_evidence(
     serving_facts: &ServingFactIndex,
     society_id: &str,
     preference: &str,
+    candidate_fact_keys: &[String],
 ) -> Option<EvidenceMatch> {
     let node_id = society_node_id(society_id);
     let rows = serving_facts.entity(&node_id)?;
 
     for fact in &rows.facts {
         let Some(metadata) = rows.search_metadata.iter().find(|metadata| {
+            let answers_preference = metadata_answers_preference(metadata, preference);
+            let key_matches = candidate_fact_keys
+                .iter()
+                .any(|key| key.eq_ignore_ascii_case(&fact.fact_key));
             metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
                 && metadata_supports_text_match(metadata)
-                && metadata_answers_preference(metadata, preference)
+                && if candidate_fact_keys.is_empty() {
+                    answers_preference
+                } else {
+                    key_matches || answers_preference
+                }
         }) else {
             continue;
         };
@@ -1605,6 +1621,14 @@ fn positive_preference_labels(intent: &SearchIntent) -> Vec<String> {
             .cloned()
             .collect()
     }
+}
+
+fn positive_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+    intent
+        .positive_preferences
+        .iter()
+        .find(|signal| signal.raw_text == preference)
+        .map_or(&[], |signal| signal.expanded_keys.as_slice())
 }
 
 fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {

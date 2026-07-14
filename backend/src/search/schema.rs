@@ -320,7 +320,7 @@ mod tests {
     #[test]
     fn loads_ranked_theme_registry() {
         let registry = registry();
-        assert_eq!(registry.version, 1);
+        assert_eq!(registry.version, 2);
         assert!(registry.theme_layers.len() >= 20);
         assert_eq!(registry.theme_layers[0].dimension, "price_discovery");
         assert!(registry

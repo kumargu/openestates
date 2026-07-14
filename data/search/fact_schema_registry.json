@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "theme_layers": [
     {
       "rank": 1,
@@ -219,7 +219,7 @@
   "positive_preference_patterns": [
     {
       "rank": 1,
-      "patterns": ["green", "greenery", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "parks"],
+      "patterns": ["green", "greenery", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "parks", "park view", "park facing"],
       "label": "greenery",
       "expanded_keys": ["greenery_score", "open_space_score", "green_cover", "google_top_positives", "sentiment_summary"],
       "weight": 0.8
@@ -286,6 +286,20 @@
       "label": "rental and resale demand",
       "expanded_keys": ["rental_yield_signal", "resale_strength_score", "market_activity", "pricing_insight"],
       "weight": 0.8
+    },
+    {
+      "rank": 11,
+      "patterns": ["good google reviews", "google reviews", "google rating", "highly rated", "well reviewed"],
+      "label": "review quality",
+      "expanded_keys": ["google_rating", "google_review_count", "google_top_positives", "google_top_negatives", "google_reviews_url"],
+      "weight": 1.0
+    },
+    {
+      "rank": 12,
+      "patterns": ["resident feedback on reddit", "reddit resident feedback", "reddit feedback", "reddit reviews", "reddit discussions"],
+      "label": "reddit discussions",
+      "expanded_keys": ["reddit_thread_count", "reddit_total_score", "reddit_total_comments", "reddit_threads", "reddit_top_concerns"],
+      "weight": 1.0
     }
   ],
   "text_evidence": [

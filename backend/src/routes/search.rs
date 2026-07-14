@@ -475,6 +475,15 @@ pub fn graph_preference_score_detailed(
     society_id: &str,
     preference: &str,
 ) -> Option<(f64, GraphFactDetail)> {
+    graph_preference_score_for_keys(graph, society_id, preference, &[])
+}
+
+pub fn graph_preference_score_for_keys(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    preference: &str,
+    candidate_fact_keys: &[String],
+) -> Option<(f64, GraphFactDetail)> {
     let node_id = society_node_id(society_id);
     let node = graph.get_node(&node_id)?;
     let pref_lower = preference.to_lowercase();
@@ -490,7 +499,18 @@ pub fn graph_preference_score_detailed(
                 || pref_lower.contains(&ap_lower)
         });
 
-        if !answers {
+        let key_matches = candidate_fact_keys
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case(&fact.key));
+        let keyed_match = answers
+            || (key_matches
+                && fact
+                    .scoring_hint
+                    .as_ref()
+                    .is_some_and(|hint| !matches!(hint.direction, ScoringDirection::TextMatch)));
+        if (!candidate_fact_keys.is_empty() && !keyed_match)
+            || (candidate_fact_keys.is_empty() && !answers)
+        {
             continue;
         }
 
@@ -499,6 +519,9 @@ pub fn graph_preference_score_detailed(
         } else {
             1.0
         };
+        if score <= 0.0 {
+            continue;
+        }
 
         let display = render_template(
             fact.display_template.as_deref().unwrap_or("{value}"),
@@ -516,7 +539,7 @@ pub fn graph_preference_score_detailed(
     }
 
     // --- Cross-node scoring: traverse BuiltBy edge to check builder facts ---
-    if let Some(result) = check_builder_facts(graph, &node_id, &pref_lower) {
+    if let Some(result) = check_builder_facts(graph, &node_id, &pref_lower, candidate_fact_keys) {
         return Some(result);
     }
 
@@ -529,6 +552,7 @@ fn check_builder_facts(
     graph: &KnowledgeGraph,
     society_node_id: &str,
     pref_lower: &str,
+    candidate_fact_keys: &[String],
 ) -> Option<(f64, GraphFactDetail)> {
     for edge in graph.edges_from(society_node_id) {
         if edge.relation != Relation::BuiltBy {
@@ -543,7 +567,17 @@ fn check_builder_facts(
                     || pref_lower.contains(&ap_lower)
             });
 
-            if !answers {
+            let key_matches = candidate_fact_keys
+                .iter()
+                .any(|key| key.eq_ignore_ascii_case(&fact.key));
+            let keyed_match = answers
+                || (key_matches
+                    && fact.scoring_hint.as_ref().is_some_and(|hint| {
+                        !matches!(hint.direction, ScoringDirection::TextMatch)
+                    }));
+            if (!candidate_fact_keys.is_empty() && !keyed_match)
+                || (candidate_fact_keys.is_empty() && !answers)
+            {
                 continue;
             }
 
@@ -552,6 +586,9 @@ fn check_builder_facts(
             } else {
                 1.0
             };
+            if score <= 0.0 {
+                continue;
+            }
 
             let display = render_template(
                 fact.display_template.as_deref().unwrap_or("{value}"),
@@ -967,6 +1004,56 @@ mod tests {
             result.is_none(),
             "Should NOT match 'under construction' for a ready_to_move society"
         );
+    }
+
+    #[test]
+    fn structured_candidate_keys_reject_unrelated_preference_facts() {
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+        let mut google_fact = make_test_fact("positive", vec!["resident feedback"]);
+        google_fact.key = "google_sentiment".to_string();
+        make_test_node(
+            &mut graph,
+            "source-specific",
+            "Source Specific Society",
+            google_fact,
+        );
+
+        let reddit_keys = vec!["reddit_thread_count".to_string()];
+        assert!(graph_preference_score_for_keys(
+            &graph,
+            "source-specific",
+            "reddit discussions",
+            &reddit_keys,
+        )
+        .is_none());
+    }
+
+    #[test]
+    fn zero_scored_fact_is_not_positive_preference_evidence() {
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+        let mut reddit_fact = make_test_fact("unused", vec!["resident feedback"]);
+        reddit_fact.key = "reddit_thread_count".to_string();
+        reddit_fact.value = FactValue::Numeric(0.0);
+        reddit_fact.scoring_hint = Some(ScoringHint {
+            direction: ScoringDirection::HigherIsBetter,
+            weight: 1.0,
+            thresholds: vec![5.0, 2.0],
+        });
+        make_test_node(
+            &mut graph,
+            "no-reddit-evidence",
+            "No Reddit Evidence Society",
+            reddit_fact,
+        );
+
+        let reddit_keys = vec!["reddit_thread_count".to_string()];
+        assert!(graph_preference_score_for_keys(
+            &graph,
+            "no-reddit-evidence",
+            "reddit discussions",
+            &reddit_keys,
+        )
+        .is_none());
     }
 
     #[test]

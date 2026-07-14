@@ -259,7 +259,7 @@ const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
         1.1,
     ),
     (
-        &["green", "greenery", "park", "garden"],
+        &["green", "greenery", "garden"],
         "greenery",
         &["greenery_score", "open_space_score", "green_cover"],
         0.8,
@@ -888,5 +888,38 @@ mod tests {
             negative
         );
         assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::Family));
+    }
+
+    #[test]
+    fn project_names_do_not_create_greenery_preferences() {
+        let intent = parse_intent("Prestige Park Grove 3bhk");
+
+        assert_eq!(intent.bhk, Some(3));
+        assert!(!intent.preferences.contains(&"greenery".to_string()));
+    }
+
+    #[test]
+    fn review_and_resident_feedback_intents_come_from_the_schema_registry() {
+        let google = parse_intent("good google reviews Prestige Park Grove");
+        let google_preference = google
+            .positive_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "review quality")
+            .expect("Google review intent should be detected");
+        assert!(google_preference
+            .expanded_keys
+            .contains(&"google_rating".to_string()));
+        assert!(!google.preferences.contains(&"greenery".to_string()));
+
+        let reddit = parse_intent("resident feedback on reddit Prestige Raintree Park");
+        let resident_preference = reddit
+            .positive_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "reddit discussions")
+            .expect("resident feedback intent should be detected");
+        assert!(resident_preference
+            .expanded_keys
+            .contains(&"reddit_thread_count".to_string()));
+        assert!(!reddit.preferences.contains(&"greenery".to_string()));
     }
 }
