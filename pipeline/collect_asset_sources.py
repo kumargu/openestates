@@ -261,7 +261,9 @@ def google_fetch_source(result: Any) -> str:
 
 
 def collect_rera_registry(
-    request: Dict[str, Any], rera_fetch: Callable[[], Any] = None
+    request: Dict[str, Any],
+    rera_fetch: Callable[[], Any] = None,
+    detail_skill: Any = None,
 ) -> Dict[str, Any]:
     entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
     entries = list(entries)
@@ -294,13 +296,99 @@ def collect_rera_registry(
     if skipped:
         logger.warning("Skipped %d RERA rows without a project name", skipped)
     logger.info("Collected %d valid RERA listing rows", len(projects))
+    detail_facts, detail_annotations, detail_watermark = collect_rera_project_details(
+        request, detail_skill
+    )
+    source_watermarks = [
+        {"source": "karnataka_rera_listing", "high_watermark": observed_at}
+    ]
+    if detail_watermark:
+        source_watermarks.append(
+            {
+                "source": "karnataka_rera_project_details",
+                "high_watermark": detail_watermark,
+            }
+        )
     return {
         "snapshot_date": observed_at[:7],
         "projects": projects,
-        "source_watermarks": [
-            {"source": "karnataka_rera_listing", "high_watermark": observed_at}
-        ],
+        "detail_facts": detail_facts,
+        "detail_fact_annotations": detail_annotations,
+        "source_watermarks": source_watermarks,
     }
+
+
+def collect_rera_project_details(
+    request: Dict[str, Any], skill: Any = None
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Any]:
+    source_entities = request.get("source_entities", [])
+    if not source_entities:
+        return [], [], None
+
+    if skill is None:
+        from pipeline.skills.batch_runner import get_skill_instance
+
+        skill = get_skill_instance("fetch_rera")
+
+    snapshot_date = partition_values(request).get("dt") or normalized_planned_at(request)[:10]
+    force_refresh = RERA_REGISTRY_MONTHLY in request.get("force_refresh_assets", [])
+    facts = []  # type: List[Dict[str, Any]]
+    annotations = []  # type: List[Dict[str, Any]]
+    latest_learned_at = None
+
+    for seed in source_entities:
+        entity_id = optional_string(seed.get("entity_id"))
+        project_name = optional_string(seed.get("name"))
+        if not entity_id or not project_name:
+            logger.warning("Skipping RERA detail input without entity ID or project name")
+            continue
+        input_data = {
+            "entity_id": entity_id,
+            "project_name": project_name,
+            "project_key": optional_string(seed.get("project_key")),
+            "area": optional_string(seed.get("area")),
+            "city": optional_string(seed.get("city")) or "Bengaluru",
+            "triggered_by": "asset_dag",
+        }
+        try:
+            result = skill.run(input_data, force=force_refresh)
+        except Exception as error:
+            logger.error("RERA detail collection failed for %s: %s", project_name, error)
+            continue
+        if not result.facts:
+            logger.warning("RERA detail collection returned no facts for %s", project_name)
+            continue
+
+        result_facts, result_annotations = skill_result_rows(
+            entity_id,
+            "fetch_rera",
+            snapshot_date,
+            input_data,
+            result,
+        )
+        facts.extend(result_facts)
+        annotations.extend(result_annotations)
+        alias_entity_id = optional_string(seed.get("alias_entity_id"))
+        if alias_entity_id and alias_entity_id != entity_id:
+            alias_facts, alias_annotations = skill_result_rows(
+                alias_entity_id,
+                "fetch_rera",
+                snapshot_date,
+                input_data,
+                result,
+            )
+            facts.extend(alias_facts)
+            annotations.extend(alias_annotations)
+        for fact in result.facts:
+            if fact.learned_at:
+                latest_learned_at = max(latest_learned_at or fact.learned_at, fact.learned_at)
+
+    logger.info(
+        "Collected %d detailed RERA facts for %d selected societies",
+        len(facts),
+        len(source_entities),
+    )
+    return facts, annotations, latest_learned_at
 
 
 def fetch_rera_listing_snapshot():
@@ -455,7 +543,7 @@ def skill_result_rows(
                 "source_url": source.url,
                 "model": source.model,
                 "skill_id": source.skill_id or skill_id,
-                "triggered_by": source.triggered_by,
+                "triggered_by": source.triggered_by or input_data.get("triggered_by"),
                 "learned_at": fact.learned_at,
                 "run_id": run_id,
                 "input_hash": input_hash,

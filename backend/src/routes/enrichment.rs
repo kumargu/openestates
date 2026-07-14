@@ -23,6 +23,8 @@ pub struct ReraInfo {
     pub original_completion_date: Option<String>,
     pub delay_months: Option<i32>,
     pub total_units: Option<i32>,
+    pub total_land_area_sqm: Option<f64>,
+    pub total_land_area_acres: Option<f64>,
     pub total_project_cost_inr: Option<f64>,
     pub land_cost_inr: Option<f64>,
     pub construction_cost_inr: Option<f64>,
@@ -193,6 +195,9 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         original_completion_date: get_text_fact(facts, "rera_original_completion_date"),
         delay_months: get_numeric_fact(facts, "rera_delay_months").map(|n| n as i32),
         total_units,
+        total_land_area_sqm: get_numeric_fact(facts, "rera_total_land_area_sqm"),
+        total_land_area_acres: get_numeric_fact(facts, "rera_total_land_area_sqm")
+            .map(|sqm| sqm / 4_046.856_422_4),
         total_project_cost_inr: total_cost_val,
         land_cost_inr: land_cost,
         construction_cost_inr: construction_cost,

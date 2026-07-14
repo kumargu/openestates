@@ -1642,6 +1642,8 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 fetched_at: now,
             },
         ],
+        detail_facts: Vec::new(),
+        detail_fact_annotations: Vec::new(),
         source_watermarks: Vec::new(),
     }
 }

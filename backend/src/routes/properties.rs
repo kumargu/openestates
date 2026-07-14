@@ -672,7 +672,11 @@ pub async fn get_property(
     };
 
     // Extract RERA info from the society's KG node
-    let rera = extract_rera_info(&graph, &property.society_id);
+    let rera = rera_info_for(
+        &property.society_id,
+        &graph,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
 
     // Extract area intelligence from the area's KG node
     let area_intelligence = extract_area_intelligence(&graph, &property.area);
@@ -829,6 +833,115 @@ fn external_reviews_for(
     })
 }
 
+fn rera_info_for(
+    society_id: &str,
+    graph: &crate::knowledge::KnowledgeGraph,
+    serving_facts: Option<&ServingFactIndex>,
+) -> Option<ReraInfo> {
+    let fallback = extract_rera_info(graph, society_id);
+    let Some(serving_facts) = serving_facts else {
+        return fallback;
+    };
+    let projection = SocietyFactProjection::from_index(serving_facts, society_id);
+    let has_serving_rera = projection.latest_bool("rera_registered").is_some()
+        || projection.latest_text("rera_number").is_some();
+    if !has_serving_rera {
+        return fallback;
+    }
+
+    let mut info = fallback.unwrap_or_default();
+    if let Some(fact) = projection.latest_bool("rera_registered") {
+        info.registered = fact.value;
+    }
+    if let Some(fact) = projection.latest_text("rera_number") {
+        info.registration_number = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_status") {
+        info.status = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_completion_date") {
+        info.completion_date = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_original_completion_date") {
+        info.original_completion_date = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_delay_months") {
+        info.delay_months = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_total_units") {
+        info.total_units = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_total_land_area_sqm") {
+        info.total_land_area_sqm = Some(fact.value);
+        info.total_land_area_acres = Some(fact.value / 4_046.856_422_4);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_total_project_cost") {
+        info.total_project_cost_inr = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_land_cost") {
+        info.land_cost_inr = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_construction_cost") {
+        info.construction_cost_inr = Some(fact.value);
+    }
+    info.cost_per_unit_inr = match (info.total_project_cost_inr, info.total_units) {
+        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
+        _ => projection
+            .latest_numeric("rera_cost_per_unit")
+            .map(|fact| fact.value)
+            .or(info.cost_per_unit_inr),
+    };
+    if let Some(fact) = projection.latest_numeric("rera_complaints_count") {
+        info.complaints_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_complaints_resolved_pct") {
+        info.complaints_resolved_pct = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
+        info.builder_total_projects = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_builder_revocations") {
+        info.builder_revocations = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_builder_states") {
+        info.builder_states = fact
+            .value
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+    if let Some(fact) = projection.latest_bool("rera_land_litigation") {
+        info.land_litigation = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_escrow_bank") {
+        info.escrow_bank = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_bool("rera_has_borrowing") {
+        info.has_borrowing = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_bool("rera_has_mortgage") {
+        info.has_mortgage = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_lat_lng") {
+        info.lat_lng = Some(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_portal_url") {
+        info.rera_portal_url = Some(fact.value);
+    }
+    info.last_verified = projection
+        .latest_learned_at_with_prefix("rera_")
+        .map(|timestamp| timestamp.to_rfc3339())
+        .or(info.last_verified);
+    Some(info)
+}
+
+fn projected_i32(value: f64) -> Option<i32> {
+    (value.is_finite() && value >= i32::MIN as f64 && value <= i32::MAX as f64)
+        .then(|| value.round() as i32)
+}
+
 /// Count non-empty lines in a JSONL file (interest events).
 async fn count_interest_lines(path: &std::path::Path) -> usize {
     match tokio::fs::read_to_string(path).await {
@@ -893,6 +1006,41 @@ mod serving_state_tests {
         );
     }
 
+    #[test]
+    fn property_detail_projects_current_rera_facts_and_exposes_acreage() {
+        let graph = crate::knowledge::KnowledgeGraph::new();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact("rera_registered", FactValue::Bool(true), 10),
+                serving_fact(
+                    "rera_number",
+                    FactValue::Text("PRM-CURRENT".to_string()),
+                    10,
+                ),
+                serving_fact("rera_total_units", FactValue::Numeric(1_520.0), 10),
+                serving_fact(
+                    "rera_total_land_area_sqm",
+                    FactValue::Numeric(112_652.0),
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let detail = rera_info_for("sample", &graph, Some(&serving))
+            .expect("serving RERA facts should create detail evidence");
+
+        assert!(detail.registered);
+        assert_eq!(detail.registration_number.as_deref(), Some("PRM-CURRENT"));
+        assert_eq!(detail.total_units, Some(1_520));
+        assert_eq!(detail.total_land_area_sqm, Some(112_652.0));
+        assert!((detail.total_land_area_acres.unwrap() - 27.8369).abs() < 0.001);
+        assert_eq!(
+            detail.last_verified.as_deref(),
+            Some("1970-01-01T00:00:10+00:00")
+        );
+    }
+
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {
         let mut graph = crate::knowledge::KnowledgeGraph::new();
         let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
@@ -954,7 +1102,11 @@ mod serving_state_tests {
             value_text: None,
             value,
             confidence: 0.9,
-            source_type: "Google".to_string(),
+            source_type: if key.starts_with("rera_") {
+                "Rera".to_string()
+            } else {
+                "Google".to_string()
+            },
             source_url: None,
             model: None,
             skill_id: None,

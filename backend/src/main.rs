@@ -28,6 +28,8 @@ async fn main() {
         .to_path_buf();
 
     let state = Arc::new(data_loader::load_app_state(&project_root).await);
+    let bind_address =
+        std::env::var("OPENESTATES_API_ADDR").unwrap_or_else(|_| "0.0.0.0:4000".to_string());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -139,7 +141,7 @@ async fn main() {
         .layer(cors)
         .with_state(state);
 
-    println!("OpenEstates API listening on http://localhost:4000");
+    println!("OpenEstates API listening on http://{bind_address}");
     println!("Routes:");
     println!("  GET /api/health");
     println!("  GET /api/properties | /api/properties/{{id}}");
@@ -165,9 +167,9 @@ async fn main() {
     println!("  GET  /api/sitemap.xml");
     println!("  POST /api/admin/reload-knowledge");
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
+    let listener = tokio::net::TcpListener::bind(&bind_address)
         .await
-        .expect("Failed to bind port 4000");
+        .unwrap_or_else(|error| panic!("Failed to bind {bind_address}: {error}"));
 
     axum::serve(listener, app).await.expect("Server error");
 }

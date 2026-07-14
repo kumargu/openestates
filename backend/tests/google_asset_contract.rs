@@ -158,6 +158,8 @@ async fn google_place_alias_resolves_to_first_run_rera_canonical_entity() {
                     source_url: "https://rera.example/project".to_string(),
                     fetched_at,
                 }],
+                detail_facts: Vec::new(),
+                detail_fact_annotations: Vec::new(),
                 source_watermarks: Vec::new(),
             },
             run_id.clone(),

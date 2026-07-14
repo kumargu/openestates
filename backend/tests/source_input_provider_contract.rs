@@ -215,6 +215,8 @@ async fn requested_assets_follow_the_dag_plan_and_skip_fresh_rera() {
             source_url: "https://rera.karnataka.gov.in/projectViewDetails".to_string(),
             fetched_at: now,
         }],
+        detail_facts: Vec::new(),
+        detail_fact_annotations: Vec::new(),
         source_watermarks: Vec::new(),
     };
     let record = ReraRegistryMaterializer::new(lake.clone())
@@ -614,6 +616,8 @@ async fn facts_only_retry_rematerializes_the_exact_google_parent() {
                     source_url: "https://rera.karnataka.gov.in/retry".to_string(),
                     fetched_at: now,
                 }],
+                detail_facts: Vec::new(),
+                detail_fact_annotations: Vec::new(),
                 source_watermarks: Vec::new(),
             },
             MaterializationId::new(),

@@ -8,6 +8,7 @@ from pipeline.collect_asset_sources import (
     collect_asset_sources,
     collect_google_places,
     collect_reddit_assets,
+    collect_rera_registry,
     google_society_inputs,
     reddit_society_inputs,
 )
@@ -23,6 +24,76 @@ from pipeline.skills.search_reddit import (
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
+    def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-14"]]},
+            "planned_at": "2026-07-14T09:30:00Z",
+            "requested_assets": ["rera_registry_monthly"],
+            "source_entities": [
+                {
+                    "entity_id": "society:rera-raintree",
+                    "alias_entity_id": "society:prestige-raintree-park",
+                    "name": "Prestige Raintree Park",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-RAINTREE",
+                }
+            ],
+        }
+        listing = SimpleNamespace(
+            ack_number="ACK-1",
+            registration_number="PRM-RAINTREE",
+            project_name="Prestige Raintree Park",
+            promoter_name="Prestige Group",
+        )
+        result = SkillResult(
+            facts=[
+                SourcedFact(
+                    key="rera_total_land_area_sqm",
+                    value={"type": "Numeric", "data": 48562.3},
+                    confidence=1.0,
+                    source=FactSource(
+                        source_type="Rera",
+                        url="https://rera.karnataka.gov.in/projectViewDetails",
+                        skill_id="fetch_rera",
+                    ),
+                    learned_at="2026-07-14T09:31:00Z",
+                    display_template="Total Land Area: {value} sq m",
+                    answers_preferences=["project size", "land area"],
+                )
+            ]
+        )
+        skill = MagicMock()
+        skill.run.return_value = result
+
+        output = collect_rera_registry(
+            request,
+            rera_fetch=lambda: ([listing], "2026-07-10T08:00:00Z"),
+            detail_skill=skill,
+        )
+
+        skill.run.assert_called_once()
+        detail_facts = output["detail_facts"]
+        self.assertEqual(len(detail_facts), 2)
+        self.assertEqual(
+            {fact["entity_id"] for fact in detail_facts},
+            {
+                "society:rera-raintree",
+                "society:prestige-raintree-park",
+            },
+        )
+        self.assertEqual(detail_facts[0]["value_type"], "numeric")
+        self.assertEqual(detail_facts[0]["source_type"], "Rera")
+        self.assertEqual(detail_facts[0]["triggered_by"], "asset_dag")
+        self.assertEqual(len(output["detail_fact_annotations"]), 2)
+        self.assertEqual(
+            output["source_watermarks"][1],
+            {
+                "source": "karnataka_rera_project_details",
+                "high_watermark": "2026-07-14T09:31:00Z",
+            },
+        )
+
     def test_reddit_inputs_use_only_requested_source_entities(self):
         inputs = reddit_society_inputs(
             {

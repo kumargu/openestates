@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
 
@@ -20,6 +20,10 @@ use crate::knowledge::FactValue;
 use crate::lake::keys::KeyError;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
+use super::skill_facts::{
+    read_fact_annotation_records, read_facts_parquet_records, write_fact_annotations_parquet,
+    write_facts_parquet, SkillFactMaterializeError,
+};
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
     KgViewEdgeRecord, KgViewEntityRecord, MaterializationId, MaterializationRecord,
@@ -75,6 +79,10 @@ pub struct ReraRegistryMonthlyInput {
     #[serde(default)]
     pub projects: Vec<ReraProjectSnapshotRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail_facts: Vec<SkillFactRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail_fact_annotations: Vec<SkillFactAnnotationRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_watermarks: Vec<SourceWatermark>,
 }
 
@@ -86,6 +94,10 @@ pub struct ReraAssetManifest {
     pub run_id: String,
     pub created_at: DateTime<Utc>,
     pub row_count: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub detail_fact_count: u64,
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub detail_fact_annotation_count: u64,
     pub artifacts: Vec<ArtifactRef>,
 }
 
@@ -139,6 +151,34 @@ impl ReraRegistryMaterializer {
             .put_bytes(&project_key, write_rera_projects(&input.projects)?)
             .await?;
         let mut artifacts = vec![ArtifactRef::parquet(project_meta)];
+        if !input.detail_facts.is_empty() {
+            let fact_key = AssetPathBuilder::raw_snapshot_key(
+                "rera",
+                &partition,
+                &run_id,
+                "detail_facts/part-00000.parquet",
+            );
+            artifacts.push(ArtifactRef::parquet(
+                self.lake
+                    .put_bytes(&fact_key, write_facts_parquet(&input.detail_facts)?)
+                    .await?,
+            ));
+
+            let annotation_key = AssetPathBuilder::raw_snapshot_key(
+                "rera",
+                &partition,
+                &run_id,
+                "detail_fact_annotations/part-00000.parquet",
+            );
+            artifacts.push(ArtifactRef::parquet(
+                self.lake
+                    .put_bytes(
+                        &annotation_key,
+                        write_fact_annotations_parquet(&input.detail_fact_annotations)?,
+                    )
+                    .await?,
+            ));
+        }
 
         let manifest_key =
             AssetPathBuilder::raw_snapshot_key("rera", &partition, &run_id, "manifest.json");
@@ -149,6 +189,8 @@ impl ReraRegistryMaterializer {
             run_id,
             created_at: Utc::now(),
             row_count: input.projects.len() as u64,
+            detail_fact_count: input.detail_facts.len() as u64,
+            detail_fact_annotation_count: input.detail_fact_annotations.len() as u64,
             artifacts: artifacts.clone(),
         };
         artifacts.push(ArtifactRef::json(
@@ -238,6 +280,8 @@ impl CanonicalSocietyMaterializer {
             run_id: dag_run_id.to_string(),
             created_at: Utc::now(),
             row_count: rows.entities.len() as u64,
+            detail_fact_count: 0,
+            detail_fact_annotation_count: 0,
             artifacts: artifacts.clone(),
         };
         artifacts.push(ArtifactRef::json(
@@ -309,6 +353,14 @@ pub async fn rera_legal_facts_input(
         }
     }
 
+    let detail_rows = read_rera_detail_fact_rows(lake, rera_record).await?;
+    let (facts, annotations) = merge_current_fact_rows(
+        facts,
+        annotations,
+        detail_rows.facts,
+        detail_rows.fact_annotations,
+    );
+
     Ok(SkillFactsInput {
         source: "rera".to_string(),
         snapshot_date: rera_record.version.clone(),
@@ -316,6 +368,97 @@ pub async fn rera_legal_facts_input(
         fact_annotations: annotations,
         source_watermarks: rera_record.source_watermarks.clone(),
     })
+}
+
+async fn read_rera_detail_fact_rows(
+    lake: &LakeStore,
+    record: &MaterializationRecord,
+) -> Result<super::SkillFactArtifactRows, ReraAssetError> {
+    if !record
+        .artifacts
+        .iter()
+        .any(|artifact| artifact.key.ends_with("detail_facts/part-00000.parquet"))
+    {
+        return Ok(super::SkillFactArtifactRows::default());
+    }
+
+    let facts = read_facts_parquet_records(
+        read_parquet_artifact(lake, record, "detail_facts/part-00000.parquet").await?,
+    )?;
+    let fact_annotations = read_fact_annotation_records(
+        read_parquet_artifact(lake, record, "detail_fact_annotations/part-00000.parquet").await?,
+    )?;
+    Ok(super::SkillFactArtifactRows {
+        facts,
+        fact_annotations,
+    })
+}
+
+fn merge_current_fact_rows(
+    base_facts: Vec<SkillFactRecord>,
+    base_annotations: Vec<SkillFactAnnotationRecord>,
+    detail_facts: Vec<SkillFactRecord>,
+    detail_annotations: Vec<SkillFactAnnotationRecord>,
+) -> (Vec<SkillFactRecord>, Vec<SkillFactAnnotationRecord>) {
+    type FactKey = (String, String);
+
+    let mut annotations_by_key: BTreeMap<FactKey, SkillFactAnnotationRecord> = base_annotations
+        .into_iter()
+        .map(|annotation| {
+            (
+                (annotation.entity_id.clone(), annotation.fact_key.clone()),
+                annotation,
+            )
+        })
+        .collect();
+    let detail_annotations_by_key: BTreeMap<FactKey, SkillFactAnnotationRecord> =
+        detail_annotations
+            .into_iter()
+            .map(|annotation| {
+                (
+                    (annotation.entity_id.clone(), annotation.fact_key.clone()),
+                    annotation,
+                )
+            })
+            .collect();
+    let mut current: BTreeMap<FactKey, (SkillFactRecord, bool)> = base_facts
+        .into_iter()
+        .map(|fact| {
+            (
+                (fact.entity_id.clone(), fact.fact_key.clone()),
+                (fact, false),
+            )
+        })
+        .collect();
+
+    for fact in detail_facts {
+        let key = (fact.entity_id.clone(), fact.fact_key.clone());
+        let replace = current
+            .get(&key)
+            .is_none_or(|(existing, existing_is_detail)| {
+                fact.learned_at > existing.learned_at
+                    || (fact.learned_at == existing.learned_at
+                        && (!*existing_is_detail || fact.confidence > existing.confidence))
+            });
+        if replace {
+            current.insert(key.clone(), (fact, true));
+            if let Some(annotation) = detail_annotations_by_key.get(&key) {
+                annotations_by_key.insert(key, annotation.clone());
+            } else {
+                annotations_by_key.remove(&key);
+            }
+        }
+    }
+
+    let mut facts = Vec::with_capacity(current.len());
+    let mut annotations = Vec::with_capacity(current.len());
+    for (key, (fact, _)) in current {
+        facts.push(fact);
+        if let Some(annotation) = annotations_by_key.remove(&key) {
+            annotations.push(annotation);
+        }
+    }
+    (facts, annotations)
 }
 
 pub async fn read_rera_project_rows(
@@ -1000,6 +1143,10 @@ fn rera_watermarks(input: &ReraRegistryMonthlyInput) -> Vec<SourceWatermark> {
     }]
 }
 
+fn is_zero(value: &u64) -> bool {
+    *value == 0
+}
+
 fn validate_rera_input(input: &ReraRegistryMonthlyInput) -> Result<(), ReraAssetError> {
     if input.projects.is_empty() {
         return Err(ReraAssetError::InvalidInput(
@@ -1018,6 +1165,44 @@ fn validate_rera_input(input: &ReraRegistryMonthlyInput) -> Result<(), ReraAsset
                 project.project_name
             )));
         }
+    }
+    let fact_keys = input
+        .detail_facts
+        .iter()
+        .map(|fact| (fact.entity_id.as_str(), fact.fact_key.as_str()))
+        .collect::<BTreeSet<_>>();
+    if fact_keys.len() != input.detail_facts.len() {
+        return Err(ReraAssetError::InvalidInput(
+            "detailed RERA facts must be unique by entity and fact key".to_string(),
+        ));
+    }
+    for fact in &input.detail_facts {
+        if fact.entity_id.trim().is_empty() || fact.fact_key.trim().is_empty() {
+            return Err(ReraAssetError::InvalidInput(
+                "detailed RERA facts require entity_id and fact_key".to_string(),
+            ));
+        }
+        if !fact.confidence.is_finite() || !(0.0..=1.0).contains(&fact.confidence) {
+            return Err(ReraAssetError::InvalidInput(format!(
+                "detailed RERA fact {} has invalid confidence {}",
+                fact.fact_key, fact.confidence
+            )));
+        }
+    }
+    let annotation_keys = input
+        .detail_fact_annotations
+        .iter()
+        .map(|annotation| (annotation.entity_id.as_str(), annotation.fact_key.as_str()))
+        .collect::<BTreeSet<_>>();
+    if annotation_keys.len() != input.detail_fact_annotations.len() {
+        return Err(ReraAssetError::InvalidInput(
+            "detailed RERA annotations must be unique by entity and fact key".to_string(),
+        ));
+    }
+    if fact_keys != annotation_keys {
+        return Err(ReraAssetError::InvalidInput(
+            "every detailed RERA fact must have exactly one matching annotation".to_string(),
+        ));
     }
     Ok(())
 }
@@ -1058,6 +1243,7 @@ pub enum ReraAssetError {
     Lake(LakeError),
     MissingArtifact { asset_id: AssetId, suffix: String },
     Parquet(parquet::errors::ParquetError),
+    SkillFact(SkillFactMaterializeError),
     Timestamp(chrono::ParseError),
 }
 
@@ -1074,6 +1260,7 @@ impl fmt::Display for ReraAssetError {
                 write!(f, "RERA asset {asset_id} is missing artifact {suffix}")
             }
             Self::Parquet(err) => write!(f, "RERA Parquet error: {err}"),
+            Self::SkillFact(err) => write!(f, "RERA fact artifact error: {err}"),
             Self::Timestamp(err) => write!(f, "RERA timestamp error: {err}"),
         }
     }
@@ -1102,5 +1289,11 @@ impl From<parquet::errors::ParquetError> for ReraAssetError {
 impl From<serde_json::Error> for ReraAssetError {
     fn from(value: serde_json::Error) -> Self {
         Self::Json(value)
+    }
+}
+
+impl From<SkillFactMaterializeError> for ReraAssetError {
+    fn from(value: SkillFactMaterializeError) -> Self {
+        Self::SkillFact(value)
     }
 }

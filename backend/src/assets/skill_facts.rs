@@ -261,7 +261,9 @@ pub async fn read_skill_fact_artifact_rows(
     Ok(rows)
 }
 
-fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMaterializeError> {
+pub(crate) fn write_facts_parquet(
+    facts: &[SkillFactRecord],
+) -> Result<Vec<u8>, SkillFactMaterializeError> {
     let typed_values = facts
         .iter()
         .map(|fact| {
@@ -316,7 +318,7 @@ fn write_facts_parquet(facts: &[SkillFactRecord]) -> Result<Vec<u8>, SkillFactMa
     write_batch(batch)
 }
 
-fn read_facts_parquet_records(
+pub(crate) fn read_facts_parquet_records(
     bytes: Vec<u8>,
 ) -> Result<Vec<SkillFactRecord>, SkillFactMaterializeError> {
     let mut records = Vec::new();
@@ -367,7 +369,7 @@ fn read_facts_parquet_records(
     Ok(records)
 }
 
-fn write_fact_annotations_parquet(
+pub(crate) fn write_fact_annotations_parquet(
     annotations: &[SkillFactAnnotationRecord],
 ) -> Result<Vec<u8>, SkillFactMaterializeError> {
     let answers_preferences = annotations
@@ -419,7 +421,7 @@ fn write_fact_annotations_parquet(
     write_batch(batch)
 }
 
-fn read_fact_annotation_records(
+pub(crate) fn read_fact_annotation_records(
     bytes: Vec<u8>,
 ) -> Result<Vec<SkillFactAnnotationRecord>, SkillFactMaterializeError> {
     let mut records = Vec::new();

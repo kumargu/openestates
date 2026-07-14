@@ -703,6 +703,8 @@ mod tests {
                         source_url: format!("https://rera.karnataka.gov.in/{suffix}"),
                         fetched_at: now,
                     }],
+                    detail_facts: Vec::new(),
+                    detail_fact_annotations: Vec::new(),
                     source_watermarks: Vec::new(),
                 },
                 MaterializationId::new(),

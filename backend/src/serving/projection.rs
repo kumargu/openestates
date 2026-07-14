@@ -60,6 +60,15 @@ impl<'a> SocietyFactProjection<'a> {
         })
     }
 
+    pub fn latest_learned_at_with_prefix(&self, fact_key_prefix: &str) -> Option<DateTime<Utc>> {
+        self.rows
+            .iter()
+            .flat_map(|rows| rows.facts.iter())
+            .filter(|fact| fact.fact_key.starts_with(fact_key_prefix))
+            .map(|fact| fact.learned_at)
+            .max()
+    }
+
     pub fn project_google_reviews(&self, fallback: GoogleReviewEvidence) -> GoogleReviewEvidence {
         let reviews_url = self
             .latest_valid("google_reviews_url", |value| match value {
