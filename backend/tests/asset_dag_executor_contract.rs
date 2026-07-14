@@ -588,6 +588,10 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
     let run_partition = source_run_partition();
     let mut partial_inputs = mock_source_inputs(now);
     partial_inputs.reddit_threads_daily = None;
+    partial_inputs.source_failures.insert(
+        REDDIT_THREADS_DAILY_ASSET_ID.to_string(),
+        "RedditSourceBlocked: HTTP 403".to_string(),
+    );
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
 
     let err = executor
@@ -601,15 +605,18 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
         .unwrap_err();
     assert!(matches!(
         err,
-        AssetDagExecutorError::SourceInputMissing { asset_id: ref failed_asset }
-            if failed_asset == &asset_id(REDDIT_THREADS_DAILY_ASSET_ID)
+        AssetDagExecutorError::SourceCollectionFailed {
+            asset_id: ref failed_asset,
+            ref reason,
+        } if failed_asset == &asset_id(REDDIT_THREADS_DAILY_ASSET_ID)
+            && reason.contains("HTTP 403")
     ));
 
     let run_store = AssetRunManifestStore::new(lake.clone());
     let failed = run_store.current_manifest(&run_partition).await.unwrap();
     assert_eq!(failed.status, DagRunStatus::Failed);
     assert_eq!(failed.failed_count, 1);
-    assert_eq!(failed.blocked_count, 3);
+    assert_eq!(failed.blocked_count, 1);
     assert_eq!(
         run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID).status,
         AssetRunStepStatus::Failed
@@ -634,11 +641,11 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
     );
     assert_eq!(
         run_step(&failed, KG_SOCIETY_VIEW_ASSET_ID).status,
-        AssetRunStepStatus::Blocked
+        AssetRunStepStatus::Succeeded
     );
     assert_eq!(
         run_step(&failed, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
-        AssetRunStepStatus::Blocked
+        AssetRunStepStatus::Succeeded
     );
     let google_materialization = run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID)
         .materialization_id
@@ -695,10 +702,10 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
     assert!(resumed
         .executed_assets
         .contains(&asset_id(REDDIT_RESIDENT_FACTS_ASSET_ID)));
-    assert!(resumed
+    assert!(!resumed
         .executed_assets
         .contains(&asset_id(KG_SOCIETY_VIEW_ASSET_ID)));
-    assert!(resumed
+    assert!(!resumed
         .executed_assets
         .contains(&asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)));
     assert!(!resumed
@@ -1507,6 +1514,7 @@ fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
 
 fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
+        source_failures: Default::default(),
         rera_registry_monthly: Some(mock_rera_input(now)),
         reddit_threads_daily: Some(RedditThreadsDailyInput {
             snapshot_date: "2026-07-13".to_string(),

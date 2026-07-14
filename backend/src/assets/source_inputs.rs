@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -13,6 +15,8 @@ use super::{
 /// lake shape. Executors normalize these records into Parquet-backed assets.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AssetSourceInputs {
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub source_failures: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub rera_registry_monthly: Option<ReraRegistryMonthlyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

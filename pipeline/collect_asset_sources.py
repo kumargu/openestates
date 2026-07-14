@@ -42,38 +42,64 @@ def collect_asset_sources(
         raise ValueError("unsupported source assets: {}".format(", ".join(unsupported)))
 
     output = {}  # type: Dict[str, Any]
+    source_failures = {}  # type: Dict[str, str]
     if RERA_REGISTRY_MONTHLY in requested:
-        output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
+        try:
+            output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
+        except Exception as error:
+            record_source_failure(source_failures, [RERA_REGISTRY_MONTHLY], error)
     if REDDIT_THREADS_DAILY in requested or REDDIT_RESIDENT_FACTS in requested:
-        collect_reddit = reddit_collect or collect_reddit_assets
-        reddit_inputs = reddit_society_inputs(
-            request, output.get(RERA_REGISTRY_MONTHLY)
-        )
-        if not reddit_inputs:
-            raise ValueError(
-                "Reddit collection requires scoped source_entities or RERA projects"
+        reddit_assets = [
+            asset_id
+            for asset_id in (REDDIT_THREADS_DAILY, REDDIT_RESIDENT_FACTS)
+            if asset_id in requested
+        ]
+        try:
+            collect_reddit = reddit_collect or collect_reddit_assets
+            reddit_inputs = reddit_society_inputs(
+                request, output.get(RERA_REGISTRY_MONTHLY)
             )
-        reddit_threads, reddit_facts = collect_reddit(
-            request,
-            society_inputs=reddit_inputs,
-        )
-        if REDDIT_THREADS_DAILY in requested:
-            output[REDDIT_THREADS_DAILY] = reddit_threads
-        if REDDIT_RESIDENT_FACTS in requested:
-            output[REDDIT_RESIDENT_FACTS] = reddit_facts
+            if not reddit_inputs:
+                raise ValueError(
+                    "Reddit collection requires scoped source_entities or RERA projects"
+                )
+            reddit_threads, reddit_facts = collect_reddit(
+                request,
+                society_inputs=reddit_inputs,
+            )
+            if REDDIT_THREADS_DAILY in requested:
+                output[REDDIT_THREADS_DAILY] = reddit_threads
+            if REDDIT_RESIDENT_FACTS in requested:
+                output[REDDIT_RESIDENT_FACTS] = reddit_facts
+        except Exception as error:
+            record_source_failure(source_failures, reddit_assets, error)
     if GOOGLE_PLACES_WEEKLY in requested:
-        google_inputs = google_society_inputs(
-            request, output.get(RERA_REGISTRY_MONTHLY)
-        )
-        if not google_inputs:
-            raise ValueError(
-                "Google collection requires scoped source_entities or RERA projects"
+        try:
+            google_inputs = google_society_inputs(
+                request, output.get(RERA_REGISTRY_MONTHLY)
             )
-        output[GOOGLE_PLACES_WEEKLY] = collect_google_places(
-            request,
-            society_inputs=google_inputs,
-        )
+            if not google_inputs:
+                raise ValueError(
+                    "Google collection requires scoped source_entities or RERA projects"
+                )
+            output[GOOGLE_PLACES_WEEKLY] = collect_google_places(
+                request,
+                society_inputs=google_inputs,
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [GOOGLE_PLACES_WEEKLY], error)
+    if source_failures:
+        output["source_failures"] = source_failures
     return output
+
+
+def record_source_failure(
+    failures: Dict[str, str], asset_ids: List[str], error: Exception
+) -> None:
+    reason = "{}: {}".format(type(error).__name__, error)
+    for asset_id in asset_ids:
+        failures[asset_id] = reason
+    logger.error("Source collection failed for %s: %s", ", ".join(asset_ids), reason)
 
 
 def collect_google_places(

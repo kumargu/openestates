@@ -311,15 +311,30 @@ pub async fn canonicalize_google_places_input(
             )
         })
         .collect();
+    let by_alias: HashMap<_, _> = canonical
+        .mappings
+        .iter()
+        .filter_map(|mapping| {
+            mapping
+                .alias_entity_id
+                .as_deref()
+                .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
+        })
+        .collect();
     let mut resolved = input.clone();
     for record in &mut resolved.records {
         if canonical_ids.contains(record.entity_id.as_str()) {
             continue;
         }
-        let entity_id = record
-            .project_key
-            .as_deref()
-            .and_then(|key| by_project_key.get(key).copied())
+        let entity_id = by_alias
+            .get(record.entity_id.as_str())
+            .copied()
+            .or_else(|| {
+                record
+                    .project_key
+                    .as_deref()
+                    .and_then(|key| by_project_key.get(key).copied())
+            })
             .ok_or_else(|| {
                 GooglePlaceAssetError::InvalidInput(format!(
                     "Google place row for {} does not resolve to canonical society evidence",

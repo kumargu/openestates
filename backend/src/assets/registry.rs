@@ -211,6 +211,8 @@ pub struct AssetDefinition {
     pub partition_policy: AssetPartitionPolicy,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub dependency_fan_in: Vec<DependencyFanInRule>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub optional_dependencies: Vec<AssetId>,
 }
 
 impl AssetDefinition {
@@ -233,6 +235,7 @@ impl AssetDefinition {
             trust_tier,
             partition_policy: AssetPartitionPolicy::default(),
             dependency_fan_in: Vec::new(),
+            optional_dependencies: Vec::new(),
         }
     }
 
@@ -259,6 +262,16 @@ impl AssetDefinition {
             .find(|rule| &rule.dependency == dependency)
             .map(|rule| rule.policy)
             .unwrap_or(DependencyFanInPolicy::ResolvedPartition)
+    }
+
+    pub fn with_optional_dependency(mut self, dependency: &str) -> Self {
+        self.optional_dependencies
+            .push(AssetId::new(dependency).expect("valid static dependency id"));
+        self
+    }
+
+    pub fn is_optional_dependency(&self, dependency: &AssetId) -> bool {
+        self.optional_dependencies.contains(dependency)
     }
 }
 
@@ -341,6 +354,24 @@ impl AssetRegistry {
                     });
                 }
             }
+            let mut optional_dependencies = HashMap::new();
+            for dependency in &definition.optional_dependencies {
+                if !definition.dependencies.contains(dependency) {
+                    return Err(RegistryError::UnknownOptionalDependency {
+                        asset_id: definition.id.clone(),
+                        dependency: dependency.clone(),
+                    });
+                }
+                if optional_dependencies
+                    .insert(dependency.clone(), ())
+                    .is_some()
+                {
+                    return Err(RegistryError::DuplicateOptionalDependency {
+                        asset_id: definition.id.clone(),
+                        dependency: dependency.clone(),
+                    });
+                }
+            }
         }
 
         self.build_dag()?;
@@ -406,6 +437,14 @@ pub enum RegistryError {
         asset_id: AssetId,
         dependency: AssetId,
     },
+    UnknownOptionalDependency {
+        asset_id: AssetId,
+        dependency: AssetId,
+    },
+    DuplicateOptionalDependency {
+        asset_id: AssetId,
+        dependency: AssetId,
+    },
     SelfDependency(AssetId),
     Cycle(AssetId),
 }
@@ -432,6 +471,20 @@ impl std::fmt::Display for RegistryError {
             } => write!(
                 f,
                 "asset {asset_id} declares duplicate fan-in policy for dependency {dependency}"
+            ),
+            Self::UnknownOptionalDependency {
+                asset_id,
+                dependency,
+            } => write!(
+                f,
+                "asset {asset_id} declares non-dependency {dependency} as optional"
+            ),
+            Self::DuplicateOptionalDependency {
+                asset_id,
+                dependency,
+            } => write!(
+                f,
+                "asset {asset_id} declares optional dependency {dependency} more than once"
             ),
             Self::SelfDependency(asset_id) => write!(f, "asset {asset_id} depends on itself"),
             Self::Cycle(asset_id) => write!(f, "asset cycle detected at {asset_id}"),
@@ -540,7 +593,9 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_dependency_fan_in_policy(
             "google_review_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
-        ),
+        )
+        .with_optional_dependency("reddit_resident_facts")
+        .with_optional_dependency("google_review_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

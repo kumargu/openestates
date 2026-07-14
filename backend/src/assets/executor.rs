@@ -345,9 +345,18 @@ impl AssetDagExecutor {
     ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
         self.persist_manifest(&mut manifest, false).await?;
         let mut executed_assets = Vec::new();
-        let mut kg_view = self
-            .restore_kg_view_runtime(graph, &records_by_asset)
-            .await?;
+        let mut kg_view = if manifest.steps.iter().any(|step| {
+            step.status == super::AssetRunStepStatus::Planned
+                && step
+                    .dependencies
+                    .iter()
+                    .any(|dependency| dependency.as_str() == KG_SOCIETY_VIEW_ASSET_ID)
+        }) {
+            self.restore_kg_view_runtime(graph, &records_by_asset)
+                .await?
+        } else {
+            None
+        };
         let mut first_error = None;
 
         for step in manifest.steps.clone() {
@@ -388,7 +397,12 @@ impl AssetDagExecutor {
                 continue;
             }
 
-            let blocked_by = blocked_dependencies(&manifest, &step.dependencies);
+            let definition = self.registry.get(&step.asset_id).ok_or_else(|| {
+                AssetDagExecutorError::UnknownAsset {
+                    asset_id: step.asset_id.clone(),
+                }
+            })?;
+            let blocked_by = blocked_dependencies(&manifest, definition);
             if !blocked_by.is_empty() {
                 manifest.mark_step_blocked(&step.asset_id, Utc::now(), blocked_by)?;
                 self.persist_manifest(&mut manifest, false).await?;
@@ -804,7 +818,7 @@ impl AssetDagExecutor {
         let mut parents = Vec::new();
 
         for dependency in &definition.dependencies {
-            let dependency_records = self
+            let dependency_records = match self
                 .dependency_records(
                     definition,
                     asset_id,
@@ -813,7 +827,16 @@ impl AssetDagExecutor {
                     records_by_asset,
                     dependency_snapshot,
                 )
-                .await?;
+                .await
+            {
+                Ok(records) => records,
+                Err(AssetDagExecutorError::MissingDependency { .. })
+                    if definition.is_optional_dependency(dependency) =>
+                {
+                    Vec::new()
+                }
+                Err(error) => return Err(error),
+            };
             parents.extend(dependency_records);
         }
 
@@ -1091,9 +1114,7 @@ impl BuiltInAssetExecutor {
                     .source_inputs
                     .rera_registry_monthly
                     .as_ref()
-                    .ok_or(AssetDagExecutorError::SourceInputMissing {
-                        asset_id: context.asset_id.clone(),
-                    })?;
+                    .ok_or_else(|| source_input_error(&context))?;
                 let record = ReraRegistryMaterializer::new(context.dag.lake.clone())
                     .materialize_for_run(
                         input,
@@ -1166,9 +1187,7 @@ impl BuiltInAssetExecutor {
                     .source_inputs
                     .reddit_threads_daily
                     .as_ref()
-                    .ok_or(AssetDagExecutorError::SourceInputMissing {
-                        asset_id: context.asset_id.clone(),
-                    })?;
+                    .ok_or_else(|| source_input_error(&context))?;
                 let parent_materializations = context
                     .dag
                     .dependency_materializations(
@@ -1199,9 +1218,7 @@ impl BuiltInAssetExecutor {
                     .source_inputs
                     .reddit_resident_facts
                     .as_ref()
-                    .ok_or(AssetDagExecutorError::SourceInputMissing {
-                        asset_id: context.asset_id.clone(),
-                    })?;
+                    .ok_or_else(|| source_input_error(&context))?;
                 let materialization = execute_skill_fact_asset(context, input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
@@ -1211,9 +1228,7 @@ impl BuiltInAssetExecutor {
                     .source_inputs
                     .google_places_weekly
                     .as_ref()
-                    .ok_or(AssetDagExecutorError::SourceInputMissing {
-                        asset_id: context.asset_id.clone(),
-                    })?;
+                    .ok_or_else(|| source_input_error(&context))?;
                 let parent_records = context
                     .dag
                     .dependency_materialization_records(
@@ -1537,6 +1552,10 @@ pub enum AssetDagExecutorError {
     SourceInputMissing {
         asset_id: AssetId,
     },
+    SourceCollectionFailed {
+        asset_id: AssetId,
+        reason: String,
+    },
     MissingDependency {
         asset_id: AssetId,
         dependency: AssetId,
@@ -1619,6 +1638,9 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::SourceInputMissing { asset_id } => {
                 write!(f, "source input payload is required to execute asset {asset_id}")
+            }
+            Self::SourceCollectionFailed { asset_id, reason } => {
+                write!(f, "source collection failed for asset {asset_id}: {reason}")
             }
             Self::MissingDependency {
                 asset_id,
@@ -1813,9 +1835,31 @@ fn ensure_global_partition(
     }
 }
 
-fn blocked_dependencies(manifest: &AssetDagRunManifest, dependencies: &[AssetId]) -> Vec<AssetId> {
-    dependencies
+fn source_input_error(context: &AssetExecutionContext<'_>) -> AssetDagExecutorError {
+    match context
+        .options
+        .source_inputs
+        .source_failures
+        .get(context.asset_id.as_str())
+    {
+        Some(reason) => AssetDagExecutorError::SourceCollectionFailed {
+            asset_id: context.asset_id.clone(),
+            reason: reason.clone(),
+        },
+        None => AssetDagExecutorError::SourceInputMissing {
+            asset_id: context.asset_id.clone(),
+        },
+    }
+}
+
+fn blocked_dependencies(
+    manifest: &AssetDagRunManifest,
+    definition: &super::AssetDefinition,
+) -> Vec<AssetId> {
+    definition
+        .dependencies
         .iter()
+        .filter(|dependency| !definition.is_optional_dependency(dependency))
         .filter(|dependency| {
             manifest.steps.iter().any(|step| {
                 &step.asset_id == *dependency
@@ -1864,7 +1908,8 @@ fn default_asset_execution_timeout_ms() -> u64 {
 }
 
 fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
-    source_inputs.rera_registry_monthly.is_none()
+    source_inputs.source_failures.is_empty()
+        && source_inputs.rera_registry_monthly.is_none()
         && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
         && source_inputs.google_places_weekly.is_none()

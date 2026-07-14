@@ -1,6 +1,8 @@
 use backend::assets::{
-    google_review_facts_input, read_google_place_rows, GooglePlaceSnapshotMaterializer,
+    canonicalize_google_places_input, google_review_facts_input, read_google_place_rows,
+    AssetPartition, CanonicalSocietyMaterializer, GooglePlaceSnapshotMaterializer,
     GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId,
+    ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
 };
 use backend::lake::LakeStore;
 use chrono::{TimeZone, Utc};
@@ -128,4 +130,68 @@ async fn invalid_google_place_rows_do_not_replace_the_current_snapshot() {
         pointer.materialization_id,
         current.record.materialization_id
     );
+}
+
+#[tokio::test]
+async fn google_place_alias_resolves_to_first_run_rera_canonical_entity() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let fetched_at = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+    let run_id = MaterializationId::new();
+    let rera = ReraRegistryMaterializer::new(lake.clone())
+        .materialize_for_run(
+            &ReraRegistryMonthlyInput {
+                snapshot_date: "2026-07".to_string(),
+                projects: vec![ReraProjectSnapshotRecord {
+                    ack_number: Some("ACK-1".to_string()),
+                    registration_number: Some("PRM-1".to_string()),
+                    project_name: "Prestige Raintree Park".to_string(),
+                    promoter_name: Some("Prestige Group".to_string()),
+                    status: None,
+                    project_type: None,
+                    project_address: None,
+                    area_name: Some("Whitefield".to_string()),
+                    district: None,
+                    taluk: None,
+                    total_land_area_sqm: None,
+                    land_litigation: None,
+                    source_url: "https://rera.example/project".to_string(),
+                    fetched_at,
+                }],
+                source_watermarks: Vec::new(),
+            },
+            run_id.clone(),
+            AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    let canonical = CanonicalSocietyMaterializer::new(lake.clone())
+        .materialize_from_rera_for_run(&rera, "first-run", run_id, AssetPartition::global())
+        .await
+        .unwrap();
+    let input = GooglePlacesWeeklyInput {
+        snapshot_date: "2026-07-14".to_string(),
+        records: vec![GooglePlaceSnapshotRecord {
+            entity_id: "society:prestige-raintree-park".to_string(),
+            project_key: None,
+            query: "Prestige Raintree Park Whitefield Bengaluru".to_string(),
+            place_name: Some("Prestige Raintree Park".to_string()),
+            place_id: None,
+            reviews_url: "https://www.google.com/maps/search/?api=1&query=raintree".to_string(),
+            rating: None,
+            review_count: None,
+            address: None,
+            confidence: 0.6,
+            fetched_at,
+            fetch_source: "google_maps_search_fallback".to_string(),
+        }],
+        source_watermarks: Vec::new(),
+    };
+
+    let resolved = canonicalize_google_places_input(&lake, &input, &canonical)
+        .await
+        .unwrap();
+
+    assert_ne!(resolved.records[0].entity_id, input.records[0].entity_id);
+    assert!(resolved.records[0].entity_id.starts_with("society:rera-"));
 }

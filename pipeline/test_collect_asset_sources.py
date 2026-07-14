@@ -102,8 +102,70 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "requested_assets": ["reddit_threads_daily"],
         }
 
-        with self.assertRaisesRegex(ValueError, "requires scoped source_entities"):
-            collect_asset_sources(request)
+        output = collect_asset_sources(request)
+
+        self.assertNotIn("reddit_threads_daily", output)
+        self.assertIn(
+            "requires scoped source_entities",
+            output["source_failures"]["reddit_threads_daily"],
+        )
+
+    def test_blocked_reddit_does_not_abort_independent_sources(self):
+        request = {
+            "partition": {
+                "parts": [
+                    ["dt", "2026-07-14"],
+                    ["subreddit", "BangaloreRealEstates"],
+                ]
+            },
+            "planned_at": "2026-07-14T09:30:00Z",
+            "requested_assets": [
+                "rera_registry_monthly",
+                "reddit_threads_daily",
+                "reddit_resident_facts",
+                "google_places_weekly",
+            ],
+            "source_entities": [
+                {
+                    "entity_id": "society:prestige-raintree-park",
+                    "name": "Prestige Raintree Park",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                }
+            ],
+        }
+
+        def blocked_reddit(_request, society_inputs):
+            self.assertEqual(len(society_inputs), 1)
+            raise RedditSourceBlocked("HTTP 403")
+
+        rera_entry = SimpleNamespace(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            project_name="Prestige Raintree Park",
+            promoter_name="Prestige Group",
+        )
+        google_input = {
+            "snapshot_date": "2026-07-14",
+            "records": [],
+            "source_watermarks": [],
+        }
+        with patch(
+            "pipeline.collect_asset_sources.collect_google_places",
+            return_value=google_input,
+        ):
+            output = collect_asset_sources(
+                request,
+                rera_fetch=lambda: ([rera_entry], "2026-07-14T09:30:00Z"),
+                reddit_collect=blocked_reddit,
+            )
+
+        self.assertIn("rera_registry_monthly", output)
+        self.assertEqual(output["google_places_weekly"], google_input)
+        self.assertNotIn("reddit_threads_daily", output)
+        self.assertNotIn("reddit_resident_facts", output)
+        self.assertIn("HTTP 403", output["source_failures"]["reddit_threads_daily"])
+        self.assertIn("HTTP 403", output["source_failures"]["reddit_resident_facts"])
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
