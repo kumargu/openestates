@@ -1,12 +1,14 @@
+use std::collections::HashMap;
 use std::fmt;
 use std::fmt::Write as _;
 use std::path::{Path as FsPath, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
+use chrono::{DateTime, Utc};
 use futures_util::StreamExt;
 use object_store::local::LocalFileSystem;
 use object_store::path::Path as ObjectPath;
-use object_store::{ObjectStore, ObjectStoreExt, PutMode, UpdateVersion};
+use object_store::{GetOptions, ObjectMeta, ObjectStore, ObjectStoreExt, PutMode, UpdateVersion};
 use sha2::{Digest, Sha256};
 
 use super::keys::KeyError;
@@ -17,6 +19,21 @@ use super::{LakeKey, LakePrefix};
 pub struct LakeStore {
     store: Arc<dyn ObjectStore>,
     local_root: Option<Arc<PathBuf>>,
+    verified_artifacts: Arc<RwLock<HashMap<String, VerifiedArtifact>>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ObjectIdentity {
+    pub e_tag: Option<String>,
+    pub version: Option<String>,
+    pub last_modified: Option<DateTime<Utc>>,
+    pub size_bytes: usize,
+}
+
+#[derive(Debug, Clone)]
+struct VerifiedArtifact {
+    content_hash: String,
+    identity: ObjectIdentity,
 }
 
 /// Metadata captured after an artifact is written.
@@ -47,6 +64,7 @@ impl LakeStore {
         Ok(Self {
             store: Arc::new(store),
             local_root: Some(Arc::new(root)),
+            verified_artifacts: Arc::new(RwLock::new(HashMap::new())),
         })
     }
 
@@ -54,7 +72,12 @@ impl LakeStore {
         Self {
             store,
             local_root: None,
+            verified_artifacts: Arc::new(RwLock::new(HashMap::new())),
         }
+    }
+
+    pub(crate) fn object_store(&self) -> Arc<dyn ObjectStore> {
+        Arc::clone(&self.store)
     }
 
     pub async fn put_json<T: serde::Serialize>(
@@ -95,10 +118,20 @@ impl LakeStore {
         let content_hash = sha256_hex(&bytes);
         let size_bytes = bytes.len();
         let location = object_path(key);
-        self.store
+        let result = self
+            .store
             .put(&location, bytes.into())
             .await
             .map_err(LakeError::ObjectStore)?;
+        let identity = ObjectIdentity {
+            e_tag: result.e_tag,
+            version: result.version,
+            last_modified: None,
+            size_bytes,
+        };
+        if identity.e_tag.is_some() || identity.version.is_some() {
+            self.cache_verified_artifact(key, &content_hash, identity)?;
+        }
         Ok(ArtifactMetadata {
             key: key.clone(),
             content_hash,
@@ -183,13 +216,129 @@ impl LakeStore {
     }
 
     pub async fn artifact_metadata(&self, key: &LakeKey) -> Result<ArtifactMetadata, LakeError> {
-        let bytes = self.get_bytes(key).await?;
-        Ok(ArtifactMetadata {
-            key: key.clone(),
-            content_hash: sha256_hex(&bytes),
-            hash_algorithm: "sha256".to_string(),
-            size_bytes: bytes.len(),
-        })
+        self.streamed_artifact_metadata(key, GetOptions::default())
+            .await
+            .map(|(metadata, _)| metadata)
+    }
+
+    pub(crate) async fn verify_artifact(
+        &self,
+        key: &LakeKey,
+        expected_size_bytes: usize,
+        expected_content_hash: &str,
+    ) -> Result<ObjectIdentity, LakeError> {
+        let head = self
+            .store
+            .head(&object_path(key))
+            .await
+            .map_err(LakeError::ObjectStore)?;
+        let size_bytes = usize::try_from(head.size).map_err(|_| {
+            LakeError::InvalidMetadata(format!("artifact {key} is too large for this platform"))
+        })?;
+        if size_bytes != expected_size_bytes {
+            return Err(LakeError::InvalidMetadata(format!(
+                "artifact {key} does not match its manifest: expected {expected_size_bytes} bytes, got {size_bytes}"
+            )));
+        }
+        let identity = ObjectIdentity {
+            e_tag: head.e_tag,
+            version: head.version,
+            last_modified: Some(head.last_modified),
+            size_bytes,
+        };
+        if self.cached_verification_matches(key, expected_content_hash, &identity)? {
+            return Ok(identity);
+        }
+
+        let options = identity.pinned_get_options();
+        let (actual, verified_identity) = self.streamed_artifact_metadata(key, options).await?;
+        if actual.size_bytes != expected_size_bytes || actual.content_hash != expected_content_hash
+        {
+            return Err(LakeError::InvalidMetadata(format!(
+                "artifact {key} does not match its manifest: expected {expected_size_bytes} bytes with sha256 {expected_content_hash}, got {} bytes with sha256 {}",
+                actual.size_bytes, actual.content_hash
+            )));
+        }
+        self.cache_verified_artifact(key, expected_content_hash, verified_identity.clone())?;
+        Ok(verified_identity)
+    }
+
+    async fn streamed_artifact_metadata(
+        &self,
+        key: &LakeKey,
+        options: GetOptions,
+    ) -> Result<(ArtifactMetadata, ObjectIdentity), LakeError> {
+        let result = self
+            .store
+            .get_opts(&object_path(key), options)
+            .await
+            .map_err(LakeError::ObjectStore)?;
+        let declared_size = usize::try_from(result.meta.size).map_err(|_| {
+            LakeError::InvalidMetadata(format!("artifact {key} is too large for this platform"))
+        })?;
+        let identity = ObjectIdentity {
+            e_tag: result.meta.e_tag.clone(),
+            version: result.meta.version.clone(),
+            last_modified: Some(result.meta.last_modified),
+            size_bytes: declared_size,
+        };
+        let mut stream = result.into_stream();
+        let mut hasher = Sha256::new();
+        let mut size_bytes = 0usize;
+        while let Some(chunk) = stream.next().await {
+            let chunk = chunk.map_err(LakeError::ObjectStore)?;
+            size_bytes = size_bytes.checked_add(chunk.len()).ok_or_else(|| {
+                LakeError::InvalidMetadata(format!("artifact {key} size overflow"))
+            })?;
+            hasher.update(&chunk);
+        }
+        if size_bytes != declared_size {
+            return Err(LakeError::InvalidMetadata(format!(
+                "artifact {key} declared {declared_size} bytes but streamed {size_bytes}"
+            )));
+        }
+        Ok((
+            ArtifactMetadata {
+                key: key.clone(),
+                content_hash: digest_hex(hasher.finalize()),
+                hash_algorithm: "sha256".to_string(),
+                size_bytes,
+            },
+            identity,
+        ))
+    }
+
+    fn cached_verification_matches(
+        &self,
+        key: &LakeKey,
+        expected_content_hash: &str,
+        identity: &ObjectIdentity,
+    ) -> Result<bool, LakeError> {
+        let cache = self.verified_artifacts.read().map_err(|_| {
+            LakeError::InvalidMetadata("verified artifact cache is poisoned".to_string())
+        })?;
+        Ok(cache.get(key.as_str()).is_some_and(|verified| {
+            verified.content_hash == expected_content_hash && verified.identity.matches(identity)
+        }))
+    }
+
+    fn cache_verified_artifact(
+        &self,
+        key: &LakeKey,
+        content_hash: &str,
+        identity: ObjectIdentity,
+    ) -> Result<(), LakeError> {
+        let mut cache = self.verified_artifacts.write().map_err(|_| {
+            LakeError::InvalidMetadata("verified artifact cache is poisoned".to_string())
+        })?;
+        cache.insert(
+            key.to_string(),
+            VerifiedArtifact {
+                content_hash: content_hash.to_string(),
+                identity,
+            },
+        );
+        Ok(())
     }
 
     pub async fn list_keys(&self, prefix: &LakePrefix) -> Result<Vec<LakeKey>, LakeError> {
@@ -228,6 +377,45 @@ impl LakeStore {
         } else {
             LakeKey::join(&[prefix.as_str(), name])
         }
+    }
+}
+
+impl ObjectIdentity {
+    pub(crate) fn from_object_meta(meta: &ObjectMeta) -> Result<Self, LakeError> {
+        let size_bytes = usize::try_from(meta.size).map_err(|_| {
+            LakeError::InvalidMetadata(format!(
+                "artifact {} is too large for this platform",
+                meta.location
+            ))
+        })?;
+        Ok(Self {
+            e_tag: meta.e_tag.clone(),
+            version: meta.version.clone(),
+            last_modified: Some(meta.last_modified),
+            size_bytes,
+        })
+    }
+
+    pub(crate) fn pinned_get_options(&self) -> GetOptions {
+        let mut options = GetOptions::default();
+        options.version.clone_from(&self.version);
+        if let Some(e_tag) = &self.e_tag {
+            options.if_match = Some(e_tag.clone());
+        } else {
+            options.if_unmodified_since = self.last_modified;
+        }
+        options
+    }
+
+    pub(crate) fn matches(&self, current: &Self) -> bool {
+        if let Some(version) = &self.version {
+            return current.version.as_ref() == Some(version)
+                && self.size_bytes == current.size_bytes;
+        }
+        if let Some(e_tag) = &self.e_tag {
+            return current.e_tag.as_ref() == Some(e_tag) && self.size_bytes == current.size_bytes;
+        }
+        self.last_modified == current.last_modified && self.size_bytes == current.size_bytes
     }
 }
 
@@ -345,7 +533,11 @@ fn object_path(key: &LakeKey) -> ObjectPath {
 fn sha256_hex(bytes: &[u8]) -> String {
     let mut hasher = Sha256::new();
     hasher.update(bytes);
-    let digest = hasher.finalize();
+    digest_hex(hasher.finalize())
+}
+
+fn digest_hex(digest: impl AsRef<[u8]>) -> String {
+    let digest = digest.as_ref();
     let mut hex = String::with_capacity(digest.len() * 2);
     for byte in digest {
         let _ = write!(&mut hex, "{byte:02x}");

@@ -4,8 +4,11 @@
 //! module keeps path construction and metadata handling out of crawlers,
 //! materializers, and request handlers.
 
+pub mod catalog;
 pub mod keys;
+mod pinned_store;
 pub mod store;
 
+pub use catalog::{LakeCatalog, LakeCatalogError, LakeCatalogTable};
 pub use keys::{LakeKey, LakePrefix};
 pub use store::{ArtifactMetadata, LakeError, LakeStore};
