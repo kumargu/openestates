@@ -439,6 +439,7 @@ fn build_source_panels(
             ("rera_status", "Status"),
             ("rera_number", "Registration"),
             ("rera_completion_date", "Completion"),
+            ("rera_total_land_area_sqm", "Land area"),
             ("rera_delay_months", "Delay"),
             ("rera_complaints_count", "Complaints"),
             ("rera_builder_revocations", "Builder revocations"),
@@ -535,10 +536,12 @@ fn build_source_panels(
         ],
     });
 
-    let review_items = collect_source_items(
+    let review_items = collect_society_source_items(
         graph,
         &society_id,
+        projection.as_ref(),
         &[
+            ("google_reviews_url", "Review link"),
             ("google_sentiment", "Overall take"),
             ("google_top_positives", "Praised for"),
             ("google_top_negatives", "Recurring complaints"),
@@ -834,6 +837,15 @@ pub async fn get_property(
             (None, None, None)
         }
     };
+    let (project_status, project_status_display) =
+        if let Some(serving_bundle) = serving_bundle.as_ref() {
+            let projection =
+                SocietyFactProjection::from_index(&serving_bundle.fact_index, &property.society_id)
+                    .project_status(project_status, project_status_display);
+            (projection.status, projection.display)
+        } else {
+            (project_status, project_status_display)
+        };
 
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
@@ -1111,6 +1123,42 @@ mod serving_state_tests {
         assert_eq!(
             detail.last_verified.as_deref(),
             Some("1970-01-01T00:00:10+00:00")
+        );
+    }
+
+    #[test]
+    fn source_panels_project_current_serving_land_area_and_review_link() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "rera_total_land_area_sqm",
+                    FactValue::Numeric(112_652.0),
+                    10,
+                ),
+                serving_fact(
+                    "google_reviews_url",
+                    FactValue::Text("https://example.com/current".to_string()),
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let keys = panels
+            .iter()
+            .flat_map(|panel| panel.items.iter().map(|item| item.key.as_str()))
+            .collect::<Vec<_>>();
+
+        assert!(
+            keys.contains(&"rera_total_land_area_sqm"),
+            "RERA land area should be visible in detail source panels: {keys:?}"
+        );
+        assert!(
+            keys.contains(&"google_reviews_url"),
+            "Google review link should be visible in detail source panels: {keys:?}"
         );
     }
 

@@ -547,6 +547,14 @@ pub(crate) fn enrich_card_from_serving_facts(
     card.google_rating = projected.rating;
     card.google_review_count = projected.review_count;
     card.google_reviews_url = projected.reviews_url;
+
+    let status_projection = SocietyFactProjection::from_index(serving_facts, society_id)
+        .project_status(
+            card.project_status.clone(),
+            card.project_status_display.clone(),
+        );
+    card.project_status = status_projection.status;
+    card.project_status_display = status_projection.display;
 }
 
 fn merged_candidate_ids(
@@ -1250,7 +1258,9 @@ fn is_scoring_stopword(token: &str) -> bool {
 fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
     match preference {
         "metro access" => {
-            if property.metro_distance_mins <= 10 {
+            if property.metro_distance_mins == 0 {
+                0.0
+            } else if property.metro_distance_mins <= 10 {
                 2.0
             } else if property.metro_distance_mins <= 20 {
                 1.0
@@ -2471,6 +2481,53 @@ mod tests {
                 .iter()
                 .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "legacy"),
             "quiet preference should be explained by local legacy scoring when no graph fact is present"
+        );
+    }
+
+    #[test]
+    fn test_zero_minute_metro_seed_value_is_not_treated_as_evidence() {
+        let properties = vec![local_property(
+            "dummy-metro",
+            "Whitefield",
+            "dummy-metro",
+            3,
+            19_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let intent = crate::search::intent::parse_intent("3bhk whitefield near metro");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3bhk whitefield near metro",
+            &intent,
+            None,
+        );
+
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("preference query should include structured explanation");
+
+        assert!(
+            !explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.fact_key == "metro_distance_mins"),
+            "0-minute seed value should be no-data, not metro evidence: {:?}",
+            explanation.reasons
+        );
+        assert!(
+            explanation
+                .preference_coverage
+                .iter()
+                .any(|coverage| coverage.preference == "metro access"
+                    && coverage.status == "no_data"),
+            "metro preference should be marked no_data when only seed value is zero: {:?}",
+            explanation.preference_coverage
         );
     }
 
