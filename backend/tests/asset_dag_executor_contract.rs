@@ -497,12 +497,20 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     assert_eq!(response.total_results, 1);
     assert_eq!(response.intent.bhk, Some(3));
     assert_eq!(response.intent.area.as_deref(), Some("Whitefield"));
-    assert!(response
+    let knowledge_context = response
         .knowledge_context
         .as_ref()
-        .expect("search endpoint should return knowledge context")
-        .learning_gaps
-        .is_empty());
+        .expect("search endpoint should return knowledge context");
+    assert!(knowledge_context.learning_gaps.is_empty());
+    assert_eq!(knowledge_context.claims.len(), 2);
+    assert!(knowledge_context
+        .claims
+        .iter()
+        .any(|claim| claim.source_type == "Rera" && claim.claim.contains("RERA land area")));
+    assert!(knowledge_context
+        .claims
+        .iter()
+        .any(|claim| claim.source_type == "Reddit" && claim.claim.contains("trees")));
     let results = response.results;
 
     assert_eq!(

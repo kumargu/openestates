@@ -10,7 +10,8 @@ use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{store as kg_store, KnowledgeGraph, SearchEvent};
 use crate::search::{
-    intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SourcedClaim, TextSearch,
+    intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SearchResultCard, SourcedClaim,
+    TextSearch,
 };
 use crate::serving::LoadedServingBundle;
 use crate::state::AppState;
@@ -94,6 +95,7 @@ pub async fn search_properties(
     };
 
     let total_results = results.len();
+    let evidence_claims = result_evidence_claims(&results);
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;
@@ -109,7 +111,13 @@ pub async fn search_properties(
             })
             .collect();
 
-        build_knowledge_context(&graph, serving_facts, &matched_society_ids, &parsed_intent)
+        build_knowledge_context(
+            &graph,
+            serving_facts,
+            &matched_society_ids,
+            &parsed_intent,
+            evidence_claims,
+        )
     };
     drop(properties);
     drop(graph);
@@ -184,31 +192,6 @@ fn serving_candidate_ids(
     }
 }
 
-// ---------------------------------------------------------------------------
-// Legacy fallback maps — used only for seed facts without self-describing metadata.
-// As skills populate display_template + answers_preferences, these shrink to nothing.
-// ---------------------------------------------------------------------------
-
-/// Legacy: maps a fact key to display format (for facts without display_template).
-fn claim_format(fact_key: &str) -> Option<ClaimFormat> {
-    match fact_key {
-        "maintenance_sentiment" | "maintenance_quality" => {
-            Some(ClaimFormat::Text("Maintenance is"))
-        }
-        "reddit_thread_count" => Some(ClaimFormat::NumericInt("{} Reddit discussions found")),
-        "livability_sentiment" | "family_suitability" => {
-            Some(ClaimFormat::Text("Family suitability:"))
-        }
-        "resident_sentiment" => Some(ClaimFormat::Text("Resident sentiment:")),
-        _ => None,
-    }
-}
-
-enum ClaimFormat {
-    Text(&'static str),
-    NumericInt(&'static str),
-}
-
 /// Legacy: maps a preference to a fact key (for nodes without answers_preferences).
 ///
 /// TODO(Phase 2): Remove once KG property/society nodes carry `answers_preferences`
@@ -236,8 +219,8 @@ fn build_knowledge_context(
     serving_facts: Option<&crate::serving::ServingFactIndex>,
     society_ids: &[String],
     intent: &intent::SearchIntent,
+    claims: Vec<SourcedClaim>,
 ) -> (KnowledgeContext, Vec<String>, Vec<EnrichmentGap>) {
-    let mut claims = Vec::new();
     let mut nodes_consulted = 0;
     let mut learning_gaps = Vec::new();
     let mut graph_nodes_hit = Vec::new();
@@ -250,98 +233,13 @@ fn build_knowledge_context(
             nodes_consulted += 1;
             graph_nodes_hit.push(node_id.clone());
 
-            // --- Extract claims ---
-            // Priority: fact's own display_template > legacy fallback map.
-            for fact in &node.facts {
-                let claim_text = if let Some(ref template) = fact.display_template {
-                    let rendered = render_template(template, &fact.value);
-                    if rendered.is_empty() {
-                        None
-                    } else {
-                        Some(rendered)
-                    }
-                } else {
-                    match claim_format(&fact.key) {
-                        Some(ClaimFormat::Text(prefix)) => {
-                            extract_text_value(&fact.value).map(|val| format!("{} {}", prefix, val))
-                        }
-                        Some(ClaimFormat::NumericInt(template)) => {
-                            extract_numeric_value(&fact.value)
-                                .map(|val| template.replace("{}", &(val as u32).to_string()))
-                        }
-                        None => None,
-                    }
-                };
-
-                if let Some(claim) = claim_text {
-                    claims.push(SourcedClaim {
-                        entity_name: node.name.clone(),
-                        claim,
-                        confidence: fact.confidence,
-                        source_type: format!("{:?}", fact.source.source_type),
-                    });
-                }
-            }
-
-            // --- Extract claims from builder nodes via BuiltBy edges ---
+            // Record related nodes consulted while evaluating query evidence gaps.
             for edge in graph.edges_from(&node_id) {
-                if edge.relation != Relation::BuiltBy {
+                if !matches!(edge.relation, Relation::BuiltBy | Relation::SocietyInArea) {
                     continue;
                 }
-                if let Some(builder_node) = graph.get_node(&edge.to) {
+                if graph.get_node(&edge.to).is_some() {
                     graph_nodes_hit.push(edge.to.clone());
-                    for fact in &builder_node.facts {
-                        let claim_text = if let Some(ref template) = fact.display_template {
-                            let rendered = render_template(template, &fact.value);
-                            if rendered.is_empty() {
-                                None
-                            } else {
-                                Some(rendered)
-                            }
-                        } else {
-                            None
-                        };
-
-                        if let Some(claim) = claim_text {
-                            claims.push(SourcedClaim {
-                                entity_name: builder_node.name.clone(),
-                                claim,
-                                confidence: fact.confidence,
-                                source_type: format!("{:?}", fact.source.source_type),
-                            });
-                        }
-                    }
-                }
-            }
-
-            // --- Extract claims from area nodes via SocietyInArea edges ---
-            for edge in graph.edges_from(&node_id) {
-                if edge.relation != Relation::SocietyInArea {
-                    continue;
-                }
-                if let Some(area_node) = graph.get_node(&edge.to) {
-                    graph_nodes_hit.push(edge.to.clone());
-                    for fact in &area_node.facts {
-                        let claim_text = if let Some(ref template) = fact.display_template {
-                            let rendered = render_template(template, &fact.value);
-                            if rendered.is_empty() {
-                                None
-                            } else {
-                                Some(rendered)
-                            }
-                        } else {
-                            None
-                        };
-
-                        if let Some(claim) = claim_text {
-                            claims.push(SourcedClaim {
-                                entity_name: area_node.name.clone(),
-                                claim,
-                                confidence: fact.confidence,
-                                source_type: format!("{:?}", fact.source.source_type),
-                            });
-                        }
-                    }
                 }
             }
 
@@ -387,8 +285,6 @@ fn build_knowledge_context(
         }
     }
 
-    claims.dedup_by(|a, b| a.entity_name == b.entity_name && a.claim == b.claim);
-
     let context = KnowledgeContext {
         claims,
         nodes_consulted,
@@ -396,6 +292,39 @@ fn build_knowledge_context(
     };
 
     (context, graph_nodes_hit, enrichment_gaps)
+}
+
+fn result_evidence_claims(results: &[SearchResultCard]) -> Vec<SourcedClaim> {
+    const MAX_KNOWLEDGE_CLAIMS: usize = 12;
+
+    let mut claims = Vec::new();
+    for result in results {
+        let Some(explanation) = &result.match_explanation else {
+            continue;
+        };
+        let entity_name = if result.card.society_name.trim().is_empty() {
+            result.card.title.clone()
+        } else {
+            result.card.society_name.clone()
+        };
+        for reason in &explanation.reasons {
+            let claim = SourcedClaim {
+                entity_name: entity_name.clone(),
+                claim: reason.display.clone(),
+                confidence: reason.confidence,
+                source_type: reason.source_type.clone(),
+            };
+            if !claims.iter().any(|existing: &SourcedClaim| {
+                existing.entity_name == claim.entity_name && existing.claim == claim.claim
+            }) {
+                claims.push(claim);
+                if claims.len() == MAX_KNOWLEDGE_CLAIMS {
+                    return claims;
+                }
+            }
+        }
+    }
+    claims
 }
 
 struct GapPreference {
@@ -767,20 +696,6 @@ fn render_template(template: &str, value: &crate::knowledge::FactValue) -> Strin
     template.replace("{value}", &value_str)
 }
 
-fn extract_text_value(value: &crate::knowledge::FactValue) -> Option<&str> {
-    match value {
-        crate::knowledge::FactValue::Text(s) => Some(s.as_str()),
-        _ => None,
-    }
-}
-
-fn extract_numeric_value(value: &crate::knowledge::FactValue) -> Option<f64> {
-    match value {
-        crate::knowledge::FactValue::Numeric(n) => Some(*n),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -898,8 +813,13 @@ mod tests {
         ));
 
         let intent = crate::search::intent::parse_intent("3bhk whitefield no waterlogging");
-        let (_, _, enrichment_gaps) =
-            build_knowledge_context(&graph, None, &["test-society".to_string()], &intent);
+        let (_, _, enrichment_gaps) = build_knowledge_context(
+            &graph,
+            None,
+            &["test-society".to_string()],
+            &intent,
+            Vec::new(),
+        );
 
         assert!(
             enrichment_gaps
