@@ -3,7 +3,10 @@ use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{Property, Seller, Society};
 use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
 use crate::routes::search::graph_preference_score_for_keys;
-use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
+use crate::serving::{
+    GoogleReviewEvidence, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
+    SocietyFactProjection,
+};
 
 use super::index::SearchIndex;
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
@@ -530,47 +533,20 @@ impl TextSearch {
     }
 }
 
-fn enrich_card_from_serving_facts(
+pub(crate) fn enrich_card_from_serving_facts(
     card: &mut crate::models::PropertyCard,
     serving_facts: &ServingFactIndex,
     society_id: &str,
 ) {
-    let Some(rows) = serving_facts.entity(&society_node_id(society_id)) else {
-        return;
-    };
-
-    card.google_reviews_url = latest_serving_text(&rows.facts, "google_reviews_url")
-        .filter(|url| url.starts_with("https://") || url.starts_with("http://"))
-        .or_else(|| card.google_reviews_url.clone());
-    card.google_rating = latest_serving_numeric(&rows.facts, "google_rating")
-        .filter(|rating| (0.0..=5.0).contains(rating))
-        .or(card.google_rating);
-    card.google_review_count = latest_serving_numeric(&rows.facts, "google_review_count")
-        .filter(|count| count.is_finite() && *count >= 0.0 && *count <= u32::MAX as f64)
-        .map(|count| count.round() as u32)
-        .or(card.google_review_count);
-}
-
-fn latest_serving_text(facts: &[ServingFactRecord], fact_key: &str) -> Option<String> {
-    facts
-        .iter()
-        .filter(|fact| fact.fact_key == fact_key)
-        .max_by_key(|fact| fact.learned_at)
-        .and_then(|fact| match &fact.value {
-            FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
-            _ => None,
-        })
-}
-
-fn latest_serving_numeric(facts: &[ServingFactRecord], fact_key: &str) -> Option<f64> {
-    facts
-        .iter()
-        .filter(|fact| fact.fact_key == fact_key)
-        .max_by_key(|fact| fact.learned_at)
-        .and_then(|fact| match fact.value {
-            FactValue::Numeric(value) => Some(value),
-            _ => None,
-        })
+    let projected = SocietyFactProjection::from_index(serving_facts, society_id)
+        .project_google_reviews(GoogleReviewEvidence {
+            rating: card.google_rating,
+            review_count: card.google_review_count,
+            reviews_url: card.google_reviews_url.clone(),
+        });
+    card.google_rating = projected.rating;
+    card.google_review_count = projected.review_count;
+    card.google_reviews_url = projected.reviews_url;
 }
 
 fn merged_candidate_ids(

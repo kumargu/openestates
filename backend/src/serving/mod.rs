@@ -8,6 +8,7 @@ pub mod builder;
 pub mod loader;
 pub mod materializer;
 pub mod parquet;
+pub mod projection;
 pub mod tantivy_index;
 pub mod types;
 
@@ -18,11 +19,13 @@ pub use materializer::{
     SearchServingBundleMaterializer,
 };
 pub use parquet::{read_facts_parquet, read_search_metadata_parquet, ParquetReadError};
+pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use types::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
-    ServingColumnSchema, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
-    ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ServingColumnSchema, ServingEntityFactRows, ServingEntityRecord, ServingFactIndex,
+    ServingFactRecord, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

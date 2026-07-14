@@ -13,6 +13,7 @@ use crate::scoring::{
 };
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
+use crate::serving::{GoogleReviewEvidence, ServingFactIndex, SocietyFactProjection};
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
@@ -89,6 +90,19 @@ pub struct PropertyDetail {
     /// Data confidence score — how trustworthy is this property's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,
+    /// Current external review evidence projected from the Parquet serving bundle.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub external_reviews: Option<ExternalReviews>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ExternalReviews {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_rating: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_review_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_reviews_url: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -586,6 +600,8 @@ pub async fn get_property(
             )
         })?;
 
+    let serving_bundle = state.serving_bundle.read().await.clone();
+
     let graph = state.knowledge.read().await;
 
     // Enrich society from KG
@@ -598,6 +614,13 @@ pub async fn get_property(
     if let Some(ref mut soc) = society {
         enrich_society(soc, &graph);
     }
+
+    let external_reviews = external_reviews_for(
+        &property.society_id,
+        society.as_ref(),
+        &graph,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
 
     // Enrich area from KG
     let area_key = area_lookup_key(&property.area_id);
@@ -773,7 +796,37 @@ pub async fn get_property(
         source_panels,
         data_freshness,
         confidence_score,
+        external_reviews,
     }))
+}
+
+fn external_reviews_for(
+    society_id: &str,
+    society: Option<&crate::models::Society>,
+    graph: &crate::knowledge::KnowledgeGraph,
+    serving_facts: Option<&ServingFactIndex>,
+) -> Option<ExternalReviews> {
+    let node_id = society_node_id(society_id);
+    let fallback = GoogleReviewEvidence {
+        rating: super::enrichment::kg_numeric(graph, &node_id, "google_rating")
+            .filter(|rating| (0.0..=5.0).contains(rating)),
+        review_count: super::enrichment::kg_numeric(graph, &node_id, "google_review_count")
+            .filter(|count| count.is_finite() && *count >= 0.0 && *count <= u32::MAX as f64)
+            .map(|count| count.round() as u32),
+        reviews_url: society.and_then(|society| society.google_reviews_url.clone()),
+    };
+    let evidence = serving_facts
+        .map(|facts| {
+            SocietyFactProjection::from_index(facts, society_id)
+                .project_google_reviews(fallback.clone())
+        })
+        .unwrap_or(fallback);
+
+    (!evidence.is_empty()).then_some(ExternalReviews {
+        google_rating: evidence.rating,
+        google_review_count: evidence.review_count,
+        google_reviews_url: evidence.reviews_url,
+    })
 }
 
 /// Count non-empty lines in a JSONL file (interest events).
@@ -784,5 +837,197 @@ async fn count_interest_lines(path: &std::path::Path) -> usize {
             .filter(|l: &&str| !l.trim().is_empty())
             .count(),
         Err(_) => 0,
+    }
+}
+
+#[cfg(test)]
+mod serving_state_tests {
+    use chrono::{TimeZone, Utc};
+
+    use super::*;
+    use crate::knowledge::fact::{FactSource, SourceType};
+    use crate::knowledge::node::{Node, NodeType};
+    use crate::models::{Property, Society};
+    use crate::routes::enrichment::enrich_property_card;
+    use crate::serving::{ServingFactRecord, ServingSearchMetadataRecord};
+
+    #[test]
+    fn search_card_and_property_detail_project_the_same_current_review_facts() {
+        let graph = legacy_graph();
+        let property = property();
+        let society = society();
+        let serving = serving_index();
+
+        let mut card = enrich_property_card(&property, std::slice::from_ref(&society), &graph);
+        crate::search::text::enrich_card_from_serving_facts(
+            &mut card,
+            &serving,
+            &property.society_id,
+        );
+        let detail =
+            external_reviews_for(&property.society_id, Some(&society), &graph, Some(&serving))
+                .expect("review evidence should be present");
+
+        assert_eq!(detail.google_rating, card.google_rating);
+        assert_eq!(detail.google_review_count, card.google_review_count);
+        assert_eq!(detail.google_reviews_url, card.google_reviews_url);
+        assert_eq!(detail.google_rating, Some(4.6));
+        assert_eq!(detail.google_review_count, Some(431));
+        assert_eq!(
+            detail.google_reviews_url.as_deref(),
+            Some("https://example.com/current")
+        );
+    }
+
+    #[test]
+    fn property_detail_keeps_legacy_review_fallback_without_serving_facts() {
+        let graph = legacy_graph();
+        let detail = external_reviews_for("sample", Some(&society()), &graph, None)
+            .expect("legacy evidence should remain available");
+
+        assert_eq!(detail.google_rating, Some(3.8));
+        assert_eq!(detail.google_review_count, Some(87));
+        assert_eq!(
+            detail.google_reviews_url.as_deref(),
+            Some("https://example.com/legacy")
+        );
+    }
+
+    fn legacy_graph() -> crate::knowledge::KnowledgeGraph {
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+        let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
+        node.add_fact(legacy_fact("google_rating", FactValue::Numeric(3.8)));
+        node.add_fact(legacy_fact("google_review_count", FactValue::Numeric(87.0)));
+        node.add_fact(legacy_fact(
+            "google_reviews_url",
+            FactValue::Text("https://example.com/legacy".to_string()),
+        ));
+        graph.add_node(node);
+        graph
+    }
+
+    fn legacy_fact(key: &str, value: FactValue) -> SourcedFact {
+        SourcedFact {
+            key: key.to_string(),
+            value,
+            confidence: 0.8,
+            source: FactSource {
+                source_type: SourceType::Google,
+                url: None,
+                model: None,
+                skill_id: None,
+                triggered_by: None,
+            },
+            learned_at: Utc.timestamp_opt(1, 0).unwrap(),
+            version: 1,
+            display_template: None,
+            answers_preferences: Vec::new(),
+            scoring_hint: None,
+        }
+    }
+
+    fn serving_index() -> ServingFactIndex {
+        ServingFactIndex::from_records(
+            vec![
+                serving_fact("google_rating", FactValue::Numeric(4.6), 2),
+                serving_fact("google_review_count", FactValue::Numeric(431.0), 2),
+                serving_fact(
+                    "google_reviews_url",
+                    FactValue::Text("https://example.com/current".to_string()),
+                    2,
+                ),
+                serving_fact(
+                    "google_reviews_url",
+                    FactValue::Text("invalid".to_string()),
+                    3,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        )
+    }
+
+    fn serving_fact(key: &str, value: FactValue, learned_at: i64) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: "society:sample".to_string(),
+            fact_key: key.to_string(),
+            value_type: "test".to_string(),
+            value_text: None,
+            value,
+            confidence: 0.9,
+            source_type: "Google".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: None,
+            learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),
+        }
+    }
+
+    fn society() -> Society {
+        Society {
+            id: "sample".to_string(),
+            name: "Sample Society".to_string(),
+            area: "Whitefield".to_string(),
+            city: "Bengaluru".to_string(),
+            builder_name: "Sample Builder".to_string(),
+            year_built: 2020,
+            total_units: 100,
+            summary: String::new(),
+            maintenance_sentiment: String::new(),
+            livability_sentiment: String::new(),
+            common_positives: Vec::new(),
+            common_complaints: Vec::new(),
+            review_summary: String::new(),
+            google_reviews_url: Some("https://example.com/legacy".to_string()),
+            future_google_place_name: String::new(),
+            future_google_place_id: None,
+            future_review_enrichment_status: String::new(),
+        }
+    }
+
+    fn property() -> Property {
+        Property {
+            id: "sample-3bhk".to_string(),
+            title: "3 BHK in Sample Society".to_string(),
+            area: "Whitefield".to_string(),
+            area_id: "whitefield".to_string(),
+            city: "Bengaluru".to_string(),
+            society_id: "sample".to_string(),
+            builder_name: "Sample Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk: 3,
+            price: 20_000_000,
+            price_per_sqft: 10_000,
+            carpet_area_sqft: 1_500,
+            super_builtup_sqft: 2_000,
+            floor: 5,
+            total_floors: 20,
+            facing: "East".to_string(),
+            possession_status: "Ready to move".to_string(),
+            metro_distance_mins: 10,
+            maintenance_cost_monthly: 8_000,
+            society_quality_score: 0.8,
+            builder_quality_score: 0.8,
+            document_completeness_score: 0.8,
+            litigation_risk: 0.1,
+            noise_score: 0.2,
+            sunlight_score: 0.8,
+            airport_noise_score: 0.1,
+            waterlogging_risk_score: 0.1,
+            traffic_score: 0.4,
+            days_on_market: 10,
+            greenery_score: None,
+            open_space_score: None,
+            resale_strength_score: None,
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            description_summary: String::new(),
+            transparency_tags: Vec::new(),
+            source_reference: String::new(),
+            seller_id: None,
+        }
     }
 }
