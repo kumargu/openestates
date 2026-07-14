@@ -1,7 +1,10 @@
-use std::collections::HashMap;
 use std::fs::File;
+use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
+use std::time::Instant;
 
 use arrow::array::{Array, StringArray};
+use axum::extract::{Query, State};
 use backend::assets::{
     default_openestates_registry, rera_legal_facts_input, AssetDagExecutionOptions,
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
@@ -23,16 +26,18 @@ use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::models::{Property, Society};
-use backend::search::intent::parse_intent;
-use backend::search::{SearchIndex, TextSearch};
+use backend::routes::search::{search_properties, SearchQuery};
+use backend::search::SearchIndex;
 use backend::serving::{
     ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
+use backend::state::AppState;
 use bytes::Bytes;
 use chrono::{Duration, TimeZone, Utc};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use tempfile::tempdir;
+use tokio::sync::RwLock;
 
 #[tokio::test]
 async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
@@ -321,7 +326,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 }
 
 #[tokio::test]
-async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
+async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
@@ -464,24 +469,41 @@ async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
         search_society("rera-meadows", "RERA Meadows"),
         search_society("unproven-whitefield", "Unproven Whitefield"),
     ];
-    let society_names = societies
-        .iter()
-        .map(|society| (society.id.clone(), society.name.clone()))
-        .collect::<HashMap<_, _>>();
     let search_index = SearchIndex::build(&properties);
-    let intent = parse_intent(query);
-    let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-        &properties,
-        Some(&search_index),
-        None,
-        Some(&loaded.fact_index),
-        &society_names,
-        &societies,
-        query,
-        &intent,
-        None,
-        &[],
-    );
+    let state = Arc::new(AppState {
+        properties: RwLock::new(properties),
+        search_index: RwLock::new(search_index),
+        serving_bundle: RwLock::new(Some(Arc::new(loaded))),
+        areas: Vec::new(),
+        societies,
+        sellers: RwLock::new(Vec::new()),
+        knowledge: Arc::new(RwLock::new(mock_graph())),
+        project_root: root.path().to_path_buf(),
+        interest_counter: AtomicU64::new(0),
+        interest_rate_limiter: RwLock::new((Instant::now(), 0)),
+        registration_counter: AtomicU64::new(0),
+        registration_rate_limiter: RwLock::new((Instant::now(), 0)),
+        publish_rate_limiter: RwLock::new((Instant::now(), 0)),
+    });
+    let response = search_properties(
+        State(state),
+        Query(SearchQuery {
+            q: Some(query.to_string()),
+        }),
+    )
+    .await
+    .0;
+    assert_eq!(response.query, query);
+    assert_eq!(response.total_results, 1);
+    assert_eq!(response.intent.bhk, Some(3));
+    assert_eq!(response.intent.area.as_deref(), Some("Whitefield"));
+    assert!(response
+        .knowledge_context
+        .as_ref()
+        .expect("search endpoint should return knowledge context")
+        .learning_gaps
+        .is_empty());
+    let results = response.results;
 
     assert_eq!(
         results

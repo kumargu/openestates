@@ -70,15 +70,15 @@ pub async fn search_properties(
             .cloned()
     });
 
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
     let results = {
         let graph = state.knowledge.read().await;
         let properties = state.properties.read().await;
         let search_index = state.search_index.read().await;
         let sellers = state.sellers.read().await;
-        let serving_bundle = state.serving_bundle.read().await.clone();
         let serving_candidate_ids =
             serving_candidate_ids(serving_bundle.as_deref(), &query, &search_index);
-        let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
         TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
             &properties,
             Some(&*search_index),
@@ -109,7 +109,7 @@ pub async fn search_properties(
             })
             .collect();
 
-        build_knowledge_context(&graph, &matched_society_ids, &parsed_intent)
+        build_knowledge_context(&graph, serving_facts, &matched_society_ids, &parsed_intent)
     };
     drop(properties);
     drop(graph);
@@ -233,6 +233,7 @@ fn legacy_preference_to_fact_key(preference: &str) -> Option<&'static str> {
 /// Returns (KnowledgeContext, graph_nodes_hit, enrichment_gaps).
 fn build_knowledge_context(
     graph: &KnowledgeGraph,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
     society_ids: &[String],
     intent: &intent::SearchIntent,
 ) -> (KnowledgeContext, Vec<String>, Vec<EnrichmentGap>) {
@@ -348,7 +349,9 @@ fn build_knowledge_context(
             // Structured intent already knows which fact keys answer a preference.
             // Use that before falling back to the legacy preference->fact map.
             for pref in gap_preferences(intent) {
-                if node_has_gap_evidence(node, &pref)
+                if serving_facts
+                    .is_some_and(|facts| serving_has_gap_evidence(facts, &node_id, &pref))
+                    || node_has_gap_evidence(node, &pref)
                     || related_node_has_gap_evidence(graph, &node_id, Relation::BuiltBy, &pref)
                     || related_node_has_gap_evidence(
                         graph,
@@ -461,6 +464,44 @@ fn node_has_gap_evidence(node: &crate::knowledge::node::Node, pref: &GapPreferen
     node.facts
         .iter()
         .any(|fact| fact_matches_gap_preference(fact, pref))
+}
+
+fn serving_has_gap_evidence(
+    serving_facts: &crate::serving::ServingFactIndex,
+    entity_id: &str,
+    pref: &GapPreference,
+) -> bool {
+    let Some(rows) = serving_facts.entity(entity_id) else {
+        return false;
+    };
+
+    rows.facts.iter().any(|fact| {
+        serving_fact_value_is_usable(&fact.value)
+            && (pref
+                .candidate_fact_keys
+                .iter()
+                .any(|key| fact.fact_key.eq_ignore_ascii_case(key))
+                || rows.search_metadata.iter().any(|metadata| {
+                    metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
+                        && metadata.answers_preferences.iter().any(|answer| {
+                            pref.match_labels
+                                .iter()
+                                .any(|label| fuzzy_preference_match(answer, label))
+                        })
+                }))
+    })
+}
+
+fn serving_fact_value_is_usable(value: &crate::knowledge::FactValue) -> bool {
+    match value {
+        crate::knowledge::FactValue::Numeric(value) => value.is_finite(),
+        crate::knowledge::FactValue::Text(value) => !value.trim().is_empty(),
+        crate::knowledge::FactValue::Bool(_) => true,
+        crate::knowledge::FactValue::Tags(values) => {
+            values.iter().any(|value| !value.trim().is_empty())
+        }
+        crate::knowledge::FactValue::Score { value, .. } => value.is_finite(),
+    }
 }
 
 fn related_node_has_gap_evidence(
@@ -858,7 +899,7 @@ mod tests {
 
         let intent = crate::search::intent::parse_intent("3bhk whitefield no waterlogging");
         let (_, _, enrichment_gaps) =
-            build_knowledge_context(&graph, &["test-society".to_string()], &intent);
+            build_knowledge_context(&graph, None, &["test-society".to_string()], &intent);
 
         assert!(
             enrichment_gaps
@@ -873,6 +914,60 @@ mod tests {
                 .any(|gap| gap.missing_fact.starts_with("unknown:")),
             "Structured negative preferences should not be logged as unknown gaps"
         );
+    }
+
+    #[test]
+    fn serving_gap_evidence_requires_a_usable_value() {
+        use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
+        use chrono::Utc;
+
+        let pref = GapPreference {
+            label: "greenery".to_string(),
+            match_labels: vec!["greenery".to_string()],
+            candidate_fact_keys: vec!["resident_greenery_signal".to_string()],
+            reason: "User preference: greenery".to_string(),
+        };
+        let metadata = ServingSearchMetadataRecord {
+            entity_id: "society:test-society".to_string(),
+            fact_key: "resident_greenery_signal".to_string(),
+            display_template: Some("Residents report {value}".to_string()),
+            answers_preferences: vec!["greenery".to_string()],
+            scoring_direction: Some("TextMatch".to_string()),
+            scoring_weight: Some(1.0),
+        };
+        let fact = |value| ServingFactRecord {
+            entity_id: "society:test-society".to_string(),
+            fact_key: "resident_greenery_signal".to_string(),
+            value_type: "text".to_string(),
+            value_text: None,
+            value,
+            confidence: 0.7,
+            source_type: "Reddit".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("reddit_resident_facts".to_string()),
+            learned_at: Utc::now(),
+        };
+
+        let empty = ServingFactIndex::from_records(
+            vec![fact(FactValue::Text("   ".to_string()))],
+            vec![metadata.clone()],
+        );
+        assert!(!serving_has_gap_evidence(
+            &empty,
+            "society:test-society",
+            &pref
+        ));
+
+        let usable = ServingFactIndex::from_records(
+            vec![fact(FactValue::Text("mature trees".to_string()))],
+            vec![metadata],
+        );
+        assert!(serving_has_gap_evidence(
+            &usable,
+            "society:test-society",
+            &pref
+        ));
     }
 
     // --- Day 62: Graph scoring integration tests ---
