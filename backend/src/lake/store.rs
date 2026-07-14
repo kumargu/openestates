@@ -47,6 +47,7 @@ pub struct ArtifactMetadata {
 
 #[derive(Debug)]
 pub enum LakeError {
+    Configuration(String),
     InvalidMetadata(String),
     ConcurrentModification(String),
     Io(std::io::Error),
@@ -477,6 +478,7 @@ impl Drop for LocalKeyLock {
 impl fmt::Display for LakeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Configuration(message) => write!(f, "lake configuration error: {message}"),
             Self::InvalidMetadata(message) => write!(f, "lake metadata error: {message}"),
             Self::ConcurrentModification(message) => {
                 write!(f, "lake concurrent modification: {message}")
@@ -517,7 +519,8 @@ impl LakeError {
                 err,
                 object_store::Error::Generic { .. } | object_store::Error::JoinError { .. }
             ),
-            Self::InvalidMetadata(_)
+            Self::Configuration(_)
+            | Self::InvalidMetadata(_)
             | Self::ConcurrentModification(_)
             | Self::Json(_)
             | Self::Key(_)

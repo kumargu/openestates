@@ -14,7 +14,10 @@ use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::search::SearchIndex;
 use crate::serving::{LoadedServingBundle, ServingBundleLoader};
 use crate::state::AppState;
-use crate::{lake::LakeStore, serving::ServingBundleLoadError};
+use crate::{
+    lake::{LakeStoreLocation, LAKE_URL_ENV},
+    serving::ServingBundleLoadError,
+};
 
 /// Load all data and construct the full AppState.
 ///
@@ -53,7 +56,9 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         "Built local search index for {} properties",
         properties.len()
     );
-    let serving_bundle = load_serving_bundle(project_root).await;
+    let serving_bundle = load_serving_bundle(project_root)
+        .await
+        .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
 
     // --- Sellers ---
     let sellers_path = project_root
@@ -94,18 +99,28 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     }
 }
 
-async fn load_serving_bundle(project_root: &Path) -> Option<Arc<LoadedServingBundle>> {
-    let lake_root = project_root.join("data").join("lake");
+async fn load_serving_bundle(
+    project_root: &Path,
+) -> Result<Option<Arc<LoadedServingBundle>>, String> {
+    let explicitly_configured = std::env::var_os(LAKE_URL_ENV).is_some();
+    let lake_location = LakeStoreLocation::from_env(project_root).map_err(|err| err.to_string())?;
+    load_serving_bundle_from_location(project_root, lake_location, explicitly_configured).await
+}
+
+async fn load_serving_bundle_from_location(
+    project_root: &Path,
+    lake_location: LakeStoreLocation,
+    explicitly_configured: bool,
+) -> Result<Option<Arc<LoadedServingBundle>>, String> {
     let cache_root = project_root.join("data").join("cache").join("serving");
-    let lake = match LakeStore::local(&lake_root) {
+    let lake = match lake_location.open() {
         Ok(lake) => lake,
+        Err(err) if explicitly_configured => {
+            return Err(format!("lake unavailable at {lake_location}: {err}"));
+        }
         Err(err) => {
-            eprintln!(
-                "WARN: Serving bundle lake unavailable at {}: {}",
-                lake_root.display(),
-                err
-            );
-            return None;
+            eprintln!("WARN: Serving bundle lake unavailable at {lake_location}: {err}");
+            return Ok(None);
         }
     };
 
@@ -120,15 +135,21 @@ async fn load_serving_bundle(project_root: &Path) -> Option<Arc<LoadedServingBun
                 bundle.manifest.entity_count,
                 bundle.manifest.fact_count
             );
-            Some(Arc::new(bundle))
+            Ok(Some(Arc::new(bundle)))
         }
+        Ok(None) if explicitly_configured => Err(format!(
+            "no promoted search serving bundle found at explicitly configured lake {lake_location}"
+        )),
         Ok(None) => {
             println!("No promoted serving bundle found; using local property recall only");
-            None
+            Ok(None)
         }
+        Err(err) if explicitly_configured => Err(format!(
+            "failed to load promoted search serving bundle from {lake_location}: {err}"
+        )),
         Err(err) => {
             log_serving_load_error(err);
-            None
+            Ok(None)
         }
     }
 }
@@ -654,6 +675,28 @@ mod tests {
     use super::*;
     use crate::knowledge::fact::SourcedFact;
     use crate::knowledge::node::Node;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn explicit_lake_requires_a_promoted_serving_bundle() {
+        let root = tempdir().unwrap();
+        let lake_location = LakeStoreLocation::Local(root.path().join("lake"));
+
+        let err = match load_serving_bundle_from_location(root.path(), lake_location.clone(), true)
+            .await
+        {
+            Ok(_) => panic!("explicit lake without a promoted bundle should fail"),
+            Err(err) => err,
+        };
+        assert!(err.contains("no promoted search serving bundle found"));
+
+        assert!(
+            load_serving_bundle_from_location(root.path(), lake_location, false)
+                .await
+                .unwrap()
+                .is_none()
+        );
+    }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
         let id = format!("society:{}", slug);

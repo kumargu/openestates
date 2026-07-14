@@ -6,7 +6,7 @@ use backend::assets::{
     SourceWatermark, KG_SOCIETY_VIEW_ASSET_ID,
 };
 use backend::knowledge::store as kg_store;
-use backend::lake::LakeStore;
+use backend::lake::LakeStoreLocation;
 use backend::serving::SearchServingBundleMaterializer;
 use chrono::Utc;
 
@@ -25,8 +25,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     })?;
     let stats = graph.stats();
 
-    let lake_root = project_root.join("data").join("lake");
-    let lake = LakeStore::local(&lake_root)?;
+    let lake_location = LakeStoreLocation::from_env(&project_root)?;
+    let lake = lake_location.open()?;
     let registry = default_openestates_registry();
     let materializations = AssetMaterializationStore::new(lake.clone());
     let kg_asset_id = AssetId::new(KG_SOCIETY_VIEW_ASSET_ID)?;
@@ -110,7 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "  materialization: {}",
         materialization.record.materialization_id
     );
-    println!("  lake root: {}", lake_root.display());
+    println!("  lake: {lake_location}");
 
     Ok(())
 }
@@ -166,8 +166,13 @@ fn default_bundle_version() -> String {
 }
 
 fn print_help() {
-    println!("Build and promote the local search serving bundle.");
+    println!("Build and promote the search serving bundle.");
     println!();
     println!("Usage:");
     println!("  cargo run --bin openestates-build-serving-bundle -- [--version <version>] [--project-root <path>]");
+    println!();
+    println!(
+        "{} selects file:///absolute/path or s3://bucket/optional/prefix.",
+        backend::lake::LAKE_URL_ENV
+    );
 }

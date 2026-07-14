@@ -11,7 +11,7 @@ use backend::assets::{
     CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
-use backend::lake::{LakeKey, LakeStore};
+use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
 use chrono::{Duration as ChronoDuration, Utc};
 
 #[tokio::main]
@@ -34,8 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })?
     };
 
-    let lake_root = project_root.join("data").join("lake");
-    let lake = LakeStore::local(&lake_root)?;
+    let lake_location = LakeStoreLocation::from_env(&project_root)?;
+    let lake = lake_location.open()?;
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
     let requested_at = Utc::now();
     let mut resume_manifest = if let Some(run_id) = &cli.resume_run_id {
@@ -441,6 +441,10 @@ fn print_help() {
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
     println!("  --resume-run Resume one failed or interrupted run by UUID");
+    println!(
+        "  {env_name:<18} Lake URL: file:///absolute/path or s3://bucket/optional/prefix",
+        env_name = backend::lake::LAKE_URL_ENV
+    );
 }
 
 #[cfg(test)]

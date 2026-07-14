@@ -11,6 +11,10 @@ path = "src/main.rs"
 name = "backend"
 path = "src/lib.rs"
 
+[features]
+default = []
+s3 = ["object_store/aws"]
+
 [dependencies]
 axum = "0.8"
 bytes = "1"

@@ -4,7 +4,7 @@ use backend::assets::{
     default_openestates_registry, AssetDagRunManifest, AssetMaterializationStore, AssetPartition,
     AssetPathBuilder, AssetPlanner, AssetRunManifestStore,
 };
-use backend::lake::LakeStore;
+use backend::lake::LakeStoreLocation;
 use chrono::Utc;
 
 #[tokio::main]
@@ -14,8 +14,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .project_root
         .clone()
         .unwrap_or_else(default_project_root);
-    let lake_root = project_root.join("data").join("lake");
-    let lake = LakeStore::local(&lake_root)?;
+    let lake_location = LakeStoreLocation::from_env(&project_root)?;
+    let lake = lake_location.open()?;
     let materializations = AssetMaterializationStore::new(lake.clone());
     let planner = AssetPlanner::new(default_openestates_registry(), materializations);
     let partition = options.partition();
@@ -107,7 +107,11 @@ fn print_help() {
         "  --partition       Add a partition coordinate, e.g. --partition source=reddit --partition dt=2026-07-13"
     );
     println!(
-        "  --write-manifest   Write the planned run manifest to data/lake and promote current.json"
+        "  --write-manifest   Write the planned run manifest to the configured lake without promoting current.json"
+    );
+    println!(
+        "  {env_name:<18} Lake URL: file:///absolute/path or s3://bucket/optional/prefix",
+        env_name = backend::lake::LAKE_URL_ENV
     );
 }
 
