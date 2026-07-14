@@ -20,6 +20,7 @@ pub mod rera;
 pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
+pub mod source_provider;
 pub mod types;
 
 pub use executor::{
@@ -67,7 +68,13 @@ pub use skill_facts::{
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactRecord, GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
-pub use source_inputs::{AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput};
+pub use source_inputs::{
+    AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,
+};
+pub use source_provider::{
+    CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
+    SourceInputProvider, SourceInputProviderError, SourceInputRequest,
+};
 pub use types::{
     ArtifactRef, AssetId, AssetPartition, AssetStage, CurrentAssetPointer, MaterializationId,
     MaterializationRecord, MaterializationStatus, SourceWatermark,

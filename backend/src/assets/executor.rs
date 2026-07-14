@@ -13,9 +13,9 @@ use crate::serving::{
 
 use super::{
     all_current_materialization_records_for_dependency, read_skill_fact_artifact_rows,
-    sort_materialization_records, AssetDagRunManifest, AssetDefinition, AssetFanInError, AssetId,
-    AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRunManifestStore,
-    AssetSourceInputs, DependencyFanInPolicy, KgSocietyViewMaterialization,
+    sort_materialization_records, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
+    AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
+    AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
     MaterializationRecord, PartitionResolutionError, PlanDecision, PlannerError,
     RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
@@ -34,6 +34,8 @@ pub struct AssetDagExecutionOptions {
     pub dry_run: bool,
     #[serde(default, skip_serializing_if = "is_default_source_inputs")]
     pub source_inputs: AssetSourceInputs,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub force_assets: Vec<AssetId>,
 }
 
 impl AssetDagExecutionOptions {
@@ -44,6 +46,7 @@ impl AssetDagExecutionOptions {
             version: default_asset_version(planned_at),
             dry_run: false,
             source_inputs: AssetSourceInputs::default(),
+            force_assets: Vec::new(),
         }
     }
 
@@ -59,6 +62,11 @@ impl AssetDagExecutionOptions {
 
     pub fn with_source_inputs(mut self, source_inputs: AssetSourceInputs) -> Self {
         self.source_inputs = source_inputs;
+        self
+    }
+
+    pub fn with_forced_assets(mut self, force_assets: Vec<AssetId>) -> Self {
+        self.force_assets = force_assets;
         self
     }
 }
@@ -96,14 +104,41 @@ impl AssetDagExecutor {
         }
     }
 
+    pub async fn plan(
+        &self,
+        partition: &AssetPartition,
+        planned_at: DateTime<Utc>,
+    ) -> Result<AssetDagPlan, AssetDagExecutorError> {
+        let planner = AssetPlanner::new(self.registry.clone(), self.materializations.clone());
+        Ok(planner
+            .plan_partition_details(partition, planned_at)
+            .await?)
+    }
+
+    pub async fn plan_with_forced_assets(
+        &self,
+        partition: &AssetPartition,
+        planned_at: DateTime<Utc>,
+        force_assets: &[AssetId],
+    ) -> Result<AssetDagPlan, AssetDagExecutorError> {
+        let planner = AssetPlanner::new(self.registry.clone(), self.materializations.clone());
+        let forced_assets = force_assets.iter().cloned().collect();
+        Ok(planner
+            .plan_partition_details_with_forced(partition, planned_at, &forced_assets)
+            .await?)
+    }
+
     pub async fn execute(
         &self,
         graph: &KnowledgeGraph,
         options: AssetDagExecutionOptions,
     ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
-        let planner = AssetPlanner::new(self.registry.clone(), self.materializations.clone());
-        let plan = planner
-            .plan_partition_details(&options.partition, options.planned_at)
+        let plan = self
+            .plan_with_forced_assets(
+                &options.partition,
+                options.planned_at,
+                &options.force_assets,
+            )
             .await?;
         let mut manifest = AssetDagRunManifest::from_plan(&plan);
 

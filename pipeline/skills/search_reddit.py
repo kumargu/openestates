@@ -43,6 +43,7 @@ def _search_via_reddit_api(query: str, subreddit: str = "bangalore", limit: int 
     for child in data.get("data", {}).get("children", [])[:limit]:
         post = child.get("data", {})
         threads.append({
+            "id": post.get("id") or post.get("name") or "",
             "title": post.get("title", ""),
             "url": f"https://reddit.com{post.get('permalink', '')}",
             "subreddit": post.get("subreddit", ""),
@@ -63,6 +64,72 @@ def fetch_reddit_threads(query: str, subreddit: str = "bangalore", limit: int = 
     return threads
 
 
+def threads_to_skill_result(input_data: dict, threads: List[dict]) -> SkillResult:
+    """Convert one exact Reddit thread set into deterministic sourced facts."""
+    if not threads:
+        return SkillResult(
+            facts=[
+                SourcedFact(
+                    key="reddit_thread_count",
+                    value={"type": "Numeric", "data": 0},
+                    confidence=0.5,
+                    source=FactSource(
+                        source_type="Reddit",
+                        skill_id="search_reddit",
+                        triggered_by=input_data.get("triggered_by"),
+                    ),
+                )
+            ],
+            confidence=0.3,
+            cost=SkillCost(api_calls=1),
+        )
+
+    total_score = sum(t["score"] for t in threads)
+    total_comments = sum(t["num_comments"] for t in threads)
+    facts = [
+        SourcedFact(
+            key="reddit_thread_count",
+            value={"type": "Numeric", "data": len(threads)},
+            confidence=0.7,
+            source=FactSource(
+                source_type="Reddit",
+                url=threads[0]["url"] if threads else None,
+                skill_id="search_reddit",
+                triggered_by=input_data.get("triggered_by"),
+            ),
+            display_template="{value} Reddit discussions found",
+            answers_preferences=["good reviews", "resident feedback", "reddit"],
+            scoring_hint={"direction": "HigherIsBetter", "weight": 1.0, "thresholds": [5.0, 2.0]},
+        ),
+        SourcedFact(
+            key="reddit_total_score",
+            value={"type": "Numeric", "data": total_score},
+            confidence=0.7,
+            source=FactSource(source_type="Reddit", skill_id="search_reddit"),
+            display_template="Reddit community score: {value}",
+        ),
+        SourcedFact(
+            key="reddit_total_comments",
+            value={"type": "Numeric", "data": total_comments},
+            confidence=0.7,
+            source=FactSource(source_type="Reddit", skill_id="search_reddit"),
+            display_template="{value} comments across Reddit threads",
+        ),
+        SourcedFact(
+            key="reddit_threads",
+            value={"type": "Tags", "data": [t["title"] for t in threads[:5]]},
+            confidence=0.7,
+            source=FactSource(source_type="Reddit", skill_id="search_reddit"),
+            display_template="Discussed on Reddit: {value}",
+        ),
+    ]
+    return SkillResult(
+        facts=facts,
+        confidence=min(0.7, len(threads) / 10),
+        cost=SkillCost(api_calls=1, estimated_usd=0.0003),
+    )
+
+
 class SearchRedditSkill(BaseSkill):
     skill_id = "search_reddit"
     description = "Search Reddit for threads mentioning a society, area, or topic"
@@ -77,83 +144,7 @@ class SearchRedditSkill(BaseSkill):
             return SkillResult(confidence=0.0)
 
         threads = fetch_reddit_threads(query, subreddit)
-
-        if not threads:
-            return SkillResult(
-                facts=[
-                    SourcedFact(
-                        key="reddit_thread_count",
-                        value={"type": "Numeric", "data": 0},
-                        confidence=0.5,
-                        source=FactSource(
-                            source_type="Reddit",
-                            skill_id=self.skill_id,
-                            triggered_by=input_data.get("triggered_by"),
-                        ),
-                    )
-                ],
-                confidence=0.3,
-                cost=SkillCost(api_calls=1),
-            )
-
-        total_score = sum(t["score"] for t in threads)
-        total_comments = sum(t["num_comments"] for t in threads)
-
-        facts = [
-            SourcedFact(
-                key="reddit_thread_count",
-                value={"type": "Numeric", "data": len(threads)},
-                confidence=0.7,
-                source=FactSource(
-                    source_type="Reddit",
-                    url=threads[0]["url"] if threads else None,
-                    skill_id=self.skill_id,
-                    triggered_by=input_data.get("triggered_by"),
-                ),
-                display_template="{value} Reddit discussions found",
-                answers_preferences=["good reviews", "resident feedback", "reddit"],
-                scoring_hint={"direction": "HigherIsBetter", "weight": 1.0, "thresholds": [5.0, 2.0]},
-            ),
-            SourcedFact(
-                key="reddit_total_score",
-                value={"type": "Numeric", "data": total_score},
-                confidence=0.7,
-                source=FactSource(
-                    source_type="Reddit",
-                    skill_id=self.skill_id,
-                ),
-                display_template="Reddit community score: {value}",
-            ),
-            SourcedFact(
-                key="reddit_total_comments",
-                value={"type": "Numeric", "data": total_comments},
-                confidence=0.7,
-                source=FactSource(
-                    source_type="Reddit",
-                    skill_id=self.skill_id,
-                ),
-                display_template="{value} comments across Reddit threads",
-            ),
-            SourcedFact(
-                key="reddit_threads",
-                value={
-                    "type": "Tags",
-                    "data": [t["title"] for t in threads[:5]],
-                },
-                confidence=0.7,
-                source=FactSource(
-                    source_type="Reddit",
-                    skill_id=self.skill_id,
-                ),
-                display_template="Discussed on Reddit: {value}",
-            ),
-        ]
-
-        return SkillResult(
-            facts=facts,
-            confidence=min(0.7, len(threads) / 10),
-            cost=SkillCost(api_calls=1, estimated_usd=0.0003),
-        )
+        return threads_to_skill_result(input_data, threads)
 
     def estimated_cost(self) -> SkillCost:
         return SkillCost(api_calls=1, estimated_usd=0.0003)

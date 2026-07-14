@@ -1,8 +1,11 @@
+use std::ffi::OsString;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetPartition,
-    AssetSourceInputs,
+    AssetSourceInputs, CommandSourceInputProvider, LakeObjectSourceInputProvider,
+    LocalFileSourceInputProvider, SourceInputProvider, SourceInputRequest,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore};
@@ -35,11 +38,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(version) = cli.version.clone() {
         options = options.with_version(version);
     }
-    if let Some(source_inputs) = cli.load_source_inputs(&lake).await? {
-        options = options.with_source_inputs(source_inputs);
+    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    if cli.dry_run && cli.source_command.is_some() {
+        eprintln!("Skipping source collector command during dry-run.");
+    } else if let Some(provider) = cli.source_input_provider()? {
+        let plan = executor.plan(&options.partition, planned_at).await?;
+        let collection_plan = AssetSourceInputs::collection_plan(&plan);
+        let request = SourceInputRequest {
+            project_root: project_root.clone(),
+            partition: options.partition.clone(),
+            planned_at,
+            requested_assets: collection_plan.requested_assets,
+        };
+        if let Some(source_inputs) = provider.load(&request, &lake).await? {
+            options = options
+                .with_source_inputs(source_inputs)
+                .with_forced_assets(collection_plan.force_assets);
+        }
     }
 
-    let executor = AssetDagExecutor::new(default_openestates_registry(), lake);
     let report = executor.execute(&graph, options).await?;
 
     if report.dry_run {
@@ -60,6 +77,9 @@ struct CliOptions {
     version: Option<String>,
     source_inputs_path: Option<PathBuf>,
     source_inputs_key: Option<String>,
+    source_command: Option<PathBuf>,
+    source_args: Vec<OsString>,
+    source_timeout_seconds: Option<u64>,
     dry_run: bool,
 }
 
@@ -100,6 +120,32 @@ impl CliOptions {
                         .ok_or_else(|| "--source-input-key requires a lake key".to_string())?;
                     options.source_inputs_key = Some(value);
                 }
+                "--source-command" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-command requires a program".to_string())?;
+                    options.source_command = Some(PathBuf::from(value));
+                }
+                "--source-arg" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-arg requires a value".to_string())?;
+                    options.source_args.push(OsString::from(value));
+                }
+                "--source-timeout-seconds" => {
+                    let value = args.next().ok_or_else(|| {
+                        "--source-timeout-seconds requires a positive integer".to_string()
+                    })?;
+                    let seconds = value.parse::<u64>().map_err(|_| {
+                        "--source-timeout-seconds requires a positive integer".to_string()
+                    })?;
+                    if seconds == 0 {
+                        return Err(
+                            "--source-timeout-seconds requires a positive integer".to_string()
+                        );
+                    }
+                    options.source_timeout_seconds = Some(seconds);
+                }
                 "--dry-run" => {
                     options.dry_run = true;
                 }
@@ -111,8 +157,25 @@ impl CliOptions {
             }
         }
 
-        if options.source_inputs_path.is_some() && options.source_inputs_key.is_some() {
-            return Err("use either --source-inputs or --source-input-key, not both".to_string());
+        let provider_count = [
+            options.source_inputs_path.is_some(),
+            options.source_inputs_key.is_some(),
+            options.source_command.is_some(),
+        ]
+        .into_iter()
+        .filter(|configured| *configured)
+        .count();
+        if provider_count > 1 {
+            return Err(
+                "use only one of --source-inputs, --source-input-key, or --source-command"
+                    .to_string(),
+            );
+        }
+        if !options.source_args.is_empty() && options.source_command.is_none() {
+            return Err("--source-arg requires --source-command".to_string());
+        }
+        if options.source_timeout_seconds.is_some() && options.source_command.is_none() {
+            return Err("--source-timeout-seconds requires --source-command".to_string());
         }
 
         Ok(options)
@@ -126,20 +189,25 @@ impl CliOptions {
         }
     }
 
-    async fn load_source_inputs(
+    fn source_input_provider(
         &self,
-        lake: &LakeStore,
-    ) -> Result<Option<AssetSourceInputs>, Box<dyn std::error::Error>> {
+    ) -> Result<Option<Box<dyn SourceInputProvider>>, Box<dyn std::error::Error>> {
         if let Some(path) = &self.source_inputs_path {
-            let bytes = std::fs::read(path)?;
-            let inputs = serde_json::from_slice(&bytes)?;
-            return Ok(Some(inputs));
+            return Ok(Some(Box::new(LocalFileSourceInputProvider::new(path))));
         }
 
         if let Some(key) = &self.source_inputs_key {
             let lake_key = LakeKey::new(key.clone())?;
-            let inputs = lake.get_json(&lake_key).await?;
-            return Ok(Some(inputs));
+            return Ok(Some(Box::new(LakeObjectSourceInputProvider::new(lake_key))));
+        }
+
+        if let Some(program) = &self.source_command {
+            let mut provider =
+                CommandSourceInputProvider::new(program).with_args(self.source_args.clone());
+            if let Some(seconds) = self.source_timeout_seconds {
+                provider = provider.with_timeout(Duration::from_secs(seconds));
+            }
+            return Ok(Some(Box::new(provider)));
         }
 
         Ok(None)
@@ -170,7 +238,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--dry-run]"
+        "  cargo run --bin openestates-run-assets -- [--project-root <path>] [--partition key=value]... [--version <version>] [--source-command <program> [--source-arg <arg>]... [--source-timeout-seconds <seconds>]] [--dry-run]"
     );
     println!();
     println!("Options:");
@@ -181,4 +249,7 @@ fn print_help() {
     );
     println!("  --source-inputs Read source executor inputs from a local JSON file");
     println!("  --source-input-key Read source executor inputs from a lake object key");
+    println!("  --source-command Run a collector that reads SourceInputRequest JSON on stdin");
+    println!("  --source-arg     Pass one literal argument to the source collector program");
+    println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
 }

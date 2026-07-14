@@ -71,6 +71,7 @@ pub enum PlanDecision {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum PlanReason {
+    Forced,
     Missing,
     DependencyPending {
         asset_id: AssetId,
@@ -185,6 +186,16 @@ impl AssetPlanner {
         partition: &AssetPartition,
         now: DateTime<Utc>,
     ) -> Result<AssetDagPlan, PlannerError> {
+        self.plan_partition_details_with_forced(partition, now, &HashSet::new())
+            .await
+    }
+
+    pub async fn plan_partition_details_with_forced(
+        &self,
+        partition: &AssetPartition,
+        now: DateTime<Utc>,
+        forced_assets: &HashSet<AssetId>,
+    ) -> Result<AssetDagPlan, PlannerError> {
         let ordered = self
             .registry
             .topological_order()
@@ -209,16 +220,20 @@ impl AssetPlanner {
                 Err(err) => return Err(PlannerError::Lake(err)),
             };
 
-            let reason = plan_reason(
-                definition,
-                current.as_ref(),
-                &records,
-                &planned_ids,
-                &self.registry,
-                &self.materializations,
-                now,
-            )
-            .await?;
+            let reason = if forced_assets.contains(&asset_id) {
+                Some(PlanReason::Forced)
+            } else {
+                plan_reason(
+                    definition,
+                    current.as_ref(),
+                    &records,
+                    &planned_ids,
+                    &self.registry,
+                    &self.materializations,
+                    now,
+                )
+                .await?
+            };
             if reason.is_some() {
                 planned_ids.insert(asset_id.clone());
             }
