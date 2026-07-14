@@ -181,58 +181,44 @@ pub async fn google_review_facts_input(
     run_id: &MaterializationId,
 ) -> Result<SkillFactsInput, GooglePlaceAssetError> {
     let rows = read_google_place_rows(lake, google_record).await?;
+    google_review_facts_from_rows(rows, google_record, run_id, &HashMap::new())
+}
+
+pub async fn google_review_facts_input_with_aliases(
+    lake: &LakeStore,
+    google_record: &MaterializationRecord,
+    canonical_record: &MaterializationRecord,
+    run_id: &MaterializationId,
+) -> Result<SkillFactsInput, GooglePlaceAssetError> {
+    let rows = read_google_place_rows(lake, google_record).await?;
+    let canonical = super::read_canonical_society_rows(lake, canonical_record).await?;
+    let aliases = canonical
+        .mappings
+        .into_iter()
+        .filter_map(|mapping| {
+            mapping
+                .alias_entity_id
+                .filter(|alias| alias != &mapping.canonical_entity_id)
+                .map(|alias| (mapping.canonical_entity_id, alias))
+        })
+        .collect::<HashMap<_, _>>();
+    google_review_facts_from_rows(rows, google_record, run_id, &aliases)
+}
+
+fn google_review_facts_from_rows(
+    rows: Vec<GooglePlaceSnapshotRecord>,
+    google_record: &MaterializationRecord,
+    run_id: &MaterializationId,
+    aliases: &HashMap<String, String>,
+) -> Result<SkillFactsInput, GooglePlaceAssetError> {
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
     for row in rows {
-        push_fact(
-            &row,
-            run_id,
-            "google_reviews_url",
-            FactValue::Text(row.reviews_url.clone()),
-            "Google reviews: {value}",
-            &["google reviews", "resident reviews", "reviews"],
-            Some(("TextMatch", 0.8)),
-            &mut facts,
-            &mut annotations,
-        )?;
-        if let Some(place_id) = &row.place_id {
-            push_fact(
-                &row,
-                run_id,
-                "google_place_id",
-                FactValue::Text(place_id.clone()),
-                "Google place id: {value}",
-                &["google reviews", "maps"],
-                None,
-                &mut facts,
-                &mut annotations,
-            )?;
-        }
-        if let Some(rating) = row.rating {
-            push_fact(
-                &row,
-                run_id,
-                "google_rating",
-                FactValue::Numeric(rating),
-                "Google rating: {value}",
-                &["high rating", "good reviews", "google rating"],
-                Some(("HigherIsBetter", 1.0)),
-                &mut facts,
-                &mut annotations,
-            )?;
-        }
-        if let Some(review_count) = row.review_count {
-            push_fact(
-                &row,
-                run_id,
-                "google_review_count",
-                FactValue::Numeric(review_count as f64),
-                "Google reviews: {value}",
-                &["many reviews", "review count", "google reviews"],
-                Some(("HigherIsBetter", 0.5)),
-                &mut facts,
-                &mut annotations,
-            )?;
+        append_google_review_facts(&row, run_id, &mut facts, &mut annotations)?;
+        if let Some(alias) = aliases.get(&row.entity_id) {
+            let mut alias_row = row.clone();
+            alias_row.entity_id.clone_from(alias);
+            append_google_review_facts(&alias_row, run_id, &mut facts, &mut annotations)?;
         }
     }
     Ok(SkillFactsInput {
@@ -242,6 +228,65 @@ pub async fn google_review_facts_input(
         fact_annotations: annotations,
         source_watermarks: google_record.source_watermarks.clone(),
     })
+}
+
+fn append_google_review_facts(
+    row: &GooglePlaceSnapshotRecord,
+    run_id: &MaterializationId,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), GooglePlaceAssetError> {
+    push_fact(
+        row,
+        run_id,
+        "google_reviews_url",
+        FactValue::Text(row.reviews_url.clone()),
+        "Google reviews: {value}",
+        &["google reviews", "resident reviews", "reviews"],
+        Some(("TextMatch", 0.8)),
+        facts,
+        annotations,
+    )?;
+    if let Some(place_id) = &row.place_id {
+        push_fact(
+            row,
+            run_id,
+            "google_place_id",
+            FactValue::Text(place_id.clone()),
+            "Google place id: {value}",
+            &["google reviews", "maps"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(rating) = row.rating {
+        push_fact(
+            row,
+            run_id,
+            "google_rating",
+            FactValue::Numeric(rating),
+            "Google rating: {value}",
+            &["high rating", "good reviews", "google rating"],
+            Some(("HigherIsBetter", 1.0)),
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(review_count) = row.review_count {
+        push_fact(
+            row,
+            run_id,
+            "google_review_count",
+            FactValue::Numeric(review_count as f64),
+            "Google reviews: {value}",
+            &["many reviews", "review count", "google reviews"],
+            Some(("HigherIsBetter", 0.5)),
+            facts,
+            annotations,
+        )?;
+    }
+    Ok(())
 }
 
 pub async fn canonicalize_google_places_input(

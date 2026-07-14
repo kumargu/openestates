@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fs::File;
 
 use arrow::array::{Array, StringArray};
@@ -21,6 +22,9 @@ use backend::knowledge::fact::{
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
+use backend::models::{Property, Society};
+use backend::search::intent::parse_intent;
+use backend::search::{SearchIndex, TextSearch};
 use backend::serving::{
     ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
@@ -257,7 +261,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &google_facts, "facts/part-00000.parquet").await,
-        4
+        8,
+        "Google evidence is published for both the canonical RERA entity and its stable society alias"
     );
 
     let kg_record =
@@ -281,7 +286,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.parent_materializations.len(), 5);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        41
+        45
     );
 
     let serving_record = current_record(
@@ -290,7 +295,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 41);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 45);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -322,9 +327,13 @@ async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
+    let mut source_inputs = mock_source_inputs(now);
+    let reddit_facts = source_inputs.reddit_resident_facts.as_mut().unwrap();
+    reddit_facts.facts[0].entity_id = "society:rera-meadows".to_string();
+    reddit_facts.fact_annotations[0].entity_id = "society:rera-meadows".to_string();
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
-        .with_source_inputs(mock_source_inputs(now));
+        .with_source_inputs(source_inputs);
 
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
@@ -441,6 +450,70 @@ async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
         .facts
         .iter()
         .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
+
+    let query = "3bhk with greenery in whitefield above 10 acres";
+    let properties = vec![
+        search_property("rera-meadows-listing", "rera-meadows", "RERA Meadows"),
+        search_property(
+            "unproven-listing",
+            "unproven-whitefield",
+            "Unproven Whitefield",
+        ),
+    ];
+    let societies = vec![
+        search_society("rera-meadows", "RERA Meadows"),
+        search_society("unproven-whitefield", "Unproven Whitefield"),
+    ];
+    let society_names = societies
+        .iter()
+        .map(|society| (society.id.clone(), society.name.clone()))
+        .collect::<HashMap<_, _>>();
+    let search_index = SearchIndex::build(&properties);
+    let intent = parse_intent(query);
+    let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+        &properties,
+        Some(&search_index),
+        None,
+        Some(&loaded.fact_index),
+        &society_names,
+        &societies,
+        query,
+        &intent,
+        None,
+        &[],
+    );
+
+    assert_eq!(
+        results
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["rera-meadows-listing"],
+        "an unproven project must not survive the RERA acreage constraint"
+    );
+    let result = &results[0];
+    let explanation = result
+        .match_explanation
+        .as_ref()
+        .expect("proof-first search should explain its evidence");
+    assert!(explanation.reasons.iter().any(|reason| {
+        reason.preference == "above 10 acres"
+            && reason.fact_key == "rera_total_land_area_sqm"
+            && reason.scoring_method == "rera-proof"
+            && reason.source_type == "Rera"
+    }));
+    assert!(explanation.reasons.iter().any(|reason| {
+        reason.preference == "greenery"
+            && reason.fact_key == "resident_greenery_signal"
+            && reason.scoring_method == "serving-fact"
+            && reason.source_type == "Reddit"
+    }));
+    assert_eq!(
+        result.card.google_reviews_url.as_deref(),
+        Some("https://maps.google.com/?cid=green-acre")
+    );
+    assert_eq!(result.card.google_rating, Some(4.4));
+    assert_eq!(result.card.google_review_count, Some(321));
 }
 
 #[tokio::test]
@@ -1276,6 +1349,75 @@ fn fact(
     }
 }
 
+fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
+    Property {
+        id: id.to_string(),
+        title: format!("3 BHK in {society_name}"),
+        area: "Whitefield".to_string(),
+        area_id: "whitefield".to_string(),
+        city: "Bengaluru".to_string(),
+        society_id: society_id.to_string(),
+        builder_name: "Proof Homes".to_string(),
+        property_type: "Apartment".to_string(),
+        listing_type: "Resale".to_string(),
+        bhk: 3,
+        price: 18_000_000,
+        price_per_sqft: 12_000,
+        carpet_area_sqft: 1_200,
+        super_builtup_sqft: 1_500,
+        floor: 8,
+        total_floors: 20,
+        facing: "East".to_string(),
+        possession_status: "Ready to Move".to_string(),
+        metro_distance_mins: 10,
+        maintenance_cost_monthly: 6_000,
+        society_quality_score: 0.7,
+        builder_quality_score: 0.7,
+        document_completeness_score: 0.8,
+        litigation_risk: 0.1,
+        noise_score: 0.2,
+        sunlight_score: 0.7,
+        airport_noise_score: 0.1,
+        waterlogging_risk_score: 0.2,
+        traffic_score: 0.4,
+        days_on_market: 20,
+        greenery_score: None,
+        open_space_score: None,
+        resale_strength_score: None,
+        interest_level: None,
+        saves_last_7d: None,
+        offers_last_7d: None,
+        images: Vec::new(),
+        hero_image: String::new(),
+        description_summary: "Proof-first search fixture".to_string(),
+        transparency_tags: Vec::new(),
+        source_reference: "asset-dag-product-proof".to_string(),
+        seller_id: None,
+    }
+}
+
+fn search_society(id: &str, name: &str) -> Society {
+    Society {
+        id: id.to_string(),
+        name: name.to_string(),
+        area: "Whitefield".to_string(),
+        city: "Bengaluru".to_string(),
+        builder_name: "Proof Homes".to_string(),
+        year_built: 2024,
+        total_units: 500,
+        summary: String::new(),
+        maintenance_sentiment: String::new(),
+        livability_sentiment: String::new(),
+        common_positives: Vec::new(),
+        common_complaints: Vec::new(),
+        review_summary: String::new(),
+        google_reviews_url: None,
+        future_google_place_name: String::new(),
+        future_google_place_id: None,
+        future_review_enrichment_status: String::new(),
+    }
+}
+
 fn asset_id(id: &str) -> AssetId {
     AssetId::new(id).unwrap()
 }
@@ -1456,7 +1598,7 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 area_name: Some("Whitefield".to_string()),
                 district: Some("Bengaluru Urban".to_string()),
                 taluk: Some("Bengaluru East".to_string()),
-                total_land_area_sqm: Some(40_468.56),
+                total_land_area_sqm: Some(40_500.0),
                 land_litigation: Some(false),
                 source_url: "https://rera.karnataka.gov.in/projectViewDetails".to_string(),
                 fetched_at: now,

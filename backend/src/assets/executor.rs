@@ -1206,9 +1206,15 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     GOOGLE_PLACES_WEEKLY_ASSET_ID,
                 )?;
-                let input = super::google_review_facts_input(
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::google_review_facts_input_with_aliases(
                     &context.dag.lake,
                     google_record,
+                    canonical_record,
                     context.run_id,
                 )
                 .await?;

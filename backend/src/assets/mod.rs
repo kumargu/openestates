@@ -34,8 +34,9 @@ pub use fan_in::{
     AssetFanInError,
 };
 pub use google::{
-    canonicalize_google_places_input, google_review_facts_input, read_google_place_rows,
-    GooglePlaceAssetError, GooglePlaceSnapshotManifest, GooglePlaceSnapshotMaterialization,
+    canonicalize_google_places_input, google_review_facts_input,
+    google_review_facts_input_with_aliases, read_google_place_rows, GooglePlaceAssetError,
+    GooglePlaceSnapshotManifest, GooglePlaceSnapshotMaterialization,
     GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
     GOOGLE_PLACES_WEEKLY_ASSET_ID,
 };

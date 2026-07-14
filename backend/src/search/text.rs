@@ -436,7 +436,7 @@ impl TextSearch {
 
                 // Use shared enrichment — same PropertyCard as /api/properties.
                 // graph is always Some in practice (search always has KG access).
-                let card = if let Some(g) = graph {
+                let mut card = if let Some(g) = graph {
                     enrich_property_card_with_sellers(p, societies, g, sellers)
                 } else {
                     // Fallback without graph — build minimal card
@@ -474,6 +474,9 @@ impl TextSearch {
                         data_freshness: None,
                     }
                 };
+                if let Some(serving_facts) = serving_facts {
+                    enrich_card_from_serving_facts(&mut card, serving_facts, &p.society_id);
+                }
 
                 // Normalize score to 0.0–1.0 range (rough normalization)
                 let max_possible = 15.0; // approximate ceiling
@@ -517,6 +520,49 @@ impl TextSearch {
         });
         results
     }
+}
+
+fn enrich_card_from_serving_facts(
+    card: &mut crate::models::PropertyCard,
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+) {
+    let Some(rows) = serving_facts.entity(&society_node_id(society_id)) else {
+        return;
+    };
+
+    card.google_reviews_url = latest_serving_text(&rows.facts, "google_reviews_url")
+        .filter(|url| url.starts_with("https://") || url.starts_with("http://"))
+        .or_else(|| card.google_reviews_url.clone());
+    card.google_rating = latest_serving_numeric(&rows.facts, "google_rating")
+        .filter(|rating| (0.0..=5.0).contains(rating))
+        .or(card.google_rating);
+    card.google_review_count = latest_serving_numeric(&rows.facts, "google_review_count")
+        .filter(|count| count.is_finite() && *count >= 0.0 && *count <= u32::MAX as f64)
+        .map(|count| count.round() as u32)
+        .or(card.google_review_count);
+}
+
+fn latest_serving_text(facts: &[ServingFactRecord], fact_key: &str) -> Option<String> {
+    facts
+        .iter()
+        .filter(|fact| fact.fact_key == fact_key)
+        .max_by_key(|fact| fact.learned_at)
+        .and_then(|fact| match &fact.value {
+            FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+            _ => None,
+        })
+}
+
+fn latest_serving_numeric(facts: &[ServingFactRecord], fact_key: &str) -> Option<f64> {
+    facts
+        .iter()
+        .filter(|fact| fact.fact_key == fact_key)
+        .max_by_key(|fact| fact.learned_at)
+        .and_then(|fact| match fact.value {
+            FactValue::Numeric(value) => Some(value),
+            _ => None,
+        })
 }
 
 fn merged_candidate_ids(

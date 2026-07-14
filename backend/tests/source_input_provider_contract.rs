@@ -674,7 +674,7 @@ async fn facts_only_retry_rematerializes_the_exact_google_parent() {
             raw_id.clone(),
             AssetStage::Raw,
             "Google raw retry fixture",
-            vec![canonical_id_asset],
+            vec![canonical_id_asset.clone()],
             RefreshCadence::Weekly,
             CostTier::Cheap,
             TrustTier::Support,
@@ -687,7 +687,7 @@ async fn facts_only_retry_rematerializes_the_exact_google_parent() {
             facts_id.clone(),
             AssetStage::Silver,
             "Google facts retry fixture",
-            vec![raw_id.clone()],
+            vec![raw_id.clone(), canonical_id_asset],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Support,
@@ -736,7 +736,7 @@ async fn facts_only_retry_rematerializes_the_exact_google_parent() {
     );
     assert_eq!(
         facts.parent_materializations,
-        vec![new_raw.materialization_id]
+        vec![new_raw.materialization_id, canonical.materialization_id]
     );
 }
 
