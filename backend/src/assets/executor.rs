@@ -209,7 +209,7 @@ impl AssetDagExecutor {
                 actual: options.partition,
             });
         }
-        manifest.ensure_resumable()?;
+        manifest.ensure_exact_resume()?;
         let mut options = options;
         options.planned_at = manifest.created_at;
         if !manifest.execution_version.is_empty() {
@@ -227,7 +227,7 @@ impl AssetDagExecutor {
             )
             .await?
         {
-            self.persist_manifest(&manifest, false).await?;
+            self.persist_manifest(&mut manifest, false).await?;
         }
         let mut manifest = manifest.prepare_resume(Utc::now())?;
         for asset_id in &options.force_assets {
@@ -297,7 +297,7 @@ impl AssetDagExecutor {
         mut records_by_asset: HashMap<AssetId, MaterializationRecord>,
         dependency_snapshot: HashMap<AssetId, Vec<MaterializationRecord>>,
     ) -> Result<AssetDagExecutionReport, AssetDagExecutorError> {
-        self.persist_manifest(&manifest, false).await?;
+        self.persist_manifest(&mut manifest, false).await?;
         let mut executed_assets = Vec::new();
         let mut kg_view = self
             .restore_kg_view_runtime(graph, &records_by_asset)
@@ -318,7 +318,7 @@ impl AssetDagExecutor {
                 {
                     Ok(()) => {
                         manifest.mark_step_promoted(&step.asset_id, Utc::now())?;
-                        self.persist_manifest(&manifest, false).await?;
+                        self.persist_manifest(&mut manifest, false).await?;
                         records_by_asset.insert(step.asset_id.clone(), record);
                         if step.asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                             kg_view = self
@@ -332,7 +332,7 @@ impl AssetDagExecutor {
                             Utc::now(),
                             err.to_string(),
                         )?;
-                        self.persist_manifest(&manifest, false).await?;
+                        self.persist_manifest(&mut manifest, false).await?;
                         first_error.get_or_insert(err);
                     }
                 }
@@ -345,7 +345,7 @@ impl AssetDagExecutor {
             let blocked_by = blocked_dependencies(&manifest, &step.dependencies);
             if !blocked_by.is_empty() {
                 manifest.mark_step_blocked(&step.asset_id, Utc::now(), blocked_by)?;
-                self.persist_manifest(&manifest, false).await?;
+                self.persist_manifest(&mut manifest, false).await?;
                 continue;
             }
 
@@ -356,7 +356,7 @@ impl AssetDagExecutor {
                 attempt += 1;
                 let started_at = Utc::now();
                 manifest.mark_step_running(&asset_id, started_at)?;
-                self.persist_manifest(&manifest, false).await?;
+                self.persist_manifest(&mut manifest, false).await?;
 
                 match self
                     .execute_asset(AssetExecutionContext {
@@ -392,7 +392,7 @@ impl AssetDagExecutor {
                                 completed_at,
                                 err.to_string(),
                             )?;
-                            self.persist_manifest(&manifest, false).await?;
+                            self.persist_manifest(&mut manifest, false).await?;
                             first_error.get_or_insert(err);
                             break;
                         }
@@ -402,7 +402,7 @@ impl AssetDagExecutor {
                             started_at,
                             completed_at,
                         )?;
-                        self.persist_manifest(&manifest, false).await?;
+                        self.persist_manifest(&mut manifest, false).await?;
                         match self
                             .promote_materialization_with_retry(
                                 &record,
@@ -414,7 +414,7 @@ impl AssetDagExecutor {
                         {
                             Ok(()) => {
                                 manifest.mark_step_promoted(&asset_id, Utc::now())?;
-                                self.persist_manifest(&manifest, false).await?;
+                                self.persist_manifest(&mut manifest, false).await?;
                                 records_by_asset.insert(asset_id.clone(), record);
                                 if asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
                                     kg_view = self
@@ -429,7 +429,7 @@ impl AssetDagExecutor {
                                     Utc::now(),
                                     err.to_string(),
                                 )?;
-                                self.persist_manifest(&manifest, false).await?;
+                                self.persist_manifest(&mut manifest, false).await?;
                                 first_error.get_or_insert(err);
                             }
                         }
@@ -446,7 +446,7 @@ impl AssetDagExecutor {
                                 completed_at,
                                 err.to_string(),
                             )?;
-                            self.persist_manifest(&manifest, false).await?;
+                            self.persist_manifest(&mut manifest, false).await?;
                             tokio::time::sleep(retry_delay(&options.retry_policy, attempt)).await;
                             continue;
                         }
@@ -456,7 +456,7 @@ impl AssetDagExecutor {
                             completed_at,
                             err.to_string(),
                         )?;
-                        self.persist_manifest(&manifest, false).await?;
+                        self.persist_manifest(&mut manifest, false).await?;
                         first_error.get_or_insert(err);
                         break;
                     }
@@ -466,7 +466,7 @@ impl AssetDagExecutor {
 
         let completed_at = Utc::now();
         manifest.finish(completed_at)?;
-        let persisted = self.persist_manifest(&manifest, true).await?;
+        let persisted = self.persist_manifest(&mut manifest, true).await?;
 
         if let Some(err) = first_error {
             return Err(err);
@@ -929,10 +929,10 @@ impl AssetDagExecutor {
 
     async fn persist_manifest(
         &self,
-        manifest: &AssetDagRunManifest,
+        manifest: &mut AssetDagRunManifest,
         promote_current: bool,
     ) -> Result<PersistedManifest, AssetDagExecutorError> {
-        let meta = self.run_manifests.write_manifest(manifest).await?;
+        let meta = self.run_manifests.write_manifest_cas(manifest).await?;
         if promote_current {
             self.run_manifests.promote_current(manifest).await?;
         }

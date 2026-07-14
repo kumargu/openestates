@@ -330,6 +330,58 @@ async fn resume_collection_replays_only_the_raw_companion_needed_for_exact_linea
         .any(|asset_id| asset_id.as_str().starts_with("google_")));
 }
 
+#[tokio::test]
+async fn resume_collection_replays_a_materialized_raw_companion_instead_of_mixing_crawls() {
+    let temp = tempdir().unwrap();
+    let lake = LakeStore::local(temp.path()).unwrap();
+    let partition =
+        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+    let plan = AssetDagExecutor::new(default_openestates_registry(), lake)
+        .plan(
+            &partition,
+            Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap(),
+        )
+        .await
+        .unwrap();
+    let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
+    for step in &mut manifest.steps {
+        step.status = AssetRunStepStatus::Succeeded;
+    }
+    let raw_id = AssetId::new("reddit_threads_daily").unwrap();
+    let raw = manifest
+        .steps
+        .iter_mut()
+        .find(|step| step.asset_id == raw_id)
+        .unwrap();
+    raw.status = AssetRunStepStatus::Materialized;
+    raw.materialization_id = Some(MaterializationId::new());
+    manifest
+        .steps
+        .iter_mut()
+        .find(|step| step.asset_id.as_str() == "reddit_resident_facts")
+        .unwrap()
+        .status = AssetRunStepStatus::Failed;
+
+    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
+
+    assert_eq!(
+        collection.requested_assets,
+        vec![
+            AssetId::new("reddit_resident_facts").unwrap(),
+            raw_id.clone(),
+        ]
+    );
+    assert_eq!(collection.force_assets, vec![raw_id.clone()]);
+    manifest.replay_step(&raw_id).unwrap();
+    let replayed = manifest
+        .steps
+        .iter()
+        .find(|step| step.asset_id == raw_id)
+        .unwrap();
+    assert_eq!(replayed.status, AssetRunStepStatus::Planned);
+    assert!(replayed.materialization_id.is_none());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn command_provider_output_executes_through_the_rera_asset() {

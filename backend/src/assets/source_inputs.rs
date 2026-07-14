@@ -104,10 +104,16 @@ impl AssetSourceInputs {
             .steps
             .iter()
             .filter(|step| {
-                !matches!(
-                    step.status,
-                    AssetRunStepStatus::Succeeded | AssetRunStepStatus::Skipped
-                ) && Self::supports_asset(&step.asset_id)
+                let needs_collection = match step.status {
+                    AssetRunStepStatus::Succeeded
+                    | AssetRunStepStatus::Skipped
+                    | AssetRunStepStatus::Materialized => false,
+                    AssetRunStepStatus::Failed => step.materialization_id.is_none(),
+                    AssetRunStepStatus::Planned
+                    | AssetRunStepStatus::Running
+                    | AssetRunStepStatus::Blocked => true,
+                };
+                needs_collection && Self::supports_asset(&step.asset_id)
             })
             .map(|step| step.asset_id.clone())
             .collect();
@@ -121,8 +127,19 @@ impl AssetSourceInputs {
             reddit_facts_requested,
             REDDIT_THREADS_DAILY_ASSET_ID,
         );
+        let google_facts_requested = requested_assets
+            .iter()
+            .any(|asset_id| asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
+        add_forced_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            google_facts_requested,
+            GOOGLE_PLACES_WEEKLY_ASSET_ID,
+        );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
+        force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        force_assets.dedup();
         SourceInputCollectionPlan {
             requested_assets,
             force_assets,
@@ -137,14 +154,14 @@ fn add_forced_raw_companion(
     derived_requested: bool,
     raw_asset_id: &str,
 ) {
-    let raw_requested = requested_assets
-        .iter()
-        .any(|asset_id| asset_id.as_str() == raw_asset_id);
-    if derived_requested && !raw_requested {
-        let raw_asset = AssetId::new(raw_asset_id).expect("static raw asset id is valid");
-        requested_assets.push(raw_asset.clone());
-        force_assets.push(raw_asset);
+    if !derived_requested {
+        return;
     }
+    let raw_asset = AssetId::new(raw_asset_id).expect("static raw asset id is valid");
+    if !requested_assets.iter().any(|asset_id| asset_id == &raw_asset) {
+        requested_assets.push(raw_asset.clone());
+    }
+    force_assets.push(raw_asset);
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
@@ -28,6 +28,15 @@ pub enum AssetRunStepStatus {
     Succeeded,
     Failed,
     Blocked,
+}
+
+pub const DEFAULT_RESUME_LEASE_SECONDS: i64 = 60 * 60;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AssetDagResumeLease {
+    pub owner_id: MaterializationId,
+    pub acquired_at: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -81,6 +90,12 @@ pub struct AssetRunStep {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AssetDagRunManifest {
+    #[serde(default)]
+    pub format_version: u32,
+    #[serde(default)]
+    pub revision: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_lease: Option<AssetDagResumeLease>,
     pub run_id: MaterializationId,
     pub partition: AssetPartition,
     #[serde(default)]
@@ -142,6 +157,9 @@ impl AssetDagRunManifest {
             .collect();
 
         let mut manifest = Self {
+            format_version: 1,
+            revision: 0,
+            resume_lease: None,
             run_id: plan.run_id.clone(),
             partition: plan.partition.clone(),
             execution_version: execution_version.into(),
@@ -437,7 +455,10 @@ impl AssetDagRunManifest {
         if step.status == AssetRunStepStatus::Planned {
             return Ok(());
         }
-        if step.status != AssetRunStepStatus::Succeeded {
+        if step.status != AssetRunStepStatus::Succeeded
+            && step.status != AssetRunStepStatus::Materialized
+            && !(step.status == AssetRunStepStatus::Failed && step.materialization_id.is_some())
+        {
             return Err(RunManifestError::InvalidStepTransition {
                 asset_id: step.asset_id.clone(),
                 status: step.status,
@@ -453,6 +474,44 @@ impl AssetDagRunManifest {
         match self.status {
             DagRunStatus::Failed | DagRunStatus::Running => Ok(()),
             status => Err(RunManifestError::RunNotResumable(status)),
+        }
+    }
+
+    pub fn ensure_exact_resume(&self) -> Result<(), RunManifestError> {
+        self.ensure_resumable()?;
+        if self.format_version != 1 || self.execution_version.is_empty() {
+            return Err(RunManifestError::UnsupportedResumeManifest {
+                format_version: self.format_version,
+            });
+        }
+        Ok(())
+    }
+
+    fn acquire_resume_lease(
+        &mut self,
+        owner_id: MaterializationId,
+        acquired_at: DateTime<Utc>,
+        lease_duration: Duration,
+    ) -> Result<(), LakeError> {
+        if let Some(lease) = &self.resume_lease {
+            if lease.owner_id != owner_id && lease.expires_at > acquired_at {
+                return Err(LakeError::ConcurrentModification(format!(
+                    "DAG run {} is leased by {} until {}",
+                    self.run_id, lease.owner_id, lease.expires_at
+                )));
+            }
+        }
+        self.resume_lease = Some(AssetDagResumeLease {
+            owner_id,
+            acquired_at,
+            expires_at: acquired_at + lease_duration,
+        });
+        Ok(())
+    }
+
+    pub fn renew_resume_lease(&mut self, now: DateTime<Utc>) {
+        if let Some(lease) = &mut self.resume_lease {
+            lease.expires_at = now + Duration::seconds(DEFAULT_RESUME_LEASE_SECONDS);
         }
     }
 
@@ -573,6 +632,9 @@ pub enum RunManifestError {
     NoRunningAttempt(AssetId),
     MissingBlockedDependencies(AssetId),
     RunNotResumable(DagRunStatus),
+    UnsupportedResumeManifest {
+        format_version: u32,
+    },
 }
 
 impl std::fmt::Display for RunManifestError {
@@ -618,6 +680,10 @@ impl std::fmt::Display for RunManifestError {
             Self::RunNotResumable(status) => {
                 write!(f, "DAG run with status {status:?} cannot be resumed")
             }
+            Self::UnsupportedResumeManifest { format_version } => write!(
+                f,
+                "DAG run manifest format {format_version} does not contain the snapshot required for exact resume"
+            ),
         }
     }
 }
@@ -652,6 +718,62 @@ impl AssetRunManifestStore {
         self.lake.put_json(&key, manifest).await
     }
 
+    pub async fn write_manifest_cas(
+        &self,
+        manifest: &mut AssetDagRunManifest,
+    ) -> Result<ArtifactMetadata, LakeError> {
+        let expected_revision = manifest.revision;
+        let mut next = manifest.clone();
+        next.revision = expected_revision + 1;
+        let key = AssetPathBuilder::dag_run_manifest_key(&manifest.partition, &manifest.run_id);
+        let updated = self
+            .lake
+            .put_json_if(&key, &next, |current: Option<&AssetDagRunManifest>| {
+                current.map_or(expected_revision == 0, |current| {
+                    current.run_id == manifest.run_id && current.revision == expected_revision
+                })
+            })
+            .await?;
+        if !updated {
+            return Err(LakeError::ConcurrentModification(format!(
+                "DAG run {} changed after revision {expected_revision}",
+                manifest.run_id
+            )));
+        }
+        *manifest = next;
+        self.lake.artifact_metadata(&key).await
+    }
+
+    pub async fn acquire_resume_lease(
+        &self,
+        manifest: &mut AssetDagRunManifest,
+        owner_id: MaterializationId,
+        acquired_at: DateTime<Utc>,
+        lease_duration: Duration,
+    ) -> Result<ArtifactMetadata, LakeError> {
+        manifest.acquire_resume_lease(owner_id, acquired_at, lease_duration)?;
+        self.write_manifest_cas(manifest).await
+    }
+
+    pub async fn release_resume_lease(
+        &self,
+        partition: &AssetPartition,
+        run_id: &MaterializationId,
+        owner_id: &MaterializationId,
+    ) -> Result<bool, LakeError> {
+        let mut manifest = self.manifest(partition, run_id).await?;
+        if manifest
+            .resume_lease
+            .as_ref()
+            .is_none_or(|lease| &lease.owner_id != owner_id)
+        {
+            return Ok(false);
+        }
+        manifest.resume_lease = None;
+        self.write_manifest_cas(&mut manifest).await?;
+        Ok(true)
+    }
+
     pub async fn promote_current(&self, manifest: &AssetDagRunManifest) -> Result<bool, LakeError> {
         let pointer = CurrentDagRunPointer {
             run_id: manifest.run_id.clone(),
@@ -666,7 +788,10 @@ impl AssetRunManifestStore {
         };
         let key = AssetPathBuilder::current_dag_run_pointer_key(&manifest.partition);
         self.lake
-            .put_json_if(&key, &pointer, |current: &CurrentDagRunPointer| {
+            .put_json_if(&key, &pointer, |current: Option<&CurrentDagRunPointer>| {
+                let Some(current) = current else {
+                    return true;
+                };
                 let current_time = current.run_created_at.unwrap_or(current.updated_at);
                 current.run_id == manifest.run_id
                     || manifest.created_at > current_time

@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetId,
-    AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
+    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
+    AssetId, AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputProvider, SourceInputRequest,
     CANONICAL_SOCIETY_NODES_ASSET_ID,
@@ -49,7 +49,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
             .into());
         }
-        manifest.ensure_resumable()?;
+        manifest.ensure_exact_resume()?;
         Some(manifest)
     } else {
         None
@@ -80,7 +80,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             planned_at,
             requested_assets: collection_plan.requested_assets,
             force_refresh_assets: collection_plan.force_refresh_assets,
-            source_entities: current_source_entities(&lake).await?,
+            source_entities: current_source_entities(&lake, resume_manifest.as_ref()).await?,
         };
         if let Some(source_inputs) = provider.load(&request, &lake).await? {
             options = options
@@ -133,16 +133,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn current_source_entities(
     lake: &LakeStore,
+    resume_manifest: Option<&AssetDagRunManifest>,
 ) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
     let store = AssetMaterializationStore::new(lake.clone());
     let asset_id = AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)?;
-    let record = match store
-        .current_record(&asset_id, &AssetPartition::global())
-        .await
-    {
-        Ok(record) => record,
-        Err(err) if err.is_not_found() => return Ok(Vec::new()),
-        Err(err) => return Err(Box::new(err)),
+    let record = match resume_manifest {
+        Some(manifest) => {
+            let Some(step) = manifest.steps.iter().find(|step| step.asset_id == asset_id) else {
+                return Ok(Vec::new());
+            };
+            let Some(materialization_id) = step
+                .materialization_id
+                .as_ref()
+                .or(step.current_materialization_id.as_ref())
+            else {
+                return Ok(Vec::new());
+            };
+            store
+                .record(&asset_id, &step.partition, materialization_id)
+                .await?
+        }
+        None => match store
+            .current_record(&asset_id, &AssetPartition::global())
+            .await
+        {
+            Ok(record) => record,
+            Err(err) if err.is_not_found() => return Ok(Vec::new()),
+            Err(err) => return Err(Box::new(err)),
+        },
     };
     let rows = backend::assets::read_canonical_society_rows(lake, &record).await?;
     let names: HashMap<_, _> = rows
@@ -370,4 +388,105 @@ fn print_help() {
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
     println!("  --resume-run Resume one failed or interrupted run by UUID");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use backend::assets::{
+        CanonicalSocietyMaterializer, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
+        ReraRegistryMonthlyInput,
+    };
+    use chrono::TimeZone;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn resumed_collection_seeds_entities_from_the_run_snapshot() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+        let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+        let old_canonical = canonical_fixture(&lake, "Old Snapshot Society", "old", now).await;
+        let current_canonical =
+            canonical_fixture(&lake, "Current Pointer Society", "current", now).await;
+        AssetMaterializationStore::new(lake.clone())
+            .promote_current(&current_canonical)
+            .await
+            .unwrap();
+
+        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let run_partition =
+            AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
+        let plan = executor.plan(&run_partition, now).await.unwrap();
+        let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
+        manifest
+            .steps
+            .iter_mut()
+            .find(|step| step.asset_id.as_str() == CANONICAL_SOCIETY_NODES_ASSET_ID)
+            .unwrap()
+            .current_materialization_id = Some(old_canonical.materialization_id.clone());
+
+        let resumed = current_source_entities(&lake, Some(&manifest))
+            .await
+            .unwrap();
+        let live = current_source_entities(&lake, None).await.unwrap();
+
+        assert_eq!(resumed.len(), 1);
+        assert_eq!(resumed[0].name, "Old Snapshot Society");
+        assert_eq!(live.len(), 1);
+        assert_eq!(live[0].name, "Current Pointer Society");
+
+        manifest
+            .steps
+            .iter_mut()
+            .find(|step| step.asset_id.as_str() == CANONICAL_SOCIETY_NODES_ASSET_ID)
+            .unwrap()
+            .current_materialization_id = Some(MaterializationId::new());
+        assert!(current_source_entities(&lake, Some(&manifest))
+            .await
+            .is_err());
+    }
+
+    async fn canonical_fixture(
+        lake: &LakeStore,
+        project_name: &str,
+        suffix: &str,
+        now: chrono::DateTime<Utc>,
+    ) -> backend::assets::MaterializationRecord {
+        let rera = ReraRegistryMaterializer::new(lake.clone())
+            .materialize_for_run(
+                &ReraRegistryMonthlyInput {
+                    snapshot_date: "2026-07".to_string(),
+                    projects: vec![ReraProjectSnapshotRecord {
+                        ack_number: Some(format!("ACK-{suffix}")),
+                        registration_number: Some(format!("PRM-{suffix}")),
+                        project_name: project_name.to_string(),
+                        promoter_name: None,
+                        status: Some("Approved".to_string()),
+                        project_type: None,
+                        project_address: None,
+                        area_name: Some("Whitefield".to_string()),
+                        district: None,
+                        taluk: None,
+                        total_land_area_sqm: None,
+                        land_litigation: None,
+                        source_url: format!("https://rera.karnataka.gov.in/{suffix}"),
+                        fetched_at: now,
+                    }],
+                    source_watermarks: Vec::new(),
+                },
+                MaterializationId::new(),
+                AssetPartition::global(),
+            )
+            .await
+            .unwrap();
+        CanonicalSocietyMaterializer::new(lake.clone())
+            .materialize_from_rera_for_run(
+                &rera,
+                suffix,
+                MaterializationId::new(),
+                AssetPartition::global(),
+            )
+            .await
+            .unwrap()
+    }
 }

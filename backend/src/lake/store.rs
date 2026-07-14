@@ -31,6 +31,7 @@ pub struct ArtifactMetadata {
 #[derive(Debug)]
 pub enum LakeError {
     InvalidMetadata(String),
+    ConcurrentModification(String),
     Io(std::io::Error),
     Json(serde_json::Error),
     Key(KeyError),
@@ -114,7 +115,7 @@ impl LakeStore {
     ) -> Result<bool, LakeError>
     where
         T: serde::Serialize + serde::de::DeserializeOwned,
-        F: Fn(&T) -> bool,
+        F: Fn(Option<&T>) -> bool,
     {
         if let Some(root) = &self.local_root {
             let _guard = LocalKeyLock::acquire(root, key).await?;
@@ -123,7 +124,7 @@ impl LakeStore {
                 Err(err) if err.is_not_found() => None,
                 Err(err) => return Err(err),
             };
-            if current.as_ref().is_some_and(|current| !replace(current)) {
+            if !replace(current.as_ref()) {
                 return Ok(false);
             }
             self.put_json(key, value).await?;
@@ -151,7 +152,7 @@ impl LakeStore {
                 Err(object_store::Error::NotFound { .. }) => (None, PutMode::Create),
                 Err(err) => return Err(LakeError::ObjectStore(err)),
             };
-            if current.as_ref().is_some_and(|current| !replace(current)) {
+            if !replace(current.as_ref()) {
                 return Ok(false);
             }
             match self
@@ -289,6 +290,9 @@ impl fmt::Display for LakeError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidMetadata(message) => write!(f, "lake metadata error: {message}"),
+            Self::ConcurrentModification(message) => {
+                write!(f, "lake concurrent modification: {message}")
+            }
             Self::Io(err) => write!(f, "lake IO error: {err}"),
             Self::Json(err) => write!(f, "lake JSON error: {err}"),
             Self::Key(err) => write!(f, "lake key error: {err}"),
@@ -325,7 +329,11 @@ impl LakeError {
                 err,
                 object_store::Error::Generic { .. } | object_store::Error::JoinError { .. }
             ),
-            Self::InvalidMetadata(_) | Self::Json(_) | Self::Key(_) | Self::Utf8(_) => false,
+            Self::InvalidMetadata(_)
+            | Self::ConcurrentModification(_)
+            | Self::Json(_)
+            | Self::Key(_)
+            | Self::Utf8(_) => false,
         }
     }
 }

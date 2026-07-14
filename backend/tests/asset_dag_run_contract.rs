@@ -2,10 +2,10 @@ use backend::assets::{
     default_openestates_registry, ArtifactRef, AssetDagRunManifest, AssetDefinition, AssetId,
     AssetMaterializationStore, AssetPartition, AssetPlanner, AssetRunManifestStore,
     AssetRunStepStatus, AssetStage, CostTier, DagRunStatus, FreshnessReferenceKind,
-    MaterializationRecord, PartitionResolutionError, PlanDecision, PlanReason, PlannerError,
-    RefreshCadence, RunManifestError, SourceWatermark, TrustTier,
+    MaterializationId, MaterializationRecord, PartitionResolutionError, PlanDecision, PlanReason,
+    PlannerError, RefreshCadence, RunManifestError, SourceWatermark, TrustTier,
 };
-use backend::lake::{LakeKey, LakeStore};
+use backend::lake::{LakeError, LakeKey, LakeStore};
 use chrono::{Duration, TimeZone, Utc};
 use serde_json::json;
 use tempfile::tempdir;
@@ -790,6 +790,72 @@ async fn dag_run_current_pointers_are_partition_scoped() {
     assert_eq!(current_global.run_id, global_manifest.run_id);
     assert_eq!(current_reddit.run_id, reddit_manifest.run_id);
     assert_ne!(current_global.run_id, current_reddit.run_id);
+}
+
+#[tokio::test]
+async fn dag_run_manifest_cas_rejects_a_stale_same_run_writer() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let run_store = AssetRunManifestStore::new(lake);
+    let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+    let plan = backend::assets::AssetDagPlan {
+        run_id: MaterializationId::new(),
+        partition: AssetPartition::global(),
+        planned_at: now,
+        entries: Vec::new(),
+    };
+    let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "cas-v1");
+
+    run_store.write_manifest_cas(&mut manifest).await.unwrap();
+    assert_eq!(manifest.revision, 1);
+
+    let mut first_writer = manifest.clone();
+    let mut stale_writer = manifest.clone();
+    first_writer.status = DagRunStatus::Running;
+    stale_writer.status = DagRunStatus::Failed;
+
+    run_store
+        .write_manifest_cas(&mut first_writer)
+        .await
+        .unwrap();
+    let error = run_store
+        .write_manifest_cas(&mut stale_writer)
+        .await
+        .unwrap_err();
+
+    assert!(matches!(error, LakeError::ConcurrentModification(_)));
+    assert_eq!(stale_writer.revision, 1);
+    let persisted = run_store
+        .manifest(&first_writer.partition, &first_writer.run_id)
+        .await
+        .unwrap();
+    assert_eq!(persisted, first_writer);
+    assert_eq!(persisted.revision, 2);
+}
+
+#[test]
+fn exact_resume_rejects_legacy_manifests_without_a_snapshot_contract() {
+    let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+    let plan = backend::assets::AssetDagPlan {
+        run_id: MaterializationId::new(),
+        partition: AssetPartition::global(),
+        planned_at: now,
+        entries: Vec::new(),
+    };
+    let mut current = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
+    current.status = DagRunStatus::Running;
+    let mut value = serde_json::to_value(current).unwrap();
+    let object = value.as_object_mut().unwrap();
+    object.remove("format_version");
+    object.remove("revision");
+    let legacy: AssetDagRunManifest = serde_json::from_value(value).unwrap();
+
+    assert_eq!(legacy.format_version, 0);
+    assert_eq!(legacy.revision, 0);
+    assert!(matches!(
+        legacy.ensure_exact_resume(),
+        Err(RunManifestError::UnsupportedResumeManifest { format_version: 0 })
+    ));
 }
 
 #[tokio::test]

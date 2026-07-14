@@ -84,7 +84,10 @@ impl AssetMaterializationStore {
         };
         let key = AssetPathBuilder::current_pointer_key(&record.asset_id, &record.partition);
         self.lake
-            .put_json_if(&key, &pointer, |current: &CurrentAssetPointer| {
+            .put_json_if(&key, &pointer, |current: Option<&CurrentAssetPointer>| {
+                let Some(current) = current else {
+                    return true;
+                };
                 let current_time = current.run_created_at.unwrap_or(current.updated_at);
                 expected_current == Some(&current.materialization_id)
                     || run_created_at > current_time
