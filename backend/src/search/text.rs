@@ -175,19 +175,20 @@ impl TextSearch {
 
                 // Soft constraint: area — exact match keeps full score,
                 // nearby/sub-area match gets a penalty instead of exclusion.
-                let area_penalty: f64 = if let Some(ref area) = intent.area {
-                    if p.area.eq_ignore_ascii_case(area) {
-                        0.0 // exact match
-                    } else if area_is_nearby(&p.area, area) {
-                        -2.0 // nearby: include but rank lower
-                    } else if graph_area_match(&p.society_id, area, graph) {
-                        -1.0 // graph SocietyInArea edge match: between exact and nearby
+                let (area_penalty, area_match_kind): (f64, Option<AreaMatchKind>) =
+                    if let Some(ref area) = intent.area {
+                        if p.area.eq_ignore_ascii_case(area) {
+                            (0.0, Some(AreaMatchKind::Exact))
+                        } else if area_is_nearby(&p.area, area) {
+                            (-2.0, Some(AreaMatchKind::Nearby))
+                        } else if graph_area_match(&p.society_id, area, graph) {
+                            (-1.0, Some(AreaMatchKind::Graph))
+                        } else {
+                            return None; // unrelated area: exclude
+                        }
                     } else {
-                        return None; // unrelated area: exclude
-                    }
-                } else {
-                    0.0
-                };
+                        (0.0, None)
+                    };
 
                 let hard_constraint_matches =
                     match_hard_constraints(intent, graph, serving_facts, &p.society_id)?;
@@ -492,7 +493,7 @@ impl TextSearch {
                     }
                 }
                 let match_label = match_label_from_score(normalized);
-                let match_reason = build_match_reason(intent, &reasons);
+                let match_reason = build_match_reason(intent, &p.area, area_match_kind, &reasons);
 
                 // Compute confidence score for this result
                 let gdp = match_explanation
@@ -1514,11 +1515,30 @@ fn format_legacy_display(preference: &str, property: &Property) -> String {
     }
 }
 
-fn build_match_reason(intent: &SearchIntent, reasons: &[String]) -> String {
+#[derive(Clone, Copy)]
+enum AreaMatchKind {
+    Exact,
+    Nearby,
+    Graph,
+}
+
+fn build_match_reason(
+    intent: &SearchIntent,
+    property_area: &str,
+    area_match_kind: Option<AreaMatchKind>,
+    reasons: &[String],
+) -> String {
     let mut parts = Vec::new();
 
     if let Some(ref area) = intent.area {
-        parts.push(format!("Matches {}", area));
+        match area_match_kind {
+            Some(AreaMatchKind::Nearby) => {
+                parts.push(format!("Near {} ({})", area, property_area));
+            }
+            Some(AreaMatchKind::Exact | AreaMatchKind::Graph) | None => {
+                parts.push(format!("Matches {}", area));
+            }
+        }
     }
     if let Some(bhk) = intent.bhk {
         parts.push(format!("{} BHK", bhk));
@@ -2588,6 +2608,68 @@ mod tests {
             "expected greenery no_data coverage, got {:?}",
             explanation.preference_coverage
         );
+    }
+
+    #[test]
+    fn nearby_area_result_does_not_claim_an_exact_area_match() {
+        let property = local_property(
+            "nearby-area",
+            "Varthur",
+            "nearby-area",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![property];
+        let society_names = local_society_names(&properties);
+        let intent = crate::search::intent::parse_intent("3bhk in whitefield");
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            "3bhk in whitefield",
+            &intent,
+            None,
+        );
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0]
+            .match_reason
+            .contains("Near Whitefield (Varthur)"));
+        assert!(!results[0].match_reason.contains("Matches Whitefield"));
+    }
+
+    #[test]
+    fn graph_verified_area_result_is_not_labeled_as_nearby() {
+        let property = local_property(
+            "graph-area",
+            "Legacy East Zone",
+            "graph-area",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![property];
+        let society_names = local_society_names(&properties);
+        let graph = graph_with_society_in_area("graph-area", "whitefield", "Whitefield");
+        let query = "3bhk apartment in whitefield";
+        let intent = crate::search::intent::parse_intent(query);
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            Some(&graph),
+        );
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].match_reason.contains("Matches Whitefield"));
+        assert!(!results[0].match_reason.contains("Near Whitefield"));
     }
 
     #[test]
