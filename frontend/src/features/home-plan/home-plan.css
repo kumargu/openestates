@@ -1,0 +1,1507 @@
+.home-plan-shell {
+  --plan-ink: #172123;
+  --plan-muted: #637072;
+  --plan-faint: #899697;
+  --plan-line: rgba(28, 47, 48, 0.12);
+  --plan-line-strong: rgba(28, 47, 48, 0.2);
+  --plan-surface: rgba(251, 252, 251, 0.94);
+  --plan-surface-solid: #fbfcfb;
+  --plan-soft: #f1f5f3;
+  --plan-buy: #ed8465;
+  --plan-rent: #68a8d4;
+  --plan-accent: #476e69;
+  --plan-brand: #c96b4f;
+  min-height: 100vh;
+  color: var(--plan-ink);
+  background:
+    radial-gradient(circle at 80% 2%, rgba(132, 167, 162, 0.3), transparent 30%),
+    linear-gradient(135deg, #f5f7f5 0%, #e7eeeb 52%, #dbe5e2 100%);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.home-plan-shell button,
+.home-plan-shell input,
+.home-plan-shell select {
+  font: inherit;
+}
+
+.home-plan-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.home-plan-header {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  min-height: 68px;
+  padding: 0 clamp(1.1rem, 3.8vw, 4rem);
+  border-bottom: 1px solid var(--plan-line);
+  background: rgba(247, 249, 248, 0.88);
+  backdrop-filter: blur(18px);
+}
+
+.home-plan-brand-group,
+.home-plan-header-actions,
+.home-plan-brand,
+.home-plan-back-link,
+.home-plan-property-context {
+  display: flex;
+  align-items: center;
+}
+
+.home-plan-brand-group {
+  gap: 1rem;
+}
+
+.home-plan-brand {
+  gap: 0.7rem;
+  color: var(--plan-ink);
+  text-decoration: none;
+  letter-spacing: -0.02em;
+  font-size: 0.88rem;
+}
+
+.home-plan-brand > span {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border-radius: 12px;
+  color: white;
+  background: var(--plan-ink);
+  box-shadow: inset 0 -1px rgba(255, 255, 255, 0.12);
+}
+
+.home-plan-brand > span::after {
+  content: "";
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: 28px 0 0 28px;
+  border: 2px solid #f7f9f8;
+  border-radius: 50%;
+  background: var(--plan-brand);
+}
+
+.home-plan-back-link {
+  gap: 0.2rem;
+  color: var(--plan-muted);
+  text-decoration: none;
+  font-size: 0.7rem;
+  transition: color 160ms ease;
+}
+
+.home-plan-back-link:hover {
+  color: var(--plan-brand);
+}
+
+.home-plan-property-context {
+  flex-direction: column;
+  gap: 0.15rem;
+  color: var(--plan-ink);
+  text-align: center;
+  text-decoration: none;
+}
+
+.home-plan-property-context small {
+  color: var(--plan-faint);
+  font-size: 0.58rem;
+}
+
+.home-plan-property-context strong {
+  max-width: 34rem;
+  overflow: hidden;
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-plan-header-actions {
+  position: relative;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
+.home-plan-scenario-menu {
+  position: relative;
+}
+
+.home-plan-scenario-menu > button,
+.home-plan-controls-launcher {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 0.8rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 12px;
+  color: var(--plan-ink);
+  background: rgba(255, 255, 255, 0.78);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.home-plan-scenario-menu > button:hover,
+.home-plan-controls-launcher:hover {
+  border-color: var(--plan-line-strong);
+  background: white;
+  transform: translateY(-1px);
+}
+
+.home-plan-scenario-menu > button {
+  gap: 0.55rem;
+}
+
+.home-plan-scenario-menu > button > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6f9f91;
+}
+
+.home-plan-scenario-menu > button > span {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.home-plan-scenario-menu > button strong,
+.home-plan-scenario-menu > button small {
+  font-size: 0.64rem;
+}
+
+.home-plan-scenario-menu > button small {
+  color: var(--plan-faint);
+}
+
+.home-plan-scenario-menu > button svg {
+  width: 14px;
+}
+
+.home-plan-controls-launcher {
+  gap: 0.45rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.home-plan-scenario-popover {
+  position: absolute;
+  top: calc(100% + 0.55rem);
+  right: 0;
+  z-index: 90;
+  width: 235px;
+  padding: 0.45rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 14px;
+  background: rgba(251, 252, 251, 0.98);
+  box-shadow: 0 18px 50px rgba(27, 47, 45, 0.15);
+}
+
+.home-plan-scenario-popover button {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.7rem;
+  border: 0;
+  border-radius: 10px;
+  color: var(--plan-ink);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.home-plan-scenario-popover button:hover,
+.home-plan-scenario-popover button.is-active {
+  background: #edf3f0;
+}
+
+.home-plan-scenario-popover span {
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.home-plan-scenario-popover small {
+  margin-top: 0.15rem;
+  color: var(--plan-muted);
+  font-size: 0.6rem;
+}
+
+.home-plan-main {
+  width: min(1240px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: 3.4rem 0 4.5rem;
+}
+
+.home-plan-pane {
+  padding: 2.15rem;
+  border: 1px solid rgba(34, 56, 56, 0.11);
+  border-radius: 25px;
+  background: var(--plan-surface);
+  box-shadow: 0 30px 70px rgba(31, 51, 49, 0.1);
+  backdrop-filter: blur(20px);
+}
+
+.home-plan-pane--repayment {
+  background: linear-gradient(145deg, rgba(252, 252, 250, 0.96), rgba(247, 245, 238, 0.94));
+}
+
+.home-plan-pane-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1.75rem;
+  padding-bottom: 1.55rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-pane-toolbar > div:first-child > span,
+.home-plan-panel-heading > div:first-child > span,
+.home-plan-repayment-intro > div:first-child > span,
+.home-plan-repayment-timeline > header > div:first-child > span {
+  display: block;
+  color: #748886;
+  font-size: 0.59rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.home-plan-pane-toolbar h1 {
+  max-width: 720px;
+  margin: 0.6rem 0 0;
+  font-size: clamp(1.9rem, 3vw, 2.75rem);
+  line-height: 1.04;
+  letter-spacing: -0.055em;
+}
+
+.home-plan-workspace-switch {
+  display: flex;
+  padding: 4px;
+  border: 1px solid var(--plan-line);
+  border-radius: 13px;
+  background: var(--plan-soft);
+  white-space: nowrap;
+}
+
+.home-plan-workspace-switch button {
+  padding: 0.6rem 0.9rem;
+  border: 0;
+  border-radius: 9px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.64rem;
+}
+
+.home-plan-workspace-switch button.is-active {
+  color: white;
+  background: var(--plan-ink);
+}
+
+.home-plan-decision-strip {
+  display: grid;
+  grid-template-columns: 1.45fr repeat(3, 1fr);
+  margin: 1.55rem 0 0.9rem;
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: 18px;
+  background: rgba(245, 248, 246, 0.82);
+}
+
+.home-plan-decision-strip > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 96px;
+  padding: 1.1rem 1.25rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-decision-strip > div:first-child {
+  border-left: 0;
+}
+
+.home-plan-decision-strip span,
+.home-plan-scenario-inspector span,
+.home-plan-boundary-card > span,
+.home-plan-repayment-metrics span,
+.home-plan-repayment-detail > div > span {
+  color: var(--plan-faint);
+  font-size: 0.58rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.home-plan-decision-strip strong {
+  margin-top: 0.42rem;
+  font-size: 1rem;
+  letter-spacing: -0.025em;
+}
+
+.home-plan-decision-strip small {
+  margin-top: 0.25rem;
+  color: var(--plan-muted);
+  font-size: 0.6rem;
+}
+
+.home-plan-decision-lead {
+  box-shadow: inset 4px 0 var(--plan-buy);
+}
+
+.home-plan-comparison-panel {
+  padding: 1.45rem 1.4rem 0;
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.52);
+}
+
+.home-plan-panel-heading,
+.home-plan-chart-tools,
+.home-plan-horizon-control {
+  display: flex;
+  align-items: center;
+}
+
+.home-plan-panel-heading {
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.home-plan-panel-heading h2,
+.home-plan-repayment-timeline h2 {
+  margin: 0.35rem 0 0;
+  font-size: 0.94rem;
+  letter-spacing: -0.02em;
+}
+
+.home-plan-chart-tools {
+  gap: 0.7rem;
+}
+
+.home-plan-chart-tools select {
+  min-height: 36px;
+  padding: 0 2rem 0 0.7rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 11px;
+  color: var(--plan-ink);
+  background: var(--plan-soft);
+  cursor: pointer;
+  font-size: 0.62rem;
+}
+
+.home-plan-horizon-control {
+  gap: 0.6rem;
+  white-space: nowrap;
+}
+
+.home-plan-horizon-control > span {
+  color: var(--plan-faint);
+  font-size: 0.6rem;
+  letter-spacing: 0.12em;
+}
+
+.home-plan-horizon-control > div {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--plan-line);
+  border-radius: 12px;
+  background: var(--plan-soft);
+}
+
+.home-plan-horizon-control button {
+  min-width: 43px;
+  padding: 0.48rem 0.52rem;
+  border: 0;
+  border-radius: 9px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.61rem;
+}
+
+.home-plan-horizon-control button.is-active {
+  color: white;
+  background: var(--plan-ink);
+}
+
+.home-plan-graph {
+  margin-top: 1.1rem;
+}
+
+.home-plan-graph-legend {
+  display: flex;
+  gap: 0.6rem;
+}
+
+.home-plan-graph-legend button {
+  display: flex;
+  align-items: center;
+  gap: 0.62rem;
+  min-width: 170px;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: var(--plan-ink);
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+}
+
+.home-plan-graph-legend button.is-selected {
+  border-color: var(--plan-line-strong);
+  background: var(--plan-soft);
+}
+
+.home-plan-legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.home-plan-legend-dot--buy {
+  background: var(--plan-buy);
+}
+
+.home-plan-legend-dot--rent {
+  background: var(--plan-rent);
+}
+
+.home-plan-graph-legend span {
+  display: flex;
+  flex-direction: column;
+}
+
+.home-plan-graph-legend strong {
+  font-size: 0.64rem;
+}
+
+.home-plan-graph-legend small {
+  margin-top: 0.12rem;
+  color: var(--plan-faint);
+  font-size: 0.56rem;
+}
+
+.home-plan-graph-svg {
+  display: block;
+  width: 100%;
+  height: 340px;
+  overflow: visible;
+  cursor: crosshair;
+  touch-action: pan-y;
+}
+
+.home-plan-gridline {
+  stroke: rgba(40, 62, 62, 0.09);
+  stroke-dasharray: 3 6;
+}
+
+.home-plan-axis-label,
+.home-plan-cursor-label,
+.home-plan-graph-event text,
+.home-plan-graph-tooltip text {
+  font-family: Inter, sans-serif;
+}
+
+.home-plan-axis-label {
+  fill: #82908f;
+  font-size: 8px;
+}
+
+.home-plan-axis-label--y {
+  text-anchor: end;
+}
+
+.home-plan-axis-label--x {
+  text-anchor: middle;
+}
+
+.home-plan-graph-area {
+  opacity: 0.95;
+  transition: d 260ms ease;
+}
+
+.home-plan-graph-area--buy {
+  fill: url(#home-plan-buy-area);
+}
+
+.home-plan-graph-area--rent {
+  fill: url(#home-plan-rent-area);
+}
+
+.home-plan-graph-line {
+  fill: none;
+  stroke-width: 2;
+  opacity: 0.48;
+  transition: opacity 160ms ease, stroke-width 160ms ease;
+}
+
+.home-plan-graph-line.is-selected {
+  stroke-width: 3.4;
+  opacity: 1;
+}
+
+.home-plan-graph-line--buy {
+  stroke: var(--plan-buy);
+}
+
+.home-plan-graph-line--rent {
+  stroke: var(--plan-rent);
+}
+
+.home-plan-cursor {
+  stroke: #78908d;
+  stroke-dasharray: 4 5;
+  opacity: 0.72;
+}
+
+.home-plan-cursor-label {
+  fill: #6d7f7d;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-anchor: middle;
+}
+
+.home-plan-graph-point {
+  stroke: white;
+  stroke-width: 2;
+}
+
+.home-plan-graph-point--buy {
+  fill: var(--plan-buy);
+}
+
+.home-plan-graph-point--rent {
+  fill: var(--plan-rent);
+}
+
+.home-plan-graph-event {
+  cursor: pointer;
+}
+
+.home-plan-graph-event circle {
+  fill: #f7faf8;
+  stroke: var(--plan-accent);
+  stroke-width: 2.8;
+}
+
+.home-plan-graph-event > text {
+  fill: var(--plan-accent);
+  font-size: 8px;
+  font-weight: 800;
+  text-anchor: middle;
+}
+
+.home-plan-graph-event .home-plan-graph-event-label {
+  fill: #536865;
+  font-size: 7px;
+  font-weight: 600;
+}
+
+.home-plan-graph-tooltip rect {
+  fill: rgba(255, 255, 255, 0.96);
+  stroke: var(--plan-line);
+}
+
+.home-plan-graph-tooltip text {
+  fill: var(--plan-muted);
+  font-size: 8px;
+}
+
+.home-plan-graph-tooltip line {
+  stroke: var(--plan-line);
+}
+
+.home-plan-graph-tooltip .home-plan-tooltip-year,
+.home-plan-graph-tooltip .home-plan-tooltip-lead {
+  fill: var(--plan-ink);
+  font-size: 7px;
+  font-weight: 700;
+}
+
+.home-plan-graph-tooltip .home-plan-tooltip-value {
+  fill: var(--plan-ink);
+  font-weight: 700;
+  text-anchor: end;
+}
+
+.home-plan-tooltip-buy {
+  fill: var(--plan-buy);
+}
+
+.home-plan-tooltip-rent {
+  fill: var(--plan-rent);
+}
+
+.home-plan-year-scrubber {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0 0.45rem 1rem;
+}
+
+.home-plan-year-scrubber span {
+  color: var(--plan-faint);
+  font-size: 0.58rem;
+}
+
+.home-plan-year-scrubber input,
+.home-plan-range-control input {
+  width: 100%;
+  accent-color: var(--plan-accent);
+}
+
+.home-plan-scenario-inspector {
+  display: grid;
+  grid-template-columns: 1.35fr 2fr 1.35fr;
+  gap: 1rem;
+  margin: 0 -1.4rem;
+  padding: 1.1rem 1.4rem;
+  border-top: 1px solid var(--plan-line);
+  background: rgba(240, 246, 243, 0.72);
+  box-shadow: inset 4px 0 var(--plan-buy);
+}
+
+.home-plan-scenario-inspector--rent {
+  box-shadow: inset 4px 0 var(--plan-rent);
+}
+
+.home-plan-scenario-inspector > div:first-child {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.home-plan-scenario-inspector > div:first-child strong {
+  margin-top: 0.4rem;
+  font-size: 0.82rem;
+}
+
+.home-plan-scenario-inspector > div:first-child small {
+  margin-top: 0.2rem;
+  color: var(--plan-muted);
+  font-size: 0.58rem;
+}
+
+.home-plan-scenario-inspector dl,
+.home-plan-repayment-detail dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+}
+
+.home-plan-scenario-inspector dl > div,
+.home-plan-repayment-detail dl > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-scenario-inspector dt,
+.home-plan-repayment-detail dt {
+  color: var(--plan-faint);
+  font-size: 0.56rem;
+  text-transform: uppercase;
+}
+
+.home-plan-scenario-inspector dd,
+.home-plan-repayment-detail dd {
+  margin: 0.35rem 0 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.home-plan-inspector-note {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.home-plan-inspector-note span {
+  align-self: flex-start;
+  padding: 0.24rem 0.45rem;
+  border-radius: 99px;
+  color: var(--plan-accent);
+  background: #dceae4;
+  font-size: 0.5rem;
+  font-weight: 750;
+}
+
+.home-plan-inspector-note p {
+  margin: 0.45rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.6rem;
+  line-height: 1.45;
+}
+
+.home-plan-boundary-card {
+  display: grid;
+  grid-template-columns: 150px 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.9rem;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 15px;
+  background: rgba(251, 252, 251, 0.62);
+}
+
+.home-plan-boundary-card strong {
+  font-size: 0.7rem;
+}
+
+.home-plan-boundary-card button {
+  padding: 0.55rem 0.72rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 9px;
+  color: var(--plan-accent);
+  background: white;
+  cursor: pointer;
+  font-size: 0.6rem;
+  font-weight: 650;
+}
+
+.home-plan-controls-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  border: 0;
+  background: rgba(21, 34, 34, 0.16);
+  backdrop-filter: blur(2px);
+}
+
+.home-plan-controls {
+  position: fixed;
+  top: 92px;
+  right: 1.7rem;
+  bottom: 1.7rem;
+  z-index: 110;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto;
+  width: min(390px, calc(100vw - 2rem));
+  overflow: hidden;
+  border: 1px solid rgba(35, 56, 55, 0.12);
+  border-radius: 23px;
+  background: rgba(251, 252, 251, 0.98);
+  box-shadow: 0 30px 80px rgba(27, 47, 45, 0.23);
+  opacity: 0;
+  transform: translateX(calc(100% + 3rem));
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+  pointer-events: none;
+}
+
+.home-plan-controls.is-open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.home-plan-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.45rem 1.25rem 0.85rem;
+}
+
+.home-plan-controls-header span,
+.home-plan-control-kicker {
+  color: #748886;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.home-plan-controls-header h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.28rem;
+  letter-spacing: -0.035em;
+}
+
+.home-plan-controls-header > button {
+  display: grid;
+  place-items: center;
+  width: 39px;
+  height: 39px;
+  border: 1px solid var(--plan-line);
+  border-radius: 11px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+}
+
+.home-plan-controls-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  padding: 0 1rem 0.85rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-controls-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.7rem 0.35rem;
+  border: 0;
+  border-radius: 11px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.56rem;
+}
+
+.home-plan-controls-tabs button.is-active {
+  color: var(--plan-accent);
+  background: #e5eeea;
+}
+
+.home-plan-controls-body {
+  overflow-y: auto;
+}
+
+.home-plan-control-block {
+  padding: 1.3rem 1.25rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-control-block h3 {
+  margin: 0.42rem 0 0;
+  font-size: 0.78rem;
+}
+
+.home-plan-control-block > p {
+  margin: 0.35rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.63rem;
+  line-height: 1.5;
+}
+
+.home-plan-range-control {
+  display: block;
+  padding: 1rem 0 0.1rem;
+}
+
+.home-plan-range-control > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--plan-muted);
+  font-size: 0.63rem;
+}
+
+.home-plan-range-control strong {
+  color: var(--plan-ink);
+}
+
+.home-plan-range-control input {
+  margin-top: 0.7rem;
+}
+
+.home-plan-control-insight {
+  margin-top: 0.8rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 11px;
+  color: #35534f;
+  background: #e6f0ec;
+  font-size: 0.61rem;
+  line-height: 1.45;
+}
+
+.home-plan-emi-options {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.35rem;
+  margin-top: 0.8rem;
+}
+
+.home-plan-emi-options button {
+  padding: 0.5rem 0;
+  border: 1px solid var(--plan-line);
+  border-radius: 9px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+  font-size: 0.62rem;
+}
+
+.home-plan-emi-options button.is-active {
+  color: white;
+  border-color: var(--plan-ink);
+  background: var(--plan-ink);
+}
+
+.home-plan-evidence-list {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.home-plan-evidence-list > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.18rem 0.7rem;
+  padding: 0.8rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 11px;
+  background: white;
+}
+
+.home-plan-evidence-list span,
+.home-plan-evidence-list small,
+.home-plan-evidence-list em {
+  color: var(--plan-muted);
+  font-size: 0.58rem;
+  font-style: normal;
+}
+
+.home-plan-evidence-list strong {
+  font-size: 0.65rem;
+}
+
+.home-plan-evidence-list small {
+  grid-column: 1 / -1;
+}
+
+.home-plan-evidence-list em {
+  grid-column: 1 / -1;
+  color: var(--plan-accent);
+}
+
+.home-plan-controls-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  padding: 0.85rem 1rem 1rem;
+  border-top: 1px solid var(--plan-line);
+  background: rgba(251, 252, 251, 0.98);
+}
+
+.home-plan-controls-footer button {
+  min-height: 40px;
+  border: 1px solid var(--plan-line-strong);
+  border-radius: 10px;
+  color: var(--plan-ink);
+  background: white;
+  cursor: pointer;
+  font-size: 0.62rem;
+  font-weight: 650;
+}
+
+.home-plan-controls-footer .home-plan-primary-action {
+  color: white;
+  border-color: var(--plan-ink);
+  background: var(--plan-ink);
+}
+
+.home-plan-repayment {
+  padding-top: 1.4rem;
+}
+
+.home-plan-repayment-intro {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 2rem;
+  padding: 1.35rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.home-plan-repayment-intro h2 {
+  margin: 0.45rem 0 0;
+  font-size: 1.05rem;
+}
+
+.home-plan-repayment-intro p,
+.home-plan-repayment-timeline p {
+  margin: 0.35rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.64rem;
+}
+
+.home-plan-repayment-options {
+  display: flex;
+  gap: 0.35rem;
+}
+
+.home-plan-repayment-options button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 52px;
+  padding: 0.55rem 0.4rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 11px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+}
+
+.home-plan-repayment-options button.is-active {
+  color: white;
+  border-color: var(--plan-ink);
+  background: var(--plan-ink);
+}
+
+.home-plan-repayment-options strong {
+  font-size: 0.78rem;
+}
+
+.home-plan-repayment-options small {
+  font-size: 0.48rem;
+}
+
+.home-plan-repayment-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 0.9rem;
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: 17px;
+  background: rgba(251, 252, 251, 0.76);
+}
+
+.home-plan-repayment-metrics > div {
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment-metrics > div:first-child {
+  border-left: 0;
+}
+
+.home-plan-repayment-metrics strong {
+  margin-top: 0.35rem;
+  font-size: 0.9rem;
+}
+
+.home-plan-repayment-metrics small {
+  margin-top: 0.2rem;
+  color: var(--plan-muted);
+  font-size: 0.56rem;
+}
+
+.home-plan-repayment-timeline {
+  margin-top: 0.9rem;
+  padding: 1.3rem;
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: 19px;
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.home-plan-repayment-timeline > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.home-plan-loan-free-badge {
+  display: flex;
+  flex-direction: column;
+  padding: 0.65rem 0.8rem;
+  border-radius: 11px;
+  color: var(--plan-accent);
+  background: #e2ede8;
+}
+
+.home-plan-loan-free-badge small {
+  font-size: 0.54rem;
+}
+
+.home-plan-loan-free-badge strong {
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+}
+
+.home-plan-timeline-scroll {
+  margin: 1.1rem -1.3rem 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.home-plan-timeline-track {
+  display: flex;
+  min-width: max-content;
+  padding: 0.8rem 1.3rem 1rem;
+}
+
+.home-plan-timeline-track button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 116px;
+  min-height: 126px;
+  padding: 0.75rem;
+  border: 1px solid var(--plan-line);
+  border-left: 0;
+  color: var(--plan-muted);
+  text-align: left;
+  background: rgba(248, 250, 249, 0.92);
+  cursor: pointer;
+}
+
+.home-plan-timeline-track button:first-child {
+  border-left: 1px solid var(--plan-line);
+  border-radius: 12px 0 0 12px;
+}
+
+.home-plan-timeline-track button:last-child {
+  border-radius: 0 12px 12px 0;
+}
+
+.home-plan-timeline-track button.is-selected {
+  z-index: 1;
+  border: 1px solid var(--plan-accent);
+  border-radius: 12px;
+  background: #e6efeb;
+  box-shadow: 0 8px 22px rgba(42, 74, 69, 0.12);
+}
+
+.home-plan-timeline-track button > span {
+  color: var(--plan-faint);
+  font-size: 0.54rem;
+  text-transform: uppercase;
+}
+
+.home-plan-timeline-track button > strong {
+  margin-top: 0.55rem;
+  color: var(--plan-ink);
+  font-size: 0.72rem;
+}
+
+.home-plan-timeline-track button > small,
+.home-plan-timeline-track button > em {
+  margin-top: 0.2rem;
+  font-size: 0.52rem;
+  font-style: normal;
+}
+
+.home-plan-timeline-track button > i {
+  align-self: flex-start;
+  margin-top: auto;
+  padding: 0.2rem 0.35rem;
+  border-radius: 99px;
+  color: var(--plan-accent);
+  background: #d8e8e1;
+  font-size: 0.48rem;
+  font-style: normal;
+}
+
+.home-plan-repayment-detail {
+  display: grid;
+  grid-template-columns: 1.2fr 2fr;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment-detail > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.home-plan-repayment-detail > div strong {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.home-plan-loading {
+  min-height: 100vh;
+  padding: 0 4vw 4rem;
+  background: linear-gradient(135deg, #f5f7f5, #e0e9e6);
+}
+
+.home-plan-loading-header {
+  height: 68px;
+  margin: 0 -4vw 3rem;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.home-plan-loading-pane {
+  display: grid;
+  gap: 1rem;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 2rem;
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.home-plan-loading-pane > div {
+  height: 90px;
+  border-radius: 15px;
+  background: linear-gradient(90deg, #e9efec 25%, #f6f8f7 50%, #e9efec 75%);
+  background-size: 200% 100%;
+  animation: home-plan-shimmer 1.4s infinite linear;
+}
+
+.home-plan-loading-pane > div:nth-child(2) {
+  height: 430px;
+}
+
+@keyframes home-plan-shimmer {
+  to { background-position: -200% 0; }
+}
+
+@media (max-width: 960px) {
+  .home-plan-header {
+    grid-template-columns: 1fr auto;
+    padding-inline: 1rem;
+  }
+
+  .home-plan-property-context {
+    display: none;
+  }
+
+  .home-plan-main {
+    width: min(100% - 18px, 760px);
+    padding-top: 1.25rem;
+  }
+
+  .home-plan-pane {
+    padding: 1.25rem 0.9rem;
+    border-radius: 20px;
+  }
+
+  .home-plan-pane-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-plan-pane-toolbar h1 {
+    font-size: 2rem;
+  }
+
+  .home-plan-decision-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .home-plan-decision-strip > div:nth-child(3) {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .home-plan-decision-strip > div:nth-child(4) {
+    border-top: 1px solid var(--plan-line);
+  }
+
+  .home-plan-panel-heading,
+  .home-plan-chart-tools {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .home-plan-scenario-inspector {
+    grid-template-columns: 1fr;
+  }
+
+  .home-plan-scenario-inspector dl > div:first-child {
+    border-left: 0;
+  }
+
+  .home-plan-inspector-note p {
+    display: none;
+  }
+
+  .home-plan-boundary-card {
+    grid-template-columns: 1fr;
+  }
+
+  .home-plan-repayment-intro {
+    grid-template-columns: 1fr;
+  }
+
+  .home-plan-repayment-options {
+    overflow-x: auto;
+  }
+
+  .home-plan-repayment-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .home-plan-repayment-metrics > div:nth-child(3) {
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .home-plan-repayment-metrics > div:nth-child(4) {
+    border-top: 1px solid var(--plan-line);
+  }
+
+  .home-plan-repayment-detail {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .home-plan-header {
+    min-height: 62px;
+  }
+
+  .home-plan-brand-group {
+    gap: 0.4rem;
+  }
+
+  .home-plan-brand strong,
+  .home-plan-back-link,
+  .home-plan-scenario-menu > button > span small,
+  .home-plan-controls-launcher {
+    display: none;
+  }
+
+  .home-plan-brand > span {
+    width: 36px;
+    height: 36px;
+  }
+
+  .home-plan-controls-launcher {
+    width: 40px;
+    padding: 0;
+    place-items: center;
+  }
+
+  .home-plan-header-actions .home-plan-controls-launcher {
+    display: grid;
+  }
+
+  .home-plan-scenario-menu > button {
+    max-width: 170px;
+  }
+
+  .home-plan-scenario-menu > button > span strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .home-plan-workspace-switch {
+    width: 100%;
+  }
+
+  .home-plan-workspace-switch button {
+    flex: 1;
+  }
+
+  .home-plan-pane-toolbar h1 {
+    font-size: 1.72rem;
+  }
+
+  .home-plan-decision-strip > div {
+    min-height: 88px;
+    padding: 0.9rem;
+  }
+
+  .home-plan-decision-strip strong {
+    font-size: 0.86rem;
+  }
+
+  .home-plan-comparison-panel {
+    padding-inline: 0.75rem;
+  }
+
+  .home-plan-chart-tools,
+  .home-plan-horizon-control {
+    width: 100%;
+  }
+
+  .home-plan-chart-tools label,
+  .home-plan-chart-tools select {
+    width: 100%;
+  }
+
+  .home-plan-horizon-control {
+    justify-content: space-between;
+  }
+
+  .home-plan-horizon-control > div {
+    overflow-x: auto;
+  }
+
+  .home-plan-graph-legend {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .home-plan-graph-legend button {
+    width: 100%;
+  }
+
+  .home-plan-graph-svg {
+    height: 245px;
+  }
+
+  .home-plan-graph-tooltip,
+  .home-plan-graph-event-label {
+    display: none;
+  }
+
+  .home-plan-scenario-inspector {
+    margin-inline: -0.75rem;
+    padding-inline: 1rem;
+  }
+
+  .home-plan-scenario-inspector dl,
+  .home-plan-repayment-detail dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .home-plan-scenario-inspector dl > div:nth-child(3),
+  .home-plan-repayment-detail dl > div:nth-child(3) {
+    border-left: 0;
+  }
+
+  .home-plan-controls {
+    top: auto;
+    right: 0.5rem;
+    bottom: 0.5rem;
+    left: 0.5rem;
+    width: auto;
+    max-height: calc(100vh - 1rem);
+    border-radius: 22px;
+    transform: translateY(calc(100% + 2rem));
+  }
+
+  .home-plan-controls.is-open {
+    transform: translateY(0);
+  }
+
+  .home-plan-repayment-timeline > header {
+    flex-direction: column;
+  }
+
+  .home-plan-loan-free-badge {
+    align-self: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-plan-controls,
+  .home-plan-scenario-menu > button,
+  .home-plan-controls-launcher,
+  .home-plan-loading-pane > div {
+    transition: none;
+    animation: none;
+  }
+}

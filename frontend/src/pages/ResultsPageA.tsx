@@ -4,7 +4,7 @@
  * Rust backend is unavailable so product review does not render a blank shell.
  */
 import { useEffect, useState, useMemo, useCallback, type FormEvent, type ReactNode } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
@@ -526,9 +526,16 @@ function SheetTray({
                     </span>
                   </span>
                 )}
-                <button type="button" className="sheet-tray-remove" onClick={() => onRemove(item.id)} aria-label="Remove from sheet">
-                  -
-                </button>
+                <span className="sheet-tray-actions">
+                  {property && (
+                    <Link to={`/property/${property.id}/plan`} className="sheet-tray-plan" aria-label={`Plan purchase for ${property.title}`}>
+                      Plan
+                    </Link>
+                  )}
+                  <button type="button" className="sheet-tray-remove" onClick={() => onRemove(item.id)} aria-label="Remove from saved homes">
+                    ×
+                  </button>
+                </span>
               </div>
             );
           })}
@@ -550,7 +557,6 @@ type SheetSortKey = "sheet" | "price" | "carpet" | "efficiency" | "carpetCost";
 type SheetCompareRow = {
   property: PropertyCardType;
   item?: SheetItem;
-  onSheet: boolean;
 };
 
 function ViewModeSwitch({
@@ -639,7 +645,7 @@ function sortValue(row: SheetCompareRow, key: SheetSortKey): number {
     return value ? -value : Number.MAX_SAFE_INTEGER;
   }
   if (key === "carpetCost") return carpetCost(row.property) ?? Number.MAX_SAFE_INTEGER;
-  return row.onSheet ? 0 : 1;
+  return row.item?.addedAt ? -Date.parse(row.item.addedAt) : Number.MAX_SAFE_INTEGER;
 }
 
 function SheetSortButton({
@@ -669,16 +675,15 @@ function SheetCompareView({
   missingSheetCount,
   sortKey,
   onSortChange,
-  onQuickView,
-  onSheetToggle,
+  onRemove,
 }: {
   rows: SheetCompareRow[];
   missingSheetCount: number;
   sortKey: SheetSortKey;
   onSortChange: (key: SheetSortKey) => void;
-  onQuickView: (id: string) => void;
-  onSheetToggle: (id: string) => void;
+  onRemove: (id: string) => void;
 }) {
+  const navigate = useNavigate();
   const sortedRows = useMemo(() => {
     return rows
       .map((row, index) => ({ row, index }))
@@ -729,10 +734,21 @@ function SheetCompareView({
             </tr>
           </thead>
           <tbody>
-            {sortedRows.map(({ property, onSheet }) => (
-              <tr key={property.id}>
+            {sortedRows.map(({ property }) => (
+              <tr
+                key={property.id}
+                className="comparison-row-link"
+                role="link"
+                tabIndex={0}
+                onClick={() => navigate(`/property/${property.id}/plan`)}
+                onKeyDown={(event) => {
+                  if (event.target === event.currentTarget && event.key === "Enter") {
+                    navigate(`/property/${property.id}/plan`);
+                  }
+                }}
+              >
                 <td className="comparison-table-home">
-                  <Link to={`/property/${property.id}`} className="comparison-home-link">
+                  <Link to={`/property/${property.id}/plan`} className="comparison-home-link">
                     <strong>{property.title}</strong>
                     <span>{isKnownText(property.builder_name) ? property.builder_name : "Builder pending"}</span>
                   </Link>
@@ -747,24 +763,31 @@ function SheetCompareView({
                 <td>
                   <ProjectStatusTag
                     status={property.project_status}
+                    displayText={property.project_status_display}
                     possessionStatus={property.possession_status}
                   />
                 </td>
                 <td className="comparison-actions">
-                  <button type="button" className="comparison-icon-btn" onClick={() => onQuickView(property.id)} aria-label={`Quick view ${property.title}`}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M12 16v-4" />
-                      <path d="M12 8h.01" />
-                    </svg>
-                  </button>
-                  <button
-                    type="button"
-                    className={onSheet ? "comparison-sheet-toggle comparison-sheet-toggle--on" : "comparison-sheet-toggle"}
-                    onClick={() => onSheetToggle(property.id)}
-                  >
-                    {onSheet ? "Saved" : "Save"}
-                  </button>
+                  <span className="comparison-row-actions">
+                    <Link
+                      to={`/property/${property.id}/plan`}
+                      className="comparison-plan-link"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      Plan
+                    </Link>
+                    <button
+                      type="button"
+                      className="comparison-remove-button"
+                      aria-label={`Remove ${property.title} from saved homes`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRemove(property.id);
+                      }}
+                    >
+                      −
+                    </button>
+                  </span>
                 </td>
               </tr>
             ))}
@@ -1017,11 +1040,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     refreshSheetItems();
   };
 
-  const toggleSheetFromComparison = (id: string) => {
-    toggleSheetItem(id);
-    refreshSheetItems();
-  };
-
   const sheetCompareRows = useMemo<SheetCompareRow[]>(() => {
     const savedRows: SheetCompareRow[] = [];
     for (const item of sheetItems) {
@@ -1030,7 +1048,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       savedRows.push({
         property,
         item,
-        onSheet: true,
       });
     }
     return savedRows;
@@ -1196,7 +1213,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             <p>
               {viewMode === "sheet"
                 ? savedCount > 0
-                  ? `${savedCountLabel} ready to compare.`
+                  ? `${savedCountLabel}. Choose a home and open its plan.`
                   : "Your saved homes will stay here while you keep browsing."
                 : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "listings with full transparency reports"}`}
             </p>
@@ -1208,7 +1225,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       <div aria-live="polite" className="sr-only">
         {viewMode === "sheet" && !query
           ? savedCount > 0
-            ? `${savedCountLabel} ready to compare.`
+            ? `${savedCountLabel} ready to plan.`
             : "No saved homes yet."
           : query
           ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
@@ -1303,8 +1320,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
           missingSheetCount={missingSheetCount}
           sortKey={sheetSortKey}
           onSortChange={setSheetSortKey}
-          onQuickView={setPanelPropertyId}
-          onSheetToggle={toggleSheetFromComparison}
+          onRemove={removeSheetItem}
         />
       ) : (
         <div

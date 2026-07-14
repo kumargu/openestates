@@ -17,6 +17,10 @@
   --color-border: rgba(0, 0, 0, 0.06);
   --color-border-hover: rgba(0, 0, 0, 0.12);
   --color-accent: #c96b4f;
+  --color-action: #b65f46;
+  --color-action-hover: #9f4f39;
+  --color-action-soft: #f7e9e3;
+  --color-action-shadow: rgba(182, 95, 70, 0.24);
   --color-positive: #2a7a2a;
   --color-positive-bg: #f0f7f0;
   --color-positive-border: #c8e6c8;
@@ -692,17 +696,17 @@ body {
 }
 
 .card-a-save-btn:hover {
-  background: var(--color-accent);
+  background: var(--color-action);
   color: #fff;
 }
 
 .card-a-save-btn--saved {
-  background: var(--color-accent);
+  background: var(--color-action);
   color: #fff;
 }
 
 .card-a-save-btn--saved:hover {
-  background: #b35a42;
+  background: var(--color-action-hover);
 }
 
 .card-a-detail-btn,
@@ -1157,7 +1161,8 @@ body {
 
 /* Footer */
 .side-panel-footer {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   gap: 0.5rem;
   padding: 0.85rem 1.25rem;
   border-top: 1px solid var(--color-border);
@@ -1213,6 +1218,27 @@ body {
   text-decoration: none;
   cursor: pointer;
   transition: background 0.2s ease;
+}
+
+.side-panel-plan-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-action);
+  border-radius: var(--radius-sm);
+  color: #fff;
+  background: var(--color-action);
+  font-size: 0.8rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.side-panel-plan-btn:hover {
+  background: var(--color-action-hover);
+  transform: translateY(-1px);
 }
 
 .side-panel-full-btn:hover {
@@ -1279,9 +1305,9 @@ body {
 }
 
 .results-view-switch-btn--active {
-  background: var(--color-text);
+  background: var(--color-action);
   color: #fff;
-  box-shadow: 0 7px 18px rgba(26, 26, 26, 0.14);
+  box-shadow: 0 7px 18px var(--color-action-shadow);
 }
 
 .results-view-switch-btn--active:hover {
@@ -1367,7 +1393,7 @@ body {
 }
 
 .comparison-sort-btn--active {
-  background: rgba(26, 26, 26, 0.9);
+  background: var(--color-action);
   color: #fff;
 }
 
@@ -1408,7 +1434,28 @@ body {
 }
 
 .comparison-table tbody tr:hover td {
-  background: rgba(201, 107, 79, 0.035);
+  background: #fff5f1;
+}
+
+.comparison-row-link {
+  cursor: pointer;
+}
+
+.comparison-table tbody tr:nth-child(odd) td {
+  background: rgba(255, 255, 255, 0.96);
+}
+
+.comparison-table tbody tr:nth-child(even) td {
+  background: #faf9f7;
+}
+
+.comparison-table tbody tr:nth-child(odd):hover td,
+.comparison-table tbody tr:nth-child(even):hover td {
+  background: #fff5f1;
+}
+
+.comparison-row-link:focus-visible td {
+  background: #fff1eb;
 }
 
 .comparison-table th:nth-child(2),
@@ -1447,7 +1494,7 @@ body {
 
 .comparison-table th:nth-child(10),
 .comparison-table td:nth-child(10) {
-  width: 84px;
+  width: 105px;
 }
 
 .comparison-table td:nth-child(9) > span {
@@ -1463,6 +1510,15 @@ body {
   width: 220px;
   background: rgba(255, 255, 255, 0.98);
   box-shadow: 1px 0 0 rgba(26, 26, 26, 0.06);
+}
+
+.comparison-table tbody tr:nth-child(even) .comparison-table-home {
+  background: #faf9f7;
+}
+
+.comparison-table tbody tr:hover .comparison-table-home,
+.comparison-table tbody tr:focus-visible .comparison-table-home {
+  background: #fff5f1;
 }
 
 .comparison-table th.comparison-table-home {
@@ -1510,49 +1566,57 @@ body {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 0;
+}
+
+.comparison-row-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
   gap: 0.35rem;
 }
 
-.comparison-icon-btn,
-.comparison-sheet-toggle {
-  height: 30px;
+.comparison-plan-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(26, 26, 26, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.86);
-  color: var(--color-text);
-  font: inherit;
-  font-size: 0.72rem;
+  min-width: 62px;
+  min-height: 31px;
+  padding: 0 0.7rem;
+  border-radius: 9px;
+  color: #fff;
+  background: var(--color-action);
+  font-size: 0.7rem;
   font-weight: 800;
+  text-decoration: none;
+  transition: transform 0.18s ease, background 0.18s ease;
+}
+
+.comparison-plan-link:hover {
+  color: #fff;
+  background: var(--color-action-hover);
+  transform: translateY(-1px);
+}
+
+.comparison-remove-button {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 31px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  color: var(--color-text-muted);
+  background: transparent;
+  font: inherit;
+  font-size: 1rem;
   cursor: pointer;
-  transition: all 0.18s ease;
+  transition: color 0.18s ease, background 0.18s ease;
 }
 
-.comparison-icon-btn {
-  width: 30px;
-}
-
-.comparison-sheet-toggle {
-  min-width: 68px;
-  padding: 0 0.58rem;
-}
-
-.comparison-icon-btn:hover,
-.comparison-sheet-toggle:hover {
-  border-color: rgba(201, 107, 79, 0.34);
-  color: var(--color-accent);
-}
-
-.comparison-sheet-toggle--on {
-  background: var(--color-text);
-  border-color: var(--color-text);
-  color: #fff;
-}
-
-.comparison-sheet-toggle--on:hover {
-  color: #fff;
+.comparison-remove-button:hover {
+  color: var(--color-negative);
+  background: var(--color-negative-bg);
 }
 
 .comparison-sheet-footnote {
@@ -1672,13 +1736,40 @@ body {
 .sheet-tray-item {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 0.45rem;
   padding: 0.42rem;
   border: 1px solid rgba(26, 26, 26, 0.06);
   border-radius: 12px;
   background: rgba(255, 255, 255, 0.86);
+}
+
+.sheet-tray-actions {
+  display: inline-flex;
+  align-items: stretch;
+  overflow: hidden;
+  border: 1px solid rgba(26, 26, 26, 0.09);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.sheet-tray-plan {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: 0 0.65rem;
+  color: var(--color-action);
+  background: var(--color-action-soft);
+  font-size: 0.67rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.sheet-tray-plan:hover {
+  color: #fff;
+  background: var(--color-action);
 }
 
 .sheet-tray-link {
@@ -1759,17 +1850,18 @@ body {
 }
 
 .sheet-tray-remove {
-  width: 28px;
+  width: 30px;
   height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(26, 26, 26, 0.08);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
+  border: 0;
+  border-left: 1px solid rgba(26, 26, 26, 0.08);
+  border-radius: 0;
+  background: transparent;
   color: var(--color-text-muted);
   font: inherit;
-  font-size: 1rem;
+  font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -1997,9 +2089,9 @@ body {
 }
 
 .home-saved-shortcut:hover {
-  border-color: rgba(201, 107, 79, 0.28);
-  background: rgba(255, 248, 243, 0.96);
-  color: var(--color-accent);
+  border-color: var(--color-action-shadow);
+  background: var(--color-action-soft);
+  color: var(--color-action);
 }
 
 .home-saved-shortcut strong {
@@ -2018,14 +2110,15 @@ body {
 }
 
 .home-saved-shortcut--active {
-  border-color: rgba(26, 26, 26, 0.88);
-  background: rgba(26, 26, 26, 0.92);
+  border-color: var(--color-action);
+  background: var(--color-action);
   color: #fff;
+  box-shadow: 0 7px 18px var(--color-action-shadow);
 }
 
 .home-saved-shortcut--active:hover {
-  border-color: rgba(26, 26, 26, 0.88);
-  background: rgba(26, 26, 26, 0.92);
+  border-color: var(--color-action-hover);
+  background: var(--color-action-hover);
   color: #fff;
 }
 
@@ -2423,6 +2516,55 @@ body {
   top: 1rem;
   display: grid;
   gap: 0.85rem;
+}
+
+.property-plan-entry-card {
+  padding: 1.05rem;
+  border-color: rgba(201, 107, 79, 0.15);
+  background: linear-gradient(145deg, rgba(255, 250, 247, 0.98), rgba(247, 244, 239, 0.94));
+}
+
+.property-plan-entry-card > span {
+  color: var(--color-accent);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.property-plan-entry-card h3 {
+  margin: 0.45rem 0 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  letter-spacing: -0.025em;
+  line-height: 1.25;
+}
+
+.property-plan-entry-card p {
+  margin: 0.55rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.5;
+}
+
+.property-plan-entry-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.85rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  color: #fff;
+  background: var(--color-action);
+  font-size: 0.78rem;
+  font-weight: 750;
+  text-decoration: none;
+  transition: transform 0.2s ease, background 0.2s ease;
+}
+
+.property-plan-entry-link:hover {
+  background: var(--color-action-hover);
+  transform: translateY(-1px);
 }
 
 .property-decision-card,

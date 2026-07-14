@@ -9,6 +9,7 @@ import { OfflineToast } from "./components/OfflineToast.tsx";
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const ResultsPageA = lazy(() => import("./pages/ResultsPageA.tsx").then(m => ({ default: m.ResultsPageA })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
+const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
 const SocietySearchPage = lazy(() => import("./pages/SocietySearchPage.tsx").then(m => ({ default: m.SocietySearchPage })));
 const SocietyDetailPage = lazy(() => import("./pages/SocietyDetailPage.tsx").then(m => ({ default: m.SocietyDetailPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
@@ -65,6 +66,7 @@ export function Nav() {
   const location = useLocation();
   const isHome = location.pathname === "/";
   const path = location.pathname;
+  const isHomePlan = /^\/property\/[^/]+\/plan$/.test(path);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -85,6 +87,8 @@ export function Nav() {
     }
     return () => { document.body.style.overflow = ""; };
   }, [drawerOpen]);
+
+  if (isHomePlan) return null;
 
   return (
     <>
@@ -177,7 +181,7 @@ export function Nav() {
 
 export function SiteFooter() {
   const location = useLocation();
-  if (location.pathname === "/") return null;
+  if (location.pathname === "/" || /^\/property\/[^/]+\/plan$/.test(location.pathname)) return null;
 
   return (
     <footer className="site-footer">
@@ -225,6 +229,7 @@ export function App() {
                 <Route path="/" element={<HomePage />} />
                 <Route path="/results" element={<ResultsPageA />} />
                 <Route path="/property/:id" element={<PropertyPage />} />
+                <Route path="/property/:id/plan" element={<HomePlanPage />} />
                 <Route path="/societies" element={<SocietySearchPage />} />
                 <Route path="/society/:slug" element={<SocietyDetailPage />} />
                 <Route path="*" element={<NotFoundPage />} />

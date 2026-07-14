@@ -533,6 +533,17 @@ export function PropertyPage() {
         </main>
 
         <aside className="property-action-rail">
+          <div className="property-mini-card property-plan-entry-card">
+            <span>Financial plan</span>
+            <h3>Would this home improve your position?</h3>
+            <p>Compare buying with renting and mutual funds, then inspect the repayment journey.</p>
+            <Link to={`/property/${p.id}/plan`} className="property-plan-entry-link">
+              Open home plan
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
+            </Link>
+          </div>
           <div className="property-mini-card property-rail-intel">
             <div>
               <h3>Risk list</h3>
