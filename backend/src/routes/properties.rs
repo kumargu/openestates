@@ -373,18 +373,68 @@ fn collect_source_items(
         .collect()
 }
 
+fn serving_source_item(
+    projection: &SocietyFactProjection<'_>,
+    key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let fact = projection.latest_record(key)?;
+    let values = match &fact.value {
+        FactValue::Tags(tags) => tags.clone(),
+        _ => Vec::new(),
+    };
+    let raw_value = fact_value_display(&fact.value);
+    let value = projection
+        .search_metadata(key)
+        .and_then(|metadata| metadata.display_template.as_deref())
+        .map(|template| template.replace("{value}", &raw_value))
+        .unwrap_or(raw_value);
+    if is_low_signal_source_value(key, &value) {
+        return None;
+    }
+    Some(SourceItem {
+        key: key.to_string(),
+        label: label.to_string(),
+        value,
+        values,
+        source_type: fact.source_type.clone(),
+        source_url: fact.source_url.clone(),
+        confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
+        learned_at: fact.learned_at.to_rfc3339(),
+    })
+}
+
+fn collect_society_source_items(
+    graph: &crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    projection: Option<&SocietyFactProjection<'_>>,
+    keys: &[(&str, &str)],
+) -> Vec<SourceItem> {
+    keys.iter()
+        .filter_map(|(key, label)| {
+            projection
+                .and_then(|projection| serving_source_item(projection, key, label))
+                .or_else(|| source_item(graph, node_id, key, label))
+        })
+        .collect()
+}
+
 fn build_source_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
+    serving_facts: Option<&ServingFactIndex>,
 ) -> Vec<SourcePanel> {
     let society_id = society_node_id(&property.society_id);
     let area_id = super::enrichment::area_node_id(&property.area);
+    let projection =
+        serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
 
     let mut panels = Vec::new();
 
-    let rera_items = collect_source_items(
+    let rera_items = collect_society_source_items(
         graph,
         &society_id,
+        projection.as_ref(),
         &[
             ("rera_status", "Status"),
             ("rera_number", "Registration"),
@@ -404,10 +454,18 @@ fn build_source_panels(
         });
     }
 
-    let market_items = collect_source_items(
+    let market_items = collect_society_source_items(
         graph,
         &society_id,
+        projection.as_ref(),
         &[
+            ("market_starting_price_inr", "Builder starting price"),
+            ("market_bhk_options", "Configurations"),
+            ("market_project_status", "Builder inventory status"),
+            ("market_total_units", "Homes"),
+            ("builder_reported_land_area_acres", "Builder project area"),
+            ("official_project_url", "Official project page"),
+            ("project_maps_url", "Project map"),
             ("pricing_3bhk", "3BHK pricing"),
             ("price_per_sqft", "Market rate"),
             ("price_appreciation", "Price movement"),
@@ -422,7 +480,7 @@ fn build_source_panels(
         missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
     });
 
-    let area_items = collect_source_items(
+    let mut area_items = collect_source_items(
         graph,
         &area_id,
         &[
@@ -432,6 +490,16 @@ fn build_source_panels(
             ("school_quality", "Schools"),
         ],
     );
+    area_items.extend(collect_society_source_items(
+        graph,
+        &society_id,
+        projection.as_ref(),
+        &[
+            ("metro_status", "Metro access"),
+            ("nearest_operational_metro_station", "Nearest station"),
+            ("metro_distance_km", "Station distance"),
+        ],
+    ));
     panels.push(SourcePanel {
         kind: "area".to_string(),
         title: "Area trail".to_string(),
@@ -443,9 +511,10 @@ fn build_source_panels(
         ],
     });
 
-    let reddit_items = collect_source_items(
+    let reddit_items = collect_society_source_items(
         graph,
         &society_id,
+        projection.as_ref(),
         &[
             ("resident_sentiment", "Overall take"),
             ("sentiment_summary", "What forums point to"),
@@ -769,7 +838,11 @@ pub async fn get_property(
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
     let builder_portfolio = build_builder_portfolio(&graph, &properties, &property);
-    let source_panels = build_source_panels(&graph, &property);
+    let source_panels = build_source_panels(
+        &graph,
+        &property,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
 
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);

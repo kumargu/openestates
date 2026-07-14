@@ -573,6 +573,67 @@ pub fn default_openestates_registry() -> AssetRegistry {
             &[("source", "google")],
         )),
         asset(
+            "prestige_inventory_weekly",
+            AssetStage::Raw,
+            "Weekly source-native project inventory observations from Prestige.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Weekly,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "prestige")],
+        )),
+        asset(
+            "market_project_facts",
+            AssetStage::Silver,
+            "Typed current market observations with source URLs and observation time.",
+            &["prestige_inventory_weekly", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "prestige")],
+        )),
+        asset(
+            "metro_stations_monthly",
+            AssetStage::Raw,
+            "Monthly geospatial snapshot of operational Namma Metro stations.",
+            &[],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "openstreetmap")],
+        )),
+        asset(
+            "metro_proximity_facts",
+            AssetStage::Silver,
+            "Nearest operational metro computed from RERA project and station coordinates.",
+            &["metro_stations_monthly", "rera_legal_facts"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "openstreetmap")],
+        )),
+        asset(
+            "builder_rera_aggregates",
+            AssetStage::Silver,
+            "Builder portfolio aggregates computed from the current RERA registry.",
+            &["rera_registry_monthly", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        ),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
@@ -581,6 +642,9 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "rera_legal_facts",
                 "reddit_resident_facts",
                 "google_review_facts",
+                "market_project_facts",
+                "metro_proximity_facts",
+                "builder_rera_aggregates",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -594,8 +658,18 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "google_review_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
+        .with_dependency_fan_in_policy(
+            "market_project_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
+            "metro_proximity_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
         .with_optional_dependency("reddit_resident_facts")
-        .with_optional_dependency("google_review_facts"),
+        .with_optional_dependency("google_review_facts")
+        .with_optional_dependency("market_project_facts")
+        .with_optional_dependency("metro_proximity_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

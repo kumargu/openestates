@@ -2,7 +2,9 @@ use chrono::{DateTime, Utc};
 
 use crate::knowledge::FactValue;
 
-use super::{ServingEntityFactRows, ServingFactIndex, ServingFactRecord};
+use super::{
+    ServingEntityFactRows, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
+};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GoogleReviewEvidence {
@@ -67,6 +69,21 @@ impl<'a> SocietyFactProjection<'a> {
             .filter(|fact| fact.fact_key.starts_with(fact_key_prefix))
             .map(|fact| fact.learned_at)
             .max()
+    }
+
+    pub fn latest_record(&self, fact_key: &str) -> Option<&'a ServingFactRecord> {
+        self.rows
+            .iter()
+            .flat_map(|rows| rows.facts.iter())
+            .filter(|fact| fact.fact_key == fact_key)
+            .max_by_key(|fact| fact.learned_at)
+    }
+
+    pub fn search_metadata(&self, fact_key: &str) -> Option<&'a ServingSearchMetadataRecord> {
+        self.rows
+            .iter()
+            .flat_map(|rows| rows.search_metadata.iter())
+            .find(|metadata| metadata.fact_key == fact_key)
     }
 
     pub fn project_google_reviews(&self, fallback: GoogleReviewEvidence) -> GoogleReviewEvidence {

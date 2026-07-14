@@ -11,12 +11,15 @@ use backend::assets::{
     AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
     AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
     GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
-    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
-    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    MetroStationObservationRecord, MetroStationsMonthlyInput, PrestigeInventoryObservationRecord,
+    PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
+    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
+    SourceWatermark, TrustTier, BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -49,24 +52,30 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     let run_partition = source_run_partition();
     let upstreams = seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
 
-    let options =
-        AssetDagExecutionOptions::new(run_partition.clone(), now).with_version("2026-07-13T06:00Z");
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
+        .with_version("2026-07-13T06:00Z")
+        .with_source_inputs(mock_source_inputs(now));
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 2);
-    assert_eq!(report.manifest.succeeded_count, 2);
+    assert_eq!(report.manifest.planned_count, 7);
+    assert_eq!(report.manifest.succeeded_count, 7);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(
-        report.executed_assets,
-        vec![
-            asset_id(KG_SOCIETY_VIEW_ASSET_ID),
-            asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)
-        ]
-    );
+    assert_eq!(report.executed_assets.len(), 7);
+    for id in [
+        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+        MARKET_PROJECT_FACTS_ASSET_ID,
+        METRO_STATIONS_MONTHLY_ASSET_ID,
+        METRO_PROXIMITY_FACTS_ASSET_ID,
+        BUILDER_RERA_AGGREGATES_ASSET_ID,
+        KG_SOCIETY_VIEW_ASSET_ID,
+        SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ] {
+        assert!(report.executed_assets.contains(&asset_id(id)));
+    }
 
     let kg_record = store
         .current_record(
@@ -76,7 +85,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 4);
+    assert_eq!(kg_record.parent_materializations.len(), 7);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -166,9 +175,14 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 6);
-    assert_eq!(report.executed_assets.len(), 6);
+    assert_eq!(report.manifest.planned_count, 11);
+    assert_eq!(report.executed_assets.len(), 11);
     for id in [
+        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+        MARKET_PROJECT_FACTS_ASSET_ID,
+        METRO_STATIONS_MONTHLY_ASSET_ID,
+        METRO_PROXIMITY_FACTS_ASSET_ID,
+        BUILDER_RERA_AGGREGATES_ASSET_ID,
         REDDIT_THREADS_DAILY_ASSET_ID,
         REDDIT_RESIDENT_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
@@ -288,10 +302,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 5);
+    assert_eq!(kg_record.parent_materializations.len(), 8);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        45
+        61
     );
 
     let serving_record = current_record(
@@ -300,7 +314,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 45);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 61);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -346,9 +360,14 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 9);
-    assert_eq!(report.executed_assets.len(), 9);
+    assert_eq!(report.manifest.planned_count, 14);
+    assert_eq!(report.executed_assets.len(), 14);
     for id in [
+        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+        MARKET_PROJECT_FACTS_ASSET_ID,
+        METRO_STATIONS_MONTHLY_ASSET_ID,
+        METRO_PROXIMITY_FACTS_ASSET_ID,
+        BUILDER_RERA_AGGREGATES_ASSET_ID,
         RERA_REGISTRY_MONTHLY_ASSET_ID,
         CANONICAL_SOCIETY_NODES_ASSET_ID,
         RERA_LEGAL_FACTS_ASSET_ID,
@@ -556,30 +575,32 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
 
     let run_partition = source_run_partition();
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
-    let err = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
+    let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
-        .unwrap_err();
+        .unwrap();
 
-    let missing_asset_id = match err {
-        AssetDagExecutorError::SourceInputMissing { asset_id } => asset_id,
-        other => panic!("expected missing source input, got {other:?}"),
-    };
-    let missing_partition = match missing_asset_id.as_str() {
-        REDDIT_THREADS_DAILY_ASSET_ID => reddit_thread_partition(),
-        REDDIT_RESIDENT_FACTS_ASSET_ID => reddit_fact_partition(),
-        GOOGLE_PLACES_WEEKLY_ASSET_ID => google_fact_partition(),
-        other => panic!("unexpected missing source asset {other}"),
-    };
-    assert!(store
-        .current_record(&missing_asset_id, &missing_partition)
-        .await
-        .unwrap_err()
-        .is_not_found());
+    assert_eq!(report.manifest.status, DagRunStatus::SucceededWithWarnings);
+    assert!(report.manifest.failed_count > 0);
+    assert_eq!(
+        run_step(&report.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
+        AssetRunStepStatus::Succeeded
+    );
+    for (id, partition) in [
+        (REDDIT_THREADS_DAILY_ASSET_ID, reddit_thread_partition()),
+        (REDDIT_RESIDENT_FACTS_ASSET_ID, reddit_fact_partition()),
+        (GOOGLE_PLACES_WEEKLY_ASSET_ID, google_fact_partition()),
+    ] {
+        assert!(store
+            .current_record(&asset_id(id), &partition)
+            .await
+            .unwrap_err()
+            .is_not_found());
+    }
 }
 
 #[tokio::test]
-async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_successes() {
+async fn executor_reports_optional_failure_as_warning_and_can_resume_same_run() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
@@ -594,7 +615,7 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
     );
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
 
-    let err = executor
+    let report = executor
         .execute(
             &mock_graph(),
             AssetDagExecutionOptions::new(run_partition.clone(), now)
@@ -602,25 +623,22 @@ async fn executor_isolates_failed_branch_and_resumes_same_run_without_replaying_
                 .with_source_inputs(partial_inputs),
         )
         .await
-        .unwrap_err();
-    assert!(matches!(
-        err,
-        AssetDagExecutorError::SourceCollectionFailed {
-            asset_id: ref failed_asset,
-            ref reason,
-        } if failed_asset == &asset_id(REDDIT_THREADS_DAILY_ASSET_ID)
-            && reason.contains("HTTP 403")
-    ));
+        .unwrap();
+    assert_eq!(report.manifest.status, DagRunStatus::SucceededWithWarnings);
 
     let run_store = AssetRunManifestStore::new(lake.clone());
     let failed = run_store.current_manifest(&run_partition).await.unwrap();
-    assert_eq!(failed.status, DagRunStatus::Failed);
+    assert_eq!(failed.status, DagRunStatus::SucceededWithWarnings);
     assert_eq!(failed.failed_count, 1);
     assert_eq!(failed.blocked_count, 1);
     assert_eq!(
         run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID).status,
         AssetRunStepStatus::Failed
     );
+    assert!(run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
+        .error
+        .as_deref()
+        .is_some_and(|error| error.contains("HTTP 403")));
     assert_eq!(
         run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
             .attempts
@@ -772,7 +790,7 @@ async fn executor_rejects_tampered_artifacts_before_resuming_successful_steps() 
                 .with_source_inputs(partial_inputs),
         )
         .await
-        .unwrap_err();
+        .unwrap();
     let failed = AssetRunManifestStore::new(lake.clone())
         .current_manifest(&run_partition)
         .await
@@ -829,7 +847,7 @@ async fn facts_only_resume_replays_raw_companion_and_records_exact_lineage() {
                 .with_source_inputs(partial_inputs),
         )
         .await
-        .unwrap_err();
+        .unwrap();
     let failed = AssetRunManifestStore::new(lake.clone())
         .current_manifest(&run_partition)
         .await
@@ -1034,6 +1052,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     assert_eq!(
         report.executed_assets,
         vec![
+            asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
@@ -1516,6 +1535,44 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
         source_failures: Default::default(),
         rera_registry_monthly: Some(mock_rera_input(now)),
+        prestige_inventory_weekly: Some(PrestigeInventoryWeeklyInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![PrestigeInventoryObservationRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                source_project_id: "prestige-green-acre".to_string(),
+                source_project_name: "Green Acre Whitefield".to_string(),
+                source_project_slug: "green-acre-whitefield".to_string(),
+                source_url: "https://www.prestigeconstructions.com/residential-projects/bangalore/green-acre-whitefield".to_string(),
+                status: Some("Under Construction".to_string()),
+                land_area_acres: Some(10.0),
+                starting_price_inr: Some(25_000_000.0),
+                price_display: Some("INR 2.5 Cr onwards".to_string()),
+                bhk_options: vec!["3 BHK".to_string()],
+                total_units: Some(600),
+                latitude: Some(12.9698),
+                longitude: Some(77.7500),
+                maps_url: Some("https://maps.google.com/?q=12.9698,77.7500".to_string()),
+                address: Some("Whitefield, Bengaluru".to_string()),
+                observed_at: now + Duration::minutes(2),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        metro_stations_monthly: Some(MetroStationsMonthlyInput {
+            snapshot_date: "2026-07".to_string(),
+            records: vec![MetroStationObservationRecord {
+                station_id: "osm:station:hopefarm".to_string(),
+                name: "Hopefarm Channasandra".to_string(),
+                network: Some("Namma Metro".to_string()),
+                operator: Some("BMRCL".to_string()),
+                status: "operational".to_string(),
+                latitude: 12.9876,
+                longitude: 77.7521,
+                source_url: "https://www.openstreetmap.org/node/hopefarm".to_string(),
+                observed_at: now + Duration::minutes(2),
+            }],
+            source_watermarks: Vec::new(),
+        }),
         reddit_threads_daily: Some(RedditThreadsDailyInput {
             snapshot_date: "2026-07-13".to_string(),
             subreddit: "BangaloreRealEstates".to_string(),
@@ -1642,8 +1699,31 @@ fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
                 fetched_at: now,
             },
         ],
-        detail_facts: Vec::new(),
-        detail_fact_annotations: Vec::new(),
+        detail_facts: vec![SkillFactRecord {
+            entity_id: "society:green-acre-whitefield".to_string(),
+            fact_key: "rera_lat_lng".to_string(),
+            value_type: "text".to_string(),
+            value_json: serde_json::to_string(&FactValue::Text("12.9698,77.7500".to_string()))
+                .unwrap(),
+            confidence: 1.0,
+            source_type: "Rera".to_string(),
+            source_url: Some("https://rera.karnataka.gov.in/projectViewDetails".to_string()),
+            model: None,
+            skill_id: Some("fetch_rera".to_string()),
+            triggered_by: Some("asset_dag_fixture".to_string()),
+            learned_at: now,
+            run_id: "rera-fixture".to_string(),
+            input_hash: "sha256:rera-green-acre-coordinate".to_string(),
+        }],
+        detail_fact_annotations: vec![SkillFactAnnotationRecord {
+            entity_id: "society:green-acre-whitefield".to_string(),
+            fact_key: "rera_lat_lng".to_string(),
+            display_template: Some("RERA coordinates: {value}".to_string()),
+            answers_preferences_json: "[]".to_string(),
+            scoring_direction: None,
+            scoring_weight: None,
+            scoring_thresholds_json: "[]".to_string(),
+        }],
         source_watermarks: Vec::new(),
     }
 }

@@ -149,6 +149,7 @@ impl Default for TrustPolicy {
                 "Google".to_string(),
                 "News".to_string(),
                 "Computed".to_string(),
+                "BuilderOfficial".to_string(),
             ],
             ai_source_max_confidence: 0.5,
         }

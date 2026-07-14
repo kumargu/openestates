@@ -197,11 +197,17 @@ async fn planner_returns_missing_default_assets_in_dependency_order() {
         .unwrap();
 
     assert_eq!(plan.len(), expected_count);
-    assert_eq!(
-        plan[0].asset_id,
-        AssetId::new("rera_registry_monthly").unwrap()
-    );
-    assert_eq!(plan[0].reason, PlanReason::Missing);
+    assert!(plan
+        .iter()
+        .position(|asset| asset.asset_id == AssetId::new("rera_registry_monthly").unwrap())
+        .is_some_and(|position| {
+            plan.iter()
+                .position(|asset| {
+                    asset.asset_id == AssetId::new("canonical_society_nodes").unwrap()
+                })
+                .is_some_and(|dependent| position < dependent)
+        }));
+    assert!(plan.iter().all(|asset| asset.reason == PlanReason::Missing));
     assert_eq!(
         plan.last().unwrap().asset_id,
         AssetId::new("search_serving_bundle").unwrap()

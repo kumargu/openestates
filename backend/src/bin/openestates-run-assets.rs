@@ -7,8 +7,9 @@ use backend::assets::{
     default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
     AssetId, AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
-    MaterializationId, SourceEntitySeed, SourceInputProvider, SourceInputRequest,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
+    MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
+    SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
@@ -69,24 +70,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if cli.dry_run && cli.source_command.is_some() {
         eprintln!("Skipping source collector command during dry-run.");
     } else if let Some(provider) = cli.source_input_provider()? {
-        let collection_plan = if let Some(manifest) = &resume_manifest {
+        let mut collection_plan = if let Some(manifest) = &resume_manifest {
             AssetSourceInputs::resume_collection_plan(manifest)
         } else {
             let plan = executor.plan(&options.partition, planned_at).await?;
             AssetSourceInputs::collection_plan(&plan)
         };
+        if resume_manifest.is_none() && !cli.source_entity_ids.is_empty() {
+            include_scoped_rera_refresh(&mut collection_plan);
+        }
+        let source_entities =
+            current_source_entities(&lake, resume_manifest.as_ref(), &cli.source_entity_ids)
+                .await?;
         let request = SourceInputRequest {
             project_root: project_root.clone(),
             partition: options.partition.clone(),
             planned_at,
             requested_assets: collection_plan.requested_assets,
             force_refresh_assets: collection_plan.force_refresh_assets,
-            source_entities: current_source_entities(
-                &lake,
-                resume_manifest.as_ref(),
-                &cli.source_entity_ids,
-            )
-            .await?,
+            source_entities,
         };
         if let Some(manifest) = resume_manifest.as_mut() {
             let lease_id = MaterializationId::new();
@@ -174,6 +176,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", serde_json::to_string_pretty(&report)?);
 
     Ok(())
+}
+
+fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) {
+    let rera = AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA asset ID");
+    collection_plan
+        .requested_assets
+        .extend(AssetSourceInputs::supported_asset_ids());
+    collection_plan.force_assets.push(rera);
+    collection_plan
+        .requested_assets
+        .sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    collection_plan.requested_assets.dedup();
+    collection_plan
+        .force_assets
+        .sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    collection_plan.force_assets.dedup();
 }
 
 async fn release_cli_resume_lease(
@@ -521,6 +539,34 @@ mod tests {
     };
     use chrono::TimeZone;
     use tempfile::tempdir;
+
+    #[test]
+    fn scoped_collection_refreshes_rera_listing_with_selected_details() {
+        let mut plan = SourceInputCollectionPlan {
+            requested_assets: vec![AssetId::new("metro_stations_monthly").unwrap()],
+            force_assets: Vec::new(),
+            force_refresh_assets: Vec::new(),
+        };
+
+        include_scoped_rera_refresh(&mut plan);
+        include_scoped_rera_refresh(&mut plan);
+
+        assert_eq!(
+            plan.requested_assets,
+            vec![
+                AssetId::new("google_places_weekly").unwrap(),
+                AssetId::new("metro_stations_monthly").unwrap(),
+                AssetId::new("prestige_inventory_weekly").unwrap(),
+                AssetId::new("reddit_resident_facts").unwrap(),
+                AssetId::new("reddit_threads_daily").unwrap(),
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+            ]
+        );
+        assert_eq!(
+            plan.force_assets,
+            vec![AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()]
+        );
+    }
 
     #[tokio::test]
     async fn source_entity_selection_fails_closed_without_a_canonical_snapshot() {

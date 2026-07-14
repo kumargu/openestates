@@ -21,12 +21,16 @@ RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
 REDDIT_RESIDENT_FACTS = "reddit_resident_facts"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
+PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
+METRO_STATIONS_MONTHLY = "metro_stations_monthly"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
         REDDIT_THREADS_DAILY,
         REDDIT_RESIDENT_FACTS,
         GOOGLE_PLACES_WEEKLY,
+        PRESTIGE_INVENTORY_WEEKLY,
+        METRO_STATIONS_MONTHLY,
     )
 )
 
@@ -88,6 +92,31 @@ def collect_asset_sources(
             )
         except Exception as error:
             record_source_failure(source_failures, [GOOGLE_PLACES_WEEKLY], error)
+    if PRESTIGE_INVENTORY_WEEKLY in requested:
+        try:
+            from pipeline.sources.project_enrichment import collect_prestige_inventory
+
+            prestige_inputs = source_society_inputs(
+                request, output.get(RERA_REGISTRY_MONTHLY)
+            )
+            if not prestige_inputs:
+                raise ValueError(
+                    "Prestige collection requires scoped source_entities or RERA projects"
+                )
+            output[PRESTIGE_INVENTORY_WEEKLY] = collect_prestige_inventory(
+                request, prestige_inputs
+            )
+        except Exception as error:
+            record_source_failure(
+                source_failures, [PRESTIGE_INVENTORY_WEEKLY], error
+            )
+    if METRO_STATIONS_MONTHLY in requested:
+        try:
+            from pipeline.sources.project_enrichment import collect_metro_stations
+
+            output[METRO_STATIONS_MONTHLY] = collect_metro_stations(request)
+        except Exception as error:
+            record_source_failure(source_failures, [METRO_STATIONS_MONTHLY], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output

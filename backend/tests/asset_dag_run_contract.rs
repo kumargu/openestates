@@ -383,6 +383,60 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::new([("source", "google")]),
     );
     write_current(&materializations, &google_facts).await;
+    let prestige_inventory = materialization_in_partition(
+        "prestige_inventory_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::new([("source", "prestige")]),
+    );
+    write_current(&materializations, &prestige_inventory).await;
+    let market_facts = materialization_in_partition(
+        "market_project_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            prestige_inventory.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "prestige")]),
+    );
+    write_current(&materializations, &market_facts).await;
+    let metro_stations = materialization_in_partition(
+        "metro_stations_monthly",
+        AssetStage::Raw,
+        "2026-07-13",
+        Vec::new(),
+        now,
+        AssetPartition::new([("source", "openstreetmap")]),
+    );
+    write_current(&materializations, &metro_stations).await;
+    let metro_facts = materialization_in_partition(
+        "metro_proximity_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            metro_stations.materialization_id.clone(),
+            rera_facts.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "openstreetmap")]),
+    );
+    write_current(&materializations, &metro_facts).await;
+    let builder_facts = materialization_in_partition(
+        "builder_rera_aggregates",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            rera.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &builder_facts).await;
 
     let stale_kg = materialization_in_partition(
         "kg_society_view",
@@ -393,6 +447,9 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),
             google_facts.materialization_id.clone(),
+            market_facts.materialization_id.clone(),
+            metro_facts.materialization_id.clone(),
+            builder_facts.materialization_id.clone(),
         ],
         now - Duration::hours(1),
         AssetPartition::global(),
@@ -423,6 +480,9 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             reddit_facts_old.materialization_id.clone(),
             reddit_facts_new.materialization_id.clone(),
             google_facts.materialization_id.clone(),
+            market_facts.materialization_id.clone(),
+            metro_facts.materialization_id.clone(),
+            builder_facts.materialization_id.clone(),
         ],
         now,
         AssetPartition::global(),

@@ -15,16 +15,19 @@ use crate::serving::{
 use super::{
     read_skill_fact_artifact_rows, sort_materialization_records, AssetDagPlan, AssetDagRunManifest,
     AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
-    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, DependencyFanInPolicy,
+    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
     MaterializationId, MaterializationRecord, PartitionResolutionError, PlannerError,
+    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer,
     RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
     RedditThreadsDailyInput, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -538,8 +541,10 @@ impl AssetDagExecutor {
         manifest.resume_lease = None;
         let persisted = self.persist_manifest(&mut manifest, true).await?;
 
-        if let Some(err) = first_error {
-            return Err(err);
+        if manifest.status == super::DagRunStatus::Failed {
+            if let Some(err) = first_error {
+                return Err(err);
+            }
         }
 
         Ok(AssetDagExecutionReport {
@@ -1069,6 +1074,26 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::GoogleReviewFacts,
         );
         executors.insert(
+            static_asset_id(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID),
+            BuiltInAssetExecutor::PrestigeInventoryWeekly,
+        );
+        executors.insert(
+            static_asset_id(MARKET_PROJECT_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::MarketProjectFacts,
+        );
+        executors.insert(
+            static_asset_id(METRO_STATIONS_MONTHLY_ASSET_ID),
+            BuiltInAssetExecutor::MetroStationsMonthly,
+        );
+        executors.insert(
+            static_asset_id(METRO_PROXIMITY_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::MetroProximityFacts,
+        );
+        executors.insert(
+            static_asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
+            BuiltInAssetExecutor::BuilderReraAggregates,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1093,6 +1118,11 @@ enum BuiltInAssetExecutor {
     RedditResidentFacts,
     GooglePlacesWeekly,
     GoogleReviewFacts,
+    PrestigeInventoryWeekly,
+    MarketProjectFacts,
+    MetroStationsMonthly,
+    MetroProximityFacts,
+    BuilderReraAggregates,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1295,6 +1325,144 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::PrestigeInventoryWeekly => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .prestige_inventory_weekly
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let record = ProjectEnrichmentMaterializer::new(context.dag.lake.clone())
+                    .materialize_prestige_inventory(
+                        input,
+                        parent_materializations,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::MarketProjectFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let inventory_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::market_project_facts_input_with_aliases(
+                    &context.dag.lake,
+                    inventory_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::MetroStationsMonthly => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .metro_stations_monthly
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let record = ProjectEnrichmentMaterializer::new(context.dag.lake.clone())
+                    .materialize_metro_stations(
+                        input,
+                        Vec::new(),
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::MetroProximityFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let metro_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    METRO_STATIONS_MONTHLY_ASSET_ID,
+                )?;
+                let rera_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_LEGAL_FACTS_ASSET_ID,
+                )?;
+                let input = super::metro_proximity_facts_input(
+                    &context.dag.lake,
+                    metro_record,
+                    rera_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::BuilderReraAggregates => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let rera_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_REGISTRY_MONTHLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::builder_rera_aggregate_facts_input(
+                    &context.dag.lake,
+                    rera_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1478,9 +1646,10 @@ fn support_fact_records(
     parent_records
         .iter()
         .filter(|record| {
-            record.asset_id.as_str() == RERA_LEGAL_FACTS_ASSET_ID
-                || definition.dependency_fan_in_policy(&record.asset_id)
-                    == DependencyFanInPolicy::AllCurrentPartitions
+            record.stage == AssetStage::Silver
+                && (definition.dependencies.contains(&record.asset_id)
+                    || definition.dependency_fan_in_policy(&record.asset_id)
+                        == DependencyFanInPolicy::AllCurrentPartitions)
         })
         .cloned()
         .collect()
@@ -1543,6 +1712,7 @@ pub enum AssetDagExecutorError {
     KgSocietyView(KgSocietyViewMaterializeError),
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
     GooglePlace(GooglePlaceAssetError),
+    ProjectEnrichment(ProjectEnrichmentAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
     Rera(ReraAssetError),
@@ -1628,6 +1798,9 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "reddit thread source execution failed: {err}")
             }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
+            Self::ProjectEnrichment(err) => {
+                write!(f, "project enrichment execution failed: {err}")
+            }
             Self::SearchServingBundle(err) => {
                 write!(f, "search serving bundle execution failed: {err}")
             }
@@ -1749,6 +1922,7 @@ impl AssetDagExecutorError {
             Self::Lake(err) => err.is_retryable(),
             Self::RedditThreadSnapshot(RedditThreadSnapshotMaterializeError::Lake(err))
             | Self::GooglePlace(GooglePlaceAssetError::Lake(err))
+            | Self::ProjectEnrichment(ProjectEnrichmentAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
             | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
@@ -1800,6 +1974,12 @@ impl From<RedditThreadSnapshotMaterializeError> for AssetDagExecutorError {
 impl From<GooglePlaceAssetError> for AssetDagExecutorError {
     fn from(err: GooglePlaceAssetError) -> Self {
         Self::GooglePlace(err)
+    }
+}
+
+impl From<ProjectEnrichmentAssetError> for AssetDagExecutorError {
+    fn from(err: ProjectEnrichmentAssetError) -> Self {
+        Self::ProjectEnrichment(err)
     }
 }
 
@@ -2076,9 +2256,11 @@ mod tests {
             Vec::new(),
         );
 
-        let support_records =
-            support_fact_records(&definition, &[custom_record.clone(), resolved_record]);
+        let support_records = support_fact_records(
+            &definition,
+            &[custom_record.clone(), resolved_record.clone()],
+        );
 
-        assert_eq!(support_records, vec![custom_record]);
+        assert_eq!(support_records, vec![custom_record, resolved_record]);
     }
 }

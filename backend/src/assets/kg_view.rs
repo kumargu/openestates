@@ -286,18 +286,32 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<(), KgSocietyViewMaterializeError> {
-        let known_entities: HashSet<_> = self
+        let mut accepted_entities: HashSet<String> = self
             .entities
             .iter()
-            .map(|entity| entity.entity_id.as_str())
+            .map(|entity| entity.entity_id.clone())
             .collect();
+        let mut society_name_counts = std::collections::HashMap::<String, usize>::new();
+        for entity in self
+            .entities
+            .iter()
+            .filter(|entity| entity.entity_type == "society")
+        {
+            *society_name_counts.entry(slug(&entity.name)).or_default() += 1;
+        }
+        accepted_entities.extend(
+            society_name_counts
+                .into_iter()
+                .filter(|(_, count)| *count == 1)
+                .map(|(name_slug, _)| format!("society:{name_slug}")),
+        );
 
         let mut support_fact_records = Vec::new();
         let mut support_fact_keys = HashSet::<(String, String)>::new();
 
         for fact in support_facts
             .iter()
-            .filter(|fact| known_entities.contains(fact.entity_id.as_str()))
+            .filter(|fact| accepted_entities.contains(&fact.entity_id))
         {
             let fact_value: FactValue = serde_json::from_str(&fact.value_json)?;
             let record = KgViewFactRecord {
@@ -322,7 +336,7 @@ impl KgViewRecords {
         let mut support_annotation_records = Vec::new();
         for annotation in support_annotations
             .iter()
-            .filter(|annotation| known_entities.contains(annotation.entity_id.as_str()))
+            .filter(|annotation| accepted_entities.contains(&annotation.entity_id))
             .filter(|annotation| {
                 support_fact_keys
                     .contains(&(annotation.entity_id.clone(), annotation.fact_key.clone()))
@@ -365,6 +379,23 @@ impl KgViewRecords {
                 .unwrap_or(0);
         }
     }
+}
+
+fn slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut pending_dash = false;
+    for character in value.trim().to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            pending_dash = false;
+        } else {
+            pending_dash = true;
+        }
+    }
+    output
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

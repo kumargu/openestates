@@ -15,6 +15,7 @@ pub mod kg_view;
 pub mod materialization;
 pub mod paths;
 pub mod planner;
+pub mod project_enrichment;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
@@ -51,6 +52,14 @@ pub use paths::AssetPathBuilder;
 pub use planner::{
     AssetDagPlan, AssetFreshness, AssetPlanEntry, AssetPlanner, FreshnessPolicy,
     FreshnessReferenceKind, PlanDecision, PlanReason, PlannedAsset, PlannerError,
+};
+pub use project_enrichment::{
+    builder_rera_aggregate_facts_input, market_project_facts_input_with_aliases,
+    metro_proximity_facts_input, MetroStationObservationRecord, MetroStationsMonthlyInput,
+    ObservationSnapshotManifest, PrestigeInventoryObservationRecord, PrestigeInventoryWeeklyInput,
+    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,

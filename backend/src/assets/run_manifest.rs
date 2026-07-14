@@ -15,6 +15,7 @@ pub enum DagRunStatus {
     Planned,
     Running,
     Succeeded,
+    SucceededWithWarnings,
     Failed,
 }
 
@@ -472,7 +473,9 @@ impl AssetDagRunManifest {
 
     pub fn ensure_resumable(&self) -> Result<(), RunManifestError> {
         match self.status {
-            DagRunStatus::Failed | DagRunStatus::Running => Ok(()),
+            DagRunStatus::Failed | DagRunStatus::Running | DagRunStatus::SucceededWithWarnings => {
+                Ok(())
+            }
             status => Err(RunManifestError::RunNotResumable(status)),
         }
     }
@@ -519,7 +522,11 @@ impl AssetDagRunManifest {
         self.recount();
         if self.failed_count > 0 || self.blocked_count > 0 {
             self.completed_at = Some(completed_at);
-            self.status = DagRunStatus::Failed;
+            self.status = if self.terminal_steps_succeeded() {
+                DagRunStatus::SucceededWithWarnings
+            } else {
+                DagRunStatus::Failed
+            };
             return Ok(());
         }
         if self.succeeded_count == self.planned_count {
@@ -533,6 +540,27 @@ impl AssetDagRunManifest {
             succeeded: self.succeeded_count,
             failed: self.failed_count,
         })
+    }
+
+    fn terminal_steps_succeeded(&self) -> bool {
+        let terminal_steps = self.steps.iter().filter(|candidate| {
+            !self.steps.iter().any(|step| {
+                step.dependencies
+                    .iter()
+                    .any(|dependency| dependency == &candidate.asset_id)
+            })
+        });
+        let mut terminal_count = 0;
+        for step in terminal_steps {
+            terminal_count += 1;
+            if !matches!(
+                step.status,
+                AssetRunStepStatus::Succeeded | AssetRunStepStatus::Skipped
+            ) {
+                return false;
+            }
+        }
+        terminal_count > 0
     }
 
     fn step_mut(&mut self, asset_id: &AssetId) -> Result<&mut AssetRunStep, RunManifestError> {

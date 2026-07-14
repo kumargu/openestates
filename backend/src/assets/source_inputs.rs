@@ -4,9 +4,12 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, GooglePlacesWeeklyInput,
-    PlanReason, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    MetroStationsMonthlyInput, PlanReason, PrestigeInventoryWeeklyInput,
+    RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
     SkillFactRecord, SourceWatermark, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -25,6 +28,10 @@ pub struct AssetSourceInputs {
     pub reddit_resident_facts: Option<SkillFactsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_places_weekly: Option<GooglePlacesWeeklyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prestige_inventory_weekly: Option<PrestigeInventoryWeeklyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metro_stations_monthly: Option<MetroStationsMonthlyInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,6 +48,8 @@ impl AssetSourceInputs {
             REDDIT_THREADS_DAILY_ASSET_ID,
             REDDIT_RESIDENT_FACTS_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+            METRO_STATIONS_MONTHLY_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -54,6 +63,8 @@ impl AssetSourceInputs {
                 | REDDIT_THREADS_DAILY_ASSET_ID
                 | REDDIT_RESIDENT_FACTS_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
+                | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID
+                | METRO_STATIONS_MONTHLY_ASSET_ID
         )
     }
 
@@ -93,6 +104,22 @@ impl AssetSourceInputs {
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             false,
         );
+        add_derived_companion(
+            plan,
+            &mut requested_assets,
+            &mut force_assets,
+            MARKET_PROJECT_FACTS_ASSET_ID,
+            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+            false,
+        );
+        add_derived_companion(
+            plan,
+            &mut requested_assets,
+            &mut force_assets,
+            METRO_PROXIMITY_FACTS_ASSET_ID,
+            METRO_STATIONS_MONTHLY_ASSET_ID,
+            false,
+        );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
         force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -109,18 +136,7 @@ impl AssetSourceInputs {
         let mut requested_assets: Vec<_> = manifest
             .steps
             .iter()
-            .filter(|step| {
-                let needs_collection = match step.status {
-                    AssetRunStepStatus::Succeeded
-                    | AssetRunStepStatus::Skipped
-                    | AssetRunStepStatus::Materialized => false,
-                    AssetRunStepStatus::Failed => step.materialization_id.is_none(),
-                    AssetRunStepStatus::Planned
-                    | AssetRunStepStatus::Running
-                    | AssetRunStepStatus::Blocked => true,
-                };
-                needs_collection && Self::supports_asset(&step.asset_id)
-            })
+            .filter(|step| step_needs_replay(step) && Self::supports_asset(&step.asset_id))
             .map(|step| step.asset_id.clone())
             .collect();
         let mut force_assets = Vec::new();
@@ -144,6 +160,24 @@ impl AssetSourceInputs {
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             true,
         );
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            manifest.steps.iter().any(|step| {
+                step.asset_id.as_str() == MARKET_PROJECT_FACTS_ASSET_ID && step_needs_replay(step)
+            }),
+            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+            true,
+        );
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            manifest.steps.iter().any(|step| {
+                step.asset_id.as_str() == METRO_PROXIMITY_FACTS_ASSET_ID && step_needs_replay(step)
+            }),
+            METRO_STATIONS_MONTHLY_ASSET_ID,
+            true,
+        );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
         force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -154,6 +188,36 @@ impl AssetSourceInputs {
             force_refresh_assets: Vec::new(),
         }
     }
+}
+
+fn step_needs_replay(step: &super::AssetRunStep) -> bool {
+    match step.status {
+        AssetRunStepStatus::Succeeded
+        | AssetRunStepStatus::Skipped
+        | AssetRunStepStatus::Materialized => false,
+        AssetRunStepStatus::Failed => step.materialization_id.is_none(),
+        AssetRunStepStatus::Planned | AssetRunStepStatus::Running | AssetRunStepStatus::Blocked => {
+            true
+        }
+    }
+}
+
+fn add_derived_companion(
+    plan: &AssetDagPlan,
+    requested_assets: &mut Vec<AssetId>,
+    force_assets: &mut Vec<AssetId>,
+    derived_asset_id: &str,
+    raw_asset_id: &str,
+    force_when_requested: bool,
+) {
+    add_raw_companion(
+        requested_assets,
+        force_assets,
+        plan.run_entries()
+            .any(|entry| entry.asset_id.as_str() == derived_asset_id),
+        raw_asset_id,
+        force_when_requested,
+    );
 }
 
 fn add_raw_companion(
