@@ -8,11 +8,11 @@ use backend::assets::{
     AssetId, AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputProvider, SourceInputRequest,
-    CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore};
-use chrono::Utc;
+use chrono::{Duration as ChronoDuration, Utc};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lake = LakeStore::local(&lake_root)?;
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
     let requested_at = Utc::now();
-    let resume_manifest = if let Some(run_id) = &cli.resume_run_id {
+    let mut resume_manifest = if let Some(run_id) = &cli.resume_run_id {
         let manifest = AssetRunManifestStore::new(lake.clone())
             .manifest(&partition, run_id)
             .await?;
@@ -65,6 +65,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else if let Some(version) = cli.version.clone() {
         options = options.with_version(version);
     }
+    let mut resume_lease_id = None;
     if cli.dry_run && cli.source_command.is_some() {
         eprintln!("Skipping source collector command during dry-run.");
     } else if let Some(provider) = cli.source_input_provider()? {
@@ -82,7 +83,39 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             force_refresh_assets: collection_plan.force_refresh_assets,
             source_entities: current_source_entities(&lake, resume_manifest.as_ref()).await?,
         };
-        if let Some(source_inputs) = provider.load(&request, &lake).await? {
+        if let Some(manifest) = resume_manifest.as_mut() {
+            let lease_id = MaterializationId::new();
+            let collector_lease_seconds = cli
+                .source_timeout_seconds
+                .unwrap_or(30 * 60)
+                .saturating_add(5 * 60) as i64;
+            AssetRunManifestStore::new(lake.clone())
+                .acquire_resume_lease(
+                    manifest,
+                    lease_id.clone(),
+                    Utc::now(),
+                    ChronoDuration::seconds(
+                        collector_lease_seconds.max(DEFAULT_RESUME_LEASE_SECONDS),
+                    ),
+                )
+                .await?;
+            options = options.with_resume_lease(lease_id.clone());
+            resume_lease_id = Some(lease_id);
+        }
+        let loaded = match provider.load(&request, &lake).await {
+            Ok(loaded) => loaded,
+            Err(err) => {
+                release_cli_resume_lease(
+                    &lake,
+                    &options.partition,
+                    cli.resume_run_id.as_ref(),
+                    resume_lease_id.as_ref(),
+                )
+                .await;
+                return Result::<(), Box<dyn std::error::Error>>::Err(Box::new(err));
+            }
+        };
+        if let Some(source_inputs) = loaded {
             options = options
                 .with_source_inputs(source_inputs)
                 .with_forced_assets(collection_plan.force_assets);
@@ -98,6 +131,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let report = match execution {
         Ok(report) => report,
         Err(err) => {
+            release_cli_resume_lease(
+                &lake,
+                &execution_partition,
+                resume_run_id.as_ref(),
+                resume_lease_id.as_ref(),
+            )
+            .await;
             let run_store = AssetRunManifestStore::new(lake.clone());
             let failed_manifest = match resume_run_id {
                 Some(run_id) => run_store.manifest(&execution_partition, &run_id).await.ok(),
@@ -116,7 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     manifest.run_id, manifest.run_id
                 );
             }
-            return Err(Box::new(err) as Box<dyn std::error::Error>);
+            return Result::<(), Box<dyn std::error::Error>>::Err(Box::new(err));
         }
     };
 
@@ -129,6 +169,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("{}", serde_json::to_string_pretty(&report)?);
 
     Ok(())
+}
+
+async fn release_cli_resume_lease(
+    lake: &LakeStore,
+    partition: &AssetPartition,
+    run_id: Option<&MaterializationId>,
+    lease_id: Option<&MaterializationId>,
+) {
+    if let (Some(run_id), Some(lease_id)) = (run_id, lease_id) {
+        let _ = AssetRunManifestStore::new(lake.clone())
+            .release_resume_lease(partition, run_id, lease_id)
+            .await;
+    }
 }
 
 async fn current_source_entities(

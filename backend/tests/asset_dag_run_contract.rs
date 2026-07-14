@@ -833,6 +833,71 @@ async fn dag_run_manifest_cas_rejects_a_stale_same_run_writer() {
     assert_eq!(persisted.revision, 2);
 }
 
+#[tokio::test]
+async fn active_resume_lease_blocks_a_staggered_second_owner() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let run_store = AssetRunManifestStore::new(lake);
+    let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+    let plan = backend::assets::AssetDagPlan {
+        run_id: MaterializationId::new(),
+        partition: AssetPartition::global(),
+        planned_at: now,
+        entries: Vec::new(),
+    };
+    let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "lease-v1");
+    manifest.status = DagRunStatus::Running;
+    run_store.write_manifest_cas(&mut manifest).await.unwrap();
+
+    let first_owner = MaterializationId::new();
+    run_store
+        .acquire_resume_lease(
+            &mut manifest,
+            first_owner.clone(),
+            now,
+            Duration::minutes(30),
+        )
+        .await
+        .unwrap();
+    let mut observed_after_first_claim = run_store
+        .manifest(&manifest.partition, &manifest.run_id)
+        .await
+        .unwrap();
+    let second_owner = MaterializationId::new();
+    let error = run_store
+        .acquire_resume_lease(
+            &mut observed_after_first_claim,
+            second_owner.clone(),
+            now + Duration::minutes(1),
+            Duration::minutes(30),
+        )
+        .await
+        .unwrap_err();
+    assert!(matches!(error, LakeError::ConcurrentModification(_)));
+
+    assert!(run_store
+        .release_resume_lease(&manifest.partition, &manifest.run_id, &first_owner)
+        .await
+        .unwrap());
+    let mut released = run_store
+        .manifest(&manifest.partition, &manifest.run_id)
+        .await
+        .unwrap();
+    run_store
+        .acquire_resume_lease(
+            &mut released,
+            second_owner.clone(),
+            now + Duration::minutes(2),
+            Duration::minutes(30),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        released.resume_lease.as_ref().map(|lease| &lease.owner_id),
+        Some(&second_owner)
+    );
+}
+
 #[test]
 fn exact_resume_rejects_legacy_manifests_without_a_snapshot_contract() {
     let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();

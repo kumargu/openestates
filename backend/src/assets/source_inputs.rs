@@ -72,25 +72,27 @@ impl AssetSourceInputs {
         let resident_facts_requested = requested_assets
             .iter()
             .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
-        let reddit_raw_requested = requested_assets
-            .iter()
-            .any(|asset_id| asset_id.as_str() == REDDIT_THREADS_DAILY_ASSET_ID);
-        if resident_facts_requested && !reddit_raw_requested {
-            let raw_asset = AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID)
-                .expect("static Reddit raw asset id is valid");
-            requested_assets.push(raw_asset.clone());
-            force_assets.push(raw_asset);
-        }
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            resident_facts_requested,
+            REDDIT_THREADS_DAILY_ASSET_ID,
+            false,
+        );
         let google_facts_requested = plan
             .run_entries()
             .any(|entry| entry.asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
-        add_forced_raw_companion(
+        add_raw_companion(
             &mut requested_assets,
             &mut force_assets,
             google_facts_requested,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            false,
         );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        requested_assets.dedup();
+        force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        force_assets.dedup();
         force_refresh_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         SourceInputCollectionPlan {
             requested_assets,
@@ -121,20 +123,22 @@ impl AssetSourceInputs {
         let reddit_facts_requested = requested_assets
             .iter()
             .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
-        add_forced_raw_companion(
+        add_raw_companion(
             &mut requested_assets,
             &mut force_assets,
             reddit_facts_requested,
             REDDIT_THREADS_DAILY_ASSET_ID,
+            true,
         );
         let google_facts_requested = requested_assets
             .iter()
             .any(|asset_id| asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
-        add_forced_raw_companion(
+        add_raw_companion(
             &mut requested_assets,
             &mut force_assets,
             google_facts_requested,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            true,
         );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
@@ -148,20 +152,26 @@ impl AssetSourceInputs {
     }
 }
 
-fn add_forced_raw_companion(
+fn add_raw_companion(
     requested_assets: &mut Vec<AssetId>,
     force_assets: &mut Vec<AssetId>,
     derived_requested: bool,
     raw_asset_id: &str,
+    force_when_requested: bool,
 ) {
     if !derived_requested {
         return;
     }
     let raw_asset = AssetId::new(raw_asset_id).expect("static raw asset id is valid");
-    if !requested_assets.iter().any(|asset_id| asset_id == &raw_asset) {
+    let already_requested = requested_assets
+        .iter()
+        .any(|asset_id| asset_id == &raw_asset);
+    if !already_requested {
         requested_assets.push(raw_asset.clone());
     }
-    force_assets.push(raw_asset);
+    if force_when_requested || !already_requested {
+        force_assets.push(raw_asset);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

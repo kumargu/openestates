@@ -380,6 +380,16 @@ async fn resume_collection_replays_a_materialized_raw_companion_instead_of_mixin
         .unwrap();
     assert_eq!(replayed.status, AssetRunStepStatus::Planned);
     assert!(replayed.materialization_id.is_none());
+
+    let raw = manifest
+        .steps
+        .iter_mut()
+        .find(|step| step.asset_id == raw_id)
+        .unwrap();
+    raw.status = AssetRunStepStatus::Running;
+    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
+    assert!(collection.requested_assets.contains(&raw_id));
+    assert!(collection.force_assets.contains(&raw_id));
 }
 
 #[cfg(unix)]

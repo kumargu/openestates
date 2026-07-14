@@ -27,6 +27,8 @@ use super::{
     RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
+const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AssetDagExecutionOptions {
     pub partition: AssetPartition,
@@ -39,6 +41,10 @@ pub struct AssetDagExecutionOptions {
     pub force_assets: Vec<AssetId>,
     #[serde(default)]
     pub retry_policy: AssetRetryPolicy,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_lease_id: Option<MaterializationId>,
+    #[serde(default = "default_asset_execution_timeout_ms")]
+    asset_execution_timeout_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -68,6 +74,8 @@ impl AssetDagExecutionOptions {
             source_inputs: AssetSourceInputs::default(),
             force_assets: Vec::new(),
             retry_policy: AssetRetryPolicy::default(),
+            resume_lease_id: None,
+            asset_execution_timeout_ms: DEFAULT_ASSET_EXECUTION_TIMEOUT_MS,
         }
     }
 
@@ -94,6 +102,22 @@ impl AssetDagExecutionOptions {
     pub fn with_retry_policy(mut self, retry_policy: AssetRetryPolicy) -> Self {
         self.retry_policy = retry_policy;
         self
+    }
+
+    pub fn with_resume_lease(mut self, lease_id: MaterializationId) -> Self {
+        self.resume_lease_id = Some(lease_id);
+        self
+    }
+
+    pub fn with_asset_execution_timeout(mut self, timeout: Duration) -> Self {
+        self.asset_execution_timeout_ms = (timeout.as_millis().min(u64::MAX as u128) as u64)
+            .min(DEFAULT_ASSET_EXECUTION_TIMEOUT_MS);
+        self
+    }
+
+    fn asset_execution_timeout_ms(&self) -> u64 {
+        self.asset_execution_timeout_ms
+            .min(DEFAULT_ASSET_EXECUTION_TIMEOUT_MS)
     }
 }
 
@@ -211,37 +235,59 @@ impl AssetDagExecutor {
         }
         manifest.ensure_exact_resume()?;
         let mut options = options;
+        let lease_id = options.resume_lease_id.clone().unwrap_or_default();
+        self.run_manifests
+            .acquire_resume_lease(
+                &mut manifest,
+                lease_id.clone(),
+                Utc::now(),
+                chrono::Duration::seconds(super::DEFAULT_RESUME_LEASE_SECONDS),
+            )
+            .await?;
+        options.resume_lease_id = Some(lease_id.clone());
         options.planned_at = manifest.created_at;
         if !manifest.execution_version.is_empty() {
             options.version.clone_from(&manifest.execution_version);
         }
-        let dependency_snapshot = self.load_dependency_snapshot(&manifest).await?;
-        let records_by_asset = self.restore_succeeded_records(&manifest).await?;
-        if self
-            .recover_interrupted_materialization(
-                &mut manifest,
-                &records_by_asset,
-                &dependency_snapshot,
-                &options.partition,
-                &options.retry_policy,
+        let lease_partition = manifest.partition.clone();
+        let lease_run_id = manifest.run_id.clone();
+        let result = async {
+            let dependency_snapshot = self.load_dependency_snapshot(&manifest).await?;
+            let records_by_asset = self.restore_succeeded_records(&manifest).await?;
+            if self
+                .recover_interrupted_materialization(
+                    &mut manifest,
+                    &records_by_asset,
+                    &dependency_snapshot,
+                    &options.partition,
+                    &options.retry_policy,
+                )
+                .await?
+            {
+                self.persist_manifest(&mut manifest, false).await?;
+            }
+            let mut manifest = manifest.prepare_resume(Utc::now())?;
+            for asset_id in &options.force_assets {
+                manifest.replay_step(asset_id)?;
+            }
+            let records_by_asset = self.restore_succeeded_records(&manifest).await?;
+            self.execute_manifest(
+                graph,
+                options,
+                manifest,
+                records_by_asset,
+                dependency_snapshot,
             )
-            .await?
-        {
-            self.persist_manifest(&mut manifest, false).await?;
+            .await
         }
-        let mut manifest = manifest.prepare_resume(Utc::now())?;
-        for asset_id in &options.force_assets {
-            manifest.replay_step(asset_id)?;
+        .await;
+        if result.is_err() {
+            let _ = self
+                .run_manifests
+                .release_resume_lease(&lease_partition, &lease_run_id, &lease_id)
+                .await;
         }
-        let records_by_asset = self.restore_succeeded_records(&manifest).await?;
-        self.execute_manifest(
-            graph,
-            options,
-            manifest,
-            records_by_asset,
-            dependency_snapshot,
-        )
-        .await
+        result
     }
 
     async fn recover_interrupted_materialization(
@@ -358,8 +404,10 @@ impl AssetDagExecutor {
                 manifest.mark_step_running(&asset_id, started_at)?;
                 self.persist_manifest(&mut manifest, false).await?;
 
-                match self
-                    .execute_asset(AssetExecutionContext {
+                let asset_execution_timeout_ms = options.asset_execution_timeout_ms();
+                let execution = tokio::time::timeout(
+                    Duration::from_millis(asset_execution_timeout_ms),
+                    self.execute_asset(AssetExecutionContext {
                         dag: self,
                         graph,
                         options: &options,
@@ -369,9 +417,16 @@ impl AssetDagExecutor {
                         records_by_asset: &records_by_asset,
                         dependency_snapshot: &dependency_snapshot,
                         kg_view: kg_view.as_ref(),
-                    })
-                    .await
-                {
+                    }),
+                )
+                .await
+                .map_err(|_| AssetDagExecutorError::AssetExecutionTimedOut {
+                    asset_id: asset_id.clone(),
+                    timeout_ms: asset_execution_timeout_ms,
+                })
+                .and_then(|result| result);
+
+                match execution {
                     Ok(executed) => {
                         let completed_at = Utc::now();
                         let record = executed.record().clone();
@@ -466,6 +521,7 @@ impl AssetDagExecutor {
 
         let completed_at = Utc::now();
         manifest.finish(completed_at)?;
+        manifest.resume_lease = None;
         let persisted = self.persist_manifest(&mut manifest, true).await?;
 
         if let Some(err) = first_error {
@@ -932,6 +988,7 @@ impl AssetDagExecutor {
         manifest: &mut AssetDagRunManifest,
         promote_current: bool,
     ) -> Result<PersistedManifest, AssetDagExecutorError> {
+        manifest.renew_resume_lease(Utc::now());
         let meta = self.run_manifests.write_manifest_cas(manifest).await?;
         if promote_current {
             self.run_manifests.promote_current(manifest).await?;
@@ -1017,6 +1074,8 @@ enum BuiltInAssetExecutor {
     SearchServingBundle,
     #[cfg(test)]
     TestFailOnce(std::sync::Arc<std::sync::atomic::AtomicUsize>),
+    #[cfg(test)]
+    TestSleep(Duration),
 }
 
 impl BuiltInAssetExecutor {
@@ -1310,6 +1369,11 @@ impl BuiltInAssetExecutor {
                     .await?;
                 Ok(ExecutedAsset::Record(record))
             }
+            #[cfg(test)]
+            Self::TestSleep(duration) => {
+                tokio::time::sleep(*duration).await;
+                unreachable!("test sleep executor should be cancelled by its timeout")
+            }
         }
     }
 }
@@ -1526,6 +1590,10 @@ pub enum AssetDagExecutorError {
         key: String,
         reason: String,
     },
+    AssetExecutionTimedOut {
+        asset_id: AssetId,
+        timeout_ms: u64,
+    },
 }
 
 impl fmt::Display for AssetDagExecutorError {
@@ -1639,6 +1707,13 @@ impl fmt::Display for AssetDagExecutorError {
                 f,
                 "asset {asset_id} cannot resume because artifact {key} failed integrity validation: {reason}"
             ),
+            Self::AssetExecutionTimedOut {
+                asset_id,
+                timeout_ms,
+            } => write!(
+                f,
+                "asset {asset_id} exceeded its execution timeout of {timeout_ms}ms"
+            ),
         }
     }
 }
@@ -1648,6 +1723,7 @@ impl std::error::Error for AssetDagExecutorError {}
 impl AssetDagExecutorError {
     pub fn is_retryable(&self) -> bool {
         match self {
+            Self::AssetExecutionTimedOut { .. } => true,
             Self::Lake(err) => err.is_retryable(),
             Self::RedditThreadSnapshot(RedditThreadSnapshotMaterializeError::Lake(err))
             | Self::GooglePlace(GooglePlaceAssetError::Lake(err))
@@ -1783,6 +1859,10 @@ fn default_asset_version(planned_at: DateTime<Utc>) -> String {
     planned_at.format("%Y-%m-%dT%H:%M:%SZ").to_string()
 }
 
+fn default_asset_execution_timeout_ms() -> u64 {
+    DEFAULT_ASSET_EXECUTION_TIMEOUT_MS
+}
+
 fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
     source_inputs.rera_registry_monthly.is_none()
         && source_inputs.reddit_threads_daily.is_none()
@@ -1854,6 +1934,69 @@ mod tests {
         assert_eq!(step.attempts.len(), 2);
         assert!(step.attempts[0].error.is_some());
         assert!(step.attempts[1].error.is_none());
+    }
+
+    #[tokio::test]
+    async fn asset_timeout_stays_inside_the_resume_lease_window() {
+        assert!(
+            DEFAULT_ASSET_EXECUTION_TIMEOUT_MS
+                < super::super::DEFAULT_RESUME_LEASE_SECONDS as u64 * 1_000
+        );
+        let capped = AssetDagExecutionOptions::new(AssetPartition::global(), Utc::now())
+            .with_asset_execution_timeout(Duration::from_secs(2 * 60 * 60));
+        assert_eq!(
+            capped.asset_execution_timeout_ms(),
+            DEFAULT_ASSET_EXECUTION_TIMEOUT_MS
+        );
+
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let asset_id = AssetId::new("slow_root").unwrap();
+        let registry = AssetRegistry::new(vec![AssetDefinition::new(
+            asset_id.clone(),
+            AssetStage::Raw,
+            "slow test root",
+            Vec::new(),
+            RefreshCadence::Daily,
+            CostTier::Free,
+            TrustTier::Root,
+        )])
+        .unwrap();
+        let mut executors = HashMap::new();
+        executors.insert(
+            asset_id.clone(),
+            BuiltInAssetExecutor::TestSleep(Duration::from_millis(20)),
+        );
+        let executor = AssetDagExecutor {
+            materializations: AssetMaterializationStore::new(lake.clone()),
+            run_manifests: AssetRunManifestStore::new(lake.clone()),
+            lake,
+            registry,
+            executors: BuiltInAssetExecutorRegistry { executors },
+        };
+        let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+
+        let error = executor
+            .execute(
+                &KnowledgeGraph::new(),
+                AssetDagExecutionOptions::new(AssetPartition::global(), now)
+                    .with_asset_execution_timeout(Duration::from_millis(1))
+                    .with_retry_policy(AssetRetryPolicy {
+                        max_attempts: 1,
+                        initial_delay_ms: 0,
+                        max_delay_ms: 0,
+                    }),
+            )
+            .await
+            .unwrap_err();
+
+        assert!(matches!(
+            error,
+            AssetDagExecutorError::AssetExecutionTimedOut {
+                asset_id: timed_out,
+                timeout_ms: 1
+            } if timed_out == asset_id
+        ));
     }
 
     #[test]
