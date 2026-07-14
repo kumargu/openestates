@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, type PointerEvent } from "react";
 import {
   BASE_INPUTS,
   calculateLoanJourney,
@@ -23,6 +23,12 @@ type Scenario = {
   ownership: string;
 };
 
+type GraphEvent = {
+  year: number;
+  label: string;
+  shortLabel: string;
+};
+
 function Icon({ name }: { name: "home" | "tune" | "save" | "close" }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   if (name === "home") return <svg {...common}><path d="m3 11 9-8 9 8" /><path d="M5 10v10h14V10" /><path d="M9 20v-6h6v6" /></svg>;
@@ -32,7 +38,8 @@ function Icon({ name }: { name: "home" | "tune" | "save" | "close" }) {
   return null;
 }
 
-function NetWorthGraph({ scenarios, projection, horizon, selected, onSelect, onHorizonChange }: { scenarios: Scenario[]; projection: ReturnType<typeof calculateProjection>; horizon: number; selected: ScenarioId; onSelect: (id: ScenarioId) => void; onHorizonChange: (year: number) => void }) {
+function NetWorthGraph({ scenarios, projection, events, horizon, selected, onSelect, onHorizonChange }: { scenarios: Scenario[]; projection: ReturnType<typeof calculateProjection>; events: GraphEvent[]; horizon: number; selected: ScenarioId; onSelect: (id: ScenarioId) => void; onHorizonChange: (year: number) => void }) {
+  const [hoverYear, setHoverYear] = useState<number | null>(null);
   const width = 960;
   const height = 340;
   const inset = { left: 66, right: 24, top: 24, bottom: 38 };
@@ -46,24 +53,60 @@ function NetWorthGraph({ scenarios, projection, horizon, selected, onSelect, onH
   const x = (year: number) => inset.left + year / 20 * plotWidth;
   const y = (value: number) => inset.top + plotHeight - value / maxValue * plotHeight;
   const line = (values: number[]) => values.map((value, year) => `${year === 0 ? "M" : "L"}${x(year).toFixed(1)},${y(value).toFixed(1)}`).join(" ");
-  const cursorX = x(horizon);
+  const area = (values: number[]) => `${line(values)} L${x(20).toFixed(1)},${(inset.top + plotHeight).toFixed(1)} L${x(0).toFixed(1)},${(inset.top + plotHeight).toFixed(1)} Z`;
+  const activeYear = hoverYear ?? horizon;
+  const cursorX = x(activeYear);
+  const selectedSeries = series.find((item) => item.id === selected) ?? series[0];
+  const buyValue = series[0].values[activeYear];
+  const rentValue = series[1].values[activeYear];
+  const leadValue = Math.abs(buyValue - rentValue);
+  const leadLabel = buyValue >= rentValue ? "Buy leads" : "Rent + MF leads";
+  const tooltipX = cursorX > width - 230 ? cursorX - 208 : cursorX + 16;
+  const tooltipY = Math.max(48, Math.min(height - 116, y(selectedSeries.values[activeYear]) - 45));
+
+  const updateHoverYear = (event: PointerEvent<SVGSVGElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const svgX = (event.clientX - bounds.left) / bounds.width * width;
+    const nextYear = Math.round((svgX - inset.left) / plotWidth * 20);
+    setHoverYear(Math.max(0, Math.min(20, nextYear)));
+  };
 
   return (
     <div className="net-worth-graph">
       <div className="graph-legend">
-        {scenarios.map((scenario) => <button key={scenario.id} className={selected === scenario.id ? "selected" : ""} onClick={() => onSelect(scenario.id)}><i className={`legend-dot legend-dot--${scenario.id}`} /><span><strong>{scenario.label}</strong><small>{formatCurrency(scenario.value, true)}</small></span></button>)}
+        {scenarios.map((scenario) => {
+          const activeValue = series.find((item) => item.id === scenario.id)?.values[activeYear] ?? scenario.value;
+          return <button key={scenario.id} className={selected === scenario.id ? "selected" : ""} onClick={() => onSelect(scenario.id)}><i className={`legend-dot legend-dot--${scenario.id}`} /><span><strong>{scenario.label}</strong><small>{formatCurrency(activeValue, true)} at year {activeYear}</small></span></button>;
+        })}
       </div>
-      <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Projected net worth over twenty years">
+      <svg className="interactive-graph" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Interactive projected net worth over twenty years" onPointerMove={updateHoverYear} onPointerLeave={() => setHoverYear(null)} onClick={() => onHorizonChange(activeYear)}>
+        <defs>
+          <linearGradient id="buy-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#ed8465" stopOpacity=".2" /><stop offset="100%" stopColor="#ed8465" stopOpacity=".01" /></linearGradient>
+          <linearGradient id="rent-area" x1="0" x2="0" y1="0" y2="1"><stop offset="0%" stopColor="#68a8d4" stopOpacity=".2" /><stop offset="100%" stopColor="#68a8d4" stopOpacity=".01" /></linearGradient>
+          <filter id="tooltip-shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#172123" floodOpacity=".14" /></filter>
+        </defs>
         {[.25, .5, .75, 1].map((ratio) => {
           const value = maxValue * ratio;
           const lineY = y(value);
           return <g key={ratio}><line x1={inset.left} x2={width - inset.right} y1={lineY} y2={lineY} className="graph-gridline" /><text x={inset.left - 10} y={lineY + 3} className="graph-y-label">{formatCurrency(value, true)}</text></g>;
         })}
         {[0, 5, 10, 15, 20].map((year) => <text key={year} x={x(year)} y={height - 9} className="graph-x-label">{year === 0 ? "Now" : `${year}y`}</text>)}
+        <path d={area(selectedSeries.values)} className={`graph-area graph-area--${selected}`} />
         {series.map((item) => <path key={item.id} d={line(item.values)} className={`graph-line graph-line--${item.id} ${selected === item.id ? "selected" : ""}`} />)}
+        {events.map((graphEvent) => {
+          const eventValue = selectedSeries.values[graphEvent.year];
+          return <g key={`${graphEvent.year}-${graphEvent.label}`} className="graph-event" transform={`translate(${x(graphEvent.year)} ${y(eventValue)})`}><circle r="10" /><text y="3">{graphEvent.shortLabel}</text><text y="-17" className="graph-event-label">{graphEvent.label}</text></g>;
+        })}
         <line x1={cursorX} x2={cursorX} y1={inset.top} y2={inset.top + plotHeight} className="graph-cursor" />
-        <text x={cursorX} y={inset.top - 8} className="graph-cursor-label">YEAR {horizon}</text>
-        {series.map((item) => <circle key={item.id} cx={cursorX} cy={y(item.values[horizon])} r={selected === item.id ? 6 : 4} className={`graph-point graph-point--${item.id}`} />)}
+        <text x={cursorX} y={inset.top - 8} className="graph-cursor-label">YEAR {activeYear}</text>
+        {series.map((item) => <circle key={item.id} cx={cursorX} cy={y(item.values[activeYear])} r={selected === item.id ? 6 : 4} className={`graph-point graph-point--${item.id}`} />)}
+        <g className={`graph-tooltip ${hoverYear === null ? "resting" : ""}`} transform={`translate(${tooltipX} ${tooltipY})`} filter="url(#tooltip-shadow)">
+          <rect width="192" height="104" rx="13" />
+          <text x="14" y="20" className="graph-tooltip__year">YEAR {activeYear}</text>
+          <circle cx="17" cy="40" r="4" className="graph-tooltip__buy" /><text x="29" y="43">Buy this home</text><text x="178" y="43" className="graph-tooltip__value">{formatCurrency(buyValue, true)}</text>
+          <circle cx="17" cy="61" r="4" className="graph-tooltip__rent" /><text x="29" y="64">Rent + mutual funds</text><text x="178" y="64" className="graph-tooltip__value">{formatCurrency(rentValue, true)}</text>
+          <line x1="14" x2="178" y1="76" y2="76" /><text x="14" y="94" className="graph-tooltip__lead">{leadLabel}</text><text x="178" y="94" className="graph-tooltip__value">{formatCurrency(leadValue, true)}</text>
+        </g>
       </svg>
       <label className="year-scrubber"><span>Now</span><input type="range" min={0} max={20} step={1} value={horizon} onChange={(event) => onHorizonChange(Number(event.target.value))} aria-label="Projection year" /><span>20 years</span></label>
     </div>
@@ -105,6 +148,7 @@ export function App() {
   const [loanYear, setLoanYear] = useState(5);
   const [activeExperimentId, setActiveExperimentId] = useState<ExperimentId | null>(null);
   const [experimentValue, setExperimentValue] = useState(0);
+  const [planLabOpen, setPlanLabOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
@@ -122,6 +166,10 @@ export function App() {
   const advantage = winner.value - ranked[1].value;
   const selectedScenario = scenarios.find((scenario) => scenario.id === selected) ?? scenarios[0];
   const monthlyGap = scenarios[0].monthlyCost - scenarios[1].monthlyCost;
+  const graphEvents: GraphEvent[] = [
+    { year: inputs.purchaseYear, label: "Purchase", shortLabel: "H" },
+    ...(projection.breakEvenYear !== null ? [{ year: projection.breakEvenYear, label: "Break-even", shortLabel: "=" }] : []),
+  ].filter((event) => event.year >= 0 && event.year <= 20);
   const experiments: PlanExperiment[] = [
     { id: "delay", title: "Buy later", description: "See the cost of waiting two years", controlLabel: "Purchase timing", value: activeExperimentId === "delay" ? experimentValue : experimentDefault(baseInputs, "delay"), min: 0, max: 7, step: 1, displayValue: `Year ${activeExperimentId === "delay" ? experimentValue : experimentDefault(baseInputs, "delay")}` },
     { id: "downPayment", title: "Use more cash", description: "Add ₹10L to the down payment", controlLabel: "Down payment", value: activeExperimentId === "downPayment" ? experimentValue : experimentDefault(baseInputs, "downPayment"), min: 20, max: 80, step: 5, displayValue: `₹${activeExperimentId === "downPayment" ? experimentValue : experimentDefault(baseInputs, "downPayment")}L` },
@@ -165,6 +213,14 @@ export function App() {
     setBaseInputs(inputs);
     setActiveExperimentId(null);
   };
+  const openPlanLab = () => {
+    setPlanLabOpen(true);
+    requestAnimationFrame(() => document.getElementById("plan-lab")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+  };
+  const openLoanJourney = () => {
+    setWorkspaceView("loan");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
 
   return (
     <div className="dashboard-shell">
@@ -192,15 +248,15 @@ export function App() {
 
               <section className="comparison-panel">
                 <div className="panel-heading"><div><span>SCENARIO COMPARISON</span><h2>Projected net worth</h2></div><div className="horizon-control"><span>Quick view</span><div>{[5, 10, 15, 20].map((year) => <button key={year} className={horizon === year ? "active" : ""} onClick={() => setHorizon(year)}>{year}y</button>)}</div></div></div>
-                <NetWorthGraph scenarios={scenarios} projection={projection} horizon={horizon} selected={selected} onSelect={setSelected} onHorizonChange={setHorizon} />
+                <NetWorthGraph scenarios={scenarios} projection={projection} events={graphEvents} horizon={horizon} selected={selected} onSelect={setSelected} onHorizonChange={setHorizon} />
                 <div className={`scenario-inspector scenario-inspector--${selected}`}>
                   <div><span>Selected option</span><strong>{selectedScenario.label}</strong><small>{selectedScenario.description}</small></div>
                   <dl><div><dt>Net worth</dt><dd>{formatCurrency(selectedScenario.value, true)}</dd></div><div><dt>Monthly cost</dt><dd>{formatCurrency(selectedScenario.monthlyCost)}</dd></div><div><dt>{selected === "rent" ? "Fund value" : "Home equity"}</dt><dd>{selectedScenario.ownership}</dd></div><div><dt>Liquidity</dt><dd>{selectedScenario.liquidity}</dd></div></dl>
-                  <p>{selected === "buy" ? "More ownership, with more capital committed upfront." : "More flexibility, with returns tied to the mutual-fund assumption."}</p>
+                  <div className="scenario-actions"><span>{selectedScenario.id === winner.id ? "Current leader" : "Alternative"}</span><p>{selected === "buy" ? "More ownership, with more capital committed upfront." : "More flexibility, with returns tied to the mutual-fund assumption."}</p><div><button onClick={openPlanLab}>Test this plan</button><button onClick={openLoanJourney}>Loan journey</button></div></div>
                 </div>
               </section>
 
-              <PlanLab experiments={experiments} activeExperiment={activeExperiment} impact={experimentImpact} reversalInsight={reversalInsight} onSelect={selectExperiment} onValueChange={setExperimentValue} onKeep={keepExperiment} onReset={() => setActiveExperimentId(null)} />
+              <PlanLab open={planLabOpen} experiments={experiments} activeExperiment={activeExperiment} impact={experimentImpact} reversalInsight={reversalInsight} onOpenChange={setPlanLabOpen} onSelect={selectExperiment} onValueChange={setExperimentValue} onKeep={keepExperiment} onReset={() => setActiveExperimentId(null)} />
             </>
           ) : (
             <LoanJourneyView journey={loanJourney} extraEmisPerYear={extraEmisPerYear} selectedYear={loanYear} onExtraEmisChange={setExtraEmisPerYear} onSelectYear={setLoanYear} />

@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { formatCurrency } from "./model.ts";
 
 export type ExperimentId = "delay" | "downPayment" | "growth" | "loanRate" | "fundReturn" | "extraSip";
@@ -30,12 +29,10 @@ function signedCurrency(value: number): string {
   return `${value > 0 ? "+" : "−"}${formatCurrency(Math.abs(value), true)}`;
 }
 
-export function PlanLab({ experiments, activeExperiment, impact, reversalInsight, onSelect, onValueChange, onKeep, onReset }: { experiments: PlanExperiment[]; activeExperiment: PlanExperiment | null; impact: ExperimentImpact | null; reversalInsight: string; onSelect: (id: ExperimentId) => void; onValueChange: (value: number) => void; onKeep: () => void; onReset: () => void }) {
-  const [open, setOpen] = useState(false);
-
+export function PlanLab({ open, experiments, activeExperiment, impact, reversalInsight, onOpenChange, onSelect, onValueChange, onKeep, onReset }: { open: boolean; experiments: PlanExperiment[]; activeExperiment: PlanExperiment | null; impact: ExperimentImpact | null; reversalInsight: string; onOpenChange: (open: boolean) => void; onSelect: (id: ExperimentId) => void; onValueChange: (value: number) => void; onKeep: () => void; onReset: () => void }) {
   return (
-    <section className={`plan-lab ${open ? "open" : ""}`}>
-      <button className="plan-lab__summary" onClick={() => setOpen((current) => !current)} aria-expanded={open}>
+    <section id="plan-lab" className={`plan-lab ${open ? "open" : ""}`}>
+      <button className="plan-lab__summary" onClick={() => onOpenChange(!open)} aria-expanded={open}>
         <span><small>TEST THE PLAN</small><strong>What could change the answer?</strong><em>{reversalInsight}</em></span>
         <span>{open ? "Close" : "Run experiments"}</span>
       </button>
