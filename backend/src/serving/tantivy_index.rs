@@ -198,7 +198,7 @@ fn facts_for_entities(
             entry.body.push_str(display_template);
         }
         entry.body.push(' ');
-        entry.body.push_str(&metadata.answers_preferences_json);
+        entry.body.push_str(&metadata.answers_preferences.join(" "));
     }
     by_entity
 }

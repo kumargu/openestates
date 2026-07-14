@@ -1,5 +1,9 @@
 use std::fs::File;
+use std::sync::Arc;
 
+use arrow::array::{ArrayRef, Float32Array, StringArray};
+use arrow::datatypes::{DataType, Field, Schema};
+use arrow::record_batch::RecordBatch;
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
@@ -7,9 +11,11 @@ use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::serving::{
-    hydrate_tantivy_index, BundleArtifactKind, ServingBundleBuilder, TantivyRecallIndex,
+    hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, BundleArtifactKind,
+    ServingBundleBuilder, TantivyRecallIndex,
 };
 use chrono::Utc;
+use parquet::arrow::ArrowWriter;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use tempfile::tempdir;
 
@@ -72,10 +78,42 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert!(search_metadata_columns.contains(&"answers_preferences".to_string()));
     assert!(!search_metadata_columns.contains(&"answers_preferences_json".to_string()));
 
+    let fact_records = read_facts_parquet(&fact_bytes).unwrap();
+    let land_area = fact_records
+        .iter()
+        .find(|fact| {
+            fact.entity_id == "society:green-acre-whitefield"
+                && fact.fact_key == "rera_total_land_area_sqm"
+        })
+        .unwrap();
+    assert_eq!(land_area.value, FactValue::Numeric(48_000.0));
+
+    let search_metadata_records = read_search_metadata_parquet(&search_metadata_bytes).unwrap();
+    let greenery_metadata = search_metadata_records
+        .iter()
+        .find(|metadata| {
+            metadata.entity_id == "society:green-acre-whitefield"
+                && metadata.fact_key == "resident_greenery_signal"
+        })
+        .unwrap();
+    assert!(greenery_metadata
+        .answers_preferences
+        .contains(&"greenery".to_string()));
+
     let manifest_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
     assert!(manifest_body.contains("\"format_version\": 2"));
+
+    let schema_key =
+        LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();
+    let schema_body = lake.get_text(&schema_key).await.unwrap();
+    let schema_json: serde_json::Value = serde_json::from_str(&schema_body).unwrap();
+    assert_eq!(schema_json["storage_format"], "parquet+tantivy");
+    assert!(schema_body.contains("\"value_number\""));
+    assert!(schema_body.contains("\"answers_preferences\""));
+    assert!(!schema_body.contains("value_json"));
+    assert!(!schema_body.contains("answers_preferences_json"));
 
     let hydrated = tempdir().unwrap();
     hydrate_tantivy_index(&lake, &manifest, hydrated.path())
@@ -84,6 +122,29 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let recall = TantivyRecallIndex::open(hydrated.path()).unwrap();
     let hits = recall.search("whitefield greenery trees", 5).unwrap();
     assert_eq!(hits[0].entity_id, "society:green-acre-whitefield");
+}
+
+#[test]
+fn legacy_json_serving_parquet_reads_into_typed_runtime_records() {
+    let facts = read_facts_parquet(&legacy_facts_parquet()).unwrap();
+    assert_eq!(facts.len(), 1);
+    assert_eq!(facts[0].entity_id, "society:legacy-green");
+    assert_eq!(
+        facts[0].value,
+        FactValue::Text("Legacy residents mention trees".to_string())
+    );
+    assert_eq!(
+        facts[0].value_text.as_deref(),
+        Some("Legacy residents mention trees")
+    );
+
+    let metadata = read_search_metadata_parquet(&legacy_search_metadata_parquet()).unwrap();
+    assert_eq!(metadata.len(), 1);
+    assert_eq!(
+        metadata[0].answers_preferences,
+        vec!["greenery".to_string(), "trees".to_string()]
+    );
+    assert_eq!(metadata[0].scoring_direction.as_deref(), Some("TextMatch"));
 }
 
 fn mock_graph() -> KnowledgeGraph {
@@ -199,4 +260,75 @@ fn parquet_columns(bytes: &[u8]) -> Vec<String> {
         .iter()
         .map(|field| field.name().to_string())
         .collect()
+}
+
+fn legacy_facts_parquet() -> Vec<u8> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("entity_id", DataType::Utf8, false),
+        Field::new("fact_key", DataType::Utf8, false),
+        Field::new("value_type", DataType::Utf8, false),
+        Field::new("value_text", DataType::Utf8, true),
+        Field::new("value_json", DataType::Utf8, false),
+        Field::new("confidence", DataType::Float32, false),
+        Field::new("source_type", DataType::Utf8, false),
+        Field::new("source_url", DataType::Utf8, true),
+        Field::new("model", DataType::Utf8, true),
+        Field::new("skill_id", DataType::Utf8, true),
+        Field::new("learned_at", DataType::Utf8, false),
+    ]));
+    write_legacy_parquet(
+        schema,
+        vec![
+            string_array(["society:legacy-green"]),
+            string_array(["resident_greenery_signal"]),
+            string_array(["text"]),
+            optional_string_array([Some("Legacy residents mention trees")]),
+            string_array([r#"{"type":"Text","data":"Legacy residents mention trees"}"#]),
+            Arc::new(Float32Array::from(vec![0.71])) as ArrayRef,
+            string_array(["Reddit"]),
+            optional_string_array([Some("https://reddit.com/r/BangaloreRealEstates/legacy")]),
+            optional_string_array([None]),
+            optional_string_array([Some("legacy_skill")]),
+            string_array(["2026-07-13T00:00:00Z"]),
+        ],
+    )
+}
+
+fn legacy_search_metadata_parquet() -> Vec<u8> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("entity_id", DataType::Utf8, false),
+        Field::new("fact_key", DataType::Utf8, false),
+        Field::new("display_template", DataType::Utf8, true),
+        Field::new("answers_preferences_json", DataType::Utf8, false),
+        Field::new("scoring_direction", DataType::Utf8, true),
+        Field::new("scoring_weight", DataType::Float32, true),
+    ]));
+    write_legacy_parquet(
+        schema,
+        vec![
+            string_array(["society:legacy-green"]),
+            string_array(["resident_greenery_signal"]),
+            optional_string_array([Some("Resident signal: {value}")]),
+            string_array([r#"["greenery","trees"]"#]),
+            optional_string_array([Some("TextMatch")]),
+            Arc::new(Float32Array::from(vec![Some(1.4)])) as ArrayRef,
+        ],
+    )
+}
+
+fn write_legacy_parquet(schema: Arc<Schema>, columns: Vec<ArrayRef>) -> Vec<u8> {
+    let batch = RecordBatch::try_new(schema.clone(), columns).unwrap();
+    let mut bytes = Vec::new();
+    let mut writer = ArrowWriter::try_new(&mut bytes, schema, None).unwrap();
+    writer.write(&batch).unwrap();
+    writer.close().unwrap();
+    bytes
+}
+
+fn string_array<const N: usize>(values: [&str; N]) -> ArrayRef {
+    Arc::new(StringArray::from(Vec::from(values)))
+}
+
+fn optional_string_array<const N: usize>(values: [Option<&str>; N]) -> ArrayRef {
+    Arc::new(StringArray::from(Vec::from(values)))
 }

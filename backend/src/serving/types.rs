@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::knowledge::FactValue;
+
 pub const SEARCH_SERVING_BUNDLE_ASSET_ID: &str = "search_serving_bundle";
 
 /// One entity row in the request-path bundle.
@@ -22,7 +24,7 @@ pub struct ServingFactRecord {
     pub fact_key: String,
     pub value_type: String,
     pub value_text: Option<String>,
-    pub value_json: String,
+    pub value: FactValue,
     pub confidence: f32,
     pub source_type: String,
     pub source_url: Option<String>,
@@ -37,9 +39,31 @@ pub struct ServingSearchMetadataRecord {
     pub entity_id: String,
     pub fact_key: String,
     pub display_template: Option<String>,
-    pub answers_preferences_json: String,
+    pub answers_preferences: Vec<String>,
     pub scoring_direction: Option<String>,
     pub scoring_weight: Option<f32>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServingBundleSchema {
+    pub format_version: u32,
+    pub storage_format: String,
+    pub fact_schema_registry_version: u32,
+    pub tables: Vec<ServingTableSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServingTableSchema {
+    pub name: String,
+    pub path: String,
+    pub columns: Vec<ServingColumnSchema>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ServingColumnSchema {
+    pub name: String,
+    pub logical_type: String,
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]

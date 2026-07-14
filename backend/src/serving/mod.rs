@@ -22,7 +22,7 @@ pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
 pub use types::{
-    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingEntityRecord,
-    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
+    ServingColumnSchema, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

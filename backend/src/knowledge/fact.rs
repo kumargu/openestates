@@ -65,7 +65,7 @@ pub enum ScoringDirection {
 }
 
 /// What kind of value a fact holds.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum FactValue {
     Numeric(f64),

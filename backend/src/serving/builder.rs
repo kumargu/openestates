@@ -7,7 +7,7 @@ use chrono::Utc;
 use crate::assets::{
     AssetPathBuilder, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
-use crate::knowledge::KnowledgeGraph;
+use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
@@ -16,8 +16,9 @@ use super::parquet::{
 };
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
-    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingEntityRecord,
-    ServingFactRecord, ServingSearchMetadataRecord, TrustPolicy,
+    BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
+    ServingColumnSchema, ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
+    ServingTableSchema, TrustPolicy,
 };
 
 const SERVING_BUNDLE_FORMAT_VERSION: u32 = 2;
@@ -48,8 +49,8 @@ impl ServingBundleBuilder {
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let entities = serving_entity_records(records);
-        let facts = serving_fact_records(&records.facts);
-        let search_metadata = serving_search_metadata_records(&records.fact_annotations);
+        let facts = serving_fact_records(&records.facts)?;
+        let search_metadata = serving_search_metadata_records(&records.fact_annotations)?;
         self.build_from_serving_records(entities, facts, search_metadata, bundle_version)
             .await
     }
@@ -103,7 +104,8 @@ impl ServingBundleBuilder {
         ));
 
         let schema_key = AssetPathBuilder::serving_bundle_key(&bundle_version, "schema.json");
-        let schema_meta = self.lake.put_json(&schema_key, schema::registry()).await?;
+        let schema_descriptor = serving_bundle_schema_descriptor(SERVING_BUNDLE_FORMAT_VERSION);
+        let schema_meta = self.lake.put_json(&schema_key, &schema_descriptor).await?;
         artifacts.push(artifact(
             BundleArtifactKind::SchemaJson,
             schema_meta,
@@ -155,6 +157,76 @@ impl ServingBundleBuilder {
     }
 }
 
+fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema {
+    ServingBundleSchema {
+        format_version,
+        storage_format: "parquet+tantivy".to_string(),
+        fact_schema_registry_version: schema::registry().version,
+        tables: vec![
+            ServingTableSchema {
+                name: "entities".to_string(),
+                path: "entities/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("entity_id", "utf8"),
+                    required_column("entity_type", "utf8"),
+                    required_column("name", "utf8"),
+                    optional_column("root_source", "utf8"),
+                    required_column("searchable_text", "utf8"),
+                ],
+            },
+            ServingTableSchema {
+                name: "facts".to_string(),
+                path: "facts/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("entity_id", "utf8"),
+                    required_column("fact_key", "utf8"),
+                    required_column("value_type", "utf8"),
+                    optional_column("value_text", "utf8"),
+                    optional_column("value_number", "float64"),
+                    optional_column("value_bool", "bool"),
+                    optional_column("value_tags", "list<utf8>"),
+                    optional_column("value_score", "float64"),
+                    optional_column("value_score_explanation", "utf8"),
+                    required_column("confidence", "float32"),
+                    required_column("source_type", "utf8"),
+                    optional_column("source_url", "utf8"),
+                    optional_column("model", "utf8"),
+                    optional_column("skill_id", "utf8"),
+                    required_column("learned_at", "timestamp_rfc3339"),
+                ],
+            },
+            ServingTableSchema {
+                name: "search_metadata".to_string(),
+                path: "search_metadata/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("entity_id", "utf8"),
+                    required_column("fact_key", "utf8"),
+                    optional_column("display_template", "utf8"),
+                    required_column("answers_preferences", "list<utf8>"),
+                    optional_column("scoring_direction", "utf8"),
+                    optional_column("scoring_weight", "float32"),
+                ],
+            },
+        ],
+    }
+}
+
+fn required_column(name: &str, logical_type: &str) -> ServingColumnSchema {
+    ServingColumnSchema {
+        name: name.to_string(),
+        logical_type: logical_type.to_string(),
+        required: true,
+    }
+}
+
+fn optional_column(name: &str, logical_type: &str) -> ServingColumnSchema {
+    ServingColumnSchema {
+        name: name.to_string(),
+        logical_type: logical_type.to_string(),
+        required: false,
+    }
+}
+
 fn serving_entity_records(records: &KgViewRecords) -> Vec<ServingEntityRecord> {
     let fact_text_by_entity = serving_fact_text_by_entity(&records.facts);
     records
@@ -193,37 +265,44 @@ fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, St
     by_entity
 }
 
-fn serving_fact_records(facts: &[KgViewFactRecord]) -> Vec<ServingFactRecord> {
+fn serving_fact_records(
+    facts: &[KgViewFactRecord],
+) -> Result<Vec<ServingFactRecord>, serde_json::Error> {
     facts
         .iter()
-        .map(|fact| ServingFactRecord {
-            entity_id: fact.entity_id.clone(),
-            fact_key: fact.fact_key.clone(),
-            value_type: fact.value_type.clone(),
-            value_text: fact.value_text.clone(),
-            value_json: fact.value_json.clone(),
-            confidence: fact.confidence,
-            source_type: fact.source_type.clone(),
-            source_url: fact.source_url.clone(),
-            model: fact.model.clone(),
-            skill_id: fact.skill_id.clone(),
-            learned_at: fact.learned_at,
+        .map(|fact| {
+            let value = serde_json::from_str::<FactValue>(&fact.value_json)?;
+            Ok(ServingFactRecord {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                value_type: fact.value_type.clone(),
+                value_text: fact.value_text.clone(),
+                value,
+                confidence: fact.confidence,
+                source_type: fact.source_type.clone(),
+                source_url: fact.source_url.clone(),
+                model: fact.model.clone(),
+                skill_id: fact.skill_id.clone(),
+                learned_at: fact.learned_at,
+            })
         })
         .collect()
 }
 
 fn serving_search_metadata_records(
     annotations: &[KgViewFactAnnotationRecord],
-) -> Vec<ServingSearchMetadataRecord> {
+) -> Result<Vec<ServingSearchMetadataRecord>, serde_json::Error> {
     annotations
         .iter()
-        .map(|annotation| ServingSearchMetadataRecord {
-            entity_id: annotation.entity_id.clone(),
-            fact_key: annotation.fact_key.clone(),
-            display_template: annotation.display_template.clone(),
-            answers_preferences_json: annotation.answers_preferences_json.clone(),
-            scoring_direction: annotation.scoring_direction.clone(),
-            scoring_weight: annotation.scoring_weight,
+        .map(|annotation| {
+            Ok(ServingSearchMetadataRecord {
+                entity_id: annotation.entity_id.clone(),
+                fact_key: annotation.fact_key.clone(),
+                display_template: annotation.display_template.clone(),
+                answers_preferences: serde_json::from_str(&annotation.answers_preferences_json)?,
+                scoring_direction: annotation.scoring_direction.clone(),
+                scoring_weight: annotation.scoring_weight,
+            })
         })
         .collect()
 }

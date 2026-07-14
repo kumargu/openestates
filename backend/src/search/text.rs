@@ -682,12 +682,11 @@ fn serving_preference_evidence(
             continue;
         };
 
-        let value = serving_fact_value(fact)?;
         let score_delta = f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
         return Some(EvidenceMatch {
             preference: preference.to_string(),
             fact_key: fact.fact_key.clone(),
-            display: render_serving_fact_display(fact, metadata, &value),
+            display: render_serving_fact_display(fact, metadata, &fact.value),
             normalized_score: (score_delta / 2.0).min(1.0),
             score_delta,
             confidence: fact.confidence,
@@ -703,8 +702,7 @@ fn serving_preference_evidence(
             continue;
         }
 
-        let value = serving_fact_value(fact)?;
-        if let Some(snippet) = schema::text_support_snippet(&value, schema) {
+        if let Some(snippet) = schema::text_support_snippet(&fact.value, schema) {
             return Some(EvidenceMatch {
                 preference: preference.to_string(),
                 fact_key: fact.fact_key.clone(),
@@ -733,19 +731,11 @@ fn metadata_supports_text_match(metadata: &ServingSearchMetadataRecord) -> bool 
 }
 
 fn metadata_answers_preference(metadata: &ServingSearchMetadataRecord, preference: &str) -> bool {
-    let Ok(answers) = serde_json::from_str::<Vec<String>>(&metadata.answers_preferences_json)
-    else {
-        return false;
-    };
     let preference = preference.to_lowercase();
-    answers.iter().any(|answer| {
+    metadata.answers_preferences.iter().any(|answer| {
         let answer = answer.to_lowercase();
         answer == preference || answer.contains(&preference) || preference.contains(&answer)
     })
-}
-
-fn serving_fact_value(fact: &ServingFactRecord) -> Option<FactValue> {
-    serde_json::from_str(&fact.value_json).ok()
 }
 
 fn render_serving_fact_display(

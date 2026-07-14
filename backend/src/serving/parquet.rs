@@ -11,6 +11,7 @@ use parquet::arrow::ArrowWriter;
 use parquet::basic::{Compression, ZstdLevel};
 use parquet::file::properties::WriterProperties;
 
+use crate::knowledge::FactValue;
 use crate::parquet_data::{
     optional_string_list_column_value, string_list_array, string_list_field, typed_value_arrays,
     typed_value_fields, typed_value_from_batch, OptionalListColumn, TypedFactValue,
@@ -54,9 +55,8 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
     let typed_values = facts
         .iter()
         .map(|fact| {
-            let value = serde_json::from_str(&fact.value_json)?;
-            validate_fact_value_type(&fact.value_type, &value)?;
-            Ok(TypedFactValue::from_fact_value(&value))
+            validate_fact_value_type(&fact.value_type, &fact.value)?;
+            Ok(TypedFactValue::from_fact_value(&fact.value))
         })
         .collect::<Result<Vec<_>, ParquetWriteError>>()?;
 
@@ -101,11 +101,6 @@ pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, Parqu
 pub fn write_search_metadata_parquet(
     records: &[ServingSearchMetadataRecord],
 ) -> Result<Vec<u8>, ParquetWriteError> {
-    let answers_preferences = records
-        .iter()
-        .map(|record| parse_string_vec(&record.answers_preferences_json).map(Some))
-        .collect::<Result<Vec<_>, ParquetWriteError>>()?;
-
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("fact_key", DataType::Utf8, false),
@@ -126,7 +121,11 @@ pub fn write_search_metadata_parquet(
                     .map(|record| record.display_template.clone())
                     .collect(),
             ),
-            string_list_array(answers_preferences.into_iter()),
+            string_list_array(
+                records
+                    .iter()
+                    .map(|record| Some(record.answers_preferences.clone())),
+            ),
             optional_string_array(
                 records
                     .iter()
@@ -154,7 +153,7 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         let fact_key = string_column(&batch, "fact_key")?;
         let value_type = string_column(&batch, "value_type")?;
         let value_text = optional_string_column(&batch, "value_text")?;
-        let value_json = optional_string_column(&batch, "value_json")?;
+        let legacy_value_json = optional_string_column(&batch, "value_json")?;
         let confidence = float32_column(&batch, "confidence")?;
         let source_type = string_column(&batch, "source_type")?;
         let source_url = string_column(&batch, "source_url")?;
@@ -165,18 +164,17 @@ pub fn read_facts_parquet(bytes: &[u8]) -> Result<Vec<ServingFactRecord>, Parque
         for row in 0..batch.num_rows() {
             let value_type = required_string(value_type, row, "value_type")?;
             let typed_value = typed_value_from_batch(&batch, row);
-            let value_json = match value_json {
-                Some(value_json) => required_string(value_json, row, "value_json")?,
-                None => typed_value_json_from_batch(typed_value.as_ref(), row, &value_type)?,
-            };
+            let value =
+                fact_value_from_batch(typed_value.as_ref(), legacy_value_json, row, &value_type)?;
+            let typed_value_text = typed_value.and_then(|value| value.value_text);
             records.push(ServingFactRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 value_type,
                 value_text: value_text
                     .and_then(|value_text| optional_string(value_text, row))
-                    .or_else(|| typed_value.and_then(|value| value.value_text)),
-                value_json,
+                    .or(typed_value_text),
+                value,
                 confidence: required_f32(confidence, row, "confidence")?,
                 source_type: required_string(source_type, row, "source_type")?,
                 source_url: optional_string(source_url, row),
@@ -203,7 +201,8 @@ pub fn read_search_metadata_parquet(
         let entity_id = string_column(&batch, "entity_id")?;
         let fact_key = string_column(&batch, "fact_key")?;
         let display_template = string_column(&batch, "display_template")?;
-        let answers_preferences_json = optional_string_column(&batch, "answers_preferences_json")?;
+        let legacy_answers_preferences_json =
+            optional_string_column(&batch, "answers_preferences_json")?;
         let scoring_direction = string_column(&batch, "scoring_direction")?;
         let scoring_weight = float32_column(&batch, "scoring_weight")?;
 
@@ -212,9 +211,9 @@ pub fn read_search_metadata_parquet(
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
                 display_template: optional_string(display_template, row),
-                answers_preferences_json: answers_preferences_json_from_batch(
+                answers_preferences: answers_preferences_from_batch(
                     &batch,
-                    answers_preferences_json,
+                    legacy_answers_preferences_json,
                     row,
                 )?,
                 scoring_direction: optional_string(scoring_direction, row),
@@ -245,15 +244,18 @@ fn optional_string_array(values: Vec<Option<String>>) -> ArrayRef {
     Arc::new(StringArray::from(values))
 }
 
-fn parse_string_vec(value: &str) -> Result<Vec<String>, ParquetWriteError> {
-    Ok(serde_json::from_str(value)?)
-}
-
-fn typed_value_json_from_batch(
+fn fact_value_from_batch(
     typed_value: Option<&TypedFactValue>,
+    legacy_json: Option<&StringArray>,
     row: usize,
     value_type: &str,
-) -> Result<String, ParquetReadError> {
+) -> Result<FactValue, ParquetReadError> {
+    if let Some(legacy_json) = legacy_json {
+        let value = serde_json::from_str(&required_string(legacy_json, row, "value_json")?)?;
+        validate_read_fact_value_type(value_type, &value, row)?;
+        return Ok(value);
+    }
+
     let typed_value = typed_value.ok_or_else(|| ParquetReadError::InvalidTypedValue {
         row,
         message: "missing typed fact value columns".to_string(),
@@ -264,13 +266,10 @@ fn typed_value_json_from_batch(
             message: format!("typed columns do not match value_type {value_type}"),
         }
     })?;
-    Ok(serde_json::to_string(&value)?)
+    Ok(value)
 }
 
-fn validate_fact_value_type(
-    value_type: &str,
-    value: &crate::knowledge::FactValue,
-) -> Result<(), ParquetWriteError> {
+fn validate_fact_value_type(value_type: &str, value: &FactValue) -> Result<(), ParquetWriteError> {
     if TypedFactValue::value_type_matches(value_type, value) {
         return Ok(());
     }
@@ -280,26 +279,48 @@ fn validate_fact_value_type(
     })
 }
 
-fn answers_preferences_json_from_batch(
+fn validate_read_fact_value_type(
+    value_type: &str,
+    value: &FactValue,
+    row: usize,
+) -> Result<(), ParquetReadError> {
+    if TypedFactValue::value_type_matches(value_type, value) {
+        return Ok(());
+    }
+    Err(ParquetReadError::InvalidTypedValue {
+        row,
+        message: format!(
+            "value_type {value_type} does not match fact value type {}",
+            TypedFactValue::value_type_for(value)
+        ),
+    })
+}
+
+fn answers_preferences_from_batch(
     batch: &RecordBatch,
     legacy_json: Option<&StringArray>,
     row: usize,
-) -> Result<String, ParquetReadError> {
+) -> Result<Vec<String>, ParquetReadError> {
     if let Some(legacy_json) = legacy_json {
-        return required_string(legacy_json, row, "answers_preferences_json");
+        return Ok(serde_json::from_str(&required_string(
+            legacy_json,
+            row,
+            "answers_preferences_json",
+        )?)?);
     }
-    let values = match optional_string_list_column_value(batch, ANSWERS_PREFERENCES_COLUMN, row) {
-        Ok(OptionalListColumn::Values(values)) => values,
-        Ok(OptionalListColumn::Null) => Vec::new(),
-        Ok(OptionalListColumn::Missing) => {
-            return Err(ParquetReadError::InvalidTypedValue {
-                row,
-                message: format!("missing typed list column {ANSWERS_PREFERENCES_COLUMN}"),
-            });
-        }
-        Err(message) => return Err(ParquetReadError::InvalidTypedValue { row, message }),
-    };
-    Ok(serde_json::to_string(&values)?)
+    Ok(
+        match optional_string_list_column_value(batch, ANSWERS_PREFERENCES_COLUMN, row) {
+            Ok(OptionalListColumn::Values(values)) => values,
+            Ok(OptionalListColumn::Null) => Vec::new(),
+            Ok(OptionalListColumn::Missing) => {
+                return Err(ParquetReadError::InvalidTypedValue {
+                    row,
+                    message: format!("missing typed list column {ANSWERS_PREFERENCES_COLUMN}"),
+                });
+            }
+            Err(message) => return Err(ParquetReadError::InvalidTypedValue { row, message }),
+        },
+    )
 }
 
 fn string_column<'a>(
@@ -397,7 +418,6 @@ pub enum ParquetWriteError {
         value_type: String,
         actual_type: String,
     },
-    Json(serde_json::Error),
     Parquet(parquet::errors::ParquetError),
 }
 
@@ -412,19 +432,12 @@ impl fmt::Display for ParquetWriteError {
                 f,
                 "serving fact value_type {value_type} does not match fact value type {actual_type}"
             ),
-            Self::Json(err) => write!(f, "Parquet JSON compatibility error: {err}"),
             Self::Parquet(err) => write!(f, "Parquet write error: {err}"),
         }
     }
 }
 
 impl std::error::Error for ParquetWriteError {}
-
-impl From<serde_json::Error> for ParquetWriteError {
-    fn from(err: serde_json::Error) -> Self {
-        Self::Json(err)
-    }
-}
 
 #[derive(Debug)]
 pub enum ParquetReadError {
