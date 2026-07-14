@@ -1,13 +1,17 @@
 use std::fs::File;
 
+use arrow::array::{Array, StringArray};
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor,
-    AssetDagExecutorError, AssetId, AssetMaterializationStore, AssetPartition,
-    AssetRunManifestStore, AssetRunStepStatus, AssetSourceInputs, AssetStage, DagRunStatus,
-    MaterializationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
+    default_openestates_registry, rera_legal_facts_input, AssetDagExecutionOptions,
+    AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
+    AssetPartition, AssetRegistry, AssetRunManifestStore, AssetRunStepStatus, AssetSourceInputs,
+    AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus, MaterializationId,
+    MaterializationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence,
+    ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
+    SourceWatermark, TrustTier, CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -16,8 +20,12 @@ use backend::knowledge::fact::{
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
-use backend::serving::{ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID};
+use backend::serving::{
+    ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
+};
+use bytes::Bytes;
 use chrono::{Duration, TimeZone, Utc};
+use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::file::reader::{FileReader, SerializedFileReader};
 use tempfile::tempdir;
 
@@ -101,7 +109,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
 
-    let upstreams = seed_authoritative_upstreams(&store, now, &AssetPartition::global()).await;
+    let upstreams =
+        seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
     let older_reddit_facts = seed_skill_fact_current(
         &lake,
         &store,
@@ -256,7 +265,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.parent_materializations.len(), 6);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        7
+        39
     );
 
     let serving_record = current_record(
@@ -265,7 +274,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 7);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 39);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -291,12 +300,139 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 }
 
 #[tokio::test]
+async fn executor_builds_rera_proof_chain_from_typed_parent_artifacts() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+    let store = AssetMaterializationStore::new(lake.clone());
+    let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
+    let run_partition = source_run_partition();
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
+        .with_version("2026-07-13T06:00Z")
+        .with_source_inputs(mock_source_inputs(now));
+
+    let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
+        .execute(&mock_graph(), options)
+        .await
+        .unwrap();
+
+    assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    assert_eq!(report.manifest.planned_count, 8);
+    assert_eq!(report.executed_assets.len(), 8);
+    for id in [
+        RERA_REGISTRY_MONTHLY_ASSET_ID,
+        CANONICAL_SOCIETY_NODES_ASSET_ID,
+        RERA_LEGAL_FACTS_ASSET_ID,
+        REDDIT_THREADS_DAILY_ASSET_ID,
+        REDDIT_RESIDENT_FACTS_ASSET_ID,
+        GOOGLE_REVIEW_FACTS_ASSET_ID,
+        KG_SOCIETY_VIEW_ASSET_ID,
+        SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ] {
+        assert!(report.executed_assets.contains(&asset_id(id)));
+    }
+
+    let rera = current_record(
+        &store,
+        RERA_REGISTRY_MONTHLY_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &rera, "projects/part-00000.parquet").await,
+        3
+    );
+
+    let canonical = current_record(
+        &store,
+        CANONICAL_SOCIETY_NODES_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    assert_eq!(
+        canonical.parent_materializations,
+        vec![rera.materialization_id.clone()]
+    );
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &canonical, "entities/part-00000.parquet").await,
+        5
+    );
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &canonical, "edges/part-00000.parquet").await,
+        6
+    );
+    assert_eq!(
+        parquet_rows_for_artifact(&lake, &canonical, "mappings/part-00000.parquet").await,
+        3
+    );
+
+    let legal = current_record(&store, RERA_LEGAL_FACTS_ASSET_ID, &AssetPartition::global()).await;
+    assert_eq!(
+        legal.parent_materializations,
+        vec![
+            rera.materialization_id,
+            canonical.materialization_id.clone()
+        ]
+    );
+    assert!(parquet_rows_for_artifact(&lake, &legal, "facts/part-00000.parquet").await >= 32);
+
+    let kg = current_record(&store, KG_SOCIETY_VIEW_ASSET_ID, &AssetPartition::global()).await;
+    assert!(kg
+        .parent_materializations
+        .contains(&canonical.materialization_id));
+    assert!(kg
+        .parent_materializations
+        .contains(&legal.materialization_id));
+    assert!(
+        parquet_contains_utf8(
+            &lake,
+            &kg,
+            "entities/part-00000.parquet",
+            "name",
+            "RERA Meadows"
+        )
+        .await
+    );
+    assert!(
+        parquet_contains_utf8(
+            &lake,
+            &kg,
+            "facts/part-00000.parquet",
+            "fact_key",
+            "rera_total_land_area_sqm"
+        )
+        .await
+    );
+
+    let serving = current_record(
+        &store,
+        SEARCH_SERVING_BUNDLE_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    assert!(serving_fact_rows(&lake, &serving).await >= 34);
+    let serving_cache = tempdir().unwrap();
+    let loaded = ServingBundleLoader::new(lake.clone(), serving_cache.path())
+        .load_current_search_bundle()
+        .await
+        .unwrap()
+        .expect("serving bundle should load");
+    let alias_rows = loaded
+        .fact_index
+        .entity("society:rera-meadows")
+        .expect("legacy property society alias should resolve to RERA facts");
+    assert!(alias_rows
+        .facts
+        .iter()
+        .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
+}
+
+#[tokio::test]
 async fn executor_requires_source_inputs_without_promoting_current_source_pointer() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
-    seed_authoritative_upstreams(&store, now, &AssetPartition::global()).await;
+    seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
 
     let run_partition = source_run_partition();
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
@@ -329,8 +465,18 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
+    let registry = AssetRegistry::new(vec![AssetDefinition::new(
+        asset_id("unwired_asset"),
+        AssetStage::Raw,
+        "test asset without a built-in executor",
+        Vec::new(),
+        RefreshCadence::Monthly,
+        CostTier::Free,
+        TrustTier::Root,
+    )])
+    .unwrap();
 
-    let err = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
+    let err = AssetDagExecutor::new(registry, lake.clone())
         .execute(&mock_graph(), options)
         .await
         .unwrap_err();
@@ -338,7 +484,7 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     assert!(matches!(
         err,
         AssetDagExecutorError::NoExecutor { asset_id: ref returned_asset_id }
-            if returned_asset_id == &asset_id("rera_registry_monthly")
+            if returned_asset_id == &asset_id("unwired_asset")
     ));
 
     let failed_run = AssetRunManifestStore::new(lake)
@@ -350,7 +496,7 @@ async fn executor_fails_loudly_when_planned_asset_has_no_executor() {
     let failed_step = failed_run
         .steps
         .iter()
-        .find(|step| step.asset_id == asset_id("rera_registry_monthly"))
+        .find(|step| step.asset_id == asset_id("unwired_asset"))
         .unwrap();
     assert_eq!(failed_step.status, AssetRunStepStatus::Failed);
     assert!(failed_step
@@ -421,44 +567,55 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
 }
 
 async fn seed_authoritative_upstreams(
+    lake: &LakeStore,
     store: &AssetMaterializationStore,
     now: chrono::DateTime<Utc>,
     partition: &AssetPartition,
 ) -> std::collections::HashMap<&'static str, MaterializationRecord> {
-    let rera = materialization(
-        "rera_registry_monthly",
-        AssetStage::Raw,
-        "2026-07",
-        now,
-        partition,
-    )
-    .with_source_watermarks(vec![SourceWatermark {
-        source: "rera".to_string(),
-        high_watermark: "2026-07".to_string(),
-    }]);
+    let rera = ReraRegistryMaterializer::new(lake.clone())
+        .materialize_for_run(
+            &mock_rera_input(now),
+            MaterializationId::new(),
+            partition.clone(),
+        )
+        .await
+        .unwrap();
     write_current(store, &rera).await;
 
-    let canonical = materialization(
-        "canonical_society_nodes",
-        AssetStage::Gold,
-        "2026-07-13",
-        now,
-        partition,
-    )
-    .with_parent_materializations(vec![rera.materialization_id.clone()]);
+    let canonical = CanonicalSocietyMaterializer::new(lake.clone())
+        .materialize_from_rera_for_run(
+            &rera,
+            "2026-07-13",
+            MaterializationId::new(),
+            partition.clone(),
+        )
+        .await
+        .unwrap();
     write_current(store, &canonical).await;
 
-    let rera_facts = materialization(
-        "rera_legal_facts",
-        AssetStage::Silver,
-        "2026-07-13",
-        now,
-        partition,
-    )
-    .with_parent_materializations(vec![
-        rera.materialization_id.clone(),
-        canonical.materialization_id.clone(),
-    ]);
+    let rera_facts_input =
+        rera_legal_facts_input(lake, &rera, &canonical, &MaterializationId::new())
+            .await
+            .unwrap();
+    let rera_facts = SkillFactMaterializer::new(lake.clone())
+        .materialize_for_run(
+            RERA_LEGAL_FACTS_ASSET_ID,
+            rera_facts_input.source,
+            rera_facts_input.snapshot_date,
+            "seed-rera-facts",
+            &rera_facts_input.facts,
+            &rera_facts_input.fact_annotations,
+            vec![
+                rera.materialization_id.clone(),
+                canonical.materialization_id.clone(),
+            ],
+            rera_facts_input.source_watermarks,
+            MaterializationId::new(),
+            partition.clone(),
+        )
+        .await
+        .unwrap()
+        .record;
     write_current(store, &rera_facts).await;
 
     std::collections::HashMap::from([
@@ -474,41 +631,11 @@ async fn seed_current_upstreams_for_partition(
     now: chrono::DateTime<Utc>,
     run_partition: &AssetPartition,
 ) -> std::collections::HashMap<&'static str, MaterializationRecord> {
-    let rera = materialization(
-        "rera_registry_monthly",
-        AssetStage::Raw,
-        "2026-07",
-        now,
-        &AssetPartition::global(),
-    )
-    .with_source_watermarks(vec![SourceWatermark {
-        source: "rera".to_string(),
-        high_watermark: "2026-07".to_string(),
-    }]);
-    write_current(store, &rera).await;
-
-    let canonical = materialization(
-        "canonical_society_nodes",
-        AssetStage::Gold,
-        "2026-07-13",
-        now,
-        &AssetPartition::global(),
-    )
-    .with_parent_materializations(vec![rera.materialization_id.clone()]);
-    write_current(store, &canonical).await;
-
-    let rera_facts = materialization(
-        "rera_legal_facts",
-        AssetStage::Silver,
-        "2026-07-13",
-        now,
-        &AssetPartition::global(),
-    )
-    .with_parent_materializations(vec![
-        rera.materialization_id.clone(),
-        canonical.materialization_id.clone(),
-    ]);
-    write_current(store, &rera_facts).await;
+    let authoritative =
+        seed_authoritative_upstreams(lake, store, now, &AssetPartition::global()).await;
+    let rera = authoritative[RERA_REGISTRY_MONTHLY_ASSET_ID].clone();
+    let canonical = authoritative[CANONICAL_SOCIETY_NODES_ASSET_ID].clone();
+    let rera_facts = authoritative[RERA_LEGAL_FACTS_ASSET_ID].clone();
 
     let reddit_threads = materialization(
         "reddit_threads_daily",
@@ -696,6 +823,9 @@ fn mock_graph() -> KnowledgeGraph {
     ));
 
     graph.add_node(society);
+    let mut rera_alias = Node::new("society:rera-meadows", NodeType::Society, "RERA Meadows");
+    rera_alias.root_source = Some(RootSource::Legacy);
+    graph.add_node(rera_alias);
     graph.add_node(builder);
     graph.add_edge(Edge {
         from: "society:green-acre-whitefield".to_string(),
@@ -800,6 +930,7 @@ fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
 
 fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
+        rera_registry_monthly: Some(mock_rera_input(now)),
         reddit_threads_daily: Some(RedditThreadsDailyInput {
             snapshot_date: "2026-07-13".to_string(),
             subreddit: "BangaloreRealEstates".to_string(),
@@ -885,6 +1016,63 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     }
 }
 
+fn mock_rera_input(now: chrono::DateTime<Utc>) -> ReraRegistryMonthlyInput {
+    ReraRegistryMonthlyInput {
+        snapshot_date: "2026-07".to_string(),
+        projects: vec![
+            ReraProjectSnapshotRecord {
+                ack_number: Some("ACK-RERA-MEADOWS-A".to_string()),
+                registration_number: Some("PRM/KA/RERA/1251/446/PR/130726/009999".to_string()),
+                project_name: "Duplicate Heights".to_string(),
+                promoter_name: Some("Proof Homes Private Limited".to_string()),
+                status: Some("Approved".to_string()),
+                project_type: Some("Residential Apartment".to_string()),
+                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                area_name: Some("Whitefield".to_string()),
+                district: Some("Bengaluru Urban".to_string()),
+                taluk: Some("Bengaluru East".to_string()),
+                total_land_area_sqm: Some(48_562.28),
+                land_litigation: Some(false),
+                source_url: "https://rera.karnataka.gov.in/projectViewDetails".to_string(),
+                fetched_at: now,
+            },
+            ReraProjectSnapshotRecord {
+                ack_number: Some("ACK-DUPLICATE-HEIGHTS-C".to_string()),
+                registration_number: Some("PRM/KA/RERA/1251/446/PR/130726/007777".to_string()),
+                project_name: "Duplicate Heights".to_string(),
+                promoter_name: Some("Proof Homes Private Limited".to_string()),
+                status: Some("Approved".to_string()),
+                project_type: Some("Residential Apartment".to_string()),
+                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                area_name: Some("Whitefield".to_string()),
+                district: Some("Bengaluru Urban".to_string()),
+                taluk: Some("Bengaluru East".to_string()),
+                total_land_area_sqm: Some(36_421.0),
+                land_litigation: Some(false),
+                source_url: "https://rera.karnataka.gov.in/projectViewDetails".to_string(),
+                fetched_at: now,
+            },
+            ReraProjectSnapshotRecord {
+                ack_number: Some("ACK-RERA-MEADOWS-B".to_string()),
+                registration_number: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                project_name: "RERA Meadows".to_string(),
+                promoter_name: Some("Proof Homes Private Limited".to_string()),
+                status: Some("Approved".to_string()),
+                project_type: Some("Residential Apartment".to_string()),
+                project_address: Some("Whitefield Main Road, Bengaluru".to_string()),
+                area_name: Some("Whitefield".to_string()),
+                district: Some("Bengaluru Urban".to_string()),
+                taluk: Some("Bengaluru East".to_string()),
+                total_land_area_sqm: Some(40_468.56),
+                land_litigation: Some(false),
+                source_url: "https://rera.karnataka.gov.in/projectViewDetails".to_string(),
+                fetched_at: now,
+            },
+        ],
+        source_watermarks: Vec::new(),
+    }
+}
+
 async fn parquet_rows_for_artifact(
     lake: &LakeStore,
     record: &MaterializationRecord,
@@ -924,4 +1112,36 @@ async fn serving_fact_rows(lake: &LakeStore, record: &MaterializationRecord) -> 
         .await
         .unwrap();
     parquet_rows(&bytes)
+}
+
+async fn parquet_contains_utf8(
+    lake: &LakeStore,
+    record: &MaterializationRecord,
+    suffix: &str,
+    column: &str,
+    expected: &str,
+) -> bool {
+    let artifact = record
+        .artifacts
+        .iter()
+        .find(|artifact| artifact.key.ends_with(suffix))
+        .unwrap_or_else(|| panic!("missing artifact ending in {suffix}"));
+    let bytes = lake
+        .get_bytes(&LakeKey::new(artifact.key.clone()).unwrap())
+        .await
+        .unwrap();
+    let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))
+        .unwrap()
+        .build()
+        .unwrap();
+    reader.any(|batch| {
+        let batch = batch.unwrap();
+        let values = batch
+            .column_by_name(column)
+            .unwrap_or_else(|| panic!("missing Parquet column {column}"))
+            .as_any()
+            .downcast_ref::<StringArray>()
+            .unwrap_or_else(|| panic!("Parquet column {column} is not UTF-8"));
+        (0..values.len()).any(|row| !values.is_null(row) && values.value(row) == expected)
+    })
 }

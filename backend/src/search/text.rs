@@ -189,7 +189,8 @@ impl TextSearch {
                     0.0
                 };
 
-                let hard_constraint_matches = match_hard_constraints(intent, graph, &p.society_id)?;
+                let hard_constraint_matches =
+                    match_hard_constraints(intent, graph, serving_facts, &p.society_id)?;
 
                 let society_name = society_names
                     .get(&p.society_id)
@@ -553,19 +554,31 @@ struct EvidenceMatch {
 fn match_hard_constraints(
     intent: &SearchIntent,
     graph: Option<&KnowledgeGraph>,
+    serving_facts: Option<&ServingFactIndex>,
     society_id: &str,
 ) -> Option<Vec<EvidenceMatch>> {
     if intent.hard_constraints.is_empty() {
         return Some(Vec::new());
     }
 
-    let graph = graph?;
     let mut matches = Vec::new();
 
     for constraint in &intent.hard_constraints {
         let schema = schema::numeric_constraint_schema(&constraint.field)?;
-        let evidence = numeric_constraint_evidence(graph, society_id, schema, constraint)?;
-        matches.push(evidence);
+        let serving_evaluation = serving_facts
+            .map(|index| serving_numeric_constraint_evidence(index, society_id, schema, constraint))
+            .unwrap_or(ConstraintEvaluation::Missing);
+        match serving_evaluation {
+            ConstraintEvaluation::Matched(evidence) => matches.push(evidence),
+            ConstraintEvaluation::Failed => return None,
+            ConstraintEvaluation::Missing => {
+                let graph = graph?;
+                match numeric_constraint_evidence(graph, society_id, schema, constraint) {
+                    ConstraintEvaluation::Matched(evidence) => matches.push(evidence),
+                    ConstraintEvaluation::Failed | ConstraintEvaluation::Missing => return None,
+                }
+            }
+        }
     }
 
     Some(matches)
@@ -576,13 +589,18 @@ fn numeric_constraint_evidence(
     society_id: &str,
     schema: &NumericConstraintSchema,
     constraint: &HardConstraint,
-) -> Option<EvidenceMatch> {
+) -> ConstraintEvaluation {
     let node_id = society_node_id(society_id);
-    let node = graph.get_node(&node_id)?;
-    let query_unit = schema
+    let Some(node) = graph.get_node(&node_id) else {
+        return ConstraintEvaluation::Missing;
+    };
+    let Some(query_unit) = schema
         .query_units
         .iter()
-        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))?;
+        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))
+    else {
+        return ConstraintEvaluation::Missing;
+    };
     let threshold = constraint.value * query_unit.to_canonical;
 
     for fact_key in &schema.fact_keys {
@@ -606,13 +624,13 @@ fn numeric_constraint_evidence(
         match constraint.operator {
             ConstraintOperator::Min => {
                 if canonical_value + 0.001 < threshold {
-                    return None;
+                    return ConstraintEvaluation::Failed;
                 }
             }
         }
 
         let display_value = canonical_value / query_unit.to_canonical;
-        return Some(EvidenceMatch {
+        return ConstraintEvaluation::Matched(EvidenceMatch {
             preference: constraint.raw_text.clone(),
             fact_key: fact.key.clone(),
             display: format!(
@@ -630,7 +648,76 @@ fn numeric_constraint_evidence(
         });
     }
 
-    None
+    ConstraintEvaluation::Missing
+}
+
+fn serving_numeric_constraint_evidence(
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+    schema: &NumericConstraintSchema,
+    constraint: &HardConstraint,
+) -> ConstraintEvaluation {
+    let node_id = society_node_id(society_id);
+    let Some(rows) = serving_facts.entity(&node_id) else {
+        return ConstraintEvaluation::Missing;
+    };
+    let Some(query_unit) = schema
+        .query_units
+        .iter()
+        .find(|unit| unit.unit.eq_ignore_ascii_case(&constraint.unit))
+    else {
+        return ConstraintEvaluation::Missing;
+    };
+    let threshold = constraint.value * query_unit.to_canonical;
+
+    for fact_key in &schema.fact_keys {
+        let Some(fact) = rows.facts.iter().find(|fact| {
+            fact.fact_key.eq_ignore_ascii_case(fact_key)
+                && schema.proof_sources.iter().any(|source| {
+                    fact.source_type
+                        .eq_ignore_ascii_case(&format!("{source:?}"))
+                })
+        }) else {
+            continue;
+        };
+        let FactValue::Numeric(canonical_value) = fact.value else {
+            continue;
+        };
+        if !canonical_value.is_finite() || canonical_value <= 0.0 {
+            continue;
+        }
+        match constraint.operator {
+            ConstraintOperator::Min if canonical_value + 0.001 < threshold => {
+                return ConstraintEvaluation::Failed;
+            }
+            ConstraintOperator::Min => {}
+        }
+        let display_value = canonical_value / query_unit.to_canonical;
+        return ConstraintEvaluation::Matched(EvidenceMatch {
+            preference: constraint.raw_text.clone(),
+            fact_key: fact.fact_key.clone(),
+            display: format!(
+                "{}: {} {}",
+                schema.label,
+                format_measurement(display_value),
+                query_unit.unit
+            ),
+            normalized_score: 1.0,
+            score_delta: 2.0,
+            confidence: fact.confidence,
+            source_type: fact.source_type.clone(),
+            scoring_method: schema.scoring_method.clone(),
+            reason: format!("proved constraint: {}", constraint.raw_text),
+        });
+    }
+
+    ConstraintEvaluation::Missing
+}
+
+enum ConstraintEvaluation {
+    Missing,
+    Failed,
+    Matched(EvidenceMatch),
 }
 
 fn graph_textual_preference_evidence(

@@ -195,9 +195,90 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<Self, KgSocietyViewMaterializeError> {
+        Self::from_graph_with_asset_rows(graph, &[], &[], support_facts, support_annotations)
+    }
+
+    pub fn from_graph_with_asset_rows(
+        graph: &KnowledgeGraph,
+        canonical_entities: &[KgViewEntityRecord],
+        canonical_edges: &[KgViewEdgeRecord],
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<Self, KgSocietyViewMaterializeError> {
         let mut records = Self::from_graph(graph)?;
+        records.merge_canonical_rows(canonical_entities, canonical_edges)?;
         records.merge_skill_facts(support_facts, support_annotations)?;
         Ok(records)
+    }
+
+    fn merge_canonical_rows(
+        &mut self,
+        canonical_entities: &[KgViewEntityRecord],
+        canonical_edges: &[KgViewEdgeRecord],
+    ) -> Result<(), KgSocietyViewMaterializeError> {
+        let mut entity_positions: HashMap<_, _> = self
+            .entities
+            .iter()
+            .enumerate()
+            .map(|(index, entity)| (entity.entity_id.clone(), index))
+            .collect();
+        for entity in canonical_entities {
+            if let Some(index) = entity_positions.get(&entity.entity_id).copied() {
+                let existing = &mut self.entities[index];
+                existing.entity_type.clone_from(&entity.entity_type);
+                existing.name.clone_from(&entity.name);
+                existing.root_source.clone_from(&entity.root_source);
+                existing.created_at = existing.created_at.min(entity.created_at);
+                existing.updated_at = existing.updated_at.max(entity.updated_at);
+            } else {
+                entity_positions.insert(entity.entity_id.clone(), self.entities.len());
+                self.entities.push(entity.clone());
+            }
+        }
+        self.entities
+            .sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+
+        let mut edge_positions: HashMap<_, _> = self
+            .edges
+            .iter()
+            .enumerate()
+            .map(|(index, edge)| {
+                (
+                    (
+                        edge.from_entity_id.clone(),
+                        edge.to_entity_id.clone(),
+                        edge.relation.clone(),
+                    ),
+                    index,
+                )
+            })
+            .collect();
+        for edge in canonical_edges {
+            let key = (
+                edge.from_entity_id.clone(),
+                edge.to_entity_id.clone(),
+                edge.relation.clone(),
+            );
+            if let Some(index) = edge_positions.get(&key).copied() {
+                self.edges[index] = edge.clone();
+            } else {
+                edge_positions.insert(key, self.edges.len());
+                self.edges.push(edge.clone());
+            }
+        }
+        self.edges.sort_by(|left, right| {
+            left.from_entity_id
+                .cmp(&right.from_entity_id)
+                .then(left.to_entity_id.cmp(&right.to_entity_id))
+                .then(left.relation.cmp(&right.relation))
+        });
+        self.content_hash = content_hash(
+            &self.entities,
+            &self.facts,
+            &self.fact_annotations,
+            &self.edges,
+        )?;
+        Ok(())
     }
 
     fn merge_skill_facts(
@@ -258,11 +339,10 @@ impl KgViewRecords {
             });
         }
 
-        self.facts.extend(dedupe_facts(support_fact_records));
-        sort_facts(&mut self.facts);
-        self.fact_annotations
-            .extend(dedupe_fact_annotations(support_annotation_records));
-        sort_fact_annotations(&mut self.fact_annotations);
+        self.facts.extend(support_fact_records);
+        self.facts = dedupe_facts(std::mem::take(&mut self.facts));
+        self.fact_annotations.extend(support_annotation_records);
+        self.fact_annotations = dedupe_fact_annotations(std::mem::take(&mut self.fact_annotations));
         self.update_entity_fact_counts();
         self.content_hash = content_hash(
             &self.entities,
@@ -436,6 +516,8 @@ impl KgSocietyViewMaterializer {
             partition,
             &[],
             &[],
+            &[],
+            &[],
         )
         .await
     }
@@ -452,6 +534,35 @@ impl KgSocietyViewMaterializer {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
+        self.materialize_for_run_with_asset_rows(
+            graph,
+            view_version,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            partition,
+            &[],
+            &[],
+            support_facts,
+            support_annotations,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_for_run_with_asset_rows(
+        &self,
+        graph: &KnowledgeGraph,
+        view_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+        canonical_entities: &[KgViewEntityRecord],
+        canonical_edges: &[KgViewEdgeRecord],
+        support_facts: &[SkillFactRecord],
+        support_annotations: &[SkillFactAnnotationRecord],
+    ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
         self.materialize_for_run_inner(
             graph,
             view_version,
@@ -459,6 +570,8 @@ impl KgSocietyViewMaterializer {
             parent_materializations,
             run_id,
             partition,
+            canonical_entities,
+            canonical_edges,
             support_facts,
             support_annotations,
         )
@@ -474,12 +587,19 @@ impl KgSocietyViewMaterializer {
         parent_materializations: Vec<MaterializationId>,
         run_id: MaterializationId,
         partition: AssetPartition,
+        canonical_entities: &[KgViewEntityRecord],
+        canonical_edges: &[KgViewEdgeRecord],
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<KgSocietyViewMaterialization, KgSocietyViewMaterializeError> {
         let view_version = view_version.into();
-        let records =
-            KgViewRecords::from_graph_with_skill_facts(graph, support_facts, support_annotations)?;
+        let records = KgViewRecords::from_graph_with_asset_rows(
+            graph,
+            canonical_entities,
+            canonical_edges,
+            support_facts,
+            support_annotations,
+        )?;
 
         let entity_key = AssetPathBuilder::gold_asset_key(
             KG_SOCIETY_VIEW_ASSET_ID,
@@ -894,6 +1014,7 @@ fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
         let key = FactDedupeKey {
             entity_id: fact.entity_id.clone(),
             fact_key: fact.fact_key.clone(),
+            fact_version: fact.fact_version,
             source_type: fact.source_type.clone(),
             source_url: fact.source_url.clone(),
             skill_id: fact.skill_id.clone(),
@@ -937,6 +1058,7 @@ fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> boo
 struct FactDedupeKey {
     entity_id: String,
     fact_key: String,
+    fact_version: u32,
     source_type: String,
     source_url: Option<String>,
     skill_id: Option<String>,

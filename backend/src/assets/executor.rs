@@ -19,9 +19,11 @@ use super::{
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, MaterializationId,
     MaterializationRecord, PartitionResolutionError, PlanDecision, PlannerError,
     RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
-    RedditThreadsDailyInput, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactsInput, SourceWatermark, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID,
+    RedditThreadsDailyInput, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
+    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -451,6 +453,18 @@ impl BuiltInAssetExecutorRegistry {
     fn default_openestates() -> Self {
         let mut executors = HashMap::new();
         executors.insert(
+            static_asset_id(RERA_REGISTRY_MONTHLY_ASSET_ID),
+            BuiltInAssetExecutor::ReraRegistryMonthly,
+        );
+        executors.insert(
+            static_asset_id(CANONICAL_SOCIETY_NODES_ASSET_ID),
+            BuiltInAssetExecutor::CanonicalSocietyNodes,
+        );
+        executors.insert(
+            static_asset_id(RERA_LEGAL_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::ReraLegalFacts,
+        );
+        executors.insert(
             static_asset_id(REDDIT_THREADS_DAILY_ASSET_ID),
             BuiltInAssetExecutor::RedditThreadsDaily,
         );
@@ -480,6 +494,9 @@ impl BuiltInAssetExecutorRegistry {
 
 #[derive(Clone, Copy)]
 enum BuiltInAssetExecutor {
+    ReraRegistryMonthly,
+    CanonicalSocietyNodes,
+    ReraLegalFacts,
     RedditThreadsDaily,
     RedditResidentFacts,
     GoogleReviewFacts,
@@ -493,6 +510,80 @@ impl BuiltInAssetExecutor {
         context: AssetExecutionContext<'_>,
     ) -> Result<ExecutedAsset, AssetDagExecutorError> {
         match self {
+            Self::ReraRegistryMonthly => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .rera_registry_monthly
+                    .as_ref()
+                    .ok_or(AssetDagExecutorError::SourceInputMissing {
+                        asset_id: context.asset_id.clone(),
+                    })?;
+                let record = ReraRegistryMaterializer::new(context.dag.lake.clone())
+                    .materialize_for_run(
+                        input,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::CanonicalSocietyNodes => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let rera_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_REGISTRY_MONTHLY_ASSET_ID,
+                )?;
+                let record = super::CanonicalSocietyMaterializer::new(context.dag.lake.clone())
+                    .materialize_from_rera_for_run(
+                        rera_record,
+                        &context.options.version,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::ReraLegalFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                    )
+                    .await?;
+                let rera_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_REGISTRY_MONTHLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::rera_legal_facts_input(
+                    &context.dag.lake,
+                    rera_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let record = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(record))
+            }
             Self::RedditThreadsDaily => {
                 let input = context
                     .options
@@ -567,18 +658,27 @@ impl BuiltInAssetExecutor {
                 let support_records = support_fact_records(definition, &parent_records);
                 let support_rows =
                     read_skill_fact_artifact_rows(&context.dag.lake, &support_records).await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let canonical_rows =
+                    super::read_canonical_society_rows(&context.dag.lake, canonical_record).await?;
                 let parent_materializations = parent_records
                     .iter()
                     .map(|record| record.materialization_id.clone())
                     .collect();
                 let materialization = KgSocietyViewMaterializer::new(context.dag.lake.clone())
-                    .materialize_for_run_with_skill_facts(
+                    .materialize_for_run_with_asset_rows(
                         context.graph,
                         context.options.version.clone(),
                         vec![knowledge_graph_watermark(context.graph)],
                         parent_materializations,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
+                        &canonical_rows.entities,
+                        &canonical_rows.edges,
                         &support_rows.facts,
                         &support_rows.fact_annotations,
                     )
@@ -688,14 +788,30 @@ fn support_fact_records(
     parent_records
         .iter()
         .filter(|record| {
-            definition.dependency_fan_in_policy(&record.asset_id)
-                == DependencyFanInPolicy::AllCurrentPartitions
+            record.asset_id.as_str() == RERA_LEGAL_FACTS_ASSET_ID
+                || definition.dependency_fan_in_policy(&record.asset_id)
+                    == DependencyFanInPolicy::AllCurrentPartitions
         })
         .cloned()
         .collect()
 }
 
+fn dependency_record<'a>(
+    asset_id: &AssetId,
+    records: &'a [MaterializationRecord],
+    dependency: &str,
+) -> Result<&'a MaterializationRecord, AssetDagExecutorError> {
+    records
+        .iter()
+        .find(|record| record.asset_id.as_str() == dependency)
+        .ok_or_else(|| AssetDagExecutorError::MissingDependency {
+            asset_id: asset_id.clone(),
+            dependency: static_asset_id(dependency),
+        })
+}
+
 enum ExecutedAsset {
+    Record(MaterializationRecord),
     RedditThreadsDaily(MaterializationRecord),
     SkillFacts(MaterializationRecord),
     KgSocietyView(KgSocietyViewMaterialization),
@@ -705,7 +821,9 @@ enum ExecutedAsset {
 impl ExecutedAsset {
     fn record(&self) -> &MaterializationRecord {
         match self {
-            Self::RedditThreadsDaily(record) | Self::SkillFacts(record) => record,
+            Self::Record(record) | Self::RedditThreadsDaily(record) | Self::SkillFacts(record) => {
+                record
+            }
             Self::KgSocietyView(materialization) => &materialization.record,
             Self::SearchServingBundle(materialization) => &materialization.record,
         }
@@ -723,6 +841,7 @@ pub enum AssetDagExecutorError {
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
+    Rera(ReraAssetError),
     NoExecutor {
         asset_id: AssetId,
     },
@@ -769,6 +888,7 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "search serving bundle execution failed: {err}")
             }
             Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
+            Self::Rera(err) => write!(f, "RERA asset execution failed: {err}"),
             Self::NoExecutor { asset_id } => {
                 write!(f, "no executor registered for planned asset {asset_id}")
             }
@@ -866,6 +986,12 @@ impl From<SkillFactMaterializeError> for AssetDagExecutorError {
     }
 }
 
+impl From<ReraAssetError> for AssetDagExecutorError {
+    fn from(err: ReraAssetError) -> Self {
+        Self::Rera(err)
+    }
+}
+
 fn ensure_global_partition(
     asset_id: &AssetId,
     partition: &AssetPartition,
@@ -900,7 +1026,8 @@ fn default_asset_version(planned_at: DateTime<Utc>) -> String {
 }
 
 fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
-    source_inputs.reddit_threads_daily.is_none()
+    source_inputs.rera_registry_monthly.is_none()
+        && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
         && source_inputs.google_review_facts.is_none()
 }

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -48,9 +48,11 @@ impl ServingBundleBuilder {
         records: &KgViewRecords,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
-        let entities = serving_entity_records(records);
-        let facts = serving_fact_records(&records.facts)?;
-        let search_metadata = serving_search_metadata_records(&records.fact_annotations)?;
+        let current_facts = current_serving_facts(&records.facts);
+        let entities = serving_entity_records(records, &current_facts);
+        let facts = serving_fact_records(&current_facts)?;
+        let current_annotations = current_serving_annotations(&records.fact_annotations);
+        let search_metadata = serving_search_metadata_records(&current_annotations)?;
         self.build_from_serving_records(entities, facts, search_metadata, bundle_version)
             .await
     }
@@ -227,8 +229,11 @@ fn optional_column(name: &str, logical_type: &str) -> ServingColumnSchema {
     }
 }
 
-fn serving_entity_records(records: &KgViewRecords) -> Vec<ServingEntityRecord> {
-    let fact_text_by_entity = serving_fact_text_by_entity(&records.facts);
+fn serving_entity_records(
+    records: &KgViewRecords,
+    current_facts: &[KgViewFactRecord],
+) -> Vec<ServingEntityRecord> {
+    let fact_text_by_entity = serving_fact_text_by_entity(current_facts);
     records
         .entities
         .iter()
@@ -249,6 +254,57 @@ fn serving_entity_records(records: &KgViewRecords) -> Vec<ServingEntityRecord> {
             ),
         })
         .collect()
+}
+
+fn current_serving_facts(facts: &[KgViewFactRecord]) -> Vec<KgViewFactRecord> {
+    let mut current = BTreeMap::<ServingFactKey, &KgViewFactRecord>::new();
+    for fact in facts {
+        let key = ServingFactKey {
+            entity_id: fact.entity_id.as_str(),
+            fact_key: fact.fact_key.as_str(),
+            source_type: fact.source_type.as_str(),
+            source_url: fact.source_url.as_deref(),
+            skill_id: fact.skill_id.as_deref(),
+        };
+        match current.get(&key) {
+            Some(existing)
+                if fact.fact_version > existing.fact_version
+                    || (fact.fact_version == existing.fact_version
+                        && (fact.confidence > existing.confidence
+                            || ((fact.confidence - existing.confidence).abs() < f32::EPSILON
+                                && fact.learned_at > existing.learned_at))) =>
+            {
+                current.insert(key, fact);
+            }
+            None => {
+                current.insert(key, fact);
+            }
+            Some(_) => {}
+        }
+    }
+    current.into_values().cloned().collect()
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct ServingFactKey<'a> {
+    entity_id: &'a str,
+    fact_key: &'a str,
+    source_type: &'a str,
+    source_url: Option<&'a str>,
+    skill_id: Option<&'a str>,
+}
+
+fn current_serving_annotations(
+    annotations: &[KgViewFactAnnotationRecord],
+) -> Vec<KgViewFactAnnotationRecord> {
+    let mut current = BTreeMap::<(&str, &str), &KgViewFactAnnotationRecord>::new();
+    for annotation in annotations {
+        current.insert(
+            (annotation.entity_id.as_str(), annotation.fact_key.as_str()),
+            annotation,
+        );
+    }
+    current.into_values().cloned().collect()
 }
 
 fn serving_fact_text_by_entity(facts: &[KgViewFactRecord]) -> HashMap<String, String> {

@@ -158,10 +158,18 @@ fn mock_graph() -> KnowledgeGraph {
     green.root_source = Some(RootSource::Rera);
     green.add_fact(fact(
         "rera_total_land_area_sqm",
-        FactValue::Numeric(48_000.0),
+        FactValue::Numeric(40_000.0),
         SourceType::Rera,
         &["large campus", "above 10 acres"],
     ));
+    let mut corrected_land_area = fact(
+        "rera_total_land_area_sqm",
+        FactValue::Numeric(48_000.0),
+        SourceType::Rera,
+        &["large campus", "above 10 acres"],
+    );
+    corrected_land_area.version = 2;
+    green.add_fact(corrected_land_area);
     green.add_fact(fact(
         "resident_greenery_signal",
         FactValue::Text(

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    RedditThreadSnapshotRecord, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
+    RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactRecord, SourceWatermark,
 };
 
 /// Control-plane input for source executors.
@@ -10,6 +11,8 @@ use super::{
 /// lake shape. Executors normalize these records into Parquet-backed assets.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AssetSourceInputs {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rera_registry_monthly: Option<ReraRegistryMonthlyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_threads_daily: Option<RedditThreadsDailyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -149,6 +149,29 @@ async fn fanned_in_serving_support_facts_rank_and_explain_search() {
 }
 
 #[tokio::test]
+async fn serving_rera_facts_can_prove_hard_constraints_without_legacy_graph_facts() {
+    let mut world = large_acreage_world();
+    for node in world.graph.nodes.values_mut() {
+        node.facts
+            .retain(|fact| fact.key != "rera_total_land_area_sqm");
+    }
+    let fact_index = serving_index_with_rera_land_facts(&world.graph).await;
+
+    let results = world.run_with_serving_facts("3bhk in whitefield above 10 acres", &fact_index);
+
+    assert_eq!(result_ids(&results), vec!["large-green", "large-plain"]);
+    for result in &results {
+        assert_reason(
+            result,
+            "above 10 acres",
+            "rera_total_land_area_sqm",
+            "rera-proof",
+            Some("Rera"),
+        );
+    }
+}
+
+#[tokio::test]
 async fn fanned_in_serving_support_facts_need_search_annotation_to_rank() {
     let world = large_acreage_world();
     let fact_index = serving_index_with_resident_fact(&world.graph, "[]").await;
@@ -559,6 +582,72 @@ async fn serving_index_with_resident_fact_metadata(
                 scoring_weight: Some(1.4),
                 scoring_thresholds_json: "[]".to_string(),
             }],
+            Vec::new(),
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    let support_rows =
+        read_skill_fact_artifact_rows(&lake, std::slice::from_ref(&support_materialization.record))
+            .await
+            .unwrap();
+    let kg_materialization = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote_with_skill_facts(
+            graph,
+            "2026-07-13T06:00Z",
+            Vec::new(),
+            vec![support_materialization.record.materialization_id.clone()],
+            &support_rows.facts,
+            &support_rows.fact_annotations,
+        )
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_materialization, "2026-07-13T06:00Z")
+        .await
+        .unwrap();
+    ServingBundleLoader::new(lake, cache_root.path())
+        .load_current_search_bundle()
+        .await
+        .unwrap()
+        .expect("serving bundle should load")
+        .fact_index
+}
+
+async fn serving_index_with_rera_land_facts(graph: &KnowledgeGraph) -> ServingFactIndex {
+    let lake_root = tempdir().unwrap();
+    let cache_root = tempdir().unwrap();
+    let lake = LakeStore::local(lake_root.path()).unwrap();
+    let now = Utc::now();
+    let facts = [
+        ("society:large-green", 12.0 * SQM_PER_ACRE),
+        ("society:large-plain", 11.0 * SQM_PER_ACRE),
+    ]
+    .into_iter()
+    .map(|(entity_id, value)| SkillFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: "rera_total_land_area_sqm".to_string(),
+        value_type: "numeric".to_string(),
+        value_json: serde_json::to_string(&FactValue::Numeric(value)).unwrap(),
+        confidence: 1.0,
+        source_type: "Rera".to_string(),
+        source_url: Some("https://rera.karnataka.gov.in/projectViewDetails".to_string()),
+        model: None,
+        skill_id: Some("fetch_rera".to_string()),
+        triggered_by: None,
+        learned_at: now,
+        run_id: "run-rera-proof-2026-07-13".to_string(),
+        input_hash: format!("sha256:{entity_id}"),
+    })
+    .collect::<Vec<_>>();
+    let support_materialization = SkillFactMaterializer::new(lake.clone())
+        .materialize_and_promote(
+            "rera_legal_facts",
+            "rera",
+            "2026-07-13",
+            "run-rera-proof-2026-07-13",
+            &facts,
+            &[],
             Vec::new(),
             Vec::new(),
         )

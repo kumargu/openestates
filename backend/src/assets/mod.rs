@@ -16,6 +16,7 @@ pub mod paths;
 pub mod planner;
 pub mod reddit;
 pub mod registry;
+pub mod rera;
 pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
@@ -50,6 +51,12 @@ pub use registry::{
     default_openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
     DependencyFanInPolicy, DependencyFanInRule, PartitionCoordinate, PartitionResolutionError,
     RefreshCadence, RegistryError, TrustTier,
+};
+pub use rera::{
+    read_canonical_society_rows, read_rera_project_rows, rera_legal_facts_input,
+    CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
+    ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagRunManifest, AssetRunManifestStore, AssetRunStep, AssetRunStepStatus,
