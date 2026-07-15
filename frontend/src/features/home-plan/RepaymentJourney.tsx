@@ -38,9 +38,8 @@ export function RepaymentJourney({
     <section className="home-plan-repayment">
       <div className="home-plan-repayment-intro">
         <div>
-          <span>Annual prepayment</span>
-          <h2>See how extra EMIs shorten the loan.</h2>
-          <p>Your regular EMI stays unchanged. Each annual prepayment goes directly toward principal.</p>
+          <span>Extra EMIs per year</span>
+          <p>Choose how many additional EMIs to pay annually without changing the regular EMI.</p>
         </div>
         <div className="home-plan-repayment-options" aria-label="Extra EMIs per year">
           {[0, 1, 2, 3, 4, 6].map((count) => (

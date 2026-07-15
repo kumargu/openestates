@@ -1,21 +1,24 @@
+/* ── Financial Horizon canvas ───────────────────────────────────────────── */
+
 .home-plan-shell {
-  --plan-ink: #2b211c;
-  --plan-muted: #74665d;
-  --plan-faint: #9b8b80;
-  --plan-line: rgba(85, 64, 51, 0.13);
-  --plan-line-strong: rgba(85, 64, 51, 0.22);
-  --plan-surface: rgba(255, 249, 240, 0.94);
-  --plan-surface-solid: #fff9f0;
-  --plan-soft: #f3e8d9;
-  --plan-buy: #d87355;
-  --plan-rent: #79a6b8;
-  --plan-accent: #775e50;
-  --plan-brand: #c96b4f;
+  --plan-ink: #1f1814;
+  --plan-muted: #6f6258;
+  --plan-faint: #9a8d82;
+  --plan-line: rgba(50, 38, 30, 0.1);
+  --plan-line-strong: rgba(50, 38, 30, 0.18);
+  --plan-surface: rgba(255, 251, 245, 0.88);
+  --plan-surface-solid: #fffbf5;
+  --plan-soft: rgba(243, 232, 218, 0.65);
+  --plan-buy: #cf6a4a;
+  --plan-rent: #5f96ad;
+  --plan-accent: #6b5346;
+  --plan-brand: #c46345;
+  --plan-glass: rgba(255, 252, 247, 0.72);
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   color: var(--plan-ink);
-  background: linear-gradient(135deg, #fbf3e9 0%, #f4eadc 50%, #eadfce 100%);
+  background: #f7f0e6;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -26,27 +29,27 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  transition: opacity 650ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .home-plan-shell::before {
   background:
-    radial-gradient(circle at 12% 4%, rgba(211, 112, 80, 0.24), transparent 29%),
-    radial-gradient(circle at 82% 72%, rgba(220, 151, 112, 0.12), transparent 34%);
+    radial-gradient(ellipse 80% 50% at 8% -5%, rgba(207, 106, 74, 0.2), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 92% 100%, rgba(207, 106, 74, 0.08), transparent 50%);
 }
 
 .home-plan-shell::after {
   background:
-    radial-gradient(circle at 84% 3%, rgba(112, 162, 182, 0.22), transparent 31%),
-    radial-gradient(circle at 14% 76%, rgba(130, 171, 174, 0.1), transparent 34%);
+    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(95, 150, 173, 0.18), transparent 52%),
+    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(95, 150, 173, 0.1), transparent 48%);
 }
 
 .home-plan-shell--buy::before { opacity: 1; }
-.home-plan-shell--buy::after { opacity: 0.2; }
-.home-plan-shell--rent::before { opacity: 0.24; }
+.home-plan-shell--buy::after { opacity: 0.15; }
+.home-plan-shell--rent::before { opacity: 0.18; }
 .home-plan-shell--rent::after { opacity: 1; }
 .home-plan-shell--balanced::before,
-.home-plan-shell--balanced::after { opacity: 0.52; }
+.home-plan-shell--balanced::after { opacity: 0.55; }
 
 .home-plan-header,
 .home-plan-main {
@@ -72,12 +75,17 @@
   border: 0;
 }
 
+/* ── Header ───────────────────────────────────────────────────────────── */
+
 .home-plan-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 64px;
-  padding: 0 clamp(1.5rem, 4vw, 4rem);
+  min-height: 60px;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem);
+  border-bottom: 1px solid var(--plan-line);
+  background: rgba(255, 251, 245, 0.55);
+  backdrop-filter: blur(10px);
 }
 
 .home-plan-brand,
@@ -89,16 +97,22 @@
 .home-plan-brand {
   color: var(--plan-ink);
   text-decoration: none;
-  letter-spacing: -0.02em;
-  font-size: 1.05rem;
-  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.home-plan-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .home-plan-back-link {
-  gap: 0.25rem;
+  gap: 0.3rem;
   color: var(--plan-muted);
   text-decoration: none;
-  font-size: 0.7rem;
+  font-size: 0.78rem;
   transition: color 160ms ease;
 }
 
@@ -106,260 +120,310 @@
   color: var(--plan-brand);
 }
 
-.home-plan-main {
-  width: min(1240px, calc(100% - 40px));
-  margin: 0 auto;
-  padding: 2rem 0 4.5rem;
-}
-
-.home-plan-pane {
-  padding: 0;
-}
-
-.home-plan-pane--repayment {
-  background: transparent;
-}
-
-.home-plan-pane-toolbar {
-  display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1.75rem;
-  padding: 0 0.15rem 1.5rem;
-}
-
-.home-plan-pane-toolbar > div:first-child > span,
-.home-plan-panel-heading > div:first-child > span,
-.home-plan-repayment-intro > div:first-child > span,
-.home-plan-repayment-timeline > header > div:first-child > span {
-  display: block;
-  color: #748886;
-  font-size: 0.59rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.home-plan-pane-toolbar h1 {
-  max-width: 720px;
-  margin: 0.6rem 0 0;
-  font-size: clamp(1.9rem, 3vw, 2.75rem);
-  line-height: 1.04;
-  letter-spacing: -0.055em;
-}
-
-.home-plan-selected-home {
-  display: block;
-  max-width: 720px;
-  margin-top: 0.35rem;
-  color: var(--plan-brand);
-  font-size: 0.82rem;
-  font-weight: 700;
-  letter-spacing: -0.015em;
-}
-
-.home-plan-pane-toolbar p {
-  max-width: 650px;
-  margin: 0.65rem 0 0;
-  color: var(--plan-muted);
-  font-size: 0.72rem;
-  line-height: 1.55;
-}
-
 .home-plan-workspace-switch {
   display: flex;
-  padding: 4px;
+  padding: 3px;
   border: 1px solid var(--plan-line);
-  border-radius: 13px;
+  border-radius: 999px;
   background: var(--plan-soft);
-  white-space: nowrap;
 }
 
 .home-plan-workspace-switch button {
-  padding: 0.6rem 0.9rem;
+  padding: 0.45rem 0.85rem;
   border: 0;
-  border-radius: 9px;
+  border-radius: 999px;
   color: var(--plan-muted);
   background: transparent;
   cursor: pointer;
-  font-size: 0.64rem;
+  font-size: 0.76rem;
+  font-weight: 550;
+  transition: background 160ms ease, color 160ms ease;
 }
 
 .home-plan-workspace-switch button.is-active {
   color: white;
-  background: var(--plan-brand);
-}
-
-.home-plan-boundary-card span,
-.home-plan-repayment-metrics span,
-.home-plan-repayment-detail > div > span {
-  color: var(--plan-faint);
-  font-size: 0.58rem;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-
-.home-plan-comparison-panel {
-  padding: 1.45rem 1.4rem 0;
-  overflow: hidden;
-  border: 1px solid var(--plan-line);
-  border-radius: 19px;
-  background: rgba(255, 250, 243, 0.76);
-}
-
-.home-plan-panel-heading,
-.home-plan-chart-tools,
-.home-plan-horizon-control {
-  display: flex;
-  align-items: center;
-}
-
-.home-plan-panel-heading {
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.home-plan-panel-context {
-  max-width: 650px;
-  margin: 0.38rem 0 0;
-  color: var(--plan-muted);
-  font-size: 0.64rem;
-  line-height: 1.5;
-}
-
-.home-plan-panel-heading h2,
-.home-plan-repayment-timeline h2 {
-  margin: 0.35rem 0 0;
-  font-size: 0.94rem;
-  letter-spacing: -0.02em;
-}
-
-.home-plan-chart-tools {
-  gap: 0.7rem;
-}
-
-.home-plan-chart-tools select {
-  min-height: 36px;
-  padding: 0 2rem 0 0.7rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 11px;
-  color: var(--plan-ink);
-  background: var(--plan-soft);
-  cursor: pointer;
-  font-size: 0.62rem;
-}
-
-.home-plan-horizon-control {
-  gap: 0.6rem;
-  white-space: nowrap;
-}
-
-.home-plan-horizon-control > span {
-  color: var(--plan-faint);
-  font-size: 0.6rem;
-  letter-spacing: 0.12em;
-}
-
-.home-plan-horizon-control > div {
-  display: flex;
-  padding: 3px;
-  border: 1px solid var(--plan-line);
-  border-radius: 12px;
-  background: var(--plan-soft);
-}
-
-.home-plan-horizon-control button {
-  min-width: 43px;
-  padding: 0.48rem 0.52rem;
-  border: 0;
-  border-radius: 9px;
-  color: var(--plan-muted);
-  background: transparent;
-  cursor: pointer;
-  font-size: 0.61rem;
-}
-
-.home-plan-horizon-control button.is-active {
-  color: white;
   background: var(--plan-ink);
 }
 
+/* ── Main layout ──────────────────────────────────────────────────────── */
+
+.home-plan-main {
+  width: min(1180px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: clamp(1.5rem, 3vw, 2.5rem) 0 5rem;
+}
+
+.home-plan-canvas {
+  display: grid;
+  gap: clamp(1.25rem, 2.5vw, 2rem);
+}
+
+/* ── Property origin chip ───────────────────────────────────────────────── */
+
+.home-plan-origin {
+  display: grid;
+  grid-template-columns: 4px 1fr auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.85rem 1rem 0.85rem 0;
+  border-radius: 14px;
+  color: inherit;
+  text-decoration: none;
+  background: var(--plan-glass);
+  border: 1px solid var(--plan-line);
+  transition: border-color 180ms ease, background 180ms ease;
+}
+
+.home-plan-origin:hover {
+  border-color: var(--plan-line-strong);
+  background: rgba(255, 252, 247, 0.92);
+}
+
+.home-plan-origin__marker {
+  align-self: stretch;
+  border-radius: 0 4px 4px 0;
+  background: linear-gradient(180deg, var(--plan-brand), #e8956f);
+}
+
+.home-plan-origin__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.home-plan-origin__kicker {
+  color: var(--plan-faint);
+  font-size: 0.72rem;
+  font-weight: 550;
+  letter-spacing: 0.02em;
+}
+
+.home-plan-origin__title {
+  color: var(--plan-ink);
+  font-size: 0.95rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.home-plan-origin__price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  color: var(--plan-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.home-plan-origin__price small {
+  color: var(--plan-faint);
+  font-size: 0.72rem;
+  font-weight: 500;
+}
+
+.home-plan-origin__chevron {
+  color: var(--plan-faint);
+  font-size: 1.35rem;
+  line-height: 1;
+  padding-right: 0.25rem;
+}
+
+/* ── Verdict headline ───────────────────────────────────────────────────── */
+
+.home-plan-verdict {
+  padding: 0 0.15rem;
+}
+
+.home-plan-verdict__year {
+  margin: 0;
+  color: var(--plan-faint);
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.home-plan-verdict__hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  color: var(--plan-muted);
+}
+
+.home-plan-verdict__headline {
+  max-width: 18ch;
+  margin: 0.5rem 0 0;
+  font-size: clamp(2rem, 4.5vw, 3.15rem);
+  line-height: 1.02;
+  letter-spacing: -0.055em;
+  font-weight: 650;
+}
+
+.home-plan-verdict__leader {
+  color: var(--plan-ink);
+}
+
+.home-plan-shell--buy .home-plan-verdict__leader {
+  color: #b85a3c;
+}
+
+.home-plan-shell--rent .home-plan-verdict__leader {
+  color: #4a7f96;
+}
+
+.home-plan-verdict__amount {
+  color: var(--plan-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-verdict__detail {
+  max-width: 52ch;
+  margin: 0.85rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+/* ── Graph stage (continuous canvas) ────────────────────────────────────── */
+
+.home-plan-stage {
+  position: relative;
+  padding: 1.25rem 0 0.5rem;
+  border-top: 1px solid var(--plan-line);
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-stage__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 0.15rem 0.75rem;
+}
+
+.home-plan-stage__label {
+  color: var(--plan-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.home-plan-metric-toggle {
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--plan-line);
+  border-radius: 999px;
+  background: var(--plan-soft);
+}
+
+.home-plan-metric-toggle button {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.7rem;
+  border: 0;
+  border-radius: 999px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 550;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.home-plan-metric-toggle button.is-active {
+  color: var(--plan-ink);
+  background: white;
+  box-shadow: 0 2px 8px rgba(31, 24, 20, 0.08);
+}
+
+/* ── Graph ──────────────────────────────────────────────────────────────── */
+
 .home-plan-graph {
-  margin-top: 1.1rem;
+  margin-top: 0.25rem;
 }
 
 .home-plan-graph-legend {
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  padding: 0 0.15rem 0.65rem;
 }
 
 .home-plan-graph-legend > p {
   margin: 0 0 0 auto;
   color: var(--plan-faint);
-  font-size: 0.58rem;
+  font-size: 0.72rem;
 }
 
 .home-plan-graph-legend button {
   display: flex;
   align-items: center;
-  gap: 0.62rem;
-  min-width: 170px;
-  padding: 0.62rem 0.75rem;
+  gap: 0.55rem;
+  padding: 0.5rem 0.7rem;
   border: 1px solid transparent;
-  border-radius: 12px;
+  border-radius: 999px;
   color: var(--plan-ink);
   text-align: left;
   background: transparent;
   cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
 .home-plan-graph-legend button.is-selected {
   border-color: var(--plan-line-strong);
-  background: var(--plan-soft);
+  background: var(--plan-glass);
 }
 
 .home-plan-legend-dot {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
   border-radius: 50%;
+  flex-shrink: 0;
 }
 
 .home-plan-legend-dot--buy {
   background: var(--plan-buy);
+  box-shadow: 0 0 0 3px rgba(207, 106, 74, 0.18);
 }
 
 .home-plan-legend-dot--rent {
   background: var(--plan-rent);
+  box-shadow: 0 0 0 3px rgba(95, 150, 173, 0.18);
 }
 
 .home-plan-graph-legend span {
   display: flex;
-  flex-direction: column;
+  align-items: baseline;
+  gap: 0.45rem;
 }
 
 .home-plan-graph-legend strong {
-  font-size: 0.64rem;
+  font-size: 0.78rem;
+  font-weight: 650;
 }
 
 .home-plan-graph-legend small {
-  margin-top: 0.12rem;
   color: var(--plan-faint);
-  font-size: 0.56rem;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-graph-svg {
   display: block;
   width: 100%;
-  height: 340px;
+  height: clamp(280px, 42vw, 420px);
   overflow: visible;
   cursor: crosshair;
   touch-action: pan-y;
 }
 
 .home-plan-gridline {
-  stroke: rgba(40, 62, 62, 0.09);
-  stroke-dasharray: 3 6;
+  stroke: rgba(50, 38, 30, 0.07);
+  stroke-dasharray: 2 8;
 }
 
 .home-plan-axis-label,
@@ -370,8 +434,9 @@
 }
 
 .home-plan-axis-label {
-  fill: #82908f;
-  font-size: 8px;
+  fill: #8f8278;
+  font-size: 10px;
+  font-weight: 500;
 }
 
 .home-plan-axis-label--y {
@@ -382,9 +447,13 @@
   text-anchor: middle;
 }
 
+.home-plan-graph-gap {
+  transition: d 280ms ease, fill 280ms ease;
+}
+
 .home-plan-graph-area {
-  opacity: 0.95;
-  transition: d 260ms ease;
+  opacity: 0.9;
+  transition: d 280ms ease;
 }
 
 .home-plan-graph-area--buy {
@@ -397,13 +466,13 @@
 
 .home-plan-graph-line {
   fill: none;
-  stroke-width: 2;
-  opacity: 0.48;
-  transition: opacity 160ms ease, stroke-width 160ms ease;
+  stroke-width: 2.2;
+  opacity: 0.42;
+  transition: opacity 180ms ease, stroke-width 180ms ease;
 }
 
 .home-plan-graph-line.is-selected {
-  stroke-width: 3.4;
+  stroke-width: 3.2;
   opacity: 1;
 }
 
@@ -416,22 +485,24 @@
 }
 
 .home-plan-cursor {
-  stroke: #78908d;
-  stroke-dasharray: 4 5;
-  opacity: 0.72;
+  stroke: var(--plan-accent);
+  stroke-width: 1.5;
+  opacity: 0.85;
 }
 
 .home-plan-cursor-label {
-  fill: #6d7f7d;
-  font-size: 8px;
+  fill: var(--plan-accent);
+  font-size: 9px;
   font-weight: 700;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.08em;
   text-anchor: middle;
+  text-transform: uppercase;
 }
 
 .home-plan-graph-point {
   stroke: white;
-  stroke-width: 2;
+  stroke-width: 2.5;
+  transition: cy 200ms ease;
 }
 
 .home-plan-graph-point--buy {
@@ -447,32 +518,32 @@
 }
 
 .home-plan-graph-event circle {
-  fill: #f7faf8;
+  fill: var(--plan-surface-solid);
   stroke: var(--plan-accent);
-  stroke-width: 2.8;
+  stroke-width: 2;
 }
 
 .home-plan-graph-event > text {
   fill: var(--plan-accent);
-  font-size: 8px;
+  font-size: 9px;
   font-weight: 800;
   text-anchor: middle;
 }
 
 .home-plan-graph-event .home-plan-graph-event-label {
-  fill: #536865;
-  font-size: 7px;
+  fill: var(--plan-muted);
+  font-size: 8px;
   font-weight: 600;
 }
 
 .home-plan-graph-tooltip rect {
-  fill: rgba(255, 255, 255, 0.96);
+  fill: rgba(255, 252, 247, 0.97);
   stroke: var(--plan-line);
 }
 
 .home-plan-graph-tooltip text {
   fill: var(--plan-muted);
-  font-size: 8px;
+  font-size: 9px;
 }
 
 .home-plan-graph-tooltip line {
@@ -482,7 +553,7 @@
 .home-plan-graph-tooltip .home-plan-tooltip-year,
 .home-plan-graph-tooltip .home-plan-tooltip-lead {
   fill: var(--plan-ink);
-  font-size: 7px;
+  font-size: 8px;
   font-weight: 700;
 }
 
@@ -490,6 +561,7 @@
   fill: var(--plan-ink);
   font-weight: 700;
   text-anchor: end;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-tooltip-buy {
@@ -500,453 +572,223 @@
   fill: var(--plan-rent);
 }
 
-.home-plan-year-scrubber {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.7rem;
-  padding: 0 0.45rem 1rem;
+/* ── Time rail ──────────────────────────────────────────────────────────── */
+
+.home-plan-time-rail {
+  padding: 1.25rem 0.15rem 0.5rem;
 }
 
-.home-plan-year-scrubber span {
+.home-plan-time-rail__labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
   color: var(--plan-faint);
-  font-size: 0.58rem;
+  font-size: 0.72rem;
+  font-weight: 550;
 }
 
-.home-plan-year-scrubber input,
-.home-plan-range-control input {
+.home-plan-time-rail__track {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(50, 38, 30, 0.08);
+}
+
+.home-plan-time-rail__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--plan-buy), var(--plan-rent));
+  opacity: 0.55;
+  pointer-events: none;
+  transition: width 200ms ease;
+}
+
+.home-plan-time-rail__input {
+  position: absolute;
+  inset: -14px 0;
   width: 100%;
-  accent-color: var(--plan-accent);
-}
-
-.home-plan-repayment-detail dl {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
   margin: 0;
-}
-
-.home-plan-repayment-detail dl > div {
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  padding: 0.25rem 0.75rem;
-  border-left: 1px solid var(--plan-line);
-}
-
-.home-plan-repayment-detail dt {
-  color: var(--plan-faint);
-  font-size: 0.56rem;
-  text-transform: uppercase;
-}
-
-.home-plan-repayment-detail dd {
-  margin: 0.35rem 0 0;
-  font-size: 0.7rem;
-  font-weight: 700;
-}
-
-.home-plan-boundary-card {
-  display: grid;
-  grid-template-columns: 46px 1fr;
-  align-items: center;
-  gap: 1.1rem;
-  margin: 0 0 0.75rem;
-  padding: 1.15rem 1.25rem;
-  border: 1px solid rgba(201, 107, 79, 0.24);
-  border-radius: 18px;
-  background: linear-gradient(120deg, rgba(255, 241, 230, 0.96), rgba(255, 249, 240, 0.88));
-  box-shadow: 0 14px 34px rgba(71, 54, 47, 0.06);
-}
-
-.home-plan-boundary-icon {
-  display: grid;
-  place-items: center;
-  width: 44px;
-  height: 44px;
-  border-radius: 14px;
-  color: white;
-  background: var(--plan-brand);
-  font-size: 1.05rem;
-  font-weight: 700;
-  box-shadow: 0 8px 20px rgba(201, 107, 79, 0.22);
-}
-
-.home-plan-boundary-card > div:nth-child(2) {
-  display: flex;
-  flex-direction: column;
-}
-
-.home-plan-boundary-card strong {
-  margin-top: 0.3rem;
-  font-size: 1rem;
-  letter-spacing: -0.025em;
-}
-
-.home-plan-boundary-card p {
-  max-width: 690px;
-  margin: 0.3rem 0 0;
-  color: var(--plan-muted);
-  font-size: 0.64rem;
-  line-height: 1.5;
-}
-
-.home-plan-assumption-bar {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.7rem 0.85rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 15px;
-  background: rgba(255, 248, 238, 0.72);
-}
-
-.home-plan-assumption-bar > span {
-  color: var(--plan-faint);
-  font-size: 0.57rem;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.home-plan-assumption-bar > div {
-  display: flex;
-  gap: 0.4rem;
-}
-
-.home-plan-assumption-bar button {
-  border: 0;
+  opacity: 0;
   cursor: pointer;
 }
 
-.home-plan-assumption-bar > div button {
+.home-plan-time-rail__milestone {
+  position: absolute;
+  top: 50%;
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
+  align-items: center;
   gap: 0.35rem;
-  padding: 0.48rem 0.62rem;
-  border-radius: 9px;
-  color: var(--plan-muted);
-  background: rgba(241, 229, 211, 0.92);
-}
-
-.home-plan-assumption-bar > div button:hover {
-  background: white;
-}
-
-.home-plan-assumption-bar small {
-  font-size: 0.55rem;
-}
-
-.home-plan-assumption-bar strong {
-  color: var(--plan-ink);
-  font-size: 0.62rem;
-}
-
-.home-plan-assumption-bar > button {
-  padding: 0.55rem 0.72rem;
-  border-radius: 9px;
-  color: white;
-  background: var(--plan-brand);
-  font-size: 0.59rem;
-  font-weight: 650;
-}
-
-.home-plan-controls-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
+  padding: 0;
   border: 0;
-  background: rgba(21, 34, 34, 0.16);
-  backdrop-filter: blur(2px);
+  background: transparent;
+  transform: translate(-50%, -50%);
+  cursor: pointer;
 }
 
-.home-plan-controls {
-  position: fixed;
-  top: 92px;
-  right: 1.7rem;
-  bottom: 1.7rem;
-  z-index: 110;
-  display: grid;
-  grid-template-rows: auto auto auto 1fr auto;
-  width: min(390px, calc(100vw - 2rem));
-  overflow: hidden;
-  border: 1px solid rgba(35, 56, 55, 0.12);
-  border-radius: 23px;
-  background: rgba(255, 249, 240, 0.98);
-  box-shadow: 0 30px 80px rgba(27, 47, 45, 0.23);
+.home-plan-time-rail__milestone i {
+  display: block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid white;
+  border-radius: 50%;
+  background: var(--plan-accent);
+  box-shadow: 0 2px 6px rgba(31, 24, 20, 0.15);
+  transition: transform 160ms ease;
+}
+
+.home-plan-time-rail__milestone.is-active i {
+  transform: scale(1.25);
+  background: var(--plan-brand);
+}
+
+.home-plan-time-rail__milestone span {
+  position: absolute;
+  top: 14px;
+  white-space: nowrap;
+  color: var(--plan-faint);
+  font-size: 0.65rem;
+  font-weight: 600;
   opacity: 0;
-  transform: translateX(calc(100% + 3rem));
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1), opacity 180ms ease;
+  transform: translateY(4px);
+  transition: opacity 160ms ease, transform 160ms ease;
   pointer-events: none;
 }
 
-.home-plan-controls.is-open {
+.home-plan-time-rail__milestone:hover span,
+.home-plan-time-rail__milestone.is-active span {
   opacity: 1;
-  transform: translateX(0);
-  pointer-events: auto;
+  transform: translateY(0);
 }
 
-.home-plan-controls-header {
+.home-plan-time-rail__quick {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 1.45rem 1.25rem 0.85rem;
-}
-
-.home-plan-controls-header span,
-.home-plan-control-kicker {
-  color: #748886;
-  font-size: 0.58rem;
-  font-weight: 700;
-  letter-spacing: 0.13em;
-  text-transform: uppercase;
-}
-
-.home-plan-controls-header h2 {
-  margin: 0.35rem 0 0;
-  font-size: 1.28rem;
-  letter-spacing: -0.035em;
-}
-
-.home-plan-controls-header > button {
-  display: grid;
-  place-items: center;
-  width: 39px;
-  height: 39px;
-  border: 1px solid var(--plan-line);
-  border-radius: 11px;
-  color: var(--plan-muted);
-  background: white;
-  cursor: pointer;
-}
-
-.home-plan-preset-selector {
-  position: relative;
-  display: grid;
-  gap: 0.65rem;
-  margin: 0 1rem 0.85rem;
-  padding: 0.85rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 13px;
-  background: #f5eadb;
-}
-
-.home-plan-preset-selector > div:first-child {
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
-}
-
-.home-plan-preset-selector span {
-  font-size: 0.65rem;
-  font-weight: 700;
-}
-
-.home-plan-preset-selector small {
-  color: var(--plan-muted);
-  font-size: 0.56rem;
-}
-
-.home-plan-preset-selector > div:nth-child(2) {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
   gap: 0.35rem;
+  margin-top: 0.85rem;
 }
 
-.home-plan-preset-selector button {
-  min-height: 32px;
+.home-plan-time-rail__quick button {
+  min-width: 44px;
+  padding: 0.42rem 0.65rem;
   border: 1px solid var(--plan-line);
-  border-radius: 9px;
-  color: var(--plan-muted);
-  background: white;
-  cursor: pointer;
-  font-size: 0.57rem;
-  font-weight: 650;
-}
-
-.home-plan-preset-selector button.is-active {
-  color: white;
-  border-color: var(--plan-brand);
-  background: var(--plan-brand);
-}
-
-.home-plan-preset-selector em {
-  position: absolute;
-  top: 0.7rem;
-  right: 0.8rem;
-  color: var(--plan-brand);
-  font-size: 0.52rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.home-plan-controls-tabs {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.4rem;
-  padding: 0 1rem 0.85rem;
-  border-bottom: 1px solid var(--plan-line);
-}
-
-.home-plan-controls-tabs button {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.7rem 0.35rem;
-  border: 0;
-  border-radius: 11px;
+  border-radius: 999px;
   color: var(--plan-muted);
   background: transparent;
   cursor: pointer;
-  font-size: 0.56rem;
+  font-size: 0.74rem;
+  font-weight: 600;
+  transition: background 160ms ease, color 160ms ease, border-color 160ms ease;
 }
 
-.home-plan-controls-tabs button.is-active {
-  color: white;
-  background: var(--plan-accent);
-}
-
-.home-plan-controls-body {
-  overflow-y: auto;
-}
-
-.home-plan-control-block {
-  padding: 1.3rem 1.25rem;
-  border-bottom: 1px solid var(--plan-line);
-}
-
-.home-plan-control-block h3 {
-  margin: 0.42rem 0 0;
-  font-size: 0.78rem;
-}
-
-.home-plan-control-block > p {
-  margin: 0.35rem 0 0;
-  color: var(--plan-muted);
-  font-size: 0.63rem;
-  line-height: 1.5;
-}
-
-.home-plan-range-control {
-  display: block;
-  padding: 1rem 0 0.1rem;
-}
-
-.home-plan-range-control > span {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  color: var(--plan-muted);
-  font-size: 0.63rem;
-}
-
-.home-plan-range-control strong {
-  color: var(--plan-ink);
-}
-
-.home-plan-range-control input {
-  margin-top: 0.7rem;
-}
-
-.home-plan-control-insight {
-  margin-top: 0.8rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 11px;
-  color: #35534f;
-  background: #e6f0ec;
-  font-size: 0.61rem;
-  line-height: 1.45;
-}
-
-.home-plan-emi-options {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 0.35rem;
-  margin-top: 0.8rem;
-}
-
-.home-plan-emi-options button {
-  padding: 0.5rem 0;
-  border: 1px solid var(--plan-line);
-  border-radius: 9px;
-  color: var(--plan-muted);
-  background: white;
-  cursor: pointer;
-  font-size: 0.62rem;
-}
-
-.home-plan-emi-options button.is-active {
+.home-plan-time-rail__quick button.is-active {
   color: white;
   border-color: var(--plan-ink);
   background: var(--plan-ink);
 }
 
-.home-plan-evidence-list {
-  display: grid;
-  gap: 0.75rem;
-  margin-top: 1rem;
-}
+/* ── Assumption instrument strip ────────────────────────────────────────── */
 
-.home-plan-evidence-list > div {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 0.18rem 0.7rem;
-  padding: 0.8rem;
+.home-plan-instruments {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
   border: 1px solid var(--plan-line);
-  border-radius: 11px;
-  background: white;
+  border-radius: 16px;
+  background: var(--plan-glass);
+  backdrop-filter: blur(12px);
 }
 
-.home-plan-evidence-list span,
-.home-plan-evidence-list small,
-.home-plan-evidence-list em {
+.home-plan-instruments__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.home-plan-instruments__chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border: 0;
+  border-radius: 999px;
   color: var(--plan-muted);
-  font-size: 0.58rem;
-  font-style: normal;
-}
-
-.home-plan-evidence-list strong {
-  font-size: 0.65rem;
-}
-
-.home-plan-evidence-list small {
-  grid-column: 1 / -1;
-}
-
-.home-plan-evidence-list em {
-  grid-column: 1 / -1;
-  color: var(--plan-accent);
-}
-
-.home-plan-controls-footer {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
-  padding: 0.85rem 1rem 1rem;
-  border-top: 1px solid var(--plan-line);
-  background: rgba(255, 249, 240, 0.98);
-}
-
-.home-plan-controls-footer button {
-  min-height: 40px;
-  border: 1px solid var(--plan-line-strong);
-  border-radius: 10px;
-  color: var(--plan-ink);
-  background: white;
+  background: rgba(255, 255, 255, 0.55);
   cursor: pointer;
-  font-size: 0.62rem;
-  font-weight: 650;
+  transition: background 160ms ease;
 }
 
-.home-plan-controls-footer .home-plan-primary-action {
+.home-plan-instruments__chip:hover {
+  background: white;
+}
+
+.home-plan-instruments__chip small {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.home-plan-instruments__chip strong {
+  color: var(--plan-ink);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-instruments__edit {
+  flex-shrink: 0;
+  padding: 0.55rem 0.9rem;
+  border: 0;
+  border-radius: 999px;
   color: white;
-  border-color: var(--plan-brand);
-  background: var(--plan-brand);
+  background: var(--plan-ink);
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 600;
+  transition: background 160ms ease;
+}
+
+.home-plan-instruments__edit:hover {
+  background: #342820;
+}
+
+/* ── Repayment canvas ───────────────────────────────────────────────────── */
+
+.home-plan-repayment-canvas {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.home-plan-repayment-header h1 {
+  margin: 0.75rem 0 0;
+  font-size: clamp(1.75rem, 3.5vw, 2.4rem);
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.home-plan-repayment-header p {
+  max-width: 48ch;
+  margin: 0.6rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.home-plan-repayment-metrics span,
+.home-plan-repayment-detail > div > span,
+.home-plan-repayment-intro > div:first-child > span,
+.home-plan-repayment-timeline > header > div:first-child > span {
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .home-plan-repayment {
-  padding-top: 1.4rem;
+  padding-top: 0;
 }
 
 .home-plan-repayment-intro {
@@ -954,22 +796,23 @@
   grid-template-columns: 1fr auto;
   align-items: end;
   gap: 2rem;
-  padding: 1.35rem;
-  border: 1px solid var(--plan-line);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.58);
+  padding: 1.25rem 0;
+  border-top: 1px solid var(--plan-line);
+  border-bottom: 1px solid var(--plan-line);
+  background: transparent;
 }
 
 .home-plan-repayment-intro h2 {
-  margin: 0.45rem 0 0;
-  font-size: 1.05rem;
+  margin: 0.4rem 0 0;
+  font-size: 1.1rem;
+  letter-spacing: -0.02em;
 }
 
 .home-plan-repayment-intro p,
 .home-plan-repayment-timeline p {
   margin: 0.35rem 0 0;
   color: var(--plan-muted);
-  font-size: 0.64rem;
+  font-size: 0.84rem;
 }
 
 .home-plan-repayment-options {
@@ -984,10 +827,11 @@
   min-width: 52px;
   padding: 0.55rem 0.4rem;
   border: 1px solid var(--plan-line);
-  border-radius: 11px;
+  border-radius: 12px;
   color: var(--plan-muted);
-  background: white;
+  background: var(--plan-glass);
   cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
 }
 
 .home-plan-repayment-options button.is-active {
@@ -997,21 +841,20 @@
 }
 
 .home-plan-repayment-options strong {
-  font-size: 0.78rem;
+  font-size: 0.82rem;
 }
 
 .home-plan-repayment-options small {
-  font-size: 0.48rem;
+  font-size: 0.62rem;
 }
 
 .home-plan-repayment-metrics {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  margin-top: 0.9rem;
   overflow: hidden;
   border: 1px solid var(--plan-line);
-  border-radius: 17px;
-  background: rgba(251, 252, 251, 0.76);
+  border-radius: 16px;
+  background: var(--plan-glass);
 }
 
 .home-plan-repayment-metrics > div {
@@ -1027,22 +870,27 @@
 
 .home-plan-repayment-metrics strong {
   margin-top: 0.35rem;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-repayment-metrics small {
   margin-top: 0.2rem;
   color: var(--plan-muted);
-  font-size: 0.56rem;
+  font-size: 0.72rem;
 }
 
 .home-plan-repayment-timeline {
-  margin-top: 0.9rem;
-  padding: 1.3rem;
+  padding: 1.25rem 0;
   overflow: hidden;
-  border: 1px solid var(--plan-line);
-  border-radius: 19px;
-  background: rgba(255, 255, 255, 0.58);
+  border-top: 1px solid var(--plan-line);
+  background: transparent;
+}
+
+.home-plan-repayment-timeline h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1rem;
+  letter-spacing: -0.02em;
 }
 
 .home-plan-repayment-timeline > header {
@@ -1055,23 +903,23 @@
 .home-plan-loan-free-badge {
   display: flex;
   flex-direction: column;
-  padding: 0.65rem 0.8rem;
-  border-radius: 11px;
+  padding: 0.65rem 0.85rem;
+  border-radius: 12px;
   color: var(--plan-accent);
-  background: #e2ede8;
+  background: rgba(243, 232, 218, 0.8);
 }
 
 .home-plan-loan-free-badge small {
-  font-size: 0.54rem;
+  font-size: 0.68rem;
 }
 
 .home-plan-loan-free-badge strong {
   margin-top: 0.2rem;
-  font-size: 0.78rem;
+  font-size: 0.85rem;
 }
 
 .home-plan-timeline-scroll {
-  margin: 1.1rem -1.3rem 0;
+  margin: 1rem 0 0;
   overflow-x: auto;
   scrollbar-width: thin;
 }
@@ -1079,22 +927,23 @@
 .home-plan-timeline-track {
   display: flex;
   min-width: max-content;
-  padding: 0.8rem 1.3rem 1rem;
+  padding: 0.5rem 0 1rem;
 }
 
 .home-plan-timeline-track button {
   position: relative;
   display: flex;
   flex-direction: column;
-  width: 116px;
-  min-height: 126px;
+  width: 112px;
+  min-height: 118px;
   padding: 0.75rem;
   border: 1px solid var(--plan-line);
   border-left: 0;
   color: var(--plan-muted);
   text-align: left;
-  background: rgba(248, 250, 249, 0.92);
+  background: var(--plan-glass);
   cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
 .home-plan-timeline-track button:first-child {
@@ -1110,37 +959,38 @@
   z-index: 1;
   border: 1px solid var(--plan-accent);
   border-radius: 12px;
-  background: #e6efeb;
-  box-shadow: 0 8px 22px rgba(42, 74, 69, 0.12);
+  background: white;
+  box-shadow: 0 8px 24px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-timeline-track button > span {
   color: var(--plan-faint);
-  font-size: 0.54rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
 }
 
 .home-plan-timeline-track button > strong {
-  margin-top: 0.55rem;
+  margin-top: 0.5rem;
   color: var(--plan-ink);
-  font-size: 0.72rem;
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-timeline-track button > small,
 .home-plan-timeline-track button > em {
   margin-top: 0.2rem;
-  font-size: 0.52rem;
+  font-size: 0.62rem;
   font-style: normal;
 }
 
 .home-plan-timeline-track button > i {
   align-self: flex-start;
   margin-top: auto;
-  padding: 0.2rem 0.35rem;
+  padding: 0.2rem 0.4rem;
   border-radius: 99px;
   color: var(--plan-accent);
-  background: #d8e8e1;
-  font-size: 0.48rem;
+  background: var(--plan-soft);
+  font-size: 0.58rem;
   font-style: normal;
 }
 
@@ -1160,46 +1010,381 @@
 
 .home-plan-repayment-detail > div strong {
   margin-top: 0.35rem;
-  font-size: 0.75rem;
+  font-size: 0.82rem;
 }
+
+.home-plan-repayment-detail dl {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin: 0;
+}
+
+.home-plan-repayment-detail dl > div {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0.25rem 0.75rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-repayment-detail dt {
+  color: var(--plan-faint);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+}
+
+.home-plan-repayment-detail dd {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Controls drawer ──────────────────────────────────────────────────── */
+
+.home-plan-range-control input {
+  width: 100%;
+  accent-color: var(--plan-accent);
+}
+
+.home-plan-controls-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  border: 0;
+  background: rgba(21, 18, 15, 0.2);
+  backdrop-filter: blur(3px);
+}
+
+.home-plan-controls {
+  position: fixed;
+  top: 72px;
+  right: 1.5rem;
+  bottom: 1.5rem;
+  z-index: 110;
+  display: grid;
+  grid-template-rows: auto auto auto 1fr auto;
+  width: min(390px, calc(100vw - 2rem));
+  overflow: hidden;
+  border: 1px solid var(--plan-line);
+  border-radius: 20px;
+  background: rgba(255, 251, 245, 0.98);
+  box-shadow: 0 28px 70px rgba(31, 24, 20, 0.18);
+  opacity: 0;
+  transform: translateX(calc(100% + 3rem));
+  transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1), opacity 200ms ease;
+  pointer-events: none;
+}
+
+.home-plan-controls.is-open {
+  opacity: 1;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.home-plan-controls-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.35rem 1.2rem 0.8rem;
+}
+
+.home-plan-controls-header span,
+.home-plan-control-kicker {
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.home-plan-controls-header h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.2rem;
+  letter-spacing: -0.03em;
+}
+
+.home-plan-controls-header > button {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--plan-line);
+  border-radius: 10px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+}
+
+.home-plan-preset-selector {
+  position: relative;
+  display: grid;
+  gap: 0.65rem;
+  margin: 0 1rem 0.8rem;
+  padding: 0.85rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 14px;
+  background: var(--plan-soft);
+}
+
+.home-plan-preset-selector > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+}
+
+.home-plan-preset-selector span {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.home-plan-preset-selector small {
+  color: var(--plan-muted);
+  font-size: 0.72rem;
+}
+
+.home-plan-preset-selector > div:nth-child(2) {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+}
+
+.home-plan-preset-selector button {
+  min-height: 34px;
+  border: 1px solid var(--plan-line);
+  border-radius: 9px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
+.home-plan-preset-selector button.is-active {
+  color: white;
+  border-color: var(--plan-brand);
+  background: var(--plan-brand);
+}
+
+.home-plan-preset-selector em {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.8rem;
+  color: var(--plan-brand);
+  font-size: 0.68rem;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.home-plan-controls-tabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  padding: 0 1rem 0.8rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-controls-tabs button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.65rem 0.35rem;
+  border: 0;
+  border-radius: 10px;
+  color: var(--plan-muted);
+  background: transparent;
+  cursor: pointer;
+  font-size: 0.68rem;
+}
+
+.home-plan-controls-tabs button.is-active {
+  color: white;
+  background: var(--plan-accent);
+}
+
+.home-plan-controls-body {
+  overflow-y: auto;
+}
+
+.home-plan-control-block {
+  padding: 1.2rem 1.2rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-control-block h3 {
+  margin: 0.4rem 0 0;
+  font-size: 0.88rem;
+}
+
+.home-plan-control-block > p {
+  margin: 0.35rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+.home-plan-range-control {
+  display: block;
+  padding: 0.9rem 0 0.1rem;
+}
+
+.home-plan-range-control > span {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  color: var(--plan-muted);
+  font-size: 0.78rem;
+}
+
+.home-plan-range-control strong {
+  color: var(--plan-ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-range-control input {
+  margin-top: 0.65rem;
+}
+
+.home-plan-control-insight {
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border-radius: 10px;
+  color: #4a5f5a;
+  background: rgba(230, 240, 236, 0.9);
+  font-size: 0.76rem;
+  line-height: 1.45;
+}
+
+.home-plan-emi-options {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 0.35rem;
+  margin-top: 0.75rem;
+}
+
+.home-plan-emi-options button {
+  padding: 0.48rem 0;
+  border: 1px solid var(--plan-line);
+  border-radius: 9px;
+  color: var(--plan-muted);
+  background: white;
+  cursor: pointer;
+  font-size: 0.74rem;
+}
+
+.home-plan-emi-options button.is-active {
+  color: white;
+  border-color: var(--plan-ink);
+  background: var(--plan-ink);
+}
+
+.home-plan-evidence-list {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.9rem;
+}
+
+.home-plan-evidence-list > div {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.18rem 0.7rem;
+  padding: 0.75rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 11px;
+  background: white;
+}
+
+.home-plan-evidence-list span,
+.home-plan-evidence-list small,
+.home-plan-evidence-list em {
+  color: var(--plan-muted);
+  font-size: 0.72rem;
+  font-style: normal;
+}
+
+.home-plan-evidence-list strong {
+  font-size: 0.78rem;
+}
+
+.home-plan-evidence-list small {
+  grid-column: 1 / -1;
+}
+
+.home-plan-evidence-list em {
+  grid-column: 1 / -1;
+  color: var(--plan-accent);
+}
+
+.home-plan-controls-footer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  padding: 0.8rem 1rem 1rem;
+  border-top: 1px solid var(--plan-line);
+  background: rgba(255, 251, 245, 0.98);
+}
+
+.home-plan-controls-footer button {
+  min-height: 40px;
+  border: 1px solid var(--plan-line-strong);
+  border-radius: 10px;
+  color: var(--plan-ink);
+  background: white;
+  cursor: pointer;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.home-plan-controls-footer .home-plan-primary-action {
+  color: white;
+  border-color: var(--plan-brand);
+  background: var(--plan-brand);
+}
+
+/* ── Loading ────────────────────────────────────────────────────────────── */
 
 .home-plan-loading {
   min-height: 100vh;
   padding: 0 4vw 4rem;
-  background: linear-gradient(135deg, #f5f7f5, #e0e9e6);
+  background: #f7f0e6;
 }
 
 .home-plan-loading-header {
-  height: 68px;
-  margin: 0 -4vw 3rem;
-  background: rgba(255, 255, 255, 0.62);
+  height: 60px;
+  margin: 0 -4vw 2.5rem;
+  background: rgba(255, 251, 245, 0.7);
+  border-bottom: 1px solid var(--plan-line);
 }
 
 .home-plan-loading-pane {
   display: grid;
   gap: 1rem;
-  max-width: 1240px;
+  max-width: 1180px;
   margin: 0 auto;
-  padding: 2rem;
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.74);
 }
 
 .home-plan-loading-pane > div {
-  height: 90px;
-  border-radius: 15px;
-  background: linear-gradient(90deg, #e9efec 25%, #f6f8f7 50%, #e9efec 75%);
+  height: 72px;
+  border-radius: 14px;
+  background: linear-gradient(90deg, #ebe2d6 25%, #f5efe6 50%, #ebe2d6 75%);
   background-size: 200% 100%;
   animation: home-plan-shimmer 1.4s infinite linear;
 }
 
 .home-plan-loading-pane > div:nth-child(2) {
-  height: 430px;
+  height: 120px;
+}
+
+.home-plan-loading-pane > div:nth-child(3) {
+  height: 460px;
 }
 
 @keyframes home-plan-shimmer {
   to { background-position: -200% 0; }
 }
+
+/* ── Responsive ─────────────────────────────────────────────────────────── */
 
 @media (max-width: 960px) {
   .home-plan-header {
@@ -1207,41 +1392,20 @@
   }
 
   .home-plan-main {
-    width: min(100% - 18px, 760px);
-    padding-top: 1.25rem;
+    width: calc(100% - 1.25rem);
   }
 
-  .home-plan-pane {
-    padding: 0;
+  .home-plan-verdict__headline {
+    max-width: none;
   }
 
-  .home-plan-pane-toolbar {
-    align-items: flex-start;
+  .home-plan-instruments {
     flex-direction: column;
+    align-items: stretch;
   }
 
-  .home-plan-pane-toolbar h1 {
-    font-size: 2rem;
-  }
-
-  .home-plan-panel-heading,
-  .home-plan-chart-tools {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .home-plan-boundary-card {
-    grid-template-columns: 46px 1fr;
-  }
-
-  .home-plan-assumption-bar {
-    grid-template-columns: 1fr auto;
-  }
-
-  .home-plan-assumption-bar > div {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    flex-wrap: wrap;
+  .home-plan-instruments__edit {
+    width: 100%;
   }
 
   .home-plan-repayment-intro {
@@ -1272,63 +1436,23 @@
 
 @media (max-width: 640px) {
   .home-plan-header {
-    min-height: 58px;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    min-height: auto;
+    padding-block: 0.75rem;
+  }
+
+  .home-plan-header__actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .home-plan-workspace-switch {
-    width: 100%;
+    flex: 1;
   }
 
   .home-plan-workspace-switch button {
     flex: 1;
-  }
-
-  .home-plan-pane-toolbar h1 {
-    font-size: 1.72rem;
-  }
-
-  .home-plan-boundary-card {
-    grid-template-columns: 1fr;
-  }
-
-  .home-plan-boundary-icon {
-    width: 40px;
-    height: 40px;
-  }
-
-  .home-plan-assumption-bar {
-    grid-template-columns: 1fr;
-  }
-
-  .home-plan-assumption-bar > div,
-  .home-plan-assumption-bar > button {
-    grid-column: 1;
-  }
-
-  .home-plan-assumption-bar > button {
-    width: 100%;
-  }
-
-  .home-plan-comparison-panel {
-    padding-inline: 0.75rem;
-  }
-
-  .home-plan-chart-tools,
-  .home-plan-horizon-control {
-    width: 100%;
-  }
-
-  .home-plan-chart-tools label,
-  .home-plan-chart-tools select {
-    width: 100%;
-  }
-
-  .home-plan-horizon-control {
-    justify-content: space-between;
-  }
-
-  .home-plan-horizon-control > div {
-    overflow-x: auto;
   }
 
   .home-plan-graph-legend {
@@ -1345,11 +1469,15 @@
   }
 
   .home-plan-graph-svg {
-    height: 245px;
+    height: 250px;
   }
 
   .home-plan-graph-tooltip,
   .home-plan-graph-event-label {
+    display: none;
+  }
+
+  .home-plan-time-rail__milestone span {
     display: none;
   }
 
@@ -1368,7 +1496,7 @@
     left: 0.5rem;
     width: auto;
     max-height: calc(100vh - 1rem);
-    border-radius: 22px;
+    border-radius: 20px;
     transform: translateY(calc(100% + 2rem));
   }
 
@@ -1386,7 +1514,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .home-plan-shell::before,
+  .home-plan-shell::after,
   .home-plan-controls,
+  .home-plan-graph-gap,
+  .home-plan-graph-point,
+  .home-plan-time-rail__fill,
   .home-plan-loading-pane > div {
     transition: none;
     animation: none;
