@@ -54,7 +54,7 @@ function RotatingText() {
         transition: "opacity 0.4s ease, transform 0.4s ease",
         opacity: fading ? 0 : 1,
         transform: fading ? "translateY(8px)" : "translateY(0)",
-        color: "#c96b4f",
+        color: "var(--color-accent)",
       }}
     >
       {ROTATING_WORDS[index]}
@@ -316,28 +316,10 @@ export function HomePage() {
           transition: "min-height 0.7s var(--ease-out), padding 0.7s var(--ease-out)",
         }}
       >
-        <div
-          style={{
-            position: "absolute",
-            inset: 0,
-            background:
-              "radial-gradient(ellipse 80% 60% at 50% 40%, rgba(201,107,79,0.06) 0%, transparent 70%), " +
-              "radial-gradient(ellipse 60% 50% at 80% 20%, rgba(100,140,200,0.04) 0%, transparent 60%)",
-            zIndex: -1,
-          }}
-        />
+        <div className="home-hero__wash" aria-hidden="true" />
 
         <div className="fade-up" style={{ textAlign: "center", maxWidth: "720px" }}>
-          <h1
-            style={{
-              fontSize: "clamp(2.5rem, 2rem + 3vw, 4.5rem)",
-              fontWeight: 700,
-              lineHeight: 1.1,
-              letterSpacing: "-0.03em",
-              margin: "0 0 1.5rem",
-              color: "#1a1a1a",
-            }}
-          >
+          <h1 className="home-hero__title">
             Discover{" "}
             <RotatingText />
           </h1>
@@ -359,16 +341,7 @@ export function HomePage() {
         </p>
 
         {/* Search bar */}
-        <p
-          className="fade-up fade-up-delay-1"
-          style={{
-            fontSize: "0.82rem",
-            color: "#999",
-            textTransform: "uppercase",
-            letterSpacing: "0.08em",
-            margin: "0 0 0.75rem",
-          }}
-        >
+        <p className="fade-up fade-up-delay-1 home-hero__kicker">
           Describe what you're looking for
         </p>
         <form
@@ -448,11 +421,11 @@ export function HomePage() {
           <div
             className="fade-up fade-up-delay-3 home-stats-row"
           >
-            <span><strong style={{ color: "#555" }}>{snapshot.totalProperties}</strong> properties</span>
+            <span><strong>{snapshot.totalProperties}</strong> properties</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
-            <span><strong style={{ color: "#555" }}>{snapshot.totalSocieties}</strong> societies</span>
+            <span><strong>{snapshot.totalSocieties}</strong> societies</span>
             <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
-            <span><strong style={{ color: "#555" }}>{snapshot.totalAreas}</strong> micro-markets</span>
+            <span><strong>{snapshot.totalAreas}</strong> micro-markets</span>
           </div>
         )}
 
@@ -471,27 +444,10 @@ export function HomePage() {
           {POPULAR_SEARCHES.slice(0, 4).map((s) => (
             <button
               key={s}
+              type="button"
+              className="home-popular-chip"
               onClick={() => {
                 commitSearch(s);
-              }}
-              style={{
-                border: "1px solid rgba(0,0,0,0.08)",
-                background: "rgba(255,255,255,0.7)",
-                color: "#666",
-                padding: "0.4rem 0.85rem",
-                borderRadius: "999px",
-                fontSize: "0.78rem",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)";
-                e.currentTarget.style.color = "#c96b4f";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = "rgba(0,0,0,0.08)";
-                e.currentTarget.style.color = "#666";
               }}
             >
               {s}
@@ -541,48 +497,17 @@ export function HomePage() {
             >
               Area Tracker
             </span>
-            {snapshot.trending.slice(0, 4).map((t, i) => (
+            {snapshot.trending.slice(0, 4).map((t, i, items) => (
               <button
                 key={t.label}
+                type="button"
+                className={`home-trending-btn${i < items.length - 1 ? " home-trending-btn--divider" : ""}`}
                 onClick={() => {
                   commitSearch(t.searchQuery);
                 }}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.5rem",
-                  background: "none",
-                  border: "none",
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                  padding: "0.4rem 0.75rem",
-                  borderRadius: "8px",
-                  transition: "background-color 0.2s",
-                  ...(i < snapshot.trending.slice(0, 4).length - 1
-                    ? { borderRight: "1px solid rgba(0,0,0,0.06)", borderRadius: "8px 0 0 8px", paddingRight: "1.25rem" }
-                    : {}),
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(201,107,79,0.06)"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; }}
               >
-                <span style={{
-                  fontSize: "0.7rem",
-                  textTransform: "uppercase",
-                  letterSpacing: "0.05em",
-                  color: "#c96b4f",
-                  fontWeight: 600,
-                  whiteSpace: "nowrap",
-                }}>
-                  {t.label}
-                </span>
-                <span style={{
-                  fontSize: "0.82rem",
-                  color: "#555",
-                  fontWeight: 500,
-                  whiteSpace: "nowrap",
-                }}>
-                  {t.value}
-                </span>
+                <span className="home-trending-label">{t.label}</span>
+                <span className="home-trending-value">{t.value}</span>
               </button>
             ))}
           </div>
@@ -624,9 +549,9 @@ export function HomePage() {
       {snapshot && (
         <section
           ref={pulseRef}
+          className="home-pulse-section"
           style={{
             padding: "clamp(3rem, 6vw, 5rem) clamp(1.5rem, 4vw, 4rem)",
-            backgroundColor: "var(--color-bg-soft)",
           }}
         >
           <div
@@ -638,39 +563,21 @@ export function HomePage() {
               transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
             }}
           >
-            <h2
-              style={{
-                fontSize: "clamp(1.3rem, 1rem + 1.2vw, 2rem)",
-                fontWeight: 600,
-                letterSpacing: "-0.02em",
-                margin: "0 0 0.5rem",
-              }}
-            >
-              Market pulse
-            </h2>
+            <h2 className="home-pulse-heading">Market pulse</h2>
             <p style={{ color: "#888", marginBottom: "2rem", fontSize: "0.95rem" }}>
               Live snapshot across {snapshot.totalAreas} micro-markets in Bengaluru
             </p>
 
             <div className="home-pulse-grid">
               {/* Price range + BHK breakdown */}
-              <div
-                style={{
-                  padding: "1.5rem",
-                  borderRadius: "12px",
-                  backgroundColor: "#fff",
-                  border: "1px solid rgba(0,0,0,0.06)",
-                }}
-              >
-                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Price range
-                </p>
+              <div className="home-pulse-card home-pulse-card--clay">
+                <p className="home-pulse-label">Price range</p>
                 <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "1rem" }}>
-                  <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1a1a" }}>
+                  <span className="home-pulse-metric home-pulse-metric--clay">
                     {formatPrice(snapshot.priceMin)}
                   </span>
                   <span style={{ color: "#ccc" }}>&mdash;</span>
-                  <span style={{ fontSize: "1.4rem", fontWeight: 700, color: "#1a1a1a" }}>
+                  <span className="home-pulse-metric home-pulse-metric--sage">
                     {formatPrice(snapshot.priceMax)}
                   </span>
                 </div>
@@ -680,20 +587,9 @@ export function HomePage() {
                     .map(([bhk, count]) => (
                       <button
                         key={bhk}
+                        type="button"
+                        className="home-pulse-bhk-btn"
                         onClick={() => commitSearch(`${bhk}BHK`)}
-                        style={{
-                          padding: "0.3rem 0.7rem",
-                          borderRadius: "8px",
-                          border: "1px solid rgba(0,0,0,0.06)",
-                          background: "rgba(201,107,79,0.04)",
-                          fontSize: "0.78rem",
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                          color: "#555",
-                          transition: "all 0.2s",
-                        }}
-                        onMouseEnter={(e) => { e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)"; e.currentTarget.style.color = "#c96b4f"; }}
-                        onMouseLeave={(e) => { e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)"; e.currentTarget.style.color = "#555"; }}
                       >
                         {bhk} BHK <span style={{ color: "#aaa", marginLeft: "0.25rem" }}>{count}</span>
                       </button>
@@ -702,40 +598,15 @@ export function HomePage() {
               </div>
 
               {/* Top builders */}
-              <div
-                style={{
-                  padding: "1.5rem",
-                  borderRadius: "12px",
-                  backgroundColor: "#fff",
-                  border: "1px solid rgba(0,0,0,0.06)",
-                }}
-              >
-                <p style={{ margin: "0 0 0.75rem", fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                  Top builders
-                </p>
+              <div className="home-pulse-card home-pulse-card--sage">
+                <p className="home-pulse-label">Top builders</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {snapshot.topBuilders.map((b) => (
                     <button
                       key={b.name}
+                      type="button"
+                      className="home-pulse-builder-btn"
                       onClick={() => commitSearch(b.name)}
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        padding: "0.5rem 0.75rem",
-                        borderRadius: "8px",
-                        border: "1px solid rgba(0,0,0,0.04)",
-                        background: "transparent",
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                        fontSize: "0.88rem",
-                        color: "#333",
-                        transition: "all 0.2s",
-                        textAlign: "left",
-                        width: "100%",
-                      }}
-                      onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(201,107,79,0.04)"; e.currentTarget.style.borderColor = "rgba(201,107,79,0.15)"; }}
-                      onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.borderColor = "rgba(0,0,0,0.04)"; }}
                     >
                       <span style={{ fontWeight: 500 }}>{b.name}</span>
                       <span style={{ fontSize: "0.75rem", color: "#999" }}>{b.count} listings</span>
@@ -750,34 +621,12 @@ export function HomePage() {
                   to={`/property/${featured.id}`}
                   style={{ textDecoration: "none", color: "inherit" }}
                 >
-                  <div
-                    style={{
-                      padding: "1.5rem",
-                      borderRadius: "12px",
-                      backgroundColor: "#fff",
-                      border: "1px solid rgba(0,0,0,0.06)",
-                      cursor: "pointer",
-                      transition: "border-color 0.2s ease, box-shadow 0.2s ease",
-                      height: "100%",
-                      display: "flex",
-                      flexDirection: "column",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "rgba(201,107,79,0.3)";
-                      e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.06)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)";
-                      e.currentTarget.style.boxShadow = "none";
-                    }}
-                  >
+                  <div className="home-pulse-featured home-pulse-card--highlight">
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
                       <p style={{ margin: 0, fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
                         Sample transparency report
                       </p>
-                      <span style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.08em", color: "#c96b4f" }}>
-                        Live
-                      </span>
+                      <span className="home-pulse-live">Live</span>
                     </div>
                     <p style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.15rem", color: "#1a1a1a" }}>
                       {featured.title}
@@ -787,7 +636,7 @@ export function HomePage() {
                     </p>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
                       <span style={{ fontSize: "0.85rem", color: "#444" }}>Price</span>
-                      <span style={{ fontSize: "1.1rem", fontWeight: 700 }}>{formatPrice(featured.price)}</span>
+                      <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#b85a3c" }}>{formatPrice(featured.price)}</span>
                     </div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
                       <span style={{ fontSize: "0.85rem", color: "#444" }}>Per sqft</span>
@@ -811,12 +660,12 @@ export function HomePage() {
                                   ? "rgba(251, 191, 36, 0.15)"
                                   : isVerificationPending
                                   ? "rgba(156, 163, 175, 0.15)"
-                                  : "rgba(42,122,42,0.08)",
+                                  : "var(--color-positive-bg)",
                                 color: isSellerRegistered
                                   ? "#92400e"
                                   : isVerificationPending
                                   ? "#6b7280"
-                                  : "#2a7a2a",
+                                  : "var(--color-positive)",
                                 fontWeight: 500,
                               }}
                             >
@@ -921,30 +770,13 @@ function MicroMarketCard({
 }) {
   const pct = (m.avgPriceSqft / maxAvg) * 100;
   const barColor =
-    pct > 85 ? "#c96b4f" : pct > 60 ? "#daa520" : "#4a9a6a";
+    pct > 85 ? "var(--color-accent)" : pct > 60 ? "var(--color-sage-deep)" : "var(--color-sage)";
 
   return (
     <button
+      type="button"
+      className="home-micro-card"
       onClick={() => onSearch(m.area)}
-      style={{
-        padding: "1.25rem 1.4rem",
-        borderRadius: "12px",
-        backgroundColor: "#fff",
-        border: "1px solid rgba(0,0,0,0.06)",
-        cursor: "pointer",
-        fontFamily: "inherit",
-        textAlign: "left",
-        width: "100%",
-        transition: "border-color 0.2s, box-shadow 0.2s",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = "rgba(201,107,79,0.25)";
-        e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.05)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = "rgba(0,0,0,0.06)";
-        e.currentTarget.style.boxShadow = "none";
-      }}
     >
       {/* Header */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.2rem" }}>
@@ -964,7 +796,7 @@ function MicroMarketCard({
       {/* Price bar */}
       <div style={{ marginBottom: "0.85rem" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.3rem" }}>
-          <span style={{ fontSize: "1.2rem", fontWeight: 700, color: "#1a1a1a" }}>
+          <span className="home-micro-price">
             {m.avgPriceSqft.toLocaleString("en-IN")}
             <span style={{ fontSize: "0.7rem", color: "#999", fontWeight: 400, marginLeft: "0.2rem" }}>/sqft</span>
           </span>
@@ -998,12 +830,12 @@ function MicroMarketCard({
           </span>
         )}
         {m.readyToMove > 0 && (
-          <span style={chipStyle("rgba(42,122,42,0.08)", "#2a7a2a")}>
+          <span style={chipStyle("var(--color-positive-bg)", "var(--color-positive)")}>
             {m.readyToMove} ready
           </span>
         )}
         {m.nearMetro > 0 && (
-          <span style={chipStyle("rgba(42,80,180,0.08)", "#2a5ab4")}>
+          <span className="home-chip-sage">
             {m.nearMetro} near metro
           </span>
         )}
@@ -1049,18 +881,10 @@ function MicroMarketsSection({
   const maxAvg = Math.max(...markets.map((m) => m.avgPriceSqft));
 
   return (
-    <section
-      style={{
-        padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem",
-        backgroundColor: "#fff",
-        borderBottom: "1px solid rgba(0,0,0,0.04)",
-      }}
-    >
+    <section className="home-micro-section" style={{ padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem" }}>
       <div style={{ maxWidth: "960px", margin: "0 auto" }}>
         <div style={{ marginBottom: "1.5rem" }}>
-          <h2 style={{ margin: "0 0 0.25rem", fontSize: "clamp(1.3rem, 1rem + 1vw, 1.8rem)", fontWeight: 600, letterSpacing: "-0.02em" }}>
-            Area Tracker
-          </h2>
+          <h2 className="home-micro-heading">Area Tracker</h2>
           <p style={{ margin: 0, fontSize: "0.85rem", color: "#888" }}>
             {markets.length} Bengaluru areas · {properties.length} listings · price, access, and trust signals
           </p>
