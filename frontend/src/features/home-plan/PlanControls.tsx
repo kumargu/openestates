@@ -2,20 +2,22 @@ import type { PropertyDetailResponse } from "../../lib/types.ts";
 import { formatCurrency, type PlanInputs, type PlanProjection } from "./model.ts";
 
 export type PlanControlSection = "financing" | "market" | "sources";
+export type PlanPreset = "Base scenario" | "Cautious market" | "Strong growth" | "Custom";
 
 type PlanControlsProps = {
   open: boolean;
   section: PlanControlSection;
+  preset: PlanPreset;
   inputs: PlanInputs;
   projection: PlanProjection;
   extraEmisPerYear: number;
   property: PropertyDetailResponse;
   onClose: () => void;
   onSectionChange: (section: PlanControlSection) => void;
+  onPresetChange: (preset: Exclude<PlanPreset, "Custom">) => void;
   onInputChange: <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => void;
   onExtraEmisChange: (value: number) => void;
   onReset: () => void;
-  onSave: () => void;
 };
 
 function ControlIcon({ name }: { name: PlanControlSection | "close" }) {
@@ -198,32 +200,47 @@ function SourcesPanel({ property }: Pick<PlanControlsProps, "property">) {
 export function PlanControls({
   open,
   section,
+  preset,
   inputs,
   projection,
   extraEmisPerYear,
   property,
   onClose,
   onSectionChange,
+  onPresetChange,
   onInputChange,
   onExtraEmisChange,
   onReset,
-  onSave,
 }: PlanControlsProps) {
-  const sectionTitle = section === "financing" ? "Financing" : section === "market" ? "Market" : "Sources";
+  const sectionTitle = section === "financing" ? "Purchase and loan" : section === "market" ? "Market outlook" : "Evidence";
 
   return (
     <>
       {open && <button type="button" className="home-plan-controls-backdrop" aria-label="Close plan controls" onClick={onClose} />}
       <aside className={`home-plan-controls ${open ? "is-open" : ""}`} aria-hidden={!open}>
         <header className="home-plan-controls-header">
-          <div><span>Plan controls</span><h2>{sectionTitle}</h2></div>
+          <div><span>Assumptions</span><h2>{sectionTitle}</h2></div>
           <button type="button" onClick={onClose} aria-label="Close plan controls"><ControlIcon name="close" /></button>
         </header>
+        <section className="home-plan-preset-selector" aria-label="Scenario presets">
+          <div>
+            <span>Starting point</span>
+            <small>Choose a market view, then fine-tune any number below.</small>
+          </div>
+          <div>
+            {(["Base scenario", "Cautious market", "Strong growth"] as const).map((item) => (
+              <button type="button" key={item} className={preset === item ? "is-active" : ""} onClick={() => onPresetChange(item)}>
+                {item === "Base scenario" ? "Base" : item === "Cautious market" ? "Cautious" : "Strong"}
+              </button>
+            ))}
+          </div>
+          {preset === "Custom" && <em>Custom assumptions</em>}
+        </section>
         <nav className="home-plan-controls-tabs" aria-label="Plan control sections">
           {(["financing", "market", "sources"] as const).map((item) => (
             <button type="button" key={item} className={section === item ? "is-active" : ""} onClick={() => onSectionChange(item)}>
               <ControlIcon name={item} />
-              <span>{item[0].toUpperCase() + item.slice(1)}</span>
+              <span>{item === "financing" ? "Purchase" : item === "market" ? "Market" : "Evidence"}</span>
             </button>
           ))}
         </nav>
@@ -233,8 +250,8 @@ export function PlanControls({
           {section === "sources" && <SourcesPanel property={property} />}
         </div>
         <footer className="home-plan-controls-footer">
-          <button type="button" onClick={onReset}>Return to baseline</button>
-          <button type="button" className="home-plan-primary-action" onClick={onSave}>Save scenario</button>
+          <button type="button" onClick={onReset}>Reset to baseline</button>
+          <button type="button" className="home-plan-primary-action" onClick={onClose}>Done</button>
         </footer>
       </aside>
     </>

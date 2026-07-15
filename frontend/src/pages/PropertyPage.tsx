@@ -613,7 +613,7 @@ const SOURCE_PANEL_COPY: Record<SourcePanelKind, { title: string; subtitle: stri
   },
   community: {
     title: "Community pulse",
-    subtitle: "What resident chatter keeps repeating around this project.",
+    subtitle: "Public review and resident-source signals, with gaps called out.",
   },
   reviews: {
     title: "Google reviews",
@@ -664,7 +664,10 @@ function cleanSourceText(item?: SourceItem | null): string {
     .replace(/^RERA No:\s*/i, "")
     .replace(/^Expected Completion:\s*/i, "")
     .replace(/^Resident sentiment:\s*/i, "")
+    .replace(/^Community signal:\s*/i, "")
+    .replace(/^Community sentiment score:\s*/i, "")
     .replace(/^Google Reviews:\s*/i, "")
+    .replace(/^Google rating:\s*/i, "")
     .replace(/^Praised for:\s*/i, "")
     .replace(/^Criticized for:\s*/i, "")
     .replace(/^Review themes:\s*/i, "")
@@ -711,6 +714,23 @@ function sourceItemList(item?: SourceItem | null): string[] {
 
 function sourceQuoteText(item?: SourceItem | null): string {
   return cleanSourceText(item).replace(/^["“]|["”]$/g, "").trim();
+}
+
+function highlightSentences(value: string): string[] {
+  return value
+    .split(/\.\s+/g)
+    .map((part) => part.replace(/[.!?]+$/g, "").trim())
+    .filter((part) => part.length > 0);
+}
+
+function isMissingDataSentence(value: string): boolean {
+  const normalized = value.toLowerCase();
+  return (
+    normalized.includes("not ingested") ||
+    normalized.includes("not stored") ||
+    normalized.includes("unavailable") ||
+    normalized.includes("needs improving")
+  );
 }
 
 function sourcePanelUrl(panel: SourcePanel): string | undefined {
@@ -804,12 +824,20 @@ function sourcePanelPreview(panel: SourcePanel, kind: SourcePanelKind): string {
 
   if (kind === "community") {
     return finalizeSourcePreview(panel, compactPreview([
+      cleanSourceText(findSourceItem(panel, "community_review_summary", "what we know")),
+      cleanSourceText(findSourceItem(panel, "community_sentiment_score", "signal score")),
       cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take")),
-      sourceItemList(findSourceItem(panel, "common_complaints", "repeated concerns"))[0] ?? "",
+      sourceItemList(
+        findSourceItem(panel, "community_concern_themes", "common_complaints", "repeated concerns"),
+      )[0] ?? "",
     ]));
   }
 
+  const rating = cleanSourceText(findSourceItem(panel, "google_rating", "rating"));
+  const reviewCount = cleanSourceText(findSourceItem(panel, "google_review_count", "review count"));
   return finalizeSourcePreview(panel, compactPreview([
+    rating ? `${rating}/5` : "",
+    reviewCount ? `${reviewCount} reviews` : "",
     sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"))[0] ?? "",
     sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"))[0] ?? "",
   ]));
@@ -937,23 +965,42 @@ function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePane
   }
 
   if (kind === "community") {
+    const communitySummary = cleanSourceText(findSourceItem(panel, "community_review_summary", "what we know"));
+    const communityScore = cleanSourceText(findSourceItem(panel, "community_sentiment_score", "signal score"));
     const overall = cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take"));
     const summary = cleanSourceText(findSourceItem(panel, "sentiment_summary", "what forums point to"));
     const quoteItem = findSourceItem(panel, "best_quote", "quote");
     const quote = sourceQuoteText(quoteItem);
-    const positives = sourceItemList(findSourceItem(panel, "common_positives", "repeated positives"));
-    const concerns = sourceItemList(findSourceItem(panel, "common_complaints", "repeated concerns"));
+    const evidenceUrl = sourcePanelUrl(panel);
+    const positives = sourceItemList(
+      findSourceItem(panel, "community_positive_themes", "common_positives", "repeated positives"),
+    );
+    const concerns = sourceItemList(
+      findSourceItem(panel, "community_concern_themes", "common_complaints", "repeated concerns"),
+    );
+    const highlights = [
+      ...highlightSentences(communitySummary).filter((item) => !isMissingDataSentence(item)),
+      communityScore ? `Signal score: ${communityScore}/100 from available public review metadata` : "",
+      evidenceUrl ? "Evidence links back to the public review source" : "",
+      ...highlightSentences(summary).filter((item) => !isMissingDataSentence(item)),
+    ].filter((item) => item.length > 0);
 
     return (
       <div className="source-panel-stack">
-        {(overall || summary) && (
+        {communityScore && (
+          <div className="source-stat-grid">
+            <SourceStat label="Signal" value={`${communityScore}/100`} tone={sourceTone(communitySummary || overall || communityScore)} />
+          </div>
+        )}
+
+        {(overall || highlights.length > 0) && (
           <div className="source-lead">
             {overall && (
               <span className={`source-sentiment-pill source-sentiment-pill--${sourceTone(overall)}`}>
                 {overall}
               </span>
             )}
-            {summary && <p>{summary}</p>}
+            <CompactList title="Highlights" items={highlights} tone="good" />
           </div>
         )}
 
@@ -968,20 +1015,41 @@ function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePane
           <SourceListCard title="What people like" items={positives} tone="good" />
           <SourceListCard title="What people complain about" items={concerns} tone="watch" />
         </div>
+
+        {evidenceUrl && (
+          <a className="property-text-link source-panel-link" href={evidenceUrl} target="_blank" rel="noreferrer">
+            Open community evidence
+          </a>
+        )}
       </div>
     );
   }
 
+  const rating = cleanSourceText(findSourceItem(panel, "google_rating", "rating"));
+  const reviewCount = cleanSourceText(findSourceItem(panel, "google_review_count", "review count"));
+  const reviewUrl = sourcePanelUrl(panel);
   const overall = cleanSourceText(findSourceItem(panel, "google_sentiment", "overall take"));
   const positives = sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"));
   const concerns = sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"));
   const themes = sourceItemList(findSourceItem(panel, "google_common_themes", "themes"));
+  const reviewFacts = [
+    rating ? `${rating}/5 Google rating` : "",
+    reviewCount ? `${reviewCount} public reviews counted` : "",
+    reviewUrl ? "Google Maps review link is available" : "",
+    ...highlightSentences(overall).filter((item) => !isMissingDataSentence(item)),
+  ].filter((item) => item.length > 0);
 
   return (
     <div className="source-panel-stack">
-      {overall && (
+      {(rating || reviewCount) && (
+        <div className="source-stat-grid">
+          {rating && <SourceStat label="Rating" value={`${rating}/5`} tone={sourceTone(rating)} />}
+          {reviewCount && <SourceStat label="Reviews" value={reviewCount} tone="neutral" />}
+        </div>
+      )}
+      {reviewFacts.length > 0 && (
         <div className="source-lead">
-          <p>{overall}</p>
+          <CompactList title="Review facts" items={reviewFacts} tone="good" />
         </div>
       )}
       <div className="source-list-grid">
@@ -989,6 +1057,11 @@ function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePane
         <SourceListCard title="Often criticized" items={concerns} tone="watch" />
       </div>
       <SourceTagRow title="Themes" items={themes} />
+      {reviewUrl && (
+        <a className="property-text-link source-panel-link" href={reviewUrl} target="_blank" rel="noreferrer">
+          Open Google reviews
+        </a>
+      )}
     </div>
   );
 }
