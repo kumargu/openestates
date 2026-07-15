@@ -70,13 +70,29 @@ export function VerdictBlock({
       <dl className="home-plan-verdict__breakdown" aria-label={`Year ${activeYear} breakdown`}>
         {isMonthly ? (
           <>
-            <div><dt>Buy · EMI</dt><dd>{formatCurrency(monthlyEmi)}/mo</dd><small>Fixed until loan ends</small></div>
-            <div><dt>Rent</dt><dd>{formatCurrency(monthlyRent)}/mo</dd><small>Rises with inflation</small></div>
+            <div className="home-plan-verdict__tile home-plan-verdict__tile--buy">
+              <dt>Buy · EMI</dt>
+              <dd>{formatCurrency(monthlyEmi)}/mo</dd>
+              <small>Fixed until loan ends</small>
+            </div>
+            <div className="home-plan-verdict__tile home-plan-verdict__tile--rent">
+              <dt>Rent</dt>
+              <dd>{formatCurrency(monthlyRent)}/mo</dd>
+              <small>Rises with inflation</small>
+            </div>
           </>
         ) : (
           <>
-            <div><dt>Buy path</dt><dd>{formatCurrency(buyNetWorth, true)}</dd><small>EMI {formatCurrency(monthlyEmi)}/mo</small></div>
-            <div><dt>Rent + SIP</dt><dd>{formatCurrency(rentNetWorth, true)}</dd><small>Rent {formatCurrency(monthlyRent)}/mo</small></div>
+            <div className="home-plan-verdict__tile home-plan-verdict__tile--buy">
+              <dt>Buy path</dt>
+              <dd>{formatCurrency(buyNetWorth, true)}</dd>
+              <small>EMI {formatCurrency(monthlyEmi)}/mo</small>
+            </div>
+            <div className="home-plan-verdict__tile home-plan-verdict__tile--rent">
+              <dt>Rent + SIP</dt>
+              <dd>{formatCurrency(rentNetWorth, true)}</dd>
+              <small>Rent {formatCurrency(monthlyRent)}/mo</small>
+            </div>
           </>
         )}
       </dl>

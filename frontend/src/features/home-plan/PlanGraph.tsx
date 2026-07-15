@@ -174,16 +174,16 @@ export function PlanGraph({
             <stop offset="100%" stopColor="#e07858" stopOpacity=".02" />
           </linearGradient>
           <linearGradient id="home-plan-rent-area" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#6ba3c4" stopOpacity=".22" />
-            <stop offset="100%" stopColor="#6ba3c4" stopOpacity=".02" />
+            <stop offset="0%" stopColor="#7da88a" stopOpacity=".28" />
+            <stop offset="100%" stopColor="#7da88a" stopOpacity=".03" />
           </linearGradient>
           <linearGradient id="home-plan-gap-buy" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#d87355" stopOpacity=".18" />
             <stop offset="100%" stopColor="#d87355" stopOpacity=".04" />
           </linearGradient>
           <linearGradient id="home-plan-gap-rent" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#79a6b8" stopOpacity=".18" />
-            <stop offset="100%" stopColor="#79a6b8" stopOpacity=".04" />
+            <stop offset="0%" stopColor="#6d9478" stopOpacity=".22" />
+            <stop offset="100%" stopColor="#6d9478" stopOpacity=".05" />
           </linearGradient>
           <filter id="home-plan-tooltip-shadow" x="-30%" y="-30%" width="160%" height="180%">
             <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#1a1410" floodOpacity=".12" />

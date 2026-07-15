@@ -10,7 +10,11 @@
   --plan-surface-solid: #fffbf5;
   --plan-soft: rgba(243, 232, 218, 0.65);
   --plan-buy: #cf6a4a;
-  --plan-rent: #5f96ad;
+  --plan-rent: #6d9478;
+  --plan-rent-deep: #4f7560;
+  --plan-monthly: #7a8f7e;
+  --plan-monthly-deep: #567059;
+  --plan-payoff: #c4893a;
   --plan-accent: #6b5346;
   --plan-brand: #c46345;
   --plan-glass: rgba(255, 252, 247, 0.72);
@@ -40,16 +44,39 @@
 
 .home-plan-shell::after {
   background:
-    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(95, 150, 173, 0.18), transparent 52%),
-    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(95, 150, 173, 0.1), transparent 48%);
+    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(109, 148, 120, 0.24), transparent 52%),
+    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(109, 148, 120, 0.12), transparent 48%);
 }
 
 .home-plan-shell--buy::before { opacity: 1; }
-.home-plan-shell--buy::after { opacity: 0.15; }
-.home-plan-shell--rent::before { opacity: 0.18; }
+.home-plan-shell--buy::after { opacity: 0.12; }
+.home-plan-shell--rent::before { opacity: 0.16; }
 .home-plan-shell--rent::after { opacity: 1; }
 .home-plan-shell--balanced::before,
 .home-plan-shell--balanced::after { opacity: 0.55; }
+
+/* ── View chapters — unified monthly sage wash on all tabs ─────────────── */
+
+.home-plan-shell--view-net-worth,
+.home-plan-shell--view-monthly,
+.home-plan-shell--view-payoff {
+  background: #f1f0e8;
+}
+
+.home-plan-shell--view-net-worth::before,
+.home-plan-shell--view-monthly::before,
+.home-plan-shell--view-payoff::before {
+  opacity: 0.28;
+}
+
+.home-plan-shell--view-net-worth::after,
+.home-plan-shell--view-monthly::after,
+.home-plan-shell--view-payoff::after {
+  background:
+    radial-gradient(ellipse 75% 48% at 12% 0%, rgba(122, 143, 126, 0.2), transparent 54%),
+    radial-gradient(ellipse 60% 38% at 88% 100%, rgba(122, 143, 126, 0.1), transparent 50%);
+  opacity: 0.72;
+}
 
 .home-plan-header,
 .home-plan-main {
@@ -241,17 +268,19 @@
   color: var(--plan-ink);
 }
 
-.home-plan-shell--buy .home-plan-verdict__leader {
-  color: #b85a3c;
-}
-
-.home-plan-shell--rent .home-plan-verdict__leader {
-  color: #4a7f96;
-}
-
 .home-plan-verdict__amount {
   color: var(--plan-ink);
   font-variant-numeric: tabular-nums;
+}
+
+/* All views: sage chapter accent on headline metrics (monthly theme) */
+.home-plan-shell--view-net-worth .home-plan-verdict__leader,
+.home-plan-shell--view-net-worth .home-plan-verdict__amount,
+.home-plan-shell--view-monthly .home-plan-verdict__leader,
+.home-plan-shell--view-monthly .home-plan-verdict__amount,
+.home-plan-shell--view-payoff .home-plan-verdict__leader,
+.home-plan-shell--view-payoff .home-plan-verdict__amount {
+  color: var(--plan-monthly-deep);
 }
 
 .home-plan-verdict__detail {
@@ -288,11 +317,40 @@
   padding: 0;
 }
 
-.home-plan-verdict__breakdown > div {
+.home-plan-verdict__breakdown > div,
+.home-plan-verdict__tile {
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--plan-line);
   border-radius: 12px;
   background: var(--plan-glass);
+}
+
+.home-plan-verdict__tile--buy {
+  background: rgba(207, 106, 74, 0.07);
+  border-color: rgba(207, 106, 74, 0.22);
+}
+
+.home-plan-verdict__tile--buy dd {
+  color: #b85a3c;
+}
+
+.home-plan-verdict__tile--rent,
+.home-plan-verdict__tile--highlight {
+  background: rgba(122, 143, 126, 0.12);
+  border-color: rgba(122, 143, 126, 0.3);
+}
+
+.home-plan-verdict__tile--rent dd,
+.home-plan-verdict__tile--highlight dd {
+  color: var(--plan-monthly-deep);
+}
+
+.home-plan-verdict__breakdown--3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.home-plan-verdict__breakdown--4 {
+  grid-template-columns: repeat(4, 1fr);
 }
 
 .home-plan-verdict__breakdown dt {
@@ -384,7 +442,7 @@
 .home-plan-view-tabs__seg button.is-active {
   color: var(--plan-ink);
   background: white;
-  box-shadow: 0 2px 10px rgba(31, 24, 20, 0.1);
+  box-shadow: inset 0 -2px 0 var(--plan-monthly-deep), 0 2px 10px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-view-tabs__subtitle {
@@ -831,87 +889,17 @@
   background: #342820;
 }
 
-/* ── Pay off loan (contained card) ──────────────────────────────────────── */
+/* ── Pay off loan (open canvas — same chapter as monthly) ───────────────── */
 
 .home-plan-payoff {
   display: grid;
-  gap: 1.4rem;
-  padding: clamp(1.1rem, 2.2vw, 1.6rem);
-  border: 1px solid var(--plan-line);
-  border-radius: 22px;
-  background: var(--plan-glass);
-  box-shadow: 0 18px 48px rgba(31, 24, 20, 0.06);
-}
-
-.home-plan-payoff__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  flex-wrap: wrap;
-}
-
-.home-plan-payoff__title {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.home-plan-payoff__badge {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  border-radius: 11px;
-  color: var(--plan-accent);
-  background: var(--plan-soft);
-  font-size: 1rem;
-  font-weight: 700;
-}
-
-.home-plan-payoff__title h2 {
-  margin: 0;
-  font-size: 1.12rem;
-  letter-spacing: -0.02em;
-}
-
-.home-plan-payoff__title p {
-  margin: 0.3rem 0 0;
-  max-width: 42ch;
-  color: var(--plan-muted);
-  font-size: 0.84rem;
-  line-height: 1.5;
-}
-
-.home-plan-payoff__progress {
-  display: grid;
-  gap: 0.45rem;
-  min-width: 190px;
-}
-
-.home-plan-payoff__progress-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.home-plan-payoff__progress-head strong {
-  font-size: 1.15rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
-
-.home-plan-payoff__progress-head small {
-  color: var(--plan-accent);
-  font-size: 0.75rem;
-  font-weight: 650;
+  gap: clamp(1.25rem, 2.5vw, 1.75rem);
+  padding: 0 0.15rem;
 }
 
 .home-plan-payoff__bar {
   height: 8px;
+  margin-top: 0.35rem;
   border-radius: 99px;
   background: var(--plan-soft);
   overflow: hidden;
@@ -921,11 +909,9 @@
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, var(--plan-accent), var(--plan-brand));
+  background: linear-gradient(90deg, var(--plan-monthly-deep), var(--plan-rent));
   transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-
-/* Lever ------------------------------------------------------------------- */
 
 .home-plan-payoff__lever {
   display: grid;
@@ -943,10 +929,6 @@
 .home-plan-payoff__seg {
   display: grid;
   grid-template-columns: repeat(6, 1fr);
-  gap: 0.3rem;
-  padding: 4px;
-  border-radius: 14px;
-  background: var(--plan-soft);
 }
 
 .home-plan-payoff__seg button {
@@ -954,23 +936,12 @@
   flex-direction: column;
   align-items: center;
   gap: 0.05rem;
-  padding: 0.6rem 0.4rem;
-  border: 0;
-  border-radius: 10px;
-  color: var(--plan-muted);
-  background: transparent;
-  cursor: pointer;
-  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
-}
-
-.home-plan-payoff__seg button:hover {
-  color: var(--plan-ink);
+  padding: 0.65rem 0.4rem;
 }
 
 .home-plan-payoff__seg button.is-active {
-  color: var(--plan-ink);
-  background: white;
-  box-shadow: 0 2px 10px rgba(31, 24, 20, 0.1);
+  color: var(--plan-monthly-deep);
+  box-shadow: inset 0 0 0 1.5px var(--plan-monthly-deep), 0 2px 10px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-payoff__seg strong {
@@ -984,91 +955,110 @@
   text-transform: uppercase;
 }
 
-/* Outcomes list ----------------------------------------------------------- */
-
-.home-plan-payoff__outcomes {
-  display: grid;
-  gap: 0.15rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.home-plan-payoff__outcomes li {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.7rem 0.15rem;
-  border-bottom: 1px solid var(--plan-line);
-}
-
-.home-plan-payoff__outcomes li:last-child {
-  border-bottom: 0;
-}
-
-.home-plan-payoff__outcome-label {
-  color: var(--plan-muted);
-  font-size: 0.86rem;
-}
-
-.home-plan-payoff__outcome-value {
-  font-size: 0.95rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-.home-plan-payoff__chip {
-  min-width: 62px;
-  padding: 0.2rem 0.55rem;
-  border-radius: 99px;
-  color: var(--plan-muted);
-  background: var(--plan-soft);
-  font-size: 0.68rem;
-  font-weight: 650;
-  text-align: center;
-}
-
-.home-plan-payoff__chip--good {
-  color: var(--plan-accent);
-  background: rgba(178, 128, 74, 0.12);
-}
-
 /* Balance chart ----------------------------------------------------------- */
 
 .home-plan-payoff__chart-wrap {
   display: grid;
-  gap: 0.5rem;
+  gap: 0.65rem;
 }
 
-.home-plan-payoff__chart-head {
+.home-plan-payoff__chart-legend {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
 }
 
-.home-plan-payoff__chart-head span {
+.home-plan-payoff__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--plan-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.home-plan-payoff__legend-item i {
+  display: block;
+  width: 22px;
+  height: 0;
+  border-top: 2.5px solid currentColor;
+  border-radius: 99px;
+}
+
+.home-plan-payoff__legend-item--baseline i {
   color: var(--plan-faint);
-  font-size: 0.68rem;
-  font-weight: 650;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  border-top-style: dashed;
 }
 
-.home-plan-payoff__chart-head small {
+.home-plan-payoff__legend-item--prepay i {
+  color: var(--plan-monthly-deep);
+}
+
+.home-plan-payoff__legend-item small {
+  color: var(--plan-ink);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-plan-payoff__legend-gap {
+  margin-left: auto;
   color: var(--plan-muted);
   font-size: 0.75rem;
 }
 
 .home-plan-payoff__chart {
   width: 100%;
-  height: 200px;
+  height: clamp(220px, 34vw, 280px);
   display: block;
+  cursor: crosshair;
 }
 
-.home-plan-payoff__chart path {
+.home-plan-payoff__savings-gap {
+  pointer-events: none;
+}
+
+.home-plan-payoff__line {
+  fill: none;
+  stroke-linejoin: round;
+  stroke-linecap: round;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.home-plan-payoff__line--baseline {
+  stroke: var(--plan-faint);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  opacity: 0.85;
+}
+
+.home-plan-payoff__line--prepay {
+  stroke: var(--plan-monthly-deep);
+  stroke-width: 2.75;
+}
+
+.home-plan-payoff__milestone line {
+  stroke: var(--plan-line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+.home-plan-payoff__milestone text {
+  font-size: 10px;
+  font-weight: 650;
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+.home-plan-payoff__milestone--baseline text {
+  fill: var(--plan-faint);
+}
+
+.home-plan-payoff__milestone--prepay text {
+  fill: var(--plan-monthly-deep);
 }
 
 .home-plan-payoff__cursor line {
@@ -1076,16 +1066,54 @@
   stroke-width: 1;
   stroke-dasharray: 3 4;
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
-.home-plan-payoff__cursor circle {
-  fill: white;
-  stroke: var(--plan-accent);
-  stroke-width: 2.5;
+.home-plan-payoff__dot {
   vector-effect: non-scaling-stroke;
+  pointer-events: none;
 }
 
-/* Readout ----------------------------------------------------------------- */
+.home-plan-payoff__dot--baseline {
+  fill: white;
+  stroke: var(--plan-faint);
+  stroke-width: 2;
+}
+
+.home-plan-payoff__dot--prepay {
+  fill: white;
+  stroke: var(--plan-monthly-deep);
+  stroke-width: 2.5;
+}
+
+.home-plan-payoff__tooltip rect {
+  fill: rgba(255, 252, 247, 0.96);
+  stroke: var(--plan-line);
+}
+
+.home-plan-payoff__tooltip text {
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.home-plan-payoff__tooltip-year {
+  fill: var(--plan-ink);
+  font-weight: 700;
+}
+
+.home-plan-payoff__tooltip-row {
+  fill: var(--plan-muted);
+}
+
+.home-plan-payoff__tooltip-row--prepay {
+  fill: var(--plan-monthly-deep);
+  font-weight: 650;
+}
+
+.home-plan-payoff__tooltip-row--saved {
+  fill: var(--plan-monthly-deep);
+  font-weight: 650;
+}
 
 .home-plan-payoff__readout {
   display: grid;
@@ -1094,37 +1122,9 @@
   border-top: 1px solid var(--plan-line);
 }
 
-.home-plan-payoff__readout-year {
-  font-size: 0.85rem;
+.home-plan-payoff__readout-badge {
+  color: var(--plan-monthly-deep);
   font-weight: 650;
-}
-
-.home-plan-payoff__readout-year em {
-  margin-left: 0.35rem;
-  color: var(--plan-accent);
-  font-style: normal;
-  font-weight: 650;
-}
-
-.home-plan-payoff__readout dl {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 0.75rem;
-  margin: 0;
-}
-
-.home-plan-payoff__readout dt {
-  color: var(--plan-faint);
-  font-size: 0.65rem;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.home-plan-payoff__readout dd {
-  margin: 0.3rem 0 0;
-  font-size: 0.85rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
 }
 
 /* ── Controls drawer ──────────────────────────────────────────────────── */
@@ -1572,13 +1572,9 @@
     grid-template-columns: repeat(3, 1fr);
   }
 
-  .home-plan-payoff__head {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .home-plan-payoff__progress {
-    min-width: 0;
+  .home-plan-verdict__breakdown--3,
+  .home-plan-verdict__breakdown--4 {
+    grid-template-columns: 1fr 1fr;
   }
 
   .home-plan-controls {
@@ -1596,23 +1592,9 @@
     transform: translateY(0);
   }
 
-  .home-plan-payoff__outcomes li {
-    grid-template-columns: 1fr auto;
-    grid-template-areas: "label chip" "value chip";
-    row-gap: 0.15rem;
-  }
-
-  .home-plan-payoff__outcome-label {
-    grid-area: label;
-  }
-
-  .home-plan-payoff__outcome-value {
-    grid-area: value;
-  }
-
-  .home-plan-payoff__chip {
-    grid-area: chip;
-    align-self: center;
+  .home-plan-payoff__legend-gap {
+    margin-left: 0;
+    width: 100%;
   }
 }
 

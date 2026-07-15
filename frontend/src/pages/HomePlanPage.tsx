@@ -98,6 +98,7 @@ export function HomePlanPage() {
 
   const projection = useMemo(() => inputs ? calculateProjection(inputs) : null, [inputs]);
   const loanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, extraEmisPerYear) : null, [inputs, extraEmisPerYear]);
+  const baselineLoanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, 0) : null, [inputs]);
 
   useEffect(() => {
     if (!projection) return;
@@ -116,7 +117,7 @@ export function HomePlanPage() {
   if (status === "loading") return <LoadingPlan />;
   if (status === "not_found") return <PageState variant="not_found" context="property" message="This home is no longer available for planning." />;
   if (status === "error") return <PageState variant="error" context="property" message="We could not load this plan. Go back to the property and try again." />;
-  if (!propertyData || !inputs || !projection || !loanJourney) return null;
+  if (!propertyData || !inputs || !projection || !loanJourney || !baselineLoanJourney) return null;
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price);
@@ -189,8 +190,10 @@ export function HomePlanPage() {
 
   const metric = view === "monthly" ? "monthlyOutflow" : "netWorth";
 
+  const viewChapterClass = view === "netWorth" ? "net-worth" : view;
+
   return (
-    <div className={`home-plan-shell home-plan-shell--${decisionTheme}`}>
+    <div className={`home-plan-shell home-plan-shell--${decisionTheme} home-plan-shell--view-${viewChapterClass}`}>
       <Helmet>
         <title>{property.title} financial plan | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
@@ -220,6 +223,7 @@ export function HomePlanPage() {
           {view === "payoff" ? (
             <RepaymentJourney
               journey={loanJourney}
+              baselineJourney={baselineLoanJourney}
               extraEmisPerYear={extraEmisPerYear}
               selectedYear={loanYear}
               onExtraEmisChange={setExtraEmisPerYear}
