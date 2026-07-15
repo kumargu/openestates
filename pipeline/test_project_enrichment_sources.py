@@ -62,6 +62,54 @@ class ProjectEnrichmentSourceTest(unittest.TestCase):
         self.assertEqual(record["total_units"], 3713)
         self.assertIn("prestige-park-grove", record["source_url"])
 
+    def test_prestige_inventory_skips_non_matching_scoped_societies(self):
+        def fetch_projects(project_name):
+            if project_name == "Prestige Park Grove":
+                return [
+                    {
+                        "ProjectID": "2212",
+                        "ProjectName": "Prestige Park Grove",
+                        "Project_slug": "prestige-park-grove",
+                    }
+                ]
+            return []
+
+        result = collect_prestige_inventory(
+            self.request,
+            {
+                "society:rera-raheja": {
+                    "entity_id": "society:rera-raheja",
+                    "project_key": "PRM-RAHEJA",
+                    "society_name": "Raheja Vivarea Phase 2",
+                },
+                "society:rera-park-grove": {
+                    "entity_id": "society:rera-park-grove",
+                    "project_key": "PRM-PRESTIGE",
+                    "society_name": "Prestige Park Grove",
+                },
+            },
+            fetch_projects=fetch_projects,
+        )
+
+        self.assertEqual(len(result["records"]), 1)
+        self.assertEqual(result["records"][0]["entity_id"], "society:rera-park-grove")
+
+    def test_prestige_inventory_rejects_all_non_matches(self):
+        with self.assertRaisesRegex(
+            ValueError, "collected no matching projects.*Raheja Vivarea"
+        ):
+            collect_prestige_inventory(
+                self.request,
+                {
+                    "society:rera-raheja": {
+                        "entity_id": "society:rera-raheja",
+                        "project_key": "PRM-RAHEJA",
+                        "society_name": "Raheja Vivarea Phase 2",
+                    }
+                },
+                fetch_projects=lambda _name: [],
+            )
+
     def test_metro_collection_keeps_only_namma_metro_and_marks_future_station(self):
         payload = {
             "osm3s": {"timestamp_osm_base": "2026-07-14T11:59:00Z"},

@@ -1,6 +1,7 @@
 """Deterministic project inventory and metro station collectors."""
 
 import json
+import logging
 import re
 from datetime import date, datetime
 from typing import Any, Callable, Dict, Iterable, List
@@ -22,6 +23,8 @@ node(12.75,77.35,13.25,78.00)["station"="subway"]["railway"="station"];
 out body;
 """
 
+logger = logging.getLogger(__name__)
+
 
 def collect_prestige_inventory(
     request: Dict[str, Any],
@@ -32,6 +35,8 @@ def collect_prestige_inventory(
     snapshot_date = partition_values(request).get("dt") or observed_at[:10]
     fetch = fetch_projects or fetch_prestige_projects
     records = []
+    skipped = []  # type: List[str]
+    failures = []  # type: List[str]
 
     for _, input_data in sorted(society_inputs.items()):
         project_name = optional_string(
@@ -42,51 +47,49 @@ def collect_prestige_inventory(
         entity_id = optional_string(input_data.get("entity_id"))
         if not project_name or not entity_id:
             continue
-        candidates = fetch(project_name)
+        try:
+            candidates = fetch(project_name)
+        except Exception as error:
+            failures.append("{}: {}".format(project_name, error))
+            continue
         exact = [
             candidate
             for candidate in candidates
             if normalized_name(candidate.get("ProjectName")) == normalized_name(project_name)
         ]
         if len(exact) != 1:
-            raise ValueError(
-                "Prestige inventory expected one exact project for {!r}, found {}".format(
+            skipped.append(
+                "{}: expected one exact Prestige project, found {}".format(
                     project_name, len(exact)
                 )
             )
+            continue
         project = exact[0]
-        slug = required_string(project.get("Project_slug"), "Project_slug")
-        city = optional_string(project.get("CityText")) or "Bangalore"
-        coordinates = (project.get("LatLong") or {}).get("coordinates") or []
-        latitude = optional_float(coordinates[0] if len(coordinates) > 0 else None)
-        longitude = optional_float(coordinates[1] if len(coordinates) > 1 else None)
-        records.append(
-            {
-                "entity_id": entity_id,
-                "project_key": optional_string(input_data.get("project_key")),
-                "source_project_id": required_string(
-                    project.get("ProjectID") or project.get("_id"), "ProjectID"
-                ),
-                "source_project_name": required_string(
-                    project.get("ProjectName"), "ProjectName"
-                ),
-                "source_project_slug": slug,
-                "source_url": PRESTIGE_PROJECT_URL.format(
-                    city=normalized_slug(city), slug=slug
-                ),
-                "status": optional_string(project.get("ProjectStatus")),
-                "land_area_acres": parse_acres(project.get("Size")),
-                "starting_price_inr": parse_price_inr(project.get("DisplayPrice")),
-                "price_display": optional_string(project.get("DisplayPrice")),
-                "bhk_options": parse_bhk_options(project.get("bedroomdisplaytext")),
-                "total_units": optional_int(project.get("total_unit")),
-                "latitude": latitude,
-                "longitude": longitude,
-                "maps_url": optional_string(project.get("location_url_link")),
-                "address": optional_string(project.get("Address")),
-                "observed_at": observed_at,
-            }
-        )
+        try:
+            record = prestige_project_record(
+                input_data=input_data,
+                project=project,
+                observed_at=observed_at,
+            )
+        except ValueError as error:
+            failures.append("{}: {}".format(project_name, error))
+            continue
+        records.append(record)
+
+    for reason in skipped:
+        logger.warning("Skipping Prestige inventory input: %s", reason)
+    for reason in failures:
+        logger.warning("Failed Prestige inventory input: %s", reason)
+
+    if not records:
+        details = skipped + failures
+        if details:
+            raise ValueError(
+                "Prestige inventory collected no matching projects: {}".format(
+                    "; ".join(details)
+                )
+            )
+        raise ValueError("Prestige inventory collected no matching projects")
 
     return {
         "snapshot_date": snapshot_date,
@@ -94,6 +97,41 @@ def collect_prestige_inventory(
         "source_watermarks": [
             {"source": "prestige_project_inventory_api", "high_watermark": observed_at}
         ],
+    }
+
+
+def prestige_project_record(
+    input_data: Dict[str, Any],
+    project: Dict[str, Any],
+    observed_at: str,
+) -> Dict[str, Any]:
+    slug = required_string(project.get("Project_slug"), "Project_slug")
+    city = optional_string(project.get("CityText")) or "Bangalore"
+    coordinates = (project.get("LatLong") or {}).get("coordinates") or []
+    latitude = optional_float(coordinates[0] if len(coordinates) > 0 else None)
+    longitude = optional_float(coordinates[1] if len(coordinates) > 1 else None)
+    return {
+        "entity_id": required_string(input_data.get("entity_id"), "entity_id"),
+        "project_key": optional_string(input_data.get("project_key")),
+        "source_project_id": required_string(
+            project.get("ProjectID") or project.get("_id"), "ProjectID"
+        ),
+        "source_project_name": required_string(project.get("ProjectName"), "ProjectName"),
+        "source_project_slug": slug,
+        "source_url": PRESTIGE_PROJECT_URL.format(
+            city=normalized_slug(city), slug=slug
+        ),
+        "status": optional_string(project.get("ProjectStatus")),
+        "land_area_acres": parse_acres(project.get("Size")),
+        "starting_price_inr": parse_price_inr(project.get("DisplayPrice")),
+        "price_display": optional_string(project.get("DisplayPrice")),
+        "bhk_options": parse_bhk_options(project.get("bedroomdisplaytext")),
+        "total_units": optional_int(project.get("total_unit")),
+        "latitude": latitude,
+        "longitude": longitude,
+        "maps_url": optional_string(project.get("location_url_link")),
+        "address": optional_string(project.get("Address")),
+        "observed_at": observed_at,
     }
 
 

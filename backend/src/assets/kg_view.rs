@@ -205,10 +205,39 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<Self, KgSocietyViewMaterializeError> {
+        let shadow_alias_entity_ids = canonical_society_alias_entity_ids(canonical_entities);
         let mut records = Self::from_graph(graph)?;
+        records.remove_entities(&shadow_alias_entity_ids)?;
         records.merge_canonical_rows(canonical_entities, canonical_edges)?;
         records.merge_skill_facts(support_facts, support_annotations)?;
         Ok(records)
+    }
+
+    fn remove_entities(
+        &mut self,
+        entity_ids: &HashSet<String>,
+    ) -> Result<(), KgSocietyViewMaterializeError> {
+        if entity_ids.is_empty() {
+            return Ok(());
+        }
+
+        self.entities
+            .retain(|entity| !entity_ids.contains(&entity.entity_id));
+        self.facts
+            .retain(|fact| !entity_ids.contains(&fact.entity_id));
+        self.fact_annotations
+            .retain(|annotation| !entity_ids.contains(&annotation.entity_id));
+        self.edges.retain(|edge| {
+            !entity_ids.contains(&edge.from_entity_id) && !entity_ids.contains(&edge.to_entity_id)
+        });
+        self.update_entity_fact_counts();
+        self.content_hash = content_hash(
+            &self.entities,
+            &self.facts,
+            &self.fact_annotations,
+            &self.edges,
+        )?;
+        Ok(())
     }
 
     fn merge_canonical_rows(
@@ -396,6 +425,19 @@ fn slug(value: &str) -> String {
         }
     }
     output
+}
+
+fn canonical_society_alias_entity_ids(
+    canonical_entities: &[KgViewEntityRecord],
+) -> HashSet<String> {
+    canonical_entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+        .filter_map(|entity| {
+            let alias_entity_id = format!("society:{}", slug(&entity.name));
+            (alias_entity_id != entity.entity_id).then_some(alias_entity_id)
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -1197,5 +1239,151 @@ impl From<serde_json::Error> for KgSocietyViewMaterializeError {
 impl From<LakeError> for KgSocietyViewMaterializeError {
     fn from(err: LakeError) -> Self {
         Self::Lake(err)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+    use crate::knowledge::fact::{FactSource, SourceType};
+    use crate::knowledge::node::{Node, NodeType, RootSource};
+    use crate::knowledge::{FactValue, SourcedFact};
+
+    #[test]
+    fn canonical_rera_entity_suppresses_shadow_alias_graph_node() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 7, 15, 7, 0, 0).unwrap();
+        let mut graph = KnowledgeGraph::new();
+        let mut alias = Node::new(
+            "society:prestige-lavender-fields",
+            NodeType::Society,
+            "Prestige Lavender Fields",
+        );
+        alias.root_source = Some(RootSource::Legacy);
+        alias.add_fact(SourcedFact {
+            key: "google_rating".to_string(),
+            value: FactValue::Numeric(3.2),
+            confidence: 0.5,
+            source: FactSource {
+                source_type: SourceType::Google,
+                url: None,
+                model: None,
+                skill_id: Some("legacy_seed".to_string()),
+                triggered_by: None,
+            },
+            learned_at,
+            version: 1,
+            display_template: Some("Google rating: {value}".to_string()),
+            answers_preferences: vec!["google reviews".to_string()],
+            scoring_hint: None,
+        });
+        graph.add_node(alias);
+
+        let canonical_entities = vec![KgViewEntityRecord {
+            entity_id: "society:rera-a19f2cf2456fc549".to_string(),
+            entity_type: "society".to_string(),
+            name: "Prestige Lavender Fields".to_string(),
+            root_source: Some("rera".to_string()),
+            fact_count: 0,
+            created_at: learned_at,
+            updated_at: learned_at,
+        }];
+        let support_facts = vec![
+            skill_fact(
+                "society:rera-a19f2cf2456fc549",
+                "google_rating",
+                FactValue::Numeric(3.9),
+                learned_at,
+            ),
+            skill_fact(
+                "society:prestige-lavender-fields",
+                "google_rating",
+                FactValue::Numeric(3.9),
+                learned_at,
+            ),
+        ];
+        let support_annotations = vec![
+            skill_annotation("society:rera-a19f2cf2456fc549", "google_rating"),
+            skill_annotation("society:prestige-lavender-fields", "google_rating"),
+        ];
+
+        let records = KgViewRecords::from_graph_with_asset_rows(
+            &graph,
+            &canonical_entities,
+            &[],
+            &support_facts,
+            &support_annotations,
+        )
+        .unwrap();
+
+        assert!(records
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "society:rera-a19f2cf2456fc549"));
+        assert!(!records
+            .entities
+            .iter()
+            .any(|entity| entity.entity_id == "society:prestige-lavender-fields"));
+        assert!(records.facts.iter().any(|fact| {
+            fact.entity_id == "society:rera-a19f2cf2456fc549"
+                && fact.fact_key == "google_rating"
+                && fact.value_text.as_deref() == Some("3.9")
+        }));
+        let alias_facts = records
+            .facts
+            .iter()
+            .filter(|fact| fact.entity_id == "society:prestige-lavender-fields")
+            .collect::<Vec<_>>();
+        assert_eq!(alias_facts.len(), 1);
+        assert_eq!(alias_facts[0].fact_key, "google_rating");
+        assert_eq!(alias_facts[0].value_text.as_deref(), Some("3.9"));
+        assert!(records
+            .fact_annotations
+            .iter()
+            .any(|annotation| annotation.entity_id == "society:prestige-lavender-fields"));
+    }
+
+    fn skill_fact(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        learned_at: DateTime<Utc>,
+    ) -> SkillFactRecord {
+        let value_type = match &value {
+            FactValue::Numeric(_) => "numeric",
+            FactValue::Text(_) => "text",
+            FactValue::Bool(_) => "bool",
+            FactValue::Tags(_) => "tags",
+            FactValue::Score { .. } => "score",
+        }
+        .to_string();
+        SkillFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type,
+            value_json: serde_json::to_string(&value).unwrap(),
+            confidence: 0.85,
+            source_type: "Google".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("fetch_google_review_links".to_string()),
+            triggered_by: None,
+            learned_at,
+            run_id: "test-run".to_string(),
+            input_hash: format!("{entity_id}:{fact_key}"),
+        }
+    }
+
+    fn skill_annotation(entity_id: &str, fact_key: &str) -> SkillFactAnnotationRecord {
+        SkillFactAnnotationRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            display_template: Some("Google rating: {value}".to_string()),
+            answers_preferences_json: serde_json::to_string(&["google reviews"]).unwrap(),
+            scoring_direction: Some("HigherIsBetter".to_string()),
+            scoring_weight: Some(1.0),
+            scoring_thresholds_json: serde_json::to_string(&[4.2, 3.8]).unwrap(),
+        }
     }
 }

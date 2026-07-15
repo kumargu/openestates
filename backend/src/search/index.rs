@@ -5,6 +5,7 @@ use crate::routes::enrichment::society_node_id;
 use crate::serving::TantivyRecallHit;
 
 use super::intent::{SearchIntent, AREA_ALIASES};
+use super::semantic::SemanticRecallHit;
 
 /// In-memory recall index for local search.
 ///
@@ -16,6 +17,7 @@ pub struct SearchIndex {
     all_ids: Vec<String>,
     by_area: HashMap<String, Vec<String>>,
     by_bhk: HashMap<u32, Vec<String>>,
+    by_property_node: HashMap<String, String>,
     by_society_node: HashMap<String, Vec<String>>,
     by_token: HashMap<String, Vec<String>>,
     price_by_id: HashMap<String, u64>,
@@ -37,6 +39,8 @@ impl SearchIndex {
             &property.id,
         );
         push_unique(self.by_bhk.entry(property.bhk).or_default(), &property.id);
+        self.by_property_node
+            .insert(format!("property:{}", property.id), property.id.clone());
         push_unique(
             self.by_society_node
                 .entry(society_node_id(&property.society_id))
@@ -121,6 +125,27 @@ impl SearchIndex {
         ids
     }
 
+    pub fn property_scores_for_semantic_hits(
+        &self,
+        hits: &[SemanticRecallHit],
+    ) -> HashMap<String, f64> {
+        let mut scores = HashMap::new();
+        for hit in hits {
+            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
+                merge_score(&mut scores, property_id, hit.score);
+                continue;
+            }
+            if hit.entity_id.starts_with("society:") {
+                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
+                    for property_id in property_ids {
+                        merge_score(&mut scores, property_id, hit.score);
+                    }
+                }
+            }
+        }
+        scores
+    }
+
     fn area_candidates(&self, area: &str) -> HashSet<String> {
         let mut ids = HashSet::new();
         let area = normalize(area);
@@ -186,6 +211,13 @@ fn push_unique(ids: &mut Vec<String>, id: &str) {
     if !ids.iter().any(|existing| existing == id) {
         ids.push(id.to_string());
     }
+}
+
+fn merge_score(scores: &mut HashMap<String, f64>, property_id: &str, score: f64) {
+    scores
+        .entry(property_id.to_string())
+        .and_modify(|existing| *existing = existing.max(score))
+        .or_insert(score);
 }
 
 fn normalize(value: &str) -> String {

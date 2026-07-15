@@ -34,7 +34,7 @@
       "label": "metro access",
       "layer": "infrastructure",
       "intent_terms": ["metro", "metro station", "commute", "connectivity", "10 minute drive"],
-      "fact_keys": ["metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access"],
+      "fact_keys": ["metro_distance_km", "nearest_operational_metro_station", "metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access"],
       "source_priority": ["maps", "computed", "area_plan", "reddit"]
     },
     {
@@ -42,7 +42,7 @@
       "dimension": "greenery",
       "label": "greenery",
       "layer": "lifestyle_support",
-      "intent_terms": ["greenery", "trees", "tree cover", "green cover", "open space", "parks", "landscaped"],
+      "intent_terms": ["greenery", "trees", "tree cover", "green cover", "open space", "landscaped", "garden"],
       "fact_keys": ["greenery_score", "open_space_score", "green_cover", "google_top_positives", "sentiment_summary"],
       "source_priority": ["rera", "satellite", "google", "reddit"]
     },
@@ -125,15 +125,15 @@
       "layer": "risk",
       "intent_terms": ["quiet", "peaceful", "calm", "noise", "pollution", "airport noise"],
       "fact_keys": ["noise_score", "noise_level", "airport_noise_score", "pollution_signal"],
-      "source_priority": ["maps", "computed", "google", "reddit"]
+      "source_priority": ["google", "maps", "computed", "reddit"]
     },
     {
       "rank": 15,
       "dimension": "social_infra",
       "label": "schools hospitals retail",
       "layer": "infrastructure",
-      "intent_terms": ["school", "hospital", "mall", "retail", "grocery", "restaurant"],
-      "fact_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score"],
+      "intent_terms": ["school", "metro", "hospital", "gym", "cult", "fitness", "restaurant", "cafe", "tech park", "office"],
+      "fact_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score", "nearby_schools", "nearby_metro_stations", "nearby_hospitals", "nearby_fitness", "nearby_eateries", "nearby_tech_parks"],
       "source_priority": ["maps", "computed", "google", "reddit"]
     },
     {
@@ -219,7 +219,7 @@
   "positive_preference_patterns": [
     {
       "rank": 1,
-      "patterns": ["green", "greenery", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "parks", "park view", "park facing"],
+      "patterns": ["green", "greenery", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "landscaped", "park view", "park facing", "internal park", "internal parks"],
       "label": "greenery",
       "expanded_keys": ["greenery_score", "open_space_score", "green_cover", "google_top_positives", "sentiment_summary"],
       "weight": 0.8
@@ -228,7 +228,7 @@
       "rank": 2,
       "patterns": ["near metro", "metro access", "metro station", "metro"],
       "label": "metro access",
-      "expanded_keys": ["metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access"],
+      "expanded_keys": ["metro_distance_km", "nearest_operational_metro_station", "metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access"],
       "weight": 1.1
     },
     {
@@ -275,9 +275,9 @@
     },
     {
       "rank": 9,
-      "patterns": ["school", "schools", "hospital", "hospitals", "retail", "grocery", "mall"],
+      "patterns": ["nearby", "near by", "school", "schools", "metro", "metro station", "hospital", "hospitals", "cult", "gym", "fitness", "restaurant", "restaurants", "cafe", "cafes", "eatery", "eateries", "tech park", "tech parks", "office", "offices"],
       "label": "social infrastructure",
-      "expanded_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score"],
+      "expanded_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score", "nearby_schools", "nearby_metro_stations", "nearby_hospitals", "nearby_fitness", "nearby_eateries", "nearby_tech_parks"],
       "weight": 0.8
     },
     {
@@ -289,9 +289,9 @@
     },
     {
       "rank": 11,
-      "patterns": ["good google reviews", "google reviews", "google rating", "highly rated", "well reviewed"],
+      "patterns": ["good reviews", "positive reviews", "reviewed well", "good google reviews", "google reviews", "google rating", "highly rated", "well reviewed"],
       "label": "review quality",
-      "expanded_keys": ["google_rating", "google_review_count", "google_top_positives", "google_top_negatives", "google_reviews_url"],
+      "expanded_keys": ["google_rating", "google_review_count", "google_top_positives", "google_reviews_url"],
       "weight": 1.0
     },
     {
@@ -302,13 +302,50 @@
       "weight": 1.0
     }
   ],
+  "negative_preference_patterns": [
+    {
+      "rank": 1,
+      "patterns": ["avoid waterlogging", "no waterlogging", "low waterlogging", "not flood prone", "avoid flooding", "no flooding"],
+      "label": "waterlogging risk",
+      "expanded_keys": ["waterlogging_risk_score", "waterlogging_risk", "waterlogging_detail", "flooding_risk"],
+      "weight": 1.4
+    },
+    {
+      "rank": 2,
+      "patterns": ["avoid traffic", "less traffic", "low traffic", "no traffic", "traffic free", "traffic"],
+      "label": "traffic",
+      "expanded_keys": ["traffic_score", "traffic_reality", "traffic", "commute_reality"],
+      "weight": 1.3
+    },
+    {
+      "rank": 3,
+      "patterns": ["avoid noise", "less noise", "low noise", "no noise"],
+      "label": "noise",
+      "expanded_keys": ["noise_score", "noise_level", "airport_noise_score"],
+      "weight": 1.0
+    },
+    {
+      "rank": 4,
+      "patterns": ["avoid legal", "no legal issue", "no litigation", "low litigation", "clear title"],
+      "label": "legal risk",
+      "expanded_keys": ["litigation_risk", "legal_risk", "rera_complaints", "land_litigation"],
+      "weight": 1.5
+    },
+    {
+      "rank": 5,
+      "patterns": ["avoid delayed", "not delayed", "no possession delay", "avoid possession delay"],
+      "label": "delay risk",
+      "expanded_keys": ["rera_delay_months", "possession_delay", "possession_status"],
+      "weight": 1.4
+    }
+  ],
   "text_evidence": [
     {
       "dimension": "greenery",
       "label": "greenery",
-      "aliases": ["greenery", "green", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "parks"],
+      "aliases": ["greenery", "green", "many trees", "tree cover", "green cover", "open space", "open spaces", "garden", "landscaped", "park view", "park facing", "internal park", "internal parks"],
       "fact_keys": ["greenery_score", "open_space_score", "green_cover", "google_top_positives", "sentiment_summary", "best_quote", "reddit_threads"],
-      "positive_terms": ["greenery", "green spaces", "green space", "green cover", "green covers", "open spaces", "open space", "open-to-sky", "landscaped", "landscaping", "parks", "forest trail", "lush green", "trees", "tree-lined"],
+      "positive_terms": ["greenery", "green spaces", "green space", "green cover", "green covers", "open spaces", "open space", "open-to-sky", "landscaped", "landscaping", "park view", "park facing", "internal parks", "forest trail", "lush green", "trees", "tree-lined"],
       "negative_terms": ["limited greenery", "few trees", "few parks", "no greenery", "low greenery", "lack of greenery", "nil greenery", "limited green"],
       "display_label": "Green/open-space signal",
       "score_delta": 1.4
@@ -337,7 +374,7 @@
       "dimension": "metro_access",
       "label": "metro access",
       "aliases": ["metro access", "near metro", "metro station", "metro"],
-      "fact_keys": ["metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access", "sentiment_summary", "reddit_threads"],
+      "fact_keys": ["metro_distance_km", "nearest_operational_metro_station", "metro_distance_mins", "metro_distance", "metro_status", "metro_details", "metro_access"],
       "positive_terms": ["metro", "metro station", "walkable to metro", "near metro", "10 minute drive", "10 minutes drive"],
       "negative_terms": ["far from metro", "no metro", "metro is far", "not near metro"],
       "display_label": "Metro signal",
@@ -376,12 +413,74 @@
     {
       "dimension": "social_infrastructure",
       "label": "social infrastructure",
-      "aliases": ["social infrastructure", "school", "hospital", "retail", "grocery", "mall"],
-      "fact_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score", "sentiment_summary", "reddit_threads"],
-      "positive_terms": ["school", "hospital", "mall", "grocery", "retail", "restaurants", "developed social infrastructure"],
+      "aliases": ["social infrastructure", "nearby", "near by", "school", "hospital", "tech park", "office", "retail", "grocery", "mall"],
+      "fact_keys": ["school_access", "hospital_access", "retail_access", "social_infra_score", "nearby_schools", "nearby_metro_stations", "nearby_hospitals", "nearby_fitness", "nearby_eateries", "nearby_tech_parks", "sentiment_summary", "reddit_threads"],
+      "positive_terms": ["school", "hospital", "tech park", "office", "mall", "grocery", "retail", "restaurants", "developed social infrastructure", "nearby"],
       "negative_terms": ["nothing around", "no shops", "no hospital", "no school", "poor social infrastructure"],
       "display_label": "Social infrastructure signal",
       "score_delta": 0.9
+    },
+    {
+      "dimension": "flooding_waterlogging",
+      "label": "waterlogging risk",
+      "aliases": ["waterlogging risk", "waterlogging", "flooding", "flood prone", "drainage"],
+      "fact_keys": ["waterlogging_risk", "waterlogging_detail", "flooding_risk"],
+      "positive_terms": ["no waterlogging", "low waterlogging", "not flood prone", "good drainage", "well drained"],
+      "negative_terms": ["waterlogging", "flooding", "flood prone", "knee-deep water", "poor drainage", "storm water", "heavy rainfall"],
+      "display_label": "Waterlogging risk signal",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "traffic_commute",
+      "label": "traffic",
+      "aliases": ["traffic", "commute", "congestion", "road access"],
+      "fact_keys": ["traffic_reality", "commute_reality", "traffic"],
+      "positive_terms": ["less traffic", "low traffic", "smooth commute", "easy commute", "good road access"],
+      "negative_terms": ["traffic congestion", "severe traffic", "long commute", "unpredictable", "road digging", "congestion"],
+      "display_label": "Traffic risk signal",
+      "score_delta": 1.3
+    }
+  ],
+  "numeric_evidence": [
+    {
+      "dimension": "premium",
+      "label": "premium",
+      "aliases": ["premium", "luxury", "high end", "price per sqft", "premium segment"],
+      "fact_keys": ["price_per_sqft", "rera_cost_per_unit", "market_starting_price_inr"],
+      "direction": "HigherIsBetter",
+      "thresholds": [20000, 12000],
+      "display_label": "Premium price signal",
+      "score_delta": 2.0
+    },
+    {
+      "dimension": "waterlogging_risk",
+      "label": "waterlogging risk",
+      "aliases": ["waterlogging risk", "waterlogging", "flooding risk"],
+      "fact_keys": ["waterlogging_risk_score"],
+      "direction": "LowerIsBetter",
+      "thresholds": [0.2, 0.5],
+      "display_label": "waterlogging risk",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "traffic",
+      "label": "traffic",
+      "aliases": ["traffic", "traffic risk", "commute congestion"],
+      "fact_keys": ["traffic_score"],
+      "direction": "LowerIsBetter",
+      "thresholds": [0.35, 0.6],
+      "display_label": "traffic risk",
+      "score_delta": 1.3
+    },
+    {
+      "dimension": "noise",
+      "label": "noise",
+      "aliases": ["noise", "noise risk", "quiet"],
+      "fact_keys": ["noise_score", "airport_noise_score"],
+      "direction": "LowerIsBetter",
+      "thresholds": [0.3, 0.5],
+      "display_label": "noise risk",
+      "score_delta": 1.0
     }
   ]
 }

@@ -59,6 +59,23 @@ pub struct Property {
 #[derive(Debug, Clone, Serialize)]
 pub struct PropertyCard {
     pub id: String,
+    /// Stable Knowledge Graph handles the UI can dereference for dynamic facts.
+    ///
+    /// This is the contract that keeps cards and detail pages from becoming a
+    /// fixed list of hardcoded sections. The flat fields in `PropertyCard`
+    /// support fast first paint and search-result scanning. `kg_entity_refs`
+    /// supports the second layer: expandable evidence, compare rows, side
+    /// panels, source drill-down, and dynamic sections that only appear when
+    /// facts actually exist.
+    ///
+    /// Backend rules:
+    /// - Populate these IDs from app-owned KG identity, never from UI labels.
+    /// - Keep IDs dereferenceable through `/api/knowledge/nodes/{id}`.
+    /// - Add new fact families to KG/source panels instead of adding one-off
+    ///   card fields unless the value is needed on the hot first-paint path.
+    /// - It is okay for some referenced concepts to have sparse facts. The UI
+    ///   should render from fact availability and confidence.
+    pub kg_entity_refs: KgEntityRefs,
     pub title: String,
     pub area: String,
     pub price: u64,
@@ -107,4 +124,48 @@ pub struct PropertyCard {
     /// Data freshness — how recent and rich the underlying data is
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
+}
+
+/// Minimal graph identity bundle attached to property/search/detail responses.
+///
+/// These fields are stable API identifiers, not display copy and not a complete
+/// graph export. They exist so the UI can ask the KG for richer context when a
+/// user shows intent: opens a property, expands a card, compares homes, clicks a
+/// source trail, or requests a nearby/risk/community breakdown.
+///
+/// Current usage pattern:
+/// 1. Render fast listing data from `PropertyCard` or `PropertyDetailResponse`.
+/// 2. Use `source_entity_ids` to prefetch existing KG nodes for the property,
+///    society, area, and builder.
+/// 3. Use `/api/knowledge/nodes/{id}/neighbors` or `/subgraph` when the UI needs
+///    a larger drill-down such as builder portfolio, nearby projects, or lineage.
+/// 4. Build optional UI sections from facts with source/confidence metadata.
+/// 5. Hide sections that have no backed facts instead of rendering empty cards.
+///
+/// Important distinction: these are KG node IDs, not necessarily canonical RERA
+/// IDs. Some societies have an alias node such as `society:prestige-park-grove`
+/// while lake artifacts may also contain a RERA-rooted canonical ID. The UI
+/// should not infer canonicalization from the string shape. It should treat the
+/// IDs as opaque handles and follow the API.
+#[derive(Debug, Clone, Serialize)]
+pub struct KgEntityRefs {
+    /// Listing-level node for facts specific to this flat/unit/listing.
+    pub property_entity_id: String,
+    /// Society/project node for RERA, reviews, nearby places, amenities, and
+    /// community evidence.
+    pub society_entity_id: String,
+    /// Area/locality node for traffic, waterlogging, metro, schools, price trend,
+    /// and other externalities.
+    pub area_entity_id: String,
+    /// Builder node when the society has a known BuiltBy edge in the KG.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_entity_id: Option<String>,
+    /// Existing graph nodes the UI can safely prefetch first.
+    ///
+    /// This list is backend-filtered to nodes present in the current KG, sorted,
+    /// and deduplicated. It may omit an otherwise valid field ID if that node has
+    /// not been materialized yet. UI code should treat it as a convenient fetch
+    /// plan, not as a complete semantic model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_entity_ids: Vec<String>,
 }

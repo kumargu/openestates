@@ -1,7 +1,12 @@
+use std::cmp::Ordering;
+use std::collections::HashMap;
+
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
-use crate::models::{Property, Seller, Society};
-use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
+use crate::models::{KgEntityRefs, Property, Seller, Society};
+use crate::routes::enrichment::{
+    area_node_id, enrich_property_card_with_sellers, property_node_id, society_node_id,
+};
 use crate::routes::search::graph_preference_score_for_keys;
 use crate::serving::{
     GoogleReviewEvidence, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
@@ -10,7 +15,7 @@ use crate::serving::{
 
 use super::index::SearchIndex;
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
-use super::schema::{self, NumericConstraintSchema};
+use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
 use super::{
     ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
     SearchResultCard,
@@ -141,6 +146,43 @@ impl TextSearch {
         graph: Option<&KnowledgeGraph>,
         sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
+        Self::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            properties,
+            search_index,
+            extra_candidate_ids,
+            None,
+            serving_facts,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+            sellers,
+        )
+    }
+
+    /// Indexed local/Tantivy/semantic recall plus deterministic KG-first ranking.
+    ///
+    /// `semantic_scores` may widen recall and gently influence ordering, but
+    /// never creates proof claims or preference coverage on its own.
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+        extra_candidate_ids: Option<&[String]>,
+        semantic_scores: Option<&HashMap<String, f64>>,
+        serving_facts: Option<&ServingFactIndex>,
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+        sellers: &[Seller],
+    ) -> Vec<SearchResultCard> {
+        if !intent.unsupported_inventory_types.is_empty() {
+            return Vec::new();
+        }
+
         let query_lower = query.to_lowercase();
         let terms: Vec<&str> = query_lower.split_whitespace().collect();
         let positive_preferences = positive_preference_labels(intent);
@@ -153,13 +195,22 @@ impl TextSearch {
             extra_candidate_ids,
         );
 
-        let mut results: Vec<SearchResultCard> = properties
+        let mut results: Vec<RankedSearchResult> = properties
             .iter()
-            .filter_map(|p| {
+            .enumerate()
+            .filter_map(|(ordinal, p)| {
                 if let Some(ids) = candidate_ids.as_ref() {
                     if !ids.iter().any(|id| id == &p.id) {
                         return None;
                     }
+                }
+
+                if intent
+                    .excluded_areas
+                    .iter()
+                    .any(|area| property_matches_area(p, area, graph))
+                {
+                    return None;
                 }
 
                 // Hard constraint: BHK
@@ -208,6 +259,7 @@ impl TextSearch {
                     score_property(p, society_name, &terms)
                 };
                 score += area_penalty;
+                let semantic_score = semantic_scores.and_then(|scores| scores.get(&p.id).copied());
 
                 // Boost for preference alignment — collect structured reasons
                 let mut match_reasons: Vec<MatchReason> = Vec::new();
@@ -215,6 +267,7 @@ impl TextSearch {
                 let mut graph_count: usize = 0;
                 let mut legacy_count: usize = 0;
                 let mut total_facts_consulted: usize = 0;
+                let mut positive_evidence_score = 0.0;
 
                 for evidence in hard_constraint_matches {
                     total_facts_consulted += 1;
@@ -247,8 +300,16 @@ impl TextSearch {
                             pref,
                             candidate_fact_keys,
                         ) {
+                            if !evidence_is_confident_enough(
+                                &detail.source_type,
+                                detail.confidence,
+                                "graph",
+                            ) {
+                                continue;
+                            }
                             total_facts_consulted += 1;
                             score += gs;
+                            positive_evidence_score += gs.max(0.0);
                             reasons.push(format!("matches preference: {}", pref));
 
                             // Normalize score to 0-1 range (graph scores are 0-2)
@@ -275,12 +336,18 @@ impl TextSearch {
                             graph_count += 1;
                             continue;
                         }
+                    }
 
-                        if let Some(evidence) =
-                            graph_textual_preference_evidence(g, &p.society_id, pref)
-                        {
+                    if let Some(serving_facts) = serving_facts {
+                        if let Some(evidence) = serving_preference_evidence(
+                            serving_facts,
+                            &p.society_id,
+                            pref,
+                            candidate_fact_keys,
+                        ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
+                            positive_evidence_score += evidence.score_delta.max(0.0);
                             reasons.push(evidence.reason.clone());
 
                             match_reasons.push(MatchReason {
@@ -307,15 +374,13 @@ impl TextSearch {
                         }
                     }
 
-                    if let Some(serving_facts) = serving_facts {
-                        if let Some(evidence) = serving_preference_evidence(
-                            serving_facts,
-                            &p.society_id,
-                            pref,
-                            candidate_fact_keys,
-                        ) {
+                    if let Some(g) = graph {
+                        if let Some(evidence) =
+                            graph_textual_preference_evidence(g, &p.society_id, pref)
+                        {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
+                            positive_evidence_score += evidence.score_delta.max(0.0);
                             reasons.push(evidence.reason.clone());
 
                             match_reasons.push(MatchReason {
@@ -343,9 +408,19 @@ impl TextSearch {
                     }
 
                     // Legacy fallback
-                    let legacy = legacy_preference_score(p, pref);
+                    let legacy = if local_fallback_allowed(
+                        graph,
+                        serving_facts,
+                        &p.society_id,
+                        candidate_fact_keys,
+                    ) {
+                        legacy_preference_score(p, pref)
+                    } else {
+                        0.0
+                    };
                     if legacy > 0.0 {
                         score += legacy;
+                        positive_evidence_score += legacy.max(0.0);
                         reasons.push(format!("matches preference: {}", pref));
 
                         let norm_score = (legacy / 2.0).min(1.0);
@@ -380,7 +455,79 @@ impl TextSearch {
                 }
 
                 for pref in &negative_preferences {
-                    if let Some(evaluation) = legacy_negative_preference_evaluation(p, pref) {
+                    let candidate_fact_keys = negative_preference_keys(intent, pref);
+                    if let Some(serving_facts) = serving_facts {
+                        if let Some(evidence) = serving_negative_preference_evidence(
+                            serving_facts,
+                            &p.society_id,
+                            pref,
+                            candidate_fact_keys,
+                        ) {
+                            total_facts_consulted += 1;
+                            score += evidence.score_delta;
+                            reasons.push(evidence.reason.clone());
+                            let coverage_status = negative_coverage_status(&evidence);
+
+                            match_reasons.push(MatchReason {
+                                preference: format!("avoid {}", pref),
+                                fact_key: evidence.fact_key.clone(),
+                                display: evidence.display,
+                                score: evidence.normalized_score,
+                                confidence: evidence.confidence,
+                                source_type: evidence.source_type,
+                                scoring_method: evidence.scoring_method,
+                            });
+                            pref_coverage.push(PreferenceCoverage {
+                                preference: format!("avoid {}", pref),
+                                status: coverage_status.to_string(),
+                                fact_key: Some(evidence.fact_key),
+                            });
+                            graph_count += 1;
+                            continue;
+                        }
+                    }
+
+                    if let Some(g) = graph {
+                        if let Some(evidence) = graph_negative_preference_evidence(
+                            g,
+                            &p.society_id,
+                            pref,
+                            candidate_fact_keys,
+                        ) {
+                            total_facts_consulted += 1;
+                            score += evidence.score_delta;
+                            reasons.push(evidence.reason.clone());
+                            let coverage_status = negative_coverage_status(&evidence);
+
+                            match_reasons.push(MatchReason {
+                                preference: format!("avoid {}", pref),
+                                fact_key: evidence.fact_key.clone(),
+                                display: evidence.display,
+                                score: evidence.normalized_score,
+                                confidence: evidence.confidence,
+                                source_type: evidence.source_type,
+                                scoring_method: evidence.scoring_method,
+                            });
+                            pref_coverage.push(PreferenceCoverage {
+                                preference: format!("avoid {}", pref),
+                                status: coverage_status.to_string(),
+                                fact_key: Some(evidence.fact_key),
+                            });
+                            graph_count += 1;
+                            continue;
+                        }
+                    }
+
+                    let local_fallback = local_fallback_allowed(
+                        graph,
+                        serving_facts,
+                        &p.society_id,
+                        candidate_fact_keys,
+                    );
+                    if let Some(evaluation) = local_fallback
+                        .then(|| legacy_negative_preference_evaluation(p, pref))
+                        .flatten()
+                    {
                         score += evaluation.score_delta;
                         if evaluation.score_delta >= 0.0 {
                             reasons.push(format!("avoids {}", pref));
@@ -404,6 +551,7 @@ impl TextSearch {
                         });
                         legacy_count += 1;
                     } else {
+                        score -= negative_no_data_penalty(intent, pref);
                         pref_coverage.push(PreferenceCoverage {
                             preference: format!("avoid {}", pref),
                             status: "no_data".into(),
@@ -413,6 +561,8 @@ impl TextSearch {
                 }
 
                 // Build explanation only when the query asked for constraints/preferences.
+                let has_positive_evidence =
+                    has_positive_preference_evidence(&pref_coverage, &positive_preferences);
                 let match_explanation = if has_explainable_signals {
                     let total = graph_count + legacy_count;
                     let graph_pct = if total > 0 {
@@ -436,10 +586,25 @@ impl TextSearch {
                     || intent.bhk.is_some()
                     || intent.budget_max.is_some()
                     || !intent.hard_constraints.is_empty();
+                let has_preferences =
+                    !positive_preferences.is_empty() || !negative_preferences.is_empty();
                 if score <= 0.0 && has_constraints {
-                    score = 1.0;
-                    reasons.push("matches search criteria".to_string());
+                    if has_preferences {
+                        score = score.max(minimum_evidence_floor(
+                            positive_evidence_score,
+                            graph_count + legacy_count,
+                        ));
+                    } else {
+                        score = 1.0;
+                        reasons.push("matches search criteria".to_string());
+                    }
                 }
+
+                if !positive_preferences.is_empty() && !has_positive_evidence {
+                    score *= 0.65;
+                }
+
+                score += semantic_candidate_fit_boost(semantic_score);
 
                 if score <= 0.0 {
                     return None;
@@ -453,6 +618,13 @@ impl TextSearch {
                     // Fallback without graph — build minimal card
                     crate::models::PropertyCard {
                         id: p.id.clone(),
+                        kg_entity_refs: KgEntityRefs {
+                            property_entity_id: property_node_id(&p.id),
+                            society_entity_id: society_node_id(&p.society_id),
+                            area_entity_id: area_node_id(&p.area),
+                            builder_entity_id: None,
+                            source_entity_ids: Vec::new(),
+                        },
                         title: p.title.clone(),
                         area: p.area.clone(),
                         price: p.price,
@@ -512,25 +684,43 @@ impl TextSearch {
                     .unwrap_or(0.0);
                 let confidence_score = compute_confidence(graph, &p.society_id, gdp);
 
-                Some(SearchResultCard {
-                    card,
-                    match_score: (normalized * 100.0).round() / 100.0,
-                    match_label,
-                    match_reason,
-                    match_explanation,
-                    semantic_score: None,
-                    confidence_score,
+                Some(RankedSearchResult {
+                    ranking_score: normalized,
+                    ordinal,
+                    result: SearchResultCard {
+                        card,
+                        match_score: (normalized * 100.0).round() / 100.0,
+                        match_label,
+                        match_reason,
+                        match_explanation,
+                        semantic_score,
+                        confidence_score,
+                    },
                 })
             })
             .collect();
 
         results.sort_by(|a, b| {
-            b.match_score
-                .partial_cmp(&a.match_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+            b.ranking_score
+                .partial_cmp(&a.ranking_score)
+                .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    b.result
+                        .semantic_score
+                        .unwrap_or(0.0)
+                        .partial_cmp(&a.result.semantic_score.unwrap_or(0.0))
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| a.ordinal.cmp(&b.ordinal))
         });
-        results
+        results.into_iter().map(|ranked| ranked.result).collect()
     }
+}
+
+struct RankedSearchResult {
+    result: SearchResultCard,
+    ranking_score: f64,
+    ordinal: usize,
 }
 
 pub(crate) fn enrich_card_from_serving_facts(
@@ -587,6 +777,46 @@ struct EvidenceMatch {
     source_type: String,
     scoring_method: String,
     reason: String,
+}
+
+const MIN_SUPPORT_EVIDENCE_CONFIDENCE: f32 = 0.60;
+const MIN_LLM_EVIDENCE_CONFIDENCE: f32 = 0.75;
+const NEGATIVE_NO_DATA_PENALTY_MULTIPLIER: f64 = 1.2;
+const MIN_SEMANTIC_RECALL_SCORE: f64 = 0.08;
+const SEMANTIC_CANDIDATE_FIT_WEIGHT: f64 = 3.0;
+const SEMANTIC_CANDIDATE_FIT_CAP: f64 = 1.0;
+const POSITIVE_EVIDENCE_FLOOR_RATIO: f64 = 0.60;
+const MIN_SCORE_WITH_POSITIVE_EVIDENCE: f64 = 0.2;
+const MAX_SCORE_WITH_POSITIVE_EVIDENCE: f64 = SEMANTIC_CANDIDATE_FIT_CAP + 0.2;
+const MIN_SCORE_WITH_RISK_ONLY_EVIDENCE: f64 = 0.1;
+const MIN_SCORE_WITH_CONSTRAINT_ONLY: f64 = 0.01;
+
+fn minimum_evidence_floor(positive_evidence_score: f64, evidence_count: usize) -> f64 {
+    if positive_evidence_score > 0.0 {
+        (positive_evidence_score * POSITIVE_EVIDENCE_FLOOR_RATIO).clamp(
+            MIN_SCORE_WITH_POSITIVE_EVIDENCE,
+            MAX_SCORE_WITH_POSITIVE_EVIDENCE,
+        )
+    } else if evidence_count > 0 {
+        MIN_SCORE_WITH_RISK_ONLY_EVIDENCE
+    } else {
+        MIN_SCORE_WITH_CONSTRAINT_ONLY
+    }
+}
+
+fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
+    let Some(score) = semantic_score else {
+        return 0.0;
+    };
+    let score = score.clamp(0.0, 1.0);
+    if score < MIN_SEMANTIC_RECALL_SCORE {
+        return 0.0;
+    }
+
+    // Semantic recall is deliberately capped below one strong sourced fact.
+    // It can decide which plausible candidate to inspect first, but proof facts
+    // still dominate explanations and final ranking.
+    (score * SEMANTIC_CANDIDATE_FIT_WEIGHT).min(SEMANTIC_CANDIDATE_FIT_CAP)
 }
 
 fn match_hard_constraints(
@@ -773,6 +1003,10 @@ fn graph_textual_preference_evidence(
         }
 
         if let Some(snippet) = schema::text_support_snippet(&fact.value, schema) {
+            let source_type = format!("{:?}", fact.source.source_type);
+            if !evidence_is_confident_enough(&source_type, fact.confidence, "graph-text") {
+                continue;
+            }
             return Some(EvidenceMatch {
                 preference: preference.to_string(),
                 fact_key: fact.key.clone(),
@@ -780,7 +1014,7 @@ fn graph_textual_preference_evidence(
                 normalized_score: 0.7,
                 score_delta: schema.score_delta,
                 confidence: fact.confidence,
-                source_type: format!("{:?}", fact.source.source_type),
+                source_type,
                 scoring_method: "graph-text".into(),
                 reason: format!("matches preference: {}", preference),
             });
@@ -798,7 +1032,9 @@ fn serving_preference_evidence(
 ) -> Option<EvidenceMatch> {
     let node_id = society_node_id(society_id);
     let rows = serving_facts.entity(&node_id)?;
+    let source_priority = schema::source_priority_for_preference(preference);
 
+    let mut best_structured: Option<RankedEvidence> = None;
     for fact in &rows.facts {
         let Some(metadata) = rows.search_metadata.iter().find(|metadata| {
             let answers_preference = metadata_answers_preference(metadata, preference);
@@ -806,7 +1042,6 @@ fn serving_preference_evidence(
                 .iter()
                 .any(|key| key.eq_ignore_ascii_case(&fact.fact_key));
             metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
-                && metadata_supports_text_match(metadata)
                 && if candidate_fact_keys.is_empty() {
                     answers_preference
                 } else {
@@ -816,42 +1051,521 @@ fn serving_preference_evidence(
             continue;
         };
 
-        let score_delta = f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
-        return Some(EvidenceMatch {
-            preference: preference.to_string(),
-            fact_key: fact.fact_key.clone(),
-            display: render_serving_fact_display(fact, metadata, &fact.value),
-            normalized_score: (score_delta / 2.0).min(1.0),
-            score_delta,
+        if fact_is_negative_support_for_positive_preference(&fact.fact_key, preference) {
+            continue;
+        }
+
+        let Some((score_delta, scoring_method)) = serving_fact_score(fact, metadata) else {
+            continue;
+        };
+        if !evidence_is_confident_enough(&fact.source_type, fact.confidence, &scoring_method) {
+            continue;
+        }
+        let normalized_score = (score_delta / 2.0).min(1.0);
+        let ranked = RankedEvidence {
+            source_rank: source_rank(&source_priority, &fact.source_type),
+            normalized_score,
             confidence: fact.confidence,
-            source_type: fact.source_type.clone(),
-            scoring_method: "serving-fact".into(),
-            reason: format!("matches preference: {}", preference),
-        });
+            evidence: EvidenceMatch {
+                preference: preference.to_string(),
+                fact_key: fact.fact_key.clone(),
+                display: render_serving_fact_display(fact, metadata, &fact.value),
+                normalized_score,
+                score_delta,
+                confidence: fact.confidence,
+                source_type: fact.source_type.clone(),
+                scoring_method,
+                reason: format!("matches preference: {}", preference),
+            },
+        };
+        if best_structured
+            .as_ref()
+            .is_none_or(|current| ranked.is_better_than(current))
+        {
+            best_structured = Some(ranked);
+        }
+    }
+
+    if let Some(ranked) = best_structured {
+        return Some(ranked.evidence);
     }
 
     let schema = schema::text_evidence_schema(preference)?;
+    let mut best_text: Option<RankedEvidence> = None;
     for fact in &rows.facts {
         if !schema::fact_answers_text_schema(&fact.fact_key, &[], schema) {
             continue;
         }
+        if fact_is_negative_support_for_positive_preference(&fact.fact_key, preference) {
+            continue;
+        }
 
         if let Some(snippet) = schema::text_support_snippet(&fact.value, schema) {
-            return Some(EvidenceMatch {
-                preference: preference.to_string(),
-                fact_key: fact.fact_key.clone(),
-                display: format!("{}: {}", schema.display_label, snippet),
+            if !evidence_is_confident_enough(&fact.source_type, fact.confidence, "serving-text") {
+                continue;
+            }
+            let ranked = RankedEvidence {
+                source_rank: source_rank(&source_priority, &fact.source_type),
                 normalized_score: 0.7,
-                score_delta: schema.score_delta,
                 confidence: fact.confidence,
-                source_type: fact.source_type.clone(),
-                scoring_method: "serving-text".into(),
-                reason: format!("matches preference: {}", preference),
-            });
+                evidence: EvidenceMatch {
+                    preference: preference.to_string(),
+                    fact_key: fact.fact_key.clone(),
+                    display: format!("{}: {}", schema.display_label, snippet),
+                    normalized_score: 0.7,
+                    score_delta: schema.score_delta,
+                    confidence: fact.confidence,
+                    source_type: fact.source_type.clone(),
+                    scoring_method: "serving-text".into(),
+                    reason: format!("matches preference: {}", preference),
+                },
+            };
+            if best_text
+                .as_ref()
+                .is_none_or(|current| ranked.is_better_than(current))
+            {
+                best_text = Some(ranked);
+            }
         }
     }
 
+    best_text.map(|ranked| ranked.evidence)
+}
+
+fn graph_negative_preference_evidence(
+    graph: &KnowledgeGraph,
+    society_id: &str,
+    preference: &str,
+    candidate_fact_keys: &[String],
+) -> Option<EvidenceMatch> {
+    let node_id = society_node_id(society_id);
+    let source_priority = schema::source_priority_for_preference(preference);
+    let mut candidates = Vec::new();
+    if let Some(node) = graph.get_node(&node_id) {
+        candidates.push(node);
+    }
+    for area_node in graph.neighbors(
+        &node_id,
+        Some(crate::knowledge::edge::Relation::SocietyInArea),
+    ) {
+        candidates.push(area_node);
+    }
+
+    let numeric_schema = schema::numeric_evidence_schema(preference);
+    let text_schema = schema::text_evidence_schema(preference);
+    let mut best: Option<RankedEvidence> = None;
+    for node in candidates {
+        for fact in &node.facts {
+            let Some(evidence) = negative_evidence_from_fact(
+                &fact.key,
+                &fact.value,
+                format!("{:?}", fact.source.source_type),
+                fact.confidence,
+                fact.display_template.as_deref(),
+                preference,
+                candidate_fact_keys,
+                numeric_schema,
+                text_schema,
+            ) else {
+                continue;
+            };
+            let ranked = RankedEvidence {
+                source_rank: source_rank(&source_priority, &evidence.source_type),
+                normalized_score: evidence.normalized_score,
+                confidence: evidence.confidence,
+                evidence,
+            };
+            if best
+                .as_ref()
+                .is_none_or(|current| ranked.is_better_than(current))
+            {
+                best = Some(ranked);
+            }
+        }
+    }
+
+    best.map(|ranked| ranked.evidence)
+}
+
+fn serving_negative_preference_evidence(
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+    preference: &str,
+    candidate_fact_keys: &[String],
+) -> Option<EvidenceMatch> {
+    let node_id = society_node_id(society_id);
+    let rows = serving_facts.entity(&node_id)?;
+    let source_priority = schema::source_priority_for_preference(preference);
+    let numeric_schema = schema::numeric_evidence_schema(preference);
+    let text_schema = schema::text_evidence_schema(preference);
+    let mut best: Option<RankedEvidence> = None;
+
+    for fact in &rows.facts {
+        let metadata = rows
+            .search_metadata
+            .iter()
+            .find(|metadata| metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key));
+        let Some(evidence) = negative_evidence_from_fact(
+            &fact.fact_key,
+            &fact.value,
+            fact.source_type.clone(),
+            fact.confidence,
+            metadata.and_then(|metadata| metadata.display_template.as_deref()),
+            preference,
+            candidate_fact_keys,
+            numeric_schema,
+            text_schema,
+        ) else {
+            continue;
+        };
+        let ranked = RankedEvidence {
+            source_rank: source_rank(&source_priority, &evidence.source_type),
+            normalized_score: evidence.normalized_score,
+            confidence: evidence.confidence,
+            evidence,
+        };
+        if best
+            .as_ref()
+            .is_none_or(|current| ranked.is_better_than(current))
+        {
+            best = Some(ranked);
+        }
+    }
+
+    best.map(|ranked| ranked.evidence)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn negative_evidence_from_fact(
+    fact_key: &str,
+    value: &FactValue,
+    source_type: String,
+    confidence: f32,
+    display_template: Option<&str>,
+    preference: &str,
+    candidate_fact_keys: &[String],
+    numeric_schema: Option<&NumericEvidenceSchema>,
+    text_schema: Option<&TextEvidenceSchema>,
+) -> Option<EvidenceMatch> {
+    if !evidence_is_confident_enough(&source_type, confidence, "risk") {
+        return None;
+    }
+
+    if let Some(schema) = numeric_schema {
+        if schema_key_matches(fact_key, candidate_fact_keys, &schema.fact_keys) {
+            if let Some((score_delta, normalized_score, risk_label)) =
+                negative_numeric_score(value, schema)
+            {
+                let display_value = fact_value_display(value);
+                return Some(EvidenceMatch {
+                    preference: preference.to_string(),
+                    fact_key: fact_key.to_string(),
+                    display: format!("{}: {}", risk_label, display_value),
+                    normalized_score,
+                    score_delta,
+                    confidence,
+                    source_type,
+                    scoring_method: "graph-risk-numeric".to_string(),
+                    reason: negative_reason(preference, score_delta),
+                });
+            }
+        }
+    }
+
+    let schema = text_schema?;
+    if !schema_key_matches(fact_key, candidate_fact_keys, &schema.fact_keys) {
+        return None;
+    }
+    let (score_delta, normalized_score, risk_label, snippet) = negative_text_score(value, schema)?;
+    let display = display_template
+        .unwrap_or("{value}")
+        .replace("{value}", &snippet);
+    Some(EvidenceMatch {
+        preference: preference.to_string(),
+        fact_key: fact_key.to_string(),
+        display: format!("{}: {}", risk_label, display),
+        normalized_score,
+        score_delta,
+        confidence,
+        source_type,
+        scoring_method: "graph-risk-text".to_string(),
+        reason: negative_reason(preference, score_delta),
+    })
+}
+
+fn schema_key_matches(
+    fact_key: &str,
+    candidate_fact_keys: &[String],
+    schema_keys: &[String],
+) -> bool {
+    candidate_fact_keys
+        .iter()
+        .any(|key| key.eq_ignore_ascii_case(fact_key))
+        || schema_keys
+            .iter()
+            .any(|key| key.eq_ignore_ascii_case(fact_key))
+}
+
+fn negative_numeric_score(
+    value: &FactValue,
+    schema: &NumericEvidenceSchema,
+) -> Option<(f64, f64, String)> {
+    let value = fact_value_numeric(value)?;
+    if !value.is_finite() {
+        return None;
+    }
+    let weight = schema.score_delta.clamp(0.0, 3.0);
+    let lower_is_better = schema.direction.eq_ignore_ascii_case("LowerIsBetter")
+        || schema.direction.eq_ignore_ascii_case("lower_is_better");
+    if !lower_is_better || schema.thresholds.len() < 2 {
+        return None;
+    }
+    let label = schema.display_label.as_str();
+    if value <= schema.thresholds[0] {
+        Some((weight, 1.0, format!("Low {label}")))
+    } else if value <= schema.thresholds[1] {
+        Some((weight * 0.5, 0.5, format!("Moderate {label}")))
+    } else {
+        Some((-weight, 0.0, format!("High {label}")))
+    }
+}
+
+fn negative_text_score(
+    value: &FactValue,
+    schema: &TextEvidenceSchema,
+) -> Option<(f64, f64, &'static str, String)> {
+    for snippet in fact_text_snippets(value) {
+        let lower = snippet.to_lowercase();
+        if schema
+            .positive_terms
+            .iter()
+            .any(|term| lower.contains(term))
+        {
+            return Some((
+                schema.score_delta,
+                1.0,
+                "Lower risk signal",
+                truncate_snippet(&snippet, 150),
+            ));
+        }
+        if schema
+            .negative_terms
+            .iter()
+            .any(|term| lower.contains(term))
+        {
+            return Some((
+                -schema.score_delta,
+                0.0,
+                "Risk signal",
+                truncate_snippet(&snippet, 150),
+            ));
+        }
+    }
     None
+}
+
+fn fact_text_snippets(value: &FactValue) -> Vec<String> {
+    match value {
+        FactValue::Text(value) => vec![value.clone()],
+        FactValue::Tags(values) => values.clone(),
+        FactValue::Score { explanation, .. } => vec![explanation.clone()],
+        FactValue::Bool(_) | FactValue::Numeric(_) => Vec::new(),
+    }
+}
+
+fn truncate_snippet(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let mut out = trimmed.chars().take(max_chars).collect::<String>();
+    out.push_str("...");
+    out
+}
+
+fn negative_reason(preference: &str, score_delta: f64) -> String {
+    if score_delta >= 0.0 {
+        format!("avoids {}", preference)
+    } else {
+        format!("risk: {}", preference)
+    }
+}
+
+fn negative_coverage_status(evidence: &EvidenceMatch) -> &'static str {
+    if evidence.score_delta < 0.0 {
+        "risk"
+    } else if evidence.normalized_score > 0.5 {
+        "matched"
+    } else {
+        "partial"
+    }
+}
+
+fn evidence_is_confident_enough(source_type: &str, confidence: f32, scoring_method: &str) -> bool {
+    let source = source_type.to_lowercase();
+    if source == "rera" || source == "computed" {
+        return confidence >= 0.50;
+    }
+    if source == "llm" {
+        return confidence >= MIN_LLM_EVIDENCE_CONFIDENCE;
+    }
+    if scoring_method == "legacy" || scoring_method == "local-risk" {
+        return false;
+    }
+    confidence >= MIN_SUPPORT_EVIDENCE_CONFIDENCE
+}
+
+fn negative_no_data_penalty(intent: &SearchIntent, preference: &str) -> f64 {
+    intent
+        .negative_preferences
+        .iter()
+        .find(|signal| signal.raw_text.eq_ignore_ascii_case(preference))
+        .map(|signal| f64::from(signal.weight).clamp(0.5, 2.0))
+        .unwrap_or(1.0)
+        * NEGATIVE_NO_DATA_PENALTY_MULTIPLIER
+}
+
+fn local_fallback_allowed(
+    graph: Option<&KnowledgeGraph>,
+    serving_facts: Option<&ServingFactIndex>,
+    society_id: &str,
+    _candidate_fact_keys: &[String],
+) -> bool {
+    let node_id = society_node_id(society_id);
+    let has_graph_node = graph.and_then(|graph| graph.get_node(&node_id)).is_some();
+    let has_serving_node = serving_facts
+        .and_then(|serving_facts| serving_facts.entity(&node_id))
+        .is_some();
+    !has_graph_node && !has_serving_node
+}
+
+struct RankedEvidence {
+    source_rank: usize,
+    normalized_score: f64,
+    confidence: f32,
+    evidence: EvidenceMatch,
+}
+
+impl RankedEvidence {
+    fn is_better_than(&self, other: &Self) -> bool {
+        self.source_rank < other.source_rank
+            || (self.source_rank == other.source_rank
+                && self.normalized_score > other.normalized_score)
+            || (self.source_rank == other.source_rank
+                && (self.normalized_score - other.normalized_score).abs() < f64::EPSILON
+                && self.confidence > other.confidence)
+    }
+}
+
+fn serving_fact_score(
+    fact: &ServingFactRecord,
+    metadata: &ServingSearchMetadataRecord,
+) -> Option<(f64, String)> {
+    let weight = f64::from(metadata.scoring_weight.unwrap_or(1.0)).clamp(0.0, 2.0);
+    if weight <= 0.0 {
+        return None;
+    }
+    let direction = metadata
+        .scoring_direction
+        .as_deref()
+        .unwrap_or("TextMatch")
+        .to_lowercase();
+    let thresholds = metadata.scoring_thresholds.as_slice();
+
+    if direction == "higherisbetter" || direction == "higher_is_better" {
+        let value = fact_value_numeric(&fact.value)?;
+        if !value.is_finite() {
+            return None;
+        }
+        let score = if thresholds.len() >= 2 {
+            if value >= thresholds[0] {
+                weight
+            } else if value >= thresholds[1] {
+                weight * 0.5
+            } else {
+                0.0
+            }
+        } else if value > 0.0 {
+            value.clamp(0.0, 1.0) * weight
+        } else {
+            0.0
+        };
+        return (score > 0.0).then(|| (score, "serving-numeric".to_string()));
+    }
+
+    if direction == "lowerisbetter" || direction == "lower_is_better" {
+        let value = fact_value_numeric(&fact.value)?;
+        if !value.is_finite() {
+            return None;
+        }
+        let score = if thresholds.len() >= 2 {
+            if value <= thresholds[0] {
+                weight
+            } else if value <= thresholds[1] {
+                weight * 0.5
+            } else {
+                0.0
+            }
+        } else {
+            let score = (1.0 - value.clamp(0.0, 1.0)) * weight;
+            score.max(0.0)
+        };
+        return (score > 0.0).then(|| (score, "serving-numeric".to_string()));
+    }
+
+    if !metadata_supports_text_match(metadata) {
+        return None;
+    }
+    meaningful_fact_value(&fact.value).then(|| (weight, "serving-fact".to_string()))
+}
+
+fn fact_value_numeric(value: &FactValue) -> Option<f64> {
+    match value {
+        FactValue::Numeric(value) => Some(*value),
+        FactValue::Score { value, .. } => Some(*value),
+        _ => None,
+    }
+}
+
+fn meaningful_fact_value(value: &FactValue) -> bool {
+    match value {
+        FactValue::Text(value) => !value.trim().is_empty(),
+        FactValue::Tags(values) => values.iter().any(|value| !value.trim().is_empty()),
+        FactValue::Bool(_) | FactValue::Numeric(_) | FactValue::Score { .. } => true,
+    }
+}
+
+fn source_rank(source_priority: &[String], source_type: &str) -> usize {
+    let source_type = source_type.to_lowercase();
+    source_priority
+        .iter()
+        .position(|source| {
+            let source = source.to_lowercase();
+            source == source_type || source.contains(&source_type) || source_type.contains(&source)
+        })
+        .unwrap_or(source_priority.len() + 1)
+}
+
+fn fact_is_negative_support_for_positive_preference(fact_key: &str, preference: &str) -> bool {
+    let fact_key = fact_key.to_lowercase();
+    let preference = preference.to_lowercase();
+    let negative_fact = [
+        "negative",
+        "negatives",
+        "complaint",
+        "complaints",
+        "concern",
+        "risk",
+    ]
+    .iter()
+    .any(|term| fact_key.contains(term));
+    if !negative_fact {
+        return false;
+    }
+
+    !["avoid", "risk", "negative", "complaint", "concern"]
+        .iter()
+        .any(|term| preference.contains(term))
 }
 
 fn metadata_supports_text_match(metadata: &ServingSearchMetadataRecord) -> bool {
@@ -1446,6 +2160,16 @@ fn area_is_nearby(property_area: &str, canonical_area: &str) -> bool {
     false
 }
 
+fn property_matches_area(
+    property: &crate::models::Property,
+    area: &str,
+    graph: Option<&KnowledgeGraph>,
+) -> bool {
+    property.area.eq_ignore_ascii_case(area)
+        || area_is_nearby(&property.area, area)
+        || graph_area_match(&property.society_id, area, graph)
+}
+
 fn match_label_from_score(normalized: f64) -> String {
     if normalized >= 0.75 {
         "Strong match".to_string()
@@ -1587,6 +2311,18 @@ fn preference_was_matched(reasons: &[String], preference: &str) -> bool {
     reasons.iter().any(|reason| reason == &expected)
 }
 
+fn has_positive_preference_evidence(
+    coverage: &[PreferenceCoverage],
+    positive_preferences: &[String],
+) -> bool {
+    coverage.iter().any(|coverage| {
+        positive_preferences
+            .iter()
+            .any(|preference| preference == &coverage.preference)
+            && (coverage.status == "matched" || coverage.status == "partial")
+    })
+}
+
 fn negative_preference_was_avoided(reasons: &[String], preference: &str) -> bool {
     let expected = format!("avoids {}", preference);
     reasons.iter().any(|reason| reason == &expected)
@@ -1631,6 +2367,14 @@ fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
             .filter_map(|pref| pref.strip_prefix("avoid ").map(str::to_string))
             .collect()
     }
+}
+
+fn negative_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+    intent
+        .negative_preferences
+        .iter()
+        .find(|signal| signal.raw_text == preference)
+        .map_or(&[], |signal| signal.expanded_keys.as_slice())
 }
 
 struct LocalPreferenceEvaluation {
@@ -1793,6 +2537,8 @@ mod tests {
     use crate::knowledge::graph::KnowledgeGraph;
     use crate::knowledge::node::{Node, NodeType, RootSource};
     use crate::search::schema::SQM_PER_ACRE;
+    use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
+    use chrono::Utc;
 
     /// Helper: build a minimal KnowledgeGraph with a society node, an area node,
     /// and a SocietyInArea edge between them.
@@ -2222,6 +2968,66 @@ mod tests {
         )
     }
 
+    fn google_text_fact(key: &str, value: &str) -> SourcedFact {
+        let mut fact = SourcedFact::manual(key, FactValue::Text(value.to_string()));
+        fact.source.source_type = SourceType::Google;
+        fact.confidence = 0.7;
+        fact.display_template = Some("{value}".to_string());
+        fact
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn serving_fact(
+        society_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        source_type: &str,
+        confidence: f32,
+    ) -> ServingFactRecord {
+        let value_type = match value {
+            FactValue::Numeric(_) => "numeric",
+            FactValue::Text(_) => "text",
+            FactValue::Bool(_) => "bool",
+            FactValue::Tags(_) => "tags",
+            FactValue::Score { .. } => "score",
+        };
+        ServingFactRecord {
+            entity_id: format!("society:{society_id}"),
+            fact_key: fact_key.to_string(),
+            value_type: value_type.to_string(),
+            value_text: None,
+            value,
+            confidence,
+            source_type: source_type.to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("unit-test".to_string()),
+            learned_at: Utc::now(),
+        }
+    }
+
+    fn serving_metadata(
+        society_id: &str,
+        fact_key: &str,
+        answers_preferences: Vec<&str>,
+        scoring_direction: &str,
+        scoring_weight: f32,
+        scoring_thresholds: Vec<f64>,
+    ) -> ServingSearchMetadataRecord {
+        ServingSearchMetadataRecord {
+            entity_id: format!("society:{society_id}"),
+            fact_key: fact_key.to_string(),
+            display_template: Some("{value}".to_string()),
+            answers_preferences: answers_preferences
+                .into_iter()
+                .map(str::to_string)
+                .collect(),
+            scoring_direction: Some(scoring_direction.to_string()),
+            scoring_weight: Some(scoring_weight),
+            scoring_thresholds,
+        }
+    }
+
     #[test]
     fn test_search_index_recalls_hard_constraint_candidates_without_network() {
         let properties = vec![
@@ -2527,6 +3333,341 @@ mod tests {
                 .any(|coverage| coverage.preference == "metro access"
                     && coverage.status == "no_data"),
             "metro preference should be marked no_data when only seed value is zero: {:?}",
+            explanation.preference_coverage
+        );
+    }
+
+    #[test]
+    fn serving_numeric_metro_evidence_wins_over_loose_graph_text() {
+        let properties = vec![local_property(
+            "structured-metro",
+            "Whitefield",
+            "structured-metro",
+            3,
+            19_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let mut graph = graph_with_society_facts(
+            "structured-metro",
+            vec![SourcedFact::manual(
+                "sentiment_summary",
+                FactValue::Text("Residents mention a 10 minute drive to metro".to_string()),
+            )],
+        );
+        graph.add_fact_to_node(
+            "society:structured-metro",
+            tags_fact(
+                "google_top_positives",
+                vec!["landscaped open space and mature trees"],
+            ),
+        );
+
+        let serving_facts = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "structured-metro",
+                "metro_distance_km",
+                FactValue::Numeric(1.8),
+                "Computed",
+                0.9,
+            )],
+            vec![serving_metadata(
+                "structured-metro",
+                "metro_distance_km",
+                vec!["metro", "near metro", "metro access"],
+                "LowerIsBetter",
+                2.0,
+                vec![2.0, 5.0],
+            )],
+        );
+        let intent = crate::search::intent::parse_intent("green 3bhk whitefield near metro");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "green 3bhk whitefield near metro",
+                &intent,
+                Some(&graph),
+                &[],
+            );
+
+        let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
+        assert!(
+            reasons.iter().any(|reason| {
+                reason.preference == "metro access"
+                    && reason.fact_key == "metro_distance_km"
+                    && reason.source_type == "Computed"
+                    && reason.scoring_method == "serving-numeric"
+            }),
+            "metro should be proved by computed serving facts, got {:?}",
+            reasons
+        );
+        assert!(
+            !reasons.iter().any(|reason| {
+                reason.preference == "metro access" && reason.fact_key == "sentiment_summary"
+            }),
+            "loose graph text should not beat structured metro evidence: {:?}",
+            reasons
+        );
+    }
+
+    #[test]
+    fn good_reviews_preference_uses_google_rating_evidence() {
+        let properties = vec![local_property(
+            "reviewed-society",
+            "Whitefield",
+            "reviewed-society",
+            3,
+            19_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "reviewed-society",
+                    "google_top_negatives",
+                    FactValue::Text("traffic complaints".to_string()),
+                    "Google",
+                    0.95,
+                ),
+                serving_fact(
+                    "reviewed-society",
+                    "google_rating",
+                    FactValue::Numeric(4.3),
+                    "Google",
+                    0.85,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "reviewed-society",
+                    "google_top_negatives",
+                    vec!["google reviews", "good reviews"],
+                    "TextMatch",
+                    1.5,
+                    Vec::new(),
+                ),
+                serving_metadata(
+                    "reviewed-society",
+                    "google_rating",
+                    vec!["high rating", "good reviews", "google rating"],
+                    "HigherIsBetter",
+                    1.0,
+                    vec![4.2, 3.8],
+                ),
+            ],
+        );
+        let intent = crate::search::intent::parse_intent("3bhk whitefield with good reviews");
+
+        assert!(
+            intent
+                .positive_preferences
+                .iter()
+                .any(|preference| preference.raw_text == "review quality"),
+            "good reviews should be parsed as a review quality intent: {:?}",
+            intent.positive_preferences
+        );
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "3bhk whitefield with good reviews",
+                &intent,
+                None,
+                &[],
+            );
+
+        let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
+        assert!(
+            reasons.iter().any(|reason| {
+                reason.preference == "review quality"
+                    && reason.fact_key == "google_rating"
+                    && reason.source_type == "Google"
+                    && reason.scoring_method == "serving-numeric"
+            }),
+            "review quality should be backed by Google rating evidence, got {:?}",
+            reasons
+        );
+        assert!(
+            !reasons
+                .iter()
+                .any(|reason| reason.fact_key == "google_top_negatives"),
+            "negative snippets should not prove a positive reviews query: {:?}",
+            reasons
+        );
+    }
+
+    #[test]
+    fn negative_risk_query_uses_area_graph_evidence_before_local_fallback() {
+        let properties = vec![local_property(
+            "whitefield-risk",
+            "Whitefield",
+            "whitefield-risk",
+            3,
+            18_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let mut graph = graph_with_society_in_area("whitefield-risk", "whitefield", "Whitefield");
+        graph.add_fact_to_node(
+            "area:whitefield",
+            google_text_fact(
+                "waterlogging_detail",
+                "Whitefield experiences waterlogging during heavy rainfall and underpass flooding.",
+            ),
+        );
+        graph.add_fact_to_node(
+            "area:whitefield",
+            google_text_fact(
+                "traffic_reality",
+                "Whitefield has severe traffic congestion during peak commute hours.",
+            ),
+        );
+        let intent =
+            crate::search::intent::parse_intent("3bhk whitefield avoid waterlogging and traffic");
+        assert!(
+            intent
+                .negative_preferences
+                .iter()
+                .any(|preference| preference.raw_text == "waterlogging risk"),
+            "waterlogging should be parsed as a negative preference: {:?}",
+            intent.negative_preferences
+        );
+        assert!(
+            intent
+                .negative_preferences
+                .iter()
+                .any(|preference| preference.raw_text == "traffic"),
+            "traffic should be parsed as a negative preference: {:?}",
+            intent.negative_preferences
+        );
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                None,
+                &society_names,
+                &[],
+                "3bhk whitefield avoid waterlogging and traffic",
+                &intent,
+                Some(&graph),
+                &[],
+            );
+
+        let explanation = results[0].match_explanation.as_ref().unwrap();
+        assert!(
+            explanation.reasons.iter().any(|reason| {
+                reason.preference == "avoid waterlogging risk"
+                    && reason.fact_key == "waterlogging_detail"
+                    && reason.scoring_method == "graph-risk-text"
+                    && reason.source_type == "Google"
+            }),
+            "waterlogging risk should be sourced from area KG facts: {:?}",
+            explanation.reasons
+        );
+        assert!(
+            explanation.reasons.iter().any(|reason| {
+                reason.preference == "avoid traffic"
+                    && reason.fact_key == "traffic_reality"
+                    && reason.scoring_method == "graph-risk-text"
+                    && reason.source_type == "Google"
+            }),
+            "traffic risk should be sourced from area KG facts: {:?}",
+            explanation.reasons
+        );
+        assert!(
+            explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "avoid waterlogging risk" && coverage.status == "risk"
+            }),
+            "known waterlogging risk should be explicit, not shown as avoided: {:?}",
+            explanation.preference_coverage
+        );
+        assert_eq!(explanation.graph_driven_pct, 100.0);
+    }
+
+    #[test]
+    fn negative_risk_query_ranks_sourced_risk_above_unknown_risk() {
+        let known_risk = local_property(
+            "known-risk",
+            "Whitefield",
+            "known-risk",
+            3,
+            18_000_000,
+            0,
+            0.2,
+        );
+        let unknown_risk = local_property(
+            "unknown-risk",
+            "Whitefield",
+            "unknown-risk",
+            3,
+            18_000_000,
+            0,
+            0.2,
+        );
+        let properties = vec![unknown_risk, known_risk];
+        let society_names = local_society_names(&properties);
+        let mut graph = graph_with_society_in_area("known-risk", "whitefield", "Whitefield");
+        add_society_facts(&mut graph, "unknown-risk", Vec::new());
+        graph.add_fact_to_node(
+            "area:whitefield",
+            google_text_fact(
+                "waterlogging_detail",
+                "Whitefield experiences waterlogging during heavy rainfall and underpass flooding.",
+            ),
+        );
+        graph.add_fact_to_node(
+            "area:whitefield",
+            google_text_fact(
+                "traffic_reality",
+                "Whitefield has severe traffic congestion during peak commute hours.",
+            ),
+        );
+        let intent =
+            crate::search::intent::parse_intent("3bhk whitefield avoid waterlogging and traffic");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                None,
+                &society_names,
+                &[],
+                "3bhk whitefield avoid waterlogging and traffic",
+                &intent,
+                Some(&graph),
+                &[],
+            );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(
+            results[0].card.id, "known-risk",
+            "sourced risk evidence should outrank unknown risk so the UI can warn clearly"
+        );
+        let explanation = results[0].match_explanation.as_ref().unwrap();
+        assert!(
+            explanation
+                .preference_coverage
+                .iter()
+                .any(|coverage| coverage.status == "risk"),
+            "top result should carry explicit risk coverage: {:?}",
             explanation.preference_coverage
         );
     }
@@ -2874,6 +4015,267 @@ mod tests {
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].card.id, "low-traffic");
         assert!(results[0].match_score > results[1].match_score);
+    }
+
+    #[test]
+    fn test_search_filters_explicitly_excluded_area() {
+        let electronic_city = local_property(
+            "electronic-city-fit",
+            "Electronic City",
+            "electronic-city-fit",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let whitefield = local_property(
+            "whitefield-fit",
+            "Whitefield",
+            "whitefield-fit",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![electronic_city, whitefield];
+        let society_names = local_society_names(&properties);
+        let index = SearchIndex::build(&properties);
+        let query = "near tech parks but quiet not electronic city 3bhk";
+        let intent = crate::search::intent::parse_intent(query);
+
+        assert_eq!(intent.excluded_areas, vec!["Electronic City".to_string()]);
+
+        let results = TextSearch::search_with_index_and_intent_and_sellers(
+            &properties,
+            Some(&index),
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+            &[],
+        );
+
+        assert!(
+            !results.is_empty(),
+            "excluded-area query should still return non-excluded candidates"
+        );
+        assert!(
+            results
+                .iter()
+                .all(|result| result.card.area != "Electronic City"),
+            "excluded area leaked into results: {:?}",
+            results.iter().map(|r| &r.card.id).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn test_search_does_not_fake_unsupported_inventory_matches() {
+        let apartment = local_property(
+            "apartment-fit",
+            "Whitefield",
+            "apartment-fit",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![apartment];
+        let society_names = local_society_names(&properties);
+        let index = SearchIndex::build(&properties);
+        let query = "plot or villa style calm layout near Bagalur metro";
+        let intent = crate::search::intent::parse_intent(query);
+
+        assert_eq!(
+            intent.unsupported_inventory_types,
+            vec!["plot".to_string(), "villa".to_string()]
+        );
+
+        let results = TextSearch::search_with_index_and_intent_and_sellers(
+            &properties,
+            Some(&index),
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+            &[],
+        );
+
+        assert!(
+            results.is_empty(),
+            "unsupported plot/villa query should not return apartment matches"
+        );
+    }
+
+    #[test]
+    fn test_semantic_recall_does_not_create_preference_proof() {
+        let property = local_property(
+            "semantic-only",
+            "Whitefield",
+            "semantic-only",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![property];
+        let society_names = local_society_names(&properties);
+        let mut semantic_scores = std::collections::HashMap::new();
+        semantic_scores.insert("semantic-only".to_string(), 0.92);
+        let extra_candidate_ids = vec!["semantic-only".to_string()];
+        let intent = crate::search::intent::parse_intent("good reviews from actual residents");
+
+        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            &properties,
+            None,
+            Some(&extra_candidate_ids),
+            Some(&semantic_scores),
+            None,
+            &society_names,
+            &[],
+            "good reviews from actual residents",
+            &intent,
+            None,
+            &[],
+        );
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].semantic_score, Some(0.92));
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("review preference should produce coverage");
+        assert!(
+            explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "review quality" && coverage.status == "no_data"
+            }),
+            "semantic recall must not fake review evidence: {:?}",
+            explanation.preference_coverage
+        );
+    }
+
+    #[test]
+    fn test_semantic_recall_survives_risk_floor_without_becoming_proof() {
+        let mut semantic_fit = local_property(
+            "semantic-fit",
+            "Whitefield",
+            "semantic-fit",
+            3,
+            19_000_000,
+            8,
+            0.7,
+        );
+        semantic_fit.traffic_score = 0.9;
+        let mut weak_fit =
+            local_property("weak-fit", "Whitefield", "weak-fit", 3, 19_000_000, 8, 0.7);
+        weak_fit.traffic_score = 0.9;
+
+        let properties = vec![weak_fit, semantic_fit];
+        let society_names = local_society_names(&properties);
+        let mut semantic_scores = std::collections::HashMap::new();
+        semantic_scores.insert("semantic-fit".to_string(), 0.84);
+        let extra_candidate_ids = vec!["weak-fit".to_string(), "semantic-fit".to_string()];
+        let intent = crate::search::intent::parse_intent(
+            "peaceful 3bhk for my parents close to hospital not too much traffic",
+        );
+
+        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            &properties,
+            None,
+            Some(&extra_candidate_ids),
+            Some(&semantic_scores),
+            None,
+            &society_names,
+            &[],
+            "peaceful 3bhk for my parents close to hospital not too much traffic",
+            &intent,
+            None,
+            &[],
+        );
+
+        assert_eq!(results[0].card.id, "semantic-fit");
+        assert_eq!(results[0].semantic_score, Some(0.84));
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("preferences should produce coverage");
+        assert!(
+            explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "quiet neighborhood" && coverage.status == "no_data"
+            }),
+            "semantic recall should not claim quiet proof: {:?}",
+            explanation.preference_coverage
+        );
+        assert!(
+            explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "social infrastructure" && coverage.status == "no_data"
+            }),
+            "semantic recall should not claim social-infra proof: {:?}",
+            explanation.preference_coverage
+        );
+    }
+
+    #[test]
+    fn test_positive_evidence_survives_risk_floor_ahead_of_semantic_only_fit() {
+        let mut proved_but_risky = local_property(
+            "proved-but-risky",
+            "Whitefield",
+            "proved-but-risky",
+            3,
+            19_000_000,
+            8,
+            0.2,
+        );
+        proved_but_risky.traffic_score = 0.9;
+
+        let mut semantic_only = local_property(
+            "semantic-only-risky",
+            "Whitefield",
+            "semantic-only-risky",
+            3,
+            19_000_000,
+            8,
+            0.8,
+        );
+        semantic_only.traffic_score = 0.9;
+
+        let properties = vec![semantic_only, proved_but_risky];
+        let society_names = local_society_names(&properties);
+        let mut semantic_scores = std::collections::HashMap::new();
+        semantic_scores.insert("semantic-only-risky".to_string(), 0.9);
+        let extra_candidate_ids = vec![
+            "semantic-only-risky".to_string(),
+            "proved-but-risky".to_string(),
+        ];
+        let intent = crate::search::intent::parse_intent("quiet 3bhk avoid traffic");
+
+        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            &properties,
+            None,
+            Some(&extra_candidate_ids),
+            Some(&semantic_scores),
+            None,
+            &society_names,
+            &[],
+            "quiet 3bhk avoid traffic",
+            &intent,
+            None,
+            &[],
+        );
+
+        assert_eq!(results[0].card.id, "proved-but-risky");
+        let explanation = results[0]
+            .match_explanation
+            .as_ref()
+            .expect("preferences should produce coverage");
+        assert!(
+            explanation.preference_coverage.iter().any(|coverage| {
+                coverage.preference == "quiet neighborhood" && coverage.status == "matched"
+            }),
+            "positive evidence should survive risk flooring: {:?}",
+            explanation.preference_coverage
+        );
     }
 
     #[test]

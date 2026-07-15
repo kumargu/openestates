@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -11,8 +12,11 @@ use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Seller, Society};
-use crate::search::SearchIndex;
-use crate::serving::{LoadedServingBundle, ServingBundleLoader};
+use crate::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
+use crate::serving::{
+    LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
+    ServingFactIndex,
+};
 use crate::state::AppState;
 use crate::{
     lake::{LakeStoreLocation, LAKE_URL_ENV},
@@ -21,44 +25,64 @@ use crate::{
 
 /// Load all data and construct the full AppState.
 ///
-/// All entity data (properties, societies, areas) is derived from the Knowledge Graph
-/// — the single source of truth. No seed JSON files are read at startup.
+/// The promoted serving bundle is the canonical request-path data source when
+/// present. Legacy `data/knowledge` JSON is retained only as a fallback/context
+/// store until all admin and write paths move to lake-backed assets.
 pub async fn load_app_state(project_root: &Path) -> AppState {
-    // --- Knowledge Graph (must load first — societies and areas derive from it) ---
+    let serving_bundle = load_serving_bundle(project_root)
+        .await
+        .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
+
+    // --- Legacy Knowledge Graph ---
     let kg_dir = knowledge::store::knowledge_dir(project_root);
-    let graph = knowledge::store::load_graph(&kg_dir).unwrap_or_else(|| {
-        panic!(
-            "No knowledge graph found at {}. Run pipeline/seed.py first.",
-            kg_dir.display()
-        );
-    });
+    let graph = load_legacy_graph(&kg_dir, serving_bundle.is_some());
     let stats = graph.stats();
     println!(
-        "Knowledge graph loaded: {} nodes, {} edges, {} facts",
+        "Legacy knowledge graph loaded: {} nodes, {} edges, {} facts",
         stats.total_nodes, stats.total_edges, stats.total_facts
     );
 
-    // --- Derive societies and areas from KG ---
-    let societies = societies_from_graph(&graph);
-    println!("Derived {} societies from knowledge graph", societies.len());
+    let (properties, societies, areas) = if let Some(bundle) = serving_bundle.as_ref() {
+        let properties = properties_from_serving_bundle(bundle);
+        if properties.is_empty() {
+            println!(
+                "WARN: Serving bundle {} has no property entities; falling back to legacy KG",
+                bundle.manifest.bundle_version
+            );
+            runtime_data_from_graph(&graph)
+        } else {
+            let societies = societies_from_serving_bundle(bundle);
+            let areas = areas_from_serving_properties(&properties);
+            println!(
+                "Derived {} properties, {} societies, {} areas from serving bundle {}",
+                properties.len(),
+                societies.len(),
+                areas.len(),
+                bundle.manifest.bundle_version
+            );
+            (properties, societies, areas)
+        }
+    } else {
+        runtime_data_from_graph(&graph)
+    };
 
-    let areas = areas_from_graph(&graph);
-    println!("Derived {} areas from knowledge graph", areas.len());
-
-    // --- Derive properties from KG ---
-    let properties = properties_from_graph(&graph);
-    println!(
-        "Derived {} properties from knowledge graph",
-        properties.len()
-    );
     let search_index = SearchIndex::build(&properties);
     println!(
         "Built local search index for {} properties",
         properties.len()
     );
-    let serving_bundle = load_serving_bundle(project_root)
-        .await
-        .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
+
+    let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
+    let semantic_index = if let Some(bundle) = serving_bundle.as_ref() {
+        SemanticSearchIndex::from_serving_entities(&bundle.entities, semantic_embedder.as_ref())
+    } else {
+        SemanticSearchIndex::from_properties(&properties, semantic_embedder.as_ref())
+    };
+    println!(
+        "Built semantic search index with {} documents using {}",
+        semantic_index.len(),
+        semantic_index.model_id()
+    );
 
     // --- Sellers ---
     let sellers_path = project_root
@@ -85,6 +109,8 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     AppState {
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
+        semantic_index: RwLock::new(semantic_index),
+        semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
         areas,
         societies,
@@ -99,7 +125,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     }
 }
 
-async fn load_serving_bundle(
+pub async fn load_serving_bundle(
     project_root: &Path,
 ) -> Result<Option<Arc<LoadedServingBundle>>, String> {
     let explicitly_configured = std::env::var_os(LAKE_URL_ENV).is_some();
@@ -156,6 +182,493 @@ async fn load_serving_bundle_from_location(
 
 fn log_serving_load_error(err: ServingBundleLoadError) {
     eprintln!("WARN: Failed to load serving bundle; using local property recall only: {err}");
+}
+
+fn load_legacy_graph(kg_dir: &Path, serving_bundle_available: bool) -> KnowledgeGraph {
+    match knowledge::store::load_graph(kg_dir) {
+        Some(graph) => graph,
+        None if serving_bundle_available => {
+            println!(
+                "No legacy knowledge graph found at {}; serving bundle remains canonical",
+                kg_dir.display()
+            );
+            KnowledgeGraph::new()
+        }
+        None => panic!(
+            "No serving bundle or knowledge graph found. Expected data/lake serving bundle or {}.",
+            kg_dir.display()
+        ),
+    }
+}
+
+fn runtime_data_from_graph(
+    graph: &KnowledgeGraph,
+) -> (Vec<Property>, Vec<Society>, Vec<AreaProfile>) {
+    let societies = societies_from_graph(graph);
+    println!(
+        "Derived {} societies from legacy knowledge graph",
+        societies.len()
+    );
+
+    let areas = areas_from_graph(graph);
+    println!("Derived {} areas from legacy knowledge graph", areas.len());
+
+    let properties = properties_from_graph(graph);
+    println!(
+        "Derived {} properties from legacy knowledge graph",
+        properties.len()
+    );
+
+    (properties, societies, areas)
+}
+
+pub fn properties_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Property> {
+    properties_from_serving_records(
+        &bundle.entities,
+        &bundle.fact_index,
+        &bundle.manifest.bundle_version,
+    )
+}
+
+pub fn properties_from_serving_records(
+    entities: &[ServingEntityRecord],
+    fact_index: &ServingFactIndex,
+    bundle_version: &str,
+) -> Vec<Property> {
+    let mut properties = entities
+        .iter()
+        .filter(|entity| entity.entity_type == "property")
+        .map(|entity| property_from_serving_entity(entity, fact_index, bundle_version))
+        .collect::<Vec<_>>();
+    properties.sort_by(|left, right| left.id.cmp(&right.id));
+    properties
+}
+
+fn property_from_serving_entity(
+    entity: &ServingEntityRecord,
+    fact_index: &ServingFactIndex,
+    bundle_version: &str,
+) -> Property {
+    let rows = fact_index.entity(&entity.entity_id);
+    let id = strip_entity_prefix(&entity.entity_id, "property:");
+    let society_id = derive_society_id(&id);
+    let area: String = latest_text(rows, "area").unwrap_or_default();
+    let area_slug = slug(&area);
+    let bhk = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
+    let mut price = latest_numeric(rows, "price")
+        .unwrap_or(0.0)
+        .round()
+        .max(0.0) as u64;
+    let mut carpet_area_sqft = latest_numeric(rows, "carpet_area_sqft")
+        .unwrap_or(0.0)
+        .round()
+        .max(0.0) as u32;
+
+    if let Some(pricing) = market_pricing_for_serving_property(fact_index, &id, bhk) {
+        let price_confidence = latest_confidence(rows, "price").unwrap_or(0.0);
+        let sqft_confidence = latest_confidence(rows, "carpet_area_sqft").unwrap_or(0.0);
+        if should_use_market_pricing(
+            price,
+            carpet_area_sqft,
+            price_confidence,
+            sqft_confidence,
+            pricing,
+        ) {
+            price = pricing.representative_price();
+            carpet_area_sqft = pricing.representative_sqft();
+        }
+    }
+
+    let price_per_sqft = if carpet_area_sqft > 0 && price > 0 {
+        price / carpet_area_sqft as u64
+    } else {
+        latest_numeric(rows, "price_per_sqft")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u64
+    };
+
+    let title = latest_text(rows, "title")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| entity.name.clone());
+    let builder_name = latest_text(rows, "builder_name").unwrap_or_default();
+    let description_summary = latest_text(rows, "description_summary").unwrap_or_else(|| {
+        let project_name = project_name_from_title_or_id(&title, &id, bhk);
+        if builder_name.is_empty() && area.is_empty() {
+            project_name
+        } else if builder_name.is_empty() {
+            format!("{project_name} in {area}")
+        } else if area.is_empty() {
+            format!("{project_name} by {builder_name}")
+        } else {
+            format!("{project_name} by {builder_name} in {area}")
+        }
+    });
+
+    let root_source = entity.root_source.as_deref().unwrap_or("serving_bundle");
+    let mut transparency_tags = latest_tags(rows, "transparency_tags").unwrap_or_default();
+    if transparency_tags.is_empty() {
+        transparency_tags.push(format!("Source: {root_source}"));
+        transparency_tags.push("Lake indexed".to_string());
+    }
+    let possession_status = latest_text(rows, "possession_status")
+        .or_else(|| serving_society_text(fact_index, &society_id, "market_project_status"))
+        .unwrap_or_else(|| "unknown".to_string());
+
+    Property {
+        id,
+        title,
+        area: area.clone(),
+        area_id: format!("area-{area_slug}"),
+        city: latest_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
+        society_id,
+        builder_name,
+        property_type: latest_text(rows, "property_type")
+            .unwrap_or_else(|| "Apartment".to_string()),
+        listing_type: latest_text(rows, "listing_type").unwrap_or_else(|| "Resale".to_string()),
+        bhk,
+        price,
+        price_per_sqft,
+        carpet_area_sqft,
+        super_builtup_sqft: latest_numeric(rows, "super_builtup_sqft")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        floor: latest_numeric(rows, "floor")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        total_floors: latest_numeric(rows, "total_floors")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        facing: latest_text(rows, "facing").unwrap_or_else(|| "Not specified".to_string()),
+        possession_status,
+        metro_distance_mins: latest_numeric(rows, "metro_distance_mins")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        maintenance_cost_monthly: latest_numeric(rows, "maintenance_cost_monthly")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        society_quality_score: latest_numeric(rows, "society_quality_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        builder_quality_score: latest_numeric(rows, "builder_quality_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        document_completeness_score: latest_numeric(rows, "document_completeness_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        litigation_risk: latest_numeric(rows, "litigation_risk")
+            .unwrap_or(0.1)
+            .max(0.1),
+        noise_score: latest_numeric(rows, "noise_score").unwrap_or(0.5).max(0.5),
+        sunlight_score: latest_numeric(rows, "sunlight_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        airport_noise_score: latest_numeric(rows, "airport_noise_score")
+            .unwrap_or(0.1)
+            .max(0.1),
+        waterlogging_risk_score: latest_numeric(rows, "waterlogging_risk_score")
+            .unwrap_or(0.2)
+            .max(0.2),
+        traffic_score: latest_numeric(rows, "traffic_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        days_on_market: latest_numeric(rows, "days_on_market")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        greenery_score: latest_numeric(rows, "greenery_score"),
+        open_space_score: latest_numeric(rows, "open_space_score"),
+        resale_strength_score: latest_numeric(rows, "resale_strength_score"),
+        interest_level: latest_text(rows, "interest_level"),
+        saves_last_7d: latest_numeric(rows, "saves_last_7d").map(|value| value.round() as u32),
+        offers_last_7d: latest_numeric(rows, "offers_last_7d").map(|value| value.round() as u32),
+        images: latest_tags(rows, "images").unwrap_or_default(),
+        hero_image: latest_text(rows, "hero_image").unwrap_or_default(),
+        description_summary,
+        transparency_tags,
+        source_reference: format!("search_serving_bundle:{bundle_version}"),
+        seller_id: latest_text(rows, "seller_id").filter(|value| !value.trim().is_empty()),
+    }
+}
+
+pub fn societies_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Society> {
+    let mut societies = bundle
+        .entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+        .map(|entity| society_from_serving_entity(entity, &bundle.fact_index))
+        .collect::<Vec<_>>();
+    societies.sort_by(|left, right| left.id.cmp(&right.id));
+    societies.dedup_by(|left, right| left.id == right.id);
+    societies
+}
+
+fn society_from_serving_entity(
+    entity: &ServingEntityRecord,
+    fact_index: &ServingFactIndex,
+) -> Society {
+    let rows = fact_index.entity(&entity.entity_id);
+    let id = society_runtime_id(entity);
+    let google_place_id = latest_text(rows, "google_place_id");
+    Society {
+        id,
+        name: entity.name.clone(),
+        area: latest_text(rows, "area").unwrap_or_default(),
+        city: latest_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
+        builder_name: latest_text(rows, "builder_name")
+            .or_else(|| latest_text(rows, "rera_promoter_name"))
+            .unwrap_or_default(),
+        year_built: latest_numeric(rows, "year_built")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        total_units: latest_numeric(rows, "market_total_units")
+            .or_else(|| latest_numeric(rows, "rera_total_units"))
+            .or_else(|| latest_numeric(rows, "total_units"))
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        summary: latest_text(rows, "summary")
+            .or_else(|| latest_text(rows, "community_review_summary"))
+            .unwrap_or_default(),
+        maintenance_sentiment: latest_text(rows, "maintenance_sentiment")
+            .or_else(|| latest_text(rows, "community_review_summary"))
+            .or_else(|| latest_text(rows, "google_sentiment"))
+            .unwrap_or_default(),
+        livability_sentiment: latest_text(rows, "livability_sentiment")
+            .or_else(|| latest_text(rows, "community_review_summary"))
+            .unwrap_or_default(),
+        common_positives: latest_tags(rows, "community_positive_themes")
+            .or_else(|| latest_tags(rows, "google_top_positives"))
+            .unwrap_or_default(),
+        common_complaints: latest_tags(rows, "community_concern_themes")
+            .or_else(|| latest_tags(rows, "google_top_negatives"))
+            .unwrap_or_default(),
+        review_summary: latest_text(rows, "community_review_summary")
+            .or_else(|| latest_text(rows, "google_sentiment"))
+            .or_else(|| latest_text(rows, "google_common_themes"))
+            .unwrap_or_default(),
+        google_reviews_url: latest_text(rows, "google_reviews_url"),
+        future_google_place_name: entity.name.clone(),
+        future_google_place_id: google_place_id,
+        future_review_enrichment_status: "serving_bundle".to_string(),
+    }
+}
+
+fn areas_from_serving_properties(properties: &[Property]) -> Vec<AreaProfile> {
+    let mut by_area = BTreeMap::<String, Vec<&Property>>::new();
+    for property in properties {
+        if !property.area.trim().is_empty() {
+            by_area
+                .entry(property.area.trim().to_string())
+                .or_default()
+                .push(property);
+        }
+    }
+
+    by_area
+        .into_iter()
+        .map(|(area, properties)| {
+            let mut prices = properties
+                .iter()
+                .filter_map(|property| {
+                    (property.price_per_sqft > 0).then_some(property.price_per_sqft)
+                })
+                .collect::<Vec<_>>();
+            prices.sort_unstable();
+            let median_price_per_sqft = median_u64(&prices).unwrap_or(0);
+            let (low, high) = match (prices.first(), prices.last()) {
+                (Some(low), Some(high)) => (*low, *high),
+                _ => (0, 0),
+            };
+            let city = properties
+                .iter()
+                .find_map(|property| (!property.city.is_empty()).then_some(property.city.clone()))
+                .unwrap_or_else(|| "Bengaluru".to_string());
+            AreaProfile {
+                id: format!("area-{}", slug(&area)),
+                name: area,
+                city,
+                median_price_per_sqft,
+                price_range_per_sqft: PriceRange { low, high },
+                trend_direction: String::new(),
+                trend_summary: String::new(),
+                metro_access_summary: String::new(),
+                airport_noise_summary: String::new(),
+                traffic_summary: String::new(),
+                waterlogging_summary: String::new(),
+                livability_summary: String::new(),
+                externality_tags: Vec::new(),
+                infrastructure_tags: Vec::new(),
+                reddit_signals: RedditSignals {
+                    decision_drivers: Vec::new(),
+                    recurring_concerns: Vec::new(),
+                    sentiment_label: String::new(),
+                    last_updated: String::new(),
+                },
+                community_notes: String::new(),
+                sample_size: properties.len() as u32,
+                last_updated: chrono::Utc::now().to_rfc3339(),
+            }
+        })
+        .collect()
+}
+
+fn median_u64(values: &[u64]) -> Option<u64> {
+    if values.is_empty() {
+        return None;
+    }
+    Some(values[values.len() / 2])
+}
+
+fn market_pricing_for_serving_property(
+    fact_index: &ServingFactIndex,
+    property_id: &str,
+    bhk: u32,
+) -> Option<MarketPricing> {
+    if bhk == 0 {
+        return None;
+    }
+    let society_id = derive_society_id(property_id);
+    let pricing = serving_society_text(fact_index, &society_id, &format!("pricing_{}bhk", bhk))?;
+    parse_market_pricing(&pricing)
+}
+
+fn serving_society_text(
+    fact_index: &ServingFactIndex,
+    society_id: &str,
+    fact_key: &str,
+) -> Option<String> {
+    let entity_id = society_entity_id(society_id);
+    let rows = fact_index.entity(&entity_id)?;
+    latest_text(Some(rows), fact_key)
+}
+
+fn society_entity_id(society_id: &str) -> String {
+    let normalized = society_id.trim().to_lowercase().replace(['_', ' '], "-");
+    if normalized.starts_with("society:") {
+        normalized
+    } else {
+        format!(
+            "society:{}",
+            normalized.strip_prefix("soc-").unwrap_or(&normalized)
+        )
+    }
+}
+
+fn society_runtime_id(entity: &ServingEntityRecord) -> String {
+    let name_slug = slug(&entity.name);
+    if !name_slug.is_empty() {
+        format!("soc-{name_slug}")
+    } else {
+        format!("soc-{}", strip_entity_prefix(&entity.entity_id, "society:"))
+    }
+}
+
+fn strip_entity_prefix(value: &str, prefix: &str) -> String {
+    value.strip_prefix(prefix).unwrap_or(value).to_string()
+}
+
+fn project_name_from_title_or_id(title: &str, property_id: &str, bhk: u32) -> String {
+    let prefix = format!("{bhk} BHK in ");
+    title
+        .strip_prefix(&prefix)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or_else(|| {
+            let slug = property_id
+                .strip_prefix("discovered-")
+                .unwrap_or(property_id)
+                .trim_end_matches(&format!("-{bhk}bhk"));
+            title_case_slug(slug)
+        })
+}
+
+fn latest_text(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<String> {
+    latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+        FactValue::Numeric(value) if value.is_finite() => Some(value.to_string()),
+        FactValue::Bool(value) => Some(value.to_string()),
+        FactValue::Score { value, .. } if value.is_finite() => Some(value.to_string()),
+        FactValue::Tags(values) if !values.is_empty() => Some(values.join(", ")),
+        _ => None,
+    })
+}
+
+fn latest_numeric(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f64> {
+    latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Numeric(value) if value.is_finite() => Some(*value),
+        FactValue::Score { value, .. } if value.is_finite() => Some(*value),
+        _ => None,
+    })
+}
+
+fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<Vec<String>> {
+    latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Tags(values) => Some(
+            values
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+        )
+        .filter(|values| !values.is_empty()),
+        FactValue::Text(value) if !value.trim().is_empty() => Some(vec![value.trim().to_string()]),
+        _ => None,
+    })
+}
+
+fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
+    latest_fact(rows, fact_key).map(|fact| fact.confidence)
+}
+
+fn latest_fact<'a>(
+    rows: Option<&'a ServingEntityFactRows>,
+    fact_key: &str,
+) -> Option<&'a crate::serving::ServingFactRecord> {
+    rows?
+        .facts
+        .iter()
+        .filter(|fact| fact.fact_key == fact_key)
+        .max_by_key(|fact| fact.learned_at)
+}
+
+fn slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut pending_dash = false;
+    for character in value.trim().to_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            pending_dash = false;
+        } else {
+            pending_dash = true;
+        }
+    }
+    output
+}
+
+fn title_case_slug(value: &str) -> String {
+    value
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .map(|part| {
+            let mut chars = part.chars();
+            match chars.next() {
+                Some(first) => format!("{}{}", first.to_ascii_uppercase(), chars.as_str()),
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Derive Society structs from KG society nodes.
@@ -675,6 +1188,7 @@ mod tests {
     use super::*;
     use crate::knowledge::fact::SourcedFact;
     use crate::knowledge::node::Node;
+    use chrono::{TimeZone, Utc};
     use tempfile::tempdir;
 
     #[tokio::test]
@@ -696,6 +1210,118 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn serving_records_project_runtime_property_with_alias_society_facts() {
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "property:discovered-prestige-lavender-fields-3bhk".to_string(),
+                entity_type: "property".to_string(),
+                name: "3 BHK in Prestige Lavender Fields".to_string(),
+                root_source: Some("discovered".to_string()),
+                searchable_text: String::new(),
+            },
+            ServingEntityRecord {
+                entity_id: "society:rera-a19f2cf2456fc549".to_string(),
+                entity_type: "society".to_string(),
+                name: "Prestige Lavender Fields".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+        ];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "title",
+                    FactValue::Text("3 BHK in Prestige Lavender Fields".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "area",
+                    FactValue::Text("Varthur".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "city",
+                    FactValue::Text("Bengaluru".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "builder_name",
+                    FactValue::Text("Prestige Group".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "bhk",
+                    FactValue::Numeric(3.0),
+                    0.8,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "price",
+                    FactValue::Numeric(1.0),
+                    0.6,
+                ),
+                serving_fact(
+                    "property:discovered-prestige-lavender-fields-3bhk",
+                    "carpet_area_sqft",
+                    FactValue::Numeric(1.0),
+                    0.6,
+                ),
+                serving_fact(
+                    "society:prestige-lavender-fields",
+                    "pricing_3bhk",
+                    FactValue::Text(
+                        r#"{"price_range_lakh":"240-360","sqft_range":"1800-2200"}"#.to_string(),
+                    ),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:prestige-lavender-fields",
+                    "market_project_status",
+                    FactValue::Text("Sold Out".to_string()),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:rera-a19f2cf2456fc549",
+                    "community_review_summary",
+                    FactValue::Text("Google signal is mixed-positive.".to_string()),
+                    0.85,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(properties.len(), 1);
+        let property = &properties[0];
+        assert_eq!(property.id, "discovered-prestige-lavender-fields-3bhk");
+        assert_eq!(property.society_id, "soc-prestige-lavender-fields");
+        assert_eq!(property.area, "Varthur");
+        assert_eq!(property.price, 30_000_000);
+        assert_eq!(property.carpet_area_sqft, 2_000);
+        assert_eq!(property.possession_status, "Sold Out");
+        assert_eq!(property.source_reference, "search_serving_bundle:bundle-v1");
+
+        let society = society_from_serving_entity(&entities[1], &fact_index);
+        assert_eq!(society.id, "soc-prestige-lavender-fields");
+        assert_eq!(society.review_summary, "Google signal is mixed-positive.");
+    }
+
+    #[test]
+    fn missing_legacy_kg_is_allowed_when_serving_bundle_exists() {
+        let dir = tempdir().unwrap();
+        let graph = load_legacy_graph(&dir.path().join("missing-knowledge"), true);
+        let stats = graph.stats();
+        assert_eq!(stats.total_nodes, 0);
+        assert_eq!(stats.total_edges, 0);
+        assert_eq!(stats.total_facts, 0);
     }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
@@ -954,5 +1580,33 @@ mod tests {
             .or_fact_text(&node, "google_sentiment")
             .into();
         assert_eq!(result, "positive");
+    }
+
+    fn serving_fact(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        confidence: f32,
+    ) -> crate::serving::ServingFactRecord {
+        crate::serving::ServingFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: match &value {
+                FactValue::Text(_) => "text",
+                FactValue::Numeric(_) => "numeric",
+                FactValue::Bool(_) => "bool",
+                FactValue::Tags(_) => "tags",
+                FactValue::Score { .. } => "score",
+            }
+            .to_string(),
+            value_text: None,
+            value,
+            confidence,
+            source_type: "Computed".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("test".to_string()),
+            learned_at: Utc.timestamp_opt(1, 0).unwrap(),
+        }
     }
 }

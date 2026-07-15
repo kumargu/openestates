@@ -8,6 +8,7 @@ stderr. Durable Parquet writes, lineage, and promotion remain Rust-owned.
 import hashlib
 import json
 import logging
+import os
 import sys
 from datetime import datetime, timezone
 from typing import Any, Callable, Dict, List, Tuple
@@ -21,6 +22,7 @@ RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
 REDDIT_RESIDENT_FACTS = "reddit_resident_facts"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
+GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 METRO_STATIONS_MONTHLY = "metro_stations_monthly"
 SUPPORTED_ASSETS = frozenset(
@@ -29,6 +31,7 @@ SUPPORTED_ASSETS = frozenset(
         REDDIT_THREADS_DAILY,
         REDDIT_RESIDENT_FACTS,
         GOOGLE_PLACES_WEEKLY,
+        GOOGLE_NEARBY_PLACES_WEEKLY,
         PRESTIGE_INVENTORY_WEEKLY,
         METRO_STATIONS_MONTHLY,
     )
@@ -59,7 +62,6 @@ def collect_asset_sources(
             if asset_id in requested
         ]
         try:
-            collect_reddit = reddit_collect or collect_reddit_assets
             reddit_inputs = reddit_society_inputs(
                 request, output.get(RERA_REGISTRY_MONTHLY)
             )
@@ -67,10 +69,14 @@ def collect_asset_sources(
                 raise ValueError(
                     "Reddit collection requires scoped source_entities or RERA projects"
                 )
-            reddit_threads, reddit_facts = collect_reddit(
-                request,
-                society_inputs=reddit_inputs,
-            )
+            if skip_reddit_collection():
+                reddit_threads, reddit_facts = empty_reddit_assets(request)
+            else:
+                collect_reddit = reddit_collect or collect_reddit_assets
+                reddit_threads, reddit_facts = collect_reddit(
+                    request,
+                    society_inputs=reddit_inputs,
+                )
             if REDDIT_THREADS_DAILY in requested:
                 output[REDDIT_THREADS_DAILY] = reddit_threads
             if REDDIT_RESIDENT_FACTS in requested:
@@ -92,6 +98,21 @@ def collect_asset_sources(
             )
         except Exception as error:
             record_source_failure(source_failures, [GOOGLE_PLACES_WEEKLY], error)
+    if GOOGLE_NEARBY_PLACES_WEEKLY in requested:
+        try:
+            google_inputs = google_society_inputs(
+                request, output.get(RERA_REGISTRY_MONTHLY)
+            )
+            if not google_inputs:
+                raise ValueError(
+                    "Google nearby collection requires scoped source_entities or RERA projects"
+                )
+            output[GOOGLE_NEARBY_PLACES_WEEKLY] = collect_google_nearby_places(
+                request,
+                society_inputs=google_inputs,
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [GOOGLE_NEARBY_PLACES_WEEKLY], error)
     if PRESTIGE_INVENTORY_WEEKLY in requested:
         try:
             from pipeline.sources.project_enrichment import collect_prestige_inventory
@@ -129,6 +150,37 @@ def record_source_failure(
     for asset_id in asset_ids:
         failures[asset_id] = reason
     logger.error("Source collection failed for %s: %s", ", ".join(asset_ids), reason)
+
+
+def skip_reddit_collection() -> bool:
+    return str(os.environ.get("OPENESTATES_SKIP_REDDIT") or "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
+
+def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    planned_at = normalized_planned_at(request)
+    partition = partition_values(request)
+    snapshot_date = partition.get("dt") or planned_at[:10]
+    subreddit = partition.get("subreddit") or "BangaloreRealEstates"
+    watermark = {"source": "reddit_skipped", "high_watermark": planned_at}
+    return (
+        {
+            "snapshot_date": snapshot_date,
+            "subreddit": subreddit,
+            "records": [],
+            "source_watermarks": [watermark],
+        },
+        {
+            "source": "reddit",
+            "snapshot_date": snapshot_date,
+            "facts": [],
+            "fact_annotations": [],
+            "source_watermarks": [watermark],
+        },
+    )
 
 
 def collect_google_places(
@@ -176,6 +228,9 @@ def collect_google_places(
                 "reviews_url": reviews_url,
                 "rating": optional_float(fact_data(values.get("google_rating"))),
                 "review_count": optional_int(fact_data(values.get("google_review_count"))),
+                "review_snippets": optional_string_list(
+                    fact_data(values.get("google_review_snippets"))
+                ),
                 "address": optional_string(input_data.get("address")),
                 "confidence": float(result.confidence),
                 "fetched_at": learned_at,
@@ -196,6 +251,98 @@ def collect_google_places(
             }
         ],
     }
+
+
+def collect_google_nearby_places(
+    request: Dict[str, Any],
+    society_inputs: Dict[str, Dict[str, Any]] = None,
+    nearby_fetch: Callable[[Dict[str, Any], str], List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    from pipeline.skills.fetch_google_review_links import fetch_google_places_nearby_text
+
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    inputs = society_inputs or {}
+    fetch = nearby_fetch or fetch_google_places_nearby_text
+    records = []  # type: List[Dict[str, Any]]
+    categories = ("school", "metro", "hospital", "fitness", "eatery", "tech_park")
+
+    for slug, input_data in sorted(inputs.items()):
+        for category in categories:
+            query = nearby_query(input_data, category)
+            for place in fetch(input_data, category):
+                name = optional_string(place.get("place_name") or place.get("name"))
+                url = optional_string(place.get("place_url") or place.get("url"))
+                if not name or not url:
+                    logger.warning(
+                        "Skipping Google nearby row without name/link for %s %s",
+                        slug,
+                        category,
+                    )
+                    continue
+                records.append(
+                    {
+                        "entity_id": str(input_data.get("entity_id") or ""),
+                        "project_key": optional_string(input_data.get("project_key")),
+                        "query": optional_string(place.get("query")) or query,
+                        "category": category,
+                        "place_name": name,
+                        "place_id": optional_string(place.get("place_id")),
+                        "place_url": url,
+                        "distance_km": optional_float(place.get("distance_km")),
+                        "rating": optional_float(place.get("rating")),
+                        "review_count": optional_int(place.get("review_count")),
+                        "primary_type": optional_string(place.get("primary_type")),
+                        "place_types": optional_string_list(place.get("place_types")),
+                        "confidence": float(place.get("confidence") or 0.7),
+                        "fetched_at": optional_string(place.get("fetched_at")) or planned_at,
+                        "fetch_source": optional_string(place.get("fetch_source"))
+                        or "google_nearby_places",
+                    }
+                )
+
+    logger.info("Collected %d Google nearby place snapshots", len(records))
+    return {
+        "snapshot_date": snapshot_date,
+        "records": records,
+        "source_watermarks": [
+            {
+                "source": "google_nearby_places",
+                "high_watermark": max(
+                    (record["fetched_at"] for record in records), default=planned_at
+                ),
+            }
+        ],
+    }
+
+
+def unavailable_google_nearby_fetch(
+    _input_data: Dict[str, Any], _category: str
+) -> List[Dict[str, Any]]:
+    raise ValueError(
+        "Google nearby collection needs a real Places nearby provider or local source input"
+    )
+
+
+def nearby_query(input_data: Dict[str, Any], category: str) -> str:
+    base = society_query(input_data)
+    label = nearby_category_label(category)
+    if not base:
+        return ""
+    return "{} near {}".format(label, base)
+
+
+def nearby_category_label(category: str) -> str:
+    normalized = category.replace("-", "_").strip().lower()
+    labels = {
+        "school": "school",
+        "metro": "metro station",
+        "hospital": "hospital",
+        "fitness": "gym fitness",
+        "eatery": "restaurant cafe",
+        "tech_park": "tech park office",
+    }
+    return labels.get(normalized, normalized.replace("_", " "))
 
 
 def google_society_inputs(
@@ -284,6 +431,11 @@ def fact_data(fact: Any) -> Any:
 def google_fetch_source(result: Any) -> str:
     if result.cached:
         return "fetch_google_review_links_cache"
+    for fact in getattr(result, "facts", []):
+        source = getattr(fact, "source", None)
+        triggered_by = getattr(source, "triggered_by", None)
+        if isinstance(triggered_by, str) and ":" in triggered_by:
+            return triggered_by.split(":", 1)[0]
     if result.cost.api_calls:
         return "serpapi_google_maps"
     return "google_maps_search_fallback"
@@ -639,6 +791,17 @@ def optional_float(value: Any):
         except ValueError:
             return None
     return None
+
+
+def optional_string_list(value: Any) -> List[str]:
+    if not isinstance(value, list):
+        return []
+    values = []
+    for item in value:
+        text = optional_string(item)
+        if text and text not in values:
+            values.append(text)
+    return values
 
 
 def main() -> int:

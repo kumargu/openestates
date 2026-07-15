@@ -18,7 +18,9 @@ pub use materializer::{
     SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
     SearchServingBundleMaterializer,
 };
-pub use parquet::{read_facts_parquet, read_search_metadata_parquet, ParquetReadError};
+pub use parquet::{
+    read_entities_parquet, read_facts_parquet, read_search_metadata_parquet, ParquetReadError,
+};
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,

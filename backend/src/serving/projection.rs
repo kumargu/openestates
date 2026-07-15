@@ -85,6 +85,22 @@ impl<'a> SocietyFactProjection<'a> {
             .max_by_key(|fact| fact.learned_at)
     }
 
+    pub fn records(&self, fact_key: &str) -> Vec<&'a ServingFactRecord> {
+        let mut facts = self
+            .rows
+            .iter()
+            .flat_map(|rows| rows.facts.iter())
+            .filter(|fact| fact.fact_key == fact_key)
+            .collect::<Vec<_>>();
+        facts.sort_by(|left, right| {
+            right
+                .learned_at
+                .cmp(&left.learned_at)
+                .then_with(|| left.source_url.cmp(&right.source_url))
+        });
+        facts
+    }
+
     pub fn search_metadata(&self, fact_key: &str) -> Option<&'a ServingSearchMetadataRecord> {
         self.rows
             .iter()

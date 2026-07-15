@@ -3,12 +3,13 @@ use std::time::{Duration, Instant};
 
 use backend::models::Property;
 use backend::search::intent::parse_intent;
-use backend::search::{SearchIndex, TextSearch};
+use backend::search::{HashSemanticEmbedder, SearchIndex, SemanticSearchIndex, TextSearch};
 
 const MATCHING_PROPERTIES: usize = 12;
 const DISTRACTORS_PER_BUCKET: usize = 800;
 const MAX_RECALL_CANDIDATE_RATIO: f64 = 0.01;
 const MAX_INDEXED_SEARCH_DURATION: Duration = Duration::from_millis(750);
+const MAX_SEMANTIC_SCAN_DURATION: Duration = Duration::from_millis(250);
 
 #[test]
 fn indexed_search_prunes_large_mock_corpus_before_ranking() {
@@ -62,6 +63,63 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         "indexed search took {elapsed:?} for {} properties and {} recalled candidates",
         properties.len(),
         recall_ids.len()
+    );
+}
+
+#[test]
+fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
+    let properties = mock_property_corpus();
+    let society_names = society_names(&properties);
+    let index = SearchIndex::build(&properties);
+    let query = "plot or villa style calm layout near Bagalur metro";
+    let intent = parse_intent(query);
+
+    assert_eq!(
+        intent.unsupported_inventory_types,
+        vec!["plot".to_string(), "villa".to_string()],
+        "plot/villa asks should be explicit unsupported inventory gaps"
+    );
+
+    let started = Instant::now();
+    let results = TextSearch::search_with_index_and_intent_and_sellers(
+        &properties,
+        Some(&index),
+        &society_names,
+        &[],
+        query,
+        &intent,
+        None,
+        &[],
+    );
+    let elapsed = started.elapsed();
+
+    assert!(
+        results.is_empty(),
+        "unsupported inventory should not return apartment results"
+    );
+    assert!(
+        elapsed <= Duration::from_millis(50),
+        "unsupported inventory should short-circuit cheaply, took {elapsed:?}"
+    );
+}
+
+#[test]
+fn semantic_recall_scans_large_mock_corpus_under_budget() {
+    let properties = mock_property_corpus();
+    let embedder = HashSemanticEmbedder::default();
+    let semantic_index = SemanticSearchIndex::from_properties(&properties, &embedder);
+
+    assert_eq!(semantic_index.len(), properties.len());
+
+    let started = Instant::now();
+    let hits = semantic_index.search("peaceful home for parents near hospital", &embedder, 128);
+    let elapsed = started.elapsed();
+
+    assert!(!hits.is_empty());
+    assert!(
+        elapsed <= MAX_SEMANTIC_SCAN_DURATION,
+        "semantic exact scan took {elapsed:?} for {} documents",
+        semantic_index.len()
     );
 }
 

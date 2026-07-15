@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::knowledge::edge::Relation;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
-use crate::models::{AreaProfile, Property, PropertyCard, Seller, Society};
+use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Seller, Society};
 
 // ---------------------------------------------------------------------------
 // RERA and Area Intelligence response structs
@@ -418,12 +418,57 @@ pub fn to_slug(id: &str) -> String {
 
 /// Build a society node ID for KG lookup.
 pub fn society_node_id(society_id: &str) -> String {
-    format!("society:{}", to_slug(society_id))
+    let normalized = society_id.trim().to_lowercase().replace(['_', ' '], "-");
+    if normalized.starts_with("society:") {
+        normalized
+    } else {
+        format!("society:{}", to_slug(&normalized))
+    }
 }
 
 /// Build an area node ID for KG lookup.
 pub fn area_node_id(area_name: &str) -> String {
     format!("area:{}", to_slug(area_name))
+}
+
+pub fn property_node_id(property_id: &str) -> String {
+    let normalized = property_id.trim().to_lowercase().replace(['_', ' '], "-");
+    if normalized.starts_with("property:") {
+        normalized
+    } else {
+        format!("property:{normalized}")
+    }
+}
+
+pub fn kg_entity_refs_for_property(p: &Property, graph: &KnowledgeGraph) -> KgEntityRefs {
+    let property_entity_id = property_node_id(&p.id);
+    let society_entity_id = society_node_id(&p.society_id);
+    let area_entity_id = area_node_id(&p.area);
+    let builder_entity_id = graph
+        .edges_from(&society_entity_id)
+        .iter()
+        .find(|edge| edge.relation == Relation::BuiltBy && graph.get_node(&edge.to).is_some())
+        .map(|edge| edge.to.clone());
+
+    let mut source_entity_ids = vec![
+        property_entity_id.clone(),
+        society_entity_id.clone(),
+        area_entity_id.clone(),
+    ];
+    if let Some(builder_entity_id) = &builder_entity_id {
+        source_entity_ids.push(builder_entity_id.clone());
+    }
+    source_entity_ids.retain(|id| graph.get_node(id).is_some());
+    source_entity_ids.sort();
+    source_entity_ids.dedup();
+
+    KgEntityRefs {
+        property_entity_id,
+        society_entity_id,
+        area_entity_id,
+        builder_entity_id,
+        source_entity_ids,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -495,7 +540,7 @@ pub fn enrich_property_card_with_sellers(
 ) -> PropertyCard {
     let society_name = societies
         .iter()
-        .find(|s| s.id == p.society_id)
+        .find(|s| to_slug(&s.id) == to_slug(&p.society_id))
         .map(|s| s.name.clone())
         .unwrap_or_default();
 
@@ -558,6 +603,7 @@ pub fn enrich_property_card_with_sellers(
 
     PropertyCard {
         id: p.id.clone(),
+        kg_entity_refs: kg_entity_refs_for_property(p, graph),
         title: p.title.clone(),
         area: p.area.clone(),
         price: p.price,

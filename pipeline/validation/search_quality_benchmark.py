@@ -46,6 +46,8 @@ SUPPORT_FACTS = {
     "nearest_operational_metro_station",
     "official_project_url",
 }
+SEARCH_P95_GATE_MS = 50.0
+DETAIL_P95_GATE_MS = 30.0
 
 
 class ApiResponse:
@@ -76,6 +78,19 @@ def search(base_url: str, query: str) -> ApiResponse:
 def property_detail(base_url: str, property_id: str) -> ApiResponse:
     encoded = urllib.parse.quote(property_id, safe="")
     return fetch_json(base_url, f"/api/properties/{encoded}")
+
+
+def warm_local_serving_path(base_url: str) -> None:
+    """Warm in-memory routing/search code before measuring benchmark latency."""
+    for path in (
+        "/api/properties",
+        "/api/search?q=3bhk%20whitefield",
+    ):
+        try:
+            fetch_json(base_url, path, timeout=5)
+        except Exception:
+            # The real benchmark checks below will report reachability/shape failures.
+            pass
 
 
 def normalize(value: Any) -> str:
@@ -517,6 +532,33 @@ def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     }
 
 
+def latency_summary(search_latencies: List[float], detail_latencies: List[float]) -> Dict[str, Any]:
+    search_p95 = round(percentile(search_latencies, 0.95), 2)
+    detail_p95 = round(percentile(detail_latencies, 0.95), 2)
+    checks = [
+        {
+            "status": "PASS" if search_p95 <= SEARCH_P95_GATE_MS else "WARN",
+            "check": "search_p95",
+            "message": f"search p95 should be <= {SEARCH_P95_GATE_MS:.0f} ms, got {search_p95:.2f} ms",
+        },
+        {
+            "status": "PASS" if detail_p95 <= DETAIL_P95_GATE_MS else "WARN",
+            "check": "detail_p95",
+            "message": f"detail p95 should be <= {DETAIL_P95_GATE_MS:.0f} ms, got {detail_p95:.2f} ms",
+        },
+    ]
+    return {
+        "search_p50_ms": round(percentile(search_latencies, 0.50), 2),
+        "search_p95_ms": search_p95,
+        "search_max_ms": round(max(search_latencies) if search_latencies else 0.0, 2),
+        "detail_p50_ms": round(percentile(detail_latencies, 0.50), 2),
+        "detail_p95_ms": detail_p95,
+        "detail_max_ms": round(max(detail_latencies) if detail_latencies else 0.0, 2),
+        "gate": "WARN" if any(check["status"] == "WARN" for check in checks) else "PASS",
+        "checks": checks,
+    }
+
+
 def build_markdown(report: Dict[str, Any]) -> str:
     lines = []
     lines.append("# Search Quality Benchmark")
@@ -544,6 +586,8 @@ def build_markdown(report: Dict[str, Any]) -> str:
     lines.append("|---|---:|---:|---:|")
     lines.append(f"| Search | {latency['search_p50_ms']:.2f} ms | {latency['search_p95_ms']:.2f} ms | {latency['search_max_ms']:.2f} ms |")
     lines.append(f"| Detail | {latency['detail_p50_ms']:.2f} ms | {latency['detail_p95_ms']:.2f} ms | {latency['detail_max_ms']:.2f} ms |")
+    lines.append("")
+    lines.append(f"Latency gate: **{latency['gate']}**")
     lines.append("")
 
     lines.append("## Product Proof")
@@ -600,6 +644,7 @@ def run(args: argparse.Namespace) -> int:
     except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as err:
         print(f"FATAL: backend is not reachable at {base_url}: {err}", file=sys.stderr)
         return 1
+    warm_local_serving_path(base_url)
 
     cases = load_json(args.cases)
     proof_cases = load_json(args.proof_set)
@@ -618,6 +663,8 @@ def run(args: argparse.Namespace) -> int:
         if result.get("detail_latency_ms") is not None
     ]
 
+    latency = latency_summary(search_latencies, detail_latencies)
+
     report = {
         "benchmark": "search_quality_v2",
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -630,14 +677,7 @@ def run(args: argparse.Namespace) -> int:
             "summary": summarize(search_results),
             "results": search_results,
         },
-        "latency": {
-            "search_p50_ms": round(percentile(search_latencies, 0.50), 2),
-            "search_p95_ms": round(percentile(search_latencies, 0.95), 2),
-            "search_max_ms": round(max(search_latencies) if search_latencies else 0.0, 2),
-            "detail_p50_ms": round(percentile(detail_latencies, 0.50), 2),
-            "detail_p95_ms": round(percentile(detail_latencies, 0.95), 2),
-            "detail_max_ms": round(max(detail_latencies) if detail_latencies else 0.0, 2),
-        },
+        "latency": latency,
     }
 
     args.json_output.parent.mkdir(parents=True, exist_ok=True)

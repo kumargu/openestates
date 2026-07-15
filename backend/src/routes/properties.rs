@@ -4,25 +4,27 @@ use std::sync::Arc;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::models::{PropertyCard, SellerSummary};
+use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::scoring::{
     self, compute_transparency_score, CompareThemes, MarketActivityResponse, TradeoffsResponse,
     TransparencyScore,
 };
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
-use crate::serving::{GoogleReviewEvidence, ServingFactIndex, SocietyFactProjection};
+use crate::serving::{
+    GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, SocietyFactProjection,
+};
 use crate::state::AppState;
 
 use crate::knowledge::node::NodeType;
-use crate::knowledge::{FactValue, SourcedFact};
+use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 
 use super::enrichment::{
     enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
-    extract_builder_trust, extract_data_freshness, extract_rera_info, society_node_id,
-    AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
+    extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
+    society_node_id, AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
 };
 
 /// GET /api/properties — returns UI-ready property cards.
@@ -42,6 +44,15 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 #[derive(Serialize)]
 pub struct PropertyDetail {
     pub property: crate::models::Property,
+    /// Stable graph IDs the UI can dereference to render dynamic KG-backed sections.
+    pub entity_refs: KgEntityRefs,
+    /// Canonical UI read model for dynamic proof-backed cards on the property page.
+    ///
+    /// New UI should render optional property-page sections from this field
+    /// instead of hardcoding cards or calling legacy KG endpoints directly.
+    /// `source_panels` below is retained as a compatibility field for the
+    /// current frontend while it migrates.
+    pub evidence: PropertyEvidenceResponse,
     pub society: Option<crate::models::Society>,
     pub area: Option<crate::models::AreaProfile>,
     pub themes: CompareThemes,
@@ -149,6 +160,7 @@ pub struct SourcePanel {
 
 #[derive(Serialize, Clone, Debug)]
 pub struct SourceItem {
+    pub entity_id: String,
     pub key: String,
     pub label: String,
     pub value: String,
@@ -157,8 +169,57 @@ pub struct SourceItem {
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attributions: Vec<SourceAttribution>,
     pub confidence_pct: u8,
     pub learned_at: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct SourceAttribution {
+    pub value: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub source_type: String,
+    pub confidence_pct: u8,
+    pub learned_at: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct PropertyEvidenceResponse {
+    pub property_id: String,
+    pub entity_refs: KgEntityRefs,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serving_bundle_version: Option<String>,
+    pub sections: Vec<EvidenceSection>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct EvidenceSection {
+    pub kind: String,
+    pub title: String,
+    pub summary: String,
+    pub subtitle: String,
+    pub priority: u32,
+    pub confidence_pct: u8,
+    pub source_types: Vec<String>,
+    pub entity_ids: Vec<String>,
+    pub items: Vec<SourceItem>,
+    pub missing: Vec<String>,
+}
+
+#[derive(Deserialize)]
+pub struct PropertyEvidenceBatchRequest {
+    pub property_ids: Vec<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+pub struct PropertyEvidenceBatchResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub serving_bundle_version: Option<String>,
+    pub results: Vec<PropertyEvidenceResponse>,
+    pub missing_property_ids: Vec<String>,
 }
 
 #[derive(Serialize)]
@@ -175,6 +236,14 @@ fn canonical_property_id(id: &str) -> &str {
         "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
         _ => id,
     }
+}
+
+fn find_property_by_request_id<'a>(
+    properties: &'a [crate::models::Property],
+    id: &str,
+) -> Option<&'a crate::models::Property> {
+    let canonical_id = canonical_property_id(id);
+    properties.iter().find(|p| p.id == canonical_id)
 }
 
 fn normalized_builder_key(name: &str) -> String {
@@ -284,12 +353,67 @@ fn source_item(
     key: &str,
     label: &str,
 ) -> Option<SourceItem> {
+    if key == "google_reviews_url" {
+        if let Some(item) = google_reviews_url_source_item(graph, node_id, key, label) {
+            return Some(item);
+        }
+    }
     let fact = latest_fact(graph, node_id, key)?;
+    source_item_from_fact(node_id, fact, key, key, label)
+}
+
+fn google_reviews_url_source_item(
+    graph: &crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let node = graph.get_node(node_id)?;
+    let url = google_reviews_url_from_facts(&node.facts, &node.name)?;
+    Some(SourceItem {
+        entity_id: node_id.to_string(),
+        key: key.to_string(),
+        label: label.to_string(),
+        value: url.clone(),
+        values: Vec::new(),
+        source_type: "Google".to_string(),
+        source_url: Some(url),
+        attributions: Vec::new(),
+        confidence_pct: 60,
+        learned_at: node
+            .facts
+            .iter()
+            .filter(|fact| fact.source.source_type == crate::knowledge::fact::SourceType::Google)
+            .map(|fact| fact.learned_at)
+            .max()
+            .unwrap_or_else(chrono::Utc::now)
+            .to_rfc3339(),
+    })
+}
+
+fn source_item_with_display_key(
+    graph: &crate::knowledge::KnowledgeGraph,
+    node_id: &str,
+    fact_key: &str,
+    display_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let fact = latest_fact(graph, node_id, fact_key)?;
+    source_item_from_fact(node_id, fact, fact_key, display_key, label)
+}
+
+fn source_item_from_fact(
+    entity_id: &str,
+    fact: &SourcedFact,
+    fact_key: &str,
+    display_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
     let values = match &fact.value {
         FactValue::Tags(tags) => tags.clone(),
         _ => Vec::new(),
     };
-    let value = match (&fact.value, key) {
+    let value = match (&fact.value, fact_key) {
         (FactValue::Numeric(n), "rera_complaints_count") if (*n - 1.0).abs() < f64::EPSILON => {
             "1 complaint filed".to_string()
         }
@@ -323,19 +447,24 @@ fn source_item(
         (FactValue::Numeric(n), "reddit_total_score") => {
             format!("{} community score", *n as i64)
         }
+        (FactValue::Tags(tags), "google_review_snippets") => {
+            format!("{} Google review highlights", tags.len())
+        }
         (FactValue::Tags(tags), "reddit_threads") => tags.join("\n"),
         _ => fact_display(fact),
     };
-    if is_low_signal_source_value(key, &value) {
+    if is_low_signal_source_value(display_key, &value) {
         return None;
     }
     Some(SourceItem {
-        key: key.to_string(),
+        entity_id: entity_id.to_string(),
+        key: display_key.to_string(),
         label: label.to_string(),
         value,
         values,
         source_type: format!("{:?}", fact.source.source_type),
         source_url: fact.source.url.clone(),
+        attributions: Vec::new(),
         confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
         learned_at: fact.learned_at.to_rfc3339(),
     })
@@ -378,30 +507,167 @@ fn serving_source_item(
     key: &str,
     label: &str,
 ) -> Option<SourceItem> {
-    let fact = projection.latest_record(key)?;
+    serving_source_item_with_display_key(projection, key, key, label)
+}
+
+fn serving_source_item_with_display_key(
+    projection: &SocietyFactProjection<'_>,
+    fact_key: &str,
+    display_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let fact = projection.latest_record(fact_key)?;
     let values = match &fact.value {
         FactValue::Tags(tags) => tags.clone(),
         _ => Vec::new(),
     };
     let raw_value = fact_value_display(&fact.value);
-    let value = projection
-        .search_metadata(key)
-        .and_then(|metadata| metadata.display_template.as_deref())
-        .map(|template| template.replace("{value}", &raw_value))
-        .unwrap_or(raw_value);
-    if is_low_signal_source_value(key, &value) {
+    let value = if fact_key == "google_review_snippets" && !values.is_empty() {
+        format!("{} Google review highlights", values.len())
+    } else {
+        projection
+            .search_metadata(fact_key)
+            .and_then(|metadata| metadata.display_template.as_deref())
+            .map(|template| template.replace("{value}", &raw_value))
+            .unwrap_or(raw_value)
+    };
+    if is_low_signal_source_value(display_key, &value) {
         return None;
     }
     Some(SourceItem {
-        key: key.to_string(),
+        entity_id: fact.entity_id.clone(),
+        key: display_key.to_string(),
         label: label.to_string(),
         value,
         values,
         source_type: fact.source_type.clone(),
         source_url: fact.source_url.clone(),
+        attributions: Vec::new(),
         confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
         learned_at: fact.learned_at.to_rfc3339(),
     })
+}
+
+#[derive(Clone)]
+struct SourceValue {
+    value: String,
+    source_url: Option<String>,
+    source_type: String,
+    confidence_pct: u8,
+    learned_at: chrono::DateTime<chrono::Utc>,
+}
+
+fn serving_multi_source_item(
+    projection: &SocietyFactProjection<'_>,
+    fact_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let mut values = Vec::<SourceValue>::new();
+    for fact in projection.records(fact_key) {
+        match &fact.value {
+            FactValue::Text(value) if !value.trim().is_empty() => values.push(SourceValue {
+                value: value.trim().to_string(),
+                source_url: fact.source_url.clone(),
+                source_type: fact.source_type.clone(),
+                confidence_pct: confidence_pct(fact.confidence),
+                learned_at: fact.learned_at,
+            }),
+            FactValue::Tags(tags) => {
+                for value in tags
+                    .iter()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                {
+                    values.push(SourceValue {
+                        value: value.to_string(),
+                        source_url: fact.source_url.clone(),
+                        source_type: fact.source_type.clone(),
+                        confidence_pct: confidence_pct(fact.confidence),
+                        learned_at: fact.learned_at,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+    values.sort_by(|left, right| {
+        nearby_distance_key(&left.value)
+            .partial_cmp(&nearby_distance_key(&right.value))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| right.confidence_pct.cmp(&left.confidence_pct))
+            .then_with(|| left.value.cmp(&right.value))
+    });
+    values.dedup_by(|left, right| left.value == right.value && left.source_url == right.source_url);
+    values.truncate(5);
+    if values.is_empty() {
+        return None;
+    }
+
+    let first = values[0].clone();
+    let learned_at = values
+        .iter()
+        .map(|value| value.learned_at)
+        .max()
+        .unwrap_or(first.learned_at);
+    let confidence_pct = values
+        .iter()
+        .map(|value| value.confidence_pct)
+        .max()
+        .unwrap_or(0);
+    let attributions = values
+        .iter()
+        .map(|value| SourceAttribution {
+            value: value.value.clone(),
+            source_url: value.source_url.clone(),
+            source_type: value.source_type.clone(),
+            confidence_pct: value.confidence_pct,
+            learned_at: value.learned_at.to_rfc3339(),
+        })
+        .collect::<Vec<_>>();
+    let item_values = values
+        .iter()
+        .map(|value| value.value.clone())
+        .collect::<Vec<_>>();
+    let value = if item_values.len() == 1 {
+        item_values[0].clone()
+    } else {
+        format!("{} map-backed places", item_values.len())
+    };
+
+    Some(SourceItem {
+        entity_id: projection
+            .records(fact_key)
+            .first()
+            .map(|fact| fact.entity_id.clone())
+            .unwrap_or_default(),
+        key: fact_key.to_string(),
+        label: label.to_string(),
+        value,
+        values: item_values,
+        source_type: first.source_type,
+        source_url: first.source_url,
+        attributions,
+        confidence_pct,
+        learned_at: learned_at.to_rfc3339(),
+    })
+}
+
+fn confidence_pct(confidence: f32) -> u8 {
+    (confidence * 100.0).round().clamp(0.0, 100.0) as u8
+}
+
+fn nearby_distance_key(value: &str) -> f64 {
+    let Some(open_index) = value.find('(') else {
+        return f64::INFINITY;
+    };
+    let tail = &value[open_index + 1..];
+    let Some(km_index) = tail.find(" km") else {
+        return f64::INFINITY;
+    };
+    tail[..km_index]
+        .trim()
+        .parse::<f64>()
+        .unwrap_or(f64::INFINITY)
 }
 
 fn collect_society_source_items(
@@ -412,11 +678,36 @@ fn collect_society_source_items(
 ) -> Vec<SourceItem> {
     keys.iter()
         .filter_map(|(key, label)| {
+            if key.starts_with("nearby_") {
+                if let Some(item) = projection
+                    .and_then(|projection| serving_multi_source_item(projection, key, label))
+                {
+                    return Some(item);
+                }
+            }
             projection
                 .and_then(|projection| serving_source_item(projection, key, label))
                 .or_else(|| source_item(graph, node_id, key, label))
+                .or_else(|| {
+                    source_item_aliases(key).iter().find_map(|alias| {
+                        projection
+                            .and_then(|projection| {
+                                serving_source_item_with_display_key(projection, alias, key, label)
+                            })
+                            .or_else(|| {
+                                source_item_with_display_key(graph, node_id, alias, key, label)
+                            })
+                    })
+                })
         })
         .collect()
+}
+
+fn source_item_aliases(key: &str) -> &'static [&'static str] {
+    match key {
+        "market_project_status" => &["market_status"],
+        _ => &[],
+    }
 }
 
 fn build_source_panels(
@@ -512,58 +803,360 @@ fn build_source_panels(
         ],
     });
 
-    let reddit_items = collect_society_source_items(
+    let nearby_items = collect_society_source_items(
         graph,
         &society_id,
         projection.as_ref(),
         &[
-            ("resident_sentiment", "Overall take"),
-            ("sentiment_summary", "What forums point to"),
-            ("best_quote", "Quote"),
-            ("common_positives", "Repeated positives"),
-            ("common_complaints", "Repeated concerns"),
+            ("nearby_schools", "Schools"),
+            ("nearby_metro_stations", "Metro"),
+            ("nearby_hospitals", "Hospitals"),
+            ("nearby_fitness", "Cult / gyms"),
+            ("nearby_eateries", "Eateries"),
+            ("nearby_tech_parks", "Tech parks / offices"),
         ],
     );
+    if !nearby_items.is_empty() {
+        panels.push(SourcePanel {
+            kind: "nearby".to_string(),
+            title: "Nearby".to_string(),
+            subtitle: "Map-backed places near the society.".to_string(),
+            items: nearby_items,
+            missing: vec![],
+        });
+    }
+
+    let mut reddit_items = collect_society_source_items(
+        graph,
+        &society_id,
+        projection.as_ref(),
+        &[
+            ("community_review_summary", "What we know"),
+            ("community_sentiment_score", "Signal score"),
+            ("community_positive_themes", "Repeated positives"),
+            ("community_concern_themes", "Repeated concerns"),
+            ("community_review_highlights", "Review highlights"),
+            ("community_evidence_links", "Evidence"),
+        ],
+    );
+    if reddit_items.is_empty() {
+        reddit_items.extend(collect_society_source_items(
+            graph,
+            &society_id,
+            projection.as_ref(),
+            &[
+                ("resident_sentiment", "Overall take"),
+                ("sentiment_summary", "What forums point to"),
+                ("best_quote", "Quote"),
+                ("common_positives", "Repeated positives"),
+                ("common_complaints", "Repeated concerns"),
+            ],
+        ));
+    }
+    let has_theme_level_community_signal = reddit_items.iter().any(|item| {
+        matches!(
+            item.key.as_str(),
+            "community_positive_themes" | "community_concern_themes"
+        )
+    });
+    let mut community_missing =
+        vec!["Direct Reddit comment excerpts are not stored for every society yet.".to_string()];
+    if !has_theme_level_community_signal {
+        community_missing
+            .push("Review text is not ingested yet for every Google place.".to_string());
+    }
     panels.push(SourcePanel {
         kind: "community".to_string(),
         title: "Community pulse".to_string(),
-        subtitle: "Forum chatter distilled into takeaways, quotes, and recurring issues."
-            .to_string(),
+        subtitle: "Public review and resident-source signals, with gaps called out.".to_string(),
         items: reddit_items,
-        missing: vec![
-            "Direct Reddit comment excerpts are not stored for every society yet.".to_string(),
-            "Thread-level coverage still needs improving for low-mention projects.".to_string(),
-        ],
+        missing: community_missing,
     });
 
-    let review_items = collect_society_source_items(
+    let mut review_items = collect_society_source_items(
         graph,
         &society_id,
         projection.as_ref(),
         &[
+            ("google_rating", "Rating"),
+            ("google_review_count", "Review count"),
             ("google_reviews_url", "Review link"),
-            ("google_sentiment", "Overall take"),
-            ("google_top_positives", "Praised for"),
-            ("google_top_negatives", "Recurring complaints"),
-            ("google_common_themes", "Themes"),
+            ("google_review_snippets", "Review highlights"),
         ],
     );
+    if review_items.is_empty() {
+        review_items.extend(collect_society_source_items(
+            graph,
+            &society_id,
+            projection.as_ref(),
+            &[
+                ("google_sentiment", "Overall take"),
+                ("google_top_positives", "Praised for"),
+                ("google_top_negatives", "Recurring complaints"),
+                ("google_common_themes", "Themes"),
+            ],
+        ));
+    }
+    let has_review_snippets = review_items
+        .iter()
+        .any(|item| item.key == "google_review_snippets" && !item.values.is_empty());
+    let review_missing = if has_review_snippets {
+        vec!["More verbatim review quotes still need extraction.".to_string()]
+    } else {
+        vec![
+            "Google review snippets are not stored for this society yet.".to_string(),
+            "More verbatim review quotes still need extraction.".to_string(),
+        ]
+    };
     panels.push(SourcePanel {
         kind: "reviews".to_string(),
         title: "Google reviews".to_string(),
         subtitle: "What public reviews consistently praise, complain about, and repeat."
             .to_string(),
         items: review_items,
-        missing: vec![
-            "Google review snippets are not stored for this society yet.".to_string(),
-            "More verbatim review quotes still need extraction.".to_string(),
-        ],
+        missing: review_missing,
     });
 
     panels
         .into_iter()
         .filter(|panel| !panel.items.is_empty() || !panel.missing.is_empty())
         .collect()
+}
+
+fn build_property_evidence_response(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    serving_bundle: Option<&LoadedServingBundle>,
+) -> PropertyEvidenceResponse {
+    let entity_refs = kg_entity_refs_for_property(property, graph);
+    let source_panels = build_source_panels(
+        graph,
+        property,
+        serving_bundle.map(|bundle| &bundle.fact_index),
+    );
+    build_property_evidence_response_from_panels(
+        property.id.clone(),
+        entity_refs,
+        serving_bundle,
+        source_panels,
+    )
+}
+
+fn build_property_evidence_response_from_panels(
+    property_id: String,
+    entity_refs: KgEntityRefs,
+    serving_bundle: Option<&LoadedServingBundle>,
+    source_panels: Vec<SourcePanel>,
+) -> PropertyEvidenceResponse {
+    let mut sections = source_panels
+        .into_iter()
+        .map(|panel| evidence_section_from_panel(panel, &entity_refs))
+        .collect::<Vec<_>>();
+    sections.sort_by(|left, right| {
+        left.priority
+            .cmp(&right.priority)
+            .then_with(|| left.title.cmp(&right.title))
+    });
+
+    PropertyEvidenceResponse {
+        property_id,
+        entity_refs,
+        serving_bundle_version: serving_bundle.map(|bundle| bundle.manifest.bundle_version.clone()),
+        sections,
+    }
+}
+
+fn evidence_section_from_panel(panel: SourcePanel, entity_refs: &KgEntityRefs) -> EvidenceSection {
+    let source_types = unique_sorted(
+        panel
+            .items
+            .iter()
+            .map(|item| item.source_type.clone())
+            .collect(),
+    );
+    let mut entity_ids = unique_sorted(
+        panel
+            .items
+            .iter()
+            .map(|item| item.entity_id.clone())
+            .collect(),
+    );
+    if entity_ids.is_empty() {
+        entity_ids = fallback_section_entity_ids(&panel.kind, entity_refs);
+    }
+    let confidence_pct = section_confidence_pct(&panel.items);
+    let summary = section_summary(&panel);
+
+    EvidenceSection {
+        priority: evidence_section_priority(&panel.kind),
+        kind: panel.kind,
+        title: panel.title,
+        summary,
+        subtitle: panel.subtitle,
+        confidence_pct,
+        source_types,
+        entity_ids,
+        items: panel.items,
+        missing: panel.missing,
+    }
+}
+
+fn evidence_section_priority(kind: &str) -> u32 {
+    match kind {
+        "rera" => 10,
+        "market" => 20,
+        "nearby" => 30,
+        "reviews" => 40,
+        "community" => 50,
+        "area" => 60,
+        _ => 100,
+    }
+}
+
+fn section_confidence_pct(items: &[SourceItem]) -> u8 {
+    if items.is_empty() {
+        return 0;
+    }
+    let total = items
+        .iter()
+        .map(|item| u32::from(item.confidence_pct))
+        .sum::<u32>();
+    ((total / items.len() as u32).min(100)) as u8
+}
+
+fn section_summary(panel: &SourcePanel) -> String {
+    if let Some(item) = primary_section_item(panel) {
+        return source_item_summary(item);
+    }
+    panel
+        .missing
+        .first()
+        .map(|gap| format!("Gap: {}", truncate_summary(gap, 96)))
+        .unwrap_or_else(|| "No source-backed signals yet.".to_string())
+}
+
+fn primary_section_item<'a>(panel: &'a SourcePanel) -> Option<&'a SourceItem> {
+    for key in primary_section_keys(&panel.kind) {
+        if let Some(item) = panel.items.iter().find(|item| item.key == *key) {
+            return Some(item);
+        }
+    }
+    panel.items.first()
+}
+
+fn primary_section_keys(kind: &str) -> &'static [&'static str] {
+    match kind {
+        "rera" => &["rera_number", "rera_status", "rera_completion_date"],
+        "market" => &[
+            "market_project_status",
+            "market_starting_price_inr",
+            "official_project_url",
+            "project_maps_url",
+        ],
+        "nearby" => &[
+            "nearby_schools",
+            "nearby_metro_stations",
+            "nearby_hospitals",
+            "nearby_fitness",
+            "nearby_eateries",
+            "nearby_tech_parks",
+        ],
+        "reviews" => &[
+            "google_rating",
+            "google_review_count",
+            "google_review_snippets",
+            "google_reviews_url",
+        ],
+        "community" => &[
+            "community_review_summary",
+            "community_review_highlights",
+            "community_positive_themes",
+            "community_concern_themes",
+            "resident_sentiment",
+        ],
+        "area" => &[
+            "metro_details",
+            "traffic_reality",
+            "waterlogging_detail",
+            "metro_status",
+        ],
+        _ => &[],
+    }
+}
+
+fn source_item_summary(item: &SourceItem) -> String {
+    if let Some(first_value) = item.values.first() {
+        let suffix = if item.values.len() > 1 {
+            format!(" +{} more", item.values.len() - 1)
+        } else {
+            String::new()
+        };
+        return format!(
+            "{}: {}{}",
+            item.label,
+            truncate_summary(first_value, 80),
+            suffix
+        );
+    }
+    let value = truncate_summary(&item.value, 96);
+    if source_value_is_self_labeled(&item.value, &item.label) {
+        value
+    } else {
+        format!("{}: {value}", item.label)
+    }
+}
+
+fn source_value_is_self_labeled(value: &str, label: &str) -> bool {
+    let value = value.trim();
+    let label = label.trim();
+    if value.is_empty() || label.is_empty() {
+        return false;
+    }
+
+    let normalized_value = value.to_lowercase();
+    let normalized_label = label.to_lowercase();
+    if normalized_value.starts_with(&format!("{normalized_label}:")) {
+        return true;
+    }
+
+    let Some(colon_index) = value.find(':') else {
+        return false;
+    };
+    if colon_index > 48 || value.starts_with("http://") || value.starts_with("https://") {
+        return false;
+    }
+
+    let prefix = value[..colon_index].trim();
+    prefix
+        .chars()
+        .any(|character| character.is_ascii_alphabetic())
+}
+
+fn truncate_summary(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let mut out = trimmed.chars().take(max_chars).collect::<String>();
+    out.push_str("...");
+    out
+}
+
+fn fallback_section_entity_ids(kind: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
+    match kind {
+        "area" => vec![entity_refs.area_entity_id.clone()],
+        "rera" | "market" | "nearby" | "reviews" | "community" => {
+            vec![entity_refs.society_entity_id.clone()]
+        }
+        _ => vec![entity_refs.property_entity_id.clone()],
+    }
+}
+
+fn unique_sorted(mut values: Vec<String>) -> Vec<String> {
+    values.retain(|value| !value.trim().is_empty());
+    values.sort();
+    values.dedup();
+    values
 }
 
 fn build_builder_portfolio(
@@ -651,6 +1244,85 @@ fn build_builder_portfolio(
     })
 }
 
+/// GET /api/properties/:id/evidence — returns backend-shaped dynamic evidence
+/// sections for the UI. React should render these sections, not interpret raw KG
+/// facts itself.
+pub async fn get_property_evidence(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<PropertyEvidenceResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let properties = state.properties.read().await;
+    let property = find_property_by_request_id(&properties, &id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "property_not_found".to_string(),
+            }),
+        )
+    })?;
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let graph = state.knowledge.read().await;
+
+    Ok(Json(build_property_evidence_response(
+        &graph,
+        property,
+        serving_bundle.as_deref(),
+    )))
+}
+
+const MAX_EVIDENCE_BATCH_SIZE: usize = 20;
+
+/// POST /api/properties/evidence/batch — returns evidence sections for a bounded
+/// set of property IDs so search/list/compare views can prefetch dynamic cards.
+pub async fn get_property_evidence_batch(
+    State(state): State<Arc<AppState>>,
+    Json(request): Json<PropertyEvidenceBatchRequest>,
+) -> Json<PropertyEvidenceBatchResponse> {
+    let limit = request
+        .limit
+        .unwrap_or(MAX_EVIDENCE_BATCH_SIZE)
+        .clamp(1, MAX_EVIDENCE_BATCH_SIZE);
+    let mut requested = Vec::new();
+    for id in request.property_ids {
+        if requested.len() >= limit {
+            break;
+        }
+        let canonical = canonical_property_id(&id).to_string();
+        if !requested.iter().any(|existing| existing == &canonical) {
+            requested.push(canonical);
+        }
+    }
+
+    let properties = state.properties.read().await;
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let graph = state.knowledge.read().await;
+    let mut results = Vec::new();
+    let mut missing_property_ids = Vec::new();
+
+    for property_id in requested {
+        if let Some(property) = properties
+            .iter()
+            .find(|property| property.id == property_id)
+        {
+            results.push(build_property_evidence_response(
+                &graph,
+                property,
+                serving_bundle.as_deref(),
+            ));
+        } else {
+            missing_property_ids.push(property_id);
+        }
+    }
+
+    Json(PropertyEvidenceBatchResponse {
+        serving_bundle_version: serving_bundle
+            .as_ref()
+            .map(|bundle| bundle.manifest.bundle_version.clone()),
+        results,
+        missing_property_ids,
+    })
+}
+
 /// GET /api/properties/:id — returns joined property + society + area,
 /// enriched from the knowledge graph.
 pub async fn get_property(
@@ -658,10 +1330,7 @@ pub async fn get_property(
     Path(id): Path<String>,
 ) -> Result<Json<PropertyDetail>, (StatusCode, Json<ErrorResponse>)> {
     let properties = state.properties.read().await;
-    let canonical_id = canonical_property_id(&id);
-    let property = properties
-        .iter()
-        .find(|p| p.id == canonical_id)
+    let property = find_property_by_request_id(&properties, &id)
         .cloned()
         .ok_or_else(|| {
             (
@@ -850,10 +1519,17 @@ pub async fn get_property(
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
     let builder_portfolio = build_builder_portfolio(&graph, &properties, &property);
+    let entity_refs = kg_entity_refs_for_property(&property, &graph);
     let source_panels = build_source_panels(
         &graph,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
+    let evidence = build_property_evidence_response_from_panels(
+        property.id.clone(),
+        entity_refs.clone(),
+        serving_bundle.as_deref(),
+        source_panels.clone(),
     );
 
     // Extract data freshness from KG
@@ -863,6 +1539,8 @@ pub async fn get_property(
     let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
 
     Ok(Json(PropertyDetail {
+        entity_refs,
+        evidence,
         property,
         society,
         area,
@@ -1162,6 +1840,290 @@ mod serving_state_tests {
         );
     }
 
+    #[test]
+    fn source_panels_project_legacy_market_status_as_canonical_inventory_status() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "market_status",
+                FactValue::Text("under_construction".to_string()),
+                10,
+            )],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let item = panels
+            .iter()
+            .flat_map(|panel| panel.items.iter())
+            .find(|item| item.key == "market_project_status")
+            .expect("legacy market_status should fill canonical market_project_status detail");
+
+        assert_eq!(item.value, "under_construction");
+    }
+
+    #[test]
+    fn source_panels_include_dynamic_nearby_items_when_backed_by_facts() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "nearby_schools",
+                    FactValue::Text("Far School (4.0 km, 4.5 rating)".to_string()),
+                    10,
+                ),
+                serving_fact_with_url(
+                    "nearby_schools",
+                    FactValue::Text("Greenwood High (1.2 km, 4.3 rating)".to_string()),
+                    "https://maps.google.com/greenwood",
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let nearby = panels
+            .iter()
+            .find(|panel| panel.kind == "nearby")
+            .expect("nearby panel should appear when map-backed nearby facts exist");
+
+        assert_eq!(nearby.items[0].key, "nearby_schools");
+        assert_eq!(
+            nearby.items[0].values,
+            vec![
+                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
+                "Far School (4.0 km, 4.5 rating)".to_string(),
+            ]
+        );
+        assert_eq!(
+            nearby.items[0].attributions[0].source_url.as_deref(),
+            Some("https://maps.google.com/greenwood")
+        );
+        assert!(nearby.missing.is_empty());
+    }
+
+    #[test]
+    fn source_panels_project_current_community_and_google_review_card_facts() {
+        let mut graph = legacy_graph();
+        let node = graph
+            .nodes
+            .get_mut("society:sample")
+            .expect("fixture society exists");
+        node.add_fact(legacy_fact(
+            "best_quote",
+            FactValue::Text("Resident says: stale generated quote".to_string()),
+        ));
+        node.add_fact(legacy_fact(
+            "google_top_positives",
+            FactValue::Tags(vec!["stale generated review theme".to_string()]),
+        ));
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "community_review_summary",
+                    FactValue::Text("Google signal is mixed-positive: 3.9/5 from 392 reviews. Review text is not ingested yet.".to_string()),
+                    10,
+                ),
+                serving_fact("community_sentiment_score", FactValue::Numeric(78.0), 10),
+                serving_fact(
+                    "community_positive_themes",
+                    FactValue::Tags(vec!["greenery".to_string(), "amenities".to_string()]),
+                    10,
+                ),
+                serving_fact(
+                    "community_review_highlights",
+                    FactValue::Tags(vec![
+                        "Amenities and greenery are repeatedly praised.".to_string(),
+                        "Traffic is still called out as a concern.".to_string(),
+                    ]),
+                    10,
+                ),
+                serving_fact("google_rating", FactValue::Numeric(3.9), 10),
+                serving_fact("google_review_count", FactValue::Numeric(392.0), 10),
+                serving_fact(
+                    "google_review_snippets",
+                    FactValue::Tags(vec![
+                        "Amenities and greenery are repeatedly praised.".to_string(),
+                        "Traffic is still called out as a concern.".to_string(),
+                    ]),
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let community = panels
+            .iter()
+            .find(|panel| panel.kind == "community")
+            .expect("community card should be backed by current summary facts");
+        let reviews = panels
+            .iter()
+            .find(|panel| panel.kind == "reviews")
+            .expect("review card should be backed by current Google facts");
+        let community_keys = community
+            .items
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+        let review_keys = reviews
+            .items
+            .iter()
+            .map(|item| item.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(community_keys.contains(&"community_review_summary"));
+        assert!(community_keys.contains(&"community_sentiment_score"));
+        assert!(community_keys.contains(&"community_positive_themes"));
+        assert!(community_keys.contains(&"community_review_highlights"));
+        assert!(review_keys.contains(&"google_rating"));
+        assert!(review_keys.contains(&"google_review_count"));
+        assert!(review_keys.contains(&"google_review_snippets"));
+        let snippet_item = reviews
+            .items
+            .iter()
+            .find(|item| item.key == "google_review_snippets")
+            .expect("review snippets should be exposed as bullet-ready values");
+        assert_eq!(snippet_item.value, "2 Google review highlights");
+        assert_eq!(snippet_item.values.len(), 2);
+        assert!(!community
+            .missing
+            .iter()
+            .any(|item| item.contains("Review text is not ingested")));
+        assert!(!reviews
+            .missing
+            .iter()
+            .any(|item| item.contains("snippets are not stored")));
+        assert!(!community_keys.contains(&"best_quote"));
+        assert!(!review_keys.contains(&"google_top_positives"));
+    }
+
+    #[test]
+    fn source_panels_build_review_link_from_google_review_facts_without_explicit_url() {
+        let graph = legacy_graph_without_review_url();
+        let property = property();
+
+        let panels = build_source_panels(&graph, &property, None);
+        let item = panels
+            .iter()
+            .flat_map(|panel| panel.items.iter())
+            .find(|item| item.key == "google_reviews_url")
+            .expect("Google review facts should expose a navigable Maps search link");
+
+        assert_eq!(
+            item.value,
+            "https://www.google.com/maps/search/?api=1&query=Sample%20Society"
+        );
+        assert_eq!(item.source_type, "Google");
+    }
+
+    #[test]
+    fn property_evidence_sections_are_backend_shaped_for_dynamic_ui() {
+        let mut graph = legacy_graph();
+        let node = graph
+            .nodes
+            .get_mut("society:sample")
+            .expect("fixture society exists");
+        node.add_fact(legacy_fact(
+            "rera_number",
+            FactValue::Text("PRM-UI-CONTRACT".to_string()),
+        ));
+        node.add_fact(legacy_fact(
+            "nearby_schools",
+            FactValue::Tags(vec![
+                "Greenwood High (1.2 km, 4.3 rating)".to_string(),
+                "Inventure Academy (2.1 km, 4.1 rating)".to_string(),
+            ]),
+        ));
+
+        let response = build_property_evidence_response(&graph, &property(), None);
+
+        assert_eq!(response.property_id, "sample-3bhk");
+        assert_eq!(response.entity_refs.society_entity_id, "society:sample");
+        assert!(response.sections.len() >= 2);
+        assert!(
+            response
+                .sections
+                .windows(2)
+                .all(|pair| pair[0].priority <= pair[1].priority),
+            "evidence sections should be sorted by backend priority: {:?}",
+            response
+                .sections
+                .iter()
+                .map(|section| (&section.kind, section.priority))
+                .collect::<Vec<_>>()
+        );
+
+        let rera = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "rera")
+            .expect("RERA section should be produced when RERA facts exist");
+        assert_eq!(rera.priority, 10);
+        assert_eq!(rera.summary, "Registration: PRM-UI-CONTRACT");
+        assert_eq!(rera.confidence_pct, 80);
+        assert_eq!(rera.source_types, vec!["Google".to_string()]);
+        assert_eq!(rera.entity_ids, vec!["society:sample".to_string()]);
+        assert!(
+            rera.items
+                .iter()
+                .all(|item| item.entity_id == "society:sample"),
+            "items should carry graph drilldown IDs: {:?}",
+            rera.items
+        );
+
+        let nearby = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "nearby")
+            .expect("nearby section should be produced when map-backed facts exist");
+        assert_eq!(
+            nearby.summary,
+            "Schools: Greenwood High (1.2 km, 4.3 rating) +1 more"
+        );
+        assert!(nearby.missing.is_empty());
+    }
+
+    #[test]
+    fn property_evidence_keeps_missing_only_sections_with_entity_fallbacks() {
+        let graph = legacy_graph();
+        let response = build_property_evidence_response(&graph, &property(), None);
+        let area = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "area")
+            .expect("area gaps should be explicit even when facts are sparse");
+
+        assert!(area.items.is_empty());
+        assert_eq!(area.entity_ids, vec!["area:whitefield".to_string()]);
+        assert!(area.summary.starts_with("Gap: "));
+    }
+
+    #[test]
+    fn evidence_summaries_do_not_repeat_self_labeled_values() {
+        let item = SourceItem {
+            entity_id: "society:sample".to_string(),
+            key: "market_project_status".to_string(),
+            label: "Builder inventory status".to_string(),
+            value: "Builder inventory status: Sold Out".to_string(),
+            values: Vec::new(),
+            source_type: "BuilderOfficial".to_string(),
+            source_url: None,
+            attributions: Vec::new(),
+            confidence_pct: 90,
+            learned_at: "2026-07-15T00:00:00Z".to_string(),
+        };
+
+        assert_eq!(
+            source_item_summary(&item),
+            "Builder inventory status: Sold Out"
+        );
+    }
+
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {
         let mut graph = crate::knowledge::KnowledgeGraph::new();
         let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
@@ -1170,6 +2132,17 @@ mod serving_state_tests {
         node.add_fact(legacy_fact(
             "google_reviews_url",
             FactValue::Text("https://example.com/legacy".to_string()),
+        ));
+        graph.add_node(node);
+        graph
+    }
+
+    fn legacy_graph_without_review_url() -> crate::knowledge::KnowledgeGraph {
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+        let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
+        node.add_fact(legacy_fact(
+            "google_sentiment",
+            FactValue::Text("good".to_string()),
         ));
         graph.add_node(node);
         graph
@@ -1216,6 +2189,24 @@ mod serving_state_tests {
     }
 
     fn serving_fact(key: &str, value: FactValue, learned_at: i64) -> ServingFactRecord {
+        serving_fact_with_optional_url(key, value, None, learned_at)
+    }
+
+    fn serving_fact_with_url(
+        key: &str,
+        value: FactValue,
+        source_url: &str,
+        learned_at: i64,
+    ) -> ServingFactRecord {
+        serving_fact_with_optional_url(key, value, Some(source_url.to_string()), learned_at)
+    }
+
+    fn serving_fact_with_optional_url(
+        key: &str,
+        value: FactValue,
+        source_url: Option<String>,
+        learned_at: i64,
+    ) -> ServingFactRecord {
         ServingFactRecord {
             entity_id: "society:sample".to_string(),
             fact_key: key.to_string(),
@@ -1228,7 +2219,7 @@ mod serving_state_tests {
             } else {
                 "Google".to_string()
             },
-            source_url: None,
+            source_url,
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),

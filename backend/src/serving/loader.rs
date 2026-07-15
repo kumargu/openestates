@@ -8,9 +8,9 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    hydrate_tantivy_index, read_facts_parquet, read_search_metadata_parquet, ParquetReadError,
-    ServingBundleManifest, ServingFactIndex, TantivyIndexError, TantivyRecallIndex,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    hydrate_tantivy_index, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
+    ParquetReadError, ServingBundleManifest, ServingEntityRecord, ServingFactIndex,
+    TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 #[derive(Clone)]
@@ -22,6 +22,7 @@ pub struct ServingBundleLoader {
 
 pub struct LoadedServingBundle {
     pub manifest: ServingBundleManifest,
+    pub entities: Vec<ServingEntityRecord>,
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
     pub cache_dir: PathBuf,
@@ -69,9 +70,11 @@ impl ServingBundleLoader {
         }
 
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
+        let entities = load_entities(&self.lake, &manifest).await?;
         let fact_index = load_fact_index(&self.lake, &manifest).await?;
         Ok(Some(LoadedServingBundle {
             manifest,
+            entities,
             recall_index,
             fact_index,
             cache_dir,
@@ -84,6 +87,16 @@ impl ServingBundleLoader {
             .join(format!("materialization={}", record.materialization_id))
             .join("tantivy_index")
     }
+}
+
+async fn load_entities(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+) -> Result<Vec<ServingEntityRecord>, ServingBundleLoadError> {
+    let entity_key =
+        LakeKey::new(manifest.entity_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let entity_bytes = lake.get_bytes(&entity_key).await?;
+    Ok(read_entities_parquet(&entity_bytes)?)
 }
 
 async fn load_fact_index(

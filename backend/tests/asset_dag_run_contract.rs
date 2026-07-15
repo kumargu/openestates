@@ -225,7 +225,6 @@ async fn dag_plan_resolves_current_records_by_asset_partition() {
         google_fact_partition.clone(),
     );
     write_current(&materializations, &google_facts).await;
-
     let plan = planner
         .plan_partition_details(&run_partition, now)
         .await
@@ -383,6 +382,39 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::new([("source", "google")]),
     );
     write_current(&materializations, &google_facts).await;
+    let community_facts_stale = materialization_in_partition(
+        "community_review_summary_facts",
+        AssetStage::Silver,
+        "2026-07-12",
+        vec![
+            google_facts.materialization_id.clone(),
+            reddit_facts_old.materialization_id.clone(),
+        ],
+        now - Duration::hours(1),
+        AssetPartition::new([("source", "community")]),
+    );
+    write_current(&materializations, &community_facts_stale).await;
+    let google_nearby_places = materialization_in_partition(
+        "google_nearby_places_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::new([("source", "google")]),
+    );
+    write_current(&materializations, &google_nearby_places).await;
+    let google_nearby_facts = materialization_in_partition(
+        "google_nearby_place_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            google_nearby_places.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "google")]),
+    );
+    write_current(&materializations, &google_nearby_facts).await;
     let prestige_inventory = materialization_in_partition(
         "prestige_inventory_weekly",
         AssetStage::Raw,
@@ -447,6 +479,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),
             google_facts.materialization_id.clone(),
+            community_facts_stale.materialization_id.clone(),
+            google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
@@ -461,14 +495,36 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         .await
         .unwrap();
 
-    let kg_entry = plan_entry(&plan, "kg_society_view");
-    assert_eq!(kg_entry.decision, PlanDecision::Run);
+    let community_entry = plan_entry(&plan, "community_review_summary_facts");
+    assert_eq!(community_entry.decision, PlanDecision::Run);
     assert_eq!(
-        kg_entry.reason,
+        community_entry.reason,
         Some(PlanReason::DependencyChanged {
             asset_id: asset_id("reddit_resident_facts")
         })
     );
+    let kg_entry = plan_entry(&plan, "kg_society_view");
+    assert_eq!(kg_entry.decision, PlanDecision::Run);
+    assert_eq!(
+        kg_entry.reason,
+        Some(PlanReason::DependencyPending {
+            asset_id: asset_id("community_review_summary_facts")
+        })
+    );
+
+    let community_facts_fresh = materialization_in_partition(
+        "community_review_summary_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            google_facts.materialization_id.clone(),
+            reddit_facts_old.materialization_id.clone(),
+            reddit_facts_new.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "community")]),
+    );
+    write_current(&materializations, &community_facts_fresh).await;
 
     let fresh_kg = materialization_in_partition(
         "kg_society_view",
@@ -480,6 +536,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             reddit_facts_old.materialization_id.clone(),
             reddit_facts_new.materialization_id.clone(),
             google_facts.materialization_id.clone(),
+            community_facts_fresh.materialization_id.clone(),
+            google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),

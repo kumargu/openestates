@@ -35,12 +35,15 @@ pub async fn search_properties(
             query,
             intent: intent::SearchIntent {
                 area: None,
+                excluded_areas: Vec::new(),
                 bhk: None,
                 budget_max: None,
                 hard_constraints: Vec::new(),
                 preferences: Vec::new(),
                 positive_preferences: Vec::new(),
                 negative_preferences: Vec::new(),
+                accepted_tradeoffs: Vec::new(),
+                unsupported_inventory_types: Vec::new(),
                 buyer_archetype: None,
             },
             results: Vec::new(),
@@ -77,19 +80,32 @@ pub async fn search_properties(
         let graph = state.knowledge.read().await;
         let properties = state.properties.read().await;
         let search_index = state.search_index.read().await;
+        let semantic_index = state.semantic_index.read().await;
         let sellers = state.sellers.read().await;
         let serving_candidate_ids =
             serving_candidate_ids(serving_bundle.as_deref(), &query, &search_index);
-        TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+        let semantic_hits = semantic_index.search(&query, state.semantic_embedder.as_ref(), 128);
+        let semantic_scores = search_index.property_scores_for_semantic_hits(&semantic_hits);
+        let semantic_candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
+        let extra_candidate_ids =
+            merge_candidate_ids(serving_candidate_ids, semantic_candidate_ids);
+        let semantic_scores = (!semantic_scores.is_empty()).then_some(&semantic_scores);
+        let ranking_graph = if serving_facts.is_some() {
+            None
+        } else {
+            Some(&*graph)
+        };
+        TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
             &properties,
             Some(&*search_index),
-            serving_candidate_ids.as_deref(),
+            extra_candidate_ids.as_deref(),
+            semantic_scores,
             serving_facts,
             &society_names,
             &state.societies,
             &query,
             &parsed_intent,
-            Some(&graph),
+            ranking_graph,
             &sellers,
         )
     };
@@ -169,6 +185,16 @@ pub async fn search_properties(
         discovery_status: None,
         discovery_count: None,
     })
+}
+
+fn merge_candidate_ids(mut left: Option<Vec<String>>, right: Vec<String>) -> Option<Vec<String>> {
+    let ids = left.get_or_insert_with(Vec::new);
+    for id in right {
+        if !ids.iter().any(|existing| existing == &id) {
+            ids.push(id);
+        }
+    }
+    left.filter(|ids| !ids.is_empty())
 }
 
 fn serving_candidate_ids(
@@ -283,6 +309,18 @@ fn build_knowledge_context(
                 }
             }
         }
+    }
+
+    for inventory_type in &intent.unsupported_inventory_types {
+        learning_gaps.push(format!(
+            "Unsupported inventory request: {} inventory is not in the current apartment corpus",
+            inventory_type
+        ));
+        enrichment_gaps.push(EnrichmentGap {
+            entity_id: format!("inventory:{}", inventory_type.replace(' ', "-")),
+            missing_fact: "inventory_type".to_string(),
+            reason: format!("User asked for unsupported inventory type: {inventory_type}"),
+        });
     }
 
     let context = KnowledgeContext {
@@ -538,6 +576,37 @@ pub fn graph_preference_score_for_keys(
         return Some((score, detail));
     }
 
+    if let Some(schema) = schema::numeric_evidence_schema(preference) {
+        for fact in &node.facts {
+            let key_matches = schema
+                .fact_keys
+                .iter()
+                .any(|key| key.eq_ignore_ascii_case(&fact.key))
+                || candidate_fact_keys
+                    .iter()
+                    .any(|key| key.eq_ignore_ascii_case(&fact.key));
+            if !key_matches {
+                continue;
+            }
+            let Some(score) = score_fact_with_numeric_schema(&fact.value, schema) else {
+                continue;
+            };
+            if score <= 0.0 {
+                continue;
+            }
+            let value = render_template("{value}", &fact.value);
+            return Some((
+                score,
+                GraphFactDetail {
+                    fact_key: fact.key.clone(),
+                    display: format!("{}: {}", schema.display_label, value),
+                    confidence: fact.confidence,
+                    source_type: format!("{:?}", fact.source.source_type),
+                },
+            ));
+        }
+    }
+
     // --- Cross-node scoring: traverse BuiltBy edge to check builder facts ---
     if let Some(result) = check_builder_facts(graph, &node_id, &pref_lower, candidate_fact_keys) {
         return Some(result);
@@ -662,7 +731,7 @@ fn score_fact_with_hint(
             // proves relevance — score at full weight unless the value is explicitly
             // negative. This handles category values like "ready_to_move",
             // "under_construction" etc. that aren't sentiment words.
-            let text = fact_to_text(value).unwrap_or_default().to_lowercase();
+            let text = fact_to_search_text(value).to_lowercase();
             let negative = [
                 "poor",
                 "bad",
@@ -691,6 +760,48 @@ fn score_fact_with_hint(
     }
 }
 
+fn score_fact_with_numeric_schema(
+    value: &crate::knowledge::FactValue,
+    schema: &schema::NumericEvidenceSchema,
+) -> Option<f64> {
+    let num = fact_to_numeric(value)?;
+    if !num.is_finite() {
+        return None;
+    }
+    let weight = schema.score_delta.clamp(0.0, 2.0);
+    if schema.direction.eq_ignore_ascii_case("HigherIsBetter")
+        || schema.direction.eq_ignore_ascii_case("higher_is_better")
+    {
+        if schema.thresholds.len() >= 2 {
+            if num >= schema.thresholds[0] {
+                Some(weight)
+            } else if num >= schema.thresholds[1] {
+                Some(weight * 0.5)
+            } else {
+                None
+            }
+        } else {
+            Some(num.clamp(0.0, 1.0) * weight).filter(|score| *score > 0.0)
+        }
+    } else if schema.direction.eq_ignore_ascii_case("LowerIsBetter")
+        || schema.direction.eq_ignore_ascii_case("lower_is_better")
+    {
+        if schema.thresholds.len() >= 2 {
+            if num <= schema.thresholds[0] {
+                Some(weight)
+            } else if num <= schema.thresholds[1] {
+                Some(weight * 0.5)
+            } else {
+                None
+            }
+        } else {
+            Some((1.0 - num.clamp(0.0, 1.0)) * weight).filter(|score| *score > 0.0)
+        }
+    } else {
+        None
+    }
+}
+
 fn fact_to_numeric(value: &crate::knowledge::FactValue) -> Option<f64> {
     match value {
         crate::knowledge::FactValue::Numeric(n) => Some(*n),
@@ -699,10 +810,13 @@ fn fact_to_numeric(value: &crate::knowledge::FactValue) -> Option<f64> {
     }
 }
 
-fn fact_to_text(value: &crate::knowledge::FactValue) -> Option<&str> {
+fn fact_to_search_text(value: &crate::knowledge::FactValue) -> String {
     match value {
-        crate::knowledge::FactValue::Text(s) => Some(s.as_str()),
-        _ => None,
+        crate::knowledge::FactValue::Text(s) => s.clone(),
+        crate::knowledge::FactValue::Tags(tags) => tags.join(" "),
+        crate::knowledge::FactValue::Score { explanation, .. } => explanation.clone(),
+        crate::knowledge::FactValue::Bool(value) => value.to_string(),
+        crate::knowledge::FactValue::Numeric(value) => value.to_string(),
     }
 }
 
@@ -839,6 +953,21 @@ mod tests {
     }
 
     #[test]
+    fn test_textmatch_scores_non_empty_tags() {
+        let value = FactValue::Tags(vec!["Greenwood High (1.2 km, 4.3 rating)".to_string()]);
+        let hint = ScoringHint {
+            direction: ScoringDirection::TextMatch,
+            weight: 0.8,
+            thresholds: vec![],
+        };
+        let score = score_fact_with_hint(&value, &hint);
+        assert!(
+            (score - 0.8).abs() < 0.00001,
+            "non-empty tag evidence should score, got {score}"
+        );
+    }
+
+    #[test]
     fn test_negative_preference_gap_uses_structured_fact_key() {
         use crate::knowledge::node::{Node, NodeType};
 
@@ -891,6 +1020,7 @@ mod tests {
             answers_preferences: vec!["greenery".to_string()],
             scoring_direction: Some("TextMatch".to_string()),
             scoring_weight: Some(1.0),
+            scoring_thresholds: Vec::new(),
         };
         let fact = |value| ServingFactRecord {
             entity_id: "society:test-society".to_string(),
@@ -1054,6 +1184,37 @@ mod tests {
             &reddit_keys,
         )
         .is_none());
+    }
+
+    #[test]
+    fn numeric_schema_scores_premium_without_per_fact_hint() {
+        let mut graph = crate::knowledge::KnowledgeGraph::new();
+        let mut premium_fact = crate::knowledge::fact::SourcedFact::manual(
+            "price_per_sqft",
+            FactValue::Numeric(26_500.0),
+        );
+        premium_fact.confidence = 0.7;
+        premium_fact.source.source_type = crate::knowledge::fact::SourceType::Google;
+        premium_fact.source.url = Some("https://maps.google.com/?cid=test".to_string());
+        premium_fact.display_template = Some("{value}/sqft".to_string());
+        premium_fact.answers_preferences = Vec::new();
+        premium_fact.scoring_hint = None;
+        make_test_node(
+            &mut graph,
+            "k-raheja-vivarea",
+            "K Raheja Vivarea",
+            premium_fact,
+        );
+
+        let premium_keys = vec!["price_per_sqft".to_string()];
+        let (score, detail) =
+            graph_preference_score_for_keys(&graph, "k-raheja-vivarea", "premium", &premium_keys)
+                .expect("registry numeric evidence should score premium price signals");
+
+        assert_eq!(score, 2.0);
+        assert_eq!(detail.fact_key, "price_per_sqft");
+        assert_eq!(detail.display, "Premium price signal: 26500");
+        assert_eq!(detail.source_type, "Google");
     }
 
     #[test]
@@ -1337,12 +1498,15 @@ mod tests {
 
         let intent = crate::search::SearchIntent {
             area: Some("TestArea".into()),
+            excluded_areas: Vec::new(),
             bhk: Some(3),
             budget_max: None,
             hard_constraints: Vec::new(),
             preferences: vec!["metro access".into(), "quiet neighborhood".into()],
             positive_preferences: Vec::new(),
             negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
             buyer_archetype: None,
         };
 

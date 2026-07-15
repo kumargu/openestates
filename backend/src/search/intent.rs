@@ -6,6 +6,9 @@ use super::schema;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchIntent {
     pub area: Option<String>,
+    /// Areas explicitly rejected by the buyer, e.g. "not Electronic City".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_areas: Vec<String>,
     pub bhk: Option<u32>,
     pub budget_max: Option<u64>,
     /// Evidence-backed constraints that must be proven by structured/local facts.
@@ -19,6 +22,12 @@ pub struct SearchIntent {
     /// Preferences the buyer explicitly wants to avoid.
     #[serde(default)]
     pub negative_preferences: Vec<PreferenceSignal>,
+    /// Risks the buyer says they can accept as a tradeoff, e.g. "bad traffic but great amenities".
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub accepted_tradeoffs: Vec<String>,
+    /// Inventory classes requested but not currently supported by the apartment corpus.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unsupported_inventory_types: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub buyer_archetype: Option<BuyerArchetype>,
 }
@@ -179,7 +188,7 @@ const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
     ),
     // Builder trust patterns
     (
-        &["reliable builder", "dependable builder"],
+        &["reliable builder", "dependable builder", "safe builder"],
         "reliable builder",
         &[
             "builder_quality_score",
@@ -350,33 +359,52 @@ const NEGATIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
 pub fn parse_intent(query: &str) -> SearchIntent {
     let q = query.to_lowercase();
 
-    let area = detect_area(&q);
+    let excluded_areas = detect_excluded_areas(&q);
+    let area = detect_area(&q, &excluded_areas);
     let bhk = detect_bhk(&q);
     let budget_max = detect_budget(&q);
     let hard_constraints = detect_hard_constraints(&q);
     let positive_preferences = detect_positive_preferences(&q);
-    let negative_preferences = detect_negative_preferences(&q);
+    let accepted_tradeoffs = detect_accepted_tradeoffs(&q);
+    let negative_preferences: Vec<PreferenceSignal> = detect_negative_preferences(&q)
+        .into_iter()
+        .filter(|pref| {
+            !accepted_tradeoffs
+                .iter()
+                .any(|accepted| accepted.eq_ignore_ascii_case(&pref.raw_text))
+        })
+        .collect();
+    let unsupported_inventory_types = detect_unsupported_inventory_types(&q);
     let buyer_archetype = detect_buyer_archetype(&q);
     let preferences = display_preferences(&positive_preferences, &negative_preferences);
 
     SearchIntent {
         area,
+        excluded_areas,
         bhk,
         budget_max,
         hard_constraints,
         preferences,
         positive_preferences,
         negative_preferences,
+        accepted_tradeoffs,
+        unsupported_inventory_types,
         buyer_archetype,
     }
 }
 
-fn detect_area(q: &str) -> Option<String> {
+fn detect_area(q: &str, excluded_areas: &[String]) -> Option<String> {
     // Check multi-word aliases first (longer matches take priority).
     let mut best: Option<(&str, usize)> = None;
     for (aliases, canonical) in AREA_ALIASES {
+        if excluded_areas
+            .iter()
+            .any(|excluded| excluded.eq_ignore_ascii_case(canonical))
+        {
+            continue;
+        }
         for alias in *aliases {
-            if q.contains(alias) {
+            if query_contains_pattern(q, alias) {
                 let len = alias.len();
                 if best.is_none() || len > best.unwrap().1 {
                     best = Some((canonical, len));
@@ -385,6 +413,31 @@ fn detect_area(q: &str) -> Option<String> {
         }
     }
     best.map(|(name, _)| name.to_string())
+}
+
+fn detect_excluded_areas(q: &str) -> Vec<String> {
+    let mut excluded = Vec::new();
+    for (aliases, canonical) in AREA_ALIASES {
+        if aliases.iter().any(|alias| area_alias_is_excluded(q, alias)) {
+            push_unique(&mut excluded, canonical);
+        }
+    }
+    excluded
+}
+
+fn area_alias_is_excluded(q: &str, alias: &str) -> bool {
+    let patterns = [
+        format!("not {}", alias),
+        format!("not in {}", alias),
+        format!("avoid {}", alias),
+        format!("exclude {}", alias),
+        format!("excluding {}", alias),
+        format!("except {}", alias),
+        format!("outside {}", alias),
+    ];
+    patterns
+        .iter()
+        .any(|pattern| query_contains_pattern(q, pattern))
 }
 
 fn detect_bhk(q: &str) -> Option<u32> {
@@ -539,7 +592,79 @@ fn detect_positive_preferences(q: &str) -> Vec<PreferenceSignal> {
 }
 
 fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
-    detect_preference_signals(q, NEGATIVE_PREFERENCE_PATTERNS, Polarity::Negative)
+    let mut prefs = detect_preference_signals(q, NEGATIVE_PREFERENCE_PATTERNS, Polarity::Negative);
+    for pattern in schema::negative_preference_patterns() {
+        if !pattern
+            .patterns
+            .iter()
+            .any(|term| query_contains_pattern(q, term))
+        {
+            continue;
+        }
+
+        if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
+            for key in &pattern.expanded_keys {
+                if !existing
+                    .expanded_keys
+                    .iter()
+                    .any(|existing| existing == key)
+                {
+                    existing.expanded_keys.push(key.clone());
+                }
+            }
+            existing.weight = existing.weight.max(pattern.weight);
+        } else {
+            prefs.push(schema::schema_preference_signal(
+                pattern,
+                Polarity::Negative,
+            ));
+        }
+    }
+    prefs
+}
+
+fn detect_accepted_tradeoffs(q: &str) -> Vec<String> {
+    let mut accepted = Vec::new();
+
+    if query_contains_any_phrase(
+        q,
+        &[
+            "can tolerate traffic",
+            "tolerate traffic",
+            "ok with traffic",
+            "okay with traffic",
+            "fine with traffic",
+            "accept traffic",
+            "traffic is fine",
+            "bad traffic but",
+        ],
+    ) {
+        push_unique(&mut accepted, "traffic");
+    }
+
+    accepted
+}
+
+fn detect_unsupported_inventory_types(q: &str) -> Vec<String> {
+    let mut inventory_types = Vec::new();
+    for (label, patterns) in [
+        ("plot", &["plot", "plots", "plotted development"][..]),
+        ("villa", &["villa", "villas", "villa style"][..]),
+        ("row house", &["row house", "row houses", "rowhouse"][..]),
+        (
+            "independent house",
+            &["independent house", "independent home"][..],
+        ),
+    ] {
+        if patterns
+            .iter()
+            .any(|pattern| query_contains_pattern(q, pattern))
+        {
+            push_unique(&mut inventory_types, label);
+        }
+    }
+
+    inventory_types
 }
 
 fn detect_preference_signals(
@@ -615,9 +740,19 @@ fn detect_buyer_archetype(q: &str) -> Option<BuyerArchetype> {
 }
 
 fn contains_any(q: &str, patterns: &[&str]) -> bool {
+    query_contains_any_phrase(q, patterns)
+}
+
+fn query_contains_any_phrase(q: &str, patterns: &[&str]) -> bool {
     patterns
         .iter()
         .any(|pattern| query_contains_pattern(q, pattern))
+}
+
+fn push_unique(values: &mut Vec<String>, value: &str) {
+    if !values.iter().any(|existing| existing == value) {
+        values.push(value.to_string());
+    }
 }
 
 fn query_contains_pattern(q: &str, pattern: &str) -> bool {
@@ -661,6 +796,61 @@ mod tests {
         let intent = parse_intent("3bhk in whitefield");
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    }
+
+    #[test]
+    fn test_area_alias_does_not_match_inside_words() {
+        let intent = parse_intent("avoid waterlogging and traffic but near tech parks 3bhk");
+
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.area, None);
+        assert!(intent
+            .preferences
+            .contains(&"avoid waterlogging risk".to_string()));
+        assert!(intent.preferences.contains(&"avoid traffic".to_string()));
+        assert!(intent
+            .preferences
+            .contains(&"social infrastructure".to_string()));
+        assert!(!intent.preferences.contains(&"greenery".to_string()));
+    }
+
+    #[test]
+    fn negated_area_is_excluded_not_selected() {
+        let intent = parse_intent("near tech parks but quiet not electronic city 3bhk");
+
+        assert_eq!(intent.area, None);
+        assert_eq!(intent.excluded_areas, vec!["Electronic City".to_string()]);
+        assert_eq!(intent.bhk, Some(3));
+        assert!(intent
+            .preferences
+            .contains(&"quiet neighborhood".to_string()));
+        assert!(intent
+            .preferences
+            .contains(&"social infrastructure".to_string()));
+    }
+
+    #[test]
+    fn accepted_traffic_tradeoff_is_not_avoid_traffic() {
+        let intent =
+            parse_intent("I can tolerate traffic if society amenities and clubhouse are excellent");
+
+        assert_eq!(intent.accepted_tradeoffs, vec!["traffic".to_string()]);
+        assert!(!intent.preferences.contains(&"avoid traffic".to_string()));
+        assert!(intent.preferences.contains(&"amenity quality".to_string()));
+    }
+
+    #[test]
+    fn unsupported_inventory_requests_are_explicit() {
+        let intent = parse_intent("plot or villa style calm layout near Bagalur metro");
+
+        assert_eq!(
+            intent.unsupported_inventory_types,
+            vec!["plot".to_string(), "villa".to_string()]
+        );
+        assert!(intent.preferences.contains(&"metro access".to_string()));
+        assert!(intent
+            .preferences
+            .contains(&"quiet neighborhood".to_string()));
     }
 
     #[test]
@@ -711,6 +901,18 @@ mod tests {
     fn test_plain_acres_without_min_operator_is_not_hard_constraint() {
         let intent = parse_intent("3bhk whitefield 10 acres");
         assert!(intent.hard_constraints.is_empty());
+    }
+
+    #[test]
+    fn test_avoid_waterlogging_and_traffic_extracts_both_risks() {
+        let intent = parse_intent("3bhk whitefield avoid waterlogging and traffic");
+        let risks: Vec<&str> = intent
+            .negative_preferences
+            .iter()
+            .map(|preference| preference.raw_text.as_str())
+            .collect();
+        assert!(risks.contains(&"waterlogging risk"), "{risks:?}");
+        assert!(risks.contains(&"traffic"), "{risks:?}");
     }
 
     // --- Day 62: Project status preference extraction tests ---
@@ -810,6 +1012,22 @@ mod tests {
             intent.preferences
         );
         assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    }
+
+    #[test]
+    fn test_safe_builder_maps_to_reliable_builder() {
+        let intent = parse_intent("safe builder no possession delay under 2 crore");
+        assert!(
+            intent.preferences.contains(&"reliable builder".to_string()),
+            "Expected 'reliable builder' from 'safe builder', got: {:?}",
+            intent.preferences
+        );
+        assert!(
+            intent.preferences.contains(&"on time delivery".to_string())
+                || intent.preferences.contains(&"avoid delay risk".to_string()),
+            "Expected a delay signal, got: {:?}",
+            intent.preferences
+        );
     }
 
     #[test]

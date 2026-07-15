@@ -1,4 +1,5 @@
 pub mod assets;
+pub mod community;
 pub mod data_loader;
 pub mod enrichment_queue;
 pub mod knowledge;

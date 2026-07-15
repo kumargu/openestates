@@ -174,6 +174,37 @@ async fn empty_skill_fact_batches_do_not_promote_current_pointer() {
 }
 
 #[tokio::test]
+async fn skipped_source_skill_fact_batches_materialize_zero_row_parquet() {
+    let root = tempdir().unwrap();
+    let lake = LakeStore::local(root.path()).unwrap();
+
+    let materialization = SkillFactMaterializer::new(lake.clone())
+        .materialize_skipped_for_run(
+            "reddit_resident_facts",
+            "reddit",
+            "2026-07-13",
+            "run-reddit-skipped",
+            Vec::new(),
+            vec![SourceWatermark {
+                source: "reddit_skipped".to_string(),
+                high_watermark: "2026-07-13T00:00:00Z".to_string(),
+            }],
+            backend::assets::MaterializationId::new(),
+            AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")]),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(materialization.manifest.fact_count, 0);
+    assert_eq!(materialization.record.row_count, 0);
+    let rows = read_skill_fact_artifact_rows(&lake, &[materialization.record])
+        .await
+        .unwrap();
+    assert!(rows.facts.is_empty());
+    assert!(rows.fact_annotations.is_empty());
+}
+
+#[tokio::test]
 async fn skill_fact_typed_parquet_round_trips_values_and_annotations() {
     let root = tempdir().unwrap();
     let lake = LakeStore::local(root.path()).unwrap();

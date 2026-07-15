@@ -3,13 +3,14 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, GooglePlacesWeeklyInput,
-    MetroStationsMonthlyInput, PlanReason, PrestigeInventoryWeeklyInput,
+    AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, GoogleNearbyPlacesWeeklyInput,
+    GooglePlacesWeeklyInput, MetroStationsMonthlyInput, PlanReason, PrestigeInventoryWeeklyInput,
     RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactRecord, SourceWatermark, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SkillFactRecord, SourceWatermark, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -28,6 +29,8 @@ pub struct AssetSourceInputs {
     pub reddit_resident_facts: Option<SkillFactsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_places_weekly: Option<GooglePlacesWeeklyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_nearby_places_weekly: Option<GoogleNearbyPlacesWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub prestige_inventory_weekly: Option<PrestigeInventoryWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -48,6 +51,7 @@ impl AssetSourceInputs {
             REDDIT_THREADS_DAILY_ASSET_ID,
             REDDIT_RESIDENT_FACTS_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
             METRO_STATIONS_MONTHLY_ASSET_ID,
         ]
@@ -63,6 +67,7 @@ impl AssetSourceInputs {
                 | REDDIT_THREADS_DAILY_ASSET_ID
                 | REDDIT_RESIDENT_FACTS_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
+                | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID
                 | METRO_STATIONS_MONTHLY_ASSET_ID
         )
@@ -102,6 +107,16 @@ impl AssetSourceInputs {
             &mut force_assets,
             google_facts_requested,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            false,
+        );
+        let google_nearby_facts_requested = plan
+            .run_entries()
+            .any(|entry| entry.asset_id.as_str() == GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID);
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            google_nearby_facts_requested,
+            GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             false,
         );
         add_derived_companion(
@@ -158,6 +173,16 @@ impl AssetSourceInputs {
             &mut force_assets,
             google_facts_requested,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
+            true,
+        );
+        let google_nearby_facts_requested = requested_assets
+            .iter()
+            .any(|asset_id| asset_id.as_str() == GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID);
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            google_nearby_facts_requested,
+            GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             true,
         );
         add_raw_companion(

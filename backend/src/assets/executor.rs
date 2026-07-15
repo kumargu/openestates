@@ -15,15 +15,17 @@ use crate::serving::{
 use super::{
     read_skill_fact_artifact_rows, sort_materialization_records, AssetDagPlan, AssetDagRunManifest,
     AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
-    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
-    GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
-    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
-    MaterializationId, MaterializationRecord, PartitionResolutionError, PlannerError,
-    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer,
-    RedditThreadSnapshotMaterializeError, RedditThreadSnapshotMaterializer,
-    RedditThreadsDailyInput, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, CommunitySummaryAssetError,
+    DependencyFanInPolicy, GooglePlaceAssetError, GooglePlaceSnapshotMaterializer,
+    KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
+    KgViewManifest, KgViewRecords, MaterializationId, MaterializationRecord,
+    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    ProjectEnrichmentMaterializer, RedditThreadSnapshotMaterializeError,
+    RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
+    ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
+    SkillFactsInput, SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
     MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
@@ -1074,6 +1076,18 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::GoogleReviewFacts,
         );
         executors.insert(
+            static_asset_id(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID),
+            BuiltInAssetExecutor::GoogleNearbyPlacesWeekly,
+        );
+        executors.insert(
+            static_asset_id(GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::GoogleNearbyPlaceFacts,
+        );
+        executors.insert(
+            static_asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::CommunityReviewSummaryFacts,
+        );
+        executors.insert(
             static_asset_id(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID),
             BuiltInAssetExecutor::PrestigeInventoryWeekly,
         );
@@ -1118,6 +1132,9 @@ enum BuiltInAssetExecutor {
     RedditResidentFacts,
     GooglePlacesWeekly,
     GoogleReviewFacts,
+    GoogleNearbyPlacesWeekly,
+    GoogleNearbyPlaceFacts,
+    CommunityReviewSummaryFacts,
     PrestigeInventoryWeekly,
     MarketProjectFacts,
     MetroStationsMonthly,
@@ -1320,6 +1337,100 @@ impl BuiltInAssetExecutor {
                     google_record,
                     canonical_record,
                     context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::GoogleNearbyPlacesWeekly => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .google_nearby_places_weekly
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::canonicalize_google_nearby_places_input(
+                    &context.dag.lake,
+                    input,
+                    canonical_record,
+                )
+                .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let materialization =
+                    GooglePlaceSnapshotMaterializer::new(context.dag.lake.clone())
+                        .materialize_nearby_for_run(
+                            &input,
+                            context.run_id.to_string(),
+                            parent_materializations,
+                            context.run_id.clone(),
+                            context.asset_partition.clone(),
+                        )
+                        .await?;
+                Ok(ExecutedAsset::Record(materialization.record))
+            }
+            Self::GoogleNearbyPlaceFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let nearby_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::google_nearby_place_facts_input_with_aliases(
+                    &context.dag.lake,
+                    nearby_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::CommunityReviewSummaryFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let snapshot_date = context.options.planned_at.format("%Y-%m-%d").to_string();
+                let input = super::community_review_summary_facts_input(
+                    &context.dag.lake,
+                    &parent_records,
+                    context.run_id,
+                    snapshot_date,
                 )
                 .await?;
                 let materialization = execute_skill_fact_asset(context, &input).await?;
@@ -1586,20 +1697,37 @@ async fn execute_skill_fact_asset(
             context.dependency_snapshot,
         )
         .await?;
-    let materialization = SkillFactMaterializer::new(context.dag.lake.clone())
-        .materialize_for_run(
-            context.asset_id.as_str(),
-            input.source.clone(),
-            input.snapshot_date.clone(),
-            context.run_id.to_string(),
-            &input.facts,
-            &input.fact_annotations,
-            parent_materializations,
-            skill_fact_watermarks(input),
-            context.run_id.clone(),
-            context.asset_partition.clone(),
-        )
-        .await?;
+    let materializer = SkillFactMaterializer::new(context.dag.lake.clone());
+    let watermarks = skill_fact_watermarks(input);
+    let materialization = if input.facts.is_empty() {
+        materializer
+            .materialize_skipped_for_run(
+                context.asset_id.as_str(),
+                input.source.clone(),
+                input.snapshot_date.clone(),
+                context.run_id.to_string(),
+                parent_materializations,
+                watermarks,
+                context.run_id.clone(),
+                context.asset_partition.clone(),
+            )
+            .await?
+    } else {
+        materializer
+            .materialize_for_run(
+                context.asset_id.as_str(),
+                input.source.clone(),
+                input.snapshot_date.clone(),
+                context.run_id.to_string(),
+                &input.facts,
+                &input.fact_annotations,
+                parent_materializations,
+                watermarks,
+                context.run_id.clone(),
+                context.asset_partition.clone(),
+            )
+            .await?
+    };
     Ok(materialization.record)
 }
 
@@ -1712,6 +1840,7 @@ pub enum AssetDagExecutorError {
     KgSocietyView(KgSocietyViewMaterializeError),
     RedditThreadSnapshot(RedditThreadSnapshotMaterializeError),
     GooglePlace(GooglePlaceAssetError),
+    CommunitySummary(CommunitySummaryAssetError),
     ProjectEnrichment(ProjectEnrichmentAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
@@ -1798,6 +1927,9 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "reddit thread source execution failed: {err}")
             }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
+            Self::CommunitySummary(err) => {
+                write!(f, "community summary execution failed: {err}")
+            }
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
             }
@@ -1922,6 +2054,9 @@ impl AssetDagExecutorError {
             Self::Lake(err) => err.is_retryable(),
             Self::RedditThreadSnapshot(RedditThreadSnapshotMaterializeError::Lake(err))
             | Self::GooglePlace(GooglePlaceAssetError::Lake(err))
+            | Self::CommunitySummary(CommunitySummaryAssetError::SkillFacts(
+                SkillFactMaterializeError::Lake(err),
+            ))
             | Self::ProjectEnrichment(ProjectEnrichmentAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
@@ -1974,6 +2109,12 @@ impl From<RedditThreadSnapshotMaterializeError> for AssetDagExecutorError {
 impl From<GooglePlaceAssetError> for AssetDagExecutorError {
     fn from(err: GooglePlaceAssetError) -> Self {
         Self::GooglePlace(err)
+    }
+}
+
+impl From<CommunitySummaryAssetError> for AssetDagExecutorError {
+    fn from(err: CommunitySummaryAssetError) -> Self {
+        Self::CommunitySummary(err)
     }
 }
 
@@ -2093,6 +2234,9 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
         && source_inputs.google_places_weekly.is_none()
+        && source_inputs.google_nearby_places_weekly.is_none()
+        && source_inputs.prestige_inventory_weekly.is_none()
+        && source_inputs.metro_stations_monthly.is_none()
 }
 
 #[cfg(test)]

@@ -24,7 +24,11 @@ pub struct SearchSchemaConfig {
     #[serde(default)]
     pub positive_preference_patterns: Vec<PreferencePatternSpec>,
     #[serde(default)]
+    pub negative_preference_patterns: Vec<PreferencePatternSpec>,
+    #[serde(default)]
     pub text_evidence: Vec<TextEvidenceSchema>,
+    #[serde(default)]
+    pub numeric_evidence: Vec<NumericEvidenceSchema>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,6 +84,18 @@ pub struct TextEvidenceSchema {
     pub score_delta: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NumericEvidenceSchema {
+    pub dimension: String,
+    pub label: String,
+    pub aliases: Vec<String>,
+    pub fact_keys: Vec<String>,
+    pub direction: String,
+    pub thresholds: Vec<f64>,
+    pub display_label: String,
+    pub score_delta: f64,
+}
+
 pub fn registry() -> &'static SearchSchemaConfig {
     static REGISTRY: OnceLock<SearchSchemaConfig> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -92,11 +108,18 @@ pub fn registry() -> &'static SearchSchemaConfig {
             .positive_preference_patterns
             .sort_by(|left, right| left.rank.cmp(&right.rank));
         config
+            .negative_preference_patterns
+            .sort_by(|left, right| left.rank.cmp(&right.rank));
+        config
     })
 }
 
 pub fn positive_preference_patterns() -> &'static [PreferencePatternSpec] {
     &registry().positive_preference_patterns
+}
+
+pub fn negative_preference_patterns() -> &'static [PreferencePatternSpec] {
+    &registry().negative_preference_patterns
 }
 
 pub fn numeric_constraint_schema(dimension: &str) -> Option<&'static NumericConstraintSchema> {
@@ -108,14 +131,73 @@ pub fn numeric_constraint_schema(dimension: &str) -> Option<&'static NumericCons
 
 pub fn text_evidence_schema(preference: &str) -> Option<&'static TextEvidenceSchema> {
     let normalized = preference.to_lowercase();
-    registry().text_evidence.iter().find(|schema| {
-        schema.label.eq_ignore_ascii_case(&normalized)
-            || schema.dimension.eq_ignore_ascii_case(&normalized)
-            || schema.aliases.iter().any(|alias| {
-                let alias = alias.to_lowercase();
-                alias == normalized || alias.contains(&normalized) || normalized.contains(&alias)
+    registry()
+        .text_evidence
+        .iter()
+        .find(|schema| {
+            schema.label.eq_ignore_ascii_case(&normalized)
+                || schema.dimension.eq_ignore_ascii_case(&normalized)
+        })
+        .or_else(|| {
+            registry().text_evidence.iter().find(|schema| {
+                schema
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(&normalized))
             })
-    })
+        })
+        .or_else(|| {
+            registry().text_evidence.iter().find(|schema| {
+                schema.aliases.iter().any(|alias| {
+                    let alias = alias.to_lowercase();
+                    alias.contains(&normalized) || normalized.contains(&alias)
+                })
+            })
+        })
+}
+
+pub fn numeric_evidence_schema(preference: &str) -> Option<&'static NumericEvidenceSchema> {
+    let normalized = preference.to_lowercase();
+    registry()
+        .numeric_evidence
+        .iter()
+        .find(|schema| {
+            schema.label.eq_ignore_ascii_case(&normalized)
+                || schema.dimension.eq_ignore_ascii_case(&normalized)
+        })
+        .or_else(|| {
+            registry().numeric_evidence.iter().find(|schema| {
+                schema
+                    .aliases
+                    .iter()
+                    .any(|alias| alias.eq_ignore_ascii_case(&normalized))
+            })
+        })
+        .or_else(|| {
+            registry().numeric_evidence.iter().find(|schema| {
+                schema.aliases.iter().any(|alias| {
+                    let alias = alias.to_lowercase();
+                    alias.contains(&normalized) || normalized.contains(&alias)
+                })
+            })
+        })
+}
+
+pub fn source_priority_for_preference(preference: &str) -> Vec<String> {
+    let normalized = preference.to_lowercase();
+    registry()
+        .theme_layers
+        .iter()
+        .find(|layer| {
+            layer.label.eq_ignore_ascii_case(&normalized)
+                || layer.dimension.eq_ignore_ascii_case(&normalized)
+                || layer.intent_terms.iter().any(|term| {
+                    let term = term.to_lowercase();
+                    term == normalized || term.contains(&normalized) || normalized.contains(&term)
+                })
+        })
+        .map(|layer| layer.source_priority.clone())
+        .unwrap_or_default()
 }
 
 pub fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
@@ -355,5 +437,17 @@ mod tests {
         assert!(labels.contains(&"amenity quality"));
         assert!(labels.contains(&"greenery"));
         assert!(labels.contains(&"metro access"));
+    }
+
+    #[test]
+    fn loads_negative_risk_preferences_from_registry() {
+        let labels: Vec<&str> = negative_preference_patterns()
+            .iter()
+            .map(|pattern| pattern.label.as_str())
+            .collect();
+        assert!(labels.contains(&"waterlogging risk"));
+        assert!(labels.contains(&"traffic"));
+        assert!(numeric_evidence_schema("waterlogging risk").is_some());
+        assert!(text_evidence_schema("traffic").is_some());
     }
 }

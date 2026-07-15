@@ -207,6 +207,7 @@ fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema 
                     required_column("answers_preferences", "list<utf8>"),
                     optional_column("scoring_direction", "utf8"),
                     optional_column("scoring_weight", "float32"),
+                    required_column("scoring_thresholds", "list<float64>"),
                 ],
             },
         ],
@@ -358,6 +359,7 @@ fn serving_search_metadata_records(
                 answers_preferences: serde_json::from_str(&annotation.answers_preferences_json)?,
                 scoring_direction: annotation.scoring_direction.clone(),
                 scoring_weight: annotation.scoring_weight,
+                scoring_thresholds: serde_json::from_str(&annotation.scoring_thresholds_json)?,
             })
         })
         .collect()

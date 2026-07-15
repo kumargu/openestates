@@ -42,6 +42,8 @@ pub struct ServingSearchMetadataRecord {
     pub answers_preferences: Vec<String>,
     pub scoring_direction: Option<String>,
     pub scoring_weight: Option<f32>,
+    #[serde(default)]
+    pub scoring_thresholds: Vec<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

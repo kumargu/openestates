@@ -797,7 +797,7 @@ fn extract_area_from_text(text: &str, areas: &[AreaProfile]) -> Option<(String, 
     let mut best: Option<(&str, usize)> = None;
     for (aliases, canonical) in AREA_ALIASES {
         for alias in *aliases {
-            if text_lower.contains(alias) {
+            if text_contains_phrase(&text_lower, alias) {
                 let len = alias.len();
                 if best.is_none() || len > best.unwrap().1 {
                     best = Some((canonical, len));
@@ -824,6 +824,38 @@ fn extract_area_from_text(text: &str, areas: &[AreaProfile]) -> Option<(String, 
     }
 
     None
+}
+
+fn text_contains_phrase(text: &str, phrase: &str) -> bool {
+    let phrase = phrase.trim();
+    if phrase.is_empty() {
+        return false;
+    }
+
+    let mut search_start = 0;
+    while let Some(relative_pos) = text[search_start..].find(phrase) {
+        let start = search_start + relative_pos;
+        let end = start + phrase.len();
+        let before_ok = text[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
+        let after_ok = text[end..]
+            .chars()
+            .next()
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
+
+        if before_ok && after_ok {
+            return true;
+        }
+
+        search_start = end;
+        if search_start >= text.len() {
+            return false;
+        }
+    }
+
+    false
 }
 
 // --- Publish endpoint ---
@@ -1501,5 +1533,13 @@ mod tests {
         assert!(result.is_some());
         let (area_name, _) = result.unwrap();
         assert_eq!(area_name, "Whitefield");
+    }
+
+    #[test]
+    fn test_extract_area_alias_does_not_match_inside_words() {
+        // "ec" is an Electronic City alias and must not match the middle of "tech".
+        let areas = vec![test_area("area-electronic-city", "Electronic City")];
+        let result = extract_area_from_text("Office near tech parks", &areas);
+        assert!(result.is_none());
     }
 }

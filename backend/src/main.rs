@@ -44,6 +44,14 @@ async fn main() {
             "/api/properties/{id}",
             get(routes::properties::get_property),
         )
+        .route(
+            "/api/properties/{id}/evidence",
+            get(routes::properties::get_property_evidence),
+        )
+        .route(
+            "/api/properties/evidence/batch",
+            post(routes::properties::get_property_evidence_batch),
+        )
         .route("/api/areas", get(routes::areas::list_areas))
         .route("/api/areas/{id}", get(routes::areas::get_area))
         .route("/api/shortlist", get(routes::shortlist::get_shortlist))
@@ -129,6 +137,18 @@ async fn main() {
             "/api/admin/reload-knowledge",
             post(routes::admin::reload_knowledge),
         )
+        .route(
+            "/api/admin/serving-bundle/reload",
+            post(routes::admin::reload_serving_bundle),
+        )
+        .route(
+            "/api/admin/asset-runs/current",
+            get(routes::admin::current_asset_run),
+        )
+        .route(
+            "/api/admin/asset-runs",
+            post(routes::admin::trigger_asset_run),
+        )
         // Embedding / similarity endpoints
         .route(
             "/api/knowledge/nodes/{id}/similar",
@@ -144,7 +164,8 @@ async fn main() {
     println!("OpenEstates API listening on http://{bind_address}");
     println!("Routes:");
     println!("  GET /api/health");
-    println!("  GET /api/properties | /api/properties/{{id}}");
+    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence");
+    println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/{{id}}");
     println!("  GET /api/search?q=...");
     println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
@@ -166,6 +187,9 @@ async fn main() {
     println!("  POST /api/claims");
     println!("  GET  /api/sitemap.xml");
     println!("  POST /api/admin/reload-knowledge");
+    println!("  POST /api/admin/serving-bundle/reload");
+    println!("  GET  /api/admin/asset-runs/current");
+    println!("  POST /api/admin/asset-runs");
 
     let listener = tokio::net::TcpListener::bind(&bind_address)
         .await

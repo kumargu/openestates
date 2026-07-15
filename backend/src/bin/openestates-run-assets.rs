@@ -9,7 +9,9 @@ use backend::assets::{
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
     SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
@@ -180,9 +182,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) {
     let rera = AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA asset ID");
-    collection_plan
-        .requested_assets
-        .extend(AssetSourceInputs::supported_asset_ids());
+    collection_plan.requested_assets.extend([
+        AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA asset ID"),
+        AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).expect("valid static Google asset ID"),
+        AssetId::new(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID)
+            .expect("valid static Google nearby asset ID"),
+        AssetId::new(METRO_STATIONS_MONTHLY_ASSET_ID).expect("valid static metro asset ID"),
+        AssetId::new(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID).expect("valid static Prestige asset ID"),
+        AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID).expect("valid static Reddit thread asset ID"),
+        AssetId::new(REDDIT_RESIDENT_FACTS_ASSET_ID).expect("valid static Reddit fact asset ID"),
+    ]);
     collection_plan.force_assets.push(rera);
     collection_plan
         .requested_assets
@@ -554,6 +563,7 @@ mod tests {
         assert_eq!(
             plan.requested_assets,
             vec![
+                AssetId::new("google_nearby_places_weekly").unwrap(),
                 AssetId::new("google_places_weekly").unwrap(),
                 AssetId::new("metro_stations_monthly").unwrap(),
                 AssetId::new("prestige_inventory_weekly").unwrap(),

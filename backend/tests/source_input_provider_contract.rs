@@ -788,6 +788,7 @@ fn google_record(
         reviews_url: format!("https://www.google.com/maps/search/?query_place_id={place_id}"),
         rating: Some(4.3),
         review_count: Some(100),
+        review_snippets: Vec::new(),
         address: None,
         confidence: 0.8,
         fetched_at,

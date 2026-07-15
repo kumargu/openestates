@@ -573,6 +573,54 @@ pub fn default_openestates_registry() -> AssetRegistry {
             &[("source", "google")],
         )),
         asset(
+            "google_nearby_places_weekly",
+            AssetStage::Raw,
+            "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, eateries, and offices.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Weekly,
+            CostTier::Cheap,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "google")],
+        )),
+        asset(
+            "google_nearby_place_facts",
+            AssetStage::Silver,
+            "Nearby place support facts grouped by society and place category.",
+            &["google_nearby_places_weekly", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "google")],
+        )),
+        asset(
+            "community_review_summary_facts",
+            AssetStage::Silver,
+            "Source-neutral community review summaries and dynamic themes from Google and Reddit evidence.",
+            &["google_review_facts", "reddit_resident_facts"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "community")],
+        ))
+        .with_dependency_fan_in_policy(
+            "google_review_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
+            "reddit_resident_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_optional_dependency("reddit_resident_facts"),
+        asset(
             "prestige_inventory_weekly",
             AssetStage::Raw,
             "Weekly source-native project inventory observations from Prestige.",
@@ -642,6 +690,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "rera_legal_facts",
                 "reddit_resident_facts",
                 "google_review_facts",
+                "community_review_summary_facts",
+                "google_nearby_place_facts",
                 "market_project_facts",
                 "metro_proximity_facts",
                 "builder_rera_aggregates",
@@ -659,6 +709,14 @@ pub fn default_openestates_registry() -> AssetRegistry {
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy(
+            "community_review_summary_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
+            "google_nearby_place_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
             "market_project_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
@@ -668,6 +726,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         )
         .with_optional_dependency("reddit_resident_facts")
         .with_optional_dependency("google_review_facts")
+        .with_optional_dependency("community_review_summary_facts")
+        .with_optional_dependency("google_nearby_place_facts")
         .with_optional_dependency("market_project_facts")
         .with_optional_dependency("metro_proximity_facts"),
         asset(
@@ -767,6 +827,15 @@ mod tests {
         assert_eq!(
             registry
                 .partition_for(
+                    &AssetId::new("community_review_summary_facts").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::new([("source", "community")])
+        );
+        assert_eq!(
+            registry
+                .partition_for(
                     &AssetId::new("search_serving_bundle").unwrap(),
                     &run_partition
                 )
@@ -788,6 +857,10 @@ mod tests {
         );
         assert_eq!(
             kg.dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
+            DependencyFanInPolicy::AllCurrentPartitions
+        );
+        assert_eq!(
+            kg.dependency_fan_in_policy(&AssetId::new("community_review_summary_facts").unwrap()),
             DependencyFanInPolicy::AllCurrentPartitions
         );
         assert_eq!(

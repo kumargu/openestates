@@ -329,6 +329,7 @@ fn source_inputs(
                 reviews_url: "https://maps.example/raintree/reviews".to_string(),
                 rating: None,
                 review_count: None,
+                review_snippets: Vec::new(),
                 address: Some("Whitefield".to_string()),
                 confidence: 0.7,
                 fetched_at: observed_at,

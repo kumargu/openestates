@@ -10,14 +10,16 @@ use backend::assets::{
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
     AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
     AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
-    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
+    GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord,
+    GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
     MetroStationObservationRecord, MetroStationsMonthlyInput, PrestigeInventoryObservationRecord,
     PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
     RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
     SourceWatermark, TrustTier, BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
+    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
@@ -30,7 +32,7 @@ use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::models::{Property, Society};
 use backend::routes::search::{search_properties, SearchQuery};
-use backend::search::SearchIndex;
+use backend::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use backend::serving::{
     ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
@@ -61,16 +63,19 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 7);
-    assert_eq!(report.manifest.succeeded_count, 7);
+    assert_eq!(report.manifest.planned_count, 10);
+    assert_eq!(report.manifest.succeeded_count, 10);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 7);
+    assert_eq!(report.executed_assets.len(), 10);
     for id in [
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+        backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
+        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -85,13 +90,33 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 7);
+    assert_eq!(kg_record.parent_materializations.len(), 9);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
+    let nearby_facts_record = store
+        .current_record(
+            &asset_id(backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID),
+            &google_fact_partition(),
+        )
+        .await
+        .unwrap();
+    assert!(kg_record
+        .parent_materializations
+        .contains(&nearby_facts_record.materialization_id));
+    let community_facts_record = store
+        .current_record(
+            &asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
+            &AssetPartition::new([("source", "community")]),
+        )
+        .await
+        .unwrap();
+    assert!(kg_record
+        .parent_materializations
+        .contains(&community_facts_record.materialization_id));
 
     let serving_record = store
         .current_record(
@@ -175,8 +200,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 11);
-    assert_eq!(report.executed_assets.len(), 11);
+    assert_eq!(report.manifest.planned_count, 14);
+    assert_eq!(report.executed_assets.len(), 14);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -187,6 +212,9 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         REDDIT_RESIDENT_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
+        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+        backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -202,7 +230,16 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert!(
         executed_position(&report.executed_assets, GOOGLE_REVIEW_FACTS_ASSET_ID)
-            < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
+            < executed_position(
+                &report.executed_assets,
+                COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID
+            )
+    );
+    assert!(
+        executed_position(
+            &report.executed_assets,
+            COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID
+        ) < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
     );
     assert!(
         executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
@@ -296,16 +333,34 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&google_facts.materialization_id));
+    let community_facts = current_record(
+        &store,
+        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+        &AssetPartition::new([("source", "community")]),
+    )
+    .await;
+    assert!(kg_record
+        .parent_materializations
+        .contains(&community_facts.materialization_id));
+    let nearby_facts = current_record(
+        &store,
+        backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+        &google_fact_partition(),
+    )
+    .await;
+    assert!(kg_record
+        .parent_materializations
+        .contains(&nearby_facts.materialization_id));
     assert!(!kg_record
         .parent_materializations
         .contains(&older_google_facts.materialization_id));
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 8);
+    assert_eq!(kg_record.parent_materializations.len(), 10);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        61
+        74
     );
 
     let serving_record = current_record(
@@ -314,7 +369,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 61);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 74);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -360,8 +415,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 14);
-    assert_eq!(report.executed_assets.len(), 14);
+    assert_eq!(report.manifest.planned_count, 17);
+    assert_eq!(report.executed_assets.len(), 17);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -375,6 +430,9 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         REDDIT_RESIDENT_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
+        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+        backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -489,9 +547,14 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         search_society("unproven-whitefield", "Unproven Whitefield"),
     ];
     let search_index = SearchIndex::build(&properties);
+    let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
+    let semantic_index =
+        SemanticSearchIndex::from_serving_entities(&loaded.entities, semantic_embedder.as_ref());
     let state = Arc::new(AppState {
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
+        semantic_index: RwLock::new(semantic_index),
+        semantic_embedder,
         serving_bundle: RwLock::new(Some(Arc::new(loaded))),
         areas: Vec::new(),
         societies,
@@ -1053,6 +1116,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
         report.executed_assets,
         vec![
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
+            asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
@@ -1636,10 +1700,32 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 reviews_url: "https://maps.google.com/?cid=green-acre".to_string(),
                 rating: Some(4.4),
                 review_count: Some(321),
+                review_snippets: Vec::new(),
                 address: Some("Whitefield, Bengaluru".to_string()),
                 confidence: 0.82,
                 fetched_at: now + Duration::minutes(2),
                 fetch_source: "mock_google_places".to_string(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        google_nearby_places_weekly: Some(GoogleNearbyPlacesWeeklyInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![GoogleNearbyPlaceRecord {
+                entity_id: String::new(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                query: "schools near green acre whitefield".to_string(),
+                category: "school".to_string(),
+                place_name: "Greenwood High".to_string(),
+                place_id: Some("greenwood-high".to_string()),
+                place_url: "https://maps.google.com/?cid=greenwood-high".to_string(),
+                distance_km: Some(1.2),
+                rating: Some(4.3),
+                review_count: Some(420),
+                primary_type: Some("school".to_string()),
+                place_types: vec!["school".to_string()],
+                confidence: 0.82,
+                fetched_at: now + Duration::minutes(2),
+                fetch_source: "mock_google_nearby".to_string(),
             }],
             source_watermarks: Vec::new(),
         }),

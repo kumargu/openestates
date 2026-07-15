@@ -751,7 +751,10 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         detail.complaints_count = len(set(complaint_nos))
 
         resolved = len(re.findall(r'DISPOSED', comp_section, re.IGNORECASE))
-        detail.complaints_resolved = resolved
+        if detail.complaints_count > 0:
+            detail.complaints_resolved = min(resolved, detail.complaints_count)
+        else:
+            detail.complaints_resolved = 0
 
     return detail
 
@@ -1071,6 +1074,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
 
     if detail.complaints_count > 0 and detail.complaints_resolved > 0:
         pct = round(detail.complaints_resolved / detail.complaints_count * 100, 1)
+        pct = max(0.0, min(100.0, pct))
         add_fact(
             "rera_complaints_resolved_pct",
             {"type": "Numeric", "data": pct},
@@ -1135,7 +1139,7 @@ class FetchReraSkill(BaseSkill):
 
     skill_id = "fetch_rera"
     description = "Scrape Karnataka RERA portal for real project registration data"
-    version = "2.0"  # v2 = real scraping; v1 was a guessed verifier.
+    version = "2.1"  # v2.1 caps repeated complaint status markers at 100%.
     output_keys = [
         "rera_registered", "rera_number", "rera_ack_number", "rera_status",
         "rera_promoter_name", "rera_approved_on", "rera_completion_date",

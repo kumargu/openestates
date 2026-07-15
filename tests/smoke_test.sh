@@ -58,6 +58,45 @@ check() {
   printf "  %s %s\n" "$(green "✓")" "$name"
 }
 
+check_post() {
+  local name="$1"
+  local url="$2"
+  local body_json="$3"
+  local jq_expr="$4"
+  local desc="$5"
+
+  local http_code body
+  http_code=$(curl -s -X POST -H "Content-Type: application/json" -d "$body_json" -o /tmp/oe_test_body.json -w "%{http_code}" "$url" 2>/dev/null) || {
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — connection refused (is backend running on port $PORT?)\n"
+    printf "  %s %s — connection refused\n" "$(red "✗")" "$name"
+    return
+  }
+
+  body=$(cat /tmp/oe_test_body.json)
+
+  if [[ "$http_code" != "200" ]]; then
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — HTTP $http_code (expected 200)\n"
+    printf "  %s %s — HTTP %s\n" "$(red "✗")" "$name" "$http_code"
+    return
+  fi
+
+  if [[ -n "$jq_expr" ]]; then
+    local result
+    result=$(echo "$body" | jq -r "$jq_expr" 2>/dev/null) || result="jq_error"
+    if [[ "$result" == "false" || "$result" == "null" || "$result" == "jq_error" || -z "$result" ]]; then
+      FAIL=$((FAIL + 1))
+      ERRORS+="  FAIL: $name — assertion failed: $desc\n"
+      printf "  %s %s — %s\n" "$(red "✗")" "$name" "$desc"
+      return
+    fi
+  fi
+
+  PASS=$((PASS + 1))
+  printf "  %s %s\n" "$(green "✓")" "$name"
+}
+
 echo ""
 bold "OpenEstates Smoke Tests"
 echo " (${BASE})"
@@ -130,6 +169,27 @@ if [[ -n "$FIRST_ID" ]]; then
     "${BASE}/api/properties/${FIRST_ID}" \
     '.themes.value.label | IN("strong", "good", "mixed", "weak")' \
     "expected label in strong/good/mixed/weak"
+
+  check "Property evidence returns dynamic sections" \
+    "${BASE}/api/properties/${FIRST_ID}/evidence" \
+    '.property_id != null and (.entity_refs | has("property_entity_id", "society_entity_id", "area_entity_id")) and (.sections | type == "array" and length > 0)' \
+    "expected property_id, entity_refs, and non-empty sections"
+
+  check "Property detail includes canonical evidence read model" \
+    "${BASE}/api/properties/${FIRST_ID}" \
+    '.evidence.property_id == .property.id and (.evidence.sections | type == "array" and length > 0)' \
+    "expected property detail to expose evidence.sections for one-call UI rendering"
+
+  check "Property evidence sections have render fields" \
+    "${BASE}/api/properties/${FIRST_ID}/evidence" \
+    '.sections | all(has("kind", "title", "summary", "priority", "confidence_pct", "source_types", "entity_ids", "items", "missing"))' \
+    "expected each evidence section to be UI-renderable"
+
+  check_post "Property evidence batch returns matching result" \
+    "${BASE}/api/properties/evidence/batch" \
+    "{\"property_ids\":[\"${FIRST_ID}\"],\"limit\":1}" \
+    '(.results | length == 1) and (.results[0].sections | type == "array") and (.missing_property_ids | length == 0)' \
+    "expected one evidence result and no missing ids"
 else
   echo "  $(red "✗") Skipping detail tests — no property ID available"
   FAIL=$((FAIL + 1))

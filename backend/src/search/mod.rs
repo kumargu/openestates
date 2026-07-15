@@ -1,10 +1,12 @@
 pub mod index;
 pub mod intent;
 pub mod schema;
+pub mod semantic;
 pub mod text;
 
 pub use index::SearchIndex;
 pub use intent::SearchIntent;
+pub use semantic::{HashSemanticEmbedder, SemanticEmbedder, SemanticSearchIndex};
 pub use text::TextSearch;
 
 use serde::Serialize;

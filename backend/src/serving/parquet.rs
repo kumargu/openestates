@@ -13,9 +13,10 @@ use parquet::file::properties::WriterProperties;
 
 use crate::knowledge::FactValue;
 use crate::parquet_data::{
+    float64_list_array, float64_list_field, optional_f64_list_column_value,
     optional_string_list_column_value, string_list_array, string_list_field, typed_value_arrays,
     typed_value_fields, typed_value_from_batch, OptionalListColumn, TypedFactValue,
-    ANSWERS_PREFERENCES_COLUMN,
+    ANSWERS_PREFERENCES_COLUMN, SCORING_THRESHOLDS_COLUMN,
 };
 
 use super::{ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord};
@@ -49,6 +50,29 @@ pub fn write_entities_parquet(
     .map_err(ParquetWriteError::Arrow)?;
 
     write_batch(batch)
+}
+
+pub fn read_entities_parquet(bytes: &[u8]) -> Result<Vec<ServingEntityRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let entity_id = string_column(&batch, "entity_id")?;
+        let entity_type = string_column(&batch, "entity_type")?;
+        let name = string_column(&batch, "name")?;
+        let root_source = string_column(&batch, "root_source")?;
+        let searchable_text = string_column(&batch, "searchable_text")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(ServingEntityRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                entity_type: required_string(entity_type, row, "entity_type")?,
+                name: required_string(name, row, "name")?,
+                root_source: optional_string(root_source, row),
+                searchable_text: required_string(searchable_text, row, "searchable_text")?,
+            });
+        }
+    }
+    Ok(records)
 }
 
 pub fn write_facts_parquet(facts: &[ServingFactRecord]) -> Result<Vec<u8>, ParquetWriteError> {
@@ -108,6 +132,7 @@ pub fn write_search_metadata_parquet(
         string_list_field(ANSWERS_PREFERENCES_COLUMN, false),
         Field::new("scoring_direction", DataType::Utf8, true),
         Field::new("scoring_weight", DataType::Float32, true),
+        float64_list_field(SCORING_THRESHOLDS_COLUMN, false),
     ]));
 
     let batch = RecordBatch::try_new(
@@ -138,6 +163,11 @@ pub fn write_search_metadata_parquet(
                     .map(|record| record.scoring_weight)
                     .collect::<Vec<_>>(),
             )),
+            float64_list_array(
+                records
+                    .iter()
+                    .map(|record| Some(record.scoring_thresholds.clone())),
+            ),
         ],
     )
     .map_err(ParquetWriteError::Arrow)?;
@@ -207,6 +237,13 @@ pub fn read_search_metadata_parquet(
         let scoring_weight = float32_column(&batch, "scoring_weight")?;
 
         for row in 0..batch.num_rows() {
+            let scoring_thresholds =
+                match optional_f64_list_column_value(&batch, SCORING_THRESHOLDS_COLUMN, row)
+                    .map_err(|message| ParquetReadError::InvalidTypedValue { row, message })?
+                {
+                    OptionalListColumn::Values(values) => values,
+                    OptionalListColumn::Missing | OptionalListColumn::Null => Vec::new(),
+                };
             records.push(ServingSearchMetadataRecord {
                 entity_id: required_string(entity_id, row, "entity_id")?,
                 fact_key: required_string(fact_key, row, "fact_key")?,
@@ -218,6 +255,7 @@ pub fn read_search_metadata_parquet(
                 )?,
                 scoring_direction: optional_string(scoring_direction, row),
                 scoring_weight: optional_f32(scoring_weight, row),
+                scoring_thresholds,
             });
         }
     }

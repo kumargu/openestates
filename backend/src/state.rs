@@ -6,7 +6,7 @@ use tokio::sync::RwLock;
 
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{AreaProfile, Property, Seller, Society};
-use crate::search::SearchIndex;
+use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use crate::serving::LoadedServingBundle;
 
 pub struct AppState {
@@ -15,6 +15,10 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     /// Local recall index rebuilt from app-owned property data.
     pub search_index: RwLock<SearchIndex>,
+    /// Local semantic recall index over serving search documents.
+    pub semantic_index: RwLock<SemanticSearchIndex>,
+    /// Query/document embedder used by the semantic recall index.
+    pub semantic_embedder: Arc<dyn SemanticEmbedder>,
     /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
     pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     pub areas: Vec<AreaProfile>,

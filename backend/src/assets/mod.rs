@@ -8,6 +8,7 @@
 //! files. JSON is reserved for small control-plane files such as manifests,
 //! schema descriptors, trust policy, and current pointers.
 
+pub mod community;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
@@ -25,6 +26,12 @@ pub mod source_inputs;
 pub mod source_provider;
 pub mod types;
 
+pub use community::{
+    community_review_summary_facts_from_records,
+    community_review_summary_facts_from_records_with_summarizer,
+    community_review_summary_facts_input, CommunitySummaryAssetError,
+    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+};
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
     AssetRetryPolicy,
@@ -35,11 +42,14 @@ pub use fan_in::{
     AssetFanInError,
 };
 pub use google::{
-    canonicalize_google_places_input, google_review_facts_input,
-    google_review_facts_input_with_aliases, read_google_place_rows, GooglePlaceAssetError,
-    GooglePlaceSnapshotManifest, GooglePlaceSnapshotMaterialization,
-    GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    canonicalize_google_nearby_places_input, canonicalize_google_places_input,
+    google_nearby_place_facts_input, google_nearby_place_facts_input_with_aliases,
+    google_review_facts_input, google_review_facts_input_with_aliases,
+    read_google_nearby_place_rows, read_google_place_rows, GoogleNearbyPlaceRecord,
+    GoogleNearbyPlaceSnapshotManifest, GoogleNearbyPlaceSnapshotMaterialization,
+    GoogleNearbyPlacesWeeklyInput, GooglePlaceAssetError, GooglePlaceSnapshotManifest,
+    GooglePlaceSnapshotMaterialization, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord,
+    GooglePlacesWeeklyInput, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
 };
 pub use kg_view::{
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
@@ -85,7 +95,8 @@ pub use run_manifest::{
 pub use skill_facts::{
     read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactArtifactRows,
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactRecord, GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    SkillFactRecord, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
 pub use source_inputs::{
     AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,

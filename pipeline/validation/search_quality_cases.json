@@ -30,7 +30,6 @@
       "rera_number",
       "rera_total_land_area_sqm",
       "market_project_status",
-      "metro_distance_km",
       "google_reviews_url"
     ]
   },
@@ -52,6 +51,10 @@
     ],
     "min_graph_driven_pct": 50,
     "required_reasons_any": [
+      {
+        "fact_key": "metro_status",
+        "source_type": "Computed"
+      },
       {
         "fact_key": "metro_distance_km",
         "source_type": "Computed"
@@ -153,11 +156,11 @@
     "required_coverage_any": [
       {
         "preference": "avoid waterlogging risk",
-        "status": "matched"
+        "status": "risk"
       },
       {
-        "preference": "less traffic",
-        "status": "matched"
+        "preference": "avoid traffic",
+        "status": "risk"
       }
     ]
   },
@@ -230,6 +233,14 @@
     "top_n": 5,
     "min_graph_driven_pct": 50,
     "required_reasons_any": [
+      {
+        "fact_key": "google_rating",
+        "source_type": "Google"
+      },
+      {
+        "fact_key": "google_review_count",
+        "source_type": "Google"
+      },
       {
         "fact_key": "google_top_positives",
         "source_type": "Google"

@@ -182,6 +182,10 @@ pub fn google_reviews_url_from_facts(facts: &[SourcedFact], entity_name: &str) -
         }
     }
 
+    if facts.iter().any(is_google_review_link_fact) {
+        return Some(google_maps_search_url(entity_name));
+    }
+
     None
 }
 
@@ -232,6 +236,13 @@ fn google_maps_place_url(entity_name: &str, place_id: &str) -> String {
         "https://www.google.com/maps/search/?api=1&query={}&query_place_id={}",
         percent_encode_query(entity_name),
         percent_encode_query(place_id)
+    )
+}
+
+fn google_maps_search_url(entity_name: &str) -> String {
+    format!(
+        "https://www.google.com/maps/search/?api=1&query={}",
+        percent_encode_query(entity_name)
     )
 }
 
@@ -302,6 +313,20 @@ mod google_reviews_url_tests {
             Some(
                 "https://www.google.com/maps/search/?api=1&query=Test%20Society&query_place_id=ChIJ_Test%20Place"
             )
+        );
+    }
+
+    #[test]
+    fn google_reviews_url_builds_search_link_from_review_fact_without_url() {
+        let mut fact = SourcedFact::manual(
+            "google_sentiment",
+            FactValue::Text("Reviews mention amenities".to_string()),
+        );
+        fact.source.source_type = SourceType::Google;
+
+        assert_eq!(
+            google_reviews_url_from_facts(&[fact], "Test Society").as_deref(),
+            Some("https://www.google.com/maps/search/?api=1&query=Test%20Society")
         );
     }
 }

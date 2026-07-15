@@ -1,11 +1,15 @@
+import json
+import tempfile
 import unittest
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
 from pipeline.collect_asset_sources import (
     collect_asset_sources,
+    collect_google_nearby_places,
     collect_google_places,
     collect_reddit_assets,
     collect_rera_registry,
@@ -13,6 +17,10 @@ from pipeline.collect_asset_sources import (
     reddit_society_inputs,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
+from pipeline.skills.fetch_google_review_links import (
+    FetchGoogleReviewLinksSkill,
+    fetch_google_places_nearby_text,
+)
 from pipeline.skills.search_reddit import (
     RedditSourceBlocked,
     RedditSourceInvalidResponse,
@@ -238,6 +246,33 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertIn("HTTP 403", output["source_failures"]["reddit_threads_daily"])
         self.assertIn("HTTP 403", output["source_failures"]["reddit_resident_facts"])
 
+    def test_reddit_skip_mode_emits_empty_source_inputs(self):
+        request = {
+            "partition": {
+                "parts": [
+                    ["dt", "2026-07-15"],
+                    ["subreddit", "BangaloreRealEstates"],
+                ]
+            },
+            "planned_at": "2026-07-15T09:30:00Z",
+            "requested_assets": ["reddit_threads_daily", "reddit_resident_facts"],
+            "source_entities": [
+                {
+                    "entity_id": "society:prestige-park-grove",
+                    "name": "Prestige Park Grove",
+                    "city": "Bengaluru",
+                }
+            ],
+        }
+
+        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "1"}):
+            output = collect_asset_sources(request)
+
+        self.assertEqual(output["reddit_threads_daily"]["records"], [])
+        self.assertEqual(output["reddit_threads_daily"]["subreddit"], "BangaloreRealEstates")
+        self.assertEqual(output["reddit_resident_facts"]["facts"], [])
+        self.assertNotIn("source_failures", output)
+
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
         with patch(
@@ -406,6 +441,331 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(record["rating"], 4.4)
         self.assertEqual(record["fetched_at"], "2026-07-12T08:15:00Z")
         self.assertEqual(record["fetch_source"], "fetch_google_review_links_cache")
+
+    def test_google_places_api_key_collects_precise_place_metadata(self):
+        search_payload = {
+            "places": [
+                {
+                    "id": "places/example-green",
+                    "displayName": {"text": "Example Green"},
+                    "formattedAddress": "Whitefield, Bengaluru",
+                    "googleMapsUri": "https://maps.google.com/?cid=123",
+                    "rating": 4.5,
+                    "userRatingCount": 812,
+                }
+            ]
+        }
+        detail_payload = {
+            "id": "places/example-green",
+            "displayName": {"text": "Example Green"},
+            "formattedAddress": "Whitefield, Bengaluru",
+            "googleMapsUri": "https://maps.google.com/?cid=123",
+            "rating": 4.5,
+            "userRatingCount": 812,
+            "reviews": [
+                {"text": {"text": "Good clubhouse and green campus."}},
+                {"originalText": {"text": "Traffic can be slow at peak hours."}},
+            ],
+        }
+        responses = [search_payload, detail_payload]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+                with patch(
+                    "pipeline.skills.fetch_google_review_links.urllib.request.urlopen",
+                    side_effect=lambda *_args, **_kwargs: BytesIO(
+                        json.dumps(responses.pop(0)).encode("utf-8")
+                    ),
+                ) as mocked_open:
+                    skill = FetchGoogleReviewLinksSkill(cache_dir=Path(temp_dir))
+                    output = collect_google_places(
+                        {
+                            "partition": {"parts": [["dt", "2026-07-14"]]},
+                            "planned_at": "2026-07-14T09:30:00Z",
+                        },
+                        society_inputs={
+                            "example-green": {
+                                "entity_id": "society:rera-example-green",
+                                "project_key": "PRM-EXAMPLE-GREEN",
+                                "society_name": "Example Green",
+                                "area": "Whitefield",
+                                "city": "Bengaluru",
+                            }
+                        },
+                        skill=skill,
+                    )
+
+        search_request = mocked_open.call_args_list[0][0][0]
+        detail_request = mocked_open.call_args_list[1][0][0]
+        self.assertEqual(
+            search_request.full_url, "https://places.googleapis.com/v1/places:searchText"
+        )
+        self.assertEqual(search_request.get_header("X-goog-api-key"), "test-key")
+        self.assertIn(
+            "places.userRatingCount", search_request.get_header("X-goog-fieldmask")
+        )
+        self.assertEqual(
+            detail_request.full_url,
+            "https://places.googleapis.com/v1/places/example-green",
+        )
+        self.assertIn("reviews", detail_request.get_header("X-goog-fieldmask"))
+        record = output["records"][0]
+        self.assertEqual(record["place_id"], "places/example-green")
+        self.assertEqual(record["reviews_url"], "https://maps.google.com/?cid=123")
+        self.assertEqual(record["rating"], 4.5)
+        self.assertEqual(record["review_count"], 812)
+        self.assertEqual(
+            record["review_snippets"],
+            [
+                "Good clubhouse and green campus.",
+                "Traffic can be slow at peak hours.",
+            ],
+        )
+        self.assertEqual(record["confidence"], 0.85)
+        self.assertEqual(record["fetch_source"], "google_places_text_search")
+
+    def test_google_nearby_collection_emits_raw_category_rows(self):
+        output = collect_google_nearby_places(
+            {
+                "partition": {"parts": [["dt", "2026-07-14"]]},
+                "planned_at": "2026-07-14T09:30:00Z",
+            },
+            society_inputs={
+                "example-green": {
+                    "entity_id": "society:rera-example-green",
+                    "project_key": "PRM-EXAMPLE-GREEN",
+                    "society_name": "Example Green",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                }
+            },
+            nearby_fetch=lambda _input, category: [
+                {
+                    "place_name": "Example {}".format(category),
+                    "place_id": "{}-1".format(category),
+                    "place_url": "https://maps.google.com/{}".format(category),
+                    "distance_km": 1.2,
+                    "rating": 4.2,
+                    "review_count": 42,
+                    "primary_type": category,
+                    "place_types": [category],
+                    "confidence": 0.8,
+                    "fetched_at": "2026-07-14T09:35:00Z",
+                    "fetch_source": "fixture_nearby",
+                }
+            ],
+        )
+
+        self.assertEqual(output["snapshot_date"], "2026-07-14")
+        self.assertEqual(len(output["records"]), 6)
+        school = output["records"][0]
+        self.assertEqual(school["entity_id"], "society:rera-example-green")
+        self.assertEqual(school["project_key"], "PRM-EXAMPLE-GREEN")
+        self.assertEqual(school["query"], "school near Example Green Whitefield Bengaluru")
+        self.assertEqual(school["category"], "school")
+        self.assertEqual(school["place_name"], "Example school")
+        self.assertEqual(school["distance_km"], 1.2)
+        self.assertEqual(school["primary_type"], "school")
+        self.assertEqual(school["place_types"], ["school"])
+        self.assertEqual(school["fetch_source"], "fixture_nearby")
+
+    def test_google_nearby_collection_uses_places_api_by_default(self):
+        requests = []
+
+        def fake_urlopen(request, timeout=20):
+            requests.append(request)
+            body = json.loads(request.data.decode("utf-8"))
+            query = body["textQuery"]
+            payload = {
+                "places": [
+                    {
+                        "id": "places/origin",
+                        "displayName": {"text": "Example Green"},
+                        "googleMapsUri": "https://maps.google.com/?cid=origin",
+                        "location": {"latitude": 12.9716, "longitude": 77.5946},
+                        "types": ["residential_complex"],
+                    }
+                ]
+            }
+            if query.startswith("school near"):
+                payload["places"][0].update(
+                    {
+                        "id": "places/school",
+                        "displayName": {"text": "Example School"},
+                        "googleMapsUri": "https://maps.google.com/?cid=school",
+                        "primaryType": "school",
+                        "types": ["school"],
+                        "rating": 4.1,
+                        "userRatingCount": 120,
+                    }
+                )
+            elif query.startswith("metro station near"):
+                payload["places"][0].update(
+                    {
+                        "displayName": {"text": "Example Metro Station"},
+                        "primaryType": "subway_station",
+                        "types": ["subway_station", "transit_station"],
+                    }
+                )
+            elif query.startswith("hospital near"):
+                payload["places"][0].update(
+                    {
+                        "displayName": {"text": "Example Hospital"},
+                        "primaryType": "hospital",
+                        "types": ["hospital"],
+                    }
+                )
+            elif query.startswith("gym fitness near"):
+                payload["places"][0].update(
+                    {
+                        "displayName": {"text": "Cult Whitefield"},
+                        "primaryType": "gym",
+                        "types": ["gym"],
+                    }
+                )
+            elif query.startswith("restaurant cafe near"):
+                payload["places"][0].update(
+                    {
+                        "displayName": {"text": "Example Cafe"},
+                        "primaryType": "cafe",
+                        "types": ["cafe", "restaurant"],
+                    }
+                )
+            elif query.startswith("tech park office near"):
+                payload["places"][0].update(
+                    {
+                        "displayName": {"text": "Example Tech Park"},
+                        "primaryType": "business_center",
+                        "types": ["business_center"],
+                    }
+                )
+            return BytesIO(json.dumps(payload).encode("utf-8"))
+
+        with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+            with patch(
+                "pipeline.skills.fetch_google_review_links.urllib.request.urlopen",
+                side_effect=fake_urlopen,
+            ):
+                output = collect_google_nearby_places(
+                    {
+                        "partition": {"parts": [["dt", "2026-07-14"]]},
+                        "planned_at": "2026-07-14T09:30:00Z",
+                    },
+                    society_inputs={
+                        "example-green": {
+                            "entity_id": "society:rera-example-green",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                            "society_name": "Example Green",
+                            "area": "Whitefield",
+                            "city": "Bengaluru",
+                        }
+                    },
+                )
+
+        self.assertEqual(len(requests), 7)
+        school_request = json.loads(requests[1].data.decode("utf-8"))
+        self.assertEqual(
+            school_request["locationBias"]["circle"]["center"]["latitude"], 12.9716
+        )
+        self.assertEqual(
+            school_request["locationBias"]["circle"]["center"]["longitude"], 77.5946
+        )
+        self.assertEqual(school_request["locationBias"]["circle"]["radius"], 5000)
+        metro_request = json.loads(requests[2].data.decode("utf-8"))
+        self.assertEqual(metro_request["locationBias"]["circle"]["radius"], 6000)
+        fitness_request = json.loads(requests[4].data.decode("utf-8"))
+        self.assertEqual(fitness_request["locationBias"]["circle"]["radius"], 3500)
+        self.assertEqual(len(output["records"]), 6)
+        school = output["records"][0]
+        self.assertEqual(school["query"], "school near Example Green Whitefield Bengaluru")
+        self.assertEqual(school["place_name"], "Example School")
+        self.assertEqual(school["place_id"], "places/school")
+        self.assertEqual(school["distance_km"], 0.0)
+        self.assertEqual(school["rating"], 4.1)
+        self.assertEqual(school["review_count"], 120)
+        self.assertEqual(school["primary_type"], "school")
+        self.assertEqual(school["place_types"], ["school"])
+        self.assertEqual(school["fetch_source"], "google_places_text_search_nearby")
+
+    def test_google_nearby_filters_category_mismatches_before_raw_rows(self):
+        nearby = {
+            "places": [
+                {
+                    "id": "places/apartment",
+                    "displayName": {"text": "Prestige Park View"},
+                    "googleMapsUri": "https://maps.google.com/?cid=apartment",
+                    "location": {"latitude": 12.9720, "longitude": 77.5946},
+                    "primaryType": "apartment_complex",
+                    "types": ["apartment_complex", "point_of_interest"],
+                },
+                {
+                    "id": "places/gym",
+                    "displayName": {"text": "Example Gym"},
+                    "googleMapsUri": "https://maps.google.com/?cid=gym",
+                    "location": {"latitude": 12.9730, "longitude": 77.5946},
+                    "primaryType": "gym",
+                    "types": ["gym"],
+                },
+            ]
+        }
+
+        with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+            with patch(
+                "pipeline.skills.fetch_google_review_links.fetch_google_places_text_search",
+                side_effect=[nearby],
+            ):
+                records = fetch_google_places_nearby_text(
+                    {
+                        "society_name": "Example Green",
+                        "city": "Bengaluru",
+                        "latitude": 12.9716,
+                        "longitude": 77.5946,
+                    },
+                    "fitness",
+                )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["place_name"], "Example Gym")
+
+    def test_google_nearby_does_not_collect_bus_stop_as_metro(self):
+        nearby = {
+            "places": [
+                {
+                    "id": "places/bus-stop",
+                    "displayName": {"text": "Varthuru Bus Stop"},
+                    "googleMapsUri": "https://maps.google.com/?cid=bus-stop",
+                    "location": {"latitude": 12.9720, "longitude": 77.5946},
+                    "primaryType": "bus_stop",
+                    "types": ["bus_stop", "transit_station", "transit_stop"],
+                },
+                {
+                    "id": "places/metro",
+                    "displayName": {"text": "Example Metro Station"},
+                    "googleMapsUri": "https://maps.google.com/?cid=metro",
+                    "location": {"latitude": 12.9730, "longitude": 77.5946},
+                    "primaryType": "subway_station",
+                    "types": ["subway_station", "transit_station"],
+                },
+            ]
+        }
+
+        with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+            with patch(
+                "pipeline.skills.fetch_google_review_links.fetch_google_places_text_search",
+                side_effect=[nearby],
+            ):
+                records = fetch_google_places_nearby_text(
+                    {
+                        "society_name": "Example Green",
+                        "city": "Bengaluru",
+                        "latitude": 12.9716,
+                        "longitude": 77.5946,
+                    },
+                    "metro",
+                )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["place_name"], "Example Metro Station")
 
     def test_collects_exact_rust_source_input_shape(self):
         request = {

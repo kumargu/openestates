@@ -29,6 +29,7 @@ use super::{
 
 pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
 pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
+pub const GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID: &str = "google_nearby_place_facts";
 const SKILL_FACT_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -114,10 +115,6 @@ impl SkillFactMaterializer {
         parent_materializations: Vec<MaterializationId>,
         source_watermarks: Vec<SourceWatermark>,
     ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
-        if facts.is_empty() {
-            return Err(SkillFactMaterializeError::EmptyFacts);
-        }
-
         let asset_id = asset_id.into();
         let source = source.into();
         let snapshot_date = snapshot_date.into();
@@ -125,7 +122,7 @@ impl SkillFactMaterializer {
         let partition =
             AssetPartition::new([("dt", snapshot_date.as_str()), ("source", source.as_str())]);
         let materialization = self
-            .materialize_for_run(
+            .materialize_for_run_inner(
                 asset_id,
                 source,
                 snapshot_date,
@@ -136,6 +133,7 @@ impl SkillFactMaterializer {
                 source_watermarks,
                 MaterializationId::new(),
                 partition,
+                false,
             )
             .await?;
         self.materializations
@@ -158,10 +156,74 @@ impl SkillFactMaterializer {
         dag_run_id: MaterializationId,
         record_partition: AssetPartition,
     ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
-        if facts.is_empty() {
+        self.materialize_for_run_inner(
+            asset_id,
+            source,
+            snapshot_date,
+            run_id,
+            facts,
+            fact_annotations,
+            parent_materializations,
+            source_watermarks,
+            dag_run_id,
+            record_partition,
+            false,
+        )
+        .await
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_skipped_for_run(
+        &self,
+        asset_id: impl Into<String>,
+        source: impl Into<String>,
+        snapshot_date: impl Into<String>,
+        run_id: impl Into<String>,
+        parent_materializations: Vec<MaterializationId>,
+        source_watermarks: Vec<SourceWatermark>,
+        dag_run_id: MaterializationId,
+        record_partition: AssetPartition,
+    ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
+        if !source_watermarks
+            .iter()
+            .any(|watermark| watermark.source.ends_with("_skipped"))
+        {
             return Err(SkillFactMaterializeError::EmptyFacts);
         }
+        self.materialize_for_run_inner(
+            asset_id,
+            source,
+            snapshot_date,
+            run_id,
+            &[],
+            &[],
+            parent_materializations,
+            source_watermarks,
+            dag_run_id,
+            record_partition,
+            true,
+        )
+        .await
+    }
 
+    #[allow(clippy::too_many_arguments)]
+    async fn materialize_for_run_inner(
+        &self,
+        asset_id: impl Into<String>,
+        source: impl Into<String>,
+        snapshot_date: impl Into<String>,
+        run_id: impl Into<String>,
+        facts: &[SkillFactRecord],
+        fact_annotations: &[SkillFactAnnotationRecord],
+        parent_materializations: Vec<MaterializationId>,
+        source_watermarks: Vec<SourceWatermark>,
+        dag_run_id: MaterializationId,
+        record_partition: AssetPartition,
+        allow_empty: bool,
+    ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
+        if facts.is_empty() && !allow_empty {
+            return Err(SkillFactMaterializeError::EmptyFacts);
+        }
         let asset_id = asset_id.into();
         let source = source.into();
         let snapshot_date = snapshot_date.into();
