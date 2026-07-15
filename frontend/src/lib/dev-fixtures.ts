@@ -9,7 +9,7 @@ import type {
 
 const now = "2026-07-11T00:00:00.000Z";
 
-export const fixtureProperties: PropertyCard[] = [
+const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
   {
     id: "fixture-prestige-lakeside-3bhk",
     title: "3 BHK at Prestige Lakeside Habitat",
@@ -219,6 +219,11 @@ export const fixtureProperties: PropertyCard[] = [
     data_freshness: freshness(71, 83, { rera: 13, reviews: 16 }),
   },
 ];
+
+export const fixtureProperties: PropertyCard[] = fixturePropertyRows.map((property) => ({
+  ...property,
+  kg_entity_refs: fixtureKgEntityRefs(property),
+}));
 
 export const fixtureAreas: AreaListItem[] = [
   { id: "whitefield", name: "Whitefield", median_price_per_sqft: 14520, trend_direction: "up", primary_signal: "Metro access is now the key value unlock." },
@@ -535,6 +540,7 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       transparency_tags: card.transparency_tags,
       source_reference: "Local development fixture",
     },
+    entity_refs: card.kg_entity_refs,
     society: {
       id: slug(card.society_name),
       name: card.society_name,
@@ -639,6 +645,23 @@ function confidenceFor(property: PropertyCard) {
         explanation: "Benchmarked against local fixture medians.",
       },
     ],
+  };
+}
+
+function fixtureKgEntityRefs(
+  property: Pick<PropertyCard, "id" | "area" | "society_name" | "builder_name">,
+): PropertyCard["kg_entity_refs"] {
+  const propertyEntityId = `property:${slug(property.id)}`;
+  const societyEntityId = `society:${slug(property.society_name)}`;
+  const areaEntityId = `area:${slug(property.area)}`;
+  const builderEntityId = `builder:${slug(property.builder_name)}`;
+
+  return {
+    property_entity_id: propertyEntityId,
+    society_entity_id: societyEntityId,
+    area_entity_id: areaEntityId,
+    builder_entity_id: builderEntityId,
+    source_entity_ids: [propertyEntityId, societyEntityId, areaEntityId, builderEntityId].sort(),
   };
 }
 

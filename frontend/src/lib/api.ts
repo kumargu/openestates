@@ -1,6 +1,8 @@
 import type {
   PropertyCard,
   PropertyDetailResponse,
+  PropertyEvidenceBatchResponse,
+  PropertyEvidenceResponse,
   AreaListItem,
   AreaDetail,
   SearchResponse,
@@ -9,7 +11,7 @@ import type {
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://localhost:4000";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:4000";
 const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API !== "false"
   && (import.meta.env.DEV || import.meta.env.VITE_USE_FIXTURE_API === "true");
 
@@ -39,6 +41,19 @@ async function fetchJson<T>(path: string): Promise<T> {
   }
 }
 
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`API ${res.status}: ${text || res.statusText}`);
+  }
+  return res.json();
+}
+
 export function getHealth(): Promise<{ service: string; status: string }> {
   return fetchJson("/api/health");
 }
@@ -49,6 +64,20 @@ export function getProperties(): Promise<PropertyCard[]> {
 
 export function getProperty(id: string): Promise<PropertyDetailResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}`);
+}
+
+export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+}
+
+export function getPropertyEvidenceBatch(
+  propertyIds: string[],
+  limit?: number,
+): Promise<PropertyEvidenceBatchResponse> {
+  return postJson("/api/properties/evidence/batch", {
+    property_ids: propertyIds,
+    limit,
+  });
 }
 
 export function getAreas(): Promise<AreaListItem[]> {

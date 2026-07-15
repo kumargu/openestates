@@ -65,7 +65,7 @@ type RiskSignal = {
   value: number;
 };
 
-type SourcePanelKind = "rera" | "market" | "area" | "community" | "reviews";
+type SourcePanelKind = "rera" | "market" | "area" | "nearby" | "community" | "reviews";
 type SourceTone = "good" | "watch" | "risk" | "neutral";
 
 function clamp(value: number, min = 0, max = 1): number {
@@ -611,6 +611,10 @@ const SOURCE_PANEL_COPY: Record<SourcePanelKind, { title: string; subtitle: stri
     title: "Area trail",
     subtitle: "Daily-life signals around access, traffic, flooding, and schools.",
   },
+  nearby: {
+    title: "Nearby",
+    subtitle: "Map-backed schools, hospitals, work hubs, retail, and parks.",
+  },
   community: {
     title: "Community pulse",
     subtitle: "Public review and resident-source signals, with gaps called out.",
@@ -634,6 +638,7 @@ function sourcePanelKind(panel: SourcePanel): SourcePanelKind {
     explicitKind === "rera" ||
     explicitKind === "market" ||
     explicitKind === "area" ||
+    explicitKind === "nearby" ||
     explicitKind === "community" ||
     explicitKind === "reviews"
   ) {
@@ -644,6 +649,7 @@ function sourcePanelKind(panel: SourcePanel): SourcePanelKind {
   if (title.includes("rera")) return "rera";
   if (title.includes("market")) return "market";
   if (title.includes("area")) return "area";
+  if (title.includes("nearby") || title.includes("map-backed")) return "nearby";
   if (title.includes("reddit") || title.includes("community") || title.includes("forum")) return "community";
   return "reviews";
 }
@@ -820,6 +826,15 @@ function sourcePanelPreview(panel: SourcePanel, kind: SourcePanelKind): string {
       findSourceItem(panel, "school_quality", "schools") ? "School cluster" : "",
     ];
     return finalizeSourcePreview(panel, compactPreview(parts));
+  }
+
+  if (kind === "nearby") {
+    return finalizeSourcePreview(panel, compactPreview(
+      panel.items.map((item) => {
+        const first = sourceItemList(item)[0];
+        return first ? `${item.label}: ${first}` : cleanSourceText(item);
+      }),
+    ));
   }
 
   if (kind === "community") {
@@ -1021,6 +1036,23 @@ function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePane
             Open community evidence
           </a>
         )}
+      </div>
+    );
+  }
+
+  if (kind === "nearby") {
+    return (
+      <div className="source-panel-stack">
+        <div className="source-list-grid">
+          {panel.items.map((item) => (
+            <SourceListCard
+              key={item.key ?? item.label}
+              title={item.label}
+              items={sourceItemList(item)}
+              tone={sourceTone(item.value)}
+            />
+          ))}
+        </div>
       </div>
     );
   }

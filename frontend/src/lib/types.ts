@@ -1,5 +1,22 @@
 export type PropertyCard = {
   id: string;
+  /**
+   * Stable Knowledge Graph handles for this card.
+   *
+   * Treat these as the bridge from a compact search/listing response into the
+   * richer dynamic evidence graph. A result card should render its normal fast
+   * fields first, then use these IDs when the UI needs drill-down evidence,
+   * expandable cards, compare rows, or hover/side-panel context.
+   *
+   * Typical UI flow:
+   * 1. Render the card from local fields such as price, BHK, area, match_reason.
+   * 2. On expand, hover, compare, or detail prefetch, fetch the referenced KG
+   *    nodes through /api/knowledge/nodes/{id}.
+   * 3. Build optional UI sections only from returned facts/source panels.
+   * 4. Hide sections with no confident facts instead of showing empty static
+   *    placeholders.
+   */
+  kg_entity_refs: KgEntityRefs;
   title: string;
   area: string;
   price: number;
@@ -77,6 +94,15 @@ export type PropertyDetailResponse = {
     source_reference: string;
     seller_id?: string;
   };
+  /**
+   * The same graph handle set as `property.kg_entity_refs` on result cards.
+   *
+   * Detail pages should prefer this top-level field because the nested
+   * `property` object is the flat listing record, while `entity_refs` is the
+   * explicit graph contract. Use it to fetch nodes, neighbors, and subgraphs
+   * without guessing IDs from display names.
+   */
+  entity_refs: KgEntityRefs;
   society: {
     id: string;
     name: string;
@@ -134,6 +160,73 @@ export type PropertyDetailResponse = {
   confidence_score?: ConfidenceScore;
 };
 
+/**
+ * Knowledge Graph entity references exposed by property/search/detail APIs.
+ *
+ * This type is intentionally small and boring: it is a set of stable IDs, not
+ * display content. The point is to let the UI stay dynamic without baking every
+ * possible evidence dimension into React. New fact families can appear in the KG
+ * and serving bundle, and the UI can discover/render them by dereferencing these
+ * IDs instead of waiting for a new hardcoded property-card field.
+ *
+ * How to use it well:
+ * - Use `property_entity_id` when the UI needs listing-specific facts such as
+ *   BHK, carpet area, price, seller source, or per-listing market activity.
+ * - Use `society_entity_id` for project/society evidence such as RERA facts,
+ *   Google review facts, nearby places, amenities, complaints, community pulse,
+ *   and builder relationships.
+ * - Use `area_entity_id` for locality evidence such as traffic, waterlogging,
+ *   metro access, school clusters, price trend, and externalities.
+ * - Use `builder_entity_id` only when present. Some projects may not have a
+ *   known builder node yet; the UI should simply omit builder cards in that
+ *   case.
+ * - Use `source_entity_ids` for prefetching a compact evidence bundle. It only
+ *   contains IDs the backend knows are currently present in the KG, so it is a
+ *   safer "fetch these first" list than rebuilding IDs in the browser.
+ *
+ * What not to do:
+ * - Do not parse display names to create graph IDs. Slug rules and canonical
+ *   IDs can evolve; use these fields as the contract.
+ * - Do not assume every ID has the same richness. A returned node can have 2
+ *   facts or 200 facts. Render from available facts and confidence.
+ * - Do not make source panels static. If there is no school/metro/review/RERA
+ *   evidence, omit that section or show a small explicit data gap.
+ * - Do not treat these IDs as permanent public URLs. They are API identifiers
+ *   for the current KG, suitable for app state, cache keys, and fetches.
+ *
+ * Example dynamic section loader:
+ *
+ * const ids = refs.source_entity_ids?.length
+ *   ? refs.source_entity_ids
+ *   : [refs.property_entity_id, refs.society_entity_id, refs.area_entity_id];
+ *
+ * const nodes = await Promise.all(ids.map((id) => getKnowledgeNode(id)));
+ * const sections = buildSectionsFromFacts(nodes, {
+ *   minConfidencePct: 60,
+ *   preferredKinds: ["rera", "nearby", "reviews", "community", "risk"],
+ * });
+ *
+ * In that model, React components own layout and interaction, while KG facts own
+ * whether a card exists and what evidence backs it.
+ */
+export type KgEntityRefs = {
+  /** Listing-level KG node, e.g. `property:discovered-prestige-lavender-fields-3bhk`. */
+  property_entity_id: string;
+  /** Society/project KG node, e.g. `society:prestige-lavender-fields`. */
+  society_entity_id: string;
+  /** Area/locality KG node, e.g. `area:varthur`. */
+  area_entity_id: string;
+  /** Builder KG node when known, e.g. `builder:prestige-group`. */
+  builder_entity_id?: string;
+  /**
+   * Existing KG nodes worth prefetching for a dynamic card/detail/compare view.
+   *
+   * This is deduped and sorted by the backend. It may be smaller than the set of
+   * individual fields above when a node ID is valid but not yet present in KG.
+   */
+  source_entity_ids?: string[];
+};
+
 export type SourcePanel = {
   kind?: string;
   title: string;
@@ -143,14 +236,50 @@ export type SourcePanel = {
 };
 
 export type SourceItem = {
+  entity_id: string;
   key?: string;
   label: string;
   value: string;
   values?: string[];
   source_type: string;
   source_url?: string;
+  attributions?: SourceAttribution[];
   confidence_pct: number;
   learned_at: string;
+};
+
+export type SourceAttribution = {
+  value: string;
+  source_url?: string;
+  source_type: string;
+  confidence_pct: number;
+  learned_at: string;
+};
+
+export type EvidenceSection = {
+  kind: string;
+  title: string;
+  summary: string;
+  subtitle: string;
+  priority: number;
+  confidence_pct: number;
+  source_types: string[];
+  entity_ids: string[];
+  items: SourceItem[];
+  missing: string[];
+};
+
+export type PropertyEvidenceResponse = {
+  property_id: string;
+  entity_refs: KgEntityRefs;
+  serving_bundle_version?: string;
+  sections: EvidenceSection[];
+};
+
+export type PropertyEvidenceBatchResponse = {
+  serving_bundle_version?: string;
+  results: PropertyEvidenceResponse[];
+  missing_property_ids: string[];
 };
 
 export type BuilderPortfolio = {
