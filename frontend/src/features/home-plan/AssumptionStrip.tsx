@@ -1,37 +1,36 @@
+import type { PlanControlField } from "./planFields.ts";
+import { assumptionChips } from "./planFields.ts";
 import type { PlanControlSection } from "./PlanControls.tsx";
 import type { PlanInputs } from "./model.ts";
 
 type AssumptionStripProps = {
   inputs: PlanInputs;
-  onEdit: (section: PlanControlSection) => void;
+  activeField: PlanControlField | null;
+  onEdit: (section: PlanControlSection, field: PlanControlField) => void;
 };
 
-export function AssumptionStrip({ inputs, onEdit }: AssumptionStripProps) {
-  const chips: Array<{ label: string; value: string; section: PlanControlSection }> = [
-    { label: "Down", value: `₹${inputs.downPaymentLakh.toFixed(0)}L`, section: "financing" },
-    { label: "Rate", value: `${inputs.loanRate.toFixed(1)}%`, section: "financing" },
-    { label: "Growth", value: `${inputs.appreciation.toFixed(1)}%`, section: "market" },
-    { label: "Funds", value: `${inputs.equityReturn.toFixed(1)}%`, section: "market" },
-    { label: "Rent", value: `₹${inputs.currentRentThousands.toFixed(0)}K`, section: "market" },
-  ];
+export function AssumptionStrip({ inputs, activeField, onEdit }: AssumptionStripProps) {
+  const chips = assumptionChips(inputs);
 
   return (
     <footer className="home-plan-instruments" aria-label="Plan assumptions">
+      <p className="home-plan-instruments__hint">Tap a number to edit it</p>
       <div className="home-plan-instruments__chips">
         {chips.map((chip) => (
           <button
             type="button"
-            key={chip.label}
-            className="home-plan-instruments__chip"
-            onClick={() => onEdit(chip.section)}
+            key={chip.field}
+            className={`home-plan-instruments__chip ${activeField === chip.field ? "is-active" : ""}`}
+            onClick={() => onEdit(chip.section, chip.field)}
+            aria-label={`Edit ${chip.label}: ${chip.value}`}
           >
             <small>{chip.label}</small>
             <strong>{chip.value}</strong>
           </button>
         ))}
       </div>
-      <button type="button" className="home-plan-instruments__edit" onClick={() => onEdit("financing")}>
-        Adjust assumptions
+      <button type="button" className="home-plan-instruments__edit" onClick={() => onEdit("financing", "downPaymentLakh")}>
+        Edit plan
       </button>
     </footer>
   );

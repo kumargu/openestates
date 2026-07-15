@@ -1,12 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
 import { AssumptionStrip } from "../features/home-plan/AssumptionStrip.tsx";
+import { MilestoneHint } from "../features/home-plan/MilestoneHint.tsx";
 import { PlanControls, type PlanControlSection, type PlanPreset } from "../features/home-plan/PlanControls.tsx";
-import { PlanGraph, type PlanGraphMetric, type PlanScenarioId } from "../features/home-plan/PlanGraph.tsx";
+import { PlanGraph, type PlanScenarioId } from "../features/home-plan/PlanGraph.tsx";
+import { PlanViewTabs, type PlanView } from "../features/home-plan/PlanViewTabs.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { RepaymentJourney } from "../features/home-plan/RepaymentJourney.tsx";
 import { TimeRail } from "../features/home-plan/TimeRail.tsx";
@@ -17,10 +19,15 @@ import {
   calculateProjection,
   formatCurrency,
   type PlanInputs,
+  type PlanProjection,
 } from "../features/home-plan/model.ts";
+import {
+  buildMilestones,
+  describePlanChange,
+  type PlanControlField,
+  type PlanMilestone,
+} from "../features/home-plan/planFields.ts";
 import "../features/home-plan/home-plan.css";
-
-type WorkspaceView = "decision" | "repayment";
 
 function applyPreset(baseline: PlanInputs, preset: Exclude<PlanPreset, "Custom">): PlanInputs {
   if (preset === "Cautious market") return { ...baseline, appreciation: 4.5, equityReturn: 9, loanRate: 9.1 };
@@ -31,14 +38,6 @@ function applyPreset(baseline: PlanInputs, preset: Exclude<PlanPreset, "Custom">
 function BackIcon() {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   return <svg {...common}><path d="m15 18-6-6 6-6" /></svg>;
-}
-
-function MetricIcon({ metric }: { metric: PlanGraphMetric }) {
-  const common = { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  if (metric === "monthlyOutflow") {
-    return <svg {...common}><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>;
-  }
-  return <svg {...common}><path d="M3 3v18h18" /><path d="m7 15 4-4 3 3 5-6" /></svg>;
 }
 
 function LoadingPlan() {
@@ -59,16 +58,21 @@ export function HomePlanPage() {
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
-  const [workspace, setWorkspace] = useState<WorkspaceView>("decision");
+  const [view, setView] = useState<PlanView>("netWorth");
   const [horizon, setHorizon] = useState(10);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<PlanScenarioId>("buy");
-  const [metric, setMetric] = useState<PlanGraphMetric>("netWorth");
   const [controlsOpen, setControlsOpen] = useState(false);
   const [controlSection, setControlSection] = useState<PlanControlSection>("financing");
+  const [focusField, setFocusField] = useState<PlanControlField | null>(null);
   const [preset, setPreset] = useState<PlanPreset>("Base scenario");
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(2);
   const [loanYear, setLoanYear] = useState(5);
+  const [changeNote, setChangeNote] = useState<string | null>(null);
+  const [milestoneHint, setMilestoneHint] = useState<PlanMilestone | null>(null);
+  const [showFocusHint, setShowFocusHint] = useState(true);
+  const prevProjectionRef = useRef<PlanProjection | null>(null);
+  const changeNoteTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -88,13 +92,30 @@ export function HomePlanPage() {
     return () => { active = false; };
   }, [id]);
 
+  useEffect(() => () => {
+    if (changeNoteTimer.current !== null) window.clearTimeout(changeNoteTimer.current);
+  }, []);
+
   const projection = useMemo(() => inputs ? calculateProjection(inputs) : null, [inputs]);
   const loanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, extraEmisPerYear) : null, [inputs, extraEmisPerYear]);
 
-  if (!id) return <PageState variant="not_found" context="property" message="Choose a home before opening its plan." />;
+  useEffect(() => {
+    if (!projection) return;
+    if (prevProjectionRef.current) {
+      const note = describePlanChange(prevProjectionRef.current, projection, horizon);
+      if (note) {
+        setChangeNote(note);
+        if (changeNoteTimer.current !== null) window.clearTimeout(changeNoteTimer.current);
+        changeNoteTimer.current = window.setTimeout(() => setChangeNote(null), 5000);
+      }
+    }
+    prevProjectionRef.current = projection;
+  }, [projection, horizon]);
+
+  if (!id) return <PageState variant="not_found" context="property" message="Pick a home first, then open its plan." />;
   if (status === "loading") return <LoadingPlan />;
   if (status === "not_found") return <PageState variant="not_found" context="property" message="This home is no longer available for planning." />;
-  if (status === "error") return <PageState variant="error" context="property" message="We could not load this plan. Return to the property and try again." />;
+  if (status === "error") return <PageState variant="error" context="property" message="We could not load this plan. Go back to the property and try again." />;
   if (!propertyData || !inputs || !projection || !loanJourney) return null;
 
   const property = propertyData.property;
@@ -122,11 +143,7 @@ export function HomePlanPage() {
     && point.loanBalance <= 0
     && (points[index - 1]?.loanBalance ?? 0) > 0
   ))?.year ?? null;
-  const timeMilestones = [
-    { year: inputs.purchaseYear, label: inputs.purchaseYear === 0 ? "Buy" : `Buy Y${inputs.purchaseYear}` },
-    ...(projection.breakEvenYear !== null ? [{ year: projection.breakEvenYear, label: "Break-even" }] : []),
-    ...(loanFreeYear !== null ? [{ year: loanFreeYear, label: "Loan free" }] : []),
-  ];
+  const milestones = buildMilestones(inputs.purchaseYear, projection.breakEvenYear, loanFreeYear);
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
     setInputs((current) => current ? { ...current, [key]: value } : current);
@@ -147,12 +164,30 @@ export function HomePlanPage() {
   const chooseHorizon = (year: number) => {
     setHorizon(year);
     setPreviewYear(null);
+    setMilestoneHint(null);
   };
 
-  const openControls = (section: PlanControlSection) => {
+  const openControls = (section: PlanControlSection, field: PlanControlField) => {
     setControlSection(section);
+    setFocusField(field);
     setControlsOpen(true);
   };
+
+  const handleMilestonePress = (milestone: PlanMilestone) => {
+    if (milestoneHint?.year === milestone.year) {
+      chooseHorizon(milestone.year);
+      return;
+    }
+    setMilestoneHint(milestone);
+  };
+
+  const changeView = (nextView: PlanView) => {
+    setView(nextView);
+    setPreviewYear(null);
+    setMilestoneHint(null);
+  };
+
+  const metric = view === "monthly" ? "monthlyOutflow" : "netWorth";
 
   return (
     <div className={`home-plan-shell home-plan-shell--${decisionTheme}`}>
@@ -163,96 +198,26 @@ export function HomePlanPage() {
 
       <header className="home-plan-header">
         <Link to="/" className="home-plan-brand" aria-label="OpenEstates home">OpenEstates</Link>
-        <div className="home-plan-header__actions">
-          <nav className="home-plan-workspace-switch" aria-label="Planning workspace">
-            <button type="button" className={workspace === "decision" ? "is-active" : ""} onClick={() => { setPreviewYear(null); setWorkspace("decision"); }}>Compare</button>
-            <button type="button" className={workspace === "repayment" ? "is-active" : ""} onClick={() => { setPreviewYear(null); setWorkspace("repayment"); }}>Pay off loan</button>
-          </nav>
-          <Link to={`/property/${id}`} className="home-plan-back-link"><BackIcon /> Property</Link>
-        </div>
+        <Link to={`/property/${id}`} className="home-plan-back-link"><BackIcon /> Property</Link>
       </header>
 
       <div className="home-plan-main">
-        {workspace === "decision" ? (
-          <div className="home-plan-canvas">
-            <PropertyOrigin
-              propertyId={id}
-              title={property.title}
-              area={property.area}
-              bhk={property.bhk}
-              price={property.price}
-              inputs={inputs}
-              presetLabel={presetLabel}
-            />
+        <div className="home-plan-canvas">
+          <PropertyOrigin
+            propertyId={id}
+            title={property.title}
+            area={property.area}
+            bhk={property.bhk}
+            price={property.price}
+            inputs={inputs}
+            presetLabel={presetLabel}
+            monthlyEmi={projection.monthlyEmi}
+            monthlyRent={monthlyRent}
+          />
 
-            <VerdictBlock
-              activeYear={activeYear}
-              buyWins={buyWins}
-              advantage={advantage}
-              isPreview={previewYear !== null}
-              breakEvenYear={projection.breakEvenYear}
-              homeEquity={homeEquity}
-              monthlyGapSummary={monthlyGapSummary}
-            />
+          <PlanViewTabs view={view} onChange={changeView} />
 
-            <section className="home-plan-stage" aria-label="Net worth projection">
-              <div className="home-plan-stage__toolbar">
-                <span className="home-plan-stage__label">
-                  {metric === "netWorth" ? "Projected net worth" : "Monthly outflow"}
-                </span>
-                <div className="home-plan-metric-toggle" role="group" aria-label="Chart metric">
-                  {(["netWorth", "monthlyOutflow"] as const).map((item) => (
-                    <button
-                      type="button"
-                      key={item}
-                      className={metric === item ? "is-active" : ""}
-                      onClick={() => setMetric(item)}
-                      aria-pressed={metric === item}
-                      title={item === "netWorth" ? "Net worth" : "Monthly outflow"}
-                    >
-                      <MetricIcon metric={item} />
-                      <span>{item === "netWorth" ? "Net worth" : "Monthly"}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <PlanGraph
-                projection={projection}
-                horizon={horizon}
-                metric={metric}
-                selected={selectedScenario}
-                purchaseYear={inputs.purchaseYear}
-                onHorizonChange={chooseHorizon}
-                onPreviewYearChange={setPreviewYear}
-                onSelect={setSelectedScenario}
-              />
-
-              <TimeRail
-                horizon={horizon}
-                maxYear={maxYear}
-                milestones={timeMilestones}
-                onChange={chooseHorizon}
-              />
-            </section>
-
-            <AssumptionStrip inputs={inputs} onEdit={openControls} />
-          </div>
-        ) : (
-          <section className="home-plan-repayment-canvas">
-            <header className="home-plan-repayment-header">
-              <PropertyOrigin
-                propertyId={id}
-                title={property.title}
-                area={property.area}
-                bhk={property.bhk}
-                price={property.price}
-                inputs={inputs}
-                presetLabel={presetLabel}
-              />
-              <h1>See how prepayments shorten this loan.</h1>
-              <p>Keep the regular EMI unchanged. Each annual prepayment goes directly toward principal.</p>
-            </header>
+          {view === "payoff" ? (
             <RepaymentJourney
               journey={loanJourney}
               extraEmisPerYear={extraEmisPerYear}
@@ -260,19 +225,73 @@ export function HomePlanPage() {
               onExtraEmisChange={setExtraEmisPerYear}
               onSelectYear={setLoanYear}
             />
-          </section>
-        )}
+          ) : (
+            <>
+              <VerdictBlock
+                view={view}
+                activeYear={activeYear}
+                buyWins={buyWins}
+                advantage={advantage}
+                isPreview={previewYear !== null}
+                breakEvenYear={projection.breakEvenYear}
+                homeEquity={homeEquity}
+                monthlyGap={monthlyGap}
+                monthlyGapSummary={monthlyGapSummary}
+                changeNote={changeNote}
+                monthlyEmi={projection.monthlyEmi}
+                monthlyRent={monthlyRent}
+                buyNetWorth={activePoint.buyNetWorth}
+                rentNetWorth={activePoint.rentNetWorth}
+              />
+
+              <MilestoneHint milestone={milestoneHint} />
+
+              <section className="home-plan-stage" aria-label="Projection over time">
+                <PlanGraph
+                  projection={projection}
+                  horizon={horizon}
+                  metric={metric}
+                  selected={selectedScenario}
+                  milestones={milestones}
+                  hintedMilestoneYear={milestoneHint?.year ?? null}
+                  showFocusHint={showFocusHint}
+                  onHorizonChange={chooseHorizon}
+                  onPreviewYearChange={setPreviewYear}
+                  onSelect={setSelectedScenario}
+                  onMilestonePress={handleMilestonePress}
+                  onDismissFocusHint={() => setShowFocusHint(false)}
+                />
+
+                <TimeRail
+                  horizon={horizon}
+                  maxYear={maxYear}
+                  milestones={milestones}
+                  hintedMilestoneYear={milestoneHint?.year ?? null}
+                  onChange={chooseHorizon}
+                  onMilestonePress={handleMilestonePress}
+                />
+              </section>
+
+              <AssumptionStrip
+                inputs={inputs}
+                activeField={controlsOpen ? focusField : null}
+                onEdit={openControls}
+              />
+            </>
+          )}
+        </div>
       </div>
 
       <PlanControls
         open={controlsOpen}
         section={controlSection}
+        focusField={focusField}
         preset={preset}
         inputs={inputs}
         projection={projection}
         extraEmisPerYear={extraEmisPerYear}
         property={propertyData}
-        onClose={() => setControlsOpen(false)}
+        onClose={() => { setControlsOpen(false); setFocusField(null); }}
         onSectionChange={setControlSection}
         onPresetChange={choosePreset}
         onInputChange={updateInput}

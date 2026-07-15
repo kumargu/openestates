@@ -1,4 +1,5 @@
 import { useState, type PointerEvent } from "react";
+import type { PlanMilestone } from "./planFields.ts";
 import { formatCurrency, type PlanProjection } from "./model.ts";
 
 export type PlanScenarioId = "buy" | "rent";
@@ -9,10 +10,14 @@ type PlanGraphProps = {
   horizon: number;
   metric: PlanGraphMetric;
   selected: PlanScenarioId;
-  purchaseYear: number;
+  milestones: PlanMilestone[];
+  hintedMilestoneYear: number | null;
+  showFocusHint: boolean;
   onHorizonChange: (year: number) => void;
   onPreviewYearChange: (year: number | null) => void;
   onSelect: (scenario: PlanScenarioId) => void;
+  onMilestonePress: (milestone: PlanMilestone) => void;
+  onDismissFocusHint: () => void;
 };
 
 type GraphSeries = {
@@ -58,15 +63,26 @@ function gapPath(
   return `${segments.join(" ")} Z`;
 }
 
+function milestoneShortLabel(label: string): string {
+  if (label.startsWith("Buy")) return "H";
+  if (label === "Break-even") return "=";
+  if (label === "Loan free") return "✓";
+  return "•";
+}
+
 export function PlanGraph({
   projection,
   horizon,
   metric,
   selected,
-  purchaseYear,
+  milestones,
+  hintedMilestoneYear,
+  showFocusHint,
   onHorizonChange,
   onPreviewYearChange,
   onSelect,
+  onMilestonePress,
+  onDismissFocusHint,
 }: PlanGraphProps) {
   const [hoverYear, setHoverYear] = useState<number | null>(null);
   const series = graphSeries(projection, metric);
@@ -93,23 +109,11 @@ export function PlanGraph({
   const tooltipY = Math.max(56, Math.min(GRAPH_HEIGHT - 124, y(selectedSeries.values[activeYear] ?? 0) - 50));
   const leadValue = Math.abs(buyValue - rentValue);
   const leadLabel = metric === "netWorth"
-    ? (buyWins ? "Buy leads" : "Rent + MF leads")
-    : (buyValue <= rentValue ? "Buy costs less" : "Rent costs less");
-  const breakEvenYear = projection.breakEvenYear;
-  const loanFreeYear = projection.points.find((point, index, points) => (
-    point.year > purchaseYear
-    && point.loanBalance <= 0
-    && (points[index - 1]?.loanBalance ?? 0) > 0
-  ))?.year ?? null;
-  const milestones = [
-    { year: purchaseYear, label: purchaseYear === 0 ? "Purchase" : "Planned purchase", shortLabel: "H" },
-    ...(metric === "netWorth" && breakEvenYear !== null
-      ? [{ year: breakEvenYear, label: "Break-even", shortLabel: "=" }]
-      : []),
-    ...(metric === "netWorth" && loanFreeYear !== null
-      ? [{ year: loanFreeYear, label: "Loan free", shortLabel: "✓" }]
-      : []),
-  ].filter((milestone, index, all) => milestone.year <= maxYear && all.findIndex((item) => item.year === milestone.year) === index);
+    ? (buyWins ? "Buy ahead" : "Rent + SIP ahead")
+    : (buyValue <= rentValue ? "Buy is lower" : "Rent is lower");
+  const graphMilestones = metric === "netWorth"
+    ? milestones.filter((milestone) => milestone.year <= maxYear)
+    : milestones.filter((milestone) => milestone.year <= maxYear && milestone.label.startsWith("Buy"));
 
   const updateHoverYear = (event: PointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -133,16 +137,26 @@ export function PlanGraph({
             type="button"
             key={item.id}
             className={selected === item.id ? "is-selected" : ""}
-            onClick={() => onSelect(item.id)}
+            onClick={() => {
+              onSelect(item.id);
+              onDismissFocusHint();
+            }}
+            aria-pressed={selected === item.id}
           >
             <i className={`home-plan-legend-dot home-plan-legend-dot--${item.id}`} />
             <span>
-              <strong>{item.label}</strong>
+              <strong>{item.id === "buy" ? "Buy path" : "Rent + SIP"}</strong>
               <small>{formatCurrency(item.values[activeYear] ?? 0, true)}</small>
             </span>
           </button>
         ))}
-        <p>{hoverYear === null ? "Scrub the chart to preview years" : `Year ${activeYear} · click to pin`}</p>
+        <p>
+          {showFocusHint
+            ? "Highlight a path — both stay on the chart"
+            : hoverYear === null
+              ? "Move across the chart to see other years"
+              : `Year ${activeYear} — tap chart to keep`}
+        </p>
       </div>
 
       <svg
@@ -216,20 +230,20 @@ export function PlanGraph({
           />
         ))}
 
-        {milestones.map((milestone) => {
+        {graphMilestones.map((milestone) => {
           const eventValue = selectedSeries.values[milestone.year] ?? 0;
           return (
             <g
               key={`${milestone.year}-${milestone.label}`}
-              className="home-plan-graph-event"
+              className={`home-plan-graph-event ${hintedMilestoneYear === milestone.year ? "is-hinted" : ""}`}
               transform={`translate(${x(milestone.year)} ${y(eventValue)})`}
               onClick={(event) => {
                 event.stopPropagation();
-                onHorizonChange(milestone.year);
+                onMilestonePress(milestone);
               }}
             >
               <circle r="11" />
-              <text y="3.5">{milestone.shortLabel}</text>
+              <text y="3.5">{milestoneShortLabel(milestone.label)}</text>
               <text y="-20" className="home-plan-graph-event-label">{milestone.label}</text>
             </g>
           );

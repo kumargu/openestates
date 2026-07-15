@@ -1,11 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useMemo } from "react";
 import { formatCurrency, type LoanJourney } from "./model.ts";
 
 function formatDuration(months: number): string {
   const years = Math.floor(months / 12);
   const remainingMonths = months % 12;
-  return remainingMonths === 0 ? `${years} years` : `${years}y ${remainingMonths}m`;
+  if (years === 0) return `${remainingMonths}m`;
+  return remainingMonths === 0 ? `${years}y` : `${years}y ${remainingMonths}m`;
 }
+
+const CHART_W = 760;
+const CHART_H = 200;
+const PAD = { top: 22, right: 10, bottom: 10, left: 10 };
 
 export function RepaymentJourney({
   journey,
@@ -20,30 +25,61 @@ export function RepaymentJourney({
   onExtraEmisChange: (count: number) => void;
   onSelectYear: (year: number) => void;
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const selectedPoint = journey.points.find((point) => point.year === selectedYear) ?? journey.points[0];
+  const points = journey.points;
+  const selectedPoint = points.find((point) => point.year === selectedYear) ?? points[0];
   const loanFreeYear = Math.ceil(journey.loanFreeMonths / 12);
+  const originalMonths = Math.max(1, journey.loanFreeMonths + journey.monthsSaved);
+  const toLoanFreePct = Math.round((journey.loanFreeMonths / originalMonths) * 100);
 
-  useEffect(() => {
-    const container = scrollRef.current;
-    const selectedButton = container?.querySelector<HTMLButtonElement>(`[data-year="${selectedYear}"]`);
-    if (!container || !selectedButton) return;
-    container.scrollTo({
-      left: selectedButton.offsetLeft - container.clientWidth / 2 + selectedButton.clientWidth / 2,
-      behavior: "smooth",
-    });
-  }, [selectedYear]);
+  const geometry = useMemo(() => {
+    const maxYear = Math.max(1, points[points.length - 1]?.year ?? 1);
+    const maxBalance = Math.max(1, ...points.map((point) => point.balance));
+    const innerW = CHART_W - PAD.left - PAD.right;
+    const innerH = CHART_H - PAD.top - PAD.bottom;
+    const x = (year: number) => PAD.left + (year / maxYear) * innerW;
+    const y = (balance: number) => CHART_H - PAD.bottom - (balance / maxBalance) * innerH;
+
+    const coords = points.map((point) => ({ ...point, cx: x(point.year), cy: y(point.balance) }));
+    const line = coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.cx.toFixed(1)} ${c.cy.toFixed(1)}`).join(" ");
+    const area = `${line} L ${x(maxYear).toFixed(1)} ${(CHART_H - PAD.bottom).toFixed(1)} L ${x(0).toFixed(1)} ${(CHART_H - PAD.bottom).toFixed(1)} Z`;
+    const step = innerW / maxYear;
+    return { coords, line, area, step };
+  }, [points]);
+
+  const selectedCoord = geometry.coords.find((c) => c.year === selectedYear) ?? geometry.coords[0];
 
   return (
-    <section className="home-plan-repayment">
-      <div className="home-plan-repayment-intro">
-        <div>
-          <span>Extra EMIs per year</span>
-          <p>Choose how many additional EMIs to pay annually without changing the regular EMI.</p>
+    <section className="home-plan-payoff" aria-label="Loan payoff plan">
+      <header className="home-plan-payoff__head">
+        <div className="home-plan-payoff__title">
+          <span className="home-plan-payoff__badge" aria-hidden="true">₹</span>
+          <div>
+            <h2>Pay off the loan faster</h2>
+            <p>Same monthly EMI. Add a few extra payments each year and watch the finish line move.</p>
+          </div>
         </div>
-        <div className="home-plan-repayment-options" aria-label="Extra EMIs per year">
+        <div className="home-plan-payoff__progress" aria-label={`Loan-free in ${formatDuration(journey.loanFreeMonths)}`}>
+          <div className="home-plan-payoff__progress-head">
+            <strong>{formatDuration(journey.loanFreeMonths)}</strong>
+            <small>{journey.monthsSaved > 0 ? `${formatDuration(journey.monthsSaved)} sooner` : "on original schedule"}</small>
+          </div>
+          <div className="home-plan-payoff__bar">
+            <span className="home-plan-payoff__bar-fill" style={{ width: `${toLoanFreePct}%` }} />
+          </div>
+        </div>
+      </header>
+
+      <div className="home-plan-payoff__lever" role="group" aria-label="Extra EMIs each year">
+        <span className="home-plan-payoff__lever-label">Extra EMIs a year</span>
+        <div className="home-plan-payoff__seg">
           {[0, 1, 2, 3, 4, 6].map((count) => (
-            <button type="button" key={count} className={extraEmisPerYear === count ? "is-active" : ""} onClick={() => onExtraEmisChange(count)}>
+            <button
+              type="button"
+              key={count}
+              className={extraEmisPerYear === count ? "is-active" : ""}
+              aria-pressed={extraEmisPerYear === count}
+              onClick={() => onExtraEmisChange(count)}
+            >
               <strong>{count}</strong>
               <small>{count === 1 ? "EMI" : "EMIs"}</small>
             </button>
@@ -51,46 +87,80 @@ export function RepaymentJourney({
         </div>
       </div>
 
-      <div className="home-plan-repayment-metrics">
-        <div><span>Regular EMI</span><strong>{formatCurrency(journey.monthlyEmi)}</strong><small>Paid every month</small></div>
-        <div><span>Extra each year</span><strong>{formatCurrency(journey.annualPrepayment, true)}</strong><small>{extraEmisPerYear} additional EMIs</small></div>
-        <div><span>Loan-free in</span><strong>{formatDuration(journey.loanFreeMonths)}</strong><small>{formatDuration(journey.monthsSaved)} earlier</small></div>
-        <div><span>Interest saved</span><strong>{formatCurrency(journey.interestSaved, true)}</strong><small>Compared with no prepayment</small></div>
+      <ul className="home-plan-payoff__outcomes">
+        <li>
+          <span className="home-plan-payoff__outcome-label">Extra you pay each year</span>
+          <span className="home-plan-payoff__outcome-value">{formatCurrency(journey.annualPrepayment, true)}</span>
+          <span className="home-plan-payoff__chip">{extraEmisPerYear} {extraEmisPerYear === 1 ? "EMI" : "EMIs"}</span>
+        </li>
+        <li>
+          <span className="home-plan-payoff__outcome-label">Time you save</span>
+          <span className="home-plan-payoff__outcome-value">{journey.monthsSaved > 0 ? formatDuration(journey.monthsSaved) : "—"}</span>
+          <span className="home-plan-payoff__chip home-plan-payoff__chip--good">{journey.monthsSaved > 0 ? "earlier" : "no change"}</span>
+        </li>
+        <li>
+          <span className="home-plan-payoff__outcome-label">Interest you save</span>
+          <span className="home-plan-payoff__outcome-value">{formatCurrency(journey.interestSaved, true)}</span>
+          <span className="home-plan-payoff__chip home-plan-payoff__chip--good">{journey.interestSaved > 0 ? "saved" : "—"}</span>
+        </li>
+      </ul>
+
+      <div className="home-plan-payoff__chart-wrap">
+        <div className="home-plan-payoff__chart-head">
+          <span>Loan balance falling to zero</span>
+          <small>Hover the curve to read any year</small>
+        </div>
+        <svg
+          className="home-plan-payoff__chart"
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          preserveAspectRatio="none"
+          role="img"
+          aria-label="Outstanding loan balance by year"
+        >
+          <defs>
+            <linearGradient id="payoffFill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor="var(--plan-accent)" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="var(--plan-accent)" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={geometry.area} fill="url(#payoffFill)" />
+          <path d={geometry.line} fill="none" stroke="var(--plan-accent)" strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+
+          {selectedCoord && (
+            <g className="home-plan-payoff__cursor">
+              <line x1={selectedCoord.cx} y1={PAD.top - 8} x2={selectedCoord.cx} y2={CHART_H - PAD.bottom} />
+              <circle cx={selectedCoord.cx} cy={selectedCoord.cy} r="5" />
+            </g>
+          )}
+
+          {geometry.coords.map((c) => (
+            <rect
+              key={c.year}
+              x={c.cx - geometry.step / 2}
+              y={0}
+              width={geometry.step}
+              height={CHART_H}
+              fill="transparent"
+              style={{ cursor: "pointer" }}
+              onMouseEnter={() => onSelectYear(c.year)}
+              onClick={() => onSelectYear(c.year)}
+            />
+          ))}
+        </svg>
       </div>
 
-      <section className="home-plan-repayment-timeline">
-        <header>
-          <div><span>Year-by-year journey</span><h2>Watch the outstanding balance fall.</h2><p>Select a year to inspect principal, interest, and prepayments.</p></div>
-          <div className="home-plan-loan-free-badge"><small>Expected loan-free point</small><strong>{formatDuration(journey.loanFreeMonths)}</strong></div>
-        </header>
-        <div ref={scrollRef} className="home-plan-timeline-scroll" tabIndex={0} aria-label="Year-by-year loan journey">
-          <div className="home-plan-timeline-track">
-            {journey.points.map((point) => {
-              const isLoanFree = point.balance <= 0.5;
-              const isPayoffYear = point.year === loanFreeYear;
-              return (
-                <button type="button" key={point.year} data-year={point.year} className={selectedYear === point.year ? "is-selected" : ""} onClick={() => onSelectYear(point.year)}>
-                  <span>{point.year === 0 ? "Start" : `Y${point.year}`}</span>
-                  <strong>{formatCurrency(point.balance, true)}</strong>
-                  <small>{isLoanFree ? (isPayoffYear ? "No balance" : "Time saved") : "Outstanding"}</small>
-                  <em>{point.interestPaid > 0 ? `${formatCurrency(point.interestPaid, true)} interest` : isPayoffYear ? "Final payment year" : "No EMI due"}</em>
-                  {point.extraPaid > 0 && <i>+{extraEmisPerYear} EMIs</i>}
-                  {isPayoffYear && <i>Loan-free</i>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-        <div className="home-plan-repayment-detail">
-          <div><span>Selected point</span><strong>{selectedPoint.year === 0 ? "Loan start" : `End of loan year ${selectedPoint.year}`}</strong></div>
-          <dl>
-            <div><dt>Outstanding</dt><dd>{formatCurrency(selectedPoint.balance, true)}</dd></div>
-            <div><dt>Principal paid</dt><dd>{formatCurrency(selectedPoint.principalPaid, true)}</dd></div>
-            <div><dt>Interest paid</dt><dd>{formatCurrency(selectedPoint.interestPaid, true)}</dd></div>
-            <div><dt>Extra prepaid</dt><dd>{formatCurrency(selectedPoint.extraPaid, true)}</dd></div>
-          </dl>
-        </div>
-      </section>
+      <div className="home-plan-payoff__readout">
+        <span className="home-plan-payoff__readout-year">
+          {selectedPoint.year === 0 ? "At loan start" : `End of year ${selectedPoint.year}`}
+          {selectedPoint.year >= loanFreeYear && selectedPoint.balance <= 0.5 && <em>· loan-free</em>}
+        </span>
+        <dl>
+          <div><dt>Outstanding</dt><dd>{formatCurrency(selectedPoint.balance, true)}</dd></div>
+          <div><dt>Principal paid</dt><dd>{formatCurrency(selectedPoint.principalPaid, true)}</dd></div>
+          <div><dt>Interest paid</dt><dd>{formatCurrency(selectedPoint.interestPaid, true)}</dd></div>
+          <div><dt>Extra prepaid</dt><dd>{formatCurrency(selectedPoint.extraPaid, true)}</dd></div>
+        </dl>
+      </div>
     </section>
   );
 }

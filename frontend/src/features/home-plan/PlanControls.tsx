@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import type { PropertyDetailResponse } from "../../lib/types.ts";
+import type { PlanControlField } from "./planFields.ts";
 import { formatCurrency, type PlanInputs, type PlanProjection } from "./model.ts";
 
 export type PlanControlSection = "financing" | "market" | "sources";
@@ -7,6 +9,7 @@ export type PlanPreset = "Base scenario" | "Cautious market" | "Strong growth" |
 type PlanControlsProps = {
   open: boolean;
   section: PlanControlSection;
+  focusField: PlanControlField | null;
   preset: PlanPreset;
   inputs: PlanInputs;
   projection: PlanProjection;
@@ -39,6 +42,7 @@ function ControlIcon({ name }: { name: PlanControlSection | "close" }) {
 }
 
 function RangeControl({
+  field,
   label,
   valueLabel,
   min,
@@ -46,7 +50,9 @@ function RangeControl({
   step,
   value,
   onChange,
+  focused,
 }: {
+  field?: PlanControlField;
   label: string;
   valueLabel: string;
   min: number;
@@ -54,9 +60,13 @@ function RangeControl({
   step: number;
   value: number;
   onChange: (value: number) => void;
+  focused?: boolean;
 }) {
   return (
-    <label className="home-plan-range-control">
+    <label
+      id={field ? `plan-field-${field}` : undefined}
+      className={`home-plan-range-control ${focused ? "is-focused" : ""}`}
+    >
       <span><span>{label}</span><strong>{valueLabel}</strong></span>
       <input type="range" min={min} max={max} step={step} value={value} onChange={(event) => onChange(Number(event.target.value))} />
     </label>
@@ -67,9 +77,10 @@ function FinancingControls({
   inputs,
   projection,
   extraEmisPerYear,
+  focusField,
   onInputChange,
   onExtraEmisChange,
-}: Pick<PlanControlsProps, "inputs" | "projection" | "extraEmisPerYear" | "onInputChange" | "onExtraEmisChange">) {
+}: Pick<PlanControlsProps, "inputs" | "projection" | "extraEmisPerYear" | "focusField" | "onInputChange" | "onExtraEmisChange">) {
   const nextDownPayment = Math.min(inputs.propertyPriceLakh * 0.8, inputs.downPaymentLakh + 10);
   const currentEmi = projection.monthlyEmi;
   const nextLoan = Math.max(0, inputs.propertyPriceLakh - nextDownPayment) * 100_000;
@@ -81,11 +92,13 @@ function FinancingControls({
   return (
     <>
       <section className="home-plan-control-block">
-        <span className="home-plan-control-kicker">Upfront cash</span>
+        <span className="home-plan-control-kicker">Upfront</span>
         <h3>Down payment</h3>
-        <p>Change the cash committed and see EMI, liquidity, and long-term outcome move together.</p>
+        <p>More cash upfront lowers EMI, but leaves less in hand today.</p>
         <RangeControl
-          label="Cash committed"
+          field="downPaymentLakh"
+          focused={focusField === "downPaymentLakh"}
+          label="Down payment"
           valueLabel={`₹${inputs.downPaymentLakh.toFixed(0)}L`}
           min={10}
           max={Math.max(20, Math.floor(inputs.propertyPriceLakh * 0.8))}
@@ -94,20 +107,30 @@ function FinancingControls({
           onChange={(value) => onInputChange("downPaymentLakh", value)}
         />
         <div className="home-plan-control-insight">
-          Adding ₹10L lowers EMI by {formatCurrency(Math.max(0, currentEmi - nextEmi))}, but leaves ₹10L less liquid today.
+          +₹10L down payment lowers EMI by {formatCurrency(Math.max(0, currentEmi - nextEmi))}/mo.
         </div>
       </section>
 
       <section className="home-plan-control-block">
-        <span className="home-plan-control-kicker">Loan terms</span>
-        <RangeControl label="Interest rate" valueLabel={`${inputs.loanRate.toFixed(1)}%`} min={6.5} max={11} step={0.1} value={inputs.loanRate} onChange={(value) => onInputChange("loanRate", value)} />
+        <span className="home-plan-control-kicker">Loan</span>
+        <RangeControl
+          field="loanRate"
+          focused={focusField === "loanRate"}
+          label="Interest rate"
+          valueLabel={`${inputs.loanRate.toFixed(1)}%`}
+          min={6.5}
+          max={11}
+          step={0.1}
+          value={inputs.loanRate}
+          onChange={(value) => onInputChange("loanRate", value)}
+        />
         <RangeControl label="Loan tenure" valueLabel={`${inputs.loanTenureYears} years`} min={10} max={30} step={5} value={inputs.loanTenureYears} onChange={(value) => onInputChange("loanTenureYears", value)} />
       </section>
 
       <section className="home-plan-control-block">
         <span className="home-plan-control-kicker">Prepayment</span>
-        <h3>{extraEmisPerYear} extra {extraEmisPerYear === 1 ? "EMI" : "EMIs"} each year</h3>
-        <p>Keep the regular EMI unchanged and use annual prepayments to shorten the loan journey.</p>
+        <h3>{extraEmisPerYear} extra {extraEmisPerYear === 1 ? "EMI" : "EMIs"} per year</h3>
+        <p>Your regular EMI stays the same. Extra payments go straight to principal.</p>
         <div className="home-plan-emi-options" aria-label="Extra EMIs each year">
           {[0, 1, 2, 3, 4, 6].map((count) => (
             <button type="button" key={count} className={extraEmisPerYear === count ? "is-active" : ""} onClick={() => onExtraEmisChange(count)}>{count}</button>
@@ -118,29 +141,63 @@ function FinancingControls({
   );
 }
 
-function MarketControls({ inputs, onInputChange }: Pick<PlanControlsProps, "inputs" | "onInputChange">) {
+function MarketControls({
+  inputs,
+  focusField,
+  onInputChange,
+}: Pick<PlanControlsProps, "inputs" | "focusField" | "onInputChange">) {
   return (
     <>
       <section className="home-plan-control-block">
-        <span className="home-plan-control-kicker">Home market</span>
-        <h3>Property assumptions</h3>
-        <p>Use a cautious range. Appreciation changes the ownership outcome more than most monthly tweaks.</p>
-        <RangeControl label="Home appreciation" valueLabel={`${inputs.appreciation.toFixed(1)}%`} min={2} max={10} step={0.5} value={inputs.appreciation} onChange={(value) => onInputChange("appreciation", value)} />
+        <span className="home-plan-control-kicker">Home</span>
+        <h3>Price growth</h3>
+        <p>This moves the buy path more than small monthly tweaks.</p>
+        <RangeControl
+          field="appreciation"
+          focused={focusField === "appreciation"}
+          label="Home appreciation"
+          valueLabel={`${inputs.appreciation.toFixed(1)}%`}
+          min={2}
+          max={10}
+          step={0.5}
+          value={inputs.appreciation}
+          onChange={(value) => onInputChange("appreciation", value)}
+        />
         <RangeControl label="Rent inflation" valueLabel={`${inputs.rentInflation.toFixed(1)}%`} min={2} max={10} step={0.5} value={inputs.rentInflation} onChange={(value) => onInputChange("rentInflation", value)} />
       </section>
 
       <section className="home-plan-control-block">
-        <span className="home-plan-control-kicker">Alternative investment</span>
-        <h3>Mutual-fund assumptions</h3>
-        <p>The rent scenario invests the down payment and the monthly EMI difference.</p>
-        <RangeControl label="Expected return" valueLabel={`${inputs.equityReturn.toFixed(1)}%`} min={6} max={14} step={0.5} value={inputs.equityReturn} onChange={(value) => onInputChange("equityReturn", value)} />
+        <span className="home-plan-control-kicker">If you rent</span>
+        <h3>Mutual fund path</h3>
+        <p>We invest the down payment and any monthly amount left after rent.</p>
+        <RangeControl
+          field="equityReturn"
+          focused={focusField === "equityReturn"}
+          label="Expected return"
+          valueLabel={`${inputs.equityReturn.toFixed(1)}%`}
+          min={6}
+          max={14}
+          step={0.5}
+          value={inputs.equityReturn}
+          onChange={(value) => onInputChange("equityReturn", value)}
+        />
         <RangeControl label="Extra monthly SIP" valueLabel={`₹${inputs.monthlyExtraInvestmentThousands.toFixed(0)}K`} min={0} max={100} step={5} value={inputs.monthlyExtraInvestmentThousands} onChange={(value) => onInputChange("monthlyExtraInvestmentThousands", value)} />
       </section>
 
       <section className="home-plan-control-block">
         <span className="home-plan-control-kicker">Timing</span>
         <RangeControl label="Buy after" valueLabel={inputs.purchaseYear === 0 ? "Now" : `${inputs.purchaseYear} years`} min={0} max={7} step={1} value={inputs.purchaseYear} onChange={(value) => onInputChange("purchaseYear", value)} />
-        <RangeControl label="Current rent" valueLabel={`₹${inputs.currentRentThousands.toFixed(0)}K / month`} min={15} max={150} step={5} value={inputs.currentRentThousands} onChange={(value) => onInputChange("currentRentThousands", value)} />
+        <RangeControl
+          field="currentRentThousands"
+          focused={focusField === "currentRentThousands"}
+          label="Current rent"
+          valueLabel={`₹${inputs.currentRentThousands.toFixed(0)}K / month`}
+          min={15}
+          max={150}
+          step={5}
+          value={inputs.currentRentThousands}
+          onChange={(value) => onInputChange("currentRentThousands", value)}
+        />
       </section>
     </>
   );
@@ -153,36 +210,36 @@ function SourcesPanel({ property }: Pick<PlanControlsProps, "property">) {
   const freshestFact = sourceFacts[0];
   const evidence = [
     {
-      label: "Property price",
+      label: "Listed price",
       value: formatCurrency(details.price, true),
-      note: `${details.price_per_sqft.toLocaleString("en-IN")} / sqft · listing input`,
-      confidence: property.confidence_score?.label ?? "Model input",
+      note: `${details.price_per_sqft.toLocaleString("en-IN")} / sqft`,
+      confidence: property.confidence_score?.label ?? "From listing",
     },
     {
-      label: "Local benchmark",
-      value: area?.median_price_per_sqft ? `₹${area.median_price_per_sqft.toLocaleString("en-IN")} / sqft` : "Not available",
-      note: area?.trend_summary ?? "Area evidence is still being collected.",
-      confidence: area ? "Area dataset" : "Missing",
+      label: "Area benchmark",
+      value: area?.median_price_per_sqft ? `₹${area.median_price_per_sqft.toLocaleString("en-IN")} / sqft` : "Not available yet",
+      note: area?.trend_summary ?? "We are still collecting area prices.",
+      confidence: area ? "Area data" : "Pending",
     },
     {
-      label: "Regulatory record",
-      value: property.rera?.registered ? "RERA registered" : "Verification pending",
-      note: property.rera?.registration_number ?? property.rera?.status ?? "No verified registration number available.",
-      confidence: property.rera?.registered ? "Verified" : "Needs review",
+      label: "RERA",
+      value: property.rera?.registered ? "Registered" : "Not verified yet",
+      note: property.rera?.registration_number ?? property.rera?.status ?? "No registration number on file.",
+      confidence: property.rera?.registered ? "Verified" : "Check manually",
     },
     {
-      label: "Latest sourced fact",
-      value: freshestFact?.value ?? "No sourced fact yet",
-      note: freshestFact ? `${freshestFact.source_type} · ${freshestFact.confidence_pct}% confidence` : "The model uses editable assumptions until evidence arrives.",
-      confidence: freshestFact?.learned_at ? `Updated ${new Date(freshestFact.learned_at).toLocaleDateString("en-IN")}` : "Freshness unavailable",
+      label: "Latest fact",
+      value: freshestFact?.value ?? "None yet",
+      note: freshestFact ? `${freshestFact.source_type} · ${freshestFact.confidence_pct}% confidence` : "Assumptions below are editable until we have more data.",
+      confidence: freshestFact?.learned_at ? `Updated ${new Date(freshestFact.learned_at).toLocaleDateString("en-IN")}` : "—",
     },
   ];
 
   return (
     <section className="home-plan-control-block home-plan-sources-block">
-      <span className="home-plan-control-kicker">Evidence drawer</span>
-      <h3>What this plan knows</h3>
-      <p>Property facts stay separate from editable financial assumptions so the result remains inspectable.</p>
+      <span className="home-plan-control-kicker">Sources</span>
+      <h3>Where the numbers come from</h3>
+      <p>Listing and area facts sit here. Loan and market assumptions are yours to change.</p>
       <div className="home-plan-evidence-list">
         {evidence.map((item) => (
           <div key={item.label}>
@@ -200,6 +257,7 @@ function SourcesPanel({ property }: Pick<PlanControlsProps, "property">) {
 export function PlanControls({
   open,
   section,
+  focusField,
   preset,
   inputs,
   projection,
@@ -212,20 +270,28 @@ export function PlanControls({
   onExtraEmisChange,
   onReset,
 }: PlanControlsProps) {
-  const sectionTitle = section === "financing" ? "Purchase and loan" : section === "market" ? "Market outlook" : "Evidence";
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const sectionTitle = section === "financing" ? "Loan and down payment" : section === "market" ? "Market assumptions" : "Sources";
+
+  useEffect(() => {
+    if (!open || !focusField || !bodyRef.current) return;
+    const target = bodyRef.current.querySelector<HTMLElement>(`#plan-field-${focusField}`);
+    if (!target) return;
+    target.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [open, focusField, section]);
 
   return (
     <>
-      {open && <button type="button" className="home-plan-controls-backdrop" aria-label="Close plan controls" onClick={onClose} />}
+      {open && <button type="button" className="home-plan-controls-backdrop" aria-label="Close plan editor" onClick={onClose} />}
       <aside className={`home-plan-controls ${open ? "is-open" : ""}`} aria-hidden={!open}>
         <header className="home-plan-controls-header">
-          <div><span>Assumptions</span><h2>{sectionTitle}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Close plan controls"><ControlIcon name="close" /></button>
+          <div><span>Your plan</span><h2>{sectionTitle}</h2></div>
+          <button type="button" onClick={onClose} aria-label="Close plan editor"><ControlIcon name="close" /></button>
         </header>
         <section className="home-plan-preset-selector" aria-label="Scenario presets">
           <div>
-            <span>Starting point</span>
-            <small>Choose a market view, then fine-tune any number below.</small>
+            <span>Preset</span>
+            <small>Base, cautious, or strong market — then tweak any slider.</small>
           </div>
           <div>
             {(["Base scenario", "Cautious market", "Strong growth"] as const).map((item) => (
@@ -234,23 +300,23 @@ export function PlanControls({
               </button>
             ))}
           </div>
-          {preset === "Custom" && <em>Custom assumptions</em>}
+          {preset === "Custom" && <em>Custom</em>}
         </section>
-        <nav className="home-plan-controls-tabs" aria-label="Plan control sections">
+        <nav className="home-plan-controls-tabs" aria-label="Plan sections">
           {(["financing", "market", "sources"] as const).map((item) => (
             <button type="button" key={item} className={section === item ? "is-active" : ""} onClick={() => onSectionChange(item)}>
               <ControlIcon name={item} />
-              <span>{item === "financing" ? "Purchase" : item === "market" ? "Market" : "Evidence"}</span>
+              <span>{item === "financing" ? "Loan" : item === "market" ? "Market" : "Sources"}</span>
             </button>
           ))}
         </nav>
-        <div className="home-plan-controls-body">
-          {section === "financing" && <FinancingControls inputs={inputs} projection={projection} extraEmisPerYear={extraEmisPerYear} onInputChange={onInputChange} onExtraEmisChange={onExtraEmisChange} />}
-          {section === "market" && <MarketControls inputs={inputs} onInputChange={onInputChange} />}
+        <div ref={bodyRef} className="home-plan-controls-body">
+          {section === "financing" && <FinancingControls inputs={inputs} projection={projection} extraEmisPerYear={extraEmisPerYear} focusField={focusField} onInputChange={onInputChange} onExtraEmisChange={onExtraEmisChange} />}
+          {section === "market" && <MarketControls inputs={inputs} focusField={focusField} onInputChange={onInputChange} />}
           {section === "sources" && <SourcesPanel property={property} />}
         </div>
         <footer className="home-plan-controls-footer">
-          <button type="button" onClick={onReset}>Reset to baseline</button>
+          <button type="button" onClick={onReset}>Reset</button>
           <button type="button" className="home-plan-primary-action" onClick={onClose}>Done</button>
         </footer>
       </aside>

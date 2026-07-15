@@ -1,13 +1,24 @@
+import type { PlanMilestone } from "./planFields.ts";
+
 type TimeRailProps = {
   horizon: number;
   maxYear: number;
-  milestones: Array<{ year: number; label: string }>;
+  milestones: PlanMilestone[];
+  hintedMilestoneYear: number | null;
   onChange: (year: number) => void;
+  onMilestonePress: (milestone: PlanMilestone) => void;
 };
 
 const QUICK_YEARS = [5, 10, 15, 20];
 
-export function TimeRail({ horizon, maxYear, milestones, onChange }: TimeRailProps) {
+export function TimeRail({
+  horizon,
+  maxYear,
+  milestones,
+  hintedMilestoneYear,
+  onChange,
+  onMilestonePress,
+}: TimeRailProps) {
   return (
     <div className="home-plan-time-rail" aria-label="Projection timeline">
       <div className="home-plan-time-rail__labels">
@@ -33,10 +44,10 @@ export function TimeRail({ horizon, maxYear, milestones, onChange }: TimeRailPro
           <button
             type="button"
             key={`${milestone.year}-${milestone.label}`}
-            className={`home-plan-time-rail__milestone ${horizon === milestone.year ? "is-active" : ""}`}
+            className={`home-plan-time-rail__milestone ${horizon === milestone.year ? "is-active" : ""} ${hintedMilestoneYear === milestone.year ? "is-hinted" : ""}`}
             style={{ left: `${(milestone.year / maxYear) * 100}%` }}
-            onClick={() => onChange(milestone.year)}
-            title={milestone.label}
+            onClick={() => onMilestonePress(milestone)}
+            aria-label={`${milestone.label}, year ${milestone.year}`}
           >
             <i />
             <span>{milestone.label}</span>

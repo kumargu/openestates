@@ -9,6 +9,8 @@ type PropertyOriginProps = {
   price: number;
   inputs: PlanInputs;
   presetLabel: string;
+  monthlyEmi: number;
+  monthlyRent: number;
 };
 
 export function PropertyOrigin({
@@ -19,6 +21,8 @@ export function PropertyOrigin({
   price,
   inputs,
   presetLabel,
+  monthlyEmi,
+  monthlyRent,
 }: PropertyOriginProps) {
   return (
     <Link to={`/property/${propertyId}`} className="home-plan-origin">
@@ -30,7 +34,7 @@ export function PropertyOrigin({
         <strong className="home-plan-origin__title">{title}</strong>
         <span className="home-plan-origin__price">
           {formatCurrency(price, true)}
-          <small>· ₹{inputs.downPaymentLakh.toFixed(0)}L down</small>
+          <small>· ₹{inputs.downPaymentLakh.toFixed(0)}L down · EMI {formatCurrency(monthlyEmi)}/mo · rent {formatCurrency(monthlyRent)}/mo</small>
         </span>
       </div>
       <span className="home-plan-origin__chevron" aria-hidden="true">›</span>
