@@ -48,6 +48,7 @@ export function HomePlanPage() {
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceView>("decision");
   const [horizon, setHorizon] = useState(10);
+  const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<PlanScenarioId>("buy");
   const [metric, setMetric] = useState<PlanGraphMetric>("netWorth");
   const [controlsOpen, setControlsOpen] = useState(false);
@@ -85,7 +86,14 @@ export function HomePlanPage() {
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price);
-  const activePoint = projection.points[Math.min(horizon, projection.points.length - 1)];
+  const activeYear = previewYear ?? horizon;
+  const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
+  const pinnedPoint = projection.points[Math.min(horizon, projection.points.length - 1)];
+  const pinnedDifference = pinnedPoint.buyNetWorth - pinnedPoint.rentNetWorth;
+  const pinnedScale = Math.max(Math.abs(pinnedPoint.buyNetWorth), Math.abs(pinnedPoint.rentNetWorth), 1);
+  const decisionTheme = Math.abs(pinnedDifference) / pinnedScale <= 0.02
+    ? "balanced"
+    : pinnedDifference > 0 ? "buy" : "rent";
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
   const monthlyRent = activePoint.annualRent / 12;
@@ -95,8 +103,8 @@ export function HomePlanPage() {
     ? `The buying path costs ${formatCurrency(monthlyGap)} more per month than renting`
     : `The buying path costs ${formatCurrency(Math.abs(monthlyGap))} less per month than renting`;
   const decisionHeadline = buyWins
-    ? `At year ${horizon}, buying is ahead by ${formatCurrency(advantage, true)}.`
-    : `At year ${horizon}, rent + mutual funds is ahead by ${formatCurrency(advantage, true)}.`;
+    ? `At year ${activeYear}, buying is ahead by ${formatCurrency(advantage, true)}.`
+    : `At year ${activeYear}, rent + mutual funds is ahead by ${formatCurrency(advantage, true)}.`;
   const boundaryHeadline = projection.breakEvenYear
     ? `Buying catches up in year ${projection.breakEvenYear}.`
     : "Buying does not catch up within 20 years.";
@@ -120,8 +128,13 @@ export function HomePlanPage() {
     setExtraEmisPerYear(2);
   };
 
+  const chooseHorizon = (year: number) => {
+    setHorizon(year);
+    setPreviewYear(null);
+  };
+
   return (
-    <div className="home-plan-shell">
+    <div className={`home-plan-shell home-plan-shell--${decisionTheme}`}>
       <Helmet>
         <title>{property.title} financial plan | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
@@ -142,8 +155,8 @@ export function HomePlanPage() {
               <p>{workspace === "decision" ? "This result uses the assumptions shown below. Change them to test another outcome." : "Choose how many extra EMIs to pay each year and see when the loan ends."}</p>
             </div>
             <div className="home-plan-workspace-switch" aria-label="Planning workspace">
-              <button type="button" className={workspace === "decision" ? "is-active" : ""} onClick={() => setWorkspace("decision")}>Compare choices</button>
-              <button type="button" className={workspace === "repayment" ? "is-active" : ""} onClick={() => setWorkspace("repayment")}>Pay off loan</button>
+              <button type="button" className={workspace === "decision" ? "is-active" : ""} onClick={() => { setPreviewYear(null); setWorkspace("decision"); }}>Compare choices</button>
+              <button type="button" className={workspace === "repayment" ? "is-active" : ""} onClick={() => { setPreviewYear(null); setWorkspace("repayment"); }}>Pay off loan</button>
             </div>
           </div>
 
@@ -175,7 +188,7 @@ export function HomePlanPage() {
                     <span>Compare the two paths</span>
                     <h2>{metric === "netWorth" ? "Projected net worth" : "Monthly outflow"}</h2>
                     <p className="home-plan-panel-context">
-                      By year {horizon}, buying creates {formatCurrency(homeEquity, true)} in home equity. {monthlyGapSummary} and requires ₹{inputs.downPaymentLakh.toFixed(0)}L upfront.
+                      By year {activeYear}, buying creates {formatCurrency(homeEquity, true)} in home equity. {monthlyGapSummary} and requires ₹{inputs.downPaymentLakh.toFixed(0)}L upfront.
                     </p>
                   </div>
                   <div className="home-plan-chart-tools">
@@ -188,11 +201,11 @@ export function HomePlanPage() {
                     </label>
                     <div className="home-plan-horizon-control">
                       <span>Horizon</span>
-                      <div>{[5, 10, 15, 20].map((year) => <button type="button" key={year} className={horizon === year ? "is-active" : ""} onClick={() => setHorizon(year)}>{year}y</button>)}</div>
+                      <div>{[5, 10, 15, 20].map((year) => <button type="button" key={year} className={horizon === year ? "is-active" : ""} onClick={() => chooseHorizon(year)}>{year}y</button>)}</div>
                     </div>
                   </div>
                 </div>
-                <PlanGraph projection={projection} horizon={horizon} metric={metric} selected={selectedScenario} purchaseYear={inputs.purchaseYear} onHorizonChange={setHorizon} onSelect={setSelectedScenario} />
+                <PlanGraph projection={projection} horizon={horizon} metric={metric} selected={selectedScenario} purchaseYear={inputs.purchaseYear} onHorizonChange={chooseHorizon} onPreviewYearChange={setPreviewYear} onSelect={setSelectedScenario} />
               </section>
 
             </>

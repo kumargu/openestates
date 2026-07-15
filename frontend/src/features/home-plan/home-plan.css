@@ -11,13 +11,47 @@
   --plan-rent: #79a6b8;
   --plan-accent: #775e50;
   --plan-brand: #c96b4f;
+  position: relative;
+  isolation: isolate;
   min-height: 100vh;
   color: var(--plan-ink);
-  background:
-    radial-gradient(circle at 12% 4%, rgba(201, 107, 79, 0.16), transparent 27%),
-    radial-gradient(circle at 84% 3%, rgba(121, 166, 184, 0.14), transparent 30%),
-    linear-gradient(135deg, #fbf3e9 0%, #f4eadc 50%, #eadfce 100%);
+  background: linear-gradient(135deg, #fbf3e9 0%, #f4eadc 50%, #eadfce 100%);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.home-plan-shell::before,
+.home-plan-shell::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  transition: opacity 650ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-plan-shell::before {
+  background:
+    radial-gradient(circle at 12% 4%, rgba(211, 112, 80, 0.24), transparent 29%),
+    radial-gradient(circle at 82% 72%, rgba(220, 151, 112, 0.12), transparent 34%);
+}
+
+.home-plan-shell::after {
+  background:
+    radial-gradient(circle at 84% 3%, rgba(112, 162, 182, 0.22), transparent 31%),
+    radial-gradient(circle at 14% 76%, rgba(130, 171, 174, 0.1), transparent 34%);
+}
+
+.home-plan-shell--buy::before { opacity: 1; }
+.home-plan-shell--buy::after { opacity: 0.2; }
+.home-plan-shell--rent::before { opacity: 0.24; }
+.home-plan-shell--rent::after { opacity: 1; }
+.home-plan-shell--balanced::before,
+.home-plan-shell--balanced::after { opacity: 0.52; }
+
+.home-plan-header,
+.home-plan-main {
+  position: relative;
+  z-index: 1;
 }
 
 .home-plan-shell button,
@@ -256,7 +290,14 @@
 
 .home-plan-graph-legend {
   display: flex;
+  align-items: center;
   gap: 0.6rem;
+}
+
+.home-plan-graph-legend > p {
+  margin: 0 0 0 auto;
+  color: var(--plan-faint);
+  font-size: 0.58rem;
 }
 
 .home-plan-graph-legend button {
@@ -1293,6 +1334,10 @@
   .home-plan-graph-legend {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .home-plan-graph-legend > p {
+    margin-left: 0;
   }
 
   .home-plan-graph-legend button {

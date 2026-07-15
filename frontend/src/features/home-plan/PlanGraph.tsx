@@ -11,6 +11,7 @@ type PlanGraphProps = {
   selected: PlanScenarioId;
   purchaseYear: number;
   onHorizonChange: (year: number) => void;
+  onPreviewYearChange: (year: number | null) => void;
   onSelect: (scenario: PlanScenarioId) => void;
 };
 
@@ -45,6 +46,7 @@ export function PlanGraph({
   selected,
   purchaseYear,
   onHorizonChange,
+  onPreviewYearChange,
   onSelect,
 }: PlanGraphProps) {
   const [hoverYear, setHoverYear] = useState<number | null>(null);
@@ -71,10 +73,18 @@ export function PlanGraph({
     ? (buyValue >= rentValue ? "Buy leads" : "Rent + MF leads")
     : (buyValue <= rentValue ? "Buy costs less" : "Rent costs less");
   const breakEvenYear = projection.breakEvenYear;
+  const loanFreeYear = projection.points.find((point, index, points) => (
+    point.year > purchaseYear
+    && point.loanBalance <= 0
+    && (points[index - 1]?.loanBalance ?? 0) > 0
+  ))?.year ?? null;
   const milestones = [
     { year: purchaseYear, label: purchaseYear === 0 ? "Purchase" : "Planned purchase", shortLabel: "H" },
     ...(metric === "netWorth" && breakEvenYear !== null
       ? [{ year: breakEvenYear, label: "Break-even", shortLabel: "=" }]
+      : []),
+    ...(metric === "netWorth" && loanFreeYear !== null
+      ? [{ year: loanFreeYear, label: "Loan free", shortLabel: "✓" }]
       : []),
   ].filter((milestone, index, all) => milestone.year <= maxYear && all.findIndex((item) => item.year === milestone.year) === index);
 
@@ -82,7 +92,14 @@ export function PlanGraph({
     const bounds = event.currentTarget.getBoundingClientRect();
     const svgX = ((event.clientX - bounds.left) / bounds.width) * GRAPH_WIDTH;
     const nextYear = Math.round(((svgX - GRAPH_INSET.left) / plotWidth) * maxYear);
-    setHoverYear(Math.max(0, Math.min(maxYear, nextYear)));
+    const boundedYear = Math.max(0, Math.min(maxYear, nextYear));
+    setHoverYear(boundedYear);
+    onPreviewYearChange(boundedYear);
+  };
+
+  const clearHoverYear = () => {
+    setHoverYear(null);
+    onPreviewYearChange(null);
   };
 
   return (
@@ -102,6 +119,7 @@ export function PlanGraph({
             </span>
           </button>
         ))}
+        <p>{hoverYear === null ? "Move across the chart to explore. Click to keep a year." : `Previewing year ${activeYear} · click to keep`}</p>
       </div>
 
       <svg
@@ -110,7 +128,7 @@ export function PlanGraph({
         role="img"
         aria-label={`${metric === "netWorth" ? "Projected net worth" : "Projected monthly outflow"} over ${maxYear} years`}
         onPointerMove={updateHoverYear}
-        onPointerLeave={() => setHoverYear(null)}
+        onPointerLeave={clearHoverYear}
         onClick={() => onHorizonChange(activeYear)}
       >
         <defs>
