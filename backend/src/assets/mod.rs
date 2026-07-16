@@ -14,6 +14,7 @@ pub mod fan_in;
 pub mod google;
 pub mod kg_view;
 pub mod materialization;
+pub mod media;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
@@ -58,6 +59,11 @@ pub use kg_view::{
     KG_SOCIETY_VIEW_ASSET_ID,
 };
 pub use materialization::AssetMaterializationStore;
+pub use media::{
+    image_media_facts_input_with_aliases, ExternalImageObservationRecord,
+    ExternalImageSnapshotManifest, ExternalImagesWeeklyInput, MediaAssetError,
+    MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+};
 pub use paths::AssetPathBuilder;
 pub use planner::{
     AssetDagPlan, AssetFreshness, AssetPlanEntry, AssetPlanner, FreshnessPolicy,

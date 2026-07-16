@@ -3,15 +3,17 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalListingsWeeklyInput,
-    GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput, MetroStationsMonthlyInput, PlanReason,
-    PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
+    ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
+    MetroStationsMonthlyInput, PlanReason, PrestigeInventoryWeeklyInput,
+    RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactRecord, SourceWatermark, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -37,6 +39,8 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_listings_weekly: Option<ExternalListingsWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub external_images_weekly: Option<ExternalImagesWeeklyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metro_stations_monthly: Option<MetroStationsMonthlyInput>,
 }
 
@@ -57,6 +61,7 @@ impl AssetSourceInputs {
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+            EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             METRO_STATIONS_MONTHLY_ASSET_ID,
         ]
         .into_iter()
@@ -74,6 +79,7 @@ impl AssetSourceInputs {
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID
                 | EXTERNAL_LISTINGS_WEEKLY_ASSET_ID
+                | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | METRO_STATIONS_MONTHLY_ASSET_ID
         )
     }
@@ -138,6 +144,14 @@ impl AssetSourceInputs {
             &mut force_assets,
             EXTERNAL_LISTING_FACTS_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+            false,
+        );
+        add_derived_companion(
+            plan,
+            &mut requested_assets,
+            &mut force_assets,
+            IMAGE_MEDIA_FACTS_ASSET_ID,
+            EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             false,
         );
         add_derived_companion(
@@ -214,6 +228,15 @@ impl AssetSourceInputs {
                 step.asset_id.as_str() == EXTERNAL_LISTING_FACTS_ASSET_ID && step_needs_replay(step)
             }),
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+            true,
+        );
+        add_raw_companion(
+            &mut requested_assets,
+            &mut force_assets,
+            manifest.steps.iter().any(|step| {
+                step.asset_id.as_str() == IMAGE_MEDIA_FACTS_ASSET_ID && step_needs_replay(step)
+            }),
+            EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             true,
         );
         add_raw_companion(

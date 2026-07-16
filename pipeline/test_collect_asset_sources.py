@@ -431,6 +431,50 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["observed_at"], "2026-07-12T08:00:00Z")
         self.assertNotIn("confidence", listing)
 
+    def test_external_image_collection_extracts_magicbricks_images(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_images_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "project_key": "PRM-EXAMPLE-GREEN",
+                        "image_source_pages": [
+                            {
+                                "source_name": "magicbricks",
+                                "source_page_url": "https://www.magicbricks.com/example-green",
+                                "html": """
+                                    <html>
+                                      <img data-src="https://img.staticmb.com/mbimages/project/example-green-elevation.jpg" alt="Example Green elevation" width="1200" height="800">
+                                      <img src="//img.staticmb.com/mbimages/project/example-green-clubhouse.webp" alt="Example Green clubhouse">
+                                    </html>
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(output["external_images_weekly"]["snapshot_date"], "2026-07-16")
+        self.assertEqual(len(records), 2)
+        self.assertEqual(records[0]["entity_id"], "society:example-green")
+        self.assertEqual(records[0]["source_name"], "magicbricks")
+        self.assertEqual(records[0]["source_page_url"], "https://www.magicbricks.com/example-green")
+        self.assertEqual(
+            records[0]["image_url"],
+            "https://img.staticmb.com/mbimages/project/example-green-elevation.jpg",
+        )
+        self.assertEqual(records[0]["image_kind"], "exterior")
+        self.assertEqual(records[0]["width"], 1200)
+        self.assertEqual(records[0]["height"], 800)
+        self.assertEqual(records[0]["storage_policy"], "link_only")
+        self.assertNotIn("confidence", records[0])
+
     def test_stale_google_collection_forces_skill_refresh(self):
         calls = []
         result = SkillResult(

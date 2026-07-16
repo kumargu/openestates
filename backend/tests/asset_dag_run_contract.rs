@@ -457,6 +457,27 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::new([("source", "external_listing")]),
     );
     write_current(&materializations, &external_listing_facts).await;
+    let external_images = materialization_in_partition(
+        "external_images_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::new([("source", "external_image")]),
+    );
+    write_current(&materializations, &external_images).await;
+    let image_media_facts = materialization_in_partition(
+        "image_media_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            external_images.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "external_image")]),
+    );
+    write_current(&materializations, &image_media_facts).await;
     let metro_stations = materialization_in_partition(
         "metro_stations_monthly",
         AssetStage::Raw,
@@ -504,6 +525,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
             external_listing_facts.materialization_id.clone(),
+            image_media_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
         ],
@@ -562,6 +584,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
             external_listing_facts.materialization_id.clone(),
+            image_media_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
         ],

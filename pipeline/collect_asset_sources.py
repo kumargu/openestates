@@ -25,6 +25,7 @@ GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
+EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 METRO_STATIONS_MONTHLY = "metro_stations_monthly"
 SUPPORTED_ASSETS = frozenset(
     (
@@ -35,6 +36,7 @@ SUPPORTED_ASSETS = frozenset(
         GOOGLE_NEARBY_PLACES_WEEKLY,
         PRESTIGE_INVENTORY_WEEKLY,
         EXTERNAL_LISTINGS_WEEKLY,
+        EXTERNAL_IMAGES_WEEKLY,
         METRO_STATIONS_MONTHLY,
     )
 )
@@ -140,6 +142,13 @@ def collect_asset_sources(
             output[EXTERNAL_LISTINGS_WEEKLY] = collect_external_listings(request)
         except Exception as error:
             record_source_failure(source_failures, [EXTERNAL_LISTINGS_WEEKLY], error)
+    if EXTERNAL_IMAGES_WEEKLY in requested:
+        try:
+            from pipeline.sources.external_images import collect_external_images
+
+            output[EXTERNAL_IMAGES_WEEKLY] = collect_external_images(request)
+        except Exception as error:
+            record_source_failure(source_failures, [EXTERNAL_IMAGES_WEEKLY], error)
     if METRO_STATIONS_MONTHLY in requested:
         try:
             from pipeline.sources.project_enrichment import collect_metro_stations

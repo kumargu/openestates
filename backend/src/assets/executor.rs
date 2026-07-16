@@ -18,16 +18,17 @@ use super::{
     AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, CommunitySummaryAssetError,
     DependencyFanInPolicy, GooglePlaceAssetError, GooglePlaceSnapshotMaterializer,
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
-    KgViewManifest, KgViewRecords, MaterializationId, MaterializationRecord,
-    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    KgViewManifest, KgViewRecords, MaterializationId, MaterializationRecord, MediaAssetError,
+    MediaAssetMaterializer, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, RedditThreadSnapshotMaterializeError,
     RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
     ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactsInput, SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
     MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
@@ -1105,6 +1106,14 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ExternalListingFacts,
         );
         executors.insert(
+            static_asset_id(EXTERNAL_IMAGES_WEEKLY_ASSET_ID),
+            BuiltInAssetExecutor::ExternalImagesWeekly,
+        );
+        executors.insert(
+            static_asset_id(IMAGE_MEDIA_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::ImageMediaFacts,
+        );
+        executors.insert(
             static_asset_id(METRO_STATIONS_MONTHLY_ASSET_ID),
             BuiltInAssetExecutor::MetroStationsMonthly,
         );
@@ -1148,6 +1157,8 @@ enum BuiltInAssetExecutor {
     MarketProjectFacts,
     ExternalListingsWeekly,
     ExternalListingFacts,
+    ExternalImagesWeekly,
+    ImageMediaFacts,
     MetroStationsMonthly,
     MetroProximityFacts,
     BuilderReraAggregates,
@@ -1567,6 +1578,66 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::ExternalImagesWeekly => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .external_images_weekly
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let record = MediaAssetMaterializer::new(context.dag.lake.clone())
+                    .materialize_external_images(
+                        input,
+                        parent_materializations,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::ImageMediaFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let image_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::image_media_facts_input_with_aliases(
+                    &context.dag.lake,
+                    image_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::MetroStationsMonthly => {
                 let input = context
                     .options
@@ -1913,6 +1984,7 @@ pub enum AssetDagExecutorError {
     GooglePlace(GooglePlaceAssetError),
     CommunitySummary(CommunitySummaryAssetError),
     ProjectEnrichment(ProjectEnrichmentAssetError),
+    Media(MediaAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
     Rera(ReraAssetError),
@@ -2004,6 +2076,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
             }
+            Self::Media(err) => write!(f, "media asset execution failed: {err}"),
             Self::SearchServingBundle(err) => {
                 write!(f, "search serving bundle execution failed: {err}")
             }
@@ -2129,6 +2202,7 @@ impl AssetDagExecutorError {
                 SkillFactMaterializeError::Lake(err),
             ))
             | Self::ProjectEnrichment(ProjectEnrichmentAssetError::Lake(err))
+            | Self::Media(MediaAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
             | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
@@ -2192,6 +2266,12 @@ impl From<CommunitySummaryAssetError> for AssetDagExecutorError {
 impl From<ProjectEnrichmentAssetError> for AssetDagExecutorError {
     fn from(err: ProjectEnrichmentAssetError) -> Self {
         Self::ProjectEnrichment(err)
+    }
+}
+
+impl From<MediaAssetError> for AssetDagExecutorError {
+    fn from(err: MediaAssetError) -> Self {
+        Self::Media(err)
     }
 }
 
@@ -2308,6 +2388,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.google_nearby_places_weekly.is_none()
         && source_inputs.prestige_inventory_weekly.is_none()
         && source_inputs.external_listings_weekly.is_none()
+        && source_inputs.external_images_weekly.is_none()
         && source_inputs.metro_stations_monthly.is_none()
 }
 
