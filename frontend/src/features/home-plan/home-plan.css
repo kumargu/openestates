@@ -6,14 +6,20 @@
   --plan-faint: #9a8d82;
   --plan-line: rgba(50, 38, 30, 0.1);
   --plan-line-strong: rgba(50, 38, 30, 0.18);
-  --plan-surface: rgba(255, 251, 245, 0.88);
-  --plan-surface-solid: #fffbf5;
+  --plan-surface: rgba(255, 251, 247, 0.88);
+  --plan-surface-solid: #fdf9f7;
   --plan-soft: rgba(243, 232, 218, 0.65);
-  --plan-buy: #cf6a4a;
-  --plan-rent: #6d9478;
-  --plan-rent-deep: #4f7560;
-  --plan-monthly: #7a8f7e;
-  --plan-monthly-deep: #567059;
+  /* Warm clay (buy) + cool blue (rent) — matches site landing theme */
+  --plan-buy: #c96b4f;
+  --plan-buy-deep: #b85a3c;
+  --plan-rent: #5b7fb0;
+  --plan-rent-deep: #3f5c8a;
+  --plan-cool: #5b7fb0;
+  --plan-cool-deep: #3f5c8a;
+  --plan-cool-soft: rgba(100, 140, 200, 0.12);
+  --plan-cool-wash: rgba(100, 140, 200, 0.18);
+  --plan-clay-soft: rgba(201, 107, 79, 0.1);
+  --plan-clay-wash: rgba(201, 107, 79, 0.16);
   --plan-payoff: #c4893a;
   --plan-accent: #6b5346;
   --plan-brand: #c46345;
@@ -22,7 +28,7 @@
   isolation: isolate;
   min-height: 100vh;
   color: var(--plan-ink);
-  background: #f7f0e6;
+  background: #fdf9f7;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
@@ -44,8 +50,8 @@
 
 .home-plan-shell::after {
   background:
-    radial-gradient(ellipse 70% 45% at 95% 0%, rgba(109, 148, 120, 0.24), transparent 52%),
-    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(109, 148, 120, 0.12), transparent 48%);
+    radial-gradient(ellipse 70% 45% at 95% 0%, var(--plan-cool-wash), transparent 52%),
+    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(100, 140, 200, 0.1), transparent 48%);
 }
 
 .home-plan-shell--buy::before { opacity: 1; }
@@ -55,27 +61,27 @@
 .home-plan-shell--balanced::before,
 .home-plan-shell--balanced::after { opacity: 0.55; }
 
-/* ── View chapters — unified monthly sage wash on all tabs ─────────────── */
+/* ── View chapters — cream canvas + clay/blue wash (site theme) ────────── */
 
 .home-plan-shell--view-net-worth,
 .home-plan-shell--view-monthly,
 .home-plan-shell--view-payoff {
-  background: #f1f0e8;
+  background: #fdf9f7;
 }
 
 .home-plan-shell--view-net-worth::before,
 .home-plan-shell--view-monthly::before,
 .home-plan-shell--view-payoff::before {
-  opacity: 0.28;
+  opacity: 0.32;
 }
 
 .home-plan-shell--view-net-worth::after,
 .home-plan-shell--view-monthly::after,
 .home-plan-shell--view-payoff::after {
   background:
-    radial-gradient(ellipse 75% 48% at 12% 0%, rgba(122, 143, 126, 0.2), transparent 54%),
-    radial-gradient(ellipse 60% 38% at 88% 100%, rgba(122, 143, 126, 0.1), transparent 50%);
-  opacity: 0.72;
+    radial-gradient(ellipse 75% 48% at 12% 0%, var(--plan-clay-wash), transparent 54%),
+    radial-gradient(ellipse 60% 38% at 88% 100%, var(--plan-cool-wash), transparent 50%);
+  opacity: 0.78;
 }
 
 .home-plan-header,
@@ -241,9 +247,9 @@
 
 .home-plan-verdict__year {
   margin: 0;
-  color: var(--plan-faint);
+  color: var(--plan-cool-deep);
   font-size: 0.78rem;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -273,14 +279,21 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* All views: sage chapter accent on headline metrics (monthly theme) */
+/* Headline: clay leader + cool amount for scanability */
 .home-plan-shell--view-net-worth .home-plan-verdict__leader,
-.home-plan-shell--view-net-worth .home-plan-verdict__amount,
 .home-plan-shell--view-monthly .home-plan-verdict__leader,
+.home-plan-shell--view-payoff .home-plan-verdict__leader {
+  color: var(--plan-buy-deep);
+}
+
+.home-plan-shell--view-net-worth .home-plan-verdict__amount,
 .home-plan-shell--view-monthly .home-plan-verdict__amount,
-.home-plan-shell--view-payoff .home-plan-verdict__leader,
 .home-plan-shell--view-payoff .home-plan-verdict__amount {
-  color: var(--plan-monthly-deep);
+  color: var(--plan-cool-deep);
+}
+
+.home-plan-shell--view-payoff .home-plan-verdict__amount:last-of-type {
+  color: var(--plan-buy-deep);
 }
 
 .home-plan-verdict__detail {
@@ -331,18 +344,18 @@
 }
 
 .home-plan-verdict__tile--buy dd {
-  color: #b85a3c;
+  color: var(--plan-buy-deep);
 }
 
 .home-plan-verdict__tile--rent,
 .home-plan-verdict__tile--highlight {
-  background: rgba(122, 143, 126, 0.12);
-  border-color: rgba(122, 143, 126, 0.3);
+  background: var(--plan-cool-soft);
+  border-color: rgba(100, 140, 200, 0.28);
 }
 
 .home-plan-verdict__tile--rent dd,
 .home-plan-verdict__tile--highlight dd {
-  color: var(--plan-monthly-deep);
+  color: var(--plan-cool-deep);
 }
 
 .home-plan-verdict__breakdown--3 {
@@ -389,7 +402,7 @@
 }
 
 .home-plan-milestone-hint strong {
-  color: var(--plan-ink);
+  color: var(--plan-buy-deep);
   font-weight: 700;
 }
 
@@ -399,10 +412,10 @@
 
 .home-plan-milestone-hint em {
   margin-left: auto;
-  color: var(--plan-faint);
+  color: var(--plan-cool-deep);
   font-size: 0.72rem;
   font-style: normal;
-  font-weight: 600;
+  font-weight: 650;
 }
 
 /* ── View tabs (primary navigation) ─────────────────────────────────────── */
@@ -442,7 +455,7 @@
 .home-plan-view-tabs__seg button.is-active {
   color: var(--plan-ink);
   background: white;
-  box-shadow: inset 0 -2px 0 var(--plan-monthly-deep), 0 2px 10px rgba(31, 24, 20, 0.08);
+  box-shadow: inset 0 -2px 0 var(--plan-buy), 0 2px 10px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-view-tabs__subtitle {
@@ -514,7 +527,20 @@
 
 .home-plan-legend-dot--rent {
   background: var(--plan-rent);
-  box-shadow: 0 0 0 3px rgba(95, 150, 173, 0.18);
+  box-shadow: 0 0 0 3px rgba(100, 140, 200, 0.2);
+}
+
+.home-plan-graph-legend button:has(.home-plan-legend-dot--buy) strong {
+  color: var(--plan-buy-deep);
+}
+
+.home-plan-graph-legend button:has(.home-plan-legend-dot--rent) strong {
+  color: var(--plan-cool-deep);
+}
+
+.home-plan-graph-legend button.is-selected small {
+  color: var(--plan-ink);
+  font-weight: 650;
 }
 
 .home-plan-graph-legend span {
@@ -889,7 +915,7 @@
   background: #342820;
 }
 
-/* ── Pay off loan (open canvas — same chapter as monthly) ───────────────── */
+/* ── Pay off loan (open canvas — clay + cool accents) ───────────────────── */
 
 .home-plan-payoff {
   display: grid;
@@ -909,7 +935,7 @@
   display: block;
   height: 100%;
   border-radius: 99px;
-  background: linear-gradient(90deg, var(--plan-monthly-deep), var(--plan-rent));
+  background: linear-gradient(90deg, var(--plan-buy-deep), var(--plan-cool-deep));
   transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
@@ -940,8 +966,8 @@
 }
 
 .home-plan-payoff__seg button.is-active {
-  color: var(--plan-monthly-deep);
-  box-shadow: inset 0 0 0 1.5px var(--plan-monthly-deep), 0 2px 10px rgba(31, 24, 20, 0.08);
+  color: var(--plan-cool-deep);
+  box-shadow: inset 0 0 0 1.5px var(--plan-cool-deep), 0 2px 10px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-payoff__seg strong {
@@ -992,7 +1018,7 @@
 }
 
 .home-plan-payoff__legend-item--prepay i {
-  color: var(--plan-monthly-deep);
+  color: var(--plan-cool-deep);
 }
 
 .home-plan-payoff__legend-item small {
@@ -1034,7 +1060,7 @@
 }
 
 .home-plan-payoff__line--prepay {
-  stroke: var(--plan-monthly-deep);
+  stroke: var(--plan-cool-deep);
   stroke-width: 2.75;
 }
 
@@ -1058,7 +1084,7 @@
 }
 
 .home-plan-payoff__milestone--prepay text {
-  fill: var(--plan-monthly-deep);
+  fill: var(--plan-cool-deep);
 }
 
 .home-plan-payoff__cursor line {
@@ -1082,7 +1108,7 @@
 
 .home-plan-payoff__dot--prepay {
   fill: white;
-  stroke: var(--plan-monthly-deep);
+  stroke: var(--plan-cool-deep);
   stroke-width: 2.5;
 }
 
@@ -1106,12 +1132,12 @@
 }
 
 .home-plan-payoff__tooltip-row--prepay {
-  fill: var(--plan-monthly-deep);
+  fill: var(--plan-cool-deep);
   font-weight: 650;
 }
 
 .home-plan-payoff__tooltip-row--saved {
-  fill: var(--plan-monthly-deep);
+  fill: var(--plan-buy-deep);
   font-weight: 650;
 }
 
@@ -1123,7 +1149,7 @@
 }
 
 .home-plan-payoff__readout-badge {
-  color: var(--plan-monthly-deep);
+  color: var(--plan-cool-deep);
   font-weight: 650;
 }
 

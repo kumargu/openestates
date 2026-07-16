@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo, useCallback, type FormEvent, type ReactNode } from "react";
 import { useSearchParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation } from "../lib/types.ts";
+import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchResultItem } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -29,6 +29,10 @@ import {
   type SheetItem,
 } from "../lib/sheet-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
+import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.tsx";
+import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
+import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
+import { summarizeEvidence, tileDecisionRead } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -251,201 +255,6 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-/* ---------- Property Card ---------- */
-
-function CardA({ property, match, explanation, confidenceScore, onQuickView, onSaveChange }: {
-  property: PropertyCardType;
-  match?: MatchResult;
-  explanation?: MatchExplanation;
-  confidenceScore?: import("../lib/types.ts").ConfidenceScore;
-  onQuickView?: (id: string) => void;
-  onSaveChange?: () => void;
-}) {
-  const [onSheet, setOnSheet] = useState(() => isOnSheet(property.id));
-  const specs = [
-    `${property.bhk} BHK`,
-    hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
-    isKnownText(property.facing) ? property.facing : null,
-    hasKnownNumber(property.floor) && hasKnownNumber(property.total_floors)
-      ? `Floor ${property.floor}/${property.total_floors}`
-      : null,
-  ].filter((spec): spec is string => spec !== null);
-
-  const handleSave = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setOnSheet(toggleSheetItem(property.id));
-    onSaveChange?.();
-  };
-
-  const handleQuickView = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    onQuickView?.(property.id);
-  };
-
-  const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
-  const googleSignalContent = property.google_rating ? (
-    <>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
-        <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-      </svg>
-      {property.google_rating.toFixed(1)}
-      {property.google_review_count && (
-        <span style={{ color: "var(--color-text-muted)", fontSize: "0.72rem" }}>
-          ({property.google_review_count})
-        </span>
-      )}
-    </>
-  ) : property.google_reviews_url ? (
-    <>Google reviews</>
-  ) : null;
-
-  return (
-    <div className="card-a">
-      <Link to={`/property/${property.id}`} className="card-a-link">
-        <div className="card-a-image">
-          <ImageWithFallback
-            src={property.hero_image}
-            alt={property.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          />
-          {match && labelStyle && (
-            <span
-              className="card-a-match"
-              style={{ background: labelStyle.bg, color: labelStyle.color, border: `1px solid ${labelStyle.border}` }}
-            >
-              {match.label}
-            </span>
-          )}
-        </div>
-
-        <div className="card-a-body">
-          <h3 className="card-a-title">{property.title}</h3>
-          <p className="card-a-location">
-            {property.society_name ? `${property.society_name} · ` : ""}{property.area}
-          </p>
-
-          <div className="card-a-price-row">
-            <span className="card-a-price">{formatPrice(property.price)}</span>
-            {hasKnownNumber(property.price_per_sqft) && (
-              <span className="card-a-ppsqft">{property.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
-            )}
-          </div>
-
-          <div className="card-a-specs">
-            {specs.map((spec, index) => (
-              <span key={spec}>
-                {index > 0 && <span>&middot; </span>}
-                {spec}
-              </span>
-            ))}
-          </div>
-
-          {match && <p className="card-a-reason">{match.reason}</p>}
-
-          {/* Structured match explanation — preference pills + reason badges */}
-          {explanation && explanation.preference_coverage.length > 0 && (
-            <MatchExplanationBlock explanation={explanation} />
-          )}
-
-          <div className="card-a-signals">
-            {googleSignalContent && (
-              <span className="property-signal">{googleSignalContent}</span>
-            )}
-            <ProjectStatusTag
-              status={property.project_status}
-              displayText={property.project_status_display}
-              possessionStatus={property.possession_status}
-            />
-            {hasKnownNumber(property.metro_distance_mins) && (
-              <span className="property-signal">{property.metro_distance_mins} min to metro</span>
-            )}
-            {isKnownText(property.builder_name) && (
-              <span className="property-signal">{property.builder_name}</span>
-            )}
-            <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
-            <TrustBadge rootSource={property.root_source} compact />
-            <DataFreshnessBadge freshness={property.data_freshness} compact />
-            <ConfidenceMeter confidence={confidenceScore} compact />
-          </div>
-
-          {property.transparency_tags.length > 0 && (
-            <div className="card-a-tags">
-              {property.transparency_tags.map((tag) => {
-                const isDiscovery = tag === "Discovered via Search" || tag === "Verification Pending";
-                const isSellerRegistered = tag === "seller-registered";
-                const isVerificationPending = tag === "verification-pending";
-                const isSpecial = isDiscovery || isSellerRegistered || isVerificationPending;
-                const tagStyle = isSellerRegistered
-                  ? {
-                      background: "#fffbeb",
-                      color: "#92400e",
-                      border: "1px solid #fcd34d",
-                      fontSize: "0.72rem",
-                    }
-                  : isVerificationPending
-                  ? {
-                      background: "#f9fafb",
-                      color: "#6b7280",
-                      border: "1px solid #e5e7eb",
-                      fontSize: "0.72rem",
-                    }
-                  : isDiscovery ? {
-                      background: tag === "Verification Pending" ? "#fff7ed" : "#f0fdf4",
-                      color: tag === "Verification Pending" ? "#9a3412" : "#15803d",
-                      border: `1px solid ${tag === "Verification Pending" ? "#fed7aa" : "#bbf7d0"}`,
-                      fontSize: "0.72rem",
-                    } : undefined;
-                return (
-                  <span
-                    key={tag}
-                    className={isSpecial ? "tag" : "tag tag-positive"}
-                    style={tagStyle}
-                  >
-                    {tag.replace(/_/g, " ").replace(/-/g, " ")}
-                  </span>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </Link>
-
-      {/* Always-visible action bar */}
-      <div className="card-a-actions">
-        <button onClick={handleSave} className={`card-a-save-btn ${onSheet ? "card-a-save-btn--saved" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-          {onSheet ? "Saved" : "Save"}
-        </button>
-        {property.google_reviews_url && (
-          <button
-            className="card-a-review-btn"
-            onClick={() => window.open(property.google_reviews_url, "_blank", "noopener,noreferrer")}
-            aria-label={`Open Google reviews for ${property.society_name}`}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none">
-              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-            </svg>
-            <span className="card-a-detail-btn-label">Reviews</span>
-          </button>
-        )}
-        <button className="card-a-detail-btn" onClick={handleQuickView}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <span className="card-a-detail-btn-label">Quick view</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="9 18 15 12 9 6" />
-          </svg>
-        </button>
-      </div>
     </div>
   );
 }
@@ -1059,6 +868,22 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const savedCount = sheetCompareRows.length;
   const savedCountLabel = `${savedCount} ${savedCount === 1 ? "saved home" : "saved homes"}`;
 
+  const propertyIds = useMemo(
+    () => matchResults.map(({ property }) => property.id),
+    [matchResults],
+  );
+  const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
+
+  const universeResults: SearchResultItem[] = useMemo(() => {
+    if (useBackendResults && searchResponse) return searchResponse.results;
+    return filtered.map((property) => ({
+      ...property,
+      match_score: 0,
+      match_label: "Browse",
+      match_reason: "In catalog",
+    }));
+  }, [useBackendResults, searchResponse, filtered]);
+
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
   const totalCount = useBackendResults ? searchResponse.total_results : filtered.length;
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
@@ -1323,22 +1148,33 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
           onRemove={removeSheetItem}
         />
       ) : (
-        <div
-          className={`results-grid ${panelPropertyId ? "results-grid--panel-open" : ""}`}
-          style={{ transition: "margin-right 0.3s var(--ease-out)" }}
-        >
-          {matchResults.map(({ property, match, explanation, confidenceScore }) => (
-              <CardA
-                key={property.id}
-                property={property}
-                match={match}
-                explanation={explanation}
-                confidenceScore={confidenceScore}
+        <UniverseBoard
+          results={universeResults}
+          evidenceById={evidenceById}
+          learningGaps={searchResponse?.knowledge_context?.learning_gaps}
+          renderResult={(result) => {
+            const row = matchResults.find((entry) => entry.property.id === result.id);
+            const evidence = evidenceById.get(result.id);
+            const summary = summarizeEvidence(evidence);
+            return (
+              <LivingEvidenceTile
+                property={result}
+                match={row?.match}
+                explanation={row?.explanation}
+                confidenceScore={row?.confidenceScore ?? result.confidence_score}
+                evidence={evidence}
+                decisionRead={tileDecisionRead(result, summary)}
+                explanationBlock={
+                  row?.explanation && row.explanation.preference_coverage.length > 0 ? (
+                    <MatchExplanationBlock explanation={row.explanation} />
+                  ) : null
+                }
                 onQuickView={setPanelPropertyId}
                 onSaveChange={refreshSheetItems}
               />
-          ))}
-        </div>
+            );
+          }}
+        />
       )}
 
       {/* Side panel — quick view */}

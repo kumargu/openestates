@@ -1,4 +1,6 @@
 import "./index.css";
+import "./styles/evidence.css";
+import "./styles/property-scene.css";
 import { StrictMode, useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";

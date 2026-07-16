@@ -6,10 +6,10 @@
 
 :root {
   /* Design tokens */
-  --color-bg: #f1f0e8;
-  --color-bg-soft: #e8ebe4;
+  --color-bg: #fdf9f7;
+  --color-bg-soft: #f9f5f2;
   --color-bg-card: #ffffff;
-  --color-bg-elevated: #f7f4ee;
+  --color-bg-elevated: #f7f3f0;
   --color-text: #1a1a1a;
   --color-text-secondary: #666666;
   --color-text-muted: #999999;
@@ -21,15 +21,17 @@
   --color-action-hover: #9f4f39;
   --color-action-soft: #f7e9e3;
   --color-action-shadow: rgba(182, 95, 70, 0.24);
-  --color-sage: #6d9478;
-  --color-sage-deep: #567059;
-  --color-sage-soft: rgba(122, 143, 126, 0.2);
-  --color-sage-wash: rgba(122, 143, 126, 0.32);
-  --color-clay-soft: rgba(207, 106, 74, 0.14);
-  --color-clay-wash: rgba(207, 106, 74, 0.24);
-  --color-positive: #567059;
-  --color-positive-bg: #f0f4f1;
-  --color-positive-border: #c5d5c8;
+  /* Warm (clay) + cool (dusty blue) accent pair — the original theme's two
+     signature hues, used sparingly for data emphasis and visibility. */
+  --color-clay-soft: rgba(201, 107, 79, 0.1);
+  --color-clay-wash: rgba(201, 107, 79, 0.16);
+  --color-cool: #5b7fb0;
+  --color-cool-deep: #3f5c8a;
+  --color-cool-soft: rgba(100, 140, 200, 0.12);
+  --color-cool-wash: rgba(100, 140, 200, 0.18);
+  --color-positive: #2a7a2a;
+  --color-positive-bg: #f0f7f0;
+  --color-positive-border: #c8e6c8;
   --color-warning: #b88b00;
   --color-negative: #b33333;
   --color-negative-bg: #fdf5f5;
@@ -60,9 +62,8 @@ body {
   color: var(--color-text);
   background: var(--color-bg);
   background-image:
-    radial-gradient(ellipse 80% 50% at 50% 0%, var(--color-clay-wash) 0%, transparent 68%),
-    radial-gradient(ellipse 65% 42% at 92% 8%, var(--color-sage-wash) 0%, transparent 55%),
-    radial-gradient(ellipse 60% 38% at 6% 88%, rgba(122, 143, 126, 0.22) 0%, transparent 52%);
+    radial-gradient(ellipse 80% 50% at 50% 0%, rgba(201, 107, 79, 0.05) 0%, transparent 70%),
+    radial-gradient(ellipse 60% 40% at 80% 20%, rgba(100, 140, 200, 0.04) 0%, transparent 60%);
   background-attachment: fixed;
   min-height: 100vh;
   line-height: 1.6;
@@ -2022,7 +2023,7 @@ body {
 /* --- Homepage CSS classes for responsive overrides --- */
 
 .home-hero {
-  background: linear-gradient(180deg, #f1f0e8 0%, #ebe9e0 100%);
+  background: linear-gradient(180deg, #fdf9f7 0%, #f9f5f2 100%);
 }
 
 .home-hero__wash {
@@ -2045,14 +2046,14 @@ body {
 .home-hero__wash::before {
   background:
     radial-gradient(ellipse 60% 52% at 32% 30%, var(--color-clay-wash) 0%, transparent 62%),
-    radial-gradient(ellipse 55% 46% at 78% 66%, var(--color-sage-wash) 0%, transparent 58%);
+    radial-gradient(ellipse 55% 46% at 78% 66%, var(--color-cool-wash) 0%, transparent 58%);
   animation: heroDriftA 24s ease-in-out infinite alternate;
 }
 
 .home-hero__wash::after {
   background:
-    radial-gradient(ellipse 56% 48% at 82% 18%, var(--color-sage-wash) 0%, transparent 56%),
-    radial-gradient(ellipse 62% 50% at 14% 82%, rgba(122, 143, 126, 0.26) 0%, transparent 56%);
+    radial-gradient(ellipse 56% 48% at 82% 18%, var(--color-cool-wash) 0%, transparent 56%),
+    radial-gradient(ellipse 62% 50% at 14% 82%, rgba(100, 140, 200, 0.26) 0%, transparent 56%);
   animation: heroDriftB 34s ease-in-out infinite alternate;
 }
 
@@ -2089,7 +2090,7 @@ body {
 
 .home-hero__kicker {
   font-size: 0.82rem;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
   text-transform: uppercase;
   letter-spacing: 0.08em;
   margin: 0 0 0.75rem;
@@ -2097,7 +2098,7 @@ body {
 }
 
 .home-stats-row strong {
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
   font-weight: 700;
 }
 
@@ -2115,16 +2116,16 @@ body {
 }
 
 .home-popular-chip:hover {
-  border-color: rgba(109, 148, 120, 0.4);
-  color: var(--color-sage-deep);
+  border-color: rgba(100, 140, 200, 0.4);
+  color: var(--color-cool-deep);
   background: rgba(255, 255, 255, 0.85);
 }
 
 .home-pulse-section {
   background:
-    linear-gradient(180deg, var(--color-sage-soft) 0%, var(--color-bg-soft) 42%, #f1f0e8 100%);
-  border-top: 1px solid rgba(109, 148, 120, 0.18);
-  border-bottom: 1px solid rgba(109, 148, 120, 0.12);
+    linear-gradient(180deg, var(--color-cool-soft) 0%, var(--color-bg-soft) 42%, var(--color-bg) 100%);
+  border-top: 1px solid rgba(100, 140, 200, 0.18);
+  border-bottom: 1px solid rgba(100, 140, 200, 0.12);
 }
 
 .home-pulse-heading {
@@ -2132,7 +2133,7 @@ body {
   font-weight: 650;
   letter-spacing: -0.02em;
   margin: 0 0 0.5rem;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
 }
 
 .home-pulse-card {
@@ -2140,7 +2141,7 @@ body {
   border-radius: 14px;
   border: 1px solid var(--color-border);
   background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 8px 24px rgba(86, 112, 89, 0.06);
+  box-shadow: 0 8px 24px rgba(63, 92, 138, 0.06);
 }
 
 .home-pulse-card--clay {
@@ -2148,14 +2149,14 @@ body {
   border-color: rgba(207, 106, 74, 0.22);
 }
 
-.home-pulse-card--sage {
-  background: linear-gradient(145deg, rgba(244, 248, 245, 0.95), rgba(255, 255, 255, 0.9));
-  border-color: rgba(109, 148, 120, 0.28);
+.home-pulse-card--cool {
+  background: linear-gradient(145deg, rgba(244, 247, 251, 0.95), rgba(255, 255, 255, 0.9));
+  border-color: rgba(100, 140, 200, 0.28);
 }
 
 .home-pulse-card--highlight {
-  background: linear-gradient(145deg, rgba(240, 247, 242, 0.98), rgba(255, 255, 255, 0.92));
-  border-color: rgba(86, 112, 89, 0.32);
+  background: linear-gradient(145deg, rgba(244, 247, 251, 0.98), rgba(255, 255, 255, 0.92));
+  border-color: rgba(63, 92, 138, 0.3);
 }
 
 .home-pulse-metric {
@@ -2168,14 +2169,14 @@ body {
   color: #b85a3c;
 }
 
-.home-pulse-metric--sage {
-  color: var(--color-sage-deep);
+.home-pulse-metric--cool {
+  color: var(--color-cool-deep);
 }
 
 .home-pulse-label {
   margin: 0 0 0.75rem;
   font-size: 0.75rem;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 700;
@@ -2183,7 +2184,7 @@ body {
 
 .home-micro-section {
   background: #fff;
-  border-bottom: 1px solid rgba(109, 148, 120, 0.14);
+  border-bottom: 1px solid rgba(100, 140, 200, 0.14);
 }
 
 .home-micro-heading {
@@ -2191,7 +2192,7 @@ body {
   font-size: clamp(1.3rem, 1rem + 1vw, 1.8rem);
   font-weight: 650;
   letter-spacing: -0.02em;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
 }
 
 .home-micro-card:nth-child(odd) {
@@ -2200,14 +2201,14 @@ body {
 }
 
 .home-micro-card:nth-child(even) {
-  background: linear-gradient(145deg, rgba(244, 248, 245, 0.98), #fff);
-  border-color: rgba(109, 148, 120, 0.22);
+  background: linear-gradient(145deg, rgba(244, 247, 251, 0.98), #fff);
+  border-color: rgba(100, 140, 200, 0.22);
 }
 
 .home-micro-price {
   font-size: 1.2rem;
   font-weight: 700;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
 }
 
 .home-trending-btn {
@@ -2224,7 +2225,7 @@ body {
 }
 
 .home-trending-btn:hover {
-  background-color: var(--color-sage-soft);
+  background-color: var(--color-cool-soft);
 }
 
 .home-trending-btn--divider {
@@ -2237,7 +2238,7 @@ body {
   font-size: 0.7rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
   font-weight: 600;
   white-space: nowrap;
 }
@@ -2253,7 +2254,7 @@ body {
   padding: 0.3rem 0.7rem;
   border-radius: 8px;
   border: 1px solid rgba(0, 0, 0, 0.06);
-  background: var(--color-sage-soft);
+  background: var(--color-cool-soft);
   font-size: 0.78rem;
   cursor: pointer;
   font-family: inherit;
@@ -2262,8 +2263,8 @@ body {
 }
 
 .home-pulse-bhk-btn:hover {
-  border-color: rgba(109, 148, 120, 0.35);
-  color: var(--color-sage-deep);
+  border-color: rgba(100, 140, 200, 0.35);
+  color: var(--color-cool-deep);
 }
 
 .home-pulse-builder-btn {
@@ -2284,8 +2285,8 @@ body {
 }
 
 .home-pulse-builder-btn:hover {
-  background-color: var(--color-sage-soft);
-  border-color: rgba(109, 148, 120, 0.22);
+  background-color: var(--color-cool-soft);
+  border-color: rgba(100, 140, 200, 0.22);
 }
 
 .home-pulse-featured {
@@ -2300,20 +2301,20 @@ body {
 
 .home-pulse-featured.home-pulse-card--highlight {
   background: linear-gradient(145deg, rgba(240, 247, 242, 0.98), rgba(255, 255, 255, 0.92));
-  border: 1px solid rgba(86, 112, 89, 0.32);
-  box-shadow: 0 8px 24px rgba(86, 112, 89, 0.08);
+  border: 1px solid rgba(63, 92, 138, 0.32);
+  box-shadow: 0 8px 24px rgba(63, 92, 138, 0.08);
 }
 
 .home-pulse-featured:hover {
-  border-color: rgba(109, 148, 120, 0.32);
-  box-shadow: 0 2px 12px rgba(86, 112, 89, 0.08);
+  border-color: rgba(100, 140, 200, 0.32);
+  box-shadow: 0 2px 12px rgba(63, 92, 138, 0.08);
 }
 
 .home-pulse-live {
   font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--color-sage-deep);
+  color: var(--color-cool-deep);
   font-weight: 650;
 }
 
@@ -2329,16 +2330,16 @@ body {
 }
 
 .home-micro-card:hover {
-  border-color: rgba(109, 148, 120, 0.28);
-  box-shadow: 0 2px 12px rgba(86, 112, 89, 0.07);
+  border-color: rgba(100, 140, 200, 0.28);
+  box-shadow: 0 2px 12px rgba(63, 92, 138, 0.07);
 }
 
-.home-chip-sage {
+.home-chip-cool {
   font-size: 0.68rem;
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
-  background: var(--color-sage-soft);
-  color: var(--color-sage-deep);
+  background: var(--color-cool-soft);
+  color: var(--color-cool-deep);
   font-weight: 500;
   white-space: nowrap;
 }
@@ -2353,14 +2354,14 @@ body {
   gap: 0.75rem;
   padding: 1rem 1.5rem;
   border-radius: 16px;
-  background-color: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(109, 148, 120, 0.32);
-  box-shadow: 0 8px 32px rgba(86, 112, 89, 0.12);
+  background-color: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.06);
 }
 
 .search-container.home-search-form:focus-within {
-  border-color: rgba(109, 148, 120, 0.5);
-  box-shadow: 0 12px 40px rgba(86, 112, 89, 0.18);
+  border-color: rgba(201, 107, 79, 0.35);
+  box-shadow: 0 10px 34px rgba(201, 107, 79, 0.12);
 }
 
 .home-search-input-shell {
@@ -2388,7 +2389,7 @@ body {
   flex-shrink: 0;
   min-height: 42px;
   border: none;
-  background: var(--color-sage-deep);
+  background: var(--color-action);
   color: #fff;
   padding: 0.7rem 1.35rem;
   border-radius: 10px;
@@ -2400,7 +2401,7 @@ body {
 }
 
 .home-search-submit:hover {
-  background: #455a48;
+  background: var(--color-action-hover);
 }
 
 .home-saved-shortcut {
@@ -2475,9 +2476,9 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(90deg, rgba(122, 143, 126, 0.16), rgba(255, 255, 255, 0.9) 20%, rgba(255, 255, 255, 0.9) 80%, rgba(207, 106, 74, 0.12));
+  background: linear-gradient(90deg, rgba(100, 140, 200, 0.16), rgba(255, 255, 255, 0.9) 20%, rgba(255, 255, 255, 0.9) 80%, rgba(207, 106, 74, 0.12));
   backdrop-filter: blur(12px);
-  border-top: 1px solid rgba(109, 148, 120, 0.24);
+  border-top: 1px solid rgba(100, 140, 200, 0.24);
   padding: 0.75rem clamp(1rem, 3vw, 3rem);
   display: flex;
   justify-content: center;
@@ -2486,7 +2487,7 @@ body {
 }
 
 .home-trending-strip > span:first-child {
-  color: var(--color-sage-deep) !important;
+  color: var(--color-cool-deep) !important;
 }
 
 .home-micro-grid {
@@ -2502,8 +2503,8 @@ body {
 }
 
 .home-hero--search-active .home-trending-strip {
-  background: linear-gradient(90deg, rgba(122, 143, 126, 0.18), rgba(255, 255, 255, 0.94) 20%, rgba(255, 255, 255, 0.94) 80%, rgba(207, 106, 74, 0.14));
-  box-shadow: 0 -12px 40px rgba(86, 112, 89, 0.08);
+  background: linear-gradient(90deg, rgba(100, 140, 200, 0.18), rgba(255, 255, 255, 0.94) 20%, rgba(255, 255, 255, 0.94) 80%, rgba(207, 106, 74, 0.14));
+  box-shadow: 0 -12px 40px rgba(63, 92, 138, 0.08);
 }
 
 .home-inline-results-anchor {
@@ -2511,8 +2512,8 @@ body {
   padding: 0 var(--page-pad) clamp(2.5rem, 5vw, 4rem);
   background:
     linear-gradient(180deg, rgba(253, 249, 247, 0) 0%, var(--color-bg) 18%),
-    linear-gradient(135deg, rgba(201, 107, 79, 0.04), rgba(122, 143, 126, 0.05));
-  border-top: 1px solid rgba(109, 148, 120, 0.12);
+    linear-gradient(135deg, rgba(201, 107, 79, 0.04), rgba(100, 140, 200, 0.05));
+  border-top: 1px solid rgba(100, 140, 200, 0.12);
   animation: inlineResultsReveal 0.72s var(--ease-out) both;
   position: relative;
 }
@@ -2525,7 +2526,7 @@ body {
   width: 64px;
   height: 2px;
   border-radius: 999px;
-  background: linear-gradient(90deg, rgba(109, 148, 120, 0), rgba(109, 148, 120, 0.55), rgba(109, 148, 120, 0));
+  background: linear-gradient(90deg, rgba(100, 140, 200, 0), rgba(100, 140, 200, 0.55), rgba(100, 140, 200, 0));
   transform: translateX(-50%);
 }
 
@@ -2676,7 +2677,6 @@ body {
   margin-bottom: 1.25rem;
 }
 
-.property-brief-media,
 .property-brief-copy,
 .property-decision-card,
 .property-evidence-grid,
@@ -4527,8 +4527,8 @@ body {
 }
 
 .empty-state-chip:hover {
-  border-color: rgba(109, 148, 120, 0.4);
-  color: var(--color-sage-deep);
+  border-color: rgba(100, 140, 200, 0.4);
+  color: var(--color-cool-deep);
   background: rgba(255, 255, 255, 0.85);
 }
 

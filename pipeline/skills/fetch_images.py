@@ -450,7 +450,7 @@ def fetch_images_for_entity(
 
     Returns metadata dict matching the Day 22 schema.
     """
-    slug = entity_id.replace(f"soc-", "").replace(" ", "_")
+    slug = entity_id.replace("society:", "").replace("soc-", "").replace(" ", "_")
     dest_dir = PHOTOS_DIR / slug
 
     # Skip if already fetched (unless force)
@@ -474,7 +474,7 @@ def fetch_images_for_entity(
             time.sleep(1.5)  # rate limit DDG
 
         for c in candidates:
-            url_hash = hashlib.md5(c.url.encode()).hexdigest()
+            url_hash = hashlib.sha256(c.url.encode()).hexdigest()
             if url_hash not in seen_urls:
                 seen_urls.add(url_hash)
                 score_candidate(c, name)

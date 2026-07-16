@@ -6,6 +6,7 @@ pub mod knowledge;
 pub mod lake;
 pub mod models;
 pub(crate) mod parquet_data;
+pub mod recommendations;
 pub mod routes;
 pub mod scoring;
 pub mod search;

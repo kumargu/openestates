@@ -12,6 +12,8 @@ import { TrustBadge } from "./TrustBadge.tsx";
 import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "./BuilderTrustBadge.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
+import { EvidenceSectionCard } from "./evidence/EvidenceSectionCard.tsx";
+import { summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -317,6 +319,24 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
                 >
                   {p.litigation_risk <= 0.1 ? "Low" : p.litigation_risk <= 0.3 ? "Moderate" : "High"}
                 </span>
+              </div>
+            </div>
+          )}
+
+          {/* Evidence preview from new API */}
+          {detail?.evidence && summarizeEvidence(detail.evidence) && (
+            <div className="side-panel-evidence">
+              <h3 className="side-panel-evidence__title">Evidence at a glance</h3>
+              {topEvidenceGlance(detail.evidence, 2).map((line) => (
+                <p key={line} className="side-panel-society-review">{line}</p>
+              ))}
+              <div className="side-panel-evidence__cards">
+                {detail.evidence.sections
+                  .filter((s) => s.items.length > 0 || s.missing.length > 0)
+                  .slice(0, 2)
+                  .map((section) => (
+                    <EvidenceSectionCard key={section.kind} section={section} zoom="compact" />
+                  ))}
               </div>
             </div>
           )}

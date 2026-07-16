@@ -1,13 +1,16 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse, SourceItem, SourcePanel } from "../lib/types.ts";
+import type { BuilderPortfolio, PropertyDetailResponse } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isOnSheet, toggleSheetItem } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
-import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
+import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
+import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import { RecommendationBranches } from "../components/recommendations/RecommendationBranches.tsx";
+import { panelsToSections, summarizeEvidence } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -64,9 +67,6 @@ type RiskSignal = {
   label: string;
   value: number;
 };
-
-type SourcePanelKind = "rera" | "market" | "area" | "nearby" | "community" | "reviews";
-type SourceTone = "good" | "watch" | "risk" | "neutral";
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
@@ -243,14 +243,17 @@ export function PropertyPage() {
   const topRisk = risks[0];
   const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
   const sourcePanels = data.source_panels ?? [];
-  const sourceFactCount = sourcePanels.reduce((sum, panel) => sum + panel.items.length, 0);
-  const sourceTypes = data.data_freshness?.source_breakdown
+  const evidenceSummary = summarizeEvidence(data.evidence);
+  const sourceFactCount = evidenceSummary?.factCount
+    ?? sourcePanels.reduce((sum, panel) => sum + panel.items.length, 0);
+  const sourceTypes = evidenceSummary?.sourceTypes.join(", ")
+    || (data.data_freshness?.source_breakdown
     ? Object.entries(data.data_freshness.source_breakdown)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 3)
         .map(([source]) => source)
         .join(", ")
-    : sourceLabel;
+    : sourceLabel);
   const marketRows = [
     market_activity.interest_label,
     market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
@@ -289,19 +292,20 @@ export function PropertyPage() {
       </button>
 
       <section className="property-brief-hero">
-        <div className="property-brief-media">
-          <ImageWithFallback
-            src={p.hero_image}
-            alt={p.title}
-            className="property-brief-image"
-            loading="eager"
-          />
-          <div className="property-brief-media-strip">
-            <span>{p.area}</span>
-            {hasKnownNumber(p.metro_distance_mins) && <span>{p.metro_distance_mins} min metro</span>}
-            <span>{sourceLabel}</span>
-          </div>
-        </div>
+        <PropertySceneCard
+          title={p.title}
+          societyName={society?.name}
+          heroImage={p.hero_image}
+          images={p.images}
+          societyId={p.society_id}
+          chips={[
+            { label: "Area", value: p.area },
+            ...(hasKnownNumber(p.metro_distance_mins)
+              ? [{ label: "Metro", value: `${p.metro_distance_mins} min` }]
+              : []),
+            { label: "Source", value: sourceLabel },
+          ]}
+        />
 
         <div className="property-brief-copy">
           <span className={`property-verdict property-verdict--${decision.tone}`}>
@@ -383,129 +387,20 @@ export function PropertyPage() {
 
           </section>
 
-          <section className="property-evidence-section">
-            <div className="property-section-heading">
-              <span>Paper trail</span>
-              <h2>Records behind this listing</h2>
-            </div>
+          <EvidenceStack
+            evidence={data.evidence}
+            fallbackSections={panelsToSections(sourcePanels)}
+          />
 
-            <div className="property-evidence-grid">
-              <div className="property-evidence-card">
-                <h3>Price and market</h3>
-                <EvidenceRow label="Ask" value={formatPrice(p.price)} detail={pricePerSqftLabel ?? "Rate per sqft not available"} />
-                <EvidenceRow label="Benchmark" value={formatMedianDelta(medianDelta)} detail={areaMedianLabel ?? "No area benchmark"} />
-                <EvidenceRow label="Demand" value={market_activity.interest_label} detail={`${market_activity.days_on_market} days on market`} />
-              </div>
-
-              <div className="property-evidence-card">
-                <h3>RERA file</h3>
-                <EvidenceRow label="Status" value={data.rera?.registered ? data.rera.status ?? "Registered" : "Not linked yet"} detail={data.rera?.registration_number ?? "Registration number not available"} />
-                <EvidenceRow label="Timeline" value={data.rera?.completion_date ?? "Completion not available"} detail={data.rera?.delay_months ? `${data.rera.delay_months} month delay against original date` : data.rera?.original_completion_date ? `Original date: ${data.rera.original_completion_date}` : "Original date not available"} />
-                <EvidenceRow label="Complaints" value={data.rera?.complaints_count != null ? String(data.rera.complaints_count) : "Not available"} detail={data.rera?.complaints_resolved_pct != null ? `${Math.round(data.rera.complaints_resolved_pct)}% resolved in file` : "Resolution data not available"} />
-                <EvidenceRow
-                  label="Documents"
-                  value={`${Math.round(p.document_completeness_score * 100)}% complete`}
-                  detail={data.rera ? "RERA file is linked; seller-level documents still need review." : "Ask for sale deed, khata, OC/CC, and dues before token."}
-                />
-                {data.rera?.rera_portal_url && (
-                  <a className="property-text-link" href={data.rera.rera_portal_url} target="_blank" rel="noreferrer">
-                    Open RERA source
-                  </a>
-                )}
-                {data.builder_trust?.delivery_display && (
-                  <BuilderTrustBadge
-                    deliveryDisplay={data.builder_trust.delivery_display}
-                    deliveryRate={data.builder_trust.delivery_rate}
-                  />
-                )}
-              </div>
-
-              <div className="property-evidence-card">
-                <h3>Home facts</h3>
-                <EvidenceRow
-                  label="Configuration"
-                  value={`${p.bhk} BHK`}
-                  detail={[
-                    hasKnownNumber(p.carpet_area_sqft) ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet` : null,
-                    hasKnownNumber(p.super_builtup_sqft) ? `${p.super_builtup_sqft.toLocaleString("en-IN")} sqft SBA` : null,
-                  ].filter(Boolean).join(" · ") || "Size not available"}
-                />
-                <EvidenceRow
-                  label="Floor"
-                  value={hasKnownNumber(p.floor) && hasKnownNumber(p.total_floors) ? `${p.floor} of ${p.total_floors}` : "Not available"}
-                  detail={isKnownText(p.facing) ? `${p.facing} facing` : "Facing not available"}
-                />
-                <EvidenceRow
-                  label="Commute proxy"
-                  value={hasKnownNumber(p.metro_distance_mins) ? `${p.metro_distance_mins} min to metro` : "Not available"}
-                  detail={hasKnownNumber(p.maintenance_cost_monthly) ? `Maintenance ₹${p.maintenance_cost_monthly.toLocaleString("en-IN")}/mo` : "Maintenance not available"}
-                />
-              </div>
-            </div>
-
-            {data.builder_portfolio && (
+          {data.builder_portfolio && (
+            <section className="property-evidence-section">
               <BuilderRecordPanel portfolio={data.builder_portfolio} />
-            )}
-          </section>
-
-          <SourcePanelsSection panels={sourcePanels} />
-
-          {(society || area) && (
-            <section className="property-context-panel">
-              <div className="property-section-heading">
-                <span>Local context</span>
-                <h2>Neighbourhood and society</h2>
-              </div>
-
-              <div className="property-context-grid">
-                {society && (
-                  <div>
-                    <h3>{society.name}</h3>
-                    {(society.review_summary || society.summary) && (
-                      <p>{society.review_summary || society.summary}</p>
-                    )}
-                    <div className="property-context-pills">
-                      {isKnownText(society.builder_name) && <span>Builder: {society.builder_name}</span>}
-                      {hasKnownNumber(society.year_built) && <span>{society.year_built}</span>}
-                      {isKnownText(society.maintenance_sentiment) && <span>{society.maintenance_sentiment}</span>}
-                      {society.google_reviews_url && (
-                        <a href={society.google_reviews_url} target="_blank" rel="noreferrer">
-                          Google reviews
-                        </a>
-                      )}
-                    </div>
-                    <div className="property-context-lists">
-                      <CompactList title="Resident positives" items={society.common_positives.slice(0, 3)} tone="good" />
-                      <CompactList title="Concerns" items={society.common_complaints.slice(0, 3)} tone="watch" />
-                    </div>
-                  </div>
-                )}
-
-                {area && (
-                  <div>
-                    <h3>{area.name}</h3>
-                    {(area.trend_summary || area.livability_summary) && (
-                      <p>{area.trend_summary || area.livability_summary}</p>
-                    )}
-                    <div className="property-context-pills">
-                      {hasKnownNumber(area.median_price_per_sqft) && (
-                        <span>₹{area.median_price_per_sqft.toLocaleString("en-IN")} /sqft median</span>
-                      )}
-                      {isKnownText(area.trend_direction) && <span>{area.trend_direction}</span>}
-                    </div>
-                    <ul className="property-context-notes">
-                      {[area.metro_access_summary, area.traffic_summary, area.waterlogging_summary]
-                        .filter((item): item is string => Boolean(item))
-                        .slice(0, 3)
-                        .map((item) => <li key={item}>{item}</li>)}
-                    </ul>
-                  </div>
-                )}
-              </div>
             </section>
           )}
 
-          {data.similar_properties.length > 0 && (
+          {(data.recommendation_branches?.length ?? 0) > 0 ? (
+            <RecommendationBranches branches={data.recommendation_branches ?? []} />
+          ) : data.similar_properties.length > 0 ? (
             <section className="property-similar-section">
               <div className="property-section-heading">
                 <span>Compared with</span>
@@ -528,7 +423,7 @@ export function PropertyPage() {
                 ))}
               </div>
             </section>
-          )}
+          ) : null}
 
         </main>
 
@@ -584,598 +479,6 @@ function DecisionMetric({
       <span>{label}</span>
       <strong>{value}</strong>
       <small>{detail}</small>
-    </div>
-  );
-}
-
-function EvidenceRow({ label, value, detail }: { label: string; value: string; detail: string }) {
-  return (
-    <div className="property-evidence-row">
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
-    </div>
-  );
-}
-
-const SOURCE_PANEL_COPY: Record<SourcePanelKind, { title: string; subtitle: string }> = {
-  rera: {
-    title: "RERA file",
-    subtitle: "Official registration, delivery dates, and file-level complaints.",
-  },
-  market: {
-    title: "Market trail",
-    subtitle: "Price bands, rate checks, and nearby comparison points.",
-  },
-  area: {
-    title: "Area trail",
-    subtitle: "Daily-life signals around access, traffic, flooding, and schools.",
-  },
-  nearby: {
-    title: "Nearby",
-    subtitle: "Map-backed schools, hospitals, work hubs, retail, and parks.",
-  },
-  community: {
-    title: "Community pulse",
-    subtitle: "Public review and resident-source signals, with gaps called out.",
-  },
-  reviews: {
-    title: "Google reviews",
-    subtitle: "Public review patterns that show up before and after visits.",
-  },
-};
-
-function normalizeSourceToken(value: string | undefined): string {
-  return (value ?? "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "_")
-    .replace(/^_+|_+$/g, "");
-}
-
-function sourcePanelKind(panel: SourcePanel): SourcePanelKind {
-  const explicitKind = normalizeSourceToken(panel.kind);
-  if (
-    explicitKind === "rera" ||
-    explicitKind === "market" ||
-    explicitKind === "area" ||
-    explicitKind === "nearby" ||
-    explicitKind === "community" ||
-    explicitKind === "reviews"
-  ) {
-    return explicitKind;
-  }
-
-  const title = `${panel.title} ${panel.subtitle}`.toLowerCase();
-  if (title.includes("rera")) return "rera";
-  if (title.includes("market")) return "market";
-  if (title.includes("area")) return "area";
-  if (title.includes("nearby") || title.includes("map-backed")) return "nearby";
-  if (title.includes("reddit") || title.includes("community") || title.includes("forum")) return "community";
-  return "reviews";
-}
-
-function findSourceItem(panel: SourcePanel, ...candidates: string[]): SourceItem | undefined {
-  const wanted = new Set(candidates.map(normalizeSourceToken));
-  return panel.items.find((item) => (
-    wanted.has(normalizeSourceToken(item.key)) ||
-    wanted.has(normalizeSourceToken(item.label))
-  ));
-}
-
-function cleanSourceText(item?: SourceItem | null): string {
-  if (!item) return "";
-
-  return item.value
-    .replace(/^RERA Status:\s*/i, "")
-    .replace(/^RERA No:\s*/i, "")
-    .replace(/^Expected Completion:\s*/i, "")
-    .replace(/^Resident sentiment:\s*/i, "")
-    .replace(/^Community signal:\s*/i, "")
-    .replace(/^Community sentiment score:\s*/i, "")
-    .replace(/^Google Reviews:\s*/i, "")
-    .replace(/^Google rating:\s*/i, "")
-    .replace(/^Praised for:\s*/i, "")
-    .replace(/^Criticized for:\s*/i, "")
-    .replace(/^Review themes:\s*/i, "")
-    .replace(/^Complaints:\s*/i, "")
-    .replace(/^Top schools:\s*/i, "")
-    .replace(/^Traffic:\s*/i, "")
-    .replace(/^3BHK:\s*/i, "")
-    .replace(/^Similar:\s*/i, "")
-    .replace(/^Resident says:\s*/i, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function sourceItemList(item?: SourceItem | null): string[] {
-  if (!item) return [];
-
-  if (item.values && item.values.length > 0) {
-    return item.values
-      .map((value) => value.trim())
-      .filter((value) => value.length > 0);
-  }
-
-  const value = cleanSourceText(item);
-  if (!value) return [];
-
-  const key = normalizeSourceToken(item.key || item.label);
-  const splitKeys = new Set([
-    "common_positives",
-    "common_complaints",
-    "google_top_positives",
-    "google_top_negatives",
-    "google_common_themes",
-    "comparable_projects",
-    "school_quality",
-  ]);
-
-  if (!splitKeys.has(key)) return [value];
-
-  return value
-    .split(/\s*,\s*/g)
-    .map((entry) => entry.replace(/^["“]|["”]$/g, "").trim())
-    .filter((entry) => entry.length > 0);
-}
-
-function sourceQuoteText(item?: SourceItem | null): string {
-  return cleanSourceText(item).replace(/^["“]|["”]$/g, "").trim();
-}
-
-function highlightSentences(value: string): string[] {
-  return value
-    .split(/\.\s+/g)
-    .map((part) => part.replace(/[.!?]+$/g, "").trim())
-    .filter((part) => part.length > 0);
-}
-
-function isMissingDataSentence(value: string): boolean {
-  const normalized = value.toLowerCase();
-  return (
-    normalized.includes("not ingested") ||
-    normalized.includes("not stored") ||
-    normalized.includes("unavailable") ||
-    normalized.includes("needs improving")
-  );
-}
-
-function sourcePanelUrl(panel: SourcePanel): string | undefined {
-  return panel.items.find((item) => item.source_url)?.source_url;
-}
-
-function previewText(value: string, limit = 44): string {
-  if (value.length <= limit) return value;
-  return `${value.slice(0, limit - 1).trimEnd()}…`;
-}
-
-function compactPreview(parts: string[]): string {
-  return parts
-    .map((part) => part.trim())
-    .filter((part) => part.length > 0)
-    .slice(0, 3)
-    .map((part, index) => previewText(part, index === 0 ? 44 : 34))
-    .join(" · ");
-}
-
-function finalizeSourcePreview(panel: SourcePanel, preview: string): string {
-  if (preview) return preview;
-  return panel.missing[0] ? previewText(panel.missing[0], 54) : "";
-}
-
-function sourceTone(text: string): SourceTone {
-  const value = text.toLowerCase();
-
-  if (
-    value.includes("0 complaint") ||
-    value.includes("0 revocation") ||
-    value.includes("approved") ||
-    value.includes("positive") ||
-    value.includes("praised") ||
-    value.includes("registered")
-  ) {
-    return "good";
-  }
-
-  if (
-    value.includes("negative") ||
-    value.includes("complaint") ||
-    value.includes("concern") ||
-    value.includes("delay") ||
-    value.includes("revocation") ||
-    value.includes("waterlogging") ||
-    value.includes("severe traffic")
-  ) {
-    return "risk";
-  }
-
-  if (
-    value.includes("mixed") ||
-    value.includes("construction") ||
-    value.includes("under review") ||
-    value.includes("unpredictable")
-  ) {
-    return "watch";
-  }
-
-  return "neutral";
-}
-
-function sourcePanelPreview(panel: SourcePanel, kind: SourcePanelKind): string {
-  if (kind === "rera") {
-    return finalizeSourcePreview(panel, compactPreview([
-      cleanSourceText(findSourceItem(panel, "rera_status", "status")),
-      cleanSourceText(findSourceItem(panel, "rera_completion_date", "completion")),
-      cleanSourceText(findSourceItem(panel, "rera_complaints_count", "complaints"))
-        || cleanSourceText(findSourceItem(panel, "rera_delay_months", "delay")),
-    ]));
-  }
-
-  if (kind === "market") {
-    return finalizeSourcePreview(panel, compactPreview([
-      cleanSourceText(findSourceItem(panel, "price_per_sqft", "market_rate", "market rate")),
-      cleanSourceText(findSourceItem(panel, "price_appreciation", "price movement")),
-      cleanSourceText(findSourceItem(panel, "pricing_3bhk", "3bhk pricing")),
-    ]));
-  }
-
-  if (kind === "area") {
-    const parts = [
-      findSourceItem(panel, "metro_details", "metro access") ? "Metro access" : "",
-      findSourceItem(panel, "traffic_reality", "traffic") ? "Peak-hour traffic" : "",
-      findSourceItem(panel, "waterlogging_detail", "waterlogging") ? "Rain watch" : "",
-      findSourceItem(panel, "school_quality", "schools") ? "School cluster" : "",
-    ];
-    return finalizeSourcePreview(panel, compactPreview(parts));
-  }
-
-  if (kind === "nearby") {
-    return finalizeSourcePreview(panel, compactPreview(
-      panel.items.map((item) => {
-        const first = sourceItemList(item)[0];
-        return first ? `${item.label}: ${first}` : cleanSourceText(item);
-      }),
-    ));
-  }
-
-  if (kind === "community") {
-    return finalizeSourcePreview(panel, compactPreview([
-      cleanSourceText(findSourceItem(panel, "community_review_summary", "what we know")),
-      cleanSourceText(findSourceItem(panel, "community_sentiment_score", "signal score")),
-      cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take")),
-      sourceItemList(
-        findSourceItem(panel, "community_concern_themes", "common_complaints", "repeated concerns"),
-      )[0] ?? "",
-    ]));
-  }
-
-  const rating = cleanSourceText(findSourceItem(panel, "google_rating", "rating"));
-  const reviewCount = cleanSourceText(findSourceItem(panel, "google_review_count", "review count"));
-  return finalizeSourcePreview(panel, compactPreview([
-    rating ? `${rating}/5` : "",
-    reviewCount ? `${reviewCount} reviews` : "",
-    sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"))[0] ?? "",
-    sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"))[0] ?? "",
-  ]));
-}
-
-function SourcePanelsSection({ panels }: { panels: SourcePanel[] }) {
-  if (panels.length === 0) return null;
-
-  return (
-    <section className="property-source-section">
-      <div className="property-section-heading">
-        <span>Source trail</span>
-        <h2>What people and records say</h2>
-      </div>
-
-      <div className="source-panel-grid">
-        {panels.map((panel, index) => {
-          const kind = sourcePanelKind(panel);
-          const copy = SOURCE_PANEL_COPY[kind];
-          const preview = sourcePanelPreview(panel, kind);
-
-          return (
-            <details key={`${panel.title}-${kind}`} className={`source-panel source-panel--${kind}`} open={index === 0}>
-              <summary>
-                <i className="source-chevron" aria-hidden="true" />
-                <div className="source-panel-headline">
-                  <h3>{copy.title}</h3>
-                  <p>{copy.subtitle}</p>
-                </div>
-                {preview && <span className="source-panel-glance">{preview}</span>}
-              </summary>
-
-              <div className="source-panel-body">
-                <SourcePanelBody panel={panel} kind={kind} />
-                <SourceMissingNotes items={panel.missing} />
-              </div>
-            </details>
-          );
-        })}
-      </div>
-    </section>
-  );
-}
-
-function SourcePanelBody({ panel, kind }: { panel: SourcePanel; kind: SourcePanelKind }) {
-  if (kind === "rera") {
-    const status = findSourceItem(panel, "rera_status", "status");
-    const registration = findSourceItem(panel, "rera_number", "registration");
-    const completion = findSourceItem(panel, "rera_completion_date", "completion");
-    const delay = findSourceItem(panel, "rera_delay_months", "delay");
-    const complaints = findSourceItem(panel, "rera_complaints_count", "complaints");
-    const revocations = findSourceItem(panel, "rera_builder_revocations", "builder revocations");
-    const sourceUrl = sourcePanelUrl(panel);
-
-    const stats = [
-      status ? { label: "Status", value: cleanSourceText(status), tone: sourceTone(cleanSourceText(status)) } : null,
-      registration ? { label: "Registration", value: cleanSourceText(registration), tone: "neutral" as SourceTone } : null,
-      completion ? { label: "Completion", value: cleanSourceText(completion), tone: "neutral" as SourceTone } : null,
-      delay ? { label: "Delay", value: cleanSourceText(delay), tone: "watch" as SourceTone } : null,
-      complaints ? { label: "Complaints", value: cleanSourceText(complaints), tone: sourceTone(cleanSourceText(complaints)) } : null,
-      revocations ? { label: "Revocations", value: cleanSourceText(revocations), tone: sourceTone(cleanSourceText(revocations)) } : null,
-    ].filter((stat): stat is { label: string; value: string; tone: SourceTone } => stat !== null);
-
-    return (
-      <div className="source-panel-stack">
-        <div className="source-stat-grid">
-          {stats.map((stat) => (
-            <SourceStat key={stat.label} label={stat.label} value={stat.value} tone={stat.tone} />
-          ))}
-        </div>
-        {sourceUrl && (
-          <a className="property-text-link source-panel-link" href={sourceUrl} target="_blank" rel="noreferrer">
-            Open RERA source
-          </a>
-        )}
-      </div>
-    );
-  }
-
-  if (kind === "market") {
-    const pricing = findSourceItem(panel, "pricing_3bhk", "3bhk pricing");
-    const rate = findSourceItem(panel, "price_per_sqft", "market rate");
-    const appreciation = findSourceItem(panel, "price_appreciation", "price movement");
-    const comparables = sourceItemList(findSourceItem(panel, "comparable_projects", "nearby comparables"));
-
-    return (
-      <div className="source-panel-stack">
-        <div className="source-stat-grid source-stat-grid--wide">
-          {pricing && <SourceStat label="3BHK band" value={cleanSourceText(pricing)} tone="neutral" />}
-          {rate && <SourceStat label="Rate check" value={cleanSourceText(rate)} tone="good" />}
-          {appreciation && <SourceStat label="Cycle" value={cleanSourceText(appreciation)} tone="watch" />}
-        </div>
-        <SourceTagRow title="Compared against" items={comparables} />
-      </div>
-    );
-  }
-
-  if (kind === "area") {
-    const cards = [
-      (() => {
-        const item = findSourceItem(panel, "metro_details", "metro access");
-        return item ? { label: "Metro access", value: cleanSourceText(item), tone: "good" as SourceTone } : null;
-      })(),
-      (() => {
-        const item = findSourceItem(panel, "traffic_reality", "traffic");
-        return item ? { label: "Traffic", value: cleanSourceText(item), tone: "watch" as SourceTone } : null;
-      })(),
-      (() => {
-        const item = findSourceItem(panel, "waterlogging_detail", "waterlogging");
-        return item ? { label: "Waterlogging", value: cleanSourceText(item), tone: "risk" as SourceTone } : null;
-      })(),
-      (() => {
-        const item = findSourceItem(panel, "school_quality", "schools");
-        return item ? { label: "Schools", value: cleanSourceText(item), tone: "good" as SourceTone } : null;
-      })(),
-    ].filter((card): card is { label: string; value: string; tone: SourceTone } => card !== null);
-
-    return (
-      <div className="source-signal-grid">
-        {cards.map((card) => (
-          <SourceSignalCard key={card.label} label={card.label} value={card.value} tone={card.tone} />
-        ))}
-      </div>
-    );
-  }
-
-  if (kind === "community") {
-    const communitySummary = cleanSourceText(findSourceItem(panel, "community_review_summary", "what we know"));
-    const communityScore = cleanSourceText(findSourceItem(panel, "community_sentiment_score", "signal score"));
-    const overall = cleanSourceText(findSourceItem(panel, "resident_sentiment", "overall take"));
-    const summary = cleanSourceText(findSourceItem(panel, "sentiment_summary", "what forums point to"));
-    const quoteItem = findSourceItem(panel, "best_quote", "quote");
-    const quote = sourceQuoteText(quoteItem);
-    const evidenceUrl = sourcePanelUrl(panel);
-    const positives = sourceItemList(
-      findSourceItem(panel, "community_positive_themes", "common_positives", "repeated positives"),
-    );
-    const concerns = sourceItemList(
-      findSourceItem(panel, "community_concern_themes", "common_complaints", "repeated concerns"),
-    );
-    const highlights = [
-      ...highlightSentences(communitySummary).filter((item) => !isMissingDataSentence(item)),
-      communityScore ? `Signal score: ${communityScore}/100 from available public review metadata` : "",
-      evidenceUrl ? "Evidence links back to the public review source" : "",
-      ...highlightSentences(summary).filter((item) => !isMissingDataSentence(item)),
-    ].filter((item) => item.length > 0);
-
-    return (
-      <div className="source-panel-stack">
-        {communityScore && (
-          <div className="source-stat-grid">
-            <SourceStat label="Signal" value={`${communityScore}/100`} tone={sourceTone(communitySummary || overall || communityScore)} />
-          </div>
-        )}
-
-        {(overall || highlights.length > 0) && (
-          <div className="source-lead">
-            {overall && (
-              <span className={`source-sentiment-pill source-sentiment-pill--${sourceTone(overall)}`}>
-                {overall}
-              </span>
-            )}
-            <CompactList title="Highlights" items={highlights} tone="good" />
-          </div>
-        )}
-
-        {quote && (
-          <blockquote className="source-quote">
-            <p>{quote}</p>
-            <span>{quoteItem?.source_type === "Llm" ? "Representative line" : "Quoted line"}</span>
-          </blockquote>
-        )}
-
-        <div className="source-list-grid">
-          <SourceListCard title="What people like" items={positives} tone="good" />
-          <SourceListCard title="What people complain about" items={concerns} tone="watch" />
-        </div>
-
-        {evidenceUrl && (
-          <a className="property-text-link source-panel-link" href={evidenceUrl} target="_blank" rel="noreferrer">
-            Open community evidence
-          </a>
-        )}
-      </div>
-    );
-  }
-
-  if (kind === "nearby") {
-    return (
-      <div className="source-panel-stack">
-        <div className="source-list-grid">
-          {panel.items.map((item) => (
-            <SourceListCard
-              key={item.key ?? item.label}
-              title={item.label}
-              items={sourceItemList(item)}
-              tone={sourceTone(item.value)}
-            />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  const rating = cleanSourceText(findSourceItem(panel, "google_rating", "rating"));
-  const reviewCount = cleanSourceText(findSourceItem(panel, "google_review_count", "review count"));
-  const reviewUrl = sourcePanelUrl(panel);
-  const overall = cleanSourceText(findSourceItem(panel, "google_sentiment", "overall take"));
-  const positives = sourceItemList(findSourceItem(panel, "google_top_positives", "praised for"));
-  const concerns = sourceItemList(findSourceItem(panel, "google_top_negatives", "recurring complaints"));
-  const themes = sourceItemList(findSourceItem(panel, "google_common_themes", "themes"));
-  const reviewFacts = [
-    rating ? `${rating}/5 Google rating` : "",
-    reviewCount ? `${reviewCount} public reviews counted` : "",
-    reviewUrl ? "Google Maps review link is available" : "",
-    ...highlightSentences(overall).filter((item) => !isMissingDataSentence(item)),
-  ].filter((item) => item.length > 0);
-
-  return (
-    <div className="source-panel-stack">
-      {(rating || reviewCount) && (
-        <div className="source-stat-grid">
-          {rating && <SourceStat label="Rating" value={`${rating}/5`} tone={sourceTone(rating)} />}
-          {reviewCount && <SourceStat label="Reviews" value={reviewCount} tone="neutral" />}
-        </div>
-      )}
-      {reviewFacts.length > 0 && (
-        <div className="source-lead">
-          <CompactList title="Review facts" items={reviewFacts} tone="good" />
-        </div>
-      )}
-      <div className="source-list-grid">
-        <SourceListCard title="Often praised" items={positives} tone="good" />
-        <SourceListCard title="Often criticized" items={concerns} tone="watch" />
-      </div>
-      <SourceTagRow title="Themes" items={themes} />
-      {reviewUrl && (
-        <a className="property-text-link source-panel-link" href={reviewUrl} target="_blank" rel="noreferrer">
-          Open Google reviews
-        </a>
-      )}
-    </div>
-  );
-}
-
-function SourceStat({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: SourceTone;
-}) {
-  return (
-    <div className={`source-stat source-stat--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </div>
-  );
-}
-
-function SourceSignalCard({
-  label,
-  value,
-  tone,
-}: {
-  label: string;
-  value: string;
-  tone: SourceTone;
-}) {
-  return (
-    <div className={`source-signal-card source-signal-card--${tone}`}>
-      <span>{label}</span>
-      <p>{value}</p>
-    </div>
-  );
-}
-
-function SourceListCard({
-  title,
-  items,
-  tone,
-}: {
-  title: string;
-  items: string[];
-  tone: "good" | "watch";
-}) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className="source-list-card">
-      <CompactList title={title} items={items} tone={tone} />
-    </div>
-  );
-}
-
-function SourceTagRow({ title, items }: { title: string; items: string[] }) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className="source-tag-row">
-      <span>{title}</span>
-      <div className="source-chip-wrap">
-        {items.map((item) => (
-          <span key={item} className="source-chip">{item}</span>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function SourceMissingNotes({ items }: { items: string[] }) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className="source-missing-list">
-      <span>Still missing</span>
-      <ul>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
     </div>
   );
 }
@@ -1259,20 +562,6 @@ function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
   );
 }
 
-function CompactList({ title, items, tone }: { title: string; items: string[]; tone: "good" | "watch" }) {
-  if (items.length === 0) return null;
-
-  return (
-    <div className={`property-compact-list property-compact-list--${tone}`}>
-      <h4>{title}</h4>
-      <ul>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 function RiskBar({ signal }: { signal: RiskSignal }) {
   const label = riskLabel(signal.value);

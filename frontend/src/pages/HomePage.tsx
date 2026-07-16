@@ -577,7 +577,7 @@ export function HomePage() {
                     {formatPrice(snapshot.priceMin)}
                   </span>
                   <span style={{ color: "#ccc" }}>&mdash;</span>
-                  <span className="home-pulse-metric home-pulse-metric--sage">
+                  <span className="home-pulse-metric home-pulse-metric--cool">
                     {formatPrice(snapshot.priceMax)}
                   </span>
                 </div>
@@ -598,7 +598,7 @@ export function HomePage() {
               </div>
 
               {/* Top builders */}
-              <div className="home-pulse-card home-pulse-card--sage">
+              <div className="home-pulse-card home-pulse-card--cool">
                 <p className="home-pulse-label">Top builders</p>
                 <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                   {snapshot.topBuilders.map((b) => (
@@ -770,7 +770,7 @@ function MicroMarketCard({
 }) {
   const pct = (m.avgPriceSqft / maxAvg) * 100;
   const barColor =
-    pct > 85 ? "var(--color-accent)" : pct > 60 ? "var(--color-sage-deep)" : "var(--color-sage)";
+    pct > 85 ? "var(--color-accent)" : pct > 60 ? "var(--color-cool-deep)" : "var(--color-cool)";
 
   return (
     <button
@@ -835,7 +835,7 @@ function MicroMarketCard({
           </span>
         )}
         {m.nearMetro > 0 && (
-          <span className="home-chip-sage">
+          <span className="home-chip-cool">
             {m.nearMetro} near metro
           </span>
         )}

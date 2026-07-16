@@ -167,8 +167,8 @@ export function PayoffGraph({
       >
         <defs>
           <linearGradient id="payoff-savings-gap" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="var(--plan-monthly-deep)" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="var(--plan-monthly-deep)" stopOpacity="0.04" />
+            <stop offset="0%" stopColor="var(--plan-cool-deep)" stopOpacity="0.22" />
+            <stop offset="100%" stopColor="var(--plan-cool-deep)" stopOpacity="0.04" />
           </linearGradient>
           <filter id="payoff-tooltip-shadow" x="-30%" y="-30%" width="160%" height="180%">
             <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#1a1410" floodOpacity="0.1" />

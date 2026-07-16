@@ -49,6 +49,23 @@ export type PropertyCard = {
   data_freshness?: DataFreshness;
 };
 
+export type RecommendationLens = "proof" | "value" | "trust" | "commute";
+
+export type RecommendationBranch = {
+  lens: RecommendationLens;
+  headline: string;
+  property: PropertyCard;
+  contrast: string;
+  tradeoff?: string;
+  evidence_delta: {
+    fact_count: number;
+    gap_count: number;
+    confidence_pct: number;
+    fact_delta: number;
+    gap_delta: number;
+  };
+};
+
 export type PropertyDetailResponse = {
   property: {
     id: string;
@@ -138,6 +155,7 @@ export type PropertyDetailResponse = {
   tradeoffs: TradeoffsResponse;
   market_activity: MarketActivityResponse;
   similar_properties: PropertyCard[];
+  recommendation_branches?: RecommendationBranch[];
   rera?: ReraInfo;
   area_intelligence?: AreaIntelligence;
   transparency_score: TransparencyScore;
@@ -158,6 +176,13 @@ export type PropertyDetailResponse = {
   source_panels?: SourcePanel[];
   data_freshness?: DataFreshness;
   confidence_score?: ConfidenceScore;
+  /** Backend-shaped dynamic evidence cards — prefer over source_panels. */
+  evidence?: PropertyEvidenceResponse;
+  external_reviews?: {
+    google_rating?: number;
+    google_review_count?: number;
+    google_reviews_url?: string;
+  };
 };
 
 /**

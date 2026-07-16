@@ -7,6 +7,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
+use crate::recommendations::{build_recommendation_branches, RecommendationBranch};
 use crate::scoring::{
     self, compute_transparency_score, CompareThemes, MarketActivityResponse, TradeoffsResponse,
     TransparencyScore,
@@ -60,6 +61,9 @@ pub struct PropertyDetail {
     pub market_activity: MarketActivityResponse,
     /// Similar properties from locally precomputed society embeddings.
     pub similar_properties: Vec<PropertyCard>,
+    /// Counterfactual branches — why you might consider an alternative instead.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recommendation_branches: Vec<RecommendationBranch>,
     /// RERA regulatory data from the knowledge graph (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera: Option<ReraInfo>,
@@ -710,7 +714,7 @@ fn source_item_aliases(key: &str) -> &'static [&'static str] {
     }
 }
 
-fn build_source_panels(
+pub(crate) fn build_source_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
@@ -977,7 +981,7 @@ fn build_property_evidence_response_from_panels(
     }
 }
 
-fn evidence_section_from_panel(panel: SourcePanel, entity_refs: &KgEntityRefs) -> EvidenceSection {
+pub(crate) fn evidence_section_from_panel(panel: SourcePanel, entity_refs: &KgEntityRefs) -> EvidenceSection {
     let source_types = unique_sorted(
         panel
             .items
@@ -1545,6 +1549,26 @@ pub async fn get_property(
         source_panels.clone(),
     );
 
+    let area_median_ppsf = area
+        .as_ref()
+        .map(|profile| profile.median_price_per_sqft)
+        .or_else(|| match (area_price_range_low, area_price_range_high) {
+            (Some(low), Some(high)) => Some((low + high) / 2),
+            (Some(low), None) => Some(low),
+            (None, Some(high)) => Some(high),
+            (None, None) => None,
+        });
+    let recommendation_branches = build_recommendation_branches(
+        &property,
+        &evidence,
+        &graph,
+        &properties,
+        &state.societies,
+        &sellers_guard,
+        serving_bundle.as_deref(),
+        area_median_ppsf,
+    );
+
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);
 
@@ -1561,6 +1585,7 @@ pub async fn get_property(
         tradeoffs,
         market_activity,
         similar_properties,
+        recommendation_branches,
         rera,
         area_intelligence,
         transparency_score,
