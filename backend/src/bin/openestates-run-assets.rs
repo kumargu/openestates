@@ -9,9 +9,10 @@ use backend::assets::{
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
     SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::{store as kg_store, KnowledgeGraph};
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
@@ -189,6 +190,8 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
             .expect("valid static Google nearby asset ID"),
         AssetId::new(METRO_STATIONS_MONTHLY_ASSET_ID).expect("valid static metro asset ID"),
         AssetId::new(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID).expect("valid static Prestige asset ID"),
+        AssetId::new(EXTERNAL_LISTINGS_WEEKLY_ASSET_ID)
+            .expect("valid static external listings asset ID"),
         AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID).expect("valid static Reddit thread asset ID"),
         AssetId::new(REDDIT_RESIDENT_FACTS_ASSET_ID).expect("valid static Reddit fact asset ID"),
     ]);
@@ -563,6 +566,7 @@ mod tests {
         assert_eq!(
             plan.requested_assets,
             vec![
+                AssetId::new("external_listings_weekly").unwrap(),
                 AssetId::new("google_nearby_places_weekly").unwrap(),
                 AssetId::new("google_places_weekly").unwrap(),
                 AssetId::new("metro_stations_monthly").unwrap(),

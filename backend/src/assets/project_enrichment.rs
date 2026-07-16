@@ -31,6 +31,8 @@ use super::{
 
 pub const PRESTIGE_INVENTORY_WEEKLY_ASSET_ID: &str = "prestige_inventory_weekly";
 pub const MARKET_PROJECT_FACTS_ASSET_ID: &str = "market_project_facts";
+pub const EXTERNAL_LISTINGS_WEEKLY_ASSET_ID: &str = "external_listings_weekly";
+pub const EXTERNAL_LISTING_FACTS_ASSET_ID: &str = "external_listing_facts";
 pub const METRO_STATIONS_MONTHLY_ASSET_ID: &str = "metro_stations_monthly";
 pub const METRO_PROXIMITY_FACTS_ASSET_ID: &str = "metro_proximity_facts";
 pub const BUILDER_RERA_AGGREGATES_ASSET_ID: &str = "builder_rera_aggregates";
@@ -65,6 +67,52 @@ pub struct PrestigeInventoryWeeklyInput {
     pub snapshot_date: String,
     #[serde(default)]
     pub records: Vec<PrestigeInventoryObservationRecord>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_watermarks: Vec<SourceWatermark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExternalListingObservationRecord {
+    pub entity_id: String,
+    pub project_key: Option<String>,
+    pub source_name: String,
+    pub source_url: Option<String>,
+    pub price: Option<f64>,
+    #[serde(default)]
+    pub price_min: Option<f64>,
+    #[serde(default)]
+    pub price_max: Option<f64>,
+    pub area_sqft: Option<f64>,
+    #[serde(default)]
+    pub area_sqft_min: Option<f64>,
+    #[serde(default)]
+    pub area_sqft_max: Option<f64>,
+    #[serde(default)]
+    pub price_per_sqft_min: Option<f64>,
+    #[serde(default)]
+    pub price_per_sqft_max: Option<f64>,
+    #[serde(default)]
+    pub price_display: Option<String>,
+    #[serde(default)]
+    pub area_display: Option<String>,
+    #[serde(default)]
+    pub price_per_sqft_display: Option<String>,
+    #[serde(default)]
+    pub configuration: Option<String>,
+    pub area_type: Option<String>,
+    pub bhk: Option<f64>,
+    pub bathrooms: Option<f64>,
+    pub floor: Option<String>,
+    pub society: Option<String>,
+    pub locality: Option<String>,
+    pub observed_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExternalListingsWeeklyInput {
+    pub snapshot_date: String,
+    #[serde(default)]
+    pub records: Vec<ExternalListingObservationRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_watermarks: Vec<SourceWatermark>,
 }
@@ -131,6 +179,29 @@ impl ProjectEnrichmentMaterializer {
             input.records.len(),
             write_prestige_inventory_parquet(&input.records)?,
             "projects/part-00000.parquet",
+            &input.source_watermarks,
+            parent_materializations,
+            dag_run_id,
+            record_partition,
+        )
+        .await
+    }
+
+    pub async fn materialize_external_listings(
+        &self,
+        input: &ExternalListingsWeeklyInput,
+        parent_materializations: Vec<MaterializationId>,
+        dag_run_id: MaterializationId,
+        record_partition: AssetPartition,
+    ) -> Result<MaterializationRecord, ProjectEnrichmentAssetError> {
+        validate_external_listing_input(input)?;
+        self.materialize_observations(
+            EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+            "external_listings",
+            &input.snapshot_date,
+            input.records.len(),
+            write_external_listing_parquet(&input.records)?,
+            "listings/part-00000.parquet",
             &input.source_watermarks,
             parent_materializations,
             dag_run_id,
@@ -249,6 +320,41 @@ pub async fn market_project_facts_input_with_aliases(
         facts,
         fact_annotations: annotations,
         source_watermarks: inventory_record.source_watermarks.clone(),
+    })
+}
+
+pub async fn external_listing_facts_input_with_aliases(
+    lake: &LakeStore,
+    listing_record: &MaterializationRecord,
+    canonical_record: &MaterializationRecord,
+    run_id: &MaterializationId,
+) -> Result<SkillFactsInput, ProjectEnrichmentAssetError> {
+    let rows = read_external_listing_rows(lake, listing_record).await?;
+    let canonical = read_canonical_society_rows(lake, canonical_record).await?;
+    let aliases = canonical
+        .mappings
+        .into_iter()
+        .filter_map(|mapping| {
+            mapping
+                .alias_entity_id
+                .filter(|alias| alias != &mapping.canonical_entity_id)
+                .map(|alias| (mapping.canonical_entity_id, alias))
+        })
+        .collect::<HashMap<_, _>>();
+    let mut facts = Vec::new();
+    let mut annotations = Vec::new();
+    for row in rows {
+        append_listing_facts(&row, &row.entity_id, run_id, &mut facts, &mut annotations)?;
+        if let Some(alias) = aliases.get(&row.entity_id) {
+            append_listing_facts(&row, alias, run_id, &mut facts, &mut annotations)?;
+        }
+    }
+    Ok(SkillFactsInput {
+        source: "external_listing".to_string(),
+        snapshot_date: listing_record.version.clone(),
+        facts,
+        fact_annotations: annotations,
+        source_watermarks: listing_record.source_watermarks.clone(),
     })
 }
 
@@ -644,6 +750,404 @@ fn append_market_facts(
     Ok(())
 }
 
+fn append_listing_facts(
+    row: &ExternalListingObservationRecord,
+    entity_id: &str,
+    run_id: &MaterializationId,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), ProjectEnrichmentAssetError> {
+    let Some(bhk) = row.bhk else {
+        return Ok(());
+    };
+    let Some(price) = row.price.filter(|value| value.is_finite() && *value > 0.0) else {
+        return Ok(());
+    };
+    let Some(area_sqft) = row
+        .area_sqft
+        .filter(|value| value.is_finite() && *value > 0.0)
+    else {
+        return Ok(());
+    };
+    let bhk_key = bhk_fact_suffix(bhk);
+    if bhk_key.is_empty() {
+        return Ok(());
+    }
+    let source_url = row.source_url.clone();
+    let source_type = "ExternalListing";
+    let skill_id = "external_listing_facts";
+    let price_inr = price.round();
+    let area_sqft = area_sqft.round();
+    let price_min = row.price_min.unwrap_or(price).round();
+    let price_max = row.price_max.unwrap_or(price).round();
+    let area_sqft_min = row.area_sqft_min.unwrap_or(area_sqft).round();
+    let area_sqft_max = row.area_sqft_max.unwrap_or(area_sqft).round();
+    let source_name = row.source_name.trim();
+    let price_range_display = inr_range_display(price_min as u64, price_max as u64);
+    let area_range_display = sqft_range_display(area_sqft_min as u64, area_sqft_max as u64);
+    let ppsf_range_display = price_per_sqft_range_display(
+        row.price_per_sqft_min,
+        row.price_per_sqft_max,
+        price_min,
+        price_max,
+        area_sqft_min,
+        area_sqft_max,
+    );
+    let listing_payload = serde_json::json!({
+        "price": price_inr as u64,
+        "price_min": price_min as u64,
+        "price_max": price_max as u64,
+        "price_display": row.price_display.as_deref(),
+        "area_sqft": area_sqft as u64,
+        "area_sqft_min": area_sqft_min as u64,
+        "area_sqft_max": area_sqft_max as u64,
+        "area_display": row.area_display.as_deref(),
+        "price_per_sqft_min": row.price_per_sqft_min,
+        "price_per_sqft_max": row.price_per_sqft_max,
+        "price_per_sqft_display": row.price_per_sqft_display.as_deref(),
+        "area_type": row.area_type.as_deref().unwrap_or("unknown"),
+        "bhk": bhk,
+        "configuration": row.configuration.as_deref(),
+        "bathrooms": row.bathrooms,
+        "floor": row.floor.as_deref(),
+        "society": row.society.as_deref(),
+        "locality": row.locality.as_deref(),
+        "source_url": row.source_url.as_deref(),
+        "observed_at": row.observed_at.to_rfc3339(),
+    });
+    append_derived_fact(
+        entity_id,
+        &format!("listing_{bhk_key}"),
+        FactValue::Text(listing_payload.to_string()),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!(
+            "{} listing: INR {} for {}",
+            bhk_display(bhk),
+            price_range_display,
+            area_range_display
+        ),
+        &[
+            "price",
+            "budget",
+            "listing price",
+            "sqft",
+            "bhk",
+            "market listing",
+        ],
+        Some(("TextMatch", 2.0, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("listing_price_{bhk_key}"),
+        FactValue::Numeric(price_inr),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing price: INR {{value}}", bhk_display(bhk)),
+        &["price", "budget", "listing price"],
+        Some(("LowerIsBetter", 1.5, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("listing_price_range_{bhk_key}"),
+        FactValue::Text(price_range_display.clone()),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing price range: {{value}}", bhk_display(bhk)),
+        &["price", "budget", "listing price", "price range"],
+        Some(("TextMatch", 1.0, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("listing_area_sqft_{bhk_key}"),
+        FactValue::Numeric(area_sqft),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing area: {{value}} sq ft", bhk_display(bhk)),
+        &["sqft", "area", "large apartment"],
+        Some(("HigherIsBetter", 0.7, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("listing_area_sqft_range_{bhk_key}"),
+        FactValue::Text(area_range_display.clone()),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing area range: {{value}}", bhk_display(bhk)),
+        &["sqft", "area", "large apartment", "area range"],
+        Some(("TextMatch", 0.7, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    if let Some(value) = ppsf_range_display {
+        append_derived_fact(
+            entity_id,
+            &format!("listing_price_per_sqft_range_{bhk_key}"),
+            FactValue::Text(value),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} listing rate range: {{value}}", bhk_display(bhk)),
+            &["price per sqft", "market rate", "rate range"],
+            Some(("TextMatch", 0.8, Vec::new())),
+            facts,
+            annotations,
+        )?;
+    }
+    append_derived_fact(
+        entity_id,
+        &format!("listing_area_type_{bhk_key}"),
+        FactValue::Text(
+            row.area_type
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string()),
+        ),
+        0.7,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing area type: {{value}}", bhk_display(bhk)),
+        &["area type", "carpet area", "super built up"],
+        None,
+        facts,
+        annotations,
+    )?;
+    if let Some(bathrooms) = row.bathrooms.filter(|value| value.is_finite()) {
+        append_derived_fact(
+            entity_id,
+            &format!("listing_bathrooms_{bhk_key}"),
+            FactValue::Numeric(bathrooms),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} listing bathrooms: {{value}}", bhk_display(bhk)),
+            &["bathrooms"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(floor) = row.floor.as_ref().filter(|floor| !floor.trim().is_empty()) {
+        append_derived_fact(
+            entity_id,
+            &format!("listing_floor_{bhk_key}"),
+            FactValue::Text(floor.clone()),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} listing floor: {{value}}", bhk_display(bhk)),
+            &["floor"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(value) = row.society.clone().filter(|value| !value.trim().is_empty()) {
+        append_derived_fact(
+            entity_id,
+            "listing_society",
+            FactValue::Text(value),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            "Listing society: {value}",
+            &["society"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(value) = row
+        .locality
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+    {
+        append_derived_fact(
+            entity_id,
+            "listing_locality",
+            FactValue::Text(value),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            "Listing locality: {value}",
+            &["locality", "area"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(value) = row
+        .source_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+    {
+        append_derived_fact(
+            entity_id,
+            &format!("listing_source_url_{bhk_key}"),
+            FactValue::Text(value),
+            0.7,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            "Listing source: {value}",
+            &["source", "listing source"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    append_derived_fact(
+        entity_id,
+        &format!("listing_observed_at_{bhk_key}"),
+        FactValue::Text(row.observed_at.to_rfc3339()),
+        0.7,
+        source_type,
+        source_url,
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} listing observed at {{value}}", bhk_display(bhk)),
+        &["fresh listing", "recent listing"],
+        None,
+        facts,
+        annotations,
+    )?;
+    if !source_name.is_empty() {
+        append_derived_fact(
+            entity_id,
+            &format!("listing_source_name_{bhk_key}"),
+            FactValue::Text(source_name.to_string()),
+            0.7,
+            source_type,
+            row.source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} listing source: {{value}}", bhk_display(bhk)),
+            &["source", "listing source"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    Ok(())
+}
+
+fn bhk_fact_suffix(bhk: f64) -> String {
+    if !bhk.is_finite() || bhk <= 0.0 {
+        return String::new();
+    }
+    let value = if bhk.fract().abs() < f64::EPSILON {
+        format!("{}", bhk as u64)
+    } else {
+        format!("{bhk:.1}")
+            .trim_end_matches('0')
+            .trim_end_matches('.')
+            .to_string()
+    };
+    format!("{}bhk", value.replace('.', "_"))
+}
+
+fn bhk_display(bhk: f64) -> String {
+    if bhk.fract().abs() < f64::EPSILON {
+        format!("{} BHK", bhk as u64)
+    } else {
+        format!("{bhk:.1} BHK")
+    }
+}
+
+fn compact_inr(value: u64) -> String {
+    if value >= 10_000_000 {
+        format!("{:.2} Cr", value as f64 / 10_000_000.0)
+    } else if value >= 100_000 {
+        format!("{:.1} L", value as f64 / 100_000.0)
+    } else {
+        value.to_string()
+    }
+}
+
+fn inr_range_display(low: u64, high: u64) -> String {
+    if low == high {
+        compact_inr(low)
+    } else {
+        format!("{}-{}", compact_inr(low), compact_inr(high))
+    }
+}
+
+fn sqft_range_display(low: u64, high: u64) -> String {
+    if low == high {
+        format!("{low} sq ft")
+    } else {
+        format!("{low}-{high} sq ft")
+    }
+}
+
+fn price_per_sqft_range_display(
+    explicit_low: Option<f64>,
+    explicit_high: Option<f64>,
+    price_min: f64,
+    price_max: f64,
+    area_min: f64,
+    area_max: f64,
+) -> Option<String> {
+    let low = explicit_low.or_else(|| (area_max > 0.0).then_some(price_min / area_max));
+    let high = explicit_high.or_else(|| (area_min > 0.0).then_some(price_max / area_min));
+    let low = low?.round() as u64;
+    let high = high?.round() as u64;
+    if low == high {
+        Some(format!("INR {low}/sq ft"))
+    } else {
+        Some(format!("INR {low}-{high}/sq ft"))
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 fn append_derived_fact(
     entity_id: &str,
@@ -803,6 +1307,35 @@ fn validate_prestige_input(
     Ok(())
 }
 
+fn validate_external_listing_input(
+    input: &ExternalListingsWeeklyInput,
+) -> Result<(), ProjectEnrichmentAssetError> {
+    if input.snapshot_date.trim().is_empty() {
+        return Err(ProjectEnrichmentAssetError::InvalidInput(
+            "external listing snapshot date is empty".to_string(),
+        ));
+    }
+    if input.records.is_empty() {
+        return Err(ProjectEnrichmentAssetError::InvalidInput(
+            "external listing snapshot is empty".to_string(),
+        ));
+    }
+    for record in &input.records {
+        if record.entity_id.trim().is_empty() || record.source_name.trim().is_empty() {
+            return Err(ProjectEnrichmentAssetError::InvalidInput(
+                "external listing record is missing entity or source".to_string(),
+            ));
+        }
+        if record.price.is_none() || record.area_sqft.is_none() || record.bhk.is_none() {
+            return Err(ProjectEnrichmentAssetError::InvalidInput(format!(
+                "external listing record for {} is missing price, area, or bhk",
+                record.entity_id
+            )));
+        }
+    }
+    Ok(())
+}
+
 fn validate_metro_input(
     input: &MetroStationsMonthlyInput,
 ) -> Result<(), ProjectEnrichmentAssetError> {
@@ -900,6 +1433,69 @@ fn write_prestige_inventory_parquet(
     write_batch(schema, batch)
 }
 
+fn write_external_listing_parquet(
+    records: &[ExternalListingObservationRecord],
+) -> Result<Vec<u8>, ProjectEnrichmentAssetError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("entity_id", DataType::Utf8, false),
+        Field::new("project_key", DataType::Utf8, true),
+        Field::new("source_name", DataType::Utf8, false),
+        Field::new("source_url", DataType::Utf8, true),
+        Field::new("price", DataType::Float64, true),
+        Field::new("price_min", DataType::Float64, true),
+        Field::new("price_max", DataType::Float64, true),
+        Field::new("area_sqft", DataType::Float64, true),
+        Field::new("area_sqft_min", DataType::Float64, true),
+        Field::new("area_sqft_max", DataType::Float64, true),
+        Field::new("price_per_sqft_min", DataType::Float64, true),
+        Field::new("price_per_sqft_max", DataType::Float64, true),
+        Field::new("price_display", DataType::Utf8, true),
+        Field::new("area_display", DataType::Utf8, true),
+        Field::new("price_per_sqft_display", DataType::Utf8, true),
+        Field::new("configuration", DataType::Utf8, true),
+        Field::new("area_type", DataType::Utf8, true),
+        Field::new("bhk", DataType::Float64, true),
+        Field::new("bathrooms", DataType::Float64, true),
+        Field::new("floor", DataType::Utf8, true),
+        Field::new("society", DataType::Utf8, true),
+        Field::new("locality", DataType::Utf8, true),
+        Field::new("observed_at", DataType::Utf8, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            strings(records.iter().map(|record| record.entity_id.clone())),
+            optional_string_array(records.iter().map(|record| record.project_key.clone())),
+            strings(records.iter().map(|record| record.source_name.clone())),
+            optional_string_array(records.iter().map(|record| record.source_url.clone())),
+            optional_f64s(records.iter().map(|record| record.price)),
+            optional_f64s(records.iter().map(|record| record.price_min)),
+            optional_f64s(records.iter().map(|record| record.price_max)),
+            optional_f64s(records.iter().map(|record| record.area_sqft)),
+            optional_f64s(records.iter().map(|record| record.area_sqft_min)),
+            optional_f64s(records.iter().map(|record| record.area_sqft_max)),
+            optional_f64s(records.iter().map(|record| record.price_per_sqft_min)),
+            optional_f64s(records.iter().map(|record| record.price_per_sqft_max)),
+            optional_string_array(records.iter().map(|record| record.price_display.clone())),
+            optional_string_array(records.iter().map(|record| record.area_display.clone())),
+            optional_string_array(
+                records
+                    .iter()
+                    .map(|record| record.price_per_sqft_display.clone()),
+            ),
+            optional_string_array(records.iter().map(|record| record.configuration.clone())),
+            optional_string_array(records.iter().map(|record| record.area_type.clone())),
+            optional_f64s(records.iter().map(|record| record.bhk)),
+            optional_f64s(records.iter().map(|record| record.bathrooms)),
+            optional_string_array(records.iter().map(|record| record.floor.clone())),
+            optional_string_array(records.iter().map(|record| record.society.clone())),
+            optional_string_array(records.iter().map(|record| record.locality.clone())),
+            strings(records.iter().map(|record| record.observed_at.to_rfc3339())),
+        ],
+    )?;
+    write_batch(schema, batch)
+}
+
 fn write_metro_stations_parquet(
     records: &[MetroStationObservationRecord],
 ) -> Result<Vec<u8>, ProjectEnrichmentAssetError> {
@@ -986,6 +1582,67 @@ async fn read_prestige_inventory_rows(
                 longitude: optional_f64(longitude, row),
                 maps_url: optional_string(maps_url, row),
                 address: optional_string(address, row),
+                observed_at: parse_timestamp(observed_at, row)?,
+            });
+        }
+    }
+    Ok(rows)
+}
+
+async fn read_external_listing_rows(
+    lake: &LakeStore,
+    record: &MaterializationRecord,
+) -> Result<Vec<ExternalListingObservationRecord>, ProjectEnrichmentAssetError> {
+    let bytes = read_artifact(lake, record, "listings/part-00000.parquet").await?;
+    let mut rows = Vec::new();
+    for batch in parquet_batches(bytes)? {
+        let entity_id = string_column(&batch, "entity_id")?;
+        let project_key = string_column(&batch, "project_key")?;
+        let source_name = string_column(&batch, "source_name")?;
+        let source_url = string_column(&batch, "source_url")?;
+        let price = f64_column(&batch, "price")?;
+        let price_min = optional_f64_column(&batch, "price_min")?;
+        let price_max = optional_f64_column(&batch, "price_max")?;
+        let area_sqft = f64_column(&batch, "area_sqft")?;
+        let area_sqft_min = optional_f64_column(&batch, "area_sqft_min")?;
+        let area_sqft_max = optional_f64_column(&batch, "area_sqft_max")?;
+        let price_per_sqft_min = optional_f64_column(&batch, "price_per_sqft_min")?;
+        let price_per_sqft_max = optional_f64_column(&batch, "price_per_sqft_max")?;
+        let price_display = optional_string_column(&batch, "price_display")?;
+        let area_display = optional_string_column(&batch, "area_display")?;
+        let price_per_sqft_display = optional_string_column(&batch, "price_per_sqft_display")?;
+        let configuration = optional_string_column(&batch, "configuration")?;
+        let area_type = string_column(&batch, "area_type")?;
+        let bhk = f64_column(&batch, "bhk")?;
+        let bathrooms = f64_column(&batch, "bathrooms")?;
+        let floor = string_column(&batch, "floor")?;
+        let society = string_column(&batch, "society")?;
+        let locality = string_column(&batch, "locality")?;
+        let observed_at = string_column(&batch, "observed_at")?;
+        for row in 0..batch.num_rows() {
+            rows.push(ExternalListingObservationRecord {
+                entity_id: required_string(entity_id, row, "entity_id")?,
+                project_key: optional_string(project_key, row),
+                source_name: required_string(source_name, row, "source_name")?,
+                source_url: optional_string(source_url, row),
+                price: optional_f64(price, row),
+                price_min: optional_column_f64(price_min, row),
+                price_max: optional_column_f64(price_max, row),
+                area_sqft: optional_f64(area_sqft, row),
+                area_sqft_min: optional_column_f64(area_sqft_min, row),
+                area_sqft_max: optional_column_f64(area_sqft_max, row),
+                price_per_sqft_min: optional_column_f64(price_per_sqft_min, row),
+                price_per_sqft_max: optional_column_f64(price_per_sqft_max, row),
+                price_display: optional_column_string(price_display, row),
+                area_display: optional_column_string(area_display, row),
+                price_per_sqft_display: optional_column_string(price_per_sqft_display, row),
+                configuration: optional_column_string(configuration, row),
+                area_type: optional_string(area_type, row),
+                bhk: optional_f64(bhk, row),
+                bathrooms: optional_f64(bathrooms, row),
+                floor: optional_string(floor, row),
+                society: optional_string(society, row),
+                locality: optional_string(locality, row),
                 observed_at: parse_timestamp(observed_at, row)?,
             });
         }
@@ -1087,6 +1744,21 @@ fn string_column<'a>(
         .ok_or_else(|| ProjectEnrichmentAssetError::InvalidSchema(name.to_string()))
 }
 
+fn optional_string_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a StringArray>, ProjectEnrichmentAssetError> {
+    batch
+        .column_by_name(name)
+        .map(|column| {
+            column
+                .as_any()
+                .downcast_ref::<StringArray>()
+                .ok_or_else(|| ProjectEnrichmentAssetError::InvalidSchema(name.to_string()))
+        })
+        .transpose()
+}
+
 fn f64_column<'a>(
     batch: &'a RecordBatch,
     name: &str,
@@ -1095,6 +1767,21 @@ fn f64_column<'a>(
         .column_by_name(name)
         .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
         .ok_or_else(|| ProjectEnrichmentAssetError::InvalidSchema(name.to_string()))
+}
+
+fn optional_f64_column<'a>(
+    batch: &'a RecordBatch,
+    name: &str,
+) -> Result<Option<&'a Float64Array>, ProjectEnrichmentAssetError> {
+    batch
+        .column_by_name(name)
+        .map(|column| {
+            column
+                .as_any()
+                .downcast_ref::<Float64Array>()
+                .ok_or_else(|| ProjectEnrichmentAssetError::InvalidSchema(name.to_string()))
+        })
+        .transpose()
 }
 
 fn u64_column<'a>(
@@ -1132,8 +1819,16 @@ fn optional_string(column: &StringArray, row: usize) -> Option<String> {
     (!column.is_null(row)).then(|| column.value(row).to_string())
 }
 
+fn optional_column_string(column: Option<&StringArray>, row: usize) -> Option<String> {
+    column.and_then(|column| optional_string(column, row))
+}
+
 fn optional_f64(column: &Float64Array, row: usize) -> Option<f64> {
     (!column.is_null(row)).then(|| column.value(row))
+}
+
+fn optional_column_f64(column: Option<&Float64Array>, row: usize) -> Option<f64> {
+    column.and_then(|column| optional_f64(column, row))
 }
 
 fn required_f64(

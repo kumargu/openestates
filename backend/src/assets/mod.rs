@@ -64,12 +64,14 @@ pub use planner::{
     FreshnessReferenceKind, PlanDecision, PlanReason, PlannedAsset, PlannerError,
 };
 pub use project_enrichment::{
-    builder_rera_aggregate_facts_input, market_project_facts_input_with_aliases,
-    metro_proximity_facts_input, MetroStationObservationRecord, MetroStationsMonthlyInput,
-    ObservationSnapshotManifest, PrestigeInventoryObservationRecord, PrestigeInventoryWeeklyInput,
-    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    builder_rera_aggregate_facts_input, external_listing_facts_input_with_aliases,
+    market_project_facts_input_with_aliases, metro_proximity_facts_input,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, MetroStationObservationRecord,
+    MetroStationsMonthlyInput, ObservationSnapshotManifest, PrestigeInventoryObservationRecord,
+    PrestigeInventoryWeeklyInput, ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,

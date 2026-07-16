@@ -352,6 +352,85 @@ class CollectAssetSourcesTest(unittest.TestCase):
             inputs["society:rera-canonical"]["society_name"], "Canonical Green"
         )
 
+    def test_external_listing_collection_normalizes_legacy_pricing_without_confidence(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            node_dir = Path(temp_dir) / "data" / "knowledge" / "nodes" / "society"
+            node_dir.mkdir(parents=True)
+            (node_dir / "example-green.json").write_text(
+                json.dumps(
+                    {
+                        "id": "society:example-green",
+                        "name": "Example Green",
+                        "facts": [
+                            {
+                                "key": "pricing_3bhk",
+                                "value": {
+                                    "type": "Text",
+                                    "data": json.dumps(
+                                        {
+                                            "bhk": "3BHK",
+                                            "price_range_lakh": "2.5-3.5 Cr",
+                                            "sqft_range": "2000-2400",
+                                            "area_type": "super built-up",
+                                            "bathrooms": 3,
+                                            "floor": "12",
+                                        }
+                                    ),
+                                },
+                                "source": {
+                                    "skill_id": "magicbricks_candidate",
+                                    "url": "https://example.com/listing",
+                                },
+                                "learned_at": "2026-07-12T08:00:00Z",
+                            }
+                        ],
+                    }
+                )
+            )
+
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_listings_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "area": "Whitefield",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                        }
+                    ],
+                }
+            )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(output["external_listings_weekly"]["snapshot_date"], "2026-07-16")
+        self.assertEqual(listing["entity_id"], "society:example-green")
+        self.assertEqual(listing["project_key"], "PRM-EXAMPLE-GREEN")
+        self.assertEqual(listing["source_name"], "magicbricks_candidate")
+        self.assertEqual(listing["source_url"], "https://example.com/listing")
+        self.assertEqual(listing["price"], 30_000_000)
+        self.assertEqual(listing["price_min"], 25_000_000)
+        self.assertEqual(listing["price_max"], 35_000_000)
+        self.assertEqual(listing["price_display"], "2.5-3.5 Cr")
+        self.assertEqual(listing["area_sqft"], 2200)
+        self.assertEqual(listing["area_sqft_min"], 2000)
+        self.assertEqual(listing["area_sqft_max"], 2400)
+        self.assertEqual(listing["area_display"], "2000-2400")
+        self.assertIsNone(listing["price_per_sqft_min"])
+        self.assertIsNone(listing["price_per_sqft_max"])
+        self.assertIsNone(listing["price_per_sqft_display"])
+        self.assertEqual(listing["configuration"], "3BHK")
+        self.assertEqual(listing["bhk"], 3.0)
+        self.assertEqual(listing["bathrooms"], 3.0)
+        self.assertEqual(listing["floor"], "12")
+        self.assertEqual(listing["society"], "Example Green")
+        self.assertEqual(listing["locality"], "Whitefield")
+        self.assertEqual(listing["observed_at"], "2026-07-12T08:00:00Z")
+        self.assertNotIn("confidence", listing)
+
     def test_stale_google_collection_forces_skill_refresh(self):
         calls = []
         result = SkillResult(

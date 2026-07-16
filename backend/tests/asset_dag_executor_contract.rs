@@ -10,18 +10,20 @@ use backend::assets::{
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
     AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
     AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
-    GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord,
-    GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
-    MetroStationObservationRecord, MetroStationsMonthlyInput, PrestigeInventoryObservationRecord,
-    PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, TrustTier, BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
-    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
+    GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    MaterializationId, MaterializationRecord, MetroStationObservationRecord,
+    MetroStationsMonthlyInput, PrestigeInventoryObservationRecord, PrestigeInventoryWeeklyInput,
+    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -63,15 +65,17 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 10);
-    assert_eq!(report.manifest.succeeded_count, 10);
+    assert_eq!(report.manifest.planned_count, 12);
+    assert_eq!(report.manifest.succeeded_count, 12);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 10);
+    assert_eq!(report.executed_assets.len(), 12);
     for id in [
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
+        EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+        EXTERNAL_LISTING_FACTS_ASSET_ID,
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -90,7 +94,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 9);
+    assert_eq!(kg_record.parent_materializations.len(), 10);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -107,6 +111,16 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     assert!(kg_record
         .parent_materializations
         .contains(&nearby_facts_record.materialization_id));
+    let listing_facts_record = store
+        .current_record(
+            &asset_id(EXTERNAL_LISTING_FACTS_ASSET_ID),
+            &AssetPartition::new([("source", "external_listing")]),
+        )
+        .await
+        .unwrap();
+    assert!(kg_record
+        .parent_materializations
+        .contains(&listing_facts_record.materialization_id));
     let community_facts_record = store
         .current_record(
             &asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
@@ -200,11 +214,13 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 14);
-    assert_eq!(report.executed_assets.len(), 14);
+    assert_eq!(report.manifest.planned_count, 16);
+    assert_eq!(report.executed_assets.len(), 16);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
+        EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+        EXTERNAL_LISTING_FACTS_ASSET_ID,
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -357,10 +373,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 10);
+    assert_eq!(kg_record.parent_materializations.len(), 11);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        74
+        87
     );
 
     let serving_record = current_record(
@@ -369,7 +385,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 74);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 87);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -415,11 +431,13 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 17);
-    assert_eq!(report.executed_assets.len(), 17);
+    assert_eq!(report.manifest.planned_count, 19);
+    assert_eq!(report.executed_assets.len(), 19);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
+        EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+        EXTERNAL_LISTING_FACTS_ASSET_ID,
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -1618,6 +1636,35 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 longitude: Some(77.7500),
                 maps_url: Some("https://maps.google.com/?q=12.9698,77.7500".to_string()),
                 address: Some("Whitefield, Bengaluru".to_string()),
+                observed_at: now + Duration::minutes(2),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        external_listings_weekly: Some(ExternalListingsWeeklyInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![ExternalListingObservationRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                source_name: "fixture_portal".to_string(),
+                source_url: Some("https://example.com/green-acre-3bhk".to_string()),
+                price: Some(31_000_000.0),
+                price_min: Some(30_000_000.0),
+                price_max: Some(32_000_000.0),
+                area_sqft: Some(1_900.0),
+                area_sqft_min: Some(1_850.0),
+                area_sqft_max: Some(1_950.0),
+                price_per_sqft_min: Some(15_385.0),
+                price_per_sqft_max: Some(17_297.0),
+                price_display: Some("INR 3.0-3.2 Cr".to_string()),
+                area_display: Some("1850-1950".to_string()),
+                price_per_sqft_display: Some("15385-17297".to_string()),
+                configuration: Some("3BHK".to_string()),
+                area_type: Some("super built-up".to_string()),
+                bhk: Some(3.0),
+                bathrooms: Some(3.0),
+                floor: Some("12".to_string()),
+                society: Some("Green Acre Whitefield".to_string()),
+                locality: Some("Whitefield".to_string()),
                 observed_at: now + Duration::minutes(2),
             }],
             source_watermarks: Vec::new(),

@@ -535,8 +535,13 @@ fn market_pricing_for_serving_property(
         return None;
     }
     let society_id = derive_society_id(property_id);
-    let pricing = serving_society_text(fact_index, &society_id, &format!("pricing_{}bhk", bhk))?;
-    parse_market_pricing(&pricing)
+    serving_society_text(fact_index, &society_id, &format!("listing_{}bhk", bhk))
+        .and_then(|listing| parse_listing_pricing(&listing))
+        .or_else(|| {
+            let pricing =
+                serving_society_text(fact_index, &society_id, &format!("pricing_{}bhk", bhk))?;
+            parse_market_pricing(&pricing)
+        })
 }
 
 fn serving_society_text(
@@ -1020,8 +1025,11 @@ fn market_pricing_for_property(
     let society_id = derive_society_id(property_id);
     let slug = society_id.strip_prefix("soc-")?;
     let society_node = graph.get_node(&format!("society:{}", slug))?;
-    let pricing_text: String = fact_text(society_node, &format!("pricing_{}bhk", bhk)).into();
-    parse_market_pricing(&pricing_text)
+    let listing_text: String = fact_text(society_node, &format!("listing_{}bhk", bhk)).into();
+    parse_listing_pricing(&listing_text).or_else(|| {
+        let pricing_text: String = fact_text(society_node, &format!("pricing_{}bhk", bhk)).into();
+        parse_market_pricing(&pricing_text)
+    })
 }
 
 fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
@@ -1038,6 +1046,53 @@ fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
     Some(MarketPricing {
         price_low: (price_low_lakh * 100_000.0).round() as u64,
         price_high: (price_high_lakh * 100_000.0).round() as u64,
+        sqft_low: sqft_low.round() as u32,
+        sqft_high: sqft_high.round() as u32,
+    })
+}
+
+fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
+    if raw.trim().is_empty() {
+        return None;
+    }
+
+    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let price = value.get("price")?.as_f64()?;
+    let sqft = value.get("area_sqft")?.as_f64()?;
+    if !price.is_finite() || !sqft.is_finite() || price <= 0.0 || sqft <= 0.0 {
+        return None;
+    }
+    let price_low = value
+        .get("price_min")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(price);
+    let price_high = value
+        .get("price_max")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(price);
+    let sqft_low = value
+        .get("area_sqft_min")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(sqft);
+    let sqft_high = value
+        .get("area_sqft_max")
+        .and_then(|value| value.as_f64())
+        .unwrap_or(sqft);
+    if !price_low.is_finite()
+        || !price_high.is_finite()
+        || !sqft_low.is_finite()
+        || !sqft_high.is_finite()
+        || price_low <= 0.0
+        || price_high <= 0.0
+        || sqft_low <= 0.0
+        || sqft_high <= 0.0
+    {
+        return None;
+    }
+
+    Some(MarketPricing {
+        price_low: price_low.round() as u64,
+        price_high: price_high.round() as u64,
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
     })
@@ -1541,6 +1596,57 @@ mod tests {
         assert_eq!(p.price, 30_600_000);
         assert_eq!(p.carpet_area_sqft, 2243);
         assert_eq!(p.price_per_sqft, 13_642);
+    }
+
+    #[test]
+    fn test_low_confidence_property_prefers_external_listing_pricing() {
+        let mut graph = KnowledgeGraph::new();
+        let mut society = make_society_node(
+            "prestige-raintree-park",
+            "Prestige Raintree Park",
+            "Whitefield",
+            "Prestige Group",
+        );
+        society.add_facts(vec![
+            SourcedFact::manual(
+                "listing_3bhk",
+                FactValue::Text(r#"{"price":31000000,"area_sqft":1900}"#.into()),
+            ),
+            SourcedFact::manual(
+                "pricing_3bhk",
+                FactValue::Text(
+                    r#"{"bhk":"3BHK","price_range_lakh":"259-353","sqft_range":"2004-2482"}"#
+                        .into(),
+                ),
+            ),
+        ]);
+        graph.add_node(society);
+
+        let id = "property:discovered-prestige-raintree-park-3bhk";
+        let mut property = Node::new(id, NodeType::Property, "Prestige Raintree Park");
+        property.add_facts(vec![
+            SourcedFact::manual("area", FactValue::Text("Whitefield".into())),
+            SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
+            SourcedFact::manual("builder_name", FactValue::Text("Prestige Group".into())),
+            SourcedFact::manual("bhk", FactValue::Numeric(3.0)),
+            low_conf_numeric_fact("price", 11_500_000.0),
+            low_conf_numeric_fact("carpet_area_sqft", 521.0),
+            SourcedFact::manual(
+                "title",
+                FactValue::Text("3 BHK in Prestige Raintree Park".into()),
+            ),
+        ]);
+        graph.add_node(property);
+        graph.rebuild_indexes();
+
+        let properties = properties_from_graph(&graph);
+        let p = properties
+            .iter()
+            .find(|p| p.id == "discovered-prestige-raintree-park-3bhk")
+            .expect("property should be derived");
+        assert_eq!(p.price, 31_000_000);
+        assert_eq!(p.carpet_area_sqft, 1900);
+        assert_eq!(p.price_per_sqft, 16_315);
     }
 
     #[test]

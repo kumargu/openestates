@@ -758,6 +758,17 @@ fn build_source_panels(
             ("builder_reported_land_area_acres", "Builder project area"),
             ("official_project_url", "Official project page"),
             ("project_maps_url", "Project map"),
+            ("listing_3bhk", "3BHK listing"),
+            ("listing_price_3bhk", "3BHK listing price"),
+            ("listing_price_range_3bhk", "3BHK listing price range"),
+            ("listing_area_sqft_3bhk", "3BHK listing area"),
+            ("listing_area_sqft_range_3bhk", "3BHK listing area range"),
+            (
+                "listing_price_per_sqft_range_3bhk",
+                "3BHK listing rate range",
+            ),
+            ("listing_area_type_3bhk", "3BHK area basis"),
+            ("listing_source_url_3bhk", "3BHK listing source"),
             ("pricing_3bhk", "3BHK pricing"),
             ("price_per_sqft", "Market rate"),
             ("price_appreciation", "Price movement"),
@@ -1048,6 +1059,8 @@ fn primary_section_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "rera" => &["rera_number", "rera_status", "rera_completion_date"],
         "market" => &[
+            "listing_3bhk",
+            "listing_price_3bhk",
             "market_project_status",
             "market_starting_price_inr",
             "official_project_url",

@@ -1,13 +1,14 @@
 use backend::assets::{
     default_openestates_registry, read_skill_fact_artifact_rows, AssetDagExecutionOptions,
     AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs,
-    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MetroStationObservationRecord,
-    MetroStationsMonthlyInput, PrestigeInventoryObservationRecord, PrestigeInventoryWeeklyInput,
-    RedditThreadSnapshotRecord, RedditThreadsDailyInput, ReraProjectSnapshotRecord,
-    ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
-    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, GooglePlaceSnapshotRecord,
+    GooglePlacesWeeklyInput, MetroStationObservationRecord, MetroStationsMonthlyInput,
+    PrestigeInventoryObservationRecord, PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord,
+    RedditThreadsDailyInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
@@ -40,6 +41,8 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
     for asset_id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
+        EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+        EXTERNAL_LISTING_FACTS_ASSET_ID,
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -111,6 +114,9 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
             "rera_number",
             "market_starting_price_inr",
             "market_bhk_options",
+            "listing_3bhk",
+            "listing_price_3bhk",
+            "listing_area_sqft_3bhk",
             "official_project_url",
             "nearest_operational_metro_station",
             "metro_distance_km",
@@ -280,6 +286,34 @@ fn source_inputs(
             observed_at,
         })
         .collect();
+    let external_listing_records = projects
+        .iter()
+        .map(|project| ExternalListingObservationRecord {
+            entity_id: canonical_id(project.registration),
+            project_key: Some(project.registration.to_string()),
+            source_name: "FixtureListings".to_string(),
+            source_url: Some(format!("https://listings.example/{}", project.source_slug)),
+            price: Some(project.price),
+            price_min: Some(project.price),
+            price_max: Some(project.price),
+            area_sqft: Some(2_000.0),
+            area_sqft_min: Some(2_000.0),
+            area_sqft_max: Some(2_000.0),
+            price_per_sqft_min: Some(project.price / 2_000.0),
+            price_per_sqft_max: Some(project.price / 2_000.0),
+            price_display: None,
+            area_display: None,
+            price_per_sqft_display: None,
+            configuration: Some("3BHK".to_string()),
+            area_type: Some("super_builtup".to_string()),
+            bhk: Some(3.0),
+            bathrooms: Some(3.0),
+            floor: Some("12".to_string()),
+            society: Some(project.name.to_string()),
+            locality: Some("Whitefield".to_string()),
+            observed_at,
+        })
+        .collect();
     let watermark = vec![SourceWatermark {
         source: "fixture".to_string(),
         high_watermark: observed_at.to_rfc3339(),
@@ -340,6 +374,11 @@ fn source_inputs(
         prestige_inventory_weekly: Some(PrestigeInventoryWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),
             records: prestige_records,
+            source_watermarks: watermark.clone(),
+        }),
+        external_listings_weekly: Some(ExternalListingsWeeklyInput {
+            snapshot_date: "2026-07-14".to_string(),
+            records: external_listing_records,
             source_watermarks: watermark.clone(),
         }),
         metro_stations_monthly: Some(MetroStationsMonthlyInput {

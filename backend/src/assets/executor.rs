@@ -25,6 +25,7 @@ use super::{
     ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactsInput, SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
     MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
@@ -1096,6 +1097,14 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::MarketProjectFacts,
         );
         executors.insert(
+            static_asset_id(EXTERNAL_LISTINGS_WEEKLY_ASSET_ID),
+            BuiltInAssetExecutor::ExternalListingsWeekly,
+        );
+        executors.insert(
+            static_asset_id(EXTERNAL_LISTING_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::ExternalListingFacts,
+        );
+        executors.insert(
             static_asset_id(METRO_STATIONS_MONTHLY_ASSET_ID),
             BuiltInAssetExecutor::MetroStationsMonthly,
         );
@@ -1137,6 +1146,8 @@ enum BuiltInAssetExecutor {
     CommunityReviewSummaryFacts,
     PrestigeInventoryWeekly,
     MarketProjectFacts,
+    ExternalListingsWeekly,
+    ExternalListingFacts,
     MetroStationsMonthly,
     MetroProximityFacts,
     BuilderReraAggregates,
@@ -1489,6 +1500,66 @@ impl BuiltInAssetExecutor {
                 let input = super::market_project_facts_input_with_aliases(
                     &context.dag.lake,
                     inventory_record,
+                    canonical_record,
+                    context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::ExternalListingsWeekly => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .external_listings_weekly
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let record = ProjectEnrichmentMaterializer::new(context.dag.lake.clone())
+                    .materialize_external_listings(
+                        input,
+                        parent_materializations,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::ExternalListingFacts => {
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let listing_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+                )?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::external_listing_facts_input_with_aliases(
+                    &context.dag.lake,
+                    listing_record,
                     canonical_record,
                     context.run_id,
                 )
@@ -2236,6 +2307,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.google_places_weekly.is_none()
         && source_inputs.google_nearby_places_weekly.is_none()
         && source_inputs.prestige_inventory_weekly.is_none()
+        && source_inputs.external_listings_weekly.is_none()
         && source_inputs.metro_stations_monthly.is_none()
 }
 

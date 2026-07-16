@@ -436,6 +436,27 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::new([("source", "prestige")]),
     );
     write_current(&materializations, &market_facts).await;
+    let external_listings = materialization_in_partition(
+        "external_listings_weekly",
+        AssetStage::Raw,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::new([("source", "external_listing")]),
+    );
+    write_current(&materializations, &external_listings).await;
+    let external_listing_facts = materialization_in_partition(
+        "external_listing_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            external_listings.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::new([("source", "external_listing")]),
+    );
+    write_current(&materializations, &external_listing_facts).await;
     let metro_stations = materialization_in_partition(
         "metro_stations_monthly",
         AssetStage::Raw,
@@ -482,6 +503,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             community_facts_stale.materialization_id.clone(),
             google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
+            external_listing_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
         ],
@@ -539,6 +561,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             community_facts_fresh.materialization_id.clone(),
             google_nearby_facts.materialization_id.clone(),
             market_facts.materialization_id.clone(),
+            external_listing_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
         ],

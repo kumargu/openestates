@@ -647,6 +647,32 @@ pub fn default_openestates_registry() -> AssetRegistry {
             &[("source", "prestige")],
         )),
         asset(
+            "external_listings_weekly",
+            AssetStage::Raw,
+            "Weekly source-neutral property listing observations from external portals or feeds.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Weekly,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "external_listing")],
+        )),
+        asset(
+            "external_listing_facts",
+            AssetStage::Silver,
+            "Source-neutral listing facts for price, area, BHK, and listing provenance.",
+            &["external_listings_weekly", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "external_listing")],
+        )),
+        asset(
             "metro_stations_monthly",
             AssetStage::Raw,
             "Monthly geospatial snapshot of operational Namma Metro stations.",
@@ -693,6 +719,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "community_review_summary_facts",
                 "google_nearby_place_facts",
                 "market_project_facts",
+                "external_listing_facts",
                 "metro_proximity_facts",
                 "builder_rera_aggregates",
             ],
@@ -721,6 +748,10 @@ pub fn default_openestates_registry() -> AssetRegistry {
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy(
+            "external_listing_facts",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
+        .with_dependency_fan_in_policy(
             "metro_proximity_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
@@ -729,6 +760,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("community_review_summary_facts")
         .with_optional_dependency("google_nearby_place_facts")
         .with_optional_dependency("market_project_facts")
+        .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("metro_proximity_facts"),
         asset(
             "search_serving_bundle",
