@@ -253,6 +253,11 @@ check "Area items have required fields" \
   '.[0] | has("id", "name", "median_price_per_sqft", "trend_direction")' \
   "expected id, name, median_price_per_sqft, trend_direction"
 
+check "GET /api/areas/tracker returns markets" \
+  "${BASE}/api/areas/tracker" \
+  '.total_areas > 0 and (.markets | type == "array" and length > 0) and (.markets[0] | has("id", "name", "listing_count", "demand_score", "recent_searches"))' \
+  "expected backend area tracker market summaries"
+
 # ── Knowledge Graph ──
 echo ""
 echo "Knowledge Graph"
