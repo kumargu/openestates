@@ -375,21 +375,18 @@ export function HomePage() {
             >
               Search
             </button>
-            <button
-              type="button"
-              className={`home-saved-shortcut ${activeView === "sheet" ? "home-saved-shortcut--active" : ""}`}
-              onClick={() => commitSearch("", { view: "sheet", scroll: true })}
-              aria-pressed={activeView === "sheet"}
-              aria-label={sheetCount > 0 ? `Open saved homes, ${sheetCount} saved` : "Open saved homes"}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-              </svg>
-              <span>Saved</span>
-              {sheetCount > 0 && <strong>{sheetCount}</strong>}
-            </button>
           </div>
         </form>
+
+        {sheetCount > 0 && (
+          <Link
+            to="/results?view=sheet"
+            className="home-saved-link fade-up fade-up-delay-2"
+            aria-label={`View your ${sheetCount} saved ${sheetCount === 1 ? "home" : "homes"}`}
+          >
+            {sheetCount} saved {sheetCount === 1 ? "home" : "homes"}
+          </Link>
+        )}
 
         {/* Error banner — non-blocking */}
         {loadError && (

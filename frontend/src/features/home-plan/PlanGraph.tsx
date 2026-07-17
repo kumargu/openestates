@@ -54,7 +54,6 @@ function gapPath(
   const segments: string[] = [];
   for (let year = 0; year <= endYear; year += 1) {
     const buyY = y(buyValues[year] ?? 0);
-    const rentY = y(rentValues[year] ?? 0);
     segments.push(`${year === 0 ? "M" : "L"}${x(year).toFixed(1)},${buyY.toFixed(1)}`);
   }
   for (let year = endYear; year >= 0; year -= 1) {

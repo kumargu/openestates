@@ -290,7 +290,7 @@ export function PropertyPage() {
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>
-        Back to results
+        Back
       </button>
 
       <section className="property-brief-hero">
@@ -346,8 +346,12 @@ export function PropertyPage() {
           <button
             onClick={handleSave}
             className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
+            aria-pressed={saved}
           >
-            {saved ? "\u2665 Saved" : "\u2661 Save"}
+            <svg width="15" height="15" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+            </svg>
+            {saved ? "Saved" : "Save"}
           </button>
         </div>
       </section>

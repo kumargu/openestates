@@ -270,10 +270,12 @@ function SheetTray({
   items,
   propertiesById,
   onRemove,
+  onCompareAll,
 }: {
   items: SheetItem[];
   propertiesById: Map<string, PropertyCardType>;
   onRemove: (id: string) => void;
+  onCompareAll: () => void;
 }) {
   const [open, setOpen] = useState(false);
   if (items.length === 0) return null;
@@ -293,8 +295,17 @@ function SheetTray({
         </span>
       </button>
 
-      {open && (
-        <div className="sheet-tray-panel">
+      <div className="sheet-tray-curtain" aria-hidden={!open}>
+        <div className="sheet-tray-panel" inert={!open}>
+          {items.length > 1 && (
+            <button
+              type="button"
+              className="sheet-tray-compare"
+              onClick={onCompareAll}
+            >
+              Compare all
+            </button>
+          )}
           {visibleItems.map((item) => {
             const property = propertiesById.get(item.id);
             const signals = property ? sheetSignals(property) : [];
@@ -344,7 +355,7 @@ function SheetTray({
             </p>
           )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -538,15 +549,15 @@ function SheetCompareView({
                 className="comparison-row-link"
                 role="link"
                 tabIndex={0}
-                onClick={() => navigate(`/property/${property.id}/plan`)}
+                onClick={() => navigate(`/property/${property.id}`)}
                 onKeyDown={(event) => {
                   if (event.target === event.currentTarget && event.key === "Enter") {
-                    navigate(`/property/${property.id}/plan`);
+                    navigate(`/property/${property.id}`);
                   }
                 }}
               >
                 <td className="comparison-table-home">
-                  <Link to={`/property/${property.id}/plan`} className="comparison-home-link">
+                  <Link to={`/property/${property.id}`} className="comparison-home-link">
                     <strong>{property.title}</strong>
                     <span>{isKnownText(property.builder_name) ? property.builder_name : "Builder pending"}</span>
                   </Link>
@@ -1083,7 +1094,12 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       )}
 
       {viewMode === "cards" && (
-        <SheetTray items={sheetItems} propertiesById={propertiesById} onRemove={removeSheetItem} />
+        <SheetTray
+          items={sheetItems}
+          propertiesById={propertiesById}
+          onRemove={removeSheetItem}
+          onCompareAll={() => setViewMode("sheet")}
+        />
       )}
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
@@ -1149,7 +1165,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
               <LivingEvidenceTile
                 property={result}
                 match={row?.match}
-                explanation={row?.explanation}
                 confidenceScore={row?.confidenceScore ?? result.confidence_score}
                 evidence={evidence}
                 decisionRead={tileDecisionRead(result, summary)}
