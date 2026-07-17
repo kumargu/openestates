@@ -333,27 +333,29 @@ fn append_image_facts(
         .collect::<Vec<_>>();
     append_fact(
         entity_id,
-        "hero_image",
         FactValue::Text(image_urls[0].clone()),
         source_url.clone(),
         learned_at,
         run_id,
-        "Hero image: {value}",
-        &["photos", "image", "project photo", "hero image"],
-        facts,
-        annotations,
+        MediaFactContext {
+            fact_key: "hero_image",
+            display_template: "Hero image: {value}",
+            answers_preferences: &["photos", "image", "project photo", "hero image"],
+        },
+        MediaFactSink { facts, annotations },
     )?;
     append_fact(
         entity_id,
-        "images",
         FactValue::Tags(image_urls),
         source_url.clone(),
         learned_at,
         run_id,
-        "Project photos: {value}",
-        &["photos", "gallery", "project images"],
-        facts,
-        annotations,
+        MediaFactContext {
+            fact_key: "images",
+            display_template: "Project photos: {value}",
+            answers_preferences: &["photos", "gallery", "project images"],
+        },
+        MediaFactSink { facts, annotations },
     )?;
     let gallery = rows
         .iter()
@@ -376,15 +378,16 @@ fn append_image_facts(
         .collect::<Vec<_>>();
     append_fact(
         entity_id,
-        "image_gallery",
         FactValue::Text(serde_json::to_string(&gallery)?),
         source_url.clone(),
         learned_at,
         run_id,
-        "Image gallery: {value}",
-        &["photos", "gallery", "image provenance"],
-        facts,
-        annotations,
+        MediaFactContext {
+            fact_key: "image_gallery",
+            display_template: "Image gallery: {value}",
+            answers_preferences: &["photos", "gallery", "image provenance"],
+        },
+        MediaFactSink { facts, annotations },
     )?;
     let mut source_pages = rows
         .iter()
@@ -394,29 +397,38 @@ fn append_image_facts(
     source_pages.dedup();
     append_fact(
         entity_id,
-        "image_source_pages",
         FactValue::Tags(source_pages),
         source_url,
         learned_at,
         run_id,
-        "Image source pages: {value}",
-        &["photo source", "image attribution", "source"],
-        facts,
-        annotations,
+        MediaFactContext {
+            fact_key: "image_source_pages",
+            display_template: "Image source pages: {value}",
+            answers_preferences: &["photo source", "image attribution", "source"],
+        },
+        MediaFactSink { facts, annotations },
     )
+}
+
+struct MediaFactContext<'a> {
+    fact_key: &'a str,
+    display_template: &'a str,
+    answers_preferences: &'a [&'a str],
+}
+
+struct MediaFactSink<'a> {
+    facts: &'a mut Vec<SkillFactRecord>,
+    annotations: &'a mut Vec<SkillFactAnnotationRecord>,
 }
 
 fn append_fact(
     entity_id: &str,
-    fact_key: &str,
     value: FactValue,
     source_url: Option<String>,
     learned_at: DateTime<Utc>,
     run_id: &MaterializationId,
-    display_template: &str,
-    answers_preferences: &[&str],
-    facts: &mut Vec<SkillFactRecord>,
-    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    context: MediaFactContext<'_>,
+    sink: MediaFactSink<'_>,
 ) -> Result<(), MediaAssetError> {
     let value_type = match value {
         FactValue::Numeric(_) => "numeric",
@@ -426,10 +438,10 @@ fn append_fact(
         FactValue::Score { .. } => "score",
     };
     let value_json = serde_json::to_string(&value)?;
-    let input_hash = media_fact_hash(entity_id, fact_key, &value_json);
-    facts.push(SkillFactRecord {
+    let input_hash = media_fact_hash(entity_id, context.fact_key, &value_json);
+    sink.facts.push(SkillFactRecord {
         entity_id: entity_id.to_string(),
-        fact_key: fact_key.to_string(),
+        fact_key: context.fact_key.to_string(),
         value_type: value_type.to_string(),
         value_json,
         confidence: 0.68,
@@ -442,11 +454,11 @@ fn append_fact(
         run_id: run_id.to_string(),
         input_hash,
     });
-    annotations.push(SkillFactAnnotationRecord {
+    sink.annotations.push(SkillFactAnnotationRecord {
         entity_id: entity_id.to_string(),
-        fact_key: fact_key.to_string(),
-        display_template: Some(display_template.to_string()),
-        answers_preferences_json: serde_json::to_string(answers_preferences)?,
+        fact_key: context.fact_key.to_string(),
+        display_template: Some(context.display_template.to_string()),
+        answers_preferences_json: serde_json::to_string(context.answers_preferences)?,
         scoring_direction: Some("TextMatch".to_string()),
         scoring_weight: Some(0.2),
         scoring_thresholds_json: "[]".to_string(),

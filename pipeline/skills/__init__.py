@@ -10,7 +10,6 @@ Active skills:
   - fetch_rera: Fetch RERA registration facts from the government source
   - fetch_images: Fetch sourced property images
   - fetch_google_review_links: Fetch Google Maps review links and place metadata
-  - identify_gaps: Compute missing fact coverage locally
   - market_pricing_facts: Normalize already-sourced marketplace prices
 """
 

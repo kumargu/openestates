@@ -104,13 +104,13 @@ fn value_matches(value: &Value, expected: &str, mode: MatchMode) -> bool {
             MatchMode::Contains => flag.to_string().contains(&expected.to_lowercase()),
         },
         Value::Null => matches!(mode, MatchMode::Exact) && expected.eq_ignore_ascii_case("null"),
-        other => match mode {
-            MatchMode::Exact => other.to_string() == expected,
-            MatchMode::Contains => other
-                .to_string()
-                .to_lowercase()
-                .contains(&expected.to_lowercase()),
-        },
+        other => {
+            let rendered = other.to_string();
+            match mode {
+                MatchMode::Exact => rendered == expected,
+                MatchMode::Contains => rendered.to_lowercase().contains(&expected.to_lowercase()),
+            }
+        }
     }
 }
 

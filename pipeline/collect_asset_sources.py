@@ -11,12 +11,15 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Tuple
 
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
 
 logger = logging.getLogger(__name__)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge" / "nodes"
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
@@ -201,12 +204,55 @@ def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[s
     )
 
 
+def get_skill_instance(skill_id: str) -> Any:
+    if skill_id == "fetch_google_review_links":
+        from pipeline.skills.fetch_google_review_links import FetchGoogleReviewLinksSkill
+
+        return FetchGoogleReviewLinksSkill()
+    if skill_id == "fetch_rera":
+        from pipeline.skills.fetch_rera import FetchReraSkill
+
+        return FetchReraSkill()
+    raise ValueError("Unknown collector skill: {}".format(skill_id))
+
+
+def load_society_inputs_for_reddit() -> Dict[str, Dict[str, Any]]:
+    inputs: Dict[str, Dict[str, Any]] = {}
+    kg_dir = KNOWLEDGE_DIR / "society"
+    if not kg_dir.exists():
+        return inputs
+
+    for path in sorted(kg_dir.glob("*.json")):
+        try:
+            node = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        slug = path.stem
+        name = node.get("name") or slug.replace("-", " ").title()
+        area = node.get("area") or node_fact_text(node, "area")
+        inputs[slug] = {
+            "query": "{} {}".format(name, area).strip(),
+            "subreddit": "bangalore",
+            "entity_id": "society:{}".format(slug),
+        }
+    return inputs
+
+
+def node_fact_text(node: Dict[str, Any], key: str) -> str:
+    for fact in node.get("facts", []):
+        if fact.get("key") != key:
+            continue
+        value = fact.get("value", {})
+        data = value.get("data") if isinstance(value, dict) else value
+        return str(data or "").strip()
+    return ""
+
+
 def collect_google_places(
     request: Dict[str, Any],
     society_inputs: Dict[str, Dict[str, Any]] = None,
     skill: Any = None,
 ) -> Dict[str, Any]:
-    from pipeline.skills.batch_runner import get_skill_instance
     from pipeline.skills.fetch_google_review_links import build_place_query
 
     planned_at = normalized_planned_at(request)
@@ -525,8 +571,6 @@ def collect_rera_project_details(
         return [], [], None
 
     if skill is None:
-        from pipeline.skills.batch_runner import get_skill_instance
-
         skill = get_skill_instance("fetch_rera")
 
     snapshot_date = partition_values(request).get("dt") or normalized_planned_at(request)[:10]
@@ -608,7 +652,6 @@ def collect_reddit_assets(
     thread_fetch: Callable[[str, str], List[Dict[str, Any]]] = None,
     result_builder: Callable[[Dict[str, Any], List[Dict[str, Any]]], Any] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    from pipeline.skills.batch_runner import load_society_inputs
     from pipeline.skills.search_reddit import (
         fetch_reddit_threads_with_retry,
         threads_to_skill_result,
@@ -626,7 +669,7 @@ def collect_reddit_assets(
     annotations = []  # type: List[Dict[str, Any]]
     latest_created = None
     if society_inputs is None:
-        society_inputs = load_society_inputs("search_reddit")
+        society_inputs = load_society_inputs_for_reddit()
     fetch_threads = thread_fetch or fetch_reddit_threads_with_retry
     build_result = result_builder or threads_to_skill_result
     for slug, input_data in sorted(society_inputs.items()):

@@ -272,7 +272,7 @@ where
                 record
                     .text
                     .as_deref()
-                    .is_some_and(|text| text.trim().split_whitespace().count() >= 3)
+                    .is_some_and(|text| text.split_whitespace().count() >= 3)
                     || !record.tags.is_empty()
             })
             .count();
@@ -514,7 +514,7 @@ fn has_textual_evidence(document: &CommunityEvidenceRecord) -> bool {
     document
         .text
         .as_deref()
-        .is_some_and(|text| text.trim().split_whitespace().count() >= 3)
+        .is_some_and(|text| text.split_whitespace().count() >= 3)
         || !document.tags.is_empty()
 }
 

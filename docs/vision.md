@@ -29,7 +29,7 @@ Two roots, explicit trust:
 | Knowledge nodes | 229 (126 properties, 55 societies, 16 areas, 32 builders) |
 | API endpoints | 32+ |
 | Frontend pages | 7 (Home, Results, Property, Society, Shortlist, Seller Dashboard, Registration) |
-| Intelligence skills | 8 (search_reddit, fetch_rera, fetch_google_reviews, learn_society, fetch_images, score_society, embed_entity, identify_gaps) |
+| Pipeline assets | DAG-owned source collection and KG/serving materialization (RERA, Google, Reddit, listings, images, metro, market facts) |
 | Images | 240 across 48 societies, 135 properties |
 | Stack | Rust+Axum backend, React frontend, Python pipeline |
 | Sellers | 5 seed sellers, registration flow in progress |
@@ -369,79 +369,24 @@ Before scaling, prove every layer works on 10 hand-picked properties:
 | Knowledge Graph | Per-entity JSON files, self-describing SourcedFacts |
 | Skills | Python modules producing SourcedFacts (the intelligence layer) |
 
-### Knowledge Graph Update Model (redefined Day 49)
+### Knowledge Graph Update Model
 
-The KG must support the full lifecycle: skills create nodes, add facts, update facts, and add edges. Not just append facts to pre-existing nodes.
+The active path is batch materialization, not request-time graph mutation. Python source collectors and skills produce typed records; the Rust asset DAG materializes raw, silver, gold, and serving artifacts with lineage; the API loads the promoted KG/serving bundle locally at startup.
 
-**Node lifecycle:**
-
-```
-  CREATE (new in Sprint 3)
-  ─────────────────────────
-  Skills can create nodes via API. Every node has:
-    - id: "{type}:{slug}"
-    - node_type: Society | Builder | Area | Property
-    - root_source: "rera" | "seller" | "discovered"   ← NEW
-    - name: display name
-    - facts: []  (empty, skills fill these)
-    - created_at, updated_at
-
-  API: POST /api/knowledge/nodes
-  Body: { id, node_type, name, root_source }
-
-  Python: graph_client.create_node(id, node_type, name, root_source)
-```
-
-**Fact updates (upsert, not just append):**
+**Materialization flow:**
 
 ```
-  CURRENT (broken):
-    node.facts.push(fact)    ← duplicates accumulate
-    get_fact(key) → highest version  ← works but wastes disk
-
-  NEW (upsert by key):
-    If fact with same key exists:
-      Replace it (keep old in history if version > 1)
-      Increment version automatically
-    Else:
-      Append new fact
-
-  API: POST /api/knowledge/nodes/{id}/facts  (same endpoint, new behavior)
-
-  Rule: One active fact per key per node.
-  History: Available via GET /api/knowledge/nodes/{id}/facts/{key}/history
+  pipeline.collect_asset_sources
+    -> raw source snapshots
+    -> skill fact parquet + annotations
+    -> gold kg_society_view
+    -> serving/search_bundle/version=...
+    -> backend startup reads promoted current pointers
 ```
 
-**Edge management:**
+Search never calls external networks or mutates the graph. When evidence is missing, the response should expose the gap and the offline DAG run should fill it later.
 
-```
-  CURRENT: edges created at bootstrap only, stored in one edges.json
-
-  NEW: Skills can add edges via API
-  API: POST /api/knowledge/edges
-  Body: { from_id, to_id, relation, source }
-
-  Deduplicated: same from+to+relation = skip (idempotent)
-
-  Python: graph_client.add_edge(from_id, to_id, relation)
-```
-
-**Startup (no more seed-JSON bootstrap):**
-
-```
-  CURRENT:
-    1. Load seed JSON → bootstrap nodes if no KG exists
-    2. Load KG from disk
-
-  NEW:
-    1. Load KG from data/knowledge/nodes/**/*.json  (always)
-    2. If empty → run pipeline/seed.py (RERA seeding)
-    3. No hand-curated JSON as source of truth
-
-  The KG IS the source of truth. Seed JSON becomes a migration artifact.
-```
-
-**Full API surface (updated):**
+**API surface:**
 
 ```
   Nodes:
@@ -466,20 +411,21 @@ The KG must support the full lifecycle: skills create nodes, add facts, update f
     GET    /api/knowledge/search-log
 ```
 
-**Skill → Graph flow (updated):**
+**Skill → DAG flow:**
 
 ```
-  Python skill produces SkillResult:
-    new_nodes:  [{ id, type, name, root_source }]   ← CREATE nodes
-    facts:      [SourcedFact, ...]                   ← UPSERT to node
-    edges:      [{ from, to, relation }]             ← ADD edges
+  Python skill/source collector emits typed rows:
+    raw records
+    skill facts
+    skill fact annotations
 
-  graph_client.push_skill_result(node_id, result):
-    1. For each new_node → POST /api/knowledge/nodes
-    2. For each fact    → POST /api/knowledge/nodes/{id}/facts  (upsert)
-    3. For each edge    → POST /api/knowledge/edges
+  Rust asset runner validates and materializes:
+    raw parquet snapshots
+    silver fact parquet
+    gold KG view
+    versioned serving bundle
 
-  Idempotent: re-running a skill with same input produces same graph state
+  Idempotent: current pointers advance only when the DAG run succeeds.
 ```
 
 ### Key Paths

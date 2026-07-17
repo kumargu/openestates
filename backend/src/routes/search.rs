@@ -153,28 +153,6 @@ pub async fn search_properties(
         graph.log_search(event);
     }
 
-    // --- Fire-and-forget: queue enrichment request for the searched area ---
-    if let Some(ref area) = parsed_intent.area {
-        let entity_ids: Vec<String> = results
-            .iter()
-            .filter_map(|r| {
-                // Extract society node IDs from matched results
-                let properties = state.properties.try_read().ok()?;
-                properties
-                    .iter()
-                    .find(|p| p.id == r.card.id)
-                    .map(|p| society_node_id(&p.society_id))
-            })
-            .collect();
-        let root = state.project_root.clone();
-        let area = area.clone();
-        let prefs = parsed_intent.preferences.clone();
-        let q = query.clone();
-        tokio::spawn(async move {
-            crate::enrichment_queue::append_enrichment_request(&root, &area, entity_ids, prefs, &q);
-        });
-    }
-
     Json(SearchResponse {
         query,
         intent: parsed_intent,
