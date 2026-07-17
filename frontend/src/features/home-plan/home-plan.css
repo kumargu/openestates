@@ -24,12 +24,16 @@
   --plan-accent: #6b5346;
   --plan-brand: #c46345;
   --plan-glass: rgba(255, 252, 247, 0.72);
+  /* Ambient wash intensities — animated when buy/rent verdict shifts */
+  --plan-clay-wash-opacity: 0.3;
+  --plan-cool-wash-opacity: 0.52;
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   color: var(--plan-ink);
-  background: #fdf9f7;
+  background: #faf6f2;
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  transition: background-color 900ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .home-plan-shell::before,
@@ -39,49 +43,88 @@
   inset: 0;
   z-index: 0;
   pointer-events: none;
-  transition: opacity 700ms cubic-bezier(0.22, 1, 0.36, 1);
+  transition: opacity 900ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
 }
 
 .home-plan-shell::before {
   background:
-    radial-gradient(ellipse 80% 50% at 8% -5%, rgba(207, 106, 74, 0.2), transparent 55%),
-    radial-gradient(ellipse 60% 40% at 92% 100%, rgba(207, 106, 74, 0.08), transparent 50%);
+    radial-gradient(ellipse 80% 50% at 8% -5%, rgba(207, 106, 74, 0.18), transparent 55%),
+    radial-gradient(ellipse 60% 40% at 92% 100%, rgba(207, 106, 74, 0.07), transparent 50%);
+  animation: home-plan-ambient-drift 32s ease-in-out infinite;
 }
 
 .home-plan-shell::after {
   background:
     radial-gradient(ellipse 70% 45% at 95% 0%, var(--plan-cool-wash), transparent 52%),
-    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(100, 140, 200, 0.1), transparent 48%);
+    radial-gradient(ellipse 55% 35% at 5% 95%, rgba(100, 140, 200, 0.09), transparent 48%);
+  animation: home-plan-ambient-drift-alt 38s ease-in-out infinite;
 }
 
-.home-plan-shell--buy::before { opacity: 1; }
-.home-plan-shell--buy::after { opacity: 0.12; }
-.home-plan-shell--rent::before { opacity: 0.16; }
-.home-plan-shell--rent::after { opacity: 1; }
-.home-plan-shell--balanced::before,
-.home-plan-shell--balanced::after { opacity: 0.55; }
+@keyframes home-plan-ambient-drift {
+  0%, 100% { transform: scale(1) translate(0, 0); }
+  50% { transform: scale(1.015) translate(0.4%, 0.25%); }
+}
+
+@keyframes home-plan-ambient-drift-alt {
+  0%, 100% { transform: scale(1) translate(0, 0); }
+  50% { transform: scale(1.01) translate(-0.35%, 0.2%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-plan-shell::before,
+  .home-plan-shell::after {
+    animation: none;
+  }
+}
+
+/* Decision theme — clay vs cool wash follows buy / rent / balanced verdict */
+.home-plan-shell--buy {
+  --plan-clay-wash-opacity: 0.44;
+  --plan-cool-wash-opacity: 0.26;
+}
+
+.home-plan-shell--rent {
+  --plan-clay-wash-opacity: 0.2;
+  --plan-cool-wash-opacity: 0.62;
+}
+
+.home-plan-shell--balanced {
+  --plan-clay-wash-opacity: 0.3;
+  --plan-cool-wash-opacity: 0.48;
+}
+
+.home-plan-shell--buy::before { opacity: var(--plan-clay-wash-opacity); }
+.home-plan-shell--buy::after { opacity: var(--plan-cool-wash-opacity); }
+.home-plan-shell--rent::before { opacity: var(--plan-clay-wash-opacity); }
+.home-plan-shell--rent::after { opacity: var(--plan-cool-wash-opacity); }
+.home-plan-shell--balanced::before { opacity: var(--plan-clay-wash-opacity); }
+.home-plan-shell--balanced::after { opacity: var(--plan-cool-wash-opacity); }
 
 /* ── View chapters — cream canvas + clay/blue wash (site theme) ────────── */
 
 .home-plan-shell--view-net-worth,
 .home-plan-shell--view-monthly,
 .home-plan-shell--view-payoff {
-  background: #fdf9f7;
+  background: #faf6f2;
 }
 
 .home-plan-shell--view-net-worth::before,
 .home-plan-shell--view-monthly::before,
 .home-plan-shell--view-payoff::before {
-  opacity: 0.32;
+  background:
+    radial-gradient(ellipse 75% 48% at 12% 0%, var(--plan-clay-wash), transparent 54%),
+    radial-gradient(ellipse 60% 38% at 88% 100%, rgba(207, 106, 74, 0.06), transparent 50%);
+  opacity: var(--plan-clay-wash-opacity);
 }
 
 .home-plan-shell--view-net-worth::after,
 .home-plan-shell--view-monthly::after,
 .home-plan-shell--view-payoff::after {
   background:
-    radial-gradient(ellipse 75% 48% at 12% 0%, var(--plan-clay-wash), transparent 54%),
+    radial-gradient(ellipse 75% 48% at 12% 0%, rgba(201, 107, 79, 0.04), transparent 54%),
     radial-gradient(ellipse 60% 38% at 88% 100%, var(--plan-cool-wash), transparent 50%);
-  opacity: 0.78;
+  opacity: var(--plan-cool-wash-opacity);
 }
 
 .home-plan-header,
@@ -272,11 +315,13 @@
 
 .home-plan-verdict__leader {
   color: var(--plan-ink);
+  transition: color 900ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .home-plan-verdict__amount {
   color: var(--plan-ink);
   font-variant-numeric: tabular-nums;
+  transition: color 900ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* Headline: clay leader + cool amount for scanability */
