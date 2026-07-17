@@ -660,6 +660,7 @@ impl TextSearch {
                 if let Some(serving_facts) = serving_facts {
                     enrich_card_from_serving_facts(&mut card, serving_facts, &p.society_id);
                 }
+                sanitize_card_display_placeholders(&mut card);
 
                 // Normalize score to 0.0–1.0 range (rough normalization)
                 let max_possible = 15.0; // approximate ceiling
@@ -745,6 +746,41 @@ pub(crate) fn enrich_card_from_serving_facts(
         );
     card.project_status = status_projection.status;
     card.project_status_display = status_projection.display;
+}
+
+fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {
+    clean_display_string(&mut card.possession_status);
+    clean_display_string(&mut card.facing);
+    clean_optional_display_string(&mut card.project_status_display);
+    clean_optional_display_string(&mut card.builder_delivery_display);
+}
+
+fn clean_display_string(value: &mut String) {
+    if is_placeholder_display(value) {
+        value.clear();
+    }
+}
+
+fn clean_optional_display_string(value: &mut Option<String>) {
+    if value.as_deref().is_some_and(is_placeholder_display) {
+        *value = None;
+    }
+}
+
+fn is_placeholder_display(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    matches!(
+        normalized.as_str(),
+        "" | "unknown"
+            | "not specified"
+            | "n/a"
+            | "na"
+            | "none"
+            | "no data"
+            | "no_data"
+            | "missing"
+            | "gap"
+    )
 }
 
 fn merged_candidate_ids(
