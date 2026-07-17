@@ -48,7 +48,6 @@ export function EvidenceSectionCard({
       ? section.items.slice(0, 4)
       : section.items;
 
-  const showMissing = section.missing.length > 0;
   const heatClass = heat ? evidenceHeatClass(heat.heat) : "evidence-heat--sparse";
 
   return (
@@ -70,11 +69,6 @@ export function EvidenceSectionCard({
           <span className="evidence-section-card__count">
             {section.items.length} facts
           </span>
-          {showMissing && (
-            <span className="evidence-section-card__gaps">
-              {section.missing.length} gap{section.missing.length > 1 ? "s" : ""}
-            </span>
-          )}
         </div>
       </header>
 
@@ -134,14 +128,6 @@ export function EvidenceSectionCard({
             </li>
           ))}
         </ul>
-      )}
-
-      {showMissing && zoom !== "compact" && (
-        <div className="evidence-section-card__missing">
-          {section.missing.map((gap) => (
-            <span key={gap} className="evidence-section-card__gap">{gap}</span>
-          ))}
-        </div>
       )}
     </article>
   );

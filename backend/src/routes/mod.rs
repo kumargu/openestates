@@ -3,7 +3,6 @@ pub mod areas;
 pub mod claims;
 pub mod enrichment;
 pub mod interests;
-pub mod knowledge;
 pub mod properties;
 pub mod registration;
 pub mod search;

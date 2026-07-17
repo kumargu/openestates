@@ -1,17 +1,17 @@
 export type PropertyCard = {
   id: string;
   /**
-   * Stable Knowledge Graph handles for this card.
+   * Stable serving-bundle handles for this card.
    *
    * Treat these as the bridge from a compact search/listing response into the
-   * richer dynamic evidence graph. A result card should render its normal fast
-   * fields first, then use these IDs when the UI needs drill-down evidence,
+   * richer property evidence responses. A result card should render its normal
+   * fast fields first, then use these IDs when the UI needs drill-down evidence,
    * expandable cards, compare rows, or hover/side-panel context.
    *
    * Typical UI flow:
    * 1. Render the card from local fields such as price, BHK, area, match_reason.
-   * 2. On expand, hover, compare, or detail prefetch, fetch the referenced KG
-   *    nodes through /api/knowledge/nodes/{id}.
+   * 2. On expand, hover, compare, or detail prefetch, fetch the property detail
+   *    or evidence endpoints for this card.
    * 3. Build optional UI sections only from returned facts/source panels.
    * 4. Hide sections with no confident facts instead of showing empty static
    *    placeholders.
@@ -517,7 +517,7 @@ export type MatchReason = {
   score: number;
   confidence: number;
   source_type: string;
-  scoring_method: "graph" | "legacy";
+  scoring_method: string;
 };
 
 export type PreferenceCoverage = {

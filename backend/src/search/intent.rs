@@ -146,8 +146,8 @@ pub const AREA_ALIASES: &[(&[&str], &str)] = &[
 /// shorter ones. "under construction" must match before "new" would catch it.
 /// "ready to move" must match before "ready" alone.
 ///
-/// The answers_preferences values here align with classify_project_status.py's
-/// STATUS_META so that graph-driven scoring connects user queries to RERA facts.
+/// The answers_preferences values here align with project status facts from the
+/// serving bundle so scoring connects user queries to RERA-derived evidence.
 const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
     // Project status patterns (specific phrases first)
     (

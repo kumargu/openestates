@@ -15,7 +15,6 @@ pub mod graph;
 pub mod node;
 pub mod query;
 pub mod search_event;
-pub mod store;
 
 pub use fact::{google_reviews_url_from_facts, FactValue, SourcedFact};
 pub use graph::{GraphStats, KnowledgeGraph};

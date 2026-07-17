@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -25,46 +25,35 @@ use crate::{
 
 /// Load all data and construct the full AppState.
 ///
-/// The promoted serving bundle is the canonical request-path data source when
-/// present. Legacy `data/knowledge` JSON is retained only as a fallback/context
-/// store until all admin and write paths move to lake-backed assets.
+/// The promoted serving bundle is the canonical request-path data source.
+/// Legacy `data/knowledge` JSON is intentionally not loaded into runtime state.
 pub async fn load_app_state(project_root: &Path) -> AppState {
     let serving_bundle = load_serving_bundle(project_root)
         .await
         .unwrap_or_else(|err| panic!("Serving bundle startup contract failed: {err}"));
+    let bundle = serving_bundle
+        .as_ref()
+        .unwrap_or_else(|| panic!("No promoted serving bundle found. Run the asset DAG first."));
 
-    // --- Legacy Knowledge Graph ---
-    let kg_dir = knowledge::store::knowledge_dir(project_root);
-    let graph = load_legacy_graph(&kg_dir, serving_bundle.is_some());
-    let stats = graph.stats();
+    let graph = KnowledgeGraph::new();
+    println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
+
+    let properties = properties_from_serving_bundle(bundle);
+    if properties.is_empty() {
+        panic!(
+            "Serving bundle {} has no property entities; refusing to fall back to legacy data",
+            bundle.manifest.bundle_version
+        );
+    }
+    let societies = societies_from_serving_bundle(bundle);
+    let areas = areas_from_serving_properties(&properties);
     println!(
-        "Legacy knowledge graph loaded: {} nodes, {} edges, {} facts",
-        stats.total_nodes, stats.total_edges, stats.total_facts
+        "Derived {} properties, {} societies, {} areas from serving bundle {}",
+        properties.len(),
+        societies.len(),
+        areas.len(),
+        bundle.manifest.bundle_version
     );
-
-    let (properties, societies, areas) = if let Some(bundle) = serving_bundle.as_ref() {
-        let properties = properties_from_serving_bundle(bundle);
-        if properties.is_empty() {
-            println!(
-                "WARN: Serving bundle {} has no property entities; falling back to legacy KG",
-                bundle.manifest.bundle_version
-            );
-            runtime_data_from_graph(&graph)
-        } else {
-            let societies = societies_from_serving_bundle(bundle);
-            let areas = areas_from_serving_properties(&properties);
-            println!(
-                "Derived {} properties, {} societies, {} areas from serving bundle {}",
-                properties.len(),
-                societies.len(),
-                areas.len(),
-                bundle.manifest.bundle_version
-            );
-            (properties, societies, areas)
-        }
-    } else {
-        runtime_data_from_graph(&graph)
-    };
 
     let search_index = SearchIndex::build(&properties);
     println!(
@@ -73,11 +62,8 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     );
 
     let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
-    let semantic_index = if let Some(bundle) = serving_bundle.as_ref() {
-        SemanticSearchIndex::from_serving_entities(&bundle.entities, semantic_embedder.as_ref())
-    } else {
-        SemanticSearchIndex::from_properties(&properties, semantic_embedder.as_ref())
-    };
+    let semantic_index =
+        SemanticSearchIndex::from_serving_entities(&bundle.entities, semantic_embedder.as_ref());
     println!(
         "Built semantic search index with {} documents using {}",
         semantic_index.len(),
@@ -97,14 +83,14 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     };
 
     println!(
-        "Loaded {} properties, {} areas (KG), {} societies (KG), {} sellers",
+        "Loaded {} properties, {} areas, {} societies, {} sellers",
         properties.len(),
         areas.len(),
         societies.len(),
         sellers.len()
     );
 
-    println!("Request-time AI disabled: search uses only local knowledge graph data");
+    println!("Request-time AI disabled: search uses only local serving bundle data");
 
     AppState {
         properties: RwLock::new(properties),
@@ -184,44 +170,6 @@ fn log_serving_load_error(err: ServingBundleLoadError) {
     eprintln!("WARN: Failed to load serving bundle; using local property recall only: {err}");
 }
 
-fn load_legacy_graph(kg_dir: &Path, serving_bundle_available: bool) -> KnowledgeGraph {
-    match knowledge::store::load_graph(kg_dir) {
-        Some(graph) => graph,
-        None if serving_bundle_available => {
-            println!(
-                "No legacy knowledge graph found at {}; serving bundle remains canonical",
-                kg_dir.display()
-            );
-            KnowledgeGraph::new()
-        }
-        None => panic!(
-            "No serving bundle or knowledge graph found. Expected data/lake serving bundle or {}.",
-            kg_dir.display()
-        ),
-    }
-}
-
-fn runtime_data_from_graph(
-    graph: &KnowledgeGraph,
-) -> (Vec<Property>, Vec<Society>, Vec<AreaProfile>) {
-    let societies = societies_from_graph(graph);
-    println!(
-        "Derived {} societies from legacy knowledge graph",
-        societies.len()
-    );
-
-    let areas = areas_from_graph(graph);
-    println!("Derived {} areas from legacy knowledge graph", areas.len());
-
-    let properties = properties_from_graph(graph);
-    println!(
-        "Derived {} properties from legacy knowledge graph",
-        properties.len()
-    );
-
-    (properties, societies, areas)
-}
-
 pub fn properties_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Property> {
     properties_from_serving_records(
         &bundle.entities,
@@ -240,8 +188,168 @@ pub fn properties_from_serving_records(
         .filter(|entity| entity.entity_type == "property")
         .map(|entity| property_from_serving_entity(entity, fact_index, bundle_version))
         .collect::<Vec<_>>();
+    if properties.is_empty() {
+        properties =
+            representative_properties_from_serving_societies(entities, fact_index, bundle_version);
+    }
     properties.sort_by(|left, right| left.id.cmp(&right.id));
     properties
+}
+
+fn representative_properties_from_serving_societies(
+    entities: &[ServingEntityRecord],
+    fact_index: &ServingFactIndex,
+    bundle_version: &str,
+) -> Vec<Property> {
+    let entities_by_id = entities
+        .iter()
+        .map(|entity| (entity.entity_id.as_str(), entity))
+        .collect::<BTreeMap<_, _>>();
+
+    fact_index
+        .rows()
+        .filter(|(entity_id, rows)| {
+            entity_id.starts_with("society:")
+                && latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
+        })
+        .flat_map(|(entity_id, rows)| {
+            let entity = entities_by_id.get(entity_id).copied();
+            let bhks = serving_society_bhks(rows);
+            bhks.into_iter()
+                .map(|bhk| {
+                    representative_property_from_serving_society(
+                        entity_id,
+                        entity,
+                        rows,
+                        bhk,
+                        bundle_version,
+                    )
+                })
+                .collect::<Vec<_>>()
+        })
+        .collect()
+}
+
+fn representative_property_from_serving_society(
+    entity_id: &str,
+    entity: Option<&ServingEntityRecord>,
+    rows: &ServingEntityFactRows,
+    bhk: u32,
+    bundle_version: &str,
+) -> Property {
+    let society_name = entity
+        .map(|entity| entity.name.clone())
+        .or_else(|| latest_text(Some(rows), "title"))
+        .unwrap_or_else(|| title_case_slug(strip_entity_prefix(entity_id, "society:").as_str()));
+    let society_id = society_runtime_id_from_parts(entity_id, &society_name);
+    let society_slug = society_id.strip_prefix("soc-").unwrap_or(&society_id);
+    let id = format!("discovered-{society_slug}-{bhk}bhk");
+    let area = latest_text(Some(rows), "area").unwrap_or_default();
+    let area_slug = slug(&area);
+    let pricing = serving_market_pricing(rows, bhk);
+    let mut price = pricing
+        .map(|pricing| pricing.representative_price())
+        .unwrap_or(0);
+    if price == 0 {
+        price = latest_numeric(Some(rows), "market_starting_price_inr")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u64;
+    }
+    let carpet_area_sqft = pricing
+        .map(|pricing| pricing.representative_sqft())
+        .unwrap_or(0);
+    let price_per_sqft = if price > 0 && carpet_area_sqft > 0 {
+        price / carpet_area_sqft as u64
+    } else {
+        0
+    };
+    let builder_name = latest_text(Some(rows), "builder_name")
+        .or_else(|| latest_text(Some(rows), "rera_promoter_name"))
+        .unwrap_or_default();
+    let root_source = entity
+        .and_then(|entity| entity.root_source.as_deref())
+        .unwrap_or("serving_bundle");
+    let mut transparency_tags = vec![
+        format!("Source: {root_source}"),
+        "Fresh area scan".to_string(),
+    ];
+    if latest_bool(Some(rows), "rera_registered").unwrap_or(false) {
+        transparency_tags.push("RERA verified".to_string());
+    }
+    if price == 0 {
+        transparency_tags.push("Price unavailable".to_string());
+    }
+
+    Property {
+        id,
+        title: format!("{bhk} BHK in {society_name}"),
+        area: area.clone(),
+        area_id: format!("area-{area_slug}"),
+        city: latest_text(Some(rows), "city").unwrap_or_else(|| "Bengaluru".to_string()),
+        society_id,
+        builder_name,
+        property_type: latest_text(Some(rows), "rera_project_type")
+            .unwrap_or_else(|| "Apartment".to_string()),
+        listing_type: "Project".to_string(),
+        bhk,
+        price,
+        price_per_sqft,
+        carpet_area_sqft,
+        super_builtup_sqft: carpet_area_sqft,
+        floor: 0,
+        total_floors: 0,
+        facing: "Not specified".to_string(),
+        possession_status: latest_text(Some(rows), "market_project_status")
+            .or_else(|| latest_text(Some(rows), "rera_status"))
+            .unwrap_or_else(|| "unknown".to_string()),
+        metro_distance_mins: latest_numeric(Some(rows), "metro_distance_mins")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        maintenance_cost_monthly: 0,
+        society_quality_score: latest_numeric(Some(rows), "society_quality_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        builder_quality_score: latest_numeric(Some(rows), "builder_quality_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        document_completeness_score: latest_numeric(Some(rows), "document_completeness_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        litigation_risk: latest_numeric(Some(rows), "litigation_risk")
+            .unwrap_or(0.1)
+            .max(0.1),
+        noise_score: latest_numeric(Some(rows), "noise_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        sunlight_score: latest_numeric(Some(rows), "sunlight_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        airport_noise_score: latest_numeric(Some(rows), "airport_noise_score")
+            .unwrap_or(0.1)
+            .max(0.1),
+        waterlogging_risk_score: latest_numeric(Some(rows), "waterlogging_risk_score")
+            .unwrap_or(0.2)
+            .max(0.2),
+        traffic_score: latest_numeric(Some(rows), "traffic_score")
+            .unwrap_or(0.5)
+            .max(0.5),
+        days_on_market: 0,
+        greenery_score: latest_numeric(Some(rows), "greenery_score"),
+        open_space_score: latest_numeric(Some(rows), "open_space_score"),
+        resale_strength_score: latest_numeric(Some(rows), "resale_strength_score"),
+        interest_level: None,
+        saves_last_7d: None,
+        offers_last_7d: None,
+        images: latest_tags(Some(rows), "images").unwrap_or_default(),
+        hero_image: latest_text(Some(rows), "hero_image").unwrap_or_default(),
+        description_summary: latest_text(Some(rows), "summary")
+            .unwrap_or_else(|| format!("{society_name} in {area}")),
+        transparency_tags,
+        source_reference: format!("search_serving_bundle:{bundle_version}"),
+        seller_id: None,
+    }
 }
 
 fn property_from_serving_entity(
@@ -544,6 +652,62 @@ fn market_pricing_for_serving_property(
         })
 }
 
+fn serving_market_pricing(rows: &ServingEntityFactRows, bhk: u32) -> Option<MarketPricing> {
+    latest_text(Some(rows), &format!("listing_{}bhk", bhk))
+        .and_then(|listing| parse_listing_pricing(&listing))
+        .or_else(|| {
+            let pricing = latest_text(Some(rows), &format!("pricing_{}bhk", bhk))?;
+            parse_market_pricing(&pricing)
+        })
+}
+
+fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
+    let mut bhks = BTreeSet::new();
+    for fact in &rows.facts {
+        if let Some(bhk) = bhk_from_serving_fact_key(&fact.fact_key) {
+            bhks.insert(bhk);
+        }
+        if fact.fact_key == "market_bhk_options" {
+            for bhk in bhks_from_text(&fact_to_text(&fact.value)) {
+                bhks.insert(bhk);
+            }
+        }
+    }
+    if bhks.is_empty() {
+        bhks.insert(3);
+    }
+    bhks.into_iter().take(3).collect()
+}
+
+fn bhk_from_serving_fact_key(fact_key: &str) -> Option<u32> {
+    let suffix = fact_key
+        .strip_prefix("listing_")
+        .or_else(|| fact_key.strip_prefix("pricing_"))?;
+    let digits = suffix.strip_suffix("bhk")?;
+    digits
+        .parse::<u32>()
+        .ok()
+        .filter(|value| (1..=6).contains(value))
+}
+
+fn bhks_from_text(value: &str) -> Vec<u32> {
+    value
+        .split(|character: char| !character.is_ascii_digit())
+        .filter_map(|part| part.parse::<u32>().ok())
+        .filter(|value| (1..=6).contains(value))
+        .collect()
+}
+
+fn fact_to_text(value: &FactValue) -> String {
+    match value {
+        FactValue::Text(value) => value.clone(),
+        FactValue::Tags(values) => values.join(" "),
+        FactValue::Numeric(value) => value.to_string(),
+        FactValue::Bool(value) => value.to_string(),
+        FactValue::Score { explanation, .. } => explanation.clone(),
+    }
+}
+
 fn serving_society_text(
     fact_index: &ServingFactIndex,
     society_id: &str,
@@ -567,11 +731,15 @@ fn society_entity_id(society_id: &str) -> String {
 }
 
 fn society_runtime_id(entity: &ServingEntityRecord) -> String {
-    let name_slug = slug(&entity.name);
+    society_runtime_id_from_parts(&entity.entity_id, &entity.name)
+}
+
+fn society_runtime_id_from_parts(entity_id: &str, name: &str) -> String {
+    let name_slug = slug(name);
     if !name_slug.is_empty() {
         format!("soc-{name_slug}")
     } else {
-        format!("soc-{}", strip_entity_prefix(&entity.entity_id, "society:"))
+        format!("soc-{}", strip_entity_prefix(entity_id, "society:"))
     }
 }
 
@@ -609,6 +777,13 @@ fn latest_numeric(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Optio
     latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
         FactValue::Numeric(value) if value.is_finite() => Some(*value),
         FactValue::Score { value, .. } if value.is_finite() => Some(*value),
+        _ => None,
+    })
+}
+
+fn latest_bool(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<bool> {
+    latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Bool(value) => Some(*value),
         _ => None,
     })
 }
@@ -730,6 +905,7 @@ pub fn societies_from_graph(graph: &KnowledgeGraph) -> Vec<Society> {
 /// KG area nodes have a different fact schema than legacy seed JSON, so we
 /// map available facts and default the rest. The old fields like
 /// `airport_noise_summary` and `reddit_signals` may not exist in KG yet.
+#[cfg(test)]
 fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
     graph
         .nodes_of_type(NodeType::Area)
@@ -997,19 +1173,21 @@ fn derive_society_id(property_id: &str) -> String {
 
 #[derive(Clone, Copy, Debug)]
 struct MarketPricing {
+    price: u64,
     price_low: u64,
     price_high: u64,
+    sqft: u32,
     sqft_low: u32,
     sqft_high: u32,
 }
 
 impl MarketPricing {
     fn representative_price(&self) -> u64 {
-        (self.price_low + self.price_high) / 2
+        self.price
     }
 
     fn representative_sqft(&self) -> u32 {
-        (self.sqft_low + self.sqft_high) / 2
+        self.sqft
     }
 }
 
@@ -1044,8 +1222,10 @@ fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
     let (sqft_low, sqft_high) = parse_number_range(sqft_range)?;
 
     Some(MarketPricing {
+        price: (((price_low_lakh + price_high_lakh) / 2.0) * 100_000.0).round() as u64,
         price_low: (price_low_lakh * 100_000.0).round() as u64,
         price_high: (price_high_lakh * 100_000.0).round() as u64,
+        sqft: ((sqft_low + sqft_high) / 2.0).round() as u32,
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
     })
@@ -1091,8 +1271,10 @@ fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
     }
 
     Some(MarketPricing {
+        price: price.round() as u64,
         price_low: price_low.round() as u64,
         price_high: price_high.round() as u64,
+        sqft: sqft.round() as u32,
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
     })
@@ -1367,16 +1549,6 @@ mod tests {
         let society = society_from_serving_entity(&entities[1], &fact_index);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
-    }
-
-    #[test]
-    fn missing_legacy_kg_is_allowed_when_serving_bundle_exists() {
-        let dir = tempdir().unwrap();
-        let graph = load_legacy_graph(&dir.path().join("missing-knowledge"), true);
-        let stats = graph.stats();
-        assert_eq!(stats.total_nodes, 0);
-        assert_eq!(stats.total_edges, 0);
-        assert_eq!(stats.total_facts, 0);
     }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {

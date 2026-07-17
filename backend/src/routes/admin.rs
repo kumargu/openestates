@@ -19,7 +19,6 @@ use crate::assets::{
     AssetPartition, AssetRunManifestStore, AssetRunStepStatus, DagRunStatus, MaterializationId,
 };
 use crate::data_loader;
-use crate::knowledge::store;
 use crate::lake::LakeStoreLocation;
 use crate::serving::LoadedServingBundle;
 use crate::state::AppState;
@@ -27,47 +26,6 @@ use crate::state::AppState;
 const DEFAULT_SUBREDDIT: &str = "BangaloreRealEstates";
 
 type AdminError = (StatusCode, Json<serde_json::Value>);
-
-/// POST /api/admin/reload-knowledge
-///
-/// Re-reads the knowledge graph from disk (`data/knowledge`) and replaces the
-/// in-memory graph. Protected by the `X-Admin-Token` header. The expected token
-/// is read from `ADMIN_TOKEN`, defaulting to `dev` for local development.
-pub async fn reload_knowledge(
-    State(state): State<Arc<AppState>>,
-    headers: HeaderMap,
-) -> impl IntoResponse {
-    if let Err(err) = require_admin(&headers) {
-        return err.into_response();
-    }
-
-    let knowledge_dir = store::knowledge_dir(&state.project_root);
-    match store::load_graph(&knowledge_dir) {
-        Some(new_graph) => {
-            let node_count = new_graph.nodes.len();
-            let edge_count = new_graph.edges.len();
-            let fact_count: usize = new_graph.nodes.values().map(|n| n.facts.len()).sum();
-
-            let mut graph = state.knowledge.write().await;
-            *graph = new_graph;
-
-            Json(serde_json::json!({
-                "status": "reloaded",
-                "nodes": node_count,
-                "edges": edge_count,
-                "facts": fact_count,
-            }))
-            .into_response()
-        }
-        None => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({
-                "error": "reload failed: no knowledge graph found on disk"
-            })),
-        )
-            .into_response(),
-    }
-}
 
 /// POST /api/admin/serving-bundle/reload
 ///

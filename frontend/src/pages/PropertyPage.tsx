@@ -10,7 +10,7 @@ import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
-import { panelsToSections, summarizeEvidence } from "../lib/evidence.ts";
+import { panelsToSections } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -81,13 +81,6 @@ function pct(value: number): string {
 function normalizedDelta(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   return Math.abs(value) <= 1 ? value * 100 : value;
-}
-
-function formatMedianDelta(value: number | null): string {
-  if (value === null) return "No local benchmark";
-  const rounded = Math.round(Math.abs(value));
-  if (rounded === 0) return "At local median";
-  return value < 0 ? `${rounded}% below local median` : `${rounded}% above local median`;
 }
 
 function riskSignalsFor(p: PropertyDetailResponse["property"]): RiskSignal[] {
@@ -210,8 +203,7 @@ export function PropertyPage() {
   if (status === "error") return <PageState variant="error" context="property" />;
   if (!data) return null;
 
-  const { property: p, society, area, market_activity } = data;
-  const pvm = market_activity.price_vs_median;
+  const { property: p, society, market_activity } = data;
 
   const handleSave = () => {
     if (!id) return;
@@ -222,9 +214,6 @@ export function PropertyPage() {
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
-    : null;
-  const areaMedianLabel = area && hasKnownNumber(area.median_price_per_sqft)
-    ? `${area.name} median ₹${area.median_price_per_sqft.toLocaleString("en-IN")}/sqft`
     : null;
   const sizeLabel = hasKnownNumber(p.carpet_area_sqft)
     ? `${p.carpet_area_sqft.toLocaleString("en-IN")} sqft`
@@ -238,24 +227,9 @@ export function PropertyPage() {
     "Transparency scores, risk signals, and tradeoffs.",
   ].filter(Boolean).join(". ");
   const decision = buildDecision(data);
-  const medianDelta = normalizedDelta(pvm?.pct_diff);
-  const trust = trustPercent(data);
-  const trustLabel = data.confidence_score?.label ?? (trust >= 75 ? "High" : trust >= 55 ? "Medium" : "Low");
   const risks = riskSignalsFor(p);
-  const topRisk = risks[0];
   const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
   const sourcePanels = data.source_panels ?? [];
-  const evidenceSummary = summarizeEvidence(data.evidence);
-  const sourceFactCount = evidenceSummary?.factCount
-    ?? sourcePanels.reduce((sum, panel) => sum + panel.items.length, 0);
-  const sourceTypes = evidenceSummary?.sourceTypes.join(", ")
-    || (data.data_freshness?.source_breakdown
-    ? Object.entries(data.data_freshness.source_breakdown)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 3)
-        .map(([source]) => source)
-        .join(", ")
-    : sourceLabel);
   const marketRows = [
     market_activity.interest_label,
     market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
@@ -358,41 +332,6 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
-          <section className="property-decision-card property-decision-card--lead">
-            <div className="property-section-heading">
-              <span>At a glance</span>
-              <h2>Current read</h2>
-            </div>
-
-            <div className="property-decision-metrics">
-              <DecisionMetric
-                label="Value"
-                value={formatMedianDelta(medianDelta)}
-                detail={areaMedianLabel ?? "Area benchmark unavailable"}
-                tone={medianDelta !== null && medianDelta <= 0 ? "good" : medianDelta !== null && medianDelta > 8 ? "watch" : "neutral"}
-              />
-              <DecisionMetric
-                label="Trust"
-                value={trustLabel}
-                detail={`${trust}/100 · ${sourceLabel}`}
-                tone={trust >= 75 ? "good" : trust >= 55 ? "watch" : "risk"}
-              />
-              <DecisionMetric
-                label="Risk"
-                value={riskLabel(topRisk.value)}
-                detail={`${topRisk.label} is the highest signal at ${pct(topRisk.value)}`}
-                tone={topRisk.value <= 0.24 ? "good" : topRisk.value <= 0.55 ? "watch" : "risk"}
-              />
-              <DecisionMetric
-                label="Sources"
-                value={sourceFactCount > 0 ? `${sourceFactCount} facts` : "Sparse"}
-                detail={sourceTypes || "Source mix not available"}
-                tone={sourceFactCount >= 10 ? "good" : sourceFactCount >= 4 ? "watch" : "risk"}
-              />
-            </div>
-
-          </section>
-
           <EvidenceStack
             evidence={data.evidence}
             fallbackSections={panelsToSections(sourcePanels)}
@@ -465,26 +404,6 @@ export function PropertyPage() {
           </div>
         </aside>
       </div>
-    </div>
-  );
-}
-
-function DecisionMetric({
-  label,
-  value,
-  detail,
-  tone,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  tone: "good" | "watch" | "risk" | "neutral";
-}) {
-  return (
-    <div className={`property-decision-metric property-decision-metric--${tone}`}>
-      <span>{label}</span>
-      <strong>{value}</strong>
-      <small>{detail}</small>
     </div>
   );
 }

@@ -432,7 +432,7 @@ impl TextSearch {
                             score: norm_score,
                             confidence: 0.5,
                             source_type: "Seed".into(),
-                            scoring_method: "legacy".into(),
+                            scoring_method: "local".into(),
                         });
                         pref_coverage.push(PreferenceCoverage {
                             preference: pref.clone(),
@@ -1445,7 +1445,7 @@ fn evidence_is_confident_enough(source_type: &str, confidence: f32, scoring_meth
     if source == "llm" {
         return confidence >= MIN_LLM_EVIDENCE_CONFIDENCE;
     }
-    if scoring_method == "legacy" || scoring_method == "local-risk" {
+    if scoring_method == "local" || scoring_method == "local-risk" {
         return false;
     }
     confidence >= MIN_SUPPORT_EVIDENCE_CONFIDENCE
@@ -3314,15 +3314,15 @@ mod tests {
             explanation
                 .reasons
                 .iter()
-                .any(|r| r.preference == "metro access" && r.scoring_method == "legacy"),
-            "metro preference should be explained by local legacy scoring when no graph fact is present"
+                .any(|r| r.preference == "metro access" && r.scoring_method == "local"),
+            "metro preference should be explained by local scoring when no graph fact is present"
         );
         assert!(
             explanation
                 .reasons
                 .iter()
-                .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "legacy"),
-            "quiet preference should be explained by local legacy scoring when no graph fact is present"
+                .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "local"),
+            "quiet preference should be explained by local scoring when no graph fact is present"
         );
     }
 

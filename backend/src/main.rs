@@ -62,43 +62,6 @@ async fn main() {
             get(routes::societies::search_societies),
         )
         .route("/api/societies/{slug}", get(routes::societies::get_society))
-        // Knowledge graph endpoints
-        .route("/api/knowledge/stats", get(routes::knowledge::graph_stats))
-        .route("/api/knowledge/nodes", get(routes::knowledge::list_nodes))
-        .route(
-            "/api/knowledge/nodes/{id}",
-            get(routes::knowledge::get_node),
-        )
-        .route(
-            "/api/knowledge/nodes/{id}/neighbors",
-            get(routes::knowledge::get_neighbors),
-        )
-        .route(
-            "/api/knowledge/nodes/{id}/facts",
-            post(routes::knowledge::add_facts),
-        )
-        .route(
-            "/api/knowledge/enrichment/queue",
-            get(routes::knowledge::enrichment_queue),
-        )
-        .route(
-            "/api/knowledge/search-log",
-            get(routes::knowledge::search_log),
-        )
-        // Graph query endpoints
-        .route("/api/knowledge/path", get(routes::knowledge::find_path))
-        .route(
-            "/api/knowledge/nodes/{id}/subgraph",
-            get(routes::knowledge::get_subgraph),
-        )
-        .route(
-            "/api/knowledge/compare",
-            get(routes::knowledge::compare_nodes),
-        )
-        .route(
-            "/api/knowledge/coverage",
-            get(routes::knowledge::fact_coverage),
-        )
         // Seller endpoints
         .route("/api/sellers", get(routes::sellers::list_sellers))
         .route("/api/sellers/{id}", get(routes::sellers::get_seller))
@@ -135,10 +98,6 @@ async fn main() {
         .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
         .route(
-            "/api/admin/reload-knowledge",
-            post(routes::admin::reload_knowledge),
-        )
-        .route(
             "/api/admin/serving-bundle/reload",
             post(routes::admin::reload_serving_bundle),
         )
@@ -149,15 +108,6 @@ async fn main() {
         .route(
             "/api/admin/asset-runs",
             post(routes::admin::trigger_asset_run),
-        )
-        // Embedding / similarity endpoints
-        .route(
-            "/api/knowledge/nodes/{id}/similar",
-            get(routes::knowledge::similar_nodes),
-        )
-        .route(
-            "/api/knowledge/embeddings/stats",
-            get(routes::knowledge::embedding_stats),
         )
         .layer(cors)
         .with_state(state);
@@ -170,24 +120,12 @@ async fn main() {
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
     println!("  GET /api/search?q=...");
     println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
-    println!("  GET /api/knowledge/stats");
-    println!("  GET /api/knowledge/nodes?type=... | /api/knowledge/nodes/{{id}}");
-    println!("  GET /api/knowledge/nodes/{{id}}/neighbors");
-    println!("  GET /api/knowledge/enrichment/queue");
-    println!("  GET /api/knowledge/search-log");
-    println!("  GET /api/knowledge/path?from=...&to=...");
-    println!("  GET /api/knowledge/nodes/{{id}}/subgraph?depth=2");
-    println!("  GET /api/knowledge/compare?a=...&b=...");
-    println!("  GET /api/knowledge/coverage?type=society");
-    println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
-    println!("  GET /api/knowledge/embeddings/stats");
     println!("  GET /api/sellers | /api/sellers/{{id}} | /api/sellers/{{id}}/dashboard");
     println!("  POST /api/interests");
     println!("  GET /api/properties/{{id}}/interests/count");
     println!("  POST /api/registrations | GET /api/registrations/{{id}} | PUT /api/registrations/{{id}}/step/{{n}} | POST /api/registrations/{{id}}/publish");
     println!("  POST /api/claims");
     println!("  GET  /api/sitemap.xml");
-    println!("  POST /api/admin/reload-knowledge");
     println!("  POST /api/admin/serving-bundle/reload");
     println!("  GET  /api/admin/asset-runs/current");
     println!("  POST /api/admin/asset-runs");

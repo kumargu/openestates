@@ -3,7 +3,6 @@ import type { EvidenceSection, SourceItem, PropertyEvidenceResponse } from "../.
 import { constellationForSection, constellationMeta } from "../../lib/evidence.ts";
 import {
   ChevronIcon,
-  GapIcon,
   LinkIcon,
   IconForKind,
   IconForLabel,
@@ -86,9 +85,6 @@ function EvidenceFold({
         <span className="ev-fold__meta">
           <span className="ev-fold__count">{facts.length} facts</span>
           <span className="ev-fold__conf">{section.confidence_pct}%</span>
-          {section.missing.length > 0 && (
-            <span className="ev-fold__gap-badge">{section.missing.length} gap{section.missing.length > 1 ? "s" : ""}</span>
-          )}
         </span>
         <span className="ev-fold__chevron"><ChevronIcon size={18} /></span>
       </button>
@@ -100,17 +96,6 @@ function EvidenceFold({
               <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
             ))}
           </div>
-
-          {section.missing.length > 0 && (
-            <div className="ev-fold__missing">
-              {section.missing.map((m) => (
-                <span key={m} className="ev-fold__missing-row">
-                  <GapIcon size={13} />
-                  {m}
-                </span>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </section>
@@ -125,12 +110,8 @@ export function EvidenceStack({ evidence, fallbackSections }: StackProps) {
   const folds = ordered.filter((s) =>
     s.items.some((it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0)),
   );
-  // Gaps from every section (including data-less ones) collected into one strip.
-  const gaps = ordered.flatMap((s) =>
-    s.missing.map((m) => ({ kind: s.kind, label: constellationMeta(constellationForSection(s.kind)).label, text: m })),
-  );
 
-  if (folds.length === 0 && gaps.length === 0) return null;
+  if (folds.length === 0) return null;
 
   return (
     <section className="evidence-stack">
@@ -149,20 +130,6 @@ export function EvidenceStack({ evidence, fallbackSections }: StackProps) {
         ))}
       </div>
 
-      {gaps.length > 0 && (
-        <div className="evidence-stack__gaps">
-          <span className="evidence-stack__gaps-label">
-            <GapIcon size={14} /> Still unresolved
-          </span>
-          <div className="evidence-stack__gaps-list">
-            {gaps.map((g) => (
-              <span key={`${g.kind}-${g.text}`} className="evidence-stack__gap">
-                <em>{g.label}</em> {g.text}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
     </section>
   );
 }

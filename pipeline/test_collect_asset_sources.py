@@ -82,18 +82,30 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         skill.run.assert_called_once()
         detail_facts = output["detail_facts"]
-        self.assertEqual(len(detail_facts), 2)
+        rera_facts = [
+            fact for fact in detail_facts if fact["source_type"] == "Rera"
+        ]
+        self.assertEqual(len(rera_facts), 2)
         self.assertEqual(
-            {fact["entity_id"] for fact in detail_facts},
+            {fact["entity_id"] for fact in rera_facts},
             {
                 "society:rera-raintree",
                 "society:prestige-raintree-park",
             },
         )
-        self.assertEqual(detail_facts[0]["value_type"], "numeric")
-        self.assertEqual(detail_facts[0]["source_type"], "Rera")
-        self.assertEqual(detail_facts[0]["triggered_by"], "asset_dag")
-        self.assertEqual(len(output["detail_fact_annotations"]), 2)
+        self.assertEqual(rera_facts[0]["value_type"], "numeric")
+        self.assertEqual(rera_facts[0]["source_type"], "Rera")
+        self.assertEqual(rera_facts[0]["triggered_by"], "asset_dag")
+        profile_facts = [
+            fact
+            for fact in detail_facts
+            if fact["skill_id"] == "source_entity_profile"
+        ]
+        self.assertEqual(
+            {fact["fact_key"] for fact in profile_facts},
+            {"title", "area", "city", "source_scan_selected"},
+        )
+        self.assertEqual(len(output["detail_fact_annotations"]), 6)
         self.assertEqual(
             output["source_watermarks"][1],
             {
@@ -352,83 +364,97 @@ class CollectAssetSourcesTest(unittest.TestCase):
             inputs["society:rera-canonical"]["society_name"], "Canonical Green"
         )
 
-    def test_external_listing_collection_normalizes_legacy_pricing_without_confidence(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            node_dir = Path(temp_dir) / "data" / "knowledge" / "nodes" / "society"
-            node_dir.mkdir(parents=True)
-            (node_dir / "example-green.json").write_text(
-                json.dumps(
+    def test_external_listing_collection_normalizes_magicbricks_markdown_without_confidence(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
                     {
-                        "id": "society:example-green",
+                        "entity_id": "society:example-green",
                         "name": "Example Green",
-                        "facts": [
+                        "area": "Whitefield",
+                        "project_key": "PRM-EXAMPLE-GREEN",
+                        "external_listing_source_pages": [
                             {
-                                "key": "pricing_3bhk",
-                                "value": {
-                                    "type": "Text",
-                                    "data": json.dumps(
-                                        {
-                                            "bhk": "3BHK",
-                                            "price_range_lakh": "2.5-3.5 Cr",
-                                            "sqft_range": "2000-2400",
-                                            "area_type": "super built-up",
-                                            "bathrooms": 3,
-                                            "floor": "12",
-                                        }
-                                    ),
-                                },
-                                "source": {
-                                    "skill_id": "magicbricks_candidate",
-                                    "url": "https://example.com/listing",
-                                },
-                                "learned_at": "2026-07-12T08:00:00Z",
+                                "source_url": "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+                                "text": """
+                                    ## 3 BHK Flat for Sale in Example Green, Whitefield, Bangalore
+
+                                    Carpet Area
+
+                                    2000 sqft
+
+                                    Status
+
+                                    Ready to Move
+
+                                    Floor
+
+                                    12 out of 20
+
+                                    Bathroom
+
+                                    3
+
+                                    Read more
+
+                                    ₹2.50 Cr
+
+                                    ₹12,500 per sqft
+
+                                    ## 3 BHK Flat for Sale in Example Green, Hoodi, Whitefield, Bangalore
+
+                                    Super Area
+
+                                    2400 sqft
+
+                                    Bathroom
+
+                                    4
+
+                                    Read more
+
+                                    ₹3.50 Cr
+
+                                    ₹14,583 per sqft
+                                """,
                             }
                         ],
                     }
-                )
-            )
-
-            output = collect_asset_sources(
-                {
-                    "project_root": temp_dir,
-                    "partition": {"parts": [["dt", "2026-07-16"]]},
-                    "planned_at": "2026-07-16T09:30:00Z",
-                    "requested_assets": ["external_listings_weekly"],
-                    "source_entities": [
-                        {
-                            "entity_id": "society:example-green",
-                            "name": "Example Green",
-                            "area": "Whitefield",
-                            "project_key": "PRM-EXAMPLE-GREEN",
-                        }
-                    ],
-                }
-            )
+                ],
+            }
+        )
 
         listing = output["external_listings_weekly"]["records"][0]
         self.assertEqual(output["external_listings_weekly"]["snapshot_date"], "2026-07-16")
         self.assertEqual(listing["entity_id"], "society:example-green")
         self.assertEqual(listing["project_key"], "PRM-EXAMPLE-GREEN")
-        self.assertEqual(listing["source_name"], "magicbricks_candidate")
-        self.assertEqual(listing["source_url"], "https://example.com/listing")
+        self.assertEqual(listing["source_name"], "MagicBricks")
+        self.assertEqual(
+            listing["source_url"],
+            "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+        )
         self.assertEqual(listing["price"], 30_000_000)
         self.assertEqual(listing["price_min"], 25_000_000)
         self.assertEqual(listing["price_max"], 35_000_000)
-        self.assertEqual(listing["price_display"], "2.5-3.5 Cr")
-        self.assertEqual(listing["area_sqft"], 2200)
+        self.assertEqual(listing["price_display"], "₹2.5 Cr - ₹3.5 Cr")
+        self.assertEqual(listing["area_sqft"], 2215)
         self.assertEqual(listing["area_sqft_min"], 2000)
         self.assertEqual(listing["area_sqft_max"], 2400)
-        self.assertEqual(listing["area_display"], "2000-2400")
-        self.assertIsNone(listing["price_per_sqft_min"])
-        self.assertIsNone(listing["price_per_sqft_max"])
-        self.assertIsNone(listing["price_per_sqft_display"])
-        self.assertEqual(listing["configuration"], "3BHK")
+        self.assertEqual(listing["area_display"], "2000-2400 sqft")
+        self.assertEqual(listing["price_per_sqft_min"], 12500)
+        self.assertEqual(listing["price_per_sqft_max"], 14583)
+        self.assertEqual(listing["price_per_sqft_display"], "₹12,500-14,583 per sqft")
+        self.assertEqual(listing["configuration"], "3 BHK")
+        self.assertEqual(listing["area_type"], "mixed listed area")
         self.assertEqual(listing["bhk"], 3.0)
-        self.assertEqual(listing["bathrooms"], 3.0)
-        self.assertEqual(listing["floor"], "12")
+        self.assertEqual(listing["bathrooms"], 3.5)
+        self.assertEqual(listing["floor"], "12 out of 20")
         self.assertEqual(listing["society"], "Example Green")
-        self.assertEqual(listing["locality"], "Whitefield")
-        self.assertEqual(listing["observed_at"], "2026-07-12T08:00:00Z")
+        self.assertEqual(listing["locality"], "Hoodi, Whitefield")
+        self.assertEqual(listing["observed_at"], "2026-07-16T09:30:00Z")
         self.assertNotIn("confidence", listing)
 
     def test_external_image_collection_extracts_magicbricks_images(self):

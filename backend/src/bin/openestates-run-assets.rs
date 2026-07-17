@@ -14,7 +14,7 @@ use backend::assets::{
     METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
     REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
-use backend::knowledge::{store as kg_store, KnowledgeGraph};
+use backend::knowledge::KnowledgeGraph;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
 use chrono::{Duration as ChronoDuration, Utc};
 
@@ -26,17 +26,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .project_root
         .clone()
         .unwrap_or_else(default_project_root);
-    let graph = if cli.dry_run {
-        KnowledgeGraph::new()
-    } else {
-        let kg_dir = kg_store::knowledge_dir(&project_root);
-        kg_store::load_graph(&kg_dir).ok_or_else(|| {
-            format!(
-                "No knowledge graph found at {}. Seed or load KG before running assets.",
-                kg_dir.display()
-            )
-        })?
-    };
+    let graph = KnowledgeGraph::new();
 
     let lake_location = LakeStoreLocation::from_env(&project_root)?;
     let lake = lake_location.open()?;

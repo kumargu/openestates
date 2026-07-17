@@ -8,7 +8,7 @@ use serde::Deserialize;
 use crate::knowledge::edge::Relation;
 use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
-use crate::knowledge::{store as kg_store, KnowledgeGraph, SearchEvent};
+use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
     intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SearchResultCard, SourcedClaim,
     TextSearch,
@@ -142,11 +142,6 @@ pub async fn search_properties(
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps;
-
-    let kg_dir = kg_store::knowledge_dir(&state.project_root);
-    if let Err(e) = kg_store::append_search_log(&kg_dir, &event) {
-        eprintln!("WARN: Failed to append search log: {}", e);
-    }
 
     {
         let mut graph = state.knowledge.write().await;

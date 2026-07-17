@@ -607,11 +607,13 @@ pub async fn canonicalize_google_places_input(
         })
         .collect();
     let mut resolved = input.clone();
-    for record in &mut resolved.records {
+    let mut records = Vec::with_capacity(resolved.records.len());
+    for mut record in resolved.records {
         if canonical_ids.contains(record.entity_id.as_str()) {
+            records.push(record);
             continue;
         }
-        let entity_id = by_alias
+        let Some(entity_id) = by_alias
             .get(record.entity_id.as_str())
             .copied()
             .or_else(|| {
@@ -620,14 +622,17 @@ pub async fn canonicalize_google_places_input(
                     .as_deref()
                     .and_then(|key| by_project_key.get(key).copied())
             })
-            .ok_or_else(|| {
-                GooglePlaceAssetError::InvalidInput(format!(
-                    "Google place row for {} does not resolve to canonical society evidence",
-                    record.query
-                ))
-            })?;
+        else {
+            eprintln!(
+                "WARN: Skipping Google place row without canonical society evidence: {}",
+                record.query
+            );
+            continue;
+        };
         record.entity_id = entity_id.to_string();
+        records.push(record);
     }
+    resolved.records = records;
     Ok(resolved)
 }
 
@@ -664,11 +669,13 @@ pub async fn canonicalize_google_nearby_places_input(
         })
         .collect();
     let mut resolved = input.clone();
-    for record in &mut resolved.records {
+    let mut records = Vec::with_capacity(resolved.records.len());
+    for mut record in resolved.records {
         if canonical_ids.contains(record.entity_id.as_str()) {
+            records.push(record);
             continue;
         }
-        let entity_id = by_alias
+        let Some(entity_id) = by_alias
             .get(record.entity_id.as_str())
             .copied()
             .or_else(|| {
@@ -677,14 +684,17 @@ pub async fn canonicalize_google_nearby_places_input(
                     .as_deref()
                     .and_then(|key| by_project_key.get(key).copied())
             })
-            .ok_or_else(|| {
-                GooglePlaceAssetError::InvalidInput(format!(
-                    "Google nearby row for {} does not resolve to canonical society evidence",
-                    record.query
-                ))
-            })?;
+        else {
+            eprintln!(
+                "WARN: Skipping Google nearby row without canonical society evidence: {}",
+                record.query
+            );
+            continue;
+        };
         record.entity_id = entity_id.to_string();
+        records.push(record);
     }
+    resolved.records = records;
     Ok(resolved)
 }
 

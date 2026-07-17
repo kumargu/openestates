@@ -132,11 +132,13 @@ fn build_area_tracker(
             let avg_price_per_sqft = average_price_per_sqft(&area_properties);
             let price_min = area_properties
                 .iter()
+                .filter(|property| property.price > 0)
                 .map(|property| property.price)
                 .min()
                 .unwrap_or(0);
             let price_max = area_properties
                 .iter()
+                .filter(|property| property.price > 0)
                 .map(|property| property.price)
                 .max()
                 .unwrap_or(0);
@@ -234,14 +236,18 @@ fn normalize_area(value: &str) -> String {
 }
 
 fn average_price_per_sqft(properties: &[&Property]) -> u64 {
-    if properties.is_empty() {
+    let priced = properties
+        .iter()
+        .filter(|property| property.price_per_sqft > 0)
+        .collect::<Vec<_>>();
+    if priced.is_empty() {
         return 0;
     }
-    let total = properties
+    let total = priced
         .iter()
         .map(|property| property.price_per_sqft)
         .sum::<u64>();
-    ((total as f64 / properties.len() as f64).round()) as u64
+    ((total as f64 / priced.len() as f64).round()) as u64
 }
 
 fn top_builder(properties: &[&Property]) -> String {

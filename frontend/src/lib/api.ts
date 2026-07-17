@@ -112,14 +112,11 @@ export type PlatformStats = {
 };
 
 export async function getStats(): Promise<PlatformStats> {
-  const [props, areas, societyNodes] = await Promise.all([
+  const [props, areas] = await Promise.all([
     getProperties(),
     getAreas(),
-    fetchJson<unknown[]>("/api/knowledge/nodes?type=society").catch(() => null),
   ]);
-  const societyCount = Array.isArray(societyNodes) && societyNodes.length > 0
-    ? societyNodes.length
-    : new Set(props.map((p) => p.society_name).filter(Boolean)).size;
+  const societyCount = new Set(props.map((p) => p.society_name).filter(Boolean)).size;
 
   return {
     properties: props.length,

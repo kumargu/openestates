@@ -1,20 +1,20 @@
-//! Search quality tests — realistic customer queries against the real knowledge graph.
+//! Search quality tests — realistic customer queries against the serving bundle.
 //!
 //! Run with: cargo test -p backend --test search_quality -- --nocapture
 //!
-//! These tests load the actual knowledge graph and properties, fire queries
+//! These tests load the promoted serving bundle and properties, fire queries
 //! that real customers would type, and evaluate whether the search system
 //! returns sensible, well-ranked, well-explained results.
 
 use std::collections::HashMap;
 use std::path::Path;
 
-use backend::knowledge::{self, store as kg_store};
+use backend::knowledge;
 use backend::models::{Property, Society};
 use backend::search::intent::parse_intent;
 use backend::search::{SearchIndex, TextSearch};
 
-/// Load real KG + derive properties and societies for testing.
+/// Load the promoted serving bundle and derive request-path data for testing.
 fn load_test_data() -> (
     Vec<Property>,
     Vec<Society>,
@@ -23,12 +23,14 @@ fn load_test_data() -> (
     SearchIndex,
 ) {
     let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let kg_dir = kg_store::knowledge_dir(project_root);
-    let graph =
-        kg_store::load_graph(&kg_dir).expect("Knowledge graph must exist for search quality tests");
-
-    let societies = backend::data_loader::societies_from_graph(&graph);
-    let properties = backend::data_loader::properties_from_graph(&graph);
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    let bundle = runtime
+        .block_on(backend::data_loader::load_serving_bundle(project_root))
+        .expect("serving bundle loader should run")
+        .expect("promoted serving bundle must exist for search quality tests");
+    let graph = knowledge::KnowledgeGraph::new();
+    let societies = backend::data_loader::societies_from_serving_bundle(&bundle);
+    let properties = backend::data_loader::properties_from_serving_bundle(&bundle);
 
     let society_names: HashMap<String, String> = societies
         .iter()

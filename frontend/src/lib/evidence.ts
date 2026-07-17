@@ -72,7 +72,7 @@ export function visibleEvidenceSections(
 ): EvidenceSection[] {
   if (!sections?.length) return [];
   return sections
-    .filter((section) => section.items.length > 0 || section.missing.length > 0)
+    .filter((section) => section.items.length > 0)
     .sort((a, b) => a.priority - b.priority);
 }
 
@@ -85,7 +85,7 @@ export function summarizeEvidence(
   if (sections.length === 0) return null;
 
   const factCount = sections.reduce((sum, s) => sum + s.items.length, 0);
-  const gapCount = sections.reduce((sum, s) => sum + s.missing.length, 0);
+  const gapCount = 0;
   const confidencePct = Math.round(
     sections.reduce((sum, s) => sum + s.confidence_pct, 0) / sections.length,
   );
@@ -94,7 +94,7 @@ export function summarizeEvidence(
   ].slice(0, 4);
 
   let heat: EvidenceSummary["heat"] = "sparse";
-  if (factCount >= 12 && gapCount <= 2 && confidencePct >= 70) heat = "strong";
+  if (factCount >= 12 && confidencePct >= 70) heat = "strong";
   else if (factCount >= 5 && confidencePct >= 50) heat = "moderate";
 
   return {
@@ -250,6 +250,6 @@ export function panelsToSections(panels: SourcePanel[]): EvidenceSection[] {
     source_types: [...new Set(panel.items.map((item) => item.source_type))],
     entity_ids: panel.items.map((item) => item.entity_id),
     items: panel.items,
-    missing: panel.missing,
+    missing: [],
   }));
 }

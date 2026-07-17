@@ -28,7 +28,7 @@ pub struct MatchReason {
     pub confidence: f32,
     /// Source type: "Reddit", "Rera", "Computed", "Manual", etc.
     pub source_type: String,
-    /// "graph" or "legacy"
+    /// "graph" or "local"
     pub scoring_method: String,
 }
 
@@ -51,7 +51,7 @@ pub struct MatchExplanation {
     pub reasons: Vec<MatchReason>,
     /// Per-preference coverage status
     pub preference_coverage: Vec<PreferenceCoverage>,
-    /// Percentage of score derived from graph facts vs legacy scoring (0-100)
+    /// Percentage of score derived from graph facts vs local scoring (0-100)
     pub graph_driven_pct: f32,
     /// Total number of facts the scorer examined
     pub total_facts_consulted: usize,

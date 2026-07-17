@@ -328,13 +328,13 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
           {/* Evidence preview from new API */}
           {detail?.evidence && summarizeEvidence(detail.evidence) && (
             <div className="side-panel-evidence">
-              <h3 className="side-panel-evidence__title">Evidence at a glance</h3>
+              <h3 className="side-panel-evidence__title">Evidence</h3>
               {topEvidenceGlance(detail.evidence, 2).map((line) => (
                 <p key={line} className="side-panel-society-review">{line}</p>
               ))}
               <div className="side-panel-evidence__cards">
                 {detail.evidence.sections
-                  .filter((s) => s.items.length > 0 || s.missing.length > 0)
+                  .filter((s) => s.items.length > 0)
                   .slice(0, 2)
                   .map((section) => (
                     <EvidenceSectionCard key={section.kind} section={section} zoom="compact" />
@@ -346,7 +346,7 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
           {/* Tradeoffs */}
           {tradeoffs && (tradeoffs.strengths.length > 0 || tradeoffs.cautions.length > 0) && (
             <div className="side-panel-section">
-              <h3 className="side-panel-section-title">At a glance</h3>
+              <h3 className="side-panel-section-title">Tradeoffs</h3>
               {tradeoffs.strengths.length > 0 && (
                 <ul className="side-panel-tradeoff-list">
                   {tradeoffs.strengths.slice(0, 3).map((s, i) => (

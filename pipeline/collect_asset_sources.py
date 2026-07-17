@@ -593,6 +593,11 @@ def collect_rera_project_details(
             "city": optional_string(seed.get("city")) or "Bengaluru",
             "triggered_by": "asset_dag",
         }
+        profile_facts, profile_annotations = source_entity_profile_rows(
+            entity_id, snapshot_date, input_data
+        )
+        facts.extend(profile_facts)
+        annotations.extend(profile_annotations)
         try:
             result = skill.run(input_data, force=force_refresh)
         except Exception as error:
@@ -632,6 +637,89 @@ def collect_rera_project_details(
         len(source_entities),
     )
     return facts, annotations, latest_learned_at
+
+
+def source_entity_profile_rows(
+    entity_id: str, snapshot_date: str, input_data: Dict[str, Any]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    learned_at = datetime.now(timezone.utc).isoformat()
+    input_hash = "sha256:{}".format(
+        hashlib.sha256(
+            json.dumps(input_data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+    rows = []  # type: List[Tuple[str, str, str, str, List[str], float]]
+    for key, value, template, preferences in (
+        (
+            "title",
+            optional_string(input_data.get("project_name")),
+            "Project: {value}",
+            ["project name", "society name"],
+        ),
+        (
+            "area",
+            optional_string(input_data.get("area")),
+            "Area: {value}",
+            ["area", "location", "neighbourhood"],
+        ),
+        (
+            "city",
+            optional_string(input_data.get("city")),
+            "City: {value}",
+            ["city", "location"],
+        ),
+    ):
+        if value:
+            rows.append((key, "text", value, template, preferences, 0.95))
+    rows.append(
+        (
+            "source_scan_selected",
+            "bool",
+            True,
+            "Selected for fresh area scan: {value}",
+            ["fresh scan", "area tracker scan"],
+            1.0,
+        )
+    )
+
+    facts = []
+    annotations = []
+    run_id = "collector-source_entity_profile-{}".format(snapshot_date)
+    for key, value_type, value, template, preferences, confidence in rows:
+        if value_type == "bool":
+            value_json = json.dumps({"type": "Bool", "data": bool(value)}, separators=(",", ":"))
+        else:
+            value_json = json.dumps({"type": "Text", "data": str(value)}, separators=(",", ":"))
+        facts.append(
+            {
+                "entity_id": entity_id,
+                "fact_key": key,
+                "value_type": value_type,
+                "value_json": value_json,
+                "confidence": confidence,
+                "source_type": "Manual",
+                "source_url": None,
+                "model": None,
+                "skill_id": "source_entity_profile",
+                "triggered_by": "asset_dag",
+                "learned_at": learned_at,
+                "run_id": run_id,
+                "input_hash": input_hash,
+            }
+        )
+        annotations.append(
+            {
+                "entity_id": entity_id,
+                "fact_key": key,
+                "display_template": template,
+                "answers_preferences_json": json.dumps(preferences, separators=(",", ":")),
+                "scoring_direction": "TextMatch",
+                "scoring_weight": 2.0,
+                "scoring_thresholds_json": "[]",
+                "updated_at": learned_at,
+            }
+        )
+    return facts, annotations
 
 
 def fetch_rera_listing_snapshot():

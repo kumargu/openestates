@@ -712,6 +712,7 @@ type MicroMarket = {
   area: string;
   vibe: string;
   avgPriceSqft: number;
+  hasAvgPriceSqft: boolean;
   priceMin: number;
   priceMax: number;
   count: number;
@@ -732,7 +733,8 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
   return Object.entries(byArea)
     .filter(([, ps]) => ps.length >= 2)
     .map(([area, ps]) => {
-      const prices = ps.map((p) => p.price_per_sqft);
+      const prices = ps.map((p) => p.price_per_sqft).filter((price) => price > 0);
+      const projectPrices = ps.map((p) => p.price).filter((price) => price > 0);
       const bhkSet = new Set(ps.map((p) => p.bhk));
       const builderCount: Record<string, number> = {};
       for (const p of ps) {
@@ -745,9 +747,10 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
       return {
         area,
         vibe: AREA_VIBES[area] ?? "",
-        avgPriceSqft: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),
-        priceMin: Math.min(...ps.map((p) => p.price)),
-        priceMax: Math.max(...ps.map((p) => p.price)),
+        avgPriceSqft: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0,
+        hasAvgPriceSqft: prices.length > 0,
+        priceMin: projectPrices.length > 0 ? Math.min(...projectPrices) : 0,
+        priceMax: projectPrices.length > 0 ? Math.max(...projectPrices) : 0,
         count: ps.length,
         bhks: Array.from(bhkSet).sort(),
         readyToMove: ps.filter((p) => p.possession_status === "ready").length,
@@ -773,6 +776,7 @@ function deriveMicroMarketsFromTracker(
       area: market.name,
       vibe: AREA_VIBES[market.name] ?? "",
       avgPriceSqft: market.avg_price_per_sqft,
+      hasAvgPriceSqft: market.avg_price_per_sqft > 0,
       priceMin: market.price_min,
       priceMax: market.price_max,
       count: market.listing_count,
@@ -795,7 +799,8 @@ function MicroMarketCard({
   maxAvg: number;
   onSearch: (query: string) => void;
 }) {
-  const pct = (m.avgPriceSqft / maxAvg) * 100;
+  const hasPriceRange = m.priceMin > 0 && m.priceMax > 0;
+  const pct = m.hasAvgPriceSqft ? (m.avgPriceSqft / maxAvg) * 100 : 0;
   const barColor =
     pct > 85 ? "var(--color-accent)" : pct > 60 ? "var(--color-cool-deep)" : "var(--color-cool)";
 
@@ -820,29 +825,36 @@ function MicroMarketCard({
         </p>
       )}
 
-      {/* Price bar */}
-      <div style={{ marginBottom: "0.85rem" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.3rem" }}>
-          <span className="home-micro-price">
-            {m.avgPriceSqft.toLocaleString("en-IN")}
-            <span style={{ fontSize: "0.7rem", color: "#999", fontWeight: 400, marginLeft: "0.2rem" }}>/sqft</span>
-          </span>
-          <span style={{ fontSize: "0.72rem", color: "#aaa" }}>
-            {formatPrice(m.priceMin)} – {formatPrice(m.priceMax)}
-          </span>
+      {(m.hasAvgPriceSqft || hasPriceRange) && (
+        <div style={{ marginBottom: "0.85rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.3rem" }}>
+            {m.hasAvgPriceSqft && (
+              <span className="home-micro-price">
+                {m.avgPriceSqft.toLocaleString("en-IN")}
+                <span style={{ fontSize: "0.7rem", color: "#999", fontWeight: 400, marginLeft: "0.2rem" }}>/sqft</span>
+              </span>
+            )}
+            {hasPriceRange && (
+              <span style={{ fontSize: "0.72rem", color: "#aaa", marginLeft: "auto" }}>
+                {formatPrice(m.priceMin)} – {formatPrice(m.priceMax)}
+              </span>
+            )}
+          </div>
+          {m.hasAvgPriceSqft && (
+            <div style={{ height: "4px", backgroundColor: "rgba(0,0,0,0.04)", borderRadius: "2px", overflow: "hidden" }}>
+              <div
+                style={{
+                  height: "100%",
+                  width: `${pct}%`,
+                  borderRadius: "2px",
+                  backgroundColor: barColor,
+                  transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
+                }}
+              />
+            </div>
+          )}
         </div>
-        <div style={{ height: "4px", backgroundColor: "rgba(0,0,0,0.04)", borderRadius: "2px", overflow: "hidden" }}>
-          <div
-            style={{
-              height: "100%",
-              width: `${pct}%`,
-              borderRadius: "2px",
-              backgroundColor: barColor,
-              transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
-          />
-        </div>
-      </div>
+      )}
 
       {/* Signal chips */}
       <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
@@ -909,7 +921,7 @@ function MicroMarketsSection({
     : deriveMicroMarkets(properties);
   if (markets.length < 2) return null;
 
-  const maxAvg = Math.max(...markets.map((m) => m.avgPriceSqft));
+  const maxAvg = Math.max(1, ...markets.filter((m) => m.hasAvgPriceSqft).map((m) => m.avgPriceSqft));
 
   return (
     <section className="home-micro-section" style={{ padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem" }}>

@@ -109,6 +109,12 @@ impl ServingFactIndex {
     pub fn entity_count(&self) -> usize {
         self.by_entity.len()
     }
+
+    pub fn rows(&self) -> impl Iterator<Item = (&str, &ServingEntityFactRows)> {
+        self.by_entity
+            .iter()
+            .map(|(entity_id, rows)| (entity_id.as_str(), rows))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

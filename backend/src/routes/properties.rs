@@ -35,10 +35,15 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
     let sellers = state.sellers.read().await;
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
 
     let cards: Vec<PropertyCard> = properties
         .iter()
-        .map(|p| enrich_property_card_with_sellers(p, &state.societies, &graph, &sellers))
+        .map(|p| {
+            let card = enrich_property_card_with_sellers(p, &state.societies, &graph, &sellers);
+            overlay_serving_google_reviews(card, &p.society_id, serving_facts)
+        })
         .collect();
 
     Json(cards)
@@ -1409,6 +1414,7 @@ pub async fn get_property(
     let similar_properties = {
         let soc_node_id = society_node_id(&property.society_id);
         let similar_societies = graph.similar_to(&soc_node_id, 5, Some(NodeType::Society));
+        let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
 
         let mut similar = Vec::new();
         for sim_soc in &similar_societies {
@@ -1420,11 +1426,16 @@ pub async fn get_property(
                 .iter()
                 .find(|p| society_node_id(&p.society_id) == sim_soc.node_id && p.id != property.id)
             {
-                similar.push(enrich_property_card_with_sellers(
+                let card = enrich_property_card_with_sellers(
                     prop,
                     &state.societies,
                     &graph,
                     &sellers_guard,
+                );
+                similar.push(overlay_serving_google_reviews(
+                    card,
+                    &prop.society_id,
+                    serving_facts,
                 ));
                 if similar.len() >= 4 {
                     break;
@@ -1637,6 +1648,27 @@ fn external_reviews_for(
         google_review_count: evidence.review_count,
         google_reviews_url: evidence.reviews_url,
     })
+}
+
+fn overlay_serving_google_reviews(
+    mut card: PropertyCard,
+    society_id: &str,
+    serving_facts: Option<&ServingFactIndex>,
+) -> PropertyCard {
+    let Some(serving_facts) = serving_facts else {
+        return card;
+    };
+    let fallback = GoogleReviewEvidence {
+        rating: card.google_rating,
+        review_count: card.google_review_count,
+        reviews_url: card.google_reviews_url.clone(),
+    };
+    let evidence = SocietyFactProjection::from_index(serving_facts, society_id)
+        .project_google_reviews(fallback);
+    card.google_rating = evidence.rating;
+    card.google_review_count = evidence.review_count;
+    card.google_reviews_url = evidence.reviews_url;
+    card
 }
 
 fn rera_info_for(

@@ -665,7 +665,7 @@ function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation 
         </div>
       )}
 
-      {/* Graph vs legacy indicator */}
+      {/* Verified-data indicator */}
       {explanation.graph_driven_pct > 0 && (
         <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", margin: "0.3rem 0 0" }}>
           {Math.round(explanation.graph_driven_pct)}% scored from verified data
