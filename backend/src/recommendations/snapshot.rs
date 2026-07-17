@@ -75,10 +75,8 @@ mod tests {
 
     #[test]
     fn summarize_counts_visible_sections_only() {
-        let snapshot = summarize_evidence_sections(&[
-            section("rera", 4, 1),
-            section("market", 2, 0),
-        ]);
+        let snapshot =
+            summarize_evidence_sections(&[section("rera", 4, 1), section("market", 2, 0)]);
         assert_eq!(snapshot.fact_count, 6);
         assert_eq!(snapshot.gap_count, 1);
         assert_eq!(snapshot.section_count, 2);

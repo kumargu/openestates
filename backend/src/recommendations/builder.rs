@@ -9,7 +9,7 @@ use crate::routes::properties::{
 };
 use crate::serving::LoadedServingBundle;
 
-use super::branch::{BranchLens, EvidenceDelta, RecommendationBranch};
+use super::branch::{compass_magnitude, BranchLens, EvidenceDelta, RecommendationBranch};
 use super::snapshot::{summarize_evidence_sections, EvidenceSnapshot};
 
 struct Candidate {
@@ -18,16 +18,30 @@ struct Candidate {
     snapshot: EvidenceSnapshot,
 }
 
+pub struct RecommendationBranchInputs<'a> {
+    pub current: &'a Property,
+    pub current_evidence: &'a PropertyEvidenceResponse,
+    pub graph: &'a KnowledgeGraph,
+    pub properties: &'a [Property],
+    pub societies: &'a [Society],
+    pub sellers: &'a [Seller],
+    pub serving_bundle: Option<&'a LoadedServingBundle>,
+    pub area_median_ppsf: Option<u64>,
+}
+
 pub fn build_recommendation_branches(
-    current: &Property,
-    current_evidence: &PropertyEvidenceResponse,
-    graph: &KnowledgeGraph,
-    properties: &[Property],
-    societies: &[Society],
-    sellers: &[Seller],
-    serving_bundle: Option<&LoadedServingBundle>,
-    area_median_ppsf: Option<u64>,
+    inputs: RecommendationBranchInputs<'_>,
 ) -> Vec<RecommendationBranch> {
+    let RecommendationBranchInputs {
+        current,
+        current_evidence,
+        graph,
+        properties,
+        societies,
+        sellers,
+        serving_bundle,
+        area_median_ppsf,
+    } = inputs;
     let current_snapshot = summarize_evidence_sections(&current_evidence.sections);
     let candidates = recall_candidates(
         current,
@@ -88,7 +102,9 @@ fn recall_candidates(
             continue;
         }
         if let Some(prop) = properties.iter().find(|prop| {
-            society_node_id(&prop.society_id) == sim.node_id && prop.id != current.id
+            society_node_id(&prop.society_id) == sim.node_id
+                && prop.id != current.id
+                && prop.bhk == current.bhk
         }) {
             push_candidate_id(&mut ordered_ids, &mut seen, &prop.id);
         }
@@ -166,7 +182,12 @@ fn pick_proof_branch(
                         .fact_count
                         .saturating_sub(right.snapshot.gap_count),
                 )
-                .then_with(|| right.snapshot.confidence_pct.cmp(&left.snapshot.confidence_pct))
+                .then_with(|| {
+                    right
+                        .snapshot
+                        .confidence_pct
+                        .cmp(&left.snapshot.confidence_pct)
+                })
         })?;
 
     let fact_delta = best.snapshot.fact_count as i32 - current.fact_count as i32;
@@ -174,7 +195,9 @@ fn pick_proof_branch(
     let contrast = if gap_delta < 0 {
         format!(
             "{} facts vs {} here · {} fewer gaps",
-            best.snapshot.fact_count, current.fact_count, gap_delta.abs()
+            best.snapshot.fact_count,
+            current.fact_count,
+            gap_delta.abs()
         )
     } else {
         format!(
@@ -182,6 +205,9 @@ fn pick_proof_branch(
             best.snapshot.fact_count, current.fact_count
         )
     };
+
+    let magnitude =
+        compass_magnitude(fact_delta.max(0) as f32 / 18.0 + (-gap_delta).max(0) as f32 / 6.0);
 
     Some(RecommendationBranch {
         lens: BranchLens::Proof,
@@ -196,6 +222,7 @@ fn pick_proof_branch(
             fact_delta,
             gap_delta,
         },
+        magnitude,
     })
 }
 
@@ -220,7 +247,9 @@ fn pick_value_branch(
         })
         .min_by_key(|candidate| candidate.property.price_per_sqft)?;
 
-    let savings_pct = ((current.price_per_sqft.saturating_sub(best.property.price_per_sqft)) as f64
+    let savings_pct = ((current
+        .price_per_sqft
+        .saturating_sub(best.property.price_per_sqft)) as f64
         / current.price_per_sqft.max(1) as f64
         * 100.0)
         .round() as u64;
@@ -235,6 +264,7 @@ fn pick_value_branch(
         contrast: format!("{savings_pct}% lower per sqft in {}", best.property.area),
         tradeoff: tradeoff_for_metro_delta(current, &best.property),
         evidence_delta: delta_from_snapshots(current_snapshot, best.snapshot),
+        magnitude: compass_magnitude(savings_pct as f32 / 18.0),
     })
 }
 
@@ -267,6 +297,10 @@ fn pick_trust_branch(
                 .unwrap_or(std::cmp::Ordering::Equal)
         })?;
 
+    let best_risk =
+        best.property.litigation_risk + (1.0 - best.property.document_completeness_score) * 0.35;
+    let magnitude = compass_magnitude(((current_risk - best_risk) / 0.4) as f32);
+
     Some(RecommendationBranch {
         lens: BranchLens::Trust,
         headline: BranchLens::Trust.headline().to_string(),
@@ -278,6 +312,7 @@ fn pick_trust_branch(
         ),
         tradeoff: tradeoff_for_price_delta(current, &best.property),
         evidence_delta: delta_from_snapshots(current_snapshot, best.snapshot),
+        magnitude,
     })
 }
 
@@ -311,6 +346,7 @@ fn pick_commute_branch(
         contrast: format!("{delta} min closer to metro"),
         tradeoff: tradeoff_for_price_delta(current, &best.property),
         evidence_delta: delta_from_snapshots(current_snapshot, best.snapshot),
+        magnitude: compass_magnitude(delta as f32 / 12.0),
     })
 }
 
@@ -457,7 +493,11 @@ mod tests {
         };
         let snapshot = summarize_evidence_sections(&sections);
         Candidate {
-            card: crate::routes::enrichment::enrich_property_card(&property, &[], &crate::knowledge::graph::KnowledgeGraph::default()),
+            card: crate::routes::enrichment::enrich_property_card(
+                &property,
+                &[],
+                &crate::knowledge::graph::KnowledgeGraph::default(),
+            ),
             property,
             snapshot,
         }

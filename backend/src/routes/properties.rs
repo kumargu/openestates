@@ -7,7 +7,9 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
-use crate::recommendations::{build_recommendation_branches, RecommendationBranch};
+use crate::recommendations::{
+    build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
+};
 use crate::scoring::{
     self, compute_transparency_score, CompareThemes, MarketActivityResponse, TradeoffsResponse,
     TransparencyScore,
@@ -981,7 +983,10 @@ fn build_property_evidence_response_from_panels(
     }
 }
 
-pub(crate) fn evidence_section_from_panel(panel: SourcePanel, entity_refs: &KgEntityRefs) -> EvidenceSection {
+pub(crate) fn evidence_section_from_panel(
+    panel: SourcePanel,
+    entity_refs: &KgEntityRefs,
+) -> EvidenceSection {
     let source_types = unique_sorted(
         panel
             .items
@@ -1050,7 +1055,7 @@ fn section_summary(panel: &SourcePanel) -> String {
         .unwrap_or_else(|| "No source-backed signals yet.".to_string())
 }
 
-fn primary_section_item<'a>(panel: &'a SourcePanel) -> Option<&'a SourceItem> {
+fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
     for key in primary_section_keys(&panel.kind) {
         if let Some(item) = panel.items.iter().find(|item| item.key == *key) {
             return Some(item);
@@ -1558,16 +1563,16 @@ pub async fn get_property(
             (None, Some(high)) => Some(high),
             (None, None) => None,
         });
-    let recommendation_branches = build_recommendation_branches(
-        &property,
-        &evidence,
-        &graph,
-        &properties,
-        &state.societies,
-        &sellers_guard,
-        serving_bundle.as_deref(),
+    let recommendation_branches = build_recommendation_branches(RecommendationBranchInputs {
+        current: &property,
+        current_evidence: &evidence,
+        graph: &graph,
+        properties: &properties,
+        societies: &state.societies,
+        sellers: &sellers_guard,
+        serving_bundle: serving_bundle.as_deref(),
         area_median_ppsf,
-    );
+    });
 
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);

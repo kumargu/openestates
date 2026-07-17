@@ -1,3 +1,4 @@
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -57,6 +58,14 @@ pub struct AreaTrackerMarket {
     pub name: String,
     pub city: String,
     pub listing_count: usize,
+    pub avg_price_per_sqft: u64,
+    pub price_min: u64,
+    pub price_max: u64,
+    pub bhks: Vec<u32>,
+    pub ready_to_move: usize,
+    pub near_metro: usize,
+    pub top_builder: String,
+    pub societies: usize,
     pub median_price_per_sqft: u64,
     pub price_range_per_sqft: crate::models::area_profile::PriceRange,
     pub trend_direction: String,
@@ -110,12 +119,47 @@ fn build_area_tracker(
 ) -> AreaTrackerResponse {
     let markets = areas
         .iter()
-        .map(|area| {
+        .filter_map(|area| {
             let area_key = normalize_area(&area.name);
-            let listing_count = properties
+            let area_properties = properties
                 .iter()
                 .filter(|property| normalize_area(&property.area) == area_key)
+                .collect::<Vec<_>>();
+            let listing_count = area_properties.len();
+            if listing_count < 2 {
+                return None;
+            }
+            let avg_price_per_sqft = average_price_per_sqft(&area_properties);
+            let price_min = area_properties
+                .iter()
+                .map(|property| property.price)
+                .min()
+                .unwrap_or(0);
+            let price_max = area_properties
+                .iter()
+                .map(|property| property.price)
+                .max()
+                .unwrap_or(0);
+            let bhks = area_properties
+                .iter()
+                .map(|property| property.bhk)
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>();
+            let ready_to_move = area_properties
+                .iter()
+                .filter(|property| property.possession_status == "ready")
                 .count();
+            let near_metro = area_properties
+                .iter()
+                .filter(|property| property.metro_distance_mins <= 15)
+                .count();
+            let top_builder = top_builder(&area_properties);
+            let societies = area_properties
+                .iter()
+                .map(|property| property.society_id.as_str())
+                .collect::<BTreeSet<_>>()
+                .len();
             let matching_searches = search_log
                 .iter()
                 .filter(|event| {
@@ -144,11 +188,19 @@ fn build_area_tracker(
                 .unwrap_or_else(|| area.livability_summary.clone());
             let demand_score = demand_score(recent_searches, evidence_gap_count, listing_count);
 
-            AreaTrackerMarket {
+            Some(AreaTrackerMarket {
                 id: area.id.clone(),
                 name: area.name.clone(),
                 city: area.city.clone(),
                 listing_count,
+                avg_price_per_sqft,
+                price_min,
+                price_max,
+                bhks,
+                ready_to_move,
+                near_metro,
+                top_builder,
+                societies,
                 median_price_per_sqft: area.median_price_per_sqft,
                 price_range_per_sqft: area.price_range_per_sqft.clone(),
                 trend_direction: area.trend_direction.clone(),
@@ -159,9 +211,11 @@ fn build_area_tracker(
                 evidence_gap_count,
                 sample_size: area.sample_size,
                 last_updated: area.last_updated.clone(),
-            }
+            })
         })
         .collect::<Vec<_>>();
+    let mut markets = markets;
+    markets.sort_by(|left, right| right.listing_count.cmp(&left.listing_count));
 
     AreaTrackerResponse {
         generated_at: chrono::Utc::now().to_rfc3339(),
@@ -177,6 +231,39 @@ fn normalize_area(value: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(char::to_lowercase)
         .collect()
+}
+
+fn average_price_per_sqft(properties: &[&Property]) -> u64 {
+    if properties.is_empty() {
+        return 0;
+    }
+    let total = properties
+        .iter()
+        .map(|property| property.price_per_sqft)
+        .sum::<u64>();
+    ((total as f64 / properties.len() as f64).round()) as u64
+}
+
+fn top_builder(properties: &[&Property]) -> String {
+    let mut first_seen = HashMap::<&str, usize>::new();
+    let mut counts = HashMap::<&str, usize>::new();
+    for (index, property) in properties.iter().enumerate() {
+        first_seen.entry(&property.builder_name).or_insert(index);
+        *counts.entry(&property.builder_name).or_insert(0) += 1;
+    }
+
+    counts
+        .into_iter()
+        .max_by(|(left_name, left_count), (right_name, right_count)| {
+            left_count.cmp(right_count).then_with(|| {
+                first_seen
+                    .get(right_name)
+                    .unwrap_or(&usize::MAX)
+                    .cmp(first_seen.get(left_name).unwrap_or(&usize::MAX))
+            })
+        })
+        .map(|(name, _)| name.to_string())
+        .unwrap_or_default()
 }
 
 fn demand_score(recent_searches: usize, evidence_gap_count: usize, listing_count: usize) -> f32 {
@@ -269,6 +356,11 @@ mod tests {
             source_reference: String::new(),
             seller_id: None,
         };
+        let mut second_property = property.clone();
+        second_property.id = "p2".to_string();
+        second_property.builder_name = "Builder B".to_string();
+        second_property.price = 20;
+        second_property.price_per_sqft = 20;
         let mut event = SearchEvent::new(
             "3BHK Whitefield".to_string(),
             SearchIntent {
@@ -293,11 +385,16 @@ mod tests {
             reason: "area evidence".to_string(),
         });
 
-        let tracker = build_area_tracker(&[area], &[property], &[event]);
+        let tracker = build_area_tracker(&[area], &[property, second_property], &[event]);
 
         assert_eq!(tracker.total_areas, 1);
-        assert_eq!(tracker.total_listings, 1);
-        assert_eq!(tracker.markets[0].listing_count, 1);
+        assert_eq!(tracker.total_listings, 2);
+        assert_eq!(tracker.markets[0].listing_count, 2);
+        assert_eq!(tracker.markets[0].avg_price_per_sqft, 15);
+        assert_eq!(tracker.markets[0].price_min, 10);
+        assert_eq!(tracker.markets[0].price_max, 20);
+        assert_eq!(tracker.markets[0].bhks, vec![3]);
+        assert_eq!(tracker.markets[0].near_metro, 2);
         assert_eq!(tracker.markets[0].recent_searches, 1);
         assert_eq!(tracker.markets[0].evidence_gap_count, 1);
         assert_eq!(tracker.markets[0].primary_signal, "metro");

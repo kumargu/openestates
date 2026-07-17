@@ -7,26 +7,12 @@ import type {
 } from "../../lib/types.ts";
 import type { MatchResult } from "../../lib/search.ts";
 import {
-  evidenceHeatClass,
   summarizeEvidence,
   topEvidenceGlance,
-  type EvidenceSummary,
 } from "../../lib/evidence.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { isOnSheet, toggleSheetItem } from "../../lib/sheet-store.ts";
-import { ProjectStatusTag } from "../ProjectStatusTag.tsx";
-import { BuilderTrustBadge } from "../BuilderTrustBadge.tsx";
-import { TrustBadge } from "../TrustBadge.tsx";
-import { DataFreshnessBadge } from "../DataFreshnessBadge.tsx";
-import { ConfidenceMeter } from "../ConfidenceMeter.tsx";
-
-const LABEL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  "Strong match": { bg: "#edf7ed", color: "#2a7a2a", border: "#c8e6c8" },
-  "Good match": { bg: "#f0f4ff", color: "#3b5998", border: "#c8d8f0" },
-  "Value pick": { bg: "#fdf5e6", color: "#8a6d00", border: "#e8d8a0" },
-  "Premium match": { bg: "#f5f0fa", color: "#6b3fa0", border: "#d8c8e8" },
-  "Partial match": { bg: "#f8f6f2", color: "#6f6258", border: "rgba(0,0,0,0.08)" },
-};
+import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(1)} Cr`;
@@ -39,7 +25,9 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 function isKnownText(value: string | null | undefined): value is string {
-  return !!value && value.trim().length > 0 && value !== "Not specified";
+  if (!value) return false;
+  const lowered = value.trim().toLowerCase();
+  return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
 
 type Props = {
@@ -56,26 +44,28 @@ type Props = {
 export function LivingEvidenceTile({
   property,
   match,
-  confidenceScore,
   evidence,
-  decisionRead,
   explanationBlock,
   onQuickView,
   onSaveChange,
 }: Props) {
   const [onSheet, setOnSheet] = useState(() => isOnSheet(property.id));
-  const summary: EvidenceSummary | null = summarizeEvidence(evidence);
+  const summary = summarizeEvidence(evidence);
   const glances = topEvidenceGlance(evidence, 1);
-  const heatClass = summary ? evidenceHeatClass(summary.heat) : "evidence-heat--sparse";
+  const { images } = usePropertySceneImages({
+    heroImage: property.hero_image,
+    societyId: property.kg_entity_refs?.society_entity_id,
+  });
+  const cardImage = images[0] ?? property.hero_image ?? null;
 
-  const specs = [
+  const metaParts = [
+    isKnownText(property.society_name) ? property.society_name : null,
+    property.area,
     `${property.bhk} BHK`,
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
-    isKnownText(property.facing) ? property.facing : null,
-    hasKnownNumber(property.floor) && hasKnownNumber(property.total_floors)
-      ? `Floor ${property.floor}/${property.total_floors}`
-      : null,
-  ].filter((spec): spec is string => spec !== null);
+  ].filter((part): part is string => part !== null);
+
+  const whyLine = match?.reason || glances[0] || null;
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -90,112 +80,67 @@ export function LivingEvidenceTile({
     onQuickView?.(property.id);
   };
 
-  const labelStyle = match ? LABEL_COLORS[match.label] || LABEL_COLORS["Good match"] : null;
-
   return (
-    <div className={`card-a living-evidence-tile ${heatClass}`}>
-      <Link to={`/property/${property.id}`} className="card-a-link">
-        <div className="card-a-image">
+    <article className="catalog-card">
+      <Link to={`/property/${property.id}`} className="catalog-card__link">
+        <div className="catalog-card__media">
           <ImageWithFallback
-            src={property.hero_image}
+            src={cardImage}
             alt={property.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            className="catalog-card__image"
+            loading="lazy"
           />
-          {match && labelStyle && (
-            <span
-              className="card-a-match"
-              style={{ background: labelStyle.bg, color: labelStyle.color, border: `1px solid ${labelStyle.border}` }}
-            >
-              {match.label}
-            </span>
+          {match && (
+            <span className="catalog-card__kicker">{match.label}</span>
           )}
+          <div className="catalog-card__actions" aria-label="Property actions">
+            <button
+              type="button"
+              onClick={handleSave}
+              className={`catalog-card__action${onSheet ? " catalog-card__action--saved" : ""}`}
+              aria-label={onSheet ? "Remove from saved" : "Save property"}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              onClick={handleQuickView}
+              className="catalog-card__action"
+              aria-label="Quick view"
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+              </svg>
+            </button>
+          </div>
         </div>
 
-        <div className="card-a-body">
-          {(decisionRead || summary) && (
-            <div className="living-evidence-tile__glance">
-              {decisionRead && (
-                <span className="living-evidence-tile__read">{decisionRead}</span>
-              )}
-              {summary && (
-                <span className="living-evidence-tile__proof">
-                  {summary.factCount} facts
-                  {summary.gapCount > 0 ? ` · ${summary.gapCount} gaps` : ""}
-                  {` · ${summary.confidencePct}%`}
-                </span>
-              )}
-            </div>
-          )}
-
-          <h3 className="card-a-title">{property.title}</h3>
-          <p className="card-a-location">
-            {property.society_name ? `${property.society_name} · ` : ""}{property.area}
-          </p>
-
-          <div className="card-a-price-row">
-            <span className="card-a-price">{formatPrice(property.price)}</span>
+        <div className="catalog-card__caption">
+          <h3 className="catalog-card__title">{property.title}</h3>
+          <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
+          <div className="catalog-card__foot">
+            <span className="catalog-card__price">{formatPrice(property.price)}</span>
             {hasKnownNumber(property.price_per_sqft) && (
-              <span className="card-a-ppsqft">{property.price_per_sqft.toLocaleString("en-IN")} /sqft</span>
-            )}
-          </div>
-
-          <div className="card-a-specs">
-            {specs.map((spec, index) => (
-              <span key={spec}>
-                {index > 0 && <span>&middot; </span>}
-                {spec}
+              <span className="catalog-card__ppsf">
+                {property.price_per_sqft.toLocaleString("en-IN")}/sqft
               </span>
-            ))}
+            )}
           </div>
-
-          {match && <p className="card-a-reason">{match.reason}</p>}
-
-          {glances.length > 0 && (
-            <p className="living-evidence-tile__evidence-line">{glances[0]}</p>
+          {whyLine && <p className="catalog-card__why">{whyLine}</p>}
+          {summary && (
+            <p className="catalog-card__proof">
+              {summary.factCount} facts · {summary.confidencePct}% confidence
+            </p>
           )}
-
-          {explanationBlock}
-
-          <div className="card-a-signals">
-            <ProjectStatusTag
-              status={property.project_status}
-              displayText={property.project_status_display}
-              possessionStatus={property.possession_status}
-            />
-            {hasKnownNumber(property.metro_distance_mins) && (
-              <span className="property-signal">{property.metro_distance_mins} min to metro</span>
-            )}
-            {isKnownText(property.builder_name) && (
-              <span className="property-signal">{property.builder_name}</span>
-            )}
-            <BuilderTrustBadge deliveryDisplay={property.builder_delivery_display} compact />
-            <TrustBadge rootSource={property.root_source} compact />
-            <DataFreshnessBadge freshness={property.data_freshness} compact />
-            <ConfidenceMeter confidence={confidenceScore} compact />
-          </div>
-
-          {property.kg_entity_refs.society_entity_id && (
-            <div className="living-evidence-tile__refs" title="Knowledge graph handles for dynamic evidence">
-              KG linked
-            </div>
+          {explanationBlock && (
+            <div className="catalog-card__explain">{explanationBlock}</div>
           )}
         </div>
       </Link>
-
-      <div className="card-a-actions">
-        <button onClick={handleSave} className={`card-a-save-btn ${onSheet ? "card-a-save-btn--saved" : ""}`}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-          </svg>
-          {onSheet ? "Saved" : "Save"}
-        </button>
-        <button className="card-a-detail-btn" onClick={handleQuickView}>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10" /><line x1="12" y1="16" x2="12" y2="12" /><line x1="12" y1="8" x2="12.01" y2="8" />
-          </svg>
-          <span className="card-a-detail-btn-label">Quick view</span>
-        </button>
-      </div>
-    </div>
+    </article>
   );
 }

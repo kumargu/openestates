@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { PropertyCard } from "../lib/types.ts";
-import { getProperties, getStats, type PlatformStats } from "../lib/api.ts";
+import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
+import { getAreaTracker, getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { getSheetItems, SHEET_UPDATED_EVENT } from "../lib/sheet-store.ts";
 
@@ -207,6 +207,7 @@ export function HomePage() {
   const hasInlinePane = hasActiveSearch || activeView === "sheet";
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
+  const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
@@ -222,6 +223,9 @@ export function HomePage() {
       .catch(() => setLoadError(true));
     getStats()
       .then(setPlatformStats)
+      .catch(() => {});
+    getAreaTracker()
+      .then(setAreaTracker)
       .catch(() => {});
   }, []);
 
@@ -542,7 +546,7 @@ export function HomePage() {
 
       {/* Micro-market intelligence cards */}
       {snapshot && properties.length > 0 && (
-        <MicroMarketsSection properties={properties} onSearch={commitSearch} />
+        <MicroMarketsSection properties={properties} areaTracker={areaTracker} onSearch={commitSearch} />
       )}
 
       {/* Market Pulse — real data snapshot */}
@@ -759,6 +763,32 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
     .sort((a, b) => b.count - a.count);
 }
 
+function deriveMicroMarketsFromTracker(
+  tracker: AreaTrackerResponse,
+  properties: PropertyCard[],
+): MicroMarket[] {
+  return tracker.markets.map((market) => {
+    const ratings = properties
+      .filter((p) => p.area === market.name && p.google_rating && p.google_rating > 0)
+      .map((p) => p.google_rating!);
+
+    return {
+      area: market.name,
+      vibe: AREA_VIBES[market.name] ?? "",
+      avgPriceSqft: market.avg_price_per_sqft,
+      priceMin: market.price_min,
+      priceMax: market.price_max,
+      count: market.listing_count,
+      bhks: market.bhks,
+      readyToMove: market.ready_to_move,
+      nearMetro: market.near_metro,
+      topBuilder: market.top_builder,
+      avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
+      societies: market.societies,
+    };
+  });
+}
+
 function MicroMarketCard({
   m,
   maxAvg,
@@ -870,12 +900,16 @@ function chipStyle(bg: string, color: string): React.CSSProperties {
 
 function MicroMarketsSection({
   properties,
+  areaTracker,
   onSearch,
 }: {
   properties: PropertyCard[];
+  areaTracker: AreaTrackerResponse | null;
   onSearch: (query: string) => void;
 }) {
-  const markets = deriveMicroMarkets(properties);
+  const markets = areaTracker
+    ? deriveMicroMarketsFromTracker(areaTracker, properties)
+    : deriveMicroMarkets(properties);
   if (markets.length < 2) return null;
 
   const maxAvg = Math.max(...markets.map((m) => m.avgPriceSqft));

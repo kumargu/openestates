@@ -26,7 +26,9 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 function isKnownText(value: string | null | undefined): value is string {
-  return !!value && value.trim().length > 0 && value !== "Not specified";
+  if (!value) return false;
+  const lowered = value.trim().toLowerCase();
+  return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
 
 type ScoreBarProps = { label: string; value: number; color?: string };

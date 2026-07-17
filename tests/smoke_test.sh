@@ -255,7 +255,7 @@ check "Area items have required fields" \
 
 check "GET /api/areas/tracker returns markets" \
   "${BASE}/api/areas/tracker" \
-  '.total_areas > 0 and (.markets | type == "array" and length > 0) and (.markets[0] | has("id", "name", "listing_count", "demand_score", "recent_searches"))' \
+  '.total_areas > 0 and (.markets | type == "array" and length > 0) and (.markets[0] | has("id", "name", "listing_count", "avg_price_per_sqft", "price_min", "price_max", "bhks", "ready_to_move", "near_metro", "top_builder", "societies", "demand_score", "recent_searches"))' \
   "expected backend area tracker market summaries"
 
 # ── Knowledge Graph ──

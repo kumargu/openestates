@@ -29,6 +29,15 @@ pub struct RecommendationBranch {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tradeoff: Option<String>,
     pub evidence_delta: EvidenceDelta,
+    /// Normalized 0..1 strength of this branch on its lens — how far it departs
+    /// from the current property. Drives spatial distance in the decision compass.
+    pub magnitude: f32,
+}
+
+/// Clamp a raw pull value into a visible 0.25..1.0 band so no branch sits on the
+/// anchor and none escapes the compass ring.
+pub fn compass_magnitude(raw: f32) -> f32 {
+    raw.clamp(0.0, 1.0).max(0.25)
 }
 
 impl BranchLens {

@@ -15,17 +15,11 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { PreferencePill } from "../components/PreferencePill.tsx";
 import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
-import { TrustBadge } from "../components/TrustBadge.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
-import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
-import { DataFreshnessBadge } from "../components/DataFreshnessBadge.tsx";
-import { ConfidenceMeter } from "../components/ConfidenceMeter.tsx";
 import {
   getSheetItems,
-  isOnSheet,
   removeFromSheet,
   SHEET_UPDATED_EVENT,
-  toggleSheetItem,
   type SheetItem,
 } from "../lib/sheet-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
@@ -50,15 +44,10 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 function isKnownText(value: string | null | undefined): value is string {
-  return !!value && value.trim().length > 0 && value !== "Not specified";
+  if (!value) return false;
+  const lowered = value.trim().toLowerCase();
+  return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
-
-const LABEL_COLORS: Record<string, { bg: string; color: string; border: string }> = {
-  "Strong match": { bg: "#edf7ed", color: "#2a7a2a", border: "#c8e6c8" },
-  "Good match": { bg: "#f0f4ff", color: "#3b5998", border: "#c8d8f0" },
-  "Value pick": { bg: "#fdf5e6", color: "#8a6d00", border: "#e8d8a0" },
-  "Premium match": { bg: "#f5f0fa", color: "#6b3fa0", border: "#d8c8e8" },
-};
 
 /* ---------- Area Context Bar ---------- */
 

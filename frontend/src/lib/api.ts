@@ -5,6 +5,7 @@ import type {
   PropertyEvidenceResponse,
   AreaListItem,
   AreaDetail,
+  AreaTrackerResponse,
   SearchResponse,
   SocietySearchResponse,
   SocietySearchResult,
@@ -86,6 +87,10 @@ export function getAreas(): Promise<AreaListItem[]> {
 
 export function getArea(id: string): Promise<AreaDetail> {
   return fetchJson(`/api/areas/${encodeURIComponent(id)}`);
+}
+
+export function getAreaTracker(): Promise<AreaTrackerResponse> {
+  return fetchJson("/api/areas/tracker");
 }
 
 export function searchProperties(query: string): Promise<SearchResponse> {

@@ -9,7 +9,7 @@ import { isOnSheet, toggleSheetItem } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
-import { RecommendationBranches } from "../components/recommendations/RecommendationBranches.tsx";
+import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { panelsToSections, summarizeEvidence } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
@@ -23,7 +23,9 @@ function hasKnownNumber(value: number | null | undefined): value is number {
 }
 
 function isKnownText(value: string | null | undefined): value is string {
-  return !!value && value.trim().length > 0 && value !== "Not specified";
+  if (!value) return false;
+  const lowered = value.trim().toLowerCase();
+  return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
 
 function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
@@ -399,7 +401,7 @@ export function PropertyPage() {
           )}
 
           {(data.recommendation_branches?.length ?? 0) > 0 ? (
-            <RecommendationBranches branches={data.recommendation_branches ?? []} />
+            <AlternativePaths branches={data.recommendation_branches ?? []} />
           ) : data.similar_properties.length > 0 ? (
             <section className="property-similar-section">
               <div className="property-section-heading">

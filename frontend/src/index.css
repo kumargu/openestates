@@ -573,11 +573,11 @@ body {
 
 .card-a {
   position: relative;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   overflow: hidden;
   background: var(--color-bg-card);
   border: 1px solid var(--color-border);
-  transition: box-shadow 0.3s var(--ease-out), border-color 0.3s var(--ease-out);
+  transition: box-shadow 0.3s var(--ease-out), border-color 0.3s var(--ease-out), transform 0.3s var(--ease-out);
   display: flex;
   flex-direction: column;
 }
@@ -585,6 +585,40 @@ body {
 .card-a:hover {
   box-shadow: var(--shadow-lg);
   border-color: var(--color-border-hover);
+  transform: translateY(-2px);
+}
+
+/* Area Tracker theme adopted for search results: alternating warm/cool tints,
+   softly rounded cards, matching tinted borders and calm hover lift. */
+.results-grid > *:nth-child(odd) .card-a,
+.universe-cluster__grid > *:nth-child(odd) .card-a {
+  background: linear-gradient(160deg, rgba(255, 252, 249, 0.98), #fff 62%);
+  border-color: rgba(207, 106, 74, 0.16);
+}
+
+.results-grid > *:nth-child(even) .card-a,
+.universe-cluster__grid > *:nth-child(even) .card-a {
+  background: linear-gradient(160deg, rgba(244, 247, 251, 0.98), #fff 62%);
+  border-color: rgba(100, 140, 200, 0.2);
+}
+
+.results-grid > *:nth-child(odd) .card-a:hover,
+.universe-cluster__grid > *:nth-child(odd) .card-a:hover {
+  border-color: rgba(207, 106, 74, 0.32);
+  box-shadow: 0 10px 30px rgba(191, 90, 60, 0.1);
+}
+
+.results-grid > *:nth-child(even) .card-a:hover,
+.universe-cluster__grid > *:nth-child(even) .card-a:hover {
+  border-color: rgba(100, 140, 200, 0.32);
+  box-shadow: 0 10px 30px rgba(63, 92, 138, 0.1);
+}
+
+.results-grid > *:nth-child(odd) .card-a-actions,
+.universe-cluster__grid > *:nth-child(odd) .card-a-actions,
+.results-grid > *:nth-child(even) .card-a-actions,
+.universe-cluster__grid > *:nth-child(even) .card-a-actions {
+  background: transparent;
 }
 
 .card-a-link {
@@ -2641,8 +2675,8 @@ body {
 /* --- Results page CSS classes for responsive overrides --- */
 .results-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.25rem;
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+  gap: 2rem 1.35rem;
 }
 
 .results-search-bar {
