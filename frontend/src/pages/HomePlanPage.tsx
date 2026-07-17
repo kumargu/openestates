@@ -13,6 +13,7 @@ import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { RepaymentJourney } from "../features/home-plan/RepaymentJourney.tsx";
 import { TimeRail } from "../features/home-plan/TimeRail.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
+import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
@@ -219,6 +220,8 @@ export function HomePlanPage() {
           />
 
           <PlanViewTabs view={view} onChange={changeView} />
+
+          <PlanWhisper />
 
           {view === "payoff" ? (
             <RepaymentJourney
