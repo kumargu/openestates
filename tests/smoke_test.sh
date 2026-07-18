@@ -109,6 +109,24 @@ check "GET /api/health returns ok" \
   '.status == "ok"' \
   "expected status=ok"
 
+# ── Discovery ──
+echo ""
+echo "Discovery"
+check "GET /api/discovery returns product promise" \
+  "${BASE}/api/discovery" \
+  '.product_promise | type == "string" and length > 0' \
+  "expected non-empty product_promise"
+
+check "GET /api/discovery returns quotes" \
+  "${BASE}/api/discovery" \
+  '.quotes | type == "array" and length > 0 and (.[0] | has("text", "tone"))' \
+  "expected quote text and tone"
+
+check "GET /api/discovery returns shelves with cards" \
+  "${BASE}/api/discovery" \
+  '.shelves | type == "array" and length > 0 and (.[0] | has("id", "title", "quote", "description", "search_query", "proof_label", "cards")) and (.[0].cards | type == "array" and length > 0)' \
+  "expected shelf metadata and property cards"
+
 # ── Properties List ──
 echo ""
 echo "Properties"

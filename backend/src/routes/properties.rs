@@ -1,10 +1,11 @@
 use std::collections::HashSet;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use url::Url;
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::recommendations::{
@@ -94,6 +95,9 @@ pub struct PropertyDetail {
     /// Human-readable project status from skill's display_template
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_status_display: Option<String>,
+    /// Compact buyer-facing state signal for first-scan UI.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_state_display: Option<String>,
     /// Machine-readable project status: "ready_to_move", "under_construction", etc.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_status: Option<String>,
@@ -165,8 +169,13 @@ pub struct SourcePanel {
     pub kind: String,
     pub title: String,
     pub subtitle: String,
+    pub scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship: Option<String>,
     pub items: Vec<SourceItem>,
     pub missing: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<EvidenceMediaStrip>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -175,6 +184,9 @@ pub struct SourceItem {
     pub key: String,
     pub label: String,
     pub value: String,
+    pub scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
     pub source_type: String,
@@ -196,6 +208,54 @@ pub struct SourceAttribution {
     pub learned_at: String,
 }
 
+const APPROACH_ROAD_VISUALS_JSON: &str =
+    include_str!("../../../data/product/approach_road_visuals.json");
+const BUYER_CONTEXT_SECTIONS_JSON: &str =
+    include_str!("../../../data/product/buyer_context_sections.json");
+static BUYER_CONTEXT_DEFINITIONS: OnceLock<Vec<BuyerContextDefinition>> = OnceLock::new();
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct EvidenceMediaStrip {
+    pub kind: String,
+    pub provider: String,
+    pub title: String,
+    pub caption: String,
+    pub capture_date_label: String,
+    pub coverage_quality: String,
+    pub frames: Vec<EvidenceMediaFrame>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct EvidenceMediaFrame {
+    pub label: String,
+    pub distance_from_gate_m: u32,
+    pub image_url: String,
+    pub heading: f64,
+    pub pitch: f64,
+    pub fov: f64,
+    pub capture_date: String,
+    pub source_url: String,
+}
+
+#[derive(Deserialize)]
+struct ApproachRoadVisualRecord {
+    entity_id: String,
+    provider: String,
+    coverage_quality: String,
+    frames: Vec<ApproachRoadVisualFrameRecord>,
+}
+
+#[derive(Deserialize)]
+struct ApproachRoadVisualFrameRecord {
+    label: String,
+    distance_from_gate_m: u32,
+    pano_id: String,
+    heading: f64,
+    pitch: f64,
+    fov: f64,
+    capture_date: String,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct PropertyEvidenceResponse {
     pub property_id: String,
@@ -211,12 +271,25 @@ pub struct EvidenceSection {
     pub title: String,
     pub summary: String,
     pub subtitle: String,
+    pub scope: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub relationship: Option<String>,
     pub priority: u32,
     pub confidence_pct: u8,
     pub source_types: Vec<String>,
     pub entity_ids: Vec<String>,
+    pub presentation: EvidencePresentation,
     pub items: Vec<SourceItem>,
     pub missing: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<EvidenceMediaStrip>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct EvidencePresentation {
+    pub variant: String,
+    pub density: String,
+    pub max_preview_items: usize,
 }
 
 #[derive(Deserialize)]
@@ -386,6 +459,8 @@ fn google_reviews_url_source_item(
         key: key.to_string(),
         label: label.to_string(),
         value: url.clone(),
+        scope: entity_scope(node_id).to_string(),
+        relationship: None,
         values: Vec::new(),
         source_type: "Google".to_string(),
         source_url: Some(url),
@@ -472,6 +547,8 @@ fn source_item_from_fact(
         key: display_key.to_string(),
         label: label.to_string(),
         value,
+        scope: entity_scope(entity_id).to_string(),
+        relationship: None,
         values,
         source_type: format!("{:?}", fact.source.source_type),
         source_url: fact.source.url.clone(),
@@ -550,6 +627,8 @@ fn serving_source_item_with_display_key(
         key: display_key.to_string(),
         label: label.to_string(),
         value,
+        scope: entity_scope(&fact.entity_id).to_string(),
+        relationship: None,
         values,
         source_type: fact.source_type.clone(),
         source_url: fact.source_url.clone(),
@@ -654,6 +733,8 @@ fn serving_multi_source_item(
         key: fact_key.to_string(),
         label: label.to_string(),
         value,
+        scope: "society".to_string(),
+        relationship: None,
         values: item_values,
         source_type: first.source_type,
         source_url: first.source_url,
@@ -721,6 +802,379 @@ fn source_item_aliases(key: &str) -> &'static [&'static str] {
     }
 }
 
+fn entity_scope(entity_id: &str) -> &'static str {
+    if entity_id.starts_with("property:") {
+        "property"
+    } else if entity_id.starts_with("society:") || entity_id.starts_with("soc-") {
+        "society"
+    } else if entity_id.starts_with("area:") || entity_id.starts_with("area-") {
+        "area"
+    } else if entity_id.starts_with("builder:") {
+        "builder"
+    } else if entity_id.starts_with("road_segment:") {
+        "road_segment"
+    } else if entity_id.starts_with("road:") {
+        "road"
+    } else if entity_id.starts_with("poi:") {
+        "poi"
+    } else if entity_id.starts_with("waterbody:") {
+        "waterbody"
+    } else {
+        "entity"
+    }
+}
+
+fn approach_road_media_for(property: &crate::models::Property) -> Option<EvidenceMediaStrip> {
+    let api_key = std::env::var("GOOGLE_STREET_VIEW_API_KEY")
+        .or_else(|_| std::env::var("GOOGLE_PLACES_API_KEY"))
+        .or_else(|_| std::env::var("GOOGLE_MAPS_API_KEY"))
+        .ok()
+        .filter(|key| !key.trim().is_empty())?;
+    let records: Vec<ApproachRoadVisualRecord> =
+        serde_json::from_str(APPROACH_ROAD_VISUALS_JSON).ok()?;
+    let entity_ids = approach_road_entity_candidates(property);
+    let record = records
+        .into_iter()
+        .find(|record| entity_ids.contains(&record.entity_id))?;
+    if record.coverage_quality == "missing" || record.frames.is_empty() {
+        return None;
+    }
+
+    let frames = record
+        .frames
+        .into_iter()
+        .take(5)
+        .filter_map(|frame| approach_road_media_frame(frame, &api_key))
+        .collect::<Vec<_>>();
+    if frames.is_empty() {
+        return None;
+    }
+
+    let capture_date_label = capture_date_label(&frames);
+    let caption = format!("Last-lane context · {capture_date_label}");
+    Some(EvidenceMediaStrip {
+        kind: "street_view_strip".to_string(),
+        provider: record.provider,
+        title: "Approach road".to_string(),
+        caption,
+        capture_date_label,
+        coverage_quality: record.coverage_quality,
+        frames,
+    })
+}
+
+fn approach_road_entity_candidates(property: &crate::models::Property) -> HashSet<String> {
+    let mut candidates = HashSet::new();
+    candidates.insert(society_node_id(&property.society_id));
+    candidates.insert(normalized_society_entity_id(&property.society_id));
+    candidates.insert(format!(
+        "society:{}",
+        slugify_entity_component(&property.society_id)
+    ));
+    candidates.insert(format!(
+        "society:{}",
+        slugify_entity_component(&property.title)
+    ));
+    candidates
+}
+
+fn normalized_society_entity_id(value: &str) -> String {
+    let normalized = value.trim().to_lowercase().replace(['_', ' '], "-");
+    if normalized.starts_with("society:") {
+        normalized
+    } else if let Some(slug) = normalized.strip_prefix("soc-") {
+        format!("society:{slug}")
+    } else {
+        format!("society:{normalized}")
+    }
+}
+
+fn slugify_entity_component(value: &str) -> String {
+    value
+        .trim()
+        .to_lowercase()
+        .chars()
+        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
+        .collect::<String>()
+        .split('-')
+        .filter(|part| !part.is_empty())
+        .collect::<Vec<_>>()
+        .join("-")
+}
+
+fn approach_road_media_frame(
+    frame: ApproachRoadVisualFrameRecord,
+    api_key: &str,
+) -> Option<EvidenceMediaFrame> {
+    let mut image_url = Url::parse("https://maps.googleapis.com/maps/api/streetview").ok()?;
+    image_url
+        .query_pairs_mut()
+        .append_pair("size", "640x420")
+        .append_pair("pano", &frame.pano_id)
+        .append_pair("heading", &format!("{:.1}", frame.heading))
+        .append_pair("pitch", &format!("{:.1}", frame.pitch))
+        .append_pair("fov", &format!("{:.1}", frame.fov))
+        .append_pair("source", "outdoor")
+        .append_pair("key", api_key);
+
+    let mut source_url = Url::parse("https://www.google.com/maps/@").ok()?;
+    source_url
+        .query_pairs_mut()
+        .append_pair("api", "1")
+        .append_pair("map_action", "pano")
+        .append_pair("pano", &frame.pano_id)
+        .append_pair("heading", &format!("{:.1}", frame.heading))
+        .append_pair("pitch", &format!("{:.1}", frame.pitch))
+        .append_pair("fov", &format!("{:.1}", frame.fov));
+
+    Some(EvidenceMediaFrame {
+        label: frame.label,
+        distance_from_gate_m: frame.distance_from_gate_m,
+        image_url: image_url.to_string(),
+        heading: frame.heading,
+        pitch: frame.pitch,
+        fov: frame.fov,
+        capture_date: frame.capture_date,
+        source_url: source_url.to_string(),
+    })
+}
+
+fn capture_date_label(frames: &[EvidenceMediaFrame]) -> String {
+    frames
+        .iter()
+        .map(|frame| frame.capture_date.as_str())
+        .max()
+        .map(|date| format!("Street View {date}"))
+        .unwrap_or_else(|| "Street View".to_string())
+}
+
+fn evidence_media_source_item(media: &EvidenceMediaStrip) -> SourceItem {
+    let learned_at = media
+        .frames
+        .iter()
+        .filter_map(|frame| {
+            chrono::NaiveDate::parse_from_str(&format!("{}-01", frame.capture_date), "%Y-%m-%d")
+                .ok()
+        })
+        .max()
+        .and_then(|date| date.and_hms_opt(0, 0, 0))
+        .map(|date| date.and_utc().to_rfc3339())
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339());
+    let source_url = media.frames.first().map(|frame| frame.source_url.clone());
+    let value = match media.kind.as_str() {
+        "street_view_strip" => format!("{} outside road views", media.frames.len()),
+        _ => format!("{} visual receipts", media.frames.len()),
+    };
+    let values = media
+        .frames
+        .iter()
+        .map(|frame| frame.label.clone())
+        .collect::<Vec<_>>();
+
+    SourceItem {
+        entity_id: "road_segment:approach-road".to_string(),
+        key: format!("{}_available", media.kind),
+        label: media.title.clone(),
+        value,
+        scope: "road_segment".to_string(),
+        relationship: Some("gate approach".to_string()),
+        values,
+        source_type: "Google".to_string(),
+        source_url,
+        attributions: Vec::new(),
+        confidence_pct: if media.coverage_quality == "strong" {
+            85
+        } else {
+            72
+        },
+        learned_at,
+    }
+}
+
+#[derive(Clone, Deserialize)]
+struct ContextFactDefinition {
+    key: String,
+    label: String,
+    scope: String,
+    relationship: String,
+}
+
+#[derive(Clone, Deserialize)]
+struct BuyerContextDefinition {
+    kind: String,
+    title: String,
+    subtitle: String,
+    scope: String,
+    relationship: String,
+    #[serde(default)]
+    presentation: Option<EvidencePresentation>,
+    #[serde(default)]
+    media: Vec<String>,
+    facts: Vec<ContextFactDefinition>,
+}
+
+fn buyer_context_definitions() -> &'static [BuyerContextDefinition] {
+    BUYER_CONTEXT_DEFINITIONS
+        .get_or_init(|| {
+            serde_json::from_str(BUYER_CONTEXT_SECTIONS_JSON)
+                .expect("data/product/buyer_context_sections.json should be valid")
+        })
+        .as_slice()
+}
+
+fn build_buyer_context_panels(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+) -> Vec<SourcePanel> {
+    buyer_context_definitions()
+        .iter()
+        .filter_map(|definition| {
+            let mut items =
+                collect_buyer_context_items(graph, property, projection, &definition.facts);
+            let media = definition
+                .media
+                .iter()
+                .filter_map(|media_kind| context_media_for(media_kind, property))
+                .inspect(|media| {
+                    items.push(evidence_media_source_item(media));
+                })
+                .collect::<Vec<_>>();
+            (!items.is_empty() || !media.is_empty()).then(|| SourcePanel {
+                kind: definition.kind.clone(),
+                title: definition.title.clone(),
+                subtitle: definition.subtitle.clone(),
+                scope: definition.scope.clone(),
+                relationship: Some(definition.relationship.clone()),
+                items,
+                missing: Vec::new(),
+                media,
+            })
+        })
+        .collect()
+}
+
+fn collect_buyer_context_items(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+    facts: &[ContextFactDefinition],
+) -> Vec<SourceItem> {
+    let society_id = society_node_id(&property.society_id);
+    let area_id = super::enrichment::area_node_id(&property.area);
+    let mut items = Vec::new();
+    let mut seen = HashSet::new();
+
+    for fact in facts {
+        let scoped = match fact.scope.as_str() {
+            "area" | "waterbody" | "poi" => source_item(graph, &area_id, &fact.key, &fact.label)
+                .or_else(|| {
+                    projection.and_then(|projection| {
+                        serving_source_item(projection, &fact.key, &fact.label)
+                    })
+                }),
+            _ => projection
+                .and_then(|projection| serving_source_item(projection, &fact.key, &fact.label))
+                .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label))
+                .or_else(|| {
+                    review_signal_source_item(
+                        graph,
+                        &society_id,
+                        projection,
+                        &fact.key,
+                        &fact.label,
+                    )
+                }),
+        };
+        if let Some(item) = scoped.map(|item| with_context_scope(item, fact)) {
+            let key = format!("{}:{}:{}", item.entity_id, item.key, item.value);
+            if seen.insert(key) {
+                items.push(item);
+            }
+        }
+    }
+
+    items
+}
+
+fn review_signal_source_item(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+    projection: Option<&SocietyFactProjection<'_>>,
+    fact_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    let terms = review_signal_terms(fact_key)?;
+    let mut item = projection
+        .and_then(|projection| serving_source_item(projection, "google_review_snippets", label))
+        .or_else(|| source_item(graph, society_id, "google_review_snippets", label))?;
+    let matches = matching_review_signal_values(&item.values, terms);
+    if matches.is_empty() {
+        return None;
+    }
+
+    item.key = fact_key.to_string();
+    item.label = label.to_string();
+    item.value = if matches.len() == 1 {
+        "1 Google review road signal".to_string()
+    } else {
+        format!("{} Google review road signals", matches.len())
+    };
+    item.values = matches;
+    item.confidence_pct = item.confidence_pct.min(75);
+    Some(item)
+}
+
+fn review_signal_terms(fact_key: &str) -> Option<&'static [&'static str]> {
+    match fact_key {
+        "approach_road_condition" => Some(&[
+            "approach road",
+            "access road",
+            "road access",
+            "road frontage",
+            "road width",
+            "wide road",
+            "wide roads",
+            "internal roads",
+            "narrow road",
+            "bad road",
+            "road digging",
+            "single lane",
+            "100ft road",
+            "100 ft road",
+            "state highway",
+        ]),
+        _ => None,
+    }
+}
+
+fn matching_review_signal_values(values: &[String], terms: &[&str]) -> Vec<String> {
+    values
+        .iter()
+        .filter(|value| {
+            let normalized = value.to_lowercase();
+            terms.iter().any(|term| normalized.contains(term))
+        })
+        .cloned()
+        .collect()
+}
+
+fn with_context_scope(mut item: SourceItem, fact: &ContextFactDefinition) -> SourceItem {
+    item.scope = fact.scope.clone();
+    item.relationship = Some(fact.relationship.clone());
+    item
+}
+
+fn context_media_for(
+    media_kind: &str,
+    property: &crate::models::Property,
+) -> Option<EvidenceMediaStrip> {
+    match media_kind {
+        "approach_road_visuals" => approach_road_media_for(property),
+        _ => None,
+    }
+}
+
 pub(crate) fn build_source_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
@@ -732,6 +1186,11 @@ pub(crate) fn build_source_panels(
         serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
 
     let mut panels = Vec::new();
+    panels.extend(build_buyer_context_panels(
+        graph,
+        property,
+        projection.as_ref(),
+    ));
 
     let rera_items = collect_society_source_items(
         graph,
@@ -752,8 +1211,11 @@ pub(crate) fn build_source_panels(
             kind: "rera".to_string(),
             title: "RERA file".to_string(),
             subtitle: "Official project registration and delivery record.".to_string(),
+            scope: "society".to_string(),
+            relationship: Some("project registration".to_string()),
             items: rera_items,
             missing: vec![],
+            media: vec![],
         });
     }
 
@@ -790,8 +1252,11 @@ pub(crate) fn build_source_panels(
         kind: "market".to_string(),
         title: "Market trail".to_string(),
         subtitle: "Pricing, appreciation, and nearby comparable signals.".to_string(),
+        scope: "society".to_string(),
+        relationship: Some("project market trail".to_string()),
         items: market_items,
         missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
+        media: vec![],
     });
 
     let mut area_items = collect_source_items(
@@ -818,11 +1283,11 @@ pub(crate) fn build_source_panels(
         kind: "area".to_string(),
         title: "Area trail".to_string(),
         subtitle: "Neighbourhood evidence around daily life.".to_string(),
+        scope: "area".to_string(),
+        relationship: Some("locality context".to_string()),
         items: area_items,
-        missing: vec![
-            "Gate-level commute timings are not measured yet.".to_string(),
-            "Upcoming infrastructure status needs a fresh source check.".to_string(),
-        ],
+        missing: vec![],
+        media: vec![],
     });
 
     let nearby_items = collect_society_source_items(
@@ -843,12 +1308,15 @@ pub(crate) fn build_source_panels(
             kind: "nearby".to_string(),
             title: "Nearby".to_string(),
             subtitle: "Map-backed places near the society.".to_string(),
+            scope: "society".to_string(),
+            relationship: Some("nearby map context".to_string()),
             items: nearby_items,
             missing: vec![],
+            media: vec![],
         });
     }
 
-    let mut reddit_items = collect_society_source_items(
+    let mut community_items = collect_society_source_items(
         graph,
         &society_id,
         projection.as_ref(),
@@ -861,8 +1329,8 @@ pub(crate) fn build_source_panels(
             ("community_evidence_links", "Evidence"),
         ],
     );
-    if reddit_items.is_empty() {
-        reddit_items.extend(collect_society_source_items(
+    if community_items.is_empty() {
+        community_items.extend(collect_society_source_items(
             graph,
             &society_id,
             projection.as_ref(),
@@ -875,35 +1343,15 @@ pub(crate) fn build_source_panels(
             ],
         ));
     }
-    let has_theme_level_community_signal = reddit_items.iter().any(|item| {
-        matches!(
-            item.key.as_str(),
-            "community_positive_themes" | "community_concern_themes"
-        )
-    });
-    let mut community_missing =
-        vec!["Direct Reddit comment excerpts are not stored for every society yet.".to_string()];
-    if !has_theme_level_community_signal {
-        community_missing
-            .push("Review text is not ingested yet for every Google place.".to_string());
-    }
-    panels.push(SourcePanel {
-        kind: "community".to_string(),
-        title: "Community pulse".to_string(),
-        subtitle: "Public review and resident-source signals, with gaps called out.".to_string(),
-        items: reddit_items,
-        missing: community_missing,
-    });
-
     let mut review_items = collect_society_source_items(
         graph,
         &society_id,
         projection.as_ref(),
         &[
-            ("google_rating", "Rating"),
-            ("google_review_count", "Review count"),
-            ("google_reviews_url", "Review link"),
-            ("google_review_snippets", "Review highlights"),
+            ("google_rating", "Google rating"),
+            ("google_review_count", "Google review count"),
+            ("google_reviews_url", "Google review link"),
+            ("google_review_snippets", "Google highlights"),
         ],
     );
     if review_items.is_empty() {
@@ -912,36 +1360,47 @@ pub(crate) fn build_source_panels(
             &society_id,
             projection.as_ref(),
             &[
-                ("google_sentiment", "Overall take"),
-                ("google_top_positives", "Praised for"),
-                ("google_top_negatives", "Recurring complaints"),
-                ("google_common_themes", "Themes"),
+                ("google_sentiment", "Google take"),
+                ("google_top_positives", "Google positives"),
+                ("google_top_negatives", "Google concerns"),
+                ("google_common_themes", "Google themes"),
             ],
         ));
     }
+
+    let has_theme_level_community_signal = community_items.iter().any(|item| {
+        matches!(
+            item.key.as_str(),
+            "community_positive_themes" | "community_concern_themes"
+        )
+    });
     let has_review_snippets = review_items
         .iter()
         .any(|item| item.key == "google_review_snippets" && !item.values.is_empty());
-    let review_missing = if has_review_snippets {
-        vec!["More verbatim review quotes still need extraction.".to_string()]
-    } else {
-        vec![
-            "Google review snippets are not stored for this society yet.".to_string(),
-            "More verbatim review quotes still need extraction.".to_string(),
-        ]
-    };
+    community_items.extend(review_items);
+    let mut community_missing = Vec::new();
+    if !has_theme_level_community_signal {
+        community_missing
+            .push("Review themes are still being expanded across sources.".to_string());
+    }
+    if !has_review_snippets {
+        community_missing.push("Review snippets are still being extracted.".to_string());
+    }
     panels.push(SourcePanel {
-        kind: "reviews".to_string(),
-        title: "Google reviews".to_string(),
-        subtitle: "What public reviews consistently praise, complain about, and repeat."
+        kind: "community".to_string(),
+        title: "Community pulse".to_string(),
+        subtitle: "Google reviews today; resident and Reddit signals can join the same pulse."
             .to_string(),
-        items: review_items,
-        missing: review_missing,
+        scope: "society".to_string(),
+        relationship: Some("resident and review context".to_string()),
+        items: community_items,
+        missing: community_missing,
+        media: vec![],
     });
 
     panels
         .into_iter()
-        .filter(|panel| !panel.items.is_empty() || !panel.missing.is_empty())
+        .filter(|panel| !panel.items.is_empty() || !panel.media.is_empty())
         .collect()
 }
 
@@ -1011,6 +1470,7 @@ pub(crate) fn evidence_section_from_panel(
     }
     let confidence_pct = section_confidence_pct(&panel.items);
     let summary = section_summary(&panel);
+    let presentation = evidence_section_presentation(&panel.kind);
 
     EvidenceSection {
         priority: evidence_section_priority(&panel.kind),
@@ -1018,21 +1478,66 @@ pub(crate) fn evidence_section_from_panel(
         title: panel.title,
         summary,
         subtitle: panel.subtitle,
+        scope: panel.scope,
+        relationship: panel.relationship,
         confidence_pct,
         source_types,
         entity_ids,
         items: panel.items,
+        presentation,
         missing: panel.missing,
+        media: panel.media,
+    }
+}
+
+fn evidence_section_presentation(kind: &str) -> EvidencePresentation {
+    if let Some(presentation) = buyer_context_definitions()
+        .iter()
+        .find(|definition| definition.kind == kind)
+        .and_then(|definition| definition.presentation.clone())
+    {
+        return presentation;
+    }
+
+    match kind {
+        "market" => EvidencePresentation {
+            variant: "fact_grid".to_string(),
+            density: "standard".to_string(),
+            max_preview_items: 6,
+        },
+        "nearby" => EvidencePresentation {
+            variant: "fact_grid".to_string(),
+            density: "compact".to_string(),
+            max_preview_items: 6,
+        },
+        "reviews" | "community" => EvidencePresentation {
+            variant: "story".to_string(),
+            density: "standard".to_string(),
+            max_preview_items: 4,
+        },
+        "rera" => EvidencePresentation {
+            variant: "timeline".to_string(),
+            density: "compact".to_string(),
+            max_preview_items: 4,
+        },
+        _ => EvidencePresentation {
+            variant: "fact_list".to_string(),
+            density: "standard".to_string(),
+            max_preview_items: 4,
+        },
     }
 }
 
 fn evidence_section_priority(kind: &str) -> u32 {
     match kind {
+        "home_state" => 5,
+        "approach_road" => 15,
+        "waterlogging_context" => 35,
+        "surroundings" => 36,
         "rera" => 10,
         "market" => 20,
         "nearby" => 30,
-        "reviews" => 40,
-        "community" => 50,
+        "community" => 40,
         "area" => 60,
         _ => 100,
     }
@@ -1053,11 +1558,15 @@ fn section_summary(panel: &SourcePanel) -> String {
     if let Some(item) = primary_section_item(panel) {
         return source_item_summary(item);
     }
+    if let Some(media) = panel.media.first() {
+        return media.caption.clone();
+    }
     panel
-        .missing
-        .first()
-        .map(|gap| format!("Gap: {}", truncate_summary(gap, 96)))
-        .unwrap_or_else(|| "No source-backed signals yet.".to_string())
+        .subtitle
+        .trim()
+        .is_empty()
+        .then(|| "Evidence will appear here once source-backed facts are promoted.".to_string())
+        .unwrap_or_else(|| truncate_summary(&panel.subtitle, 96))
 }
 
 fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
@@ -1072,6 +1581,25 @@ fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
 fn primary_section_keys(kind: &str) -> &'static [&'static str] {
     match kind {
         "rera" => &["rera_number", "rera_status", "rera_completion_date"],
+        "home_state" => &["home_state", "home_age_bucket", "home_timeline_state"],
+        "approach_road" => &[
+            "approach_road_visual_available",
+            "approach_road_condition",
+            "access_road_quality",
+            "road_width",
+        ],
+        "waterlogging_context" => &[
+            "waterlogging_detail",
+            "waterlogging_risk",
+            "lake_waterlogging_context",
+            "nearest_lake_distance_m",
+        ],
+        "surroundings" => &[
+            "stp_concern",
+            "high_tension_wire_concern",
+            "airport_distance_km",
+            "environment_sensitivity",
+        ],
         "market" => &[
             "listing_3bhk",
             "listing_price_3bhk",
@@ -1088,17 +1616,15 @@ fn primary_section_keys(kind: &str) -> &'static [&'static str] {
             "nearby_eateries",
             "nearby_tech_parks",
         ],
-        "reviews" => &[
+        "community" => &[
+            "community_review_summary",
             "google_rating",
             "google_review_count",
             "google_review_snippets",
-            "google_reviews_url",
-        ],
-        "community" => &[
-            "community_review_summary",
             "community_review_highlights",
             "community_positive_themes",
             "community_concern_themes",
+            "google_reviews_url",
             "resident_sentiment",
         ],
         "area" => &[
@@ -1171,10 +1697,16 @@ fn truncate_summary(value: &str, max_chars: usize) -> String {
 
 fn fallback_section_entity_ids(kind: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
     match kind {
-        "area" => vec![entity_refs.area_entity_id.clone()],
-        "rera" | "market" | "nearby" | "reviews" | "community" => {
+        "area" | "waterlogging_context" | "surroundings" => {
+            vec![entity_refs.area_entity_id.clone()]
+        }
+        "rera" | "market" | "nearby" | "reviews" | "community" | "home_state" => {
             vec![entity_refs.society_entity_id.clone()]
         }
+        "approach_road" => vec![
+            entity_refs.society_entity_id.clone(),
+            "road_segment:approach-road".to_string(),
+        ],
         _ => vec![entity_refs.property_entity_id.clone()],
     }
 }
@@ -1548,6 +2080,11 @@ pub async fn get_property(
         } else {
             (project_status, project_status_display)
         };
+    let home_state_display = serving_bundle.as_ref().and_then(|bundle| {
+        SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id)
+            .project_home_state()
+            .display
+    });
 
     // Extract builder trust from KG
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
@@ -1611,6 +2148,7 @@ pub async fn get_property(
         interest_count,
         root_source,
         project_status_display,
+        home_state_display,
         project_status,
         builder_trust,
         builder_portfolio,
@@ -1650,7 +2188,7 @@ fn external_reviews_for(
     })
 }
 
-fn overlay_serving_google_reviews(
+pub(crate) fn overlay_serving_google_reviews(
     mut card: PropertyCard,
     society_id: &str,
     serving_facts: Option<&ServingFactIndex>,
@@ -1668,6 +2206,9 @@ fn overlay_serving_google_reviews(
     card.google_rating = evidence.rating;
     card.google_review_count = evidence.review_count;
     card.google_reviews_url = evidence.reviews_url;
+    card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
+        .project_home_state()
+        .display;
     card
 }
 
@@ -1981,7 +2522,7 @@ mod serving_state_tests {
     }
 
     #[test]
-    fn source_panels_project_current_community_and_google_review_card_facts() {
+    fn source_panels_merge_google_reviews_into_community_pulse() {
         let mut graph = legacy_graph();
         let node = graph
             .nodes
@@ -2035,17 +2576,8 @@ mod serving_state_tests {
         let community = panels
             .iter()
             .find(|panel| panel.kind == "community")
-            .expect("community card should be backed by current summary facts");
-        let reviews = panels
-            .iter()
-            .find(|panel| panel.kind == "reviews")
-            .expect("review card should be backed by current Google facts");
+            .expect("community pulse should be backed by current summary and Google facts");
         let community_keys = community
-            .items
-            .iter()
-            .map(|item| item.key.as_str())
-            .collect::<Vec<_>>();
-        let review_keys = reviews
             .items
             .iter()
             .map(|item| item.key.as_str())
@@ -2055,10 +2587,14 @@ mod serving_state_tests {
         assert!(community_keys.contains(&"community_sentiment_score"));
         assert!(community_keys.contains(&"community_positive_themes"));
         assert!(community_keys.contains(&"community_review_highlights"));
-        assert!(review_keys.contains(&"google_rating"));
-        assert!(review_keys.contains(&"google_review_count"));
-        assert!(review_keys.contains(&"google_review_snippets"));
-        let snippet_item = reviews
+        assert!(community_keys.contains(&"google_rating"));
+        assert!(community_keys.contains(&"google_review_count"));
+        assert!(community_keys.contains(&"google_review_snippets"));
+        assert!(
+            panels.iter().all(|panel| panel.kind != "reviews"),
+            "Google reviews should be a source inside Community pulse, not a separate panel"
+        );
+        let snippet_item = community
             .items
             .iter()
             .find(|item| item.key == "google_review_snippets")
@@ -2069,12 +2605,47 @@ mod serving_state_tests {
             .missing
             .iter()
             .any(|item| item.contains("Review text is not ingested")));
-        assert!(!reviews
-            .missing
-            .iter()
-            .any(|item| item.contains("snippets are not stored")));
         assert!(!community_keys.contains(&"best_quote"));
-        assert!(!review_keys.contains(&"google_top_positives"));
+        assert!(!community_keys.contains(&"google_top_positives"));
+    }
+
+    #[test]
+    fn source_panels_derive_approach_road_signal_from_review_snippets() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "google_review_snippets",
+                FactValue::Tags(vec![
+                    "Approach road is wide and clean near the main gate.".to_string(),
+                    "Clubhouse and greenery are repeatedly praised.".to_string(),
+                    "Access road has some road digging during peak hours.".to_string(),
+                ]),
+                10,
+            )],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let approach = panels
+            .iter()
+            .find(|panel| panel.kind == "approach_road")
+            .expect("road review snippets should produce an approach-road panel");
+        let item = approach
+            .items
+            .iter()
+            .find(|item| item.key == "approach_road_condition")
+            .expect("matching snippets should become the configured road signal");
+
+        assert_eq!(item.value, "2 Google review road signals");
+        assert_eq!(
+            item.values,
+            vec![
+                "Approach road is wide and clean near the main gate.".to_string(),
+                "Access road has some road digging during peak hours.".to_string(),
+            ]
+        );
+        assert!(item.confidence_pct <= 75);
     }
 
     #[test]
@@ -2164,18 +2735,17 @@ mod serving_state_tests {
     }
 
     #[test]
-    fn property_evidence_keeps_missing_only_sections_with_entity_fallbacks() {
+    fn property_evidence_omits_missing_only_sections() {
         let graph = legacy_graph();
         let response = build_property_evidence_response(&graph, &property(), None);
-        let area = response
-            .sections
-            .iter()
-            .find(|section| section.kind == "area")
-            .expect("area gaps should be explicit even when facts are sparse");
 
-        assert!(area.items.is_empty());
-        assert_eq!(area.entity_ids, vec!["area:whitefield".to_string()]);
-        assert!(area.summary.starts_with("Gap: "));
+        assert!(
+            response
+                .sections
+                .iter()
+                .all(|section| !section.items.is_empty() || !section.media.is_empty()),
+            "missing-only sections should stay out of the user-facing evidence response"
+        );
     }
 
     #[test]
@@ -2185,6 +2755,8 @@ mod serving_state_tests {
             key: "market_project_status".to_string(),
             label: "Builder inventory status".to_string(),
             value: "Builder inventory status: Sold Out".to_string(),
+            scope: "society".to_string(),
+            relationship: None,
             values: Vec::new(),
             source_type: "BuilderOfficial".to_string(),
             source_url: None,

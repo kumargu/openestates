@@ -117,6 +117,9 @@ pub struct PropertyCard {
     /// Human-readable project status from skill's display_template, e.g. "Ready to Move — delivered 31/01/2020"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_status_display: Option<String>,
+    /// Compact buyer-facing state signal for result tiles, e.g. "Delivered · 5-10 yrs old".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_state_display: Option<String>,
     /// Human-readable builder delivery track record, e.g. "Builder delivers on time: 100% of projects"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_delivery_display: Option<String>,

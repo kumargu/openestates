@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
+use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{AreaProfile, Property, Seller, Society};
 use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
@@ -24,6 +25,8 @@ pub struct AppState {
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,
+    /// Product-facing discovery copy and shelf metadata loaded from data/product.
+    pub discovery_config: DiscoveryConfig,
     /// The knowledge graph — the brain that learns from every search.
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).

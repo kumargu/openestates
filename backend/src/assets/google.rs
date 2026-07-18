@@ -570,8 +570,111 @@ fn append_google_review_facts(
             facts,
             annotations,
         )?;
+        append_review_signal_fact(
+            row,
+            run_id,
+            "approach_road_condition",
+            "Approach road review signal: {value}",
+            &["approach road", "access road", "road width", "road access"],
+            &[
+                "approach road",
+                "access road",
+                "road access",
+                "road frontage",
+                "road width",
+                "wide road",
+                "wide roads",
+                "internal roads",
+                "narrow road",
+                "bad road",
+                "road digging",
+                "single lane",
+                "100ft road",
+                "100 ft road",
+                "state highway",
+            ],
+            facts,
+            annotations,
+        )?;
+        append_review_signal_fact(
+            row,
+            run_id,
+            "stp_concern",
+            "STP review signal: {value}",
+            &["stp", "sewage treatment plant", "sewage smell"],
+            &[
+                "stp",
+                "sewage treatment plant",
+                "sewage smell",
+                "stp smell",
+                "sewage issue",
+            ],
+            facts,
+            annotations,
+        )?;
+        append_review_signal_fact(
+            row,
+            run_id,
+            "high_tension_wire_concern",
+            "High-tension wire review signal: {value}",
+            &[
+                "high tension wires",
+                "high tension line",
+                "ht line",
+                "power lines",
+            ],
+            &[
+                "high tension wires",
+                "high tension line",
+                "ht line",
+                "power lines",
+                "transmission line",
+            ],
+            facts,
+            annotations,
+        )?;
     }
     Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_review_signal_fact(
+    row: &GooglePlaceSnapshotRecord,
+    run_id: &MaterializationId,
+    fact_key: &str,
+    display_template: &str,
+    answers_preferences: &[&str],
+    terms: &[&str],
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), GooglePlaceAssetError> {
+    let snippets = matching_review_snippets(&row.review_snippets, terms);
+    if snippets.is_empty() {
+        return Ok(());
+    }
+
+    push_fact(
+        row,
+        run_id,
+        fact_key,
+        FactValue::Tags(snippets),
+        display_template,
+        answers_preferences,
+        None,
+        facts,
+        annotations,
+    )
+}
+
+fn matching_review_snippets(snippets: &[String], terms: &[&str]) -> Vec<String> {
+    snippets
+        .iter()
+        .filter(|snippet| {
+            let lower = snippet.to_lowercase();
+            terms.iter().any(|term| lower.contains(term))
+        })
+        .cloned()
+        .collect()
 }
 
 pub async fn canonicalize_google_places_input(

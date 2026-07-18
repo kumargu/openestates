@@ -450,4 +450,50 @@ mod tests {
         assert!(numeric_evidence_schema("waterlogging risk").is_some());
         assert!(text_evidence_schema("traffic").is_some());
     }
+
+    #[test]
+    fn loads_home_state_preferences_and_evidence_from_registry() {
+        let labels: Vec<&str> = positive_preference_patterns()
+            .iter()
+            .map(|pattern| pattern.label.as_str())
+            .collect();
+        assert!(labels.contains(&"delivered society"));
+        assert!(labels.contains(&"new property"));
+        assert!(labels.contains(&"established society"));
+        assert!(labels.contains(&"under construction"));
+
+        let delivered = text_evidence_schema("delivered society").unwrap();
+        assert!(delivered.fact_keys.contains(&"home_state".to_string()));
+        let new_property = text_evidence_schema("new property").unwrap();
+        assert!(new_property
+            .fact_keys
+            .contains(&"home_age_bucket".to_string()));
+        let old_society = text_evidence_schema("old society").unwrap();
+        assert!(old_society
+            .fact_keys
+            .contains(&"home_age_bucket".to_string()));
+        assert!(text_evidence_schema("delay risk")
+            .unwrap()
+            .fact_keys
+            .contains(&"home_timeline_state".to_string()));
+    }
+
+    #[test]
+    fn loads_buyer_externality_terms_from_registry() {
+        for (label, fact_key) in [
+            ("approach road", "approach_road_condition"),
+            ("airport access", "airport_distance_km"),
+            ("lake proximity", "lake_waterlogging_context"),
+            ("environment sensitivity", "environment_sensitivity"),
+            ("stp concern", "stp_concern"),
+            ("high tension wires", "high_tension_wire_concern"),
+        ] {
+            let schema = text_evidence_schema(label).unwrap();
+            assert!(
+                schema.fact_keys.contains(&fact_key.to_string()),
+                "{label} should use {fact_key}: {:?}",
+                schema.fact_keys
+            );
+        }
+    }
 }

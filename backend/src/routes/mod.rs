@@ -1,6 +1,7 @@
 pub mod admin;
 pub mod areas;
 pub mod claims;
+pub mod discovery;
 pub mod enrichment;
 pub mod interests;
 pub mod properties;

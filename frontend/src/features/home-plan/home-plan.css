@@ -23,21 +23,23 @@
   --plan-payoff: #c4893a;
   --plan-accent: #6b5346;
   --plan-brand: #c46345;
+  /* Rotating epigraph — warm terracotta, present but lighter than the verdict clay. */
+  --plan-whisper: #a86f52;
   --plan-glass: rgba(255, 252, 247, 0.72);
   /* Ambient wash intensities — animated when buy/rent verdict shifts */
   --plan-clay-wash-opacity: 0.3;
   --plan-cool-wash-opacity: 0.52;
-  /* Deeper cream + vignette falloff so the sparse canvas doesn't read as a
-     bright uniform sheet (glare). A soft dark-edge layer sits over a warmer
-     base cream that settles darker toward the edges/bottom. */
-  --plan-base-center: #f4ece2;
-  --plan-base-edge: #e7dbcb;
+  /* Same cream family as the landing hero (#fdf9f7 -> #f9f5f2) so the plan page
+     reads as the same product surface. A very light vignette keeps the sparse
+     canvas from flattening into a bright uniform sheet without darkening it. */
+  --plan-base-center: #fdf9f7;
+  --plan-base-edge: #f6efe8;
   position: relative;
   isolation: isolate;
   min-height: 100vh;
   color: var(--plan-ink);
   background:
-    radial-gradient(ellipse 88% 72% at 50% 34%, transparent 52%, rgba(60, 42, 28, 0.07) 100%),
+    radial-gradient(ellipse 88% 72% at 50% 34%, transparent 60%, rgba(60, 42, 28, 0.04) 100%),
     radial-gradient(ellipse 120% 95% at 50% -12%, var(--plan-base-center) 0%, var(--plan-base-edge) 100%);
   font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   transition: background-color 900ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -114,7 +116,7 @@
 .home-plan-shell--view-monthly,
 .home-plan-shell--view-payoff {
   background:
-    radial-gradient(ellipse 88% 72% at 50% 34%, transparent 52%, rgba(60, 42, 28, 0.07) 100%),
+    radial-gradient(ellipse 88% 72% at 50% 34%, transparent 60%, rgba(60, 42, 28, 0.04) 100%),
     radial-gradient(ellipse 120% 95% at 50% -12%, var(--plan-base-center) 0%, var(--plan-base-edge) 100%);
 }
 
@@ -212,25 +214,64 @@
   gap: clamp(1.25rem, 2.5vw, 2rem);
 }
 
+/* ── Hero band (origin corner + compact tabs + rotating line) ───────────── */
+
+.home-plan-hero {
+  display: grid;
+  gap: clamp(0.55rem, 1.2vw, 0.85rem);
+}
+
+.home-plan-hero__rail {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+}
+
+.home-plan-hero__stage {
+  display: grid;
+  justify-items: center;
+  padding: 0;
+  text-align: center;
+}
+
 /* Grid children must be allowed to shrink so inner overflow (charts, scrollers)
    never blows out the page width. */
 .home-plan-canvas > * {
   min-width: 0;
 }
 
+/* Orbit wrapper — a slow elliptical drift so the line feels alive without
+   pulling focus from the verdict. Motion is deliberately unhurried. */
+.home-plan-whisper-orbit {
+  animation: home-plan-whisper-drift 34s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes home-plan-whisper-drift {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(4px, -2px); }
+  50% { transform: translate(0, -4px); }
+  75% { transform: translate(-4px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
+/* Ambient epigraph — felt, not read as a second headline. Verdict stays primary. */
 .home-plan-whisper {
-  margin: -0.35rem 0 0;
-  padding: 0 0.5rem;
+  margin: 0;
+  padding: 0 0.25rem;
+  max-width: min(38rem, 94vw);
+  min-height: 2.6em;
   text-align: center;
-  min-height: 1.45em;
-  color: var(--plan-muted);
+  color: var(--plan-whisper);
   font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-  font-size: clamp(0.78rem, 0.72rem + 0.2vw, 0.88rem);
+  font-size: clamp(0.95rem, 0.88rem + 0.3vw, 1.08rem);
   font-style: italic;
+  font-weight: 400;
   line-height: 1.45;
   letter-spacing: -0.01em;
-  opacity: 0.4;
-  transition: opacity 0.55s ease, transform 0.55s ease;
+  opacity: 1;
+  transition: opacity 0.45s ease, transform 0.45s ease;
 }
 
 .home-plan-whisper--fading {
@@ -239,60 +280,73 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .home-plan-whisper-orbit {
+    animation: none;
+  }
+
   .home-plan-whisper {
     transition: none;
   }
 
   .home-plan-whisper--fading {
-    opacity: 0.4;
+    opacity: 1;
     transform: none;
   }
 }
 
-/* ── Property origin chip ───────────────────────────────────────────────── */
+/* ── Property origin breadcrumb ─────────────────────────────────────────── */
 
+/* Flat single-line link hugging the left edge — reads like a breadcrumb, not a
+   card, so it takes minimal vertical space and lets the graph sit higher. */
 .home-plan-origin {
-  display: grid;
-  grid-template-columns: 4px 1fr auto;
+  display: inline-flex;
   align-items: center;
-  gap: 1rem;
-  padding: 0.85rem 1rem 0.85rem 0;
-  border-radius: 14px;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: min(100%, 40rem);
+  margin-left: -0.15rem;
+  padding: 0.2rem 0.35rem 0.2rem 0.5rem;
+  border-radius: 8px;
   color: inherit;
   text-decoration: none;
-  background: var(--plan-glass);
-  border: 1px solid var(--plan-line);
-  transition: border-color 180ms ease, background 180ms ease;
+  transition: background 180ms ease;
 }
 
 .home-plan-origin:hover {
-  border-color: var(--plan-line-strong);
-  background: rgba(255, 252, 247, 0.92);
+  background: var(--plan-glass);
 }
 
 .home-plan-origin__marker {
-  align-self: stretch;
-  border-radius: 0 4px 4px 0;
+  flex: 0 0 auto;
+  width: 3px;
+  height: 1.05em;
+  border-radius: 2px;
   background: linear-gradient(180deg, var(--plan-brand), #e8956f);
 }
 
-.home-plan-origin__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+.home-plan-origin__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
   min-width: 0;
 }
 
-.home-plan-origin__kicker {
+.home-plan-origin__place {
+  flex: 0 0 auto;
+  color: var(--plan-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.home-plan-origin__sep {
+  flex: 0 0 auto;
   color: var(--plan-faint);
-  font-size: 0.72rem;
-  font-weight: 550;
-  letter-spacing: 0.02em;
+  font-size: 0.82rem;
 }
 
 .home-plan-origin__title {
   color: var(--plan-ink);
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 650;
   letter-spacing: -0.02em;
   white-space: nowrap;
@@ -301,25 +355,20 @@
 }
 
 .home-plan-origin__price {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-  color: var(--plan-muted);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
-.home-plan-origin__price small {
-  color: var(--plan-faint);
-  font-size: 0.72rem;
-  font-weight: 500;
+  flex: 0 0 auto;
+  padding-left: 0.15rem;
+  color: var(--plan-ink);
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-origin__chevron {
+  flex: 0 0 auto;
   color: var(--plan-faint);
-  font-size: 1.35rem;
+  font-size: 1.1rem;
   line-height: 1;
-  padding-right: 0.25rem;
+  padding-right: 0.15rem;
 }
 
 /* ── Verdict headline ───────────────────────────────────────────────────── */
@@ -511,6 +560,11 @@
   gap: 0.55rem;
 }
 
+.home-plan-view-tabs--compact {
+  flex-shrink: 0;
+  gap: 0;
+}
+
 .home-plan-view-tabs__seg {
   display: flex;
   gap: 0.25rem;
@@ -518,6 +572,12 @@
   border: 1px solid var(--plan-line);
   border-radius: 14px;
   background: var(--plan-soft);
+}
+
+.home-plan-view-tabs--compact .home-plan-view-tabs__seg {
+  gap: 0.15rem;
+  padding: 3px;
+  border-radius: 999px;
 }
 
 .home-plan-view-tabs__seg button {
@@ -533,6 +593,15 @@
   transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
 }
 
+.home-plan-view-tabs--compact .home-plan-view-tabs__seg button {
+  flex: 0 0 auto;
+  padding: 0.38rem 0.72rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
 .home-plan-view-tabs__seg button:hover {
   color: var(--plan-ink);
 }
@@ -541,6 +610,10 @@
   color: var(--plan-ink);
   background: white;
   box-shadow: inset 0 -2px 0 var(--plan-buy), 0 2px 10px rgba(31, 24, 20, 0.08);
+}
+
+.home-plan-view-tabs--compact .home-plan-view-tabs__seg button.is-active {
+  box-shadow: 0 1px 6px rgba(31, 24, 20, 0.08);
 }
 
 .home-plan-view-tabs__subtitle {
@@ -1644,9 +1717,28 @@
     padding-block: 0.75rem;
   }
 
+  .home-plan-hero__rail {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .home-plan-origin {
+    width: 100%;
+    max-width: none;
+  }
+
+  .home-plan-view-tabs--compact {
+    align-self: flex-end;
+  }
+
   .home-plan-view-tabs__seg button {
     padding: 0.65rem 0.35rem;
     font-size: 0.8rem;
+  }
+
+  .home-plan-view-tabs--compact .home-plan-view-tabs__seg button {
+    padding: 0.34rem 0.58rem;
+    font-size: 0.7rem;
   }
 
   .home-plan-graph-legend {

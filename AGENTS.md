@@ -4,17 +4,25 @@
 
 You are the primary engineering implementation partner for **OpenEstates** — a transparency-first property discovery and matching platform. The product should feel like **Hinge + Robinhood for property**: calm, premium, explainable.
 
+Product promise:
+
+> Tell us the life you want. We'll show homes with receipts.
+
 Core product surfaces:
 - transparent property discovery with context-based search
 - property pages that feel like asset pages, not dumb listings
 - results that explain *why* a property is shown
 - shortlist and compare workflows that reduce ambiguity
+- Area Tracker as a living market map for prices, crawl freshness, society density, and evidence strength
+- plan pages that compare buying, renting, investing, and repayment tradeoffs without turning into generic calculators
+
+OpenEstates is not trying to win by having the biggest pile of listings. The wedge is **rich discovery with transparent proof**: fewer but better-ranked options, source-backed reasoning, and clear tradeoffs.
 
 ---
 
 ## 0. Before Writing Any Code
 
-**Always read `.Codex/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
+**Always read `.claude/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
 
 ---
 
@@ -33,24 +41,109 @@ You are allowed to suggest deleting or deprecating anything no longer aligned wi
 
 ---
 
-## 2. Stack & Boundaries
+## 2. Product Theme
+
+### Discovery, not listings
+The product should make choosing easier, not make browsing endless. Design every search/result/detail surface around:
+- what life the user is asking for
+- which homes match that intent
+- which facts prove the match
+- which tradeoffs still matter
+
+### Intent search is the moat
+Search should understand soft intent such as "quiet 3BHK near schools under 2.5Cr" and map it to structured dimensions: price, BHK, society, area, commute, school access, noise, traffic, builder quality, RERA, freshness, and source confidence.
+
+### Receipts beat claims
+Never show confident product language unless it is backed by DAG facts or a clearly marked derived computation from DAG facts. A good result explains itself with source lineage, freshness, and confidence.
+
+### One signal, one primary surface
+Do not show the same buyer signal repeatedly in different words. A fact should have a clear surface hierarchy:
+- property/result tiles show the shortest useful distinction, such as `Google 4.1`, `Delivered`, `Est. 7 yrs old`, `Price proof`
+- detail pages explain what the signal means for the decision
+- evidence/source panels show the receipt, lineage, freshness, and confidence
+
+Before adding a new chip, card, shelf, or detail block, check whether the same idea is already represented elsewhere. Merge, replace, or drill down instead of duplicating. The product should feel layered, not repetitive.
+
+Buyer-facing derived signals should be named by the user problem, not by one source. Prefer generic concepts such as `home_state_signals`, `project_milestones`, or `buyer_surface_signals` over source-specific product concepts like `rera_lifecycle_facts`. RERA may be the strongest input, but the product surface should stay open to builder sites, seller proof, Google reviews, transaction history, and future sources.
+
+### Collections should be DAG-backed
+Curated-feeling shelves are welcome, but they must be generated from facts rather than hand-written marketing. Examples:
+- Best verified 3BHKs under budget
+- Low commute pain homes
+- Family-friendly societies
+- Good price, weaker proof
+- Premium but explainable
+- Area Tracker picks
+
+### User-added properties are future inputs, not instant truth
+When opening the gates for owners, buyers, or brokers to add properties, accept structured contributions only: listing facts, price proof, photos, source links, RERA/project mapping, and locality signals. User submissions should enter a validation/enrichment flow before they affect ranking or proof labels.
+
+### Product voice
+Use compact, memorable lines sparingly in landing, search, and plan surfaces. Good examples:
+- "Tell us the life you want. We'll show homes with receipts."
+- "Fewer homes. Better reasons."
+- "Search by tradeoff, not checkbox."
+
+Do not over-explain with long in-app text. Keep quotes and captions short, premium, and useful.
+
+---
+
+## 3. Engineering Themes
+
+### DAG facts are the spine
+No durable product fact should bypass the asset DAG. The preferred flow is:
+
+```
+crawl/source input -> normalize -> DAG asset -> serving bundle -> Rust API -> UI
+```
+
+Rules:
+- If a fact appears in the UI, it should come from a promoted DAG-backed serving bundle or from a deterministic computation over DAG facts.
+- Missing evidence should be tracked internally for enrichment, not rendered as raw "unknown/gap" copy to users.
+- Legacy local data stores must not silently mix with DAG outputs; mixed truth makes quality impossible to measure.
+- Area Tracker must stay first-class and must read from the same DAG-backed facts as property details and search.
+
+### Fact model > feature-specific blobs
+Keep canonical facts separate from search metadata, derived scores, UI copy, and cache indexes. New features should consume facts through typed views or serving products, not mutate the canonical layer.
+
+### Storage must stay boring
+Use appendable/versioned files and S3-ready paths. Prefer Parquet/Arrow-style tabular assets for analytics and serving materialization, JSON only where human inspection or small config wins.
+
+### Cache layers must be explicit
+Use these layers deliberately:
+- durable truth: DAG outputs in `data/lake` or S3-compatible storage
+- promoted runtime input: serving bundle with manifest/current pointer
+- local hydration: generated indexes or bundle-local caches that can be rebuilt
+- memory: Rust startup state for hot request paths
+
+Do not treat cache output as source truth.
+
+### APIs stay clean
+Backend endpoints should serve structured views: ranked results, property details, area tracker, proof summaries, collections, and plan inputs. Handlers should assemble and map data, not perform crawling, enrichment, or ad hoc business logic.
+
+### Search quality must be measurable
+Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
+
+---
+
+## 4. Stack & Boundaries
 
 | Layer | Tech | Notes |
 |-------|------|-------|
 | Frontend | React + Vite | Port 5173 |
 | Backend API | Rust + Axum | Port 4000 |
-| Data pipeline | Python | Scraping, enrichment, skills |
-| Storage | S3-ready local FS | `data/` — migrate to S3 with zero path changes |
+| Data pipeline | Python | Scraping, enrichment, DAG assets |
+| Storage | S3-ready local FS | `data/lake` and serving bundles — migrate to S3 with zero path changes |
 | Scoring/search | Rust (`backend/src/search`, `backend/src/scoring`) | Hot-path ranking, scoring, and explanations |
 
 **The Python/Rust boundary is firm:**
 - Python: fast iteration for scraping and enrichment. Treat as throwaway-friendly.
-- Rust: durable API layer, request path, in-memory graph. If the user is waiting → Rust.
+- Rust: durable API layer, request path, in-memory serving state. If the user is waiting → Rust.
 - Communication: structured JSON files or defined API contracts. No shared code.
 
 ---
 
-## 3. Architecture Principles
+## 5. Architecture Principles
 
 ### Transparency is the product
 Prefer designs that increase explainability, inspectability, comparability, and confidence in ranking. Do not optimize for hidden "magic" if it reduces user trust.
@@ -71,7 +164,7 @@ The app must own: authoritative ranking inputs, listing data, context state, exp
 
 ---
 
-## 4. Product UI & API Design
+## 6. Product UI & API Design
 
 When designing any frontend component or API endpoint, ask:
 - What does the user need to understand here?
@@ -83,11 +176,11 @@ Backend APIs serve structured data for: NL search results, ranked properties, pr
 
 ---
 
-## 5. Knowledge Graph & Live Discovery
+## 7. DAG Facts & Discovery
 
 ### Self-Describing Facts
 
-The `SourcedFact` is the atomic unit of knowledge:
+The sourced fact is the atomic unit of product truth. It should be created by DAG-backed ingestion/enrichment and then materialized into serving bundles.
 
 ```
 SourcedFact:
@@ -103,14 +196,14 @@ SourcedFact:
 ### Local Search + Offline Enrichment Flow
 
 Search must stay local and deterministic. When search finds no good matches or
-missing evidence, it should return the best local results plus explicit
-knowledge gaps.
+missing evidence, it should return the best local results and record internal
+evidence gaps for enrichment.
 
 ```
-Query → local KG/index recall → deterministic ranking → explanation
+Query → local serving bundle recall → deterministic ranking → explanation
   → log search event + missing evidence
-  → queue offline enrichment (Reddit, RERA, Google reviews, photos, embeddings)
-  → next search improves after the pipeline writes SourcedFacts
+  → queue offline DAG enrichment (RERA, Google reviews, prices, photos, embeddings)
+  → next search improves after the pipeline promotes a new serving bundle
 ```
 
 Rules:
@@ -119,46 +212,46 @@ Rules:
 - Python skills may use external APIs for offline enrichment, but their output
   must be structured `SourcedFact`s. Do not add Gemini/Claude/LLM executable
   flows without an explicit product/security decision.
-- Search should surface explicit gaps rather than inventing or live-discovering
-  facts.
+- Search should never invent or live-discover facts.
+- User-facing UI should not show raw missing/gap sentences. Use confidence,
+  proof strength, and source freshness instead.
 - Newly enriched/crawled data gets lower confidence until RERA/source checks pass.
 
 Every search either returns good local data or records the evidence needed to
 make the next search better. This is the flywheel.
 
-### Knowledge Graph Storage
+### Serving Storage
 
 ```
-data/knowledge/
-  nodes/{type}/{slug}.json        # One file per entity (atomic writes via .tmp+rename)
-  edges.json
-  search_log/{YYYY}/{MM}/{DD}.jsonl
+data/lake/
+  assets/...                       # DAG outputs
+  serving/...                      # versioned serving bundles
+  current.json                     # promoted bundle pointer
 ```
 
-### Knowledge API
+### Runtime APIs
 
 ```
-GET  /api/knowledge/stats
-GET  /api/knowledge/nodes?type=society
-GET  /api/knowledge/nodes/{id}
-GET  /api/knowledge/nodes/{id}/neighbors
-GET  /api/knowledge/enrichment/queue
-GET  /api/knowledge/search-log
-POST /api/knowledge/nodes/{id}/facts
+GET  /api/search
+GET  /api/properties/{id}
+GET  /api/areas/tracker
+GET  /api/societies
+GET  /api/admin/data-health
 ```
 
 ---
 
-## 6. Script & Pipeline Discipline
+## 8. Script & Pipeline Discipline
 
 - **One entry point per concern** — one enrichment runner that composes skills, not 5 separate scripts.
 - **Skills are the abstraction** — new data sources become skills in `pipeline/skills/`, not top-level scripts.
 - **Delete superseded scripts** — if a module replaces a script, remove the old one same day.
 - **No glue scripts** — if it's a function call, make it a function call.
+- DAG assets are the composition layer. Do not recreate DAG orchestration with one-off scripts.
 
 ---
 
-## 7. Day Continuity
+## 9. Day Continuity
 
 At the start of each day of work:
 
@@ -170,12 +263,13 @@ Do not start fresh each day and ignore what was built. That leads to conflicting
 
 ---
 
-## 8. Cleanup Policy
+## 10. Cleanup Policy
 
 You are explicitly allowed to clean up and remove dead code. When removing something meaningful, explain why it no longer fits and what replaces it.
 
 **Known dead targets:**
-- `data/intelligence/` — pre-knowledge-graph format. Migrate to `data/knowledge/` as skills run.
+- `data/intelligence/` — pre-DAG format. Migrate to DAG assets and serving bundles as sources are rebuilt.
+- legacy `data/knowledge/` runtime files once their facts are represented in DAG assets and serving bundles.
 - Any orphan frontend components with no route or import.
 - TODO comments older than 2 weeks — either do them or delete them.
 
@@ -183,7 +277,7 @@ See `docs/cleanup_plan.md` for the full plan.
 
 ---
 
-## 9. Architecture Reference
+## 11. Architecture Reference
 
 Full design in `docs/architecture_v2.md`. Key layout:
 
@@ -191,44 +285,44 @@ Full design in `docs/architecture_v2.md`. Key layout:
 frontend/               React web app (Vite, port 5173)
 backend/                Rust + Axum (port 4000)
   src/state.rs          AppState — all in-memory data behind Arc
-  src/data_loader.rs    Startup: load seed + KG into memory
+  src/data_loader.rs    Startup: load promoted serving bundle into memory
   src/models/           Serde structs
   src/routes/           Thin HTTP handlers
   src/search/           Intent parsing, local recall, deterministic scoring
-  src/scoring/          Theme computation (KG-facts-first)
-  src/knowledge/        Graph nodes, edges, facts, embeddings
+  src/scoring/          Theme computation (DAG-facts-first)
+  src/serving/          Serving bundle types and loaders
   src/cache/            LRU + TTL caches
   src/storage/          StorageBackend trait (local FS → S3)
 pipeline/               Python data collection
-  pipeline/skills/      Deterministic adapters and fact normalizers → SourcedFacts
+  pipeline/skills/      Deterministic adapters and fact normalizers
   pipeline/crawlers/    BaseCrawler, CrawlCache, RateLimiter
   pipeline/enrichment/  Offline enrichment adapters
 data/seed/              Flat JSON seed data
-data/knowledge/         Knowledge graph (nodes, edges, search logs)
+data/lake/              DAG assets and promoted serving bundles
 data/cache/             Pipeline skill result cache
 docs/                   Architecture, cleanup plan, blueprints
-.Codex/skills/         Codex workflow skills
+.claude/skills/        OpenEstates workflow skills
 days/                   Day spec files
 ```
 
 ---
 
-## 10. Codex Skills
+## 12. Codex Skills
 
 Read the matching skill file **before** starting any task that falls under it:
 
 | Skill | File | Purpose |
 |-------|------|---------|
-| Coding Practices | `.Codex/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
-| Add Crawler | `.Codex/skills/add-crawler.md` | Add a new data source to the pipeline |
-| Add API Endpoint | `.Codex/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
-| Data Enrichment | `.Codex/skills/data-enrichment.md` | Run AI enrichment on entities |
-| Debug Pipeline | `.Codex/skills/debug-pipeline.md` | Debug pipeline failures |
-| Run Scoring | `.Codex/skills/run-scoring.md` | Run and modify the scoring engine |
+| Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
+| Add Crawler | `.claude/skills/add-crawler.md` | Add a new data source to the pipeline |
+| Add API Endpoint | `.claude/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
+| Data Enrichment | `.claude/skills/data-enrichment.md` | Run AI enrichment on entities |
+| Debug Pipeline | `.claude/skills/debug-pipeline.md` | Debug pipeline failures |
+| Run Scoring | `.claude/skills/run-scoring.md` | Run and modify the scoring engine |
 
 ---
 
-## 11. Non-goals (unless explicitly requested)
+## 13. Non-goals (unless explicitly requested)
 
 - Heavy legal/document validation workflows
 - Payment flows

@@ -1,5 +1,6 @@
 import type {
   AreaListItem,
+  DiscoveryResponse,
   MatchExplanation,
   PropertyCard,
   PropertyDetailResponse,
@@ -33,6 +34,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 5-10 yrs old",
     builder_delivery_display: "Strong delivery record",
     data_freshness: freshness(142, 54, { rera: 24, seller: 11, reviews: 19 }),
   },
@@ -59,6 +61,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 1-5 yrs old",
     builder_delivery_display: "On-time pattern",
     data_freshness: freshness(96, 38, { rera: 18, seller: 8, reviews: 12 }),
   },
@@ -85,6 +88,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "seller",
     project_status: "under_construction",
     project_status_display: "Under construction",
+    home_state_display: "Under construction",
     builder_delivery_display: "Verify handover",
     data_freshness: freshness(42, 91, { seller: 12, discovery: 18 }),
   },
@@ -111,6 +115,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 1-5 yrs old",
     builder_delivery_display: "Strong delivery record",
     data_freshness: freshness(118, 45, { rera: 21, reviews: 20 }),
   },
@@ -137,6 +142,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "under_construction",
     project_status_display: "Under construction",
+    home_state_display: "Under construction",
     builder_delivery_display: "Track phase handover",
     data_freshness: freshness(76, 62, { rera: 16, reviews: 11 }),
   },
@@ -163,6 +169,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 5-10 yrs old",
     builder_delivery_display: "Stable",
     data_freshness: freshness(64, 77, { rera: 12, reviews: 18 }),
   },
@@ -189,6 +196,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "seller",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 10+ yrs old",
     builder_delivery_display: "Established society",
     data_freshness: freshness(38, 110, { seller: 9, reviews: 20 }),
   },
@@ -215,6 +223,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     root_source: "rera",
     project_status: "ready_to_move",
     project_status_display: "Ready to move",
+    home_state_display: "Delivered · 1-5 yrs old",
     builder_delivery_display: "Verify tower corpus",
     data_freshness: freshness(71, 83, { rera: 13, reviews: 16 }),
   },
@@ -231,6 +240,65 @@ export const fixtureAreas: AreaListItem[] = [
   { id: "bellandur", name: "Bellandur", median_price_per_sqft: 17350, trend_direction: "stable", primary_signal: "Premium demand with lake and traffic externalities." },
   { id: "hebbal", name: "Hebbal", median_price_per_sqft: 16800, trend_direction: "up", primary_signal: "Airport corridor premium is holding." },
 ];
+
+export const fixtureDiscovery: DiscoveryResponse = {
+  product_promise: "Tell us the life you want. We'll show homes with receipts.",
+  quotes: [
+    { text: "Fewer homes. Better reasons.", tone: "proof" },
+    { text: "Search by tradeoff, not checkbox.", tone: "intent" },
+    { text: "Receipts before recommendations.", tone: "trust" },
+    { text: "Area context before site visits.", tone: "proof" },
+  ],
+  shelves: [
+    {
+      id: "verified_value",
+      title: "Value with receipts",
+      quote: "Good price, proof attached.",
+      description: "Lower per-sqft options with visible source signals.",
+      search_query: "good value with proof",
+      proof_label: "Price + source facts",
+      cards: fixtureProperties
+        .filter((property) => property.price_per_sqft > 0)
+        .sort((a, b) => a.price_per_sqft - b.price_per_sqft)
+        .slice(0, 3)
+        .map((property) => ({
+          property,
+          reason: `${property.price_per_sqft.toLocaleString("en-IN")} /sqft with ${property.transparency_tags.length} source tags`,
+        })),
+    },
+    {
+      id: "low_commute_pain",
+      title: "Low commute pain",
+      quote: "Shorter commute, cleaner proof.",
+      description: "Homes with closer metro access or stronger traffic signals.",
+      search_query: "near metro low traffic",
+      proof_label: "Access facts",
+      cards: fixtureProperties
+        .filter((property) => property.metro_distance_mins > 0 && property.metro_distance_mins <= 15)
+        .sort((a, b) => a.metro_distance_mins - b.metro_distance_mins)
+        .slice(0, 3)
+        .map((property) => ({
+          property,
+          reason: `${property.metro_distance_mins} min metro access`,
+        })),
+    },
+    {
+      id: "family_ready",
+      title: "Family-ready societies",
+      quote: "More life-fit, less guesswork.",
+      description: "3BHK+ homes with society, risk, and review signals.",
+      search_query: "family friendly 3BHK",
+      proof_label: "Society + risk facts",
+      cards: fixtureProperties
+        .filter((property) => property.bhk >= 3)
+        .slice(0, 3)
+        .map((property) => ({
+          property,
+          reason: `${property.bhk} BHK with ${property.transparency_tags.length} visible signals`,
+        })),
+    },
+  ],
+};
 
 const areaContexts: Record<string, SearchAreaContext> = {
   whitefield: {
@@ -301,6 +369,7 @@ export function getFixtureResponse(path: string): unknown | null {
 
   if (pathname === "/api/properties") return fixtureProperties;
   if (pathname === "/api/areas") return fixtureAreas;
+  if (pathname === "/api/discovery") return fixtureDiscovery;
 
   if (pathname === "/api/search") {
     return searchFixtureProperties(params.get("q") ?? "");
@@ -615,6 +684,7 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
     root_source: card.root_source,
     project_status: card.project_status,
     project_status_display: card.project_status_display,
+    home_state_display: card.home_state_display,
     builder_trust: {
       delivery_rate: card.root_source === "rera" ? 0.84 : 0.62,
       project_count: 12,

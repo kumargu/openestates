@@ -114,8 +114,8 @@
       "dimension": "flooding_waterlogging",
       "label": "waterlogging risk",
       "layer": "risk",
-      "intent_terms": ["waterlogging", "flooding", "drainage", "lake overflow", "storm water"],
-      "fact_keys": ["waterlogging_risk_score", "waterlogging_risk", "flooding_risk"],
+      "intent_terms": ["waterlogging", "flooding", "drainage", "lake", "lake distance", "lake overflow", "storm water"],
+      "fact_keys": ["waterlogging_risk_score", "waterlogging_risk", "flooding_risk", "nearest_lake_distance_m", "lake_proximity", "lake_waterlogging_context"],
       "source_priority": ["bbmp", "news", "maps", "reddit"]
     },
     {
@@ -123,8 +123,8 @@
       "dimension": "noise_pollution",
       "label": "noise and pollution",
       "layer": "risk",
-      "intent_terms": ["quiet", "peaceful", "calm", "noise", "pollution", "airport noise"],
-      "fact_keys": ["noise_score", "noise_level", "airport_noise_score", "pollution_signal"],
+      "intent_terms": ["quiet", "peaceful", "calm", "noise", "pollution", "airport", "airport distance", "airport noise", "environment sensitivity", "surroundings"],
+      "fact_keys": ["noise_score", "noise_level", "airport_noise_score", "airport_distance_km", "pollution_signal", "surroundings_signal", "environment_sensitivity"],
       "source_priority": ["google", "maps", "computed", "reddit"]
     },
     {
@@ -177,8 +177,8 @@
       "dimension": "parking_access",
       "label": "parking and access",
       "layer": "preference",
-      "intent_terms": ["parking", "visitor parking", "road width", "access road", "approach road"],
-      "fact_keys": ["parking_quality", "visitor_parking", "road_width", "access_road_quality"],
+      "intent_terms": ["parking", "visitor parking", "road", "lane", "road width", "access road", "approach road", "approach lane"],
+      "fact_keys": ["parking_quality", "visitor_parking", "road_width", "access_road_quality", "approach_road_condition"],
       "source_priority": ["seller_disclosure", "google", "reddit"]
     },
     {
@@ -186,8 +186,8 @@
       "dimension": "possession_status",
       "label": "possession status",
       "layer": "proof",
-      "intent_terms": ["ready to move", "possession", "under construction", "delayed", "completion"],
-      "fact_keys": ["possession_status", "project_status", "rera_status", "rera_completion_date"],
+      "intent_terms": ["ready to move", "possession", "under construction", "delayed", "completion", "delivered", "property age", "old society", "new property"],
+      "fact_keys": ["home_state", "home_age_years", "home_age_bucket", "home_timeline_state", "possession_status", "project_status", "rera_status", "rera_completion_date"],
       "source_priority": ["rera", "seller_disclosure", "google", "reddit"]
     },
     {
@@ -300,6 +300,62 @@
       "label": "reddit discussions",
       "expanded_keys": ["reddit_thread_count", "reddit_total_score", "reddit_total_comments", "reddit_threads", "reddit_top_concerns"],
       "weight": 1.0
+    },
+    {
+      "rank": 13,
+      "patterns": ["delivered society", "delivered project", "completed project", "ready resale", "ready to move"],
+      "label": "delivered society",
+      "expanded_keys": ["home_state", "home_age_bucket", "possession_status", "project_status", "market_project_status"],
+      "weight": 1.2
+    },
+    {
+      "rank": 14,
+      "patterns": ["new property", "newly delivered", "new society", "recently delivered"],
+      "label": "new property",
+      "expanded_keys": ["home_age_years", "home_age_bucket", "home_state"],
+      "weight": 1.0
+    },
+    {
+      "rank": 15,
+      "patterns": ["old society", "established society", "mature society", "older property"],
+      "label": "established society",
+      "expanded_keys": ["home_age_bucket", "home_state"],
+      "weight": 0.9
+    },
+    {
+      "rank": 16,
+      "patterns": ["under construction", "new launch", "upcoming project"],
+      "label": "under construction",
+      "expanded_keys": ["home_state", "home_timeline_state", "project_status", "market_project_status"],
+      "weight": 1.0
+    },
+    {
+      "rank": 17,
+      "patterns": ["approach road", "access road", "road width", "wide road", "good road access"],
+      "label": "approach road",
+      "expanded_keys": ["access_road_quality", "road_width", "approach_road_condition", "google_review_snippets", "traffic_reality"],
+      "weight": 0.8
+    },
+    {
+      "rank": 18,
+      "patterns": ["airport distance", "near airport", "airport access"],
+      "label": "airport access",
+      "expanded_keys": ["airport_distance_km", "airport_noise_score", "noise_score"],
+      "weight": 0.6
+    },
+    {
+      "rank": 19,
+      "patterns": ["lake distance", "near lake", "lake nearby", "lake proximity"],
+      "label": "lake proximity",
+      "expanded_keys": ["nearest_lake_distance_m", "lake_proximity", "lake_waterlogging_context", "waterlogging_risk"],
+      "weight": 0.7
+    },
+    {
+      "rank": 20,
+      "patterns": ["environment sensitivity", "surroundings", "noise pollution", "pollution", "quiet surroundings"],
+      "label": "environment sensitivity",
+      "expanded_keys": ["environment_sensitivity", "surroundings_signal", "noise_score", "pollution_signal", "airport_noise_score", "google_review_snippets"],
+      "weight": 0.8
     }
   ],
   "negative_preference_patterns": [
@@ -335,8 +391,43 @@
       "rank": 5,
       "patterns": ["avoid delayed", "not delayed", "no possession delay", "avoid possession delay"],
       "label": "delay risk",
-      "expanded_keys": ["rera_delay_months", "possession_delay", "possession_status"],
+      "expanded_keys": ["home_timeline_state", "home_state", "rera_delay_months", "possession_delay", "possession_status"],
       "weight": 1.4
+    },
+    {
+      "rank": 6,
+      "patterns": ["avoid bad road", "avoid narrow road", "bad approach road", "narrow approach road", "poor access road"],
+      "label": "approach road",
+      "expanded_keys": ["access_road_quality", "road_width", "approach_road_condition", "google_review_snippets", "traffic_reality"],
+      "weight": 1.0
+    },
+    {
+      "rank": 7,
+      "patterns": ["avoid airport noise", "far from airport noise", "low airport noise"],
+      "label": "environment sensitivity",
+      "expanded_keys": ["environment_sensitivity", "airport_noise_score", "noise_score", "pollution_signal", "google_review_snippets"],
+      "weight": 1.0
+    },
+    {
+      "rank": 8,
+      "patterns": ["avoid lake flooding", "avoid lake waterlogging", "not near lake", "away from lake"],
+      "label": "lake proximity",
+      "expanded_keys": ["nearest_lake_distance_m", "lake_proximity", "lake_waterlogging_context", "waterlogging_risk", "flooding_risk"],
+      "weight": 1.0
+    },
+    {
+      "rank": 9,
+      "patterns": ["avoid stp", "sewage treatment plant", "sewage smell", "stp smell"],
+      "label": "stp concern",
+      "expanded_keys": ["stp_concern", "google_review_snippets", "resident_sentiment"],
+      "weight": 1.0
+    },
+    {
+      "rank": 10,
+      "patterns": ["avoid high tension wires", "high tension wires", "power lines", "ht line"],
+      "label": "high tension wires",
+      "expanded_keys": ["high_tension_wire_concern", "google_review_snippets", "surroundings_signal"],
+      "weight": 1.0
     }
   ],
   "text_evidence": [
@@ -401,6 +492,56 @@
       "score_delta": 0.9
     },
     {
+      "dimension": "home_state",
+      "label": "delivered society",
+      "aliases": ["delivered society", "delivered project", "completed project", "ready resale", "ready to move"],
+      "fact_keys": ["home_state", "possession_status", "project_status", "market_project_status"],
+      "positive_terms": ["delivered", "ready to move", "ready_to_move", "completed"],
+      "negative_terms": ["under_construction", "under construction", "delayed"],
+      "display_label": "Home state signal",
+      "score_delta": 1.2
+    },
+    {
+      "dimension": "home_age_bucket",
+      "label": "new property",
+      "aliases": ["new property", "newly delivered", "new society", "recently delivered"],
+      "fact_keys": ["home_age_bucket", "home_age_years", "home_state"],
+      "positive_terms": ["newly delivered", "1-5 yrs old", "1-5 years old", "delivered"],
+      "negative_terms": ["5-10 yrs old", "10+ yrs old", "delayed"],
+      "display_label": "Home age signal",
+      "score_delta": 1.0
+    },
+    {
+      "dimension": "home_age_bucket",
+      "label": "established society",
+      "aliases": ["old society", "established society", "mature society", "older property"],
+      "fact_keys": ["home_age_bucket"],
+      "positive_terms": ["5-10 yrs old", "5-10 years old", "10+ yrs old", "10+ years old"],
+      "negative_terms": ["newly delivered", "under_construction", "under construction"],
+      "display_label": "Home age signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "home_state",
+      "label": "under construction",
+      "aliases": ["under construction", "new launch", "upcoming project"],
+      "fact_keys": ["home_state", "project_status", "market_project_status"],
+      "positive_terms": ["under_construction", "under construction", "ongoing"],
+      "negative_terms": ["delivered", "delayed"],
+      "display_label": "Home state signal",
+      "score_delta": 1.0
+    },
+    {
+      "dimension": "delay_risk",
+      "label": "delay risk",
+      "aliases": ["delay risk", "avoid delayed", "not delayed", "no possession delay", "avoid possession delay"],
+      "fact_keys": ["home_timeline_state", "rera_delay_months", "possession_delay", "possession_status"],
+      "positive_terms": ["on_track", "on track", "not delayed", "delivered"],
+      "negative_terms": ["delayed", "possession delay"],
+      "display_label": "Delay risk signal",
+      "score_delta": 1.4
+    },
+    {
       "dimension": "water_supply",
       "label": "water supply",
       "aliases": ["water supply", "water", "borewell", "cauvery", "tanker"],
@@ -439,6 +580,66 @@
       "negative_terms": ["traffic congestion", "severe traffic", "long commute", "unpredictable", "road digging", "congestion"],
       "display_label": "Traffic risk signal",
       "score_delta": 1.3
+    },
+    {
+      "dimension": "approach_road",
+      "label": "approach road",
+      "aliases": ["approach road", "access road", "road width", "road access", "lane", "approach lane"],
+      "fact_keys": ["access_road_quality", "road_width", "approach_road_condition", "google_review_snippets", "traffic_reality", "commute_reality"],
+      "positive_terms": ["wide road", "good road", "good access road", "easy access", "smooth approach", "well connected"],
+      "negative_terms": ["narrow road", "bad road", "poor road", "poor access", "approach road is bad", "road digging", "broken road", "single lane"],
+      "display_label": "Approach road signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "airport_access",
+      "label": "airport access",
+      "aliases": ["airport", "airport distance", "near airport", "airport access"],
+      "fact_keys": ["airport_distance_km", "airport_noise_score", "noise_score", "google_review_snippets"],
+      "positive_terms": ["near airport", "airport access", "airport road", "airport is close"],
+      "negative_terms": ["airport noise", "flight noise", "aircraft noise", "too close to airport"],
+      "display_label": "Airport signal",
+      "score_delta": 0.6
+    },
+    {
+      "dimension": "lake_proximity",
+      "label": "lake proximity",
+      "aliases": ["lake", "lake distance", "near lake", "lake nearby", "lake proximity"],
+      "fact_keys": ["nearest_lake_distance_m", "lake_proximity", "lake_waterlogging_context", "waterlogging_risk", "flooding_risk", "google_review_snippets"],
+      "positive_terms": ["away from lake", "not near lake", "no lake flooding", "lake view"],
+      "negative_terms": ["near lake", "lake overflow", "lake flooding", "lake smell", "lake pollution", "waterlogging near lake"],
+      "display_label": "Lake proximity signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "environment_sensitivity",
+      "label": "environment sensitivity",
+      "aliases": ["environment sensitivity", "surroundings", "noise pollution", "pollution", "quiet surroundings"],
+      "fact_keys": ["environment_sensitivity", "surroundings_signal", "noise_score", "airport_noise_score", "pollution_signal", "google_review_snippets"],
+      "positive_terms": ["quiet", "peaceful", "clean surroundings", "low pollution", "calm surroundings"],
+      "negative_terms": ["noise", "pollution", "dust", "smell", "bad surroundings", "construction noise", "airport noise"],
+      "display_label": "Environment signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "stp_concern",
+      "label": "stp concern",
+      "aliases": ["stp", "sewage treatment plant", "sewage smell", "stp smell"],
+      "fact_keys": ["stp_concern", "google_review_snippets", "resident_sentiment"],
+      "positive_terms": ["stp maintained", "no sewage smell", "sewage treatment works"],
+      "negative_terms": ["stp", "sewage treatment plant", "sewage smell", "stp smell", "bad smell from stp", "sewage issue"],
+      "display_label": "STP signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "high_tension_wires",
+      "label": "high tension wires",
+      "aliases": ["high tension wires", "high tension line", "ht line", "power lines"],
+      "fact_keys": ["high_tension_wire_concern", "google_review_snippets", "surroundings_signal"],
+      "positive_terms": ["no high tension wires", "away from power lines"],
+      "negative_terms": ["high tension wires", "high tension line", "ht line", "power lines", "transmission line"],
+      "display_label": "High-tension wire signal",
+      "score_delta": 0.9
     }
   ],
   "numeric_evidence": [

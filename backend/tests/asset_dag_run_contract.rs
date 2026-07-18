@@ -511,6 +511,15 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &builder_facts).await;
+    let home_state_facts = materialization_in_partition(
+        "home_state_signals",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![rera_facts.materialization_id.clone()],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &home_state_facts).await;
 
     let stale_kg = materialization_in_partition(
         "kg_society_view",
@@ -528,6 +537,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             image_media_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
+            home_state_facts.materialization_id.clone(),
         ],
         now - Duration::hours(1),
         AssetPartition::global(),
@@ -587,6 +597,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             image_media_facts.materialization_id.clone(),
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
+            home_state_facts.materialization_id.clone(),
         ],
         now,
         AssetPartition::global(),

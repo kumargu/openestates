@@ -1,6 +1,7 @@
 pub mod assets;
 pub mod community;
 pub mod data_loader;
+pub mod discovery;
 pub mod knowledge;
 pub mod lake;
 pub mod models;

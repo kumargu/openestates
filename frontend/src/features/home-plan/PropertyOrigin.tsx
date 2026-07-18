@@ -1,42 +1,23 @@
 import { Link } from "react-router-dom";
-import { formatCurrency, type PlanInputs } from "./model.ts";
+import { formatCurrency } from "./model.ts";
 
 type PropertyOriginProps = {
   propertyId: string;
   title: string;
   area: string;
-  bhk: number;
   price: number;
-  inputs: PlanInputs;
-  presetLabel: string;
-  monthlyEmi: number;
-  monthlyRent: number;
 };
 
-export function PropertyOrigin({
-  propertyId,
-  title,
-  area,
-  bhk,
-  price,
-  inputs,
-  presetLabel,
-  monthlyEmi,
-  monthlyRent,
-}: PropertyOriginProps) {
+export function PropertyOrigin({ propertyId, title, area, price }: PropertyOriginProps) {
   return (
     <Link to={`/property/${propertyId}`} className="home-plan-origin">
       <span className="home-plan-origin__marker" aria-hidden="true" />
-      <div className="home-plan-origin__body">
-        <span className="home-plan-origin__kicker">
-          {area} · {bhk} BHK · {presetLabel}
-        </span>
-        <strong className="home-plan-origin__title">{title}</strong>
-        <span className="home-plan-origin__price">
-          {formatCurrency(price, true)}
-          <small>· ₹{inputs.downPaymentLakh.toFixed(0)}L down · EMI {formatCurrency(monthlyEmi)}/mo · rent {formatCurrency(monthlyRent)}/mo</small>
-        </span>
-      </div>
+      <span className="home-plan-origin__label">
+        <span className="home-plan-origin__place">{area}</span>
+        <span className="home-plan-origin__sep" aria-hidden="true">·</span>
+        <span className="home-plan-origin__title">{title}</span>
+      </span>
+      <span className="home-plan-origin__price">{formatCurrency(price, true)}</span>
       <span className="home-plan-origin__chevron" aria-hidden="true">›</span>
     </Link>
   );

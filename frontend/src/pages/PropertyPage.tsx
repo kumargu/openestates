@@ -5,9 +5,10 @@ import type { BuilderPortfolio, PropertyDetailResponse } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { isOnSheet, toggleSheetItem } from "../lib/sheet-store.ts";
+import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
+import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { panelsToSections } from "../lib/evidence.ts";
@@ -157,7 +158,7 @@ export function PropertyPage() {
 
   useEffect(() => {
     if (!id) return;
-    queueMicrotask(() => setSaved(isOnSheet(id)));
+    queueMicrotask(() => setSaved(isSaved(id)));
     getProperty(id)
       .then((d) => {
         setData(d);
@@ -207,7 +208,7 @@ export function PropertyPage() {
 
   const handleSave = () => {
     if (!id) return;
-    toggleSheetItem(id);
+    toggleSaved(id);
     setSaved(!saved);
   };
 
@@ -238,6 +239,11 @@ export function PropertyPage() {
       : null,
     `Listed ${market_activity.days_on_market}d ago`,
   ].filter((row): row is string => row !== null);
+  const fallbackEvidenceSections = panelsToSections(sourcePanels);
+  const detailEvidenceSections = data.evidence?.sections?.length
+    ? data.evidence.sections
+    : fallbackEvidenceSections;
+  const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -332,9 +338,14 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
+          {showApproachTrail && (
+            <ApproachRoadTrail sections={detailEvidenceSections} />
+          )}
+
           <EvidenceStack
             evidence={data.evidence}
-            fallbackSections={panelsToSections(sourcePanels)}
+            fallbackSections={fallbackEvidenceSections}
+            excludeKinds={showApproachTrail ? ["approach_road"] : []}
           />
 
           {data.builder_portfolio && (

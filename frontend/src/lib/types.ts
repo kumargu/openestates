@@ -45,8 +45,35 @@ export type PropertyCard = {
   root_source?: string;
   project_status?: string;
   project_status_display?: string;
+  home_state_display?: string;
   builder_delivery_display?: string;
   data_freshness?: DataFreshness;
+};
+
+export type DiscoveryQuote = {
+  text: string;
+  tone: "proof" | "intent" | "trust" | string;
+};
+
+export type DiscoveryShelfCard = {
+  property: PropertyCard;
+  reason: string;
+};
+
+export type DiscoveryShelf = {
+  id: string;
+  title: string;
+  quote: string;
+  description: string;
+  search_query: string;
+  proof_label: string;
+  cards: DiscoveryShelfCard[];
+};
+
+export type DiscoveryResponse = {
+  product_promise: string;
+  quotes: DiscoveryQuote[];
+  shelves: DiscoveryShelf[];
 };
 
 export type RecommendationLens = "proof" | "value" | "trust" | "commute";
@@ -167,6 +194,7 @@ export type PropertyDetailResponse = {
   root_source?: string;
   project_status_display?: string;
   project_status?: string;
+  home_state_display?: string;
   builder_trust?: {
     delivery_rate?: number;
     project_count?: number;
@@ -257,8 +285,11 @@ export type SourcePanel = {
   kind?: string;
   title: string;
   subtitle: string;
+  scope?: string;
+  relationship?: string;
   items: SourceItem[];
   missing: string[];
+  media?: EvidenceMediaStrip[];
 };
 
 export type SourceItem = {
@@ -266,12 +297,35 @@ export type SourceItem = {
   key?: string;
   label: string;
   value: string;
+  scope?: string;
+  relationship?: string;
   values?: string[];
   source_type: string;
   source_url?: string;
   attributions?: SourceAttribution[];
   confidence_pct: number;
   learned_at: string;
+};
+
+export type EvidenceMediaFrame = {
+  label: string;
+  distance_from_gate_m: number;
+  image_url: string;
+  heading: number;
+  pitch: number;
+  fov: number;
+  capture_date: string;
+  source_url: string;
+};
+
+export type EvidenceMediaStrip = {
+  kind: string;
+  provider: string;
+  title: string;
+  caption: string;
+  capture_date_label: string;
+  coverage_quality: "strong" | "usable" | string;
+  frames: EvidenceMediaFrame[];
 };
 
 export type SourceAttribution = {
@@ -287,12 +341,22 @@ export type EvidenceSection = {
   title: string;
   summary: string;
   subtitle: string;
+  scope?: string;
+  relationship?: string;
   priority: number;
   confidence_pct: number;
   source_types: string[];
   entity_ids: string[];
+  presentation?: EvidencePresentation;
   items: SourceItem[];
   missing: string[];
+  media?: EvidenceMediaStrip[];
+};
+
+export type EvidencePresentation = {
+  variant: "fact_list" | "fact_grid" | "risk_grid" | "timeline" | "media_grid" | "story" | string;
+  density: "compact" | "standard" | string;
+  max_preview_items: number;
 };
 
 export type PropertyEvidenceResponse = {
@@ -646,67 +710,4 @@ export type AreaIntelligence = {
   overall_sentiment?: string;
   source_count?: number;
   last_updated?: string;
-};
-
-// Society search types — aligned with pipeline/society_scorer.py output
-export type SocietySearchResult = {
-  slug: string;
-  name: string;
-  builder: string;
-  year_built?: number;
-  total_units?: number;
-  unit_types?: string;
-  price_range?: string;
-  summary: string;
-  overall_score: number;
-  rank: number;
-  best_for_label: string;
-  life_fit_reason: string;
-  dimension_scores: Record<string, number>;
-  confidence: string; // "high" | "moderate" | "low"
-  evidence: {
-    reddit_threads: number;
-    society_threads: number;
-    area_threads: number;
-    has_seed_data: boolean;
-    reddit_confidence: string;
-  };
-  photos: string[];
-  signals: string[];
-  cautions: string[];
-  resident_quote: string | null;
-  why_above_next: string;
-};
-
-export type SocietySearchResponse = {
-  query_interpreted: {
-    original: string;
-    area: string;
-    city: string;
-    intent: string;
-    weights_applied: Record<string, number>;
-  };
-  results: SocietySearchResult[];
-  result_count: number;
-  area_context: {
-    name: string;
-    city: string;
-    median_price_per_sqft: number;
-    trend_direction: string;
-    trend_summary: string;
-    metro_access_summary: string;
-    traffic_summary: string;
-    livability_summary: string;
-    infrastructure_tags: string[];
-    externality_tags: string[];
-    community_notes: string;
-  } | null;
-  enrichment_status: {
-    societies_discovered: number;
-    societies_scored: number;
-    reddit_enriched: number;
-    seed_matched: number;
-    photos_available: number;
-    scored_at: string;
-  };
 };

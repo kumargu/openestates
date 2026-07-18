@@ -45,8 +45,20 @@ export function EvidenceSectionCard({
   const visibleItems = zoom === "compact"
     ? section.items.slice(0, 1)
     : zoom === "expanded"
-      ? section.items.slice(0, 4)
+      ? section.items.slice(0, section.presentation?.max_preview_items ?? 4)
       : section.items;
+  const mediaFrames = section.media
+    ?.flatMap((strip) =>
+      strip.frames
+        .filter((frame) => frame.image_url)
+        .map((frame) => ({
+          ...frame,
+          stripTitle: strip.title,
+          stripCaption: strip.caption,
+        })),
+    ) ?? [];
+  const mediaCount = mediaFrames.length;
+  const visibleMediaFrames = mediaFrames.slice(0, zoom === "compact" ? 3 : 6);
 
   const heatClass = heat ? evidenceHeatClass(heat.heat) : "evidence-heat--sparse";
 
@@ -67,13 +79,30 @@ export function EvidenceSectionCard({
             {section.confidence_pct}% conf
           </span>
           <span className="evidence-section-card__count">
-            {section.items.length} facts
+            {section.items.length} facts{mediaCount > 0 ? ` · ${mediaCount} views` : ""}
           </span>
         </div>
       </header>
 
       {section.summary && (
         <p className="evidence-section-card__summary">{section.summary}</p>
+      )}
+
+      {visibleMediaFrames.length > 0 && (
+        <div className="evidence-section-card__media-strip" aria-label={`${section.title} visual receipts`}>
+          {visibleMediaFrames.map((frame) => (
+            <a
+              key={`${frame.image_url}-${frame.heading}`}
+              className="evidence-section-card__media-frame"
+              href={frame.source_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <img src={frame.image_url} alt={`${frame.stripTitle}: ${frame.label}`} loading="lazy" />
+              <span>{frame.label}</span>
+            </a>
+          ))}
+        </div>
       )}
 
       {visibleItems.length > 0 && (
@@ -104,6 +133,12 @@ export function EvidenceSectionCard({
             </li>
           ))}
         </ul>
+      )}
+
+      {visibleItems.length === 0 && mediaCount > visibleMediaFrames.length && (
+        <p className="evidence-section-card__summary">
+          {mediaCount - visibleMediaFrames.length} more visual receipts available in the detail evidence stack.
+        </p>
       )}
 
       {zoom === "board" && section.items.length > visibleItems.length && (

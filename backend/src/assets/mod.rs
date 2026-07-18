@@ -12,6 +12,7 @@ pub mod community;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
+pub mod home_state;
 pub mod kg_view;
 pub mod materialization;
 pub mod media;
@@ -52,6 +53,7 @@ pub use google::{
     GooglePlaceSnapshotMaterialization, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord,
     GooglePlacesWeeklyInput, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
 };
+pub use home_state::{home_state_signals_input, HOME_STATE_SIGNALS_ASSET_ID};
 pub use kg_view::{
     KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
     KgViewArtifact, KgViewArtifactKind, KgViewEdgeRecord, KgViewEntityRecord,

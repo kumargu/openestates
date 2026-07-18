@@ -11,7 +11,7 @@ import {
   topEvidenceGlance,
 } from "../../lib/evidence.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
-import { isOnSheet, toggleSheetItem } from "../../lib/sheet-store.ts";
+import { isSaved, toggleSaved } from "../../lib/sheet-store.ts";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
 function formatPrice(price: number): string {
@@ -49,7 +49,7 @@ export function LivingEvidenceTile({
   onQuickView,
   onSaveChange,
 }: Props) {
-  const [onSheet, setOnSheet] = useState(() => isOnSheet(property.id));
+  const [onSheet, setOnSheet] = useState(() => isSaved(property.id));
   const summary = summarizeEvidence(evidence);
   const glances = topEvidenceGlance(evidence, 1);
   const { images } = usePropertySceneImages({
@@ -70,7 +70,7 @@ export function LivingEvidenceTile({
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    setOnSheet(toggleSheetItem(property.id));
+    setOnSheet(toggleSaved(property.id));
     onSaveChange?.();
   };
 

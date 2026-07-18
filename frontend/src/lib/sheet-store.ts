@@ -1,112 +1,66 @@
+/**
+ * Saved homes — a plain list of property IDs persisted in localStorage.
+ * Kept intentionally minimal: saving is a lightweight bookmark. Any richer
+ * "sheet" (tags, notes, comparison) will live in its own surface later.
+ */
 const STORAGE_KEY = "openestates_shortlist";
-export const SHEET_UPDATED_EVENT = "oe-sheet-changed";
+export const SAVED_UPDATED_EVENT = "oe-saved-changed";
 
-export type SheetTag = "watching" | "finalist" | "verify" | "stretch";
-
-export type SheetItem = {
-  id: string;
-  tag: SheetTag;
-  note: string;
-  addedAt: string;
-  updatedAt: string;
-};
-
-type StoredSheet = {
-  version: 2;
-  items: SheetItem[];
-};
-
-const DEFAULT_TAG: SheetTag = "watching";
-
-function nowIso(): string {
-  return new Date().toISOString();
-}
-
-function makeItem(id: string): SheetItem {
-  const ts = nowIso();
-  return {
-    id,
-    tag: DEFAULT_TAG,
-    note: "",
-    addedAt: ts,
-    updatedAt: ts,
-  };
-}
-
-function isSheetTag(value: unknown): value is SheetTag {
-  return value === "watching" || value === "finalist" || value === "verify" || value === "stretch";
-}
-
-function parseStoredSheet(): StoredSheet {
+function readIds(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return { version: 2, items: [] };
+    if (!raw) return [];
 
     const parsed = JSON.parse(raw);
 
+    // Current format: a plain array of IDs.
     if (Array.isArray(parsed)) {
-      return {
-        version: 2,
-        items: parsed
-          .filter((id): id is string => typeof id === "string" && id.length > 0)
-          .map(makeItem),
-      };
+      return parsed.filter((id): id is string => typeof id === "string" && id.length > 0);
     }
 
+    // Legacy format: { items: [{ id, tag, note, ... }] }. Migrate to IDs.
     if (parsed && Array.isArray(parsed.items)) {
-      return {
-        version: 2,
-        items: parsed.items
-          .filter((item: unknown): item is Partial<SheetItem> & { id: string } => {
-            return typeof item === "object" && item !== null && typeof (item as SheetItem).id === "string";
-          })
-          .map((item: Partial<SheetItem> & { id: string }) => ({
-            id: item.id,
-            tag: isSheetTag(item.tag) ? item.tag : DEFAULT_TAG,
-            note: typeof item.note === "string" ? item.note : "",
-            addedAt: typeof item.addedAt === "string" ? item.addedAt : nowIso(),
-            updatedAt: typeof item.updatedAt === "string" ? item.updatedAt : nowIso(),
-          })),
-      };
+      return parsed.items
+        .map((item: unknown) =>
+          item && typeof item === "object" ? (item as { id?: unknown }).id : item,
+        )
+        .filter((id: unknown): id is string => typeof id === "string" && id.length > 0);
     }
   } catch {
-    return { version: 2, items: [] };
+    return [];
   }
 
-  return { version: 2, items: [] };
+  return [];
 }
 
-function persistSheet(sheet: StoredSheet): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(sheet));
+function writeIds(ids: string[]): void {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(ids));
   if (typeof window !== "undefined") {
-    window.dispatchEvent(new CustomEvent(SHEET_UPDATED_EVENT));
+    window.dispatchEvent(new CustomEvent(SAVED_UPDATED_EVENT));
   }
 }
 
-export function getSheetItems(): SheetItem[] {
-  return parseStoredSheet().items;
+export function getSavedIds(): string[] {
+  return readIds();
 }
 
-export function isOnSheet(id: string): boolean {
-  return getSheetItems().some((item) => item.id === id);
+export function isSaved(id: string): boolean {
+  return readIds().includes(id);
 }
 
-export function removeFromSheet(id: string): void {
-  const sheet = parseStoredSheet();
-  sheet.items = sheet.items.filter((item) => item.id !== id);
-  persistSheet(sheet);
+export function removeSaved(id: string): void {
+  const ids = readIds();
+  if (!ids.includes(id)) return;
+  writeIds(ids.filter((existing) => existing !== id));
 }
 
-export function toggleSheetItem(id: string): boolean {
-  const sheet = parseStoredSheet();
-  const index = sheet.items.findIndex((item) => item.id === id);
-  if (index >= 0) {
-    sheet.items.splice(index, 1);
-    persistSheet(sheet);
+/** Toggle a home's saved state. Returns the new state (true = now saved). */
+export function toggleSaved(id: string): boolean {
+  const ids = readIds();
+  if (ids.includes(id)) {
+    writeIds(ids.filter((existing) => existing !== id));
     return false;
   }
-
-  sheet.items.push(makeItem(id));
-  persistSheet(sheet);
+  writeIds([...ids, id]);
   return true;
 }

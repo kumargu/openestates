@@ -632,6 +632,7 @@ pub fn enrich_property_card_with_sellers(
         root_source,
         project_status,
         project_status_display,
+        home_state_display: None,
         builder_delivery_display,
         data_freshness,
     }

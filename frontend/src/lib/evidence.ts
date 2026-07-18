@@ -39,6 +39,10 @@ export type UniverseCluster = {
 };
 
 const SECTION_CONSTELLATION: Record<string, EvidenceConstellation> = {
+  home_state: "trust",
+  approach_road: "commute",
+  waterlogging_context: "risk",
+  surroundings: "risk",
   market: "value",
   rera: "trust",
   reviews: "lifestyle",
@@ -72,7 +76,9 @@ export function visibleEvidenceSections(
 ): EvidenceSection[] {
   if (!sections?.length) return [];
   return sections
-    .filter((section) => section.items.length > 0)
+    .filter((section) =>
+      section.items.length > 0 || (section.media?.some((strip) => strip.frames.length > 0) ?? false),
+    )
     .sort((a, b) => a.priority - b.priority);
 }
 
@@ -245,11 +251,19 @@ export function panelsToSections(panels: SourcePanel[]): EvidenceSection[] {
     title: panel.title,
     summary: panel.subtitle,
     subtitle: "",
+    scope: panel.scope,
+    relationship: panel.relationship,
     priority: index,
     confidence_pct: 50,
     source_types: [...new Set(panel.items.map((item) => item.source_type))],
     entity_ids: panel.items.map((item) => item.entity_id),
     items: panel.items,
+    presentation: {
+      variant: panel.media?.length ? "media_grid" : "fact_list",
+      density: "standard",
+      max_preview_items: 4,
+    },
     missing: [],
+    media: panel.media ?? [],
   }));
 }

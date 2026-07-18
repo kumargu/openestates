@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use tokio::sync::RwLock;
 
+use crate::discovery::load_discovery_config;
 use crate::knowledge;
 use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
@@ -91,6 +92,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     );
 
     println!("Request-time AI disabled: search uses only local serving bundle data");
+    let discovery_config = load_discovery_config(project_root);
 
     AppState {
         properties: RwLock::new(properties),
@@ -101,6 +103,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         areas,
         societies,
         sellers: RwLock::new(sellers),
+        discovery_config,
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
         interest_counter: AtomicU64::new(0),

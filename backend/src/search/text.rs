@@ -653,6 +653,7 @@ impl TextSearch {
                         root_source: None,
                         project_status: None,
                         project_status_display: None,
+                        home_state_display: None,
                         builder_delivery_display: None,
                         data_freshness: None,
                     }
@@ -746,12 +747,16 @@ pub(crate) fn enrich_card_from_serving_facts(
         );
     card.project_status = status_projection.status;
     card.project_status_display = status_projection.display;
+    card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
+        .project_home_state()
+        .display;
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {
     clean_display_string(&mut card.possession_status);
     clean_display_string(&mut card.facing);
     clean_optional_display_string(&mut card.project_status_display);
+    clean_optional_display_string(&mut card.home_state_display);
     clean_optional_display_string(&mut card.builder_delivery_display);
 }
 
@@ -1077,17 +1082,23 @@ fn serving_preference_evidence(
             let key_matches = candidate_fact_keys
                 .iter()
                 .any(|key| key.eq_ignore_ascii_case(&fact.fact_key));
+            let metadata_can_expand = answers_preference
+                && !preference_requires_registry_fact_key(preference)
+                && fact_key_can_self_describe_preference(&fact.fact_key);
             metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
                 && if candidate_fact_keys.is_empty() {
-                    answers_preference
+                    metadata_can_expand
                 } else {
-                    key_matches || answers_preference
+                    key_matches || metadata_can_expand
                 }
         }) else {
             continue;
         };
 
         if fact_is_negative_support_for_positive_preference(&fact.fact_key, preference) {
+            continue;
+        }
+        if !lifecycle_preference_value_compatible(preference, &fact.fact_key, &fact.value) {
             continue;
         }
 
@@ -1614,6 +1625,85 @@ fn metadata_supports_text_match(metadata: &ServingSearchMetadataRecord) -> bool 
         })
 }
 
+fn fact_key_can_self_describe_preference(fact_key: &str) -> bool {
+    let key = fact_key.to_ascii_lowercase();
+    !key.ends_with("_date")
+        && !matches!(
+            key.as_str(),
+            "rera_status" | "rera_completion_date" | "rera_original_completion_date"
+        )
+}
+
+fn preference_requires_registry_fact_key(preference: &str) -> bool {
+    matches!(
+        preference,
+        "ready to move"
+            | "delivered society"
+            | "new property"
+            | "established society"
+            | "under construction"
+            | "new launch"
+            | "delayed"
+            | "avoid delay risk"
+    )
+}
+
+fn lifecycle_preference_value_compatible(
+    preference: &str,
+    fact_key: &str,
+    value: &FactValue,
+) -> bool {
+    if !preference_requires_registry_fact_key(preference) {
+        return true;
+    }
+    let Some(text) = fact_value_search_text(value) else {
+        return true;
+    };
+    let key = fact_key.to_ascii_lowercase();
+    let has_ready = text.contains("ready to move")
+        || text.contains("ready_to_move")
+        || text.contains("delivered")
+        || text.contains("completed");
+    let has_under_construction = text.contains("under construction")
+        || text.contains("under_construction")
+        || text.contains("ongoing")
+        || text.contains("new launch")
+        || text.contains("upcoming");
+    let has_delay = text.contains("delayed") || text.contains("delay");
+    let has_new_age = text.contains("newly delivered")
+        || text.contains("1-5 yrs old")
+        || text.contains("1-5 years old");
+    let has_established_age = text.contains("5-10 yrs old")
+        || text.contains("5-10 years old")
+        || text.contains("10+ yrs old")
+        || text.contains("10+ years old")
+        || text.contains("old society")
+        || text.contains("established")
+        || text.contains("mature");
+
+    match preference {
+        "ready to move" | "delivered society" => {
+            (has_ready || (key == "home_age_bucket" && (has_new_age || has_established_age)))
+                && !has_under_construction
+                && !has_delay
+        }
+        "under construction" | "new launch" => has_under_construction && !has_ready,
+        "new property" => has_new_age || (key == "home_age_bucket" && text == "newly delivered"),
+        "established society" => has_established_age,
+        "delayed" | "avoid delay risk" => has_delay,
+        _ => true,
+    }
+}
+
+fn fact_value_search_text(value: &FactValue) -> Option<String> {
+    match value {
+        FactValue::Text(value) => Some(value.to_ascii_lowercase()),
+        FactValue::Tags(values) => Some(values.join(" ").to_ascii_lowercase()),
+        FactValue::Score { explanation, .. } => Some(explanation.to_ascii_lowercase()),
+        FactValue::Bool(_) | FactValue::Numeric(_) => None,
+    }
+}
+
 fn metadata_answers_preference(metadata: &ServingSearchMetadataRecord, preference: &str) -> bool {
     let preference = preference.to_lowercase();
     metadata.answers_preferences.iter().any(|answer| {
@@ -1627,15 +1717,47 @@ fn render_serving_fact_display(
     metadata: &ServingSearchMetadataRecord,
     value: &FactValue,
 ) -> String {
-    let value = fact
-        .value_text
-        .clone()
-        .unwrap_or_else(|| fact_value_display(value));
+    let value = compact_serving_fact_display_value(fact, value);
     metadata
         .display_template
         .as_deref()
         .unwrap_or("{value}")
         .replace("{value}", &value)
+}
+
+fn compact_serving_fact_display_value(fact: &ServingFactRecord, value: &FactValue) -> String {
+    const MAX_DISPLAY_CHARS: usize = 180;
+
+    if let Some(value_text) = fact.value_text.as_deref() {
+        return truncate_snippet(value_text, MAX_DISPLAY_CHARS);
+    }
+
+    match value {
+        FactValue::Text(value) => truncate_snippet(value, MAX_DISPLAY_CHARS),
+        FactValue::Tags(values) => compact_tag_display(values, MAX_DISPLAY_CHARS),
+        FactValue::Score { value, explanation } => truncate_snippet(
+            &format!("{}: {}", format_measurement(*value), explanation),
+            MAX_DISPLAY_CHARS,
+        ),
+        FactValue::Numeric(_) | FactValue::Bool(_) => fact_value_display(value),
+    }
+}
+
+fn compact_tag_display(values: &[String], max_chars: usize) -> String {
+    let mut visible = values
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty());
+    let first = visible.next().unwrap_or_default();
+    let Some(second) = visible.next() else {
+        return truncate_snippet(first, max_chars);
+    };
+    let remaining = visible.count();
+    let mut display = format!("{}, {}", first, second);
+    if remaining > 0 {
+        display.push_str(&format!(" +{} more", remaining));
+    }
+    truncate_snippet(&display, max_chars)
 }
 
 fn fact_value_display(value: &FactValue) -> String {

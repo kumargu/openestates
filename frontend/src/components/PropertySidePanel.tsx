@@ -7,13 +7,13 @@ import { Link } from "react-router-dom";
 import type { PropertyDetailResponse, PropertyCard as PropertyCardType } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
-import { isOnSheet, toggleSheetItem } from "../lib/sheet-store.ts";
+import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
 import { TrustBadge } from "./TrustBadge.tsx";
 import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { BuilderTrustBadge } from "./BuilderTrustBadge.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 import { EvidenceSectionCard } from "./evidence/EvidenceSectionCard.tsx";
-import { summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
+import { summarizeEvidence, topEvidenceGlance, visibleEvidenceSections } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -67,7 +67,7 @@ type Props = {
 export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: Props) {
   const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(() => isOnSheet(propertyId));
+  const [saved, setSaved] = useState(() => isSaved(propertyId));
   const [closing, setClosing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const specs = [
@@ -118,7 +118,7 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
   };
 
   const handleSave = () => {
-    setSaved(toggleSheetItem(propertyId));
+    setSaved(toggleSaved(propertyId));
     onSaveChange?.();
   };
 
@@ -333,9 +333,11 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
                 <p key={line} className="side-panel-society-review">{line}</p>
               ))}
               <div className="side-panel-evidence__cards">
-                {detail.evidence.sections
-                  .filter((s) => s.items.length > 0)
-                  .slice(0, 2)
+                {visibleEvidenceSections(detail.evidence.sections)
+                  .filter((section, index, sections) =>
+                    index < 2 || section.kind === "approach_road" && !sections.slice(0, 2).some((candidate) => candidate.kind === "approach_road")
+                  )
+                  .slice(0, 3)
                   .map((section) => (
                     <EvidenceSectionCard key={section.kind} section={section} zoom="compact" />
                   ))}

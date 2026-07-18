@@ -146,8 +146,8 @@ pub const AREA_ALIASES: &[(&[&str], &str)] = &[
 /// shorter ones. "under construction" must match before "new" would catch it.
 /// "ready to move" must match before "ready" alone.
 ///
-/// The answers_preferences values here align with project status facts from the
-/// serving bundle so scoring connects user queries to RERA-derived evidence.
+/// The answers_preferences values here align with buyer-facing status facts from
+/// the serving bundle. Raw RERA approval/date facts are not lifecycle proof.
 const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
     // Project status patterns (specific phrases first)
     (
@@ -159,7 +159,13 @@ const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
             "completed",
         ],
         "ready to move",
-        &["possession_status", "project_status", "rera_status"],
+        &[
+            "home_state",
+            "home_age_bucket",
+            "possession_status",
+            "project_status",
+            "market_project_status",
+        ],
         1.2,
     ),
     (
@@ -959,6 +965,34 @@ mod tests {
             "Expected 'new launch' preference, got: {:?}",
             intent.preferences
         );
+    }
+
+    #[test]
+    fn home_state_queries_use_schema_backed_preferences() {
+        let delivered = parse_intent("delivered society near metro whitefield");
+        assert!(delivered
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.raw_text == "delivered society"
+                && preference.expanded_keys.contains(&"home_state".to_string())));
+
+        let new_property = parse_intent("new property in sarjapur");
+        assert!(new_property
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.raw_text == "new property"
+                && preference
+                    .expanded_keys
+                    .contains(&"home_age_bucket".to_string())));
+
+        let old_society = parse_intent("old society in whitefield");
+        assert!(old_society
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.raw_text == "established society"
+                && preference
+                    .expanded_keys
+                    .contains(&"home_age_bucket".to_string())));
     }
 
     #[test]

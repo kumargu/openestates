@@ -25,6 +25,13 @@ pub struct ProjectStatusEvidence {
     pub display: Option<String>,
 }
 
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct HomeStateEvidence {
+    pub state: Option<String>,
+    pub age_bucket: Option<String>,
+    pub display: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ProjectedFact<T> {
     pub value: T,
@@ -173,6 +180,22 @@ impl<'a> SocietyFactProjection<'a> {
         }
     }
 
+    pub fn project_home_state(&self) -> HomeStateEvidence {
+        let state = self.latest_text("home_state").map(|fact| fact.value);
+        let age_bucket = self.latest_text("home_age_bucket").map(|fact| fact.value);
+        let timeline = self
+            .latest_text("home_timeline_state")
+            .map(|fact| fact.value);
+        let display =
+            home_state_display(state.as_deref(), age_bucket.as_deref(), timeline.as_deref());
+
+        HomeStateEvidence {
+            state,
+            age_bucket,
+            display,
+        }
+    }
+
     fn latest_valid<T>(
         &self,
         fact_key: &str,
@@ -229,6 +252,27 @@ fn inventory_status_label(value: &str) -> Option<String> {
         Some("Available".to_string())
     } else {
         Some(normalized.to_string())
+    }
+}
+
+fn home_state_display(
+    state: Option<&str>,
+    age_bucket: Option<&str>,
+    timeline: Option<&str>,
+) -> Option<String> {
+    if timeline.is_some_and(|value| value.eq_ignore_ascii_case("delayed")) {
+        return Some("Timeline delayed".to_string());
+    }
+
+    match state {
+        Some("delivered") => match age_bucket {
+            Some("newly delivered") => Some("Newly delivered".to_string()),
+            Some(bucket) => Some(format!("Delivered · {bucket}")),
+            None => Some("Delivered".to_string()),
+        },
+        Some("under_construction") => Some("Under construction".to_string()),
+        Some("delayed") => Some("Timeline delayed".to_string()),
+        _ => age_bucket.map(|bucket| format!("Est. {bucket}")),
     }
 }
 
@@ -348,6 +392,55 @@ mod tests {
             projected.display.as_deref(),
             Some("Sold Out · Under Construction")
         );
+    }
+
+    #[test]
+    fn home_state_projection_keeps_card_label_compact() {
+        let index = index(vec![
+            fact(
+                "society:sample",
+                "home_state",
+                FactValue::Text("delivered".to_string()),
+                1,
+            ),
+            fact(
+                "society:sample",
+                "home_age_bucket",
+                FactValue::Text("5-10 yrs old".to_string()),
+                1,
+            ),
+        ]);
+
+        let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
+
+        assert_eq!(projected.state.as_deref(), Some("delivered"));
+        assert_eq!(projected.age_bucket.as_deref(), Some("5-10 yrs old"));
+        assert_eq!(
+            projected.display.as_deref(),
+            Some("Delivered · 5-10 yrs old")
+        );
+    }
+
+    #[test]
+    fn delayed_timeline_wins_home_state_projection() {
+        let index = index(vec![
+            fact(
+                "society:sample",
+                "home_state",
+                FactValue::Text("under_construction".to_string()),
+                1,
+            ),
+            fact(
+                "society:sample",
+                "home_timeline_state",
+                FactValue::Text("delayed".to_string()),
+                2,
+            ),
+        ]);
+
+        let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
+
+        assert_eq!(projected.display.as_deref(), Some("Timeline delayed"));
     }
 
     fn index(facts: Vec<ServingFactRecord>) -> ServingFactIndex {

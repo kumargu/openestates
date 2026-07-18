@@ -734,6 +734,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
+            "home_state_signals",
+            AssetStage::Silver,
+            "Buyer-facing home state and age from RERA now, with Google and Reddit support later.",
+            &["rera_legal_facts"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        ),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
@@ -749,6 +758,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "image_media_facts",
                 "metro_proximity_facts",
                 "builder_rera_aggregates",
+                "home_state_signals",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -790,7 +800,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("market_project_facts")
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
-        .with_optional_dependency("metro_proximity_facts"),
+        .with_optional_dependency("metro_proximity_facts")
+        .with_optional_dependency("home_state_signals"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

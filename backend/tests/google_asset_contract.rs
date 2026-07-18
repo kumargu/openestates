@@ -30,6 +30,8 @@ async fn google_place_snapshot_materializes_raw_parquet_and_derives_linked_facts
             review_snippets: vec![
                 "Well maintained campus with good clubhouse.".to_string(),
                 "Traffic near the approach road can be slow.".to_string(),
+                "STP smell near the back gate needs checking.".to_string(),
+                "High tension wires are visible near one edge.".to_string(),
             ],
             address: Some("Whitefield, Bengaluru".to_string()),
             confidence: 0.9,
@@ -75,6 +77,30 @@ async fn google_place_snapshot_materializes_raw_parquet_and_derives_linked_facts
         fact.fact_key == "google_review_snippets"
             && fact.value_json.contains("Well maintained campus")
     }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "approach_road_condition" && fact.value_json.contains("approach road")
+    }));
+    assert!(facts
+        .facts
+        .iter()
+        .any(|fact| { fact.fact_key == "stp_concern" && fact.value_json.contains("STP smell") }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "high_tension_wire_concern"
+            && fact.value_json.contains("High tension wires")
+    }));
+    for fact_key in [
+        "approach_road_condition",
+        "stp_concern",
+        "high_tension_wire_concern",
+    ] {
+        let annotation = facts
+            .fact_annotations
+            .iter()
+            .find(|annotation| annotation.fact_key == fact_key)
+            .unwrap();
+        assert!(annotation.scoring_direction.is_none());
+        assert!(annotation.scoring_weight.is_none());
+    }
     assert!(facts.fact_annotations.iter().any(|annotation| {
         annotation.fact_key == "google_reviews_url"
             && annotation

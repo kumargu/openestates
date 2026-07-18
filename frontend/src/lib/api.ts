@@ -6,9 +6,8 @@ import type {
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
+  DiscoveryResponse,
   SearchResponse,
-  SocietySearchResponse,
-  SocietySearchResult,
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
 
@@ -97,12 +96,8 @@ export function searchProperties(query: string): Promise<SearchResponse> {
   return fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
 }
 
-export function searchSocieties(query: string): Promise<SocietySearchResponse> {
-  return fetchJson(`/api/societies/search?q=${encodeURIComponent(query)}`);
-}
-
-export function getSociety(slug: string): Promise<SocietySearchResult> {
-  return fetchJson(`/api/societies/${encodeURIComponent(slug)}`);
+export function getDiscovery(): Promise<DiscoveryResponse> {
+  return fetchJson("/api/discovery");
 }
 
 export type PlatformStats = {

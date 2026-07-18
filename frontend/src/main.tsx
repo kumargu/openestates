@@ -12,8 +12,6 @@ const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default:
 const ResultsPageA = lazy(() => import("./pages/ResultsPageA.tsx").then(m => ({ default: m.ResultsPageA })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
-const SocietySearchPage = lazy(() => import("./pages/SocietySearchPage.tsx").then(m => ({ default: m.SocietySearchPage })));
-const SocietyDetailPage = lazy(() => import("./pages/SocietyDetailPage.tsx").then(m => ({ default: m.SocietyDetailPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -61,7 +59,6 @@ export function NavLink({ to, label, active }: { to: string; label: string; acti
 
 const NAV_ITEMS = [
   { to: "/results", label: "Properties", matchFn: (p: string) => p === "/results" || p.startsWith("/property/") },
-  { to: "/societies", label: "Societies", matchFn: (p: string) => p === "/societies" || p.startsWith("/society/") },
 ];
 
 export function Nav() {
@@ -189,7 +186,6 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer-links">
         <Link to="/results">Properties</Link>
-        <Link to="/societies">Societies</Link>
       </div>
       <div className="site-footer-wordmark">OpenEstates</div>
       <p className="site-footer-tagline">Transparent property discovery</p>
@@ -232,8 +228,6 @@ export function App() {
                 <Route path="/results" element={<ResultsPageA />} />
                 <Route path="/property/:id" element={<PropertyPage />} />
                 <Route path="/property/:id/plan" element={<HomePlanPage />} />
-                <Route path="/societies" element={<SocietySearchPage />} />
-                <Route path="/society/:slug" element={<SocietyDetailPage />} />
                 <Route path="*" element={<NotFoundPage />} />
               </Routes>
             </Suspense>

@@ -28,10 +28,11 @@ use super::{
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1126,6 +1127,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::BuilderReraAggregates,
         );
         executors.insert(
+            static_asset_id(HOME_STATE_SIGNALS_ASSET_ID),
+            BuiltInAssetExecutor::HomeStateSignals,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1162,6 +1167,7 @@ enum BuiltInAssetExecutor {
     MetroStationsMonthly,
     MetroProximityFacts,
     BuilderReraAggregates,
+    HomeStateSignals,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1711,6 +1717,32 @@ impl BuiltInAssetExecutor {
                     rera_record,
                     canonical_record,
                     context.run_id,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::HomeStateSignals => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let rera_facts_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    RERA_LEGAL_FACTS_ASSET_ID,
+                )?;
+                let input = super::home_state_signals_input(
+                    &context.dag.lake,
+                    std::slice::from_ref(rera_facts_record),
+                    context.run_id,
+                    context.options.planned_at,
                 )
                 .await?;
                 let materialization = execute_skill_fact_asset(context, &input).await?;

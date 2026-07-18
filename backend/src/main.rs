@@ -56,6 +56,7 @@ async fn main() {
         .route("/api/areas/tracker", get(routes::areas::area_tracker))
         .route("/api/areas/{id}", get(routes::areas::get_area))
         .route("/api/shortlist", get(routes::shortlist::get_shortlist))
+        .route("/api/discovery", get(routes::discovery::discovery_home))
         .route("/api/search", get(routes::search::search_properties))
         .route(
             "/api/societies/search",
@@ -118,6 +119,7 @@ async fn main() {
     println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence");
     println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
+    println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");
     println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
     println!("  GET /api/sellers | /api/sellers/{{id}} | /api/sellers/{{id}}/dashboard");

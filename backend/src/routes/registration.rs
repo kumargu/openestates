@@ -1065,9 +1065,9 @@ pub async fn publish_registration(
             (String::new(), String::new(), String::new(), String::new())
         };
 
-    // KG indexing deferred to enrichment pipeline — published properties start with
+    // DAG enrichment deferred to the offline pipeline — published properties start with
     // transparency_tags: ["seller-registered", "verification-pending"] and get enriched
-    // by Python skills per CLAUDE.md §17.4.
+    // by Python skills and promoted serving bundles per AGENTS.md.
 
     let seller_name = draft
         .name

@@ -1,9 +1,9 @@
 import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getProperties, getStats, type PlatformStats } from "../lib/api.ts";
+import type { AreaTrackerResponse, DiscoveryResponse, PropertyCard } from "../lib/types.ts";
+import { getAreaTracker, getDiscovery, getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
-import { getSheetItems, SHEET_UPDATED_EVENT } from "../lib/sheet-store.ts";
+import { getSavedIds, SAVED_UPDATED_EVENT } from "../lib/sheet-store.ts";
 
 const InlineSearchExperience = lazy(() =>
   import("./ResultsPageA.tsx").then((m) => ({ default: m.SearchExperience }))
@@ -203,15 +203,16 @@ export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
-  const activeView = searchParams.get("view") === "sheet" ? "sheet" : "cards";
-  const hasInlinePane = hasActiveSearch || activeView === "sheet";
+  const activeView = searchParams.get("view") === "saved" ? "saved" : "cards";
+  const hasInlinePane = hasActiveSearch || activeView === "saved";
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
+  const [discovery, setDiscovery] = useState<DiscoveryResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
-  const [sheetCount, setSheetCount] = useState(() => getSheetItems().length);
+  const [sheetCount, setSheetCount] = useState(() => getSavedIds().length);
   const pulseRef = useRef<HTMLElement | null>(null);
   const inlineResultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
@@ -227,6 +228,9 @@ export function HomePage() {
     getAreaTracker()
       .then(setAreaTracker)
       .catch(() => {});
+    getDiscovery()
+      .then(setDiscovery)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -234,7 +238,7 @@ export function HomePage() {
   }, [activeSearchQuery]);
 
   useEffect(() => {
-    const refreshSheetCount = () => setSheetCount(getSheetItems().length);
+    const refreshSheetCount = () => setSheetCount(getSavedIds().length);
     const refreshOnVisible = () => {
       if (!document.hidden) refreshSheetCount();
     };
@@ -242,13 +246,13 @@ export function HomePage() {
     refreshSheetCount();
     window.addEventListener("focus", refreshSheetCount);
     window.addEventListener("storage", refreshSheetCount);
-    window.addEventListener(SHEET_UPDATED_EVENT, refreshSheetCount);
+    window.addEventListener(SAVED_UPDATED_EVENT, refreshSheetCount);
     document.addEventListener("visibilitychange", refreshOnVisible);
 
     return () => {
       window.removeEventListener("focus", refreshSheetCount);
       window.removeEventListener("storage", refreshSheetCount);
-      window.removeEventListener(SHEET_UPDATED_EVENT, refreshSheetCount);
+      window.removeEventListener(SAVED_UPDATED_EVENT, refreshSheetCount);
       document.removeEventListener("visibilitychange", refreshOnVisible);
     };
   }, []);
@@ -261,10 +265,10 @@ export function HomePage() {
     }, 90);
   }, [activeSearchQuery, hasInlinePane]);
 
-  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean; view?: "cards" | "sheet" } = {}) => {
+  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean; view?: "cards" | "saved" } = {}) => {
     const q = rawQuery.trim();
     const nextParams = new URLSearchParams();
-    if (options.view === "sheet") nextParams.set("view", "sheet");
+    if (options.view === "saved") nextParams.set("view", "saved");
     setQuery(q);
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
@@ -275,7 +279,7 @@ export function HomePage() {
       setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
-      shouldScrollToResultsRef.current = options.scroll ?? options.view === "sheet";
+      shouldScrollToResultsRef.current = options.scroll ?? options.view === "saved";
       setSearchParams(nextParams);
     }
   }, [setSearchParams]);
@@ -340,9 +344,18 @@ export function HomePage() {
             lineHeight: 1.7,
           }}
         >
-          Property discovery that explains why, not just what.
-          Every listing comes with context you can trust.
+          {discovery?.product_promise ?? "Property discovery that explains why, not just what."}
         </p>
+
+        {discovery?.quotes?.length ? (
+          <div className="home-proof-quotes fade-up fade-up-delay-1" aria-label="OpenEstates principles">
+            {discovery.quotes.slice(0, 3).map((quote) => (
+              <span key={quote.text} className={`home-proof-quote home-proof-quote--${quote.tone}`}>
+                {quote.text}
+              </span>
+            ))}
+          </div>
+        ) : null}
 
         {/* Search bar */}
         <p className="fade-up fade-up-delay-1 home-hero__kicker">
@@ -380,7 +393,7 @@ export function HomePage() {
 
         {sheetCount > 0 && (
           <Link
-            to="/results?view=sheet"
+            to="/results?view=saved"
             className="home-saved-link fade-up fade-up-delay-2"
             aria-label={`View your ${sheetCount} saved ${sheetCount === 1 ? "home" : "homes"}`}
           >
@@ -522,11 +535,11 @@ export function HomePage() {
               <div className="inline-results-shell">
                 <div className="inline-results-header">
                   <span className="inline-results-kicker">
-                    {activeView === "sheet" && !activeSearchQuery ? "Saved homes" : "Search results"}
+                    {activeView === "saved" && !activeSearchQuery ? "Saved homes" : "Search results"}
                   </span>
                   <div className="results-view-switch" aria-hidden="true">
                     <span className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Results</span>
-                    <span className={activeView === "sheet" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Saved</span>
+                    <span className={activeView === "saved" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Saved</span>
                   </div>
                   <div className="skeleton-search-bar skeleton-bar" />
                 </div>
@@ -540,6 +553,10 @@ export function HomePage() {
           </Suspense>
         </section>
       )}
+
+      {discovery?.shelves?.length ? (
+        <DiscoveryShelvesSection discovery={discovery} onSearch={commitSearch} />
+      ) : null}
 
       {/* Micro-market intelligence cards */}
       {snapshot && properties.length > 0 && (
@@ -905,6 +922,70 @@ function chipStyle(bg: string, color: string): React.CSSProperties {
     fontWeight: 500,
     whiteSpace: "nowrap",
   };
+}
+
+function DiscoveryShelvesSection({
+  discovery,
+  onSearch,
+}: {
+  discovery: DiscoveryResponse;
+  onSearch: (query: string) => void;
+}) {
+  const shelves = discovery.shelves.filter((shelf) => shelf.cards.length > 0).slice(0, 5);
+  if (shelves.length === 0) return null;
+
+  return (
+    <section className="home-discovery-section" aria-label="Discovery shelves">
+      <div className="home-discovery-inner">
+        <div className="home-discovery-heading-row">
+          <div>
+            <span className="home-discovery-kicker">Discovery shelves</span>
+            <h2 className="home-discovery-heading">Fewer homes. Better reasons.</h2>
+          </div>
+          <button
+            type="button"
+            className="home-discovery-all"
+            onClick={() => onSearch("transparent homes with proof")}
+          >
+            Explore by intent
+          </button>
+        </div>
+
+        <div className="home-discovery-grid">
+          {shelves.map((shelf) => (
+            <article key={shelf.id} className="home-discovery-shelf">
+              <div className="home-discovery-shelf__head">
+                <span>{shelf.proof_label}</span>
+                <h3>{shelf.title}</h3>
+                <p>{shelf.quote}</p>
+              </div>
+              <p className="home-discovery-shelf__desc">{shelf.description}</p>
+              <div className="home-discovery-cards">
+                {shelf.cards.slice(0, 3).map(({ property, reason }) => (
+                  <Link
+                    key={`${shelf.id}-${property.id}`}
+                    to={`/property/${property.id}`}
+                    className="home-discovery-card"
+                  >
+                    <strong>{property.society_name || property.title}</strong>
+                    <span>{property.area} · {property.bhk} BHK · {formatPrice(property.price)}</span>
+                    <em>{reason}</em>
+                  </Link>
+                ))}
+              </div>
+              <button
+                type="button"
+                className="home-discovery-search"
+                onClick={() => onSearch(shelf.search_query)}
+              >
+                Search this shelf
+              </button>
+            </article>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function MicroMarketsSection({

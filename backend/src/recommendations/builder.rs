@@ -470,16 +470,25 @@ mod tests {
                 title: "RERA".to_string(),
                 summary: String::new(),
                 subtitle: String::new(),
+                scope: "society".to_string(),
+                relationship: None,
                 priority: 10,
                 confidence_pct: 80,
                 source_types: vec!["Google".to_string()],
                 entity_ids: vec!["society:sample".to_string()],
+                presentation: crate::routes::properties::EvidencePresentation {
+                    variant: "fact_list".to_string(),
+                    density: "standard".to_string(),
+                    max_preview_items: 4,
+                },
                 items: (0..facts)
                     .map(|idx| crate::routes::properties::SourceItem {
                         entity_id: "society:sample".to_string(),
                         key: format!("fact_{idx}"),
                         label: format!("Fact {idx}"),
                         value: "ok".to_string(),
+                        scope: "society".to_string(),
+                        relationship: None,
                         values: Vec::new(),
                         source_url: None,
                         attributions: Vec::new(),
@@ -489,6 +498,7 @@ mod tests {
                     })
                     .collect(),
                 missing: (0..gaps).map(|idx| format!("gap {idx}")).collect(),
+                media: Vec::new(),
             }]
         };
         let snapshot = summarize_evidence_sections(&sections);

@@ -138,7 +138,6 @@ export function HomePlanPage() {
   const monthlyGapSummary = monthlyGap >= 0
     ? `Buying costs ${formatCurrency(monthlyGap)} more per month than renting`
     : `Buying costs ${formatCurrency(Math.abs(monthlyGap))} less per month than renting`;
-  const presetLabel = preset === "Base scenario" ? "Base case" : preset;
   const maxYear = projection.points.length - 1;
   const loanFreeYear = projection.points.find((point, index, points) => (
     point.year > inputs.purchaseYear
@@ -207,21 +206,21 @@ export function HomePlanPage() {
 
       <div className="home-plan-main">
         <div className="home-plan-canvas">
-          <PropertyOrigin
-            propertyId={id}
-            title={property.title}
-            area={property.area}
-            bhk={property.bhk}
-            price={property.price}
-            inputs={inputs}
-            presetLabel={presetLabel}
-            monthlyEmi={projection.monthlyEmi}
-            monthlyRent={monthlyRent}
-          />
+          <section className="home-plan-hero" aria-label="Plan overview">
+            <div className="home-plan-hero__rail">
+              <PropertyOrigin
+                propertyId={id}
+                title={property.title}
+                area={property.area}
+                price={property.price}
+              />
+              <PlanViewTabs view={view} onChange={changeView} compact />
+            </div>
 
-          <PlanViewTabs view={view} onChange={changeView} />
-
-          <PlanWhisper />
+            <div className="home-plan-hero__stage">
+              <PlanWhisper />
+            </div>
+          </section>
 
           {view === "payoff" ? (
             <RepaymentJourney
