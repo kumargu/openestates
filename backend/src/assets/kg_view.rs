@@ -13,6 +13,7 @@ use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::dag_config::{better_source_type, load_resolution_policies};
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
 use crate::parquet_data::{
@@ -1087,10 +1088,6 @@ fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
         let key = FactDedupeKey {
             entity_id: fact.entity_id.clone(),
             fact_key: fact.fact_key.clone(),
-            fact_version: fact.fact_version,
-            source_type: fact.source_type.clone(),
-            source_url: fact.source_url.clone(),
-            skill_id: fact.skill_id.clone(),
         };
         match by_key.get(&key) {
             Some(existing) if better_fact(existing, &fact) => {
@@ -1122,6 +1119,29 @@ fn sort_facts(facts: &mut [KgViewFactRecord]) {
 }
 
 fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> bool {
+    if existing.entity_id == candidate.entity_id && existing.fact_key == candidate.fact_key {
+        if let Ok(policies) = load_resolution_policies() {
+            if better_source_type(
+                &candidate.source_type,
+                &existing.source_type,
+                candidate.confidence,
+                existing.confidence,
+                &policies,
+            ) {
+                return true;
+            }
+            if better_source_type(
+                &existing.source_type,
+                &candidate.source_type,
+                existing.confidence,
+                candidate.confidence,
+                &policies,
+            ) {
+                return false;
+            }
+        }
+    }
+
     candidate.confidence > existing.confidence
         || ((candidate.confidence - existing.confidence).abs() < f32::EPSILON
             && candidate.learned_at > existing.learned_at)
@@ -1131,10 +1151,6 @@ fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> boo
 struct FactDedupeKey {
     entity_id: String,
     fact_key: String,
-    fact_version: u32,
-    source_type: String,
-    source_url: Option<String>,
-    skill_id: Option<String>,
 }
 
 fn dedupe_fact_annotations(

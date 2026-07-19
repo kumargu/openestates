@@ -1,0 +1,90 @@
+{
+  "_comment": "Bootstrap importer — maps data/seed/*.json to low-confidence LegacySeed facts in the lake.",
+  "version": 1,
+  "source_id": "legacy_seed",
+  "source_type": "LegacySeed",
+  "skill_id": "legacy_seed_import",
+  "default_confidence": 0.25,
+  "trust_tier": "bootstrap",
+  "maps": [
+    {
+      "input_path": "data/seed/properties.json",
+      "entity_type": "property",
+      "entity_id_prefix": "property:",
+      "entity_id_field": "id",
+      "fields": [
+        { "from": "title", "fact_key": "listing.title", "value_type": "text" },
+        { "from": "area", "fact_key": "area", "value_type": "text" },
+        { "from": "city", "fact_key": "city", "value_type": "text" },
+        { "from": "society_id", "fact_key": "listing.society_id", "value_type": "text" },
+        { "from": "builder_name", "fact_key": "builder_name", "value_type": "text" },
+        { "from": "property_type", "fact_key": "listing.property_type", "value_type": "text" },
+        { "from": "listing_type", "fact_key": "listing.listing_type", "value_type": "text" },
+        { "from": "bhk", "fact_key": "bhk", "value_type": "numeric" },
+        { "from": "price", "fact_key": "price", "value_type": "numeric" },
+        { "from": "price_per_sqft", "fact_key": "market.price_per_sqft", "value_type": "numeric" },
+        { "from": "carpet_area_sqft", "fact_key": "carpet_area_sqft", "value_type": "numeric" },
+        { "from": "super_builtup_sqft", "fact_key": "listing.super_builtup_sqft", "value_type": "numeric" },
+        { "from": "floor", "fact_key": "listing.floor", "value_type": "numeric" },
+        { "from": "total_floors", "fact_key": "listing.total_floors", "value_type": "numeric" },
+        { "from": "facing", "fact_key": "listing.facing", "value_type": "text" },
+        { "from": "possession_status", "fact_key": "listing.possession_status", "value_type": "text" },
+        { "from": "metro_distance_mins", "fact_key": "metro_distance_mins", "value_type": "numeric" },
+        { "from": "maintenance_cost_monthly", "fact_key": "listing.maintenance_cost_monthly", "value_type": "numeric" },
+        { "from": "description_summary", "fact_key": "summary", "value_type": "text" },
+        { "from": "hero_image", "fact_key": "hero_image", "value_type": "text" },
+        { "from": "images", "fact_key": "images", "value_type": "tags" },
+        { "from": "transparency_tags", "fact_key": "transparency_tags", "value_type": "tags" },
+        { "from": "greenery_score", "fact_key": "greenery_score", "value_type": "numeric" },
+        { "from": "open_space_score", "fact_key": "open_space_score", "value_type": "numeric" },
+        { "from": "resale_strength_score", "fact_key": "resale_strength_score", "value_type": "numeric" },
+        { "from": "noise_score", "fact_key": "risk.noise_level", "value_type": "numeric", "internal_only": true },
+        { "from": "waterlogging_risk_score", "fact_key": "risk.waterlogging", "value_type": "numeric", "internal_only": true },
+        { "from": "society_quality_score", "fact_key": "operating.society_quality", "value_type": "numeric", "internal_only": true },
+        { "from": "builder_quality_score", "fact_key": "operating.builder_quality", "value_type": "numeric", "internal_only": true },
+        { "from": "document_completeness_score", "fact_key": "legal.document_completeness", "value_type": "numeric", "internal_only": true },
+        { "from": "litigation_risk", "fact_key": "legal.litigation_risk", "value_type": "numeric", "internal_only": true },
+        { "from": "sunlight_score", "fact_key": "layout.sunlight", "value_type": "numeric", "internal_only": true },
+        { "from": "airport_noise_score", "fact_key": "risk.airport_noise", "value_type": "numeric", "internal_only": true },
+        { "from": "traffic_score", "fact_key": "risk.traffic", "value_type": "numeric", "internal_only": true }
+      ]
+    },
+    {
+      "input_path": "data/seed/societies.json",
+      "entity_type": "society",
+      "entity_id_prefix": "society:",
+      "entity_id_field": "id",
+      "entity_id_transform": "strip_soc_prefix",
+      "fields": [
+        { "from": "name", "fact_key": "name", "value_type": "text" },
+        { "from": "area", "fact_key": "area", "value_type": "text" },
+        { "from": "city", "fact_key": "city", "value_type": "text" },
+        { "from": "builder_name", "fact_key": "builder_name", "value_type": "text" },
+        { "from": "year_built", "fact_key": "home_state.year_built", "value_type": "numeric" },
+        { "from": "total_units", "fact_key": "layout.total_units", "value_type": "numeric" },
+        { "from": "summary", "fact_key": "summary", "value_type": "text" },
+        { "from": "maintenance_sentiment", "fact_key": "operating.maintenance_sentiment", "value_type": "text" },
+        { "from": "livability_sentiment", "fact_key": "operating.livability_sentiment", "value_type": "text" },
+        { "from": "common_positives", "fact_key": "community.common_positives", "value_type": "tags" },
+        { "from": "common_complaints", "fact_key": "community.common_complaints", "value_type": "tags" },
+        { "from": "review_summary", "fact_key": "community.review_summary", "value_type": "text" }
+      ]
+    },
+    {
+      "input_path": "data/seed/area_profiles.json",
+      "entity_type": "area",
+      "entity_id_prefix": "area:",
+      "entity_id_field": "id",
+      "entity_id_transform": "strip_area_prefix",
+      "fields": [
+        { "from": "name", "fact_key": "name", "value_type": "text" },
+        { "from": "city", "fact_key": "city", "value_type": "text" },
+        { "from": "median_price_per_sqft", "fact_key": "market.median_price_per_sqft", "value_type": "numeric" },
+        { "from": "metro_access_summary", "fact_key": "metro_access", "value_type": "text" },
+        { "from": "traffic_summary", "fact_key": "risk.traffic_summary", "value_type": "text" },
+        { "from": "waterlogging_summary", "fact_key": "risk.waterlogging_summary", "value_type": "text" },
+        { "from": "livability_summary", "fact_key": "operating.livability_summary", "value_type": "text" }
+      ]
+    }
+  ]
+}

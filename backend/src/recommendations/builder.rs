@@ -274,7 +274,8 @@ fn pick_trust_branch(
     candidates: &[Candidate],
     used_ids: &HashSet<String>,
 ) -> Option<RecommendationBranch> {
-    let current_risk = current.litigation_risk + (1.0 - current.document_completeness_score) * 0.35;
+    let current_risk = current.litigation_risk.unwrap_or(1.0)
+        + (1.0 - current.document_completeness_score.unwrap_or(0.0)) * 0.35;
     if current_risk < 0.35 {
         return None;
     }
@@ -283,22 +284,22 @@ fn pick_trust_branch(
         .iter()
         .filter(|candidate| !used_ids.contains(&candidate.property.id))
         .filter(|candidate| {
-            let risk = candidate.property.litigation_risk
-                + (1.0 - candidate.property.document_completeness_score) * 0.35;
+            let risk = candidate.property.litigation_risk.unwrap_or(1.0)
+                + (1.0 - candidate.property.document_completeness_score.unwrap_or(0.0)) * 0.35;
             risk + 0.08 < current_risk
         })
         .min_by(|left, right| {
-            let left_risk = left.property.litigation_risk
-                + (1.0 - left.property.document_completeness_score) * 0.35;
-            let right_risk = right.property.litigation_risk
-                + (1.0 - right.property.document_completeness_score) * 0.35;
+            let left_risk = left.property.litigation_risk.unwrap_or(1.0)
+                + (1.0 - left.property.document_completeness_score.unwrap_or(0.0)) * 0.35;
+            let right_risk = right.property.litigation_risk.unwrap_or(1.0)
+                + (1.0 - right.property.document_completeness_score.unwrap_or(0.0)) * 0.35;
             left_risk
                 .partial_cmp(&right_risk)
                 .unwrap_or(std::cmp::Ordering::Equal)
         })?;
 
-    let best_risk =
-        best.property.litigation_risk + (1.0 - best.property.document_completeness_score) * 0.35;
+    let best_risk = best.property.litigation_risk.unwrap_or(1.0)
+        + (1.0 - best.property.document_completeness_score.unwrap_or(0.0)) * 0.35;
     let magnitude = compass_magnitude(((current_risk - best_risk) / 0.4) as f32);
 
     Some(RecommendationBranch {
@@ -307,8 +308,8 @@ fn pick_trust_branch(
         property: best.card.clone(),
         contrast: format!(
             "Stronger file · {:.0}% document completeness vs {:.0}% here",
-            best.property.document_completeness_score * 100.0,
-            current.document_completeness_score * 100.0
+            best.property.document_completeness_score.unwrap_or(0.0) * 100.0,
+            current.document_completeness_score.unwrap_or(0.0) * 100.0
         ),
         tradeoff: tradeoff_for_price_delta(current, &best.property),
         evidence_delta: delta_from_snapshots(current_snapshot, best.snapshot),
@@ -427,15 +428,15 @@ mod tests {
             possession_status: "ready".to_string(),
             metro_distance_mins: metro,
             maintenance_cost_monthly: 4_500,
-            society_quality_score: 0.7,
-            builder_quality_score: 0.7,
-            document_completeness_score: docs,
-            litigation_risk: risk,
-            noise_score: 0.3,
-            sunlight_score: 0.7,
-            airport_noise_score: 0.2,
-            waterlogging_risk_score: 0.2,
-            traffic_score: 0.4,
+            society_quality_score: Some(0.7),
+            builder_quality_score: Some(0.7),
+            document_completeness_score: Some(docs),
+            litigation_risk: Some(risk),
+            noise_score: Some(0.3),
+            sunlight_score: Some(0.7),
+            airport_noise_score: Some(0.2),
+            waterlogging_risk_score: Some(0.2),
+            traffic_score: Some(0.4),
             days_on_market: 20,
             greenery_score: None,
             open_space_score: None,

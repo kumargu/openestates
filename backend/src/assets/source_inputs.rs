@@ -11,7 +11,7 @@ use super::{
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    LEGACY_SEED_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
@@ -30,6 +30,8 @@ pub struct AssetSourceInputs {
     pub reddit_threads_daily: Option<RedditThreadsDailyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_resident_facts: Option<SkillFactsInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub legacy_seed_facts: Option<SkillFactsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_places_weekly: Option<GooglePlacesWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -57,6 +59,7 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID,
             REDDIT_THREADS_DAILY_ASSET_ID,
             REDDIT_RESIDENT_FACTS_ASSET_ID,
+            LEGACY_SEED_FACTS_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
@@ -75,6 +78,7 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID
                 | REDDIT_THREADS_DAILY_ASSET_ID
                 | REDDIT_RESIDENT_FACTS_ASSET_ID
+                | LEGACY_SEED_FACTS_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID

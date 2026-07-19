@@ -415,9 +415,16 @@ fn serving_search_metadata_records(
 }
 
 #[derive(Debug, serde::Serialize)]
+struct BootstrapCoverage {
+    legacy_seed_fact_count: u32,
+    legacy_seed_entity_count: u32,
+}
+
+#[derive(Debug, serde::Serialize)]
 struct PreferenceCoverageReport {
     generated_at: String,
     society_count: usize,
+    bootstrap: BootstrapCoverage,
     preference_labels: Vec<PreferenceLabelCoverage>,
     registry_gaps: Vec<RegistryGap>,
 }
@@ -492,9 +499,26 @@ fn write_preference_coverage_report(
         })
         .collect::<Vec<_>>();
 
+    let legacy_seed_facts = facts
+        .iter()
+        .filter(|fact| {
+            fact.source_type.eq_ignore_ascii_case("LegacySeed")
+                || fact.source_type.eq_ignore_ascii_case("legacy_seed")
+        })
+        .collect::<Vec<_>>();
+    let legacy_seed_entity_count = legacy_seed_facts
+        .iter()
+        .map(|fact| fact.entity_id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len() as u32;
+
     let report = PreferenceCoverageReport {
         generated_at: Utc::now().to_rfc3339(),
         society_count,
+        bootstrap: BootstrapCoverage {
+            legacy_seed_fact_count: legacy_seed_facts.len() as u32,
+            legacy_seed_entity_count,
+        },
         preference_labels,
         registry_gaps,
     };

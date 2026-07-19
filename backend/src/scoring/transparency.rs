@@ -31,9 +31,9 @@ pub fn compute_transparency_score(
     property: &Property,
     rera: Option<&ReraInfo>,
 ) -> TransparencyScore {
-    let doc_score = property.document_completeness_score * 30.0;
-    let society_score = property.society_quality_score * 25.0;
-    let builder_score = property.builder_quality_score * 25.0;
+    let doc_score = property.document_completeness_score.unwrap_or(0.0) * 30.0;
+    let society_score = property.society_quality_score.unwrap_or(0.0) * 25.0;
+    let builder_score = property.builder_quality_score.unwrap_or(0.0) * 25.0;
 
     // RERA: registered = full credit, unregistered = 0
     let rera_raw = match rera {

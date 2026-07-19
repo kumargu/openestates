@@ -414,11 +414,33 @@
       }
     },
     {
+      "id": "legacy_seed_facts",
+      "stage": "silver",
+      "description": "Low-confidence bootstrap facts imported from data/seed JSON.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "legacy_seed"
+          }
+        ]
+      }
+    },
+    {
       "id": "kg_society_view",
       "stage": "gold",
       "description": "Versioned society KG view merged by source precedence and fact policy.",
       "dependencies": [
         "canonical_society_nodes",
+        "legacy_seed_facts",
         "rera_legal_facts",
         "reddit_resident_facts",
         "google_review_facts",
@@ -472,6 +494,7 @@
         }
       ],
       "optional_dependencies": [
+        "legacy_seed_facts",
         "reddit_resident_facts",
         "google_review_facts",
         "community_review_summary_facts",

@@ -23,8 +23,31 @@ config (ontology + fact leaves + sources + crawl policy)
 - **No fake defaults** — missing facts stay missing (`never_default: true` for quality/risk leaves)
 - **Confidence internal only** — users see proof labels + sources, not numeric scores
 - **Leaves are additive** — new facts via config, not Rust match arms
+- **Thin Rust engine** — Rust loops over config structs; it does not enumerate product semantics. New `fact_key`, preference label, evidence section, or area alias = JSON edit + bundle promote, **zero new `match` arms** for domain keys (see §0.1)
 - **Storage unchanged in shape** — `LakeKey` paths, Parquet serving tables, versioned bundles, local FS → S3 with zero path rewrites
 - **KG stays identity** — facts attach to entities; KG is not a second truth store
+
+### 0.1 Thin Rust engine (config vs code)
+
+**Goal:** Move product semantics out of Rust `match` / `if preference == "..."` blocks into `app/config/`. The runtime should be a small generic interpreter:
+
+```text
+config JSON  →  load at startup / bake into bundle  →  generic engine (lookup, score, render)
+```
+
+| Belongs in **config** | Belongs in **Rust** (stable engine only) |
+|-----------------------|------------------------------------------|
+| `fact_key`, preference labels, area aliases | Parquet load, edge index, bounded graph walk |
+| `answers_preferences`, `scoring_hint`, thresholds | Scoring *algorithms* (`TextMatch`, `LowerIsBetter`) |
+| Evidence section `kind`, `fact_keys[]`, presentation variant | Map `variant` → React component name |
+| `display_template`, proof label thresholds | Template substitution `{value}` |
+| Source priority tiers | Resolver tie-break logic |
+
+**Anti-pattern (delete in Phase 4):** `match preference { "metro access" => ..., "quiet neighborhood" => ... }` or `match kind { "rera" => ... }` with dozens of arms.
+
+**Allowed match arms:** value-type dispatch (`FactValue::Text` vs `Number`), scoring direction enum, HTTP/error handling — not per-leaf product vocabulary.
+
+**Acceptance for convergence:** Adding a leaf in `concern_taxonomy.json` + `fact_registry.json` requires no Rust change and no frontend const map.
 
 ---
 
@@ -302,10 +325,10 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 **Acceptance:**
 
-- [ ] No `unwrap_or(0.5)` on quality/risk fields in `data_loader.rs`
-- [ ] Coverage report shows bootstrap fact counts per entity
-- [ ] Property page no longer shows identical fake risk bars
-- [ ] Legacy facts visible in admin/data-health, not as buyer proof
+- [x] No `unwrap_or(0.5)` on quality/risk fields in `data_loader.rs`
+- [x] Coverage report shows bootstrap fact counts per entity
+- [x] Property page no longer shows identical fake risk bars
+- [x] Legacy facts visible in admin/data-health, not as buyer proof
 
 **Storage check:**
 
@@ -314,20 +337,69 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 4 — Entity expansion: property + area + edges (10–14 days)
+### Phase 4 — Entity expansion + edges + **legacy deletion** (10–14 days)
 
-**Goal:** Serving bundle materializes full graph for search, evidence, and future EntityContext API.
+**Goal:** Serving bundle materializes the full graph **and** we delete superseded code paths. Phase 4 is not done until net lines go down — new graph support must come with removal of what it replaces.
 
-**Work:**
+**Prerequisite:** Phase 3 landed (bootstrap facts in lake, `data_loader` score defaults gone).
+
+#### 4A — Graph materialization (build)
 
 1. `canonical_property_nodes` asset from listings + seed
 2. `canonical_area_nodes` from RERA localities + `search_intent.json` aliases
 3. `road_segment` + `place` nodes where enrichment provides them
 4. KG edges in gold: `property→society`, `society→area`, `society→road`, `society→place`
 5. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `kg_society_view`)
-6. Rust loads edges into `AppState` (index by `from_entity_id` + `edge_type`)
-7. Search hard filters read property facts (BHK, price, area) from bundle
-8. `entity_refs` on search results populated for all listing cards
+6. Rust loads edges into `AppState` via `GraphIndex` (`edges_from` / `edges_to`)
+7. Bounded `walk_out(anchor, hops, max_depth=2)` — unit tests only, no HTTP (Phase 10)
+8. Search hard filters read property facts (BHK, price, area) from bundle
+9. `entity_refs` on search results populated for all listing cards
+
+#### 4B — Legacy deletion + **thin the Rust engine** (required, same phase)
+
+Delete code that existed only because the graph and bundle were incomplete. **No new feature ships without deleting its replacement target.**
+
+**Principle:** Every deleted `match` arm must be replaced by a config-driven loop, not a smaller hardcoded list.
+
+| Delete (hardcoded semantics) | Location | Replaced by |
+|------------------------------|----------|-------------|
+| `legacy_preference_score` (~200-line `match preference`) | `search/text.rs` | `search_metadata` + generic preference scorer over `PreferencePatternSpec` |
+| `legacy_fact_key_for_preference`, `format_legacy_display`, `legacy_negative_preference_evaluation` | `search/text.rs` | `fact_registry` `expanded_keys` + `display_template` |
+| `local_fallback_allowed` + seed field reads | `search/text.rs` | Bundle facts on `property:*` / `society:*` |
+| `legacy_preference_to_fact_key` | `routes/search.rs` | `fact_registry` preference patterns |
+| `include_str!(fact_schema_registry.json)` fallback | `search/schema.rs` | `fact_registry.json` only |
+| `include_str!(livability_theme_registry.json)` + theme `match` loops | `livability_brief.rs` | `concern_taxonomy.json` buckets + `fact_registry` |
+| `AREA_ALIASES` const (~100+ lines) | `search/intent.rs` | `search_intent.json` `area_aliases` |
+| `evidence_presentation_for_kind`, `evidence_section_priority`, per-`kind` fact key lists | `routes/properties.rs` | `app/config/product/evidence_sections.json` (already exists — wire it, delete matches) |
+| Seed score fields on `Property` / `PropertyCard` | `models/property.rs`, frontend | DAG facts via serving bundle |
+| Runtime reads of `data/knowledge/` | pipeline stragglers | lake gold KG |
+| `data/search/fact_schema_registry.json`, `livability_theme_registry.json` | git | merged config |
+| Embedded default asset graph (if parity proven) | `assets/registry.rs` | `asset_registry.json` only |
+| `data/intelligence/` | git | lake serving bundle |
+
+**What Rust should look like after Phase 4:**
+
+```rust
+// GOOD — generic engine
+for pattern in registry().positive_preference_patterns() {
+    if query_matches(&pattern.patterns, q) {
+        score += score_facts_for_keys(&pattern.expanded_keys, &bundle, entity_id);
+    }
+}
+
+// BAD — delete
+match preference {
+    "metro access" => if property.metro_distance_mins <= 10 { 2.0 } ...
+}
+```
+
+**Phase 8 follow-up (not blocking Phase 4):** frontend `SECTION_CONSTELLATION` / display title maps → API fields from config.
+
+**Deletion rules:**
+- Run `eval_search.py` before and after each deletion batch; no regression vs baseline
+- If a file is only kept for tests, migrate tests to bundle fixtures then delete
+- Prefer one PR per deletion cluster (search legacy, registries, data dirs) — easier to bisect
+- Update `app/config/coverage.json` as each item is removed
 
 **Acceptance:**
 
@@ -335,13 +407,21 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 - [ ] Bundle includes edges table; row count documented
 - [ ] Search "3bhk whitefield under 2cr" uses property + society facts
 - [ ] Tiles show `entity_refs` and match reasons from leaves
-- [ ] Graph walk `society → served_by_road → road_segment` resolvable in memory (no API yet)
+- [ ] Graph walk `society → served_by_road → road_segment` resolvable in unit test
+- [ ] **No `legacy_preference_score` or `local_fallback_allowed` in search hot path**
+- [ ] **`search/text.rs` has no `match preference` arms for product labels**
+- [ ] **`properties.rs` evidence sections driven by `evidence_sections.json`, not `match kind`**
+- [ ] **`data/search/fact_schema_registry.json` and `livability_theme_registry.json` deleted**
+- [ ] **`search/intent.rs` has no hardcoded `AREA_ALIASES`**
+- [ ] Net LOC reduction documented in PR (build + delete in same phase)
 
 **Storage check:**
 
 - `entities.parquet` + `edges.parquet` in serving bundle
 - `format_version` bump if edges table added
 - Tantivy index rebuild acceptable; keep in bundle version folder
+
+**Not in Phase 4:** EntityContext HTTP API (Phase 10), Reddit pipeline (Phase 6).
 
 ---
 
@@ -393,16 +473,11 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 7 — Search legacy deletion (3–5 days)
+### Phase 7 — Search legacy deletion (3–5 days) — **merged into Phase 4**
 
-**Goal:** Remove hardcoded preference scoring.
+> Phase 7 items (`legacy_preference_score`, `routes/search.rs` legacy map) are now **required Phase 4B deliverables**. This section kept for traceability only.
 
-**Work:**
-
-1. Delete `legacy_preference_score`, `format_legacy_display`, `legacy_fact_key_for_preference`
-2. Delete `routes/search.rs` legacy preference map
-3. `local_fallback_allowed` → always false when serving node exists (or remove path)
-4. Re-run `eval_search.py` + search benchmark
+**Goal:** Remove hardcoded preference scoring — done as part of Phase 4B once property entities + bundle facts exist.
 
 **Acceptance:**
 
@@ -489,7 +564,7 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 ```text
 Stream A — Config & DAG loader        (Phases 0–1) ✅
 Stream B — Fact registry & resolver   (Phases 2–3)  ← NEXT
-Stream C — Entity + edges in bundle   (Phase 4)
+Stream C — Entity + edges + **delete legacy**  (Phase 4)  ← NEXT after Phase 3
 Stream D — UI consolidation           (Phase 5, partial)
 Stream E — Reddit taxonomy pipeline   (Phase 6)
 Stream F — Search cleanup             (Phase 7)
@@ -497,9 +572,9 @@ Stream G — Config-driven evidence UI  (Phase 8)
 Stream H — EntityContext graph API    (Phase 10 — last)
 ```
 
-**Critical path:** B → C → F (search needs property entities + real facts)  
-**Graph UI path:** C (edges in bundle) → H (API + generic renderers)  
-**Can parallel:** D after B starts; E after A; G after B; H only after C
+**Critical path:** Phase 3 (done) → Phase 4 build + delete → eval green  
+**Graph UI path:** Phase 4 edges → Phase 10 API  
+**Can parallel:** Phase 5/8 after Phase 3; Phase 4 deletions batched with graph work
 
 ### Graph UI readiness (config today, API later)
 
@@ -585,15 +660,13 @@ data/validation/resolution_audit.json
 
 ## 10. Immediate next actions
 
-**Build data/config layers now. API last.**
+**Phase 3 complete. Phase 4 = build graph + delete legacy.**
 
-1. **Phase 2:** Wire `fact_registry.json` → `search_metadata` materialization; baseline `eval_search.py` snapshot ✅
-2. **Phase 2:** Replace `search/schema.rs` embedded registry with `dag_config` loader ✅
-3. **Phase 3:** Legacy seed importer → silver facts; remove `data_loader.rs` score defaults
-4. **Phase 4:** Materialize `property:*`, `area:*`, `road:*` + **edges in serving bundle**
-5. **Do not start:** `GET /api/entities/{id}/context` until Phase 4 edges ship
-
-Config-only prep (no runtime): extend `ontology.json` with `near_place` when place enrichment is scoped.
+1. **Phase 3** (other session): bootstrap importer, kill `data_loader` score defaults
+2. **Phase 4A:** property/area/road nodes + edges in serving bundle + `GraphIndex`
+3. **Phase 4B:** delete legacy search scoring, old registries, `AREA_ALIASES`, `data/knowledge` stragglers
+4. **Gate:** `eval_search.py` green after each deletion batch
+5. **Do not start:** EntityContext HTTP API until Phase 4 edges ship
 
 ---
 

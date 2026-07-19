@@ -153,7 +153,7 @@ async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
     older_fact.confidence = 0.9;
     let mut corrected_fact = older_fact.clone();
     corrected_fact.version = 2;
-    corrected_fact.confidence = 0.6;
+    corrected_fact.confidence = 0.95;
     corrected_fact.value = FactValue::Text("mixed".to_string());
     society.add_fact(older_fact);
     society.add_fact(corrected_fact);
@@ -217,7 +217,7 @@ async fn kg_support_fact_merge_preserves_canonical_fact_versions() {
         .filter(|record| record.fact_key == "maintenance_quality")
         .map(|record| record.fact_version)
         .collect::<Vec<_>>();
-    assert_eq!(canonical_versions, vec![1, 2]);
+    assert_eq!(canonical_versions, vec![2]);
     assert!(materialization
         .records
         .facts

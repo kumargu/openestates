@@ -1,0 +1,594 @@
+[
+  {
+    "id": "area-whitefield",
+    "name": "Whitefield",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Kadugodi Tree Park Metro Station (Purple Line) is approximately 0.5 km from Whitefield Railway Station.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Whitefield is notorious for severe traffic congestion during peak hours, leading to unpredictable and long commute times, often exacerbated by road digging and waterlogging.",
+    "waterlogging_summary": "Whitefield experiences waterlogging during heavy rainfall, with incidents reported on Whitefield Main Road, Varthur Kodi, and underpasses, sometimes leading to knee-deep water and traffic disruptions.",
+    "livability_summary": "Whitefield is a highly sought-after residential area in East Bangalore, offering a balanced mix of work, life, and leisure with world-class amenities and excellent connectivity. Despite challenges like traffic and occasional waterlogging, ongoing infrastructure developments are continuously enhancing its appeal for professionals and families.",
+    "externality_tags": [
+      "Waterlogging: moderate",
+      "Metro: operational",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Bengaluru Suburban Rail (Keng",
+      "School: The Deens Academy",
+      "School: National Public School (NPS) Whitefield",
+      "School: Vydehi School of Excellence"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Cosmopolitan, dynamic, and modern, Whitefield is a bustling IT hub that blends old-world charm with a vibrant social and cultural life.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-hoodi",
+    "name": "Hoodi",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Hoodi Metro Station is operational on the Purple Line of Namma Metro, located between Baiyappanahali and Whitefield stations. It provides convenient connectivity to nearby localities like Whitefield and ITPL.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Hoodi experiences significant traffic congestion, especially during peak office hours, due to its proximity to major IT hubs. Potholes and bad road conditions, particularly at Hoodi junction, contribute to daily commute delays.",
+    "waterlogging_summary": "Waterlogging is a recurring issue in Hoodi and surrounding areas during heavy rains, with specific incidents including the Hoodi railway underpass being flooded in May 2025. Drainage issues exist in low-lying areas, and heavy rainfall has led to knee-deep water in streets and water entering houses in nearby areas.",
+    "livability_summary": "Hoodi is a fast-developing residential hub in East Bengaluru, offering good connectivity via road and the operational metro, and proximity to major IT hubs. It boasts adequate social infrastructure, including schools, hospitals, and shopping malls, making it a viable living destination for professionals and families.",
+    "externality_tags": [
+      "Waterlogging: moderate",
+      "Metro: operational",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The Hoodi metro station on the Purple Line is already operational. Upcoming deve",
+      "School: Gopalan International School",
+      "School: Sri Chaitanya Techno School",
+      "School: EuroSchool Whitefield"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A developed and vibrant locality, often seen as a popular alternative to Whitefield, attracting a diverse population due to its proximity to employment centers.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-marathahalliwhitefield-road",
+    "name": "Marathahalli\u2014Whitefield Road",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Marathahalli metro station (Blue Line Phase 2A) is under construction and expected to open in June 2026. The nearest operational metro stations are Seetharampalya (approx. 2.61 km) and Kundalahalli (approx. 2.66 km) on the Purple Line. Whitefield (Kadugodi) metro station on the Purple Line is operational.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "The Marathahalli-Whitefield Road experiences heavy traffic congestion daily, especially during peak hours. Recent traffic changes at Marathahalli Bridge have been observed to shift congestion rather than reduce it.",
+    "waterlogging_summary": "Frequent waterlogging is a serious issue in Marathahalli and Whitefield, particularly in areas near lakes and during the monsoon season. Incidents include waterlogging at the newly inaugurated Nallurhalli metro station and major flooding in parts of Whitefield, HSR Layout, Outer Ring Road (ORR), Siddapura, and Panathur underbridge.",
+    "livability_summary": "Marathahalli-Whitefield Road is a dynamic and densely populated residential area in East Bengaluru, highly sought after by IT professionals and families due to its proximity to major tech hubs and a wide range of amenities. The area is undergoing significant infrastructure development, including metro expansion and road projects, which are expected to enhance connectivity and property values. However, residents frequently face challenges with heavy traffic congestion and a high risk of waterlogging during heavy rains.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Marathahalli metro station (e",
+      "School: VIBGYOR High School",
+      "School: National Public School",
+      "School: Sri Chaitanya School"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Densely populated, vibrant, active, and a busy hub with a mix of established and new residential developments, attracting IT professionals and families.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-pattandur-agrahara",
+    "name": "Pattandur Agrahara",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Pattandur Agrahara has an elevated metro station on the Purple Line, which opened on March 26, 2023. The nearest metro station is Sri Sathya Sai Hospital, approximately 0.34 km away. Pattandur Agrahara metro station is also nearby, about 0.91 km from some parts of the locality.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Pattandur Agrahara experiences massive traffic throughout the day, with frequent traffic jams and high noise pollution, especially near the metro line. Daily commutes can be a nightmare due to poor road conditions, narrow streets, and potholes.",
+    "waterlogging_summary": "There is a risk of water pooling on the roads during the rainy season, leading to numerous potholes. Bengaluru, including Whitefield, frequently experiences severe waterlogging during heavy rains due to overwhelmed drainage infrastructure, clogged drains, and inadequate stormwater systems, with roads becoming inundated and water entering houses. The Pattandur Agrahara lake is also noted as very polluted and emits a bad smell.",
+    "livability_summary": "Pattandur Agrahara is a developing residential area in Whitefield, offering modern housing and good connectivity to major IT hubs, schools, hospitals, and malls. However, residents frequently contend with significant traffic congestion, poor road conditions, and a high risk of waterlogging during heavy rainfall.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: operational",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include Namma Metro Phase 3, the Bengalur",
+      "School: The Deens Academy (0.96 km)",
+      "School: Vydehi School of Excellence (1.23 km)",
+      "School: Holy Cross School (1.31 km)"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A bustling area popular with professionals due to its proximity to IT hubs, offering a mix of modern amenities and traditional charm, though it can be noisy and experience traffic-related frustrations.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-sarjapur-road",
+    "name": "Sarjapur Road",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "The Sarjapur-Hebbal Metro Line (Red Line, Phase 3A) is planned and approved by the Karnataka Government, with construction expected to start later in 2025 or 2027-28 and completion by 2031 or later. Currently, the nearest operational metro stations are Hosa Road (Yellow Line) and Seetharampalya / Kundalahalli (Purple Line), both approximately 13-14 km away.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Sarjapur Road experiences severe traffic congestion daily, especially during peak hours (8:00 AM to 11:00 AM and 5:00 PM to 9:00 PM), where a 15-18 km commute can take over 90 minutes. Key bottlenecks include Iblur Junction and Wipro Signal, exacerbated by narrow road widths that cannot handle the daily volume of over 1.5 lakh vehicles.",
+    "waterlogging_summary": "Sarjapur Road is highly prone to waterlogging and flooding during heavy rainfall. Specific incidents include Rainbow Drive Layout experiencing knee-deep water in 2022, 2024, and May/June 2025 due to its low-lying nature and poor drainage. Road junctions like Sarjapur\u2013Marathahalli also frequently waterlog, and areas near Bellandur and Agara Lakes flood when the lakes overflow.",
+    "livability_summary": "Sarjapur Road is a rapidly developing residential hub in Southeast Bangalore, offering excellent connectivity to major IT corridors and a robust social infrastructure with numerous schools, hospitals, and shopping centers. Despite challenges like severe traffic congestion and waterlogging in some areas, its modern amenities and strong investment potential make it a highly sought-after location for both professionals and families.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: planned",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Sarjapur-Hebbal Metro Line (P",
+      "School: National Public School (NPS), Sarjapur Road",
+      "School: Greenwood High International School",
+      "School: Indus International School"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Sarjapur Road has a tech-forward and entrepreneurial community atmosphere, driven by a high concentration of tech professionals. It offers a blend of urban conveniences with green spaces, creating a cosmopolitan urban living experience that appeals to both young professionals and families.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-whitefield-sarjapur-road",
+    "name": "Whitefield-Sarjapur Road",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "The Purple Line of Namma Metro is operational in Whitefield, with the closest station being Kadugodi Tree Park, approximately 0.5 km from Whitefield Railway Station. Seetharampalya is also a metro station on the Purple Line near Sarjapur Road. The Red Line (Hebbal-Sarjapur) is an upcoming metro project for Sarjapur Road, expected to be completed by 2031.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commute on Whitefield-Sarjapur Road is characterized by severe traffic congestion, especially during peak hours, with commuters often spending an hour to cover just 4-5 km. Slow progress on flyover construction, such as at Dommasandra Junction, exacerbates bottlenecks.",
+    "waterlogging_summary": "Sarjapur Road and Whitefield have experienced significant waterlogging and flooding during heavy rains. Notable incidents include Rainbow Drive Layout and Sunny Brooks on Sarjapur Road being flooded in 2022 due to overflowing stormwater drains. Bellandur, Sarjapur Road, and Whitefield also saw massive flooding in August 2022 and May/June 2025. The issues are attributed to rapid, unplanned construction, encroachment on water bodies and drains, and insufficient drainage capacity.",
+    "livability_summary": "Whitefield-Sarjapur Road is a rapidly developing residential area, highly attractive to IT professionals and families due to its proximity to major IT hubs and a growing social infrastructure. The area offers a diverse range of housing options and is seeing continuous property appreciation. However, residents frequently face challenges with severe traffic congestion and a high risk of waterlogging during heavy rains.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: operational | under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Namma Metro Phase 3 (Hebbal-S",
+      "School: Greenwood High",
+      "School: Oakridge International School",
+      "School: Vydehi School of Excellence"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "The area has a dynamic, IT-driven personality, characterized by rapid urbanization and a blend of modern residential communities with evolving social amenities. It offers a bustling yet family-friendly environment, despite the ongoing infrastructure challenges.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-panathur",
+    "name": "Panathur",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Ragigudda Metro Station (Yellow Line) is the nearest, approximately a 4-minute walk from Panathur Main Road.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Panathur experiences significant daily traffic congestion, especially during office hours, with the Panathur junction and railway underpass being notorious bottlenecks.",
+    "waterlogging_summary": "Panathur is prone to waterlogging during heavy rains, with incidents reported in October 2024 and August 2024. The Panathur railway underpass is particularly susceptible to knee-deep waterlogging.",
+    "livability_summary": "Panathur is a rapidly developing and sought-after residential area in East Bengaluru's IT corridor, offering diverse housing options and excellent connectivity to major IT hubs, educational institutions, and healthcare facilities. Despite challenges like traffic congestion and waterlogging during heavy rains, the area's ongoing infrastructure development and significant property appreciation make it an attractive location for both residents and investors.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: operational",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Upcoming infrastructure includes ongoing smart city projects, and the area benef",
+      "School: VIBGYOR Rise School (0.6 km)",
+      "School: New Horizon Gurukul (0.9 km)",
+      "School: Geetanjali Olympiad School (0.9 km)"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Panathur has a vibrant and bustling atmosphere, characterized by a cosmopolitan and diverse community of upper-middle-class professionals and businessmen. It offers a blend of urban conveniences with a somewhat relaxed feel, despite its proximity to the city's tech hubs.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-bellandur",
+    "name": "Bellandur",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Prestige Bellandur metro station (Blue Line) is under construction and slated to be operational by December 2026. The nearest operational metro stations on the Yellow Line include Hongasandra (5.75 km), Bommanahalli (5.93 km), and Kudlu Gate (6.05 km).",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Bellandur experiences severe traffic congestion, especially during peak hours, particularly on the Outer Ring Road (ORR) and near tech parks. Commutes can be lengthy, with travel from Bellandur to Kempegowda International Airport taking up to 1 hour 45 minutes.",
+    "waterlogging_summary": "Bellandur faces a high risk of waterlogging, which is a recurring issue during heavy rains. This is attributed to narrowed and concretized drains, encroachment of wetlands, and incomplete drain development work. Notable incidents include severe flooding in September 2022 and May 2025, where parts of the Outer Ring Road and residential areas were inundated.",
+    "livability_summary": "Bellandur is a vibrant, tech-centric residential locality with well-developed social and physical infrastructure, offering a blend of residential and commercial spaces. It provides convenient access to major IT hubs, quality schools, hospitals, and a wide range of amenities. However, residents frequently contend with significant traffic congestion and waterlogging issues.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The Prestige Bellandur Metro Station on the Blue Line is under construction and ",
+      "School: Narayana e-Techno School, Bellandur",
+      "School: GEAR Innovative International School",
+      "School: Royale Concorde International School, Bellandur"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Urban, cosmopolitan, and vibrant, attracting IT professionals and young families with its array of hip cafes, craft beer breweries, international restaurants, and a lively social scene.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-haralur-road",
+    "name": "Haralur Road",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Hosa Road Metro Station (Yellow Line) is approximately 755 meters away, a 10-minute walk.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commute on Haralur Road experiences significant traffic congestion during peak hours due to narrow roads and bottlenecks, with a 4km stretch sometimes taking 20-25 minutes.",
+    "waterlogging_summary": "Waterlogging is a commonly faced issue during monsoons, with specific incidents reported on Silver County Road near Haralur. Heavy rainfall has led to severe waterlogging, disrupting daily life and causing water to enter houses in residential areas.",
+    "livability_summary": "Haralur Road is a rapidly developing residential area in Bengaluru, offering a mix of modern apartments and villas with good connectivity to major IT hubs. It provides essential amenities like schools, hospitals, and shopping centers, making it suitable for professionals and families. However, residents frequently face challenges such as traffic congestion and water supply concerns.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The Namma Metro Yellow Line extension is a major upcoming infrastructure project",
+      "School: Narayana Olympiad School (1 km)",
+      "School: VIBGYOR High School, Haralur (1.5 km)",
+      "School: Orchids The International School (2 km)"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Haralur Road offers a blend of modern living with peaceful surroundings, characterized by green spaces and a fast-paced, metropolitan lifestyle with a strong community feel. It is a preferred choice for IT professionals and families.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-hsr-layout",
+    "name": "HSR Layout",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "The Yellow Line metro became operational on August 11, 2025, with the nearest station, Hongasandra, approximately 2.09 km away. An HSR Layout metro station on the Blue Line is under construction and is slated to become operational around December 2026.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commutes in HSR Layout are often challenging due to significant traffic congestion, exacerbated by ongoing metro construction and flyover closures, leading to considerable delays, especially during peak hours.",
+    "waterlogging_summary": "HSR Layout has experienced severe waterlogging and flooding incidents, with roads becoming heavily inundated and basements flooded during heavy rains in September 2017, May 2025, and October 2025. Issues like incomplete or blocked storm drains and sewage mixing with rainwater have been cited as causes.",
+    "livability_summary": "HSR Layout is a well-planned, upscale residential area in South Bengaluru, known for its robust infrastructure, green spaces, and excellent connectivity to major IT hubs. It is considered highly livable for families due to its safety, numerous schools, and comprehensive healthcare facilities, offering a balanced urban lifestyle despite facing traffic and waterlogging challenges.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: operational | under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Namma Metro Phase 2A and 2B e",
+      "School: National Public School, HSR Layout",
+      "School: JSS Public School, HSR Layout",
+      "School: Sri Chaitanya School, HSR Layout"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Vibrant, family-friendly, and cosmopolitan with a strong startup culture, offering a blend of suburban tranquility and urban connectivity.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-agara-village",
+    "name": "Agara Village",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Agara metro station (Blue Line) is under construction and slated to be operational by December 2026. The nearest operational metro station is Bommanahalli (Yellow Line) at 2.79 km.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commutes in Agara Village are significantly impacted by severe traffic congestion, particularly at the Agara flyover and Iblur junction, where vehicles converge from multiple directions. Commuters often experience 40-50 minute delays for a 4km stretch, with overall daily commutes frequently extending to 1.5-2 hours.",
+    "waterlogging_summary": "Agara Village and surrounding areas, including HSR Layout and the Outer Ring Road, experience severe waterlogging during heavy rainfall, leading to roads turning into waterlogged pools and knee-deep water in some sections. This disrupts traffic and can cause water to enter homes.",
+    "livability_summary": "Agara Village is a vibrant residential locality within the HSR Layout area, offering a blend of peaceful village life with urban conveniences. It boasts good connectivity to major IT hubs like Koramangala and Sarjapur Road, and public transport is accessible. The area is experiencing improving infrastructure and amenities, making it a sought-after destination for working professionals and families.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The Agara metro station on the Blue Line is under construction and expected to b",
+      "School: National Public School, HSR",
+      "School: Gnan Srishti School Of Excellence, HSR Layout",
+      "School: Lawrence High School, HSR Layout"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A peaceful and charming residential area with broad, tree-lined roads, offering a calm atmosphere with greenery, ideal for families and working professionals seeking a quieter neighborhood near tech hubs.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-thanisandra",
+    "name": "Thanisandra",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Nagawara Station, approximately 3-4 km. The Pink Line (elevated section) is expected to be operational by May 2026, and the underground section by December 2026 or September 2026. The Blue Line Phase 2B will also connect to Nagawara.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commute in Thanisandra can be challenging, with traffic picking up near junctions and the highway during peak hours. A journey to the central business district can take 50-60 minutes in rush traffic, though road upgrades and metro expansion are projected to reduce this to 30-35 minutes by 2030.",
+    "waterlogging_summary": "While Thanisandra itself isn't frequently cited for severe waterlogging, nearby areas like Rashtrathana Junction towards Ashwath Nagar Junction experience water accumulation. Bengaluru generally faces waterlogging issues during heavy rains due to poor drainage, affecting major roads and underpasses, including areas close to Manyata Tech Park.",
+    "livability_summary": "Thanisandra is a rapidly developing residential hub in North Bengaluru, offering strategic connectivity to major IT hubs like Manyata Tech Park and the airport. It provides a balanced mix of accessibility, lifestyle amenities, and future growth potential, making it a preferred choice for families and working professionals.",
+    "externality_tags": [
+      "Waterlogging: moderate",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Namma Metro Pink and Blue Lin",
+      "School: Rashtrothana Vidya Kendra (0.33 km)",
+      "School: St. George Public School (0.4 km)",
+      "School: MR International School (0.62 km)"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A peaceful yet developing area in North Bangalore, characterized by a mix of greenery and ongoing construction. It has a growing city pulse, attracting families and professionals seeking quality living and long-term value.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-hebbal",
+    "name": "Hebbal",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Hebbal metro station on the Blue Line is under construction and expected to be operational around June 2026. It is planned as an interchange for Blue, Orange, and Red lines.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commute in Hebbal is often characterized by heavy traffic congestion, particularly around the Hebbal flyover, though recent infrastructure improvements like new traffic loops have reduced travel times in some stretches.",
+    "waterlogging_summary": "Hebbal Circle below the flyover and parts of the Outer Ring Road are highly prone to waterlogging, with incidents reported even after mild showers, leading to severe traffic snarls. Tata Nagar near Hebbal also experienced knee-deep waterlogging due to an overflowing lake.",
+    "livability_summary": "Hebbal is a premium residential locality in North Bengaluru, offering excellent connectivity to Kempegowda International Airport and major IT hubs like Manyata Tech Park. It provides a blend of urban amenities with natural beauty, including Hebbal Lake and green spaces, making it a desirable area for families and professionals despite persistent traffic congestion and waterlogging issues.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming projects include the Hebbal metro station (Blue Line, Orange Line",
+      "School: Canadian International School",
+      "School: NPS North",
+      "School: Presidency School"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A vibrant, dynamic neighborhood that blends urban living with a sense of community spirit, known for its picturesque lake and modern infrastructure, attracting working professionals and families.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-marathahalli",
+    "name": "Marathahalli",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "Marathahalli metro station (Blue Line Phase 2A) is under construction and expected to open by June 2026 or December 2026. The nearest operational metro stations are Seetharamapalya (2.61 km) and Kundalahalli (2.66 km) on the Purple Line.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Marathahalli is notorious for heavy traffic congestion and frequent jams, especially during peak hours around the Marathahalli Bridge, with commutes often exceeding 30 minutes. Metro construction work further narrows roads, contributing to the congestion.",
+    "waterlogging_summary": "Marathahalli experiences occasional monsoon flooding and severe waterlogging incidents. In August 2024, the basement of Sonesta Silver Oak Apartments was completely flooded, and a wall collapsed due to heavy rains.",
+    "livability_summary": "Marathahalli is a popular and strategically located residential area in Bangalore, offering excellent connectivity to major IT hubs and a wide range of amenities including schools, hospitals, and shopping centers. However, residents frequently face challenges with heavy traffic congestion and occasional waterlogging during monsoon seasons.",
+    "externality_tags": [
+      "Waterlogging: moderate",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The major upcoming infrastructure project is the Marathahalli metro station on t",
+      "School: VIBGYOR High School",
+      "School: National Public School (Munnekolala)",
+      "School: Vagdevi Vilas School"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A bustling and dynamic IT hub with a vibrant culture, diverse shopping options, and a lively atmosphere, attracting a mix of IT professionals and families, though some areas can feel chaotic due to traffic and development.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-varthur",
+    "name": "Varthur",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "The nearest operational metro station is Whitefield (Kadugodi) on the Purple Line, approximately 7 km from Varthur. A future metro line (Sarjapur to Hebbal Red Line) is planned to include Varthur, with construction slated to begin in 2026.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Varthur Road (SH-35) experiences slow-moving traffic during morning and evening rush hours, with frequent backups at Varthur Kodi Junction. Commutes to Whitefield tech parks can take 25-45 minutes during peak hours for distances of 4-11.5 km, and to Outer Ring Road (ORR) tech parks (10-16 km) 40-75 minutes. Students on the Varthur\u2013Sarjapur Road spend significant time in traffic, with some losing nearly 600 hours annually.",
+    "waterlogging_summary": "Varthur has a high risk of waterlogging. In September 2023, Whitefield Main Road and Varthur Kodi were waterlogged after just an hour of normal rainfall, leading to traffic jams. In October 2020, Varthur junction was under three feet of water due to overflowing stormwater drains. Balagere Road also experiences waterlogging during heavy rains.",
+    "livability_summary": "Varthur is a rapidly developing residential hub in East Bangalore, strategically located between major IT corridors like Whitefield and Sarjapur Road. It offers a mix of new gated townships and established neighborhoods with improving access to schools, markets, and offices. While facing challenges like traffic congestion and waterlogging, ongoing infrastructure projects aim to enhance connectivity and quality of life, making it an attractive area for families and IT professionals.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: operational",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "Major upcoming infrastructure projects include the Namma Metro Phase development",
+      "School: Basil Woods International School",
+      "School: Chrysalis High School",
+      "School: National Public School, Varthur"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "A rapidly evolving, peaceful locality with a mix of established neighborhoods and new developments, attracting IT professionals and families seeking a calmer environment with good access to amenities.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  },
+  {
+    "id": "area-koramangala",
+    "name": "Koramangala",
+    "city": "Bengaluru",
+    "median_price_per_sqft": 0,
+    "price_range_per_sqft": {
+      "low": 0,
+      "high": 0
+    },
+    "trend_direction": "stable",
+    "trend_summary": "Not yet enriched. Run learn_area skill to populate.",
+    "metro_access_summary": "The nearest operational metro station is Central Silk Board (Yellow Line), approximately 1.52 km away. The Sarjapur-Hebbal metro line (Red Line, Phase 3A) is under construction and will have stations within Koramangala, expected to be ready by December 2030.",
+    "airport_noise_summary": "Not assessed.",
+    "traffic_summary": "Daily commutes in Koramangala are often characterized by significant congestion, with a 10 km journey sometimes taking up to two hours during peak hours.",
+    "waterlogging_summary": "Koramangala has experienced severe waterlogging incidents, including widespread flooding in September 2022 and May 2025, and knee-deep water in Koramangala 6th Block in April 2020.",
+    "livability_summary": "Koramangala is an upscale and lively residential area in Bengaluru, offering a blend of urban amenities, excellent connectivity to business hubs, and a robust social infrastructure. It is a highly desirable neighborhood known for its green spaces, diverse dining, and entertainment options, making it suitable for young professionals, entrepreneurs, and families.",
+    "externality_tags": [
+      "Waterlogging: high",
+      "Metro: under_construction",
+      "Price: appreciating"
+    ],
+    "infrastructure_tags": [
+      "The Sarjapur-Hebbal metro line (Red Line, Phase 3A) is a major upcoming project ",
+      "School: National Public School, Koramangala",
+      "School: Bethany High School, Koramangala",
+      "School: St. Francis High School, Koramangala"
+    ],
+    "reddit_signals": {
+      "decision_drivers": [],
+      "recurring_concerns": [],
+      "sentiment_label": "neutral",
+      "last_updated": "2026-03-09"
+    },
+    "community_notes": "Cosmopolitan, youthful, energetic, vibrant, and a melting pot of cultures.",
+    "sample_size": 0,
+    "last_updated": "2026-03-09"
+  }
+]

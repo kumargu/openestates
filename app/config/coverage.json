@@ -70,6 +70,11 @@
       "primitive": "bootstrap"
     },
     {
+      "path": "app/config/dag/source_adapters/legacy_seed.json",
+      "role": "Seed JSON field → fact_key mapping for legacy_seed_facts silver asset",
+      "primitive": "bootstrap"
+    },
+    {
       "path": "app/config/bootstrap/edge_inference.json",
       "role": "How to infer served_by_road, in_area, etc. — rules not instances",
       "primitive": "bootstrap"
@@ -180,9 +185,7 @@
       "primitive": "pipeline"
     }
   ],
-  "pending_empty_scaffolds": [
-    "app/config/dag/source_adapters/ — one JSON per external source"
-  ],
+  "pending_empty_scaffolds": [],
   "graph_ui_readiness": {
     "_comment": "EntityContext API (Phase 10) — verify config/lake before building API or generic UI",
     "contract": "app/config/dag/entity_context.json",

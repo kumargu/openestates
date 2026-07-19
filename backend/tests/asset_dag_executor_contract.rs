@@ -17,11 +17,12 @@ use backend::assets::{
     PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
     RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, TrustTier, BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    SourceWatermark, TrustTier,     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
     COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, LEGACY_SEED_FACTS_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID,
     METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
@@ -67,10 +68,10 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 15);
-    assert_eq!(report.manifest.succeeded_count, 15);
+    assert_eq!(report.manifest.planned_count, 16);
+    assert_eq!(report.manifest.succeeded_count, 16);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 15);
+    assert_eq!(report.executed_assets.len(), 16);
     for id in [
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
@@ -85,6 +86,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+        LEGACY_SEED_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -99,7 +101,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 12);
+    assert_eq!(kg_record.parent_materializations.len(), 13);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -243,8 +245,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 19);
-    assert_eq!(report.executed_assets.len(), 19);
+    assert_eq!(report.manifest.planned_count, 20);
+    assert_eq!(report.executed_assets.len(), 20);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -263,6 +265,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+        LEGACY_SEED_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -473,10 +476,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&home_state_record.materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 13);
+    assert_eq!(kg_record.parent_materializations.len(), 14);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        93
+        92
     );
 
     let serving_record = current_record(
@@ -485,7 +488,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 93);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 92);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -531,8 +534,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 22);
-    assert_eq!(report.executed_assets.len(), 22);
+    assert_eq!(report.manifest.planned_count, 23);
+    assert_eq!(report.executed_assets.len(), 23);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -554,6 +557,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+        LEGACY_SEED_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -1614,15 +1618,15 @@ fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
         possession_status: "Ready to Move".to_string(),
         metro_distance_mins: 10,
         maintenance_cost_monthly: 6_000,
-        society_quality_score: 0.7,
-        builder_quality_score: 0.7,
-        document_completeness_score: 0.8,
-        litigation_risk: 0.1,
-        noise_score: 0.2,
-        sunlight_score: 0.7,
-        airport_noise_score: 0.1,
-        waterlogging_risk_score: 0.2,
-        traffic_score: 0.4,
+        society_quality_score: Some(0.7),
+        builder_quality_score: Some(0.7),
+        document_completeness_score: Some(0.8),
+        litigation_risk: Some(0.1),
+        noise_score: Some(0.2),
+        sunlight_score: Some(0.7),
+        airport_noise_score: Some(0.1),
+        waterlogging_risk_score: Some(0.2),
+        traffic_score: Some(0.4),
         days_on_market: 20,
         greenery_score: None,
         open_space_score: None,
@@ -1860,6 +1864,27 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 scoring_weight: Some(1.4),
                 scoring_thresholds_json: "[]".to_string(),
             }],
+            source_watermarks: Vec::new(),
+        }),
+        legacy_seed_facts: Some(SkillFactsInput {
+            source: "legacy_seed".to_string(),
+            snapshot_date: "2026-07-13".to_string(),
+            facts: vec![SkillFactRecord {
+                entity_id: "property:discovered-green-acre-whitefield-3bhk".to_string(),
+                fact_key: "listing.title".to_string(),
+                value_type: "text".to_string(),
+                value_json: r#"{"type":"Text","data":"3 BHK in Green Acre Whitefield"}"#.to_string(),
+                confidence: 0.25,
+                source_type: "LegacySeed".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: Some("legacy_seed_import".to_string()),
+                triggered_by: Some("bootstrap_import".to_string()),
+                learned_at: now,
+                run_id: "collector-legacy_seed_import-2026-07-13".to_string(),
+                input_hash: "sha256:legacy-seed-fixture".to_string(),
+            }],
+            fact_annotations: vec![],
             source_watermarks: Vec::new(),
         }),
         google_places_weekly: Some(GooglePlacesWeeklyInput {

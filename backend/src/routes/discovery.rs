@@ -166,14 +166,15 @@ fn commute_cards(candidates: &[DiscoveryCandidate]) -> Vec<DiscoveryShelfCard> {
             .then_with(|| {
                 b.property
                     .traffic_score
-                    .total_cmp(&a.property.traffic_score)
+                    .unwrap_or(0.0)
+                    .total_cmp(&a.property.traffic_score.unwrap_or(0.0))
             })
     });
     cards_from(ranked, |candidate| {
         format!(
             "{} min metro access, traffic score {:.0}%",
             candidate.property.metro_distance_mins,
-            candidate.property.traffic_score * 100.0
+            candidate.property.traffic_score.unwrap_or(0.0) * 100.0
         )
     })
 }
@@ -192,7 +193,7 @@ fn family_cards(candidates: &[DiscoveryCandidate]) -> Vec<DiscoveryShelfCard> {
         format!(
             "{} BHK, society score {:.0}%, low-risk checks visible",
             candidate.property.bhk,
-            candidate.property.society_quality_score * 100.0
+            candidate.property.society_quality_score.unwrap_or(0.0) * 100.0
         )
     })
 }
@@ -280,10 +281,10 @@ where
 }
 
 fn family_score(property: &Property) -> f64 {
-    property.society_quality_score
-        + property.sunlight_score * 0.3
-        + (1.0 - property.litigation_risk) * 0.25
-        + (1.0 - property.waterlogging_risk_score) * 0.2
+    property.society_quality_score.unwrap_or(0.0)
+        + property.sunlight_score.unwrap_or(0.0) * 0.3
+        + (1.0 - property.litigation_risk.unwrap_or(1.0)) * 0.25
+        + (1.0 - property.waterlogging_risk_score.unwrap_or(1.0)) * 0.2
 }
 
 fn premium_proof_score(card: &PropertyCard) -> usize {
@@ -301,8 +302,8 @@ fn premium_proof_score(card: &PropertyCard) -> usize {
 }
 
 fn area_strength_score(property: &Property) -> f64 {
-    property.society_quality_score
-        + property.traffic_score * 0.25
+    property.society_quality_score.unwrap_or(0.0)
+        + property.traffic_score.unwrap_or(0.0) * 0.25
         + property.resale_strength_score.unwrap_or(0.0) * 0.2
 }
 

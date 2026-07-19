@@ -1,11 +1,14 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use tokio::sync::RwLock;
 
+use crate::dag_config::{
+    better_source_type, buyer_visible_fact, load_resolution_policies, ResolutionPoliciesFile,
+};
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
 use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
@@ -311,33 +314,15 @@ fn representative_property_from_serving_society(
             .round()
             .max(0.0) as u32,
         maintenance_cost_monthly: 0,
-        society_quality_score: latest_numeric(Some(rows), "society_quality_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        builder_quality_score: latest_numeric(Some(rows), "builder_quality_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        document_completeness_score: latest_numeric(Some(rows), "document_completeness_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        litigation_risk: latest_numeric(Some(rows), "litigation_risk")
-            .unwrap_or(0.1)
-            .max(0.1),
-        noise_score: latest_numeric(Some(rows), "noise_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        sunlight_score: latest_numeric(Some(rows), "sunlight_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        airport_noise_score: latest_numeric(Some(rows), "airport_noise_score")
-            .unwrap_or(0.1)
-            .max(0.1),
-        waterlogging_risk_score: latest_numeric(Some(rows), "waterlogging_risk_score")
-            .unwrap_or(0.2)
-            .max(0.2),
-        traffic_score: latest_numeric(Some(rows), "traffic_score")
-            .unwrap_or(0.5)
-            .max(0.5),
+        society_quality_score: latest_numeric(Some(rows), "society_quality_score"),
+        builder_quality_score: latest_numeric(Some(rows), "builder_quality_score"),
+        document_completeness_score: latest_numeric(Some(rows), "document_completeness_score"),
+        litigation_risk: latest_numeric(Some(rows), "litigation_risk"),
+        noise_score: latest_numeric(Some(rows), "noise_score"),
+        sunlight_score: latest_numeric(Some(rows), "sunlight_score"),
+        airport_noise_score: latest_numeric(Some(rows), "airport_noise_score"),
+        waterlogging_risk_score: latest_numeric(Some(rows), "waterlogging_risk_score"),
+        traffic_score: latest_numeric(Some(rows), "traffic_score"),
         days_on_market: 0,
         greenery_score: latest_numeric(Some(rows), "greenery_score"),
         open_space_score: latest_numeric(Some(rows), "open_space_score"),
@@ -463,31 +448,15 @@ fn property_from_serving_entity(
             .unwrap_or(0.0)
             .round()
             .max(0.0) as u32,
-        society_quality_score: latest_numeric(rows, "society_quality_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        builder_quality_score: latest_numeric(rows, "builder_quality_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        document_completeness_score: latest_numeric(rows, "document_completeness_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        litigation_risk: latest_numeric(rows, "litigation_risk")
-            .unwrap_or(0.1)
-            .max(0.1),
-        noise_score: latest_numeric(rows, "noise_score").unwrap_or(0.5).max(0.5),
-        sunlight_score: latest_numeric(rows, "sunlight_score")
-            .unwrap_or(0.5)
-            .max(0.5),
-        airport_noise_score: latest_numeric(rows, "airport_noise_score")
-            .unwrap_or(0.1)
-            .max(0.1),
-        waterlogging_risk_score: latest_numeric(rows, "waterlogging_risk_score")
-            .unwrap_or(0.2)
-            .max(0.2),
-        traffic_score: latest_numeric(rows, "traffic_score")
-            .unwrap_or(0.5)
-            .max(0.5),
+        society_quality_score: latest_numeric(rows, "society_quality_score"),
+        builder_quality_score: latest_numeric(rows, "builder_quality_score"),
+        document_completeness_score: latest_numeric(rows, "document_completeness_score"),
+        litigation_risk: latest_numeric(rows, "litigation_risk"),
+        noise_score: latest_numeric(rows, "noise_score"),
+        sunlight_score: latest_numeric(rows, "sunlight_score"),
+        airport_noise_score: latest_numeric(rows, "airport_noise_score"),
+        waterlogging_risk_score: latest_numeric(rows, "waterlogging_risk_score"),
+        traffic_score: latest_numeric(rows, "traffic_score"),
         days_on_market: latest_numeric(rows, "days_on_market")
             .unwrap_or(0.0)
             .round()
@@ -765,6 +734,53 @@ fn project_name_from_title_or_id(title: &str, property_id: &str, bhk: u32) -> St
         })
 }
 
+fn resolution_policies() -> &'static ResolutionPoliciesFile {
+    static POLICIES: OnceLock<ResolutionPoliciesFile> = OnceLock::new();
+    POLICIES.get_or_init(|| {
+        load_resolution_policies().unwrap_or_else(|_| ResolutionPoliciesFile {
+            version: 1,
+            default_strategy: None,
+            source_tiers: Vec::new(),
+            never_default_fact_prefixes: Vec::new(),
+            source_caps: HashMap::new(),
+        })
+    })
+}
+
+fn latest_fact<'a>(
+    rows: Option<&'a ServingEntityFactRows>,
+    fact_key: &str,
+) -> Option<&'a crate::serving::ServingFactRecord> {
+    let policies = resolution_policies();
+    rows?.facts
+        .iter()
+        .filter(|fact| {
+            fact.fact_key == fact_key
+                && buyer_visible_fact(&fact.fact_key, &fact.source_type, policies)
+        })
+        .max_by(|left, right| {
+            if better_source_type(
+                &left.source_type,
+                &right.source_type,
+                left.confidence,
+                right.confidence,
+                policies,
+            ) {
+                std::cmp::Ordering::Greater
+            } else if better_source_type(
+                &right.source_type,
+                &left.source_type,
+                right.confidence,
+                left.confidence,
+                policies,
+            ) {
+                std::cmp::Ordering::Less
+            } else {
+                left.learned_at.cmp(&right.learned_at)
+            }
+        })
+}
+
 fn latest_text(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<String> {
     latest_fact(rows, fact_key).and_then(|fact| match &fact.value {
         FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
@@ -809,17 +825,6 @@ fn latest_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<V
 
 fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
     latest_fact(rows, fact_key).map(|fact| fact.confidence)
-}
-
-fn latest_fact<'a>(
-    rows: Option<&'a ServingEntityFactRows>,
-    fact_key: &str,
-) -> Option<&'a crate::serving::ServingFactRecord> {
-    rows?
-        .facts
-        .iter()
-        .filter(|fact| fact.fact_key == fact_key)
-        .max_by_key(|fact| fact.learned_at)
 }
 
 fn slug(value: &str) -> String {
@@ -1083,37 +1088,15 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 },
                 metro_distance_mins: fact_numeric(node, "metro_distance_mins") as u32,
                 maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
-                society_quality_score: fact_numeric(node, "society_quality_score").max(0.5),
-                builder_quality_score: fact_numeric(node, "builder_quality_score").max(0.5),
-                document_completeness_score: fact_numeric(node, "document_completeness_score")
-                    .max(0.5),
-                litigation_risk: {
-                    let v = fact_numeric(node, "litigation_risk");
-                    if v == 0.0 {
-                        0.1
-                    } else {
-                        v
-                    }
-                },
-                noise_score: fact_numeric(node, "noise_score").max(0.5),
-                sunlight_score: fact_numeric(node, "sunlight_score").max(0.5),
-                airport_noise_score: {
-                    let v = fact_numeric(node, "airport_noise_score");
-                    if v == 0.0 {
-                        0.1
-                    } else {
-                        v
-                    }
-                },
-                waterlogging_risk_score: {
-                    let v = fact_numeric(node, "waterlogging_risk_score");
-                    if v == 0.0 {
-                        0.2
-                    } else {
-                        v
-                    }
-                },
-                traffic_score: fact_numeric(node, "traffic_score").max(0.5),
+                society_quality_score: optional_fact_numeric(node, "society_quality_score"),
+                builder_quality_score: optional_fact_numeric(node, "builder_quality_score"),
+                document_completeness_score: optional_fact_numeric(node, "document_completeness_score"),
+                litigation_risk: optional_fact_numeric(node, "litigation_risk"),
+                noise_score: optional_fact_numeric(node, "noise_score"),
+                sunlight_score: optional_fact_numeric(node, "sunlight_score"),
+                airport_noise_score: optional_fact_numeric(node, "airport_noise_score"),
+                waterlogging_risk_score: optional_fact_numeric(node, "waterlogging_risk_score"),
+                traffic_score: optional_fact_numeric(node, "traffic_score"),
                 days_on_market: fact_numeric(node, "days_on_market") as u32,
                 greenery_score: None,
                 open_space_score: None,
@@ -1389,13 +1372,15 @@ fn fact_text(node: &knowledge::node::Node, key: &str) -> FactStr {
 
 /// Extract a numeric fact value, returning 0.0 if missing.
 fn fact_numeric(node: &knowledge::node::Node, key: &str) -> f64 {
-    node.get_fact(key)
-        .map(|f| match &f.value {
-            FactValue::Numeric(n) => *n,
-            FactValue::Score { value, .. } => *value,
-            _ => 0.0,
-        })
-        .unwrap_or(0.0)
+    optional_fact_numeric(node, key).unwrap_or(0.0)
+}
+
+fn optional_fact_numeric(node: &knowledge::node::Node, key: &str) -> Option<f64> {
+    node.get_fact(key).and_then(|fact| match &fact.value {
+        FactValue::Numeric(value) if value.is_finite() => Some(*value),
+        FactValue::Score { value, .. } if value.is_finite() => Some(*value),
+        _ => None,
+    })
 }
 
 fn fact_confidence(node: &knowledge::node::Node, key: &str) -> f32 {
@@ -1719,9 +1704,9 @@ mod tests {
         assert_eq!(p.property_type, "Apartment");
         assert_eq!(p.facing, "Not specified");
         assert_eq!(p.possession_status, "unknown");
-        // Default scores
-        assert_eq!(p.society_quality_score, 0.5);
-        assert_eq!(p.litigation_risk, 0.1);
+        // Missing quality/risk scores stay absent — no bootstrap defaults.
+        assert!(p.society_quality_score.is_none());
+        assert!(p.litigation_risk.is_none());
         assert!(p
             .transparency_tags
             .contains(&"Discovered via Search".to_string()));

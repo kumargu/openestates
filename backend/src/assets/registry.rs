@@ -772,11 +772,25 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
+            "legacy_seed_facts",
+            AssetStage::Silver,
+            "Low-confidence bootstrap facts imported from data/seed JSON.",
+            &["canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
+            &[],
+            &[("source", "legacy_seed")],
+        )),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
             &[
                 "canonical_society_nodes",
+                "legacy_seed_facts",
                 "rera_legal_facts",
                 "reddit_resident_facts",
                 "google_review_facts",
@@ -822,6 +836,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "metro_proximity_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
+        .with_optional_dependency("legacy_seed_facts")
         .with_optional_dependency("reddit_resident_facts")
         .with_optional_dependency("google_review_facts")
         .with_optional_dependency("community_review_summary_facts")

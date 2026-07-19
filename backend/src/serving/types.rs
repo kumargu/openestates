@@ -115,6 +115,13 @@ impl ServingFactIndex {
             .iter()
             .map(|(entity_id, rows)| (entity_id.as_str(), rows))
     }
+
+    pub fn all_facts(&self) -> Vec<&ServingFactRecord> {
+        self.by_entity
+            .values()
+            .flat_map(|rows| rows.facts.iter())
+            .collect()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

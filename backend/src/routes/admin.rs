@@ -27,6 +27,49 @@ const DEFAULT_SUBREDDIT: &str = "BangaloreRealEstates";
 
 type AdminError = (StatusCode, Json<serde_json::Value>);
 
+/// GET /api/admin/data-health
+///
+/// Bundle counts, bootstrap fact coverage, and preference coverage artifact path.
+pub async fn data_health(
+    State(state): State<Arc<AppState>>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if let Err(err) = require_admin(&headers) {
+        return err.into_response();
+    }
+
+    let bundle = state.serving_bundle.read().await;
+    let payload = bundle.as_ref().map(|loaded| {
+        let all_facts = loaded.fact_index.all_facts();
+        let legacy_seed_fact_count = all_facts
+            .iter()
+            .filter(|fact| fact.source_type.eq_ignore_ascii_case("LegacySeed"))
+            .count() as u64;
+        let legacy_seed_entity_count = all_facts
+            .iter()
+            .filter(|fact| fact.source_type.eq_ignore_ascii_case("LegacySeed"))
+            .map(|fact| fact.entity_id.as_str())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len() as u64;
+
+        serde_json::json!({
+            "serving_bundle": serving_bundle_summary(loaded),
+            "bootstrap": {
+                "legacy_seed_fact_count": legacy_seed_fact_count,
+                "legacy_seed_entity_count": legacy_seed_entity_count,
+            },
+            "preference_coverage_path": "data/validation/preference_coverage.json",
+        })
+    });
+
+    Json(serde_json::json!({
+        "status": "ok",
+        "serving_bundle_loaded": bundle.is_some(),
+        "data": payload,
+    }))
+    .into_response()
+}
+
 /// POST /api/admin/serving-bundle/reload
 ///
 /// Reloads the promoted search serving bundle from the configured local/S3 lake

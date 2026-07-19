@@ -19,6 +19,7 @@
 
 mod fact_registry;
 mod loader;
+mod resolution;
 
 pub use fact_registry::{
     fact_registry_path, load_fact_registry, load_fact_registry_from_path, load_fact_registry_index,
@@ -28,4 +29,8 @@ pub use fact_registry::{
 pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
     load_json, load_manifest, AssetRegistryFile, CrawlPolicyFile, DagConfigError, DagManifest,
+};
+pub use resolution::{
+    better_source_type, buyer_visible_fact, is_legacy_seed_source, load_resolution_policies,
+    source_tier_rank, ResolutionPoliciesFile,
 };

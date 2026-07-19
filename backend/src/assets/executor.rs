@@ -32,6 +32,7 @@ use super::{
     KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
     METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
     REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    LEGACY_SEED_FACTS_ASSET_ID,
     RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
@@ -1071,6 +1072,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::RedditResidentFacts,
         );
         executors.insert(
+            static_asset_id(LEGACY_SEED_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::LegacySeedFacts,
+        );
+        executors.insert(
             static_asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID),
             BuiltInAssetExecutor::GooglePlacesWeekly,
         );
@@ -1153,6 +1158,7 @@ enum BuiltInAssetExecutor {
     ReraLegalFacts,
     RedditThreadsDaily,
     RedditResidentFacts,
+    LegacySeedFacts,
     GooglePlacesWeekly,
     GoogleReviewFacts,
     GoogleNearbyPlacesWeekly,
@@ -1292,6 +1298,16 @@ impl BuiltInAssetExecutor {
                     .options
                     .source_inputs
                     .reddit_resident_facts
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let materialization = execute_skill_fact_asset(context, input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::LegacySeedFacts => {
+                let input = context
+                    .options
+                    .source_inputs
+                    .legacy_seed_facts
                     .as_ref()
                     .ok_or_else(|| source_input_error(&context))?;
                 let materialization = execute_skill_fact_asset(context, input).await?;

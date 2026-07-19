@@ -79,11 +79,13 @@ PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 METRO_STATIONS_MONTHLY = "metro_stations_monthly"
+LEGACY_SEED_FACTS = "legacy_seed_facts"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
         REDDIT_THREADS_DAILY,
         REDDIT_RESIDENT_FACTS,
+        LEGACY_SEED_FACTS,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
         PRESTIGE_INVENTORY_WEEKLY,
@@ -208,6 +210,16 @@ def collect_asset_sources(
             output[METRO_STATIONS_MONTHLY] = collect_metro_stations(request)
         except Exception as error:
             record_source_failure(source_failures, [METRO_STATIONS_MONTHLY], error)
+    if LEGACY_SEED_FACTS in requested:
+        try:
+            from pipeline.skills.legacy_seed_import import collect_legacy_seed_facts
+
+            planned_at = normalized_planned_at(request)
+            partition = partition_values(request)
+            snapshot_date = partition.get("dt") or planned_at[:10]
+            output[LEGACY_SEED_FACTS] = collect_legacy_seed_facts(snapshot_date)
+        except Exception as error:
+            record_source_failure(source_failures, [LEGACY_SEED_FACTS], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output

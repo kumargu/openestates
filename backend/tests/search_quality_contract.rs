@@ -227,7 +227,7 @@ fn negative_risk_preference_changes_rank_and_explanation_without_kg_data() {
         3,
         18_000_000,
     );
-    low_risk.waterlogging_risk_score = 0.1;
+    low_risk.waterlogging_risk_score = Some(0.1);
     let mut high_risk = property(
         "high-waterlogging",
         "Whitefield",
@@ -235,7 +235,7 @@ fn negative_risk_preference_changes_rank_and_explanation_without_kg_data() {
         3,
         17_500_000,
     );
-    high_risk.waterlogging_risk_score = 0.9;
+    high_risk.waterlogging_risk_score = Some(0.9);
 
     let world = SearchWorld::new(vec![high_risk, low_risk]);
 
@@ -265,7 +265,7 @@ fn builder_trust_can_be_proven_through_related_builder_node() {
         3,
         19_000_000,
     );
-    proven.builder_quality_score = 0.2;
+    proven.builder_quality_score = Some(0.2);
     let mut unproven = property(
         "unproven-builder-home",
         "Whitefield",
@@ -273,7 +273,7 @@ fn builder_trust_can_be_proven_through_related_builder_node() {
         3,
         18_500_000,
     );
-    unproven.builder_quality_score = 0.2;
+    unproven.builder_quality_score = Some(0.2);
 
     let mut world = SearchWorld::new(vec![unproven, proven]);
     world.add_society("proven-builder", RootSource::Rera, Vec::new());
@@ -702,15 +702,15 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         possession_status: "Ready to Move".to_string(),
         metro_distance_mins: 8,
         maintenance_cost_monthly: 6_000,
-        society_quality_score: 0.7,
-        builder_quality_score: 0.7,
-        document_completeness_score: 0.8,
-        litigation_risk: 0.1,
-        noise_score: 0.2,
-        sunlight_score: 0.7,
-        airport_noise_score: 0.1,
-        waterlogging_risk_score: 0.2,
-        traffic_score: 0.4,
+        society_quality_score: Some(0.7),
+        builder_quality_score: Some(0.7),
+        document_completeness_score: Some(0.8),
+        litigation_risk: Some(0.1),
+        noise_score: Some(0.2),
+        sunlight_score: Some(0.7),
+        airport_noise_score: Some(0.1),
+        waterlogging_risk_score: Some(0.2),
+        traffic_score: Some(0.4),
         days_on_market: 20,
         greenery_score: Some(0.6),
         open_space_score: Some(0.6),

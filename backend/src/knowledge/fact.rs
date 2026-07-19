@@ -113,6 +113,8 @@ pub enum SourceType {
     /// Legacy AI-generated synthesis. Retained so older KG facts still load.
     /// New enrichment code should not emit this source type.
     Llm,
+    /// Bootstrap seed JSON imported at low confidence — superseded by source-backed facts.
+    LegacySeed,
 }
 
 impl SourceType {
@@ -128,6 +130,7 @@ impl SourceType {
             Self::News => 0.7,
             Self::Computed => 0.6,
             Self::Llm => 0.5,
+            Self::LegacySeed => 0.25,
         }
     }
 }

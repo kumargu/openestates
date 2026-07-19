@@ -2140,15 +2140,11 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
                 0.0
             }
         }
-        "quiet neighborhood" => {
-            if property.noise_score < 0.3 {
-                2.0
-            } else if property.noise_score < 0.5 {
-                1.0
-            } else {
-                0.0
-            }
-        }
+        "quiet neighborhood" => match property.noise_score {
+            Some(score) if score < 0.3 => 2.0,
+            Some(score) if score < 0.5 => 1.0,
+            _ => 0.0,
+        },
         "value for money" => {
             if property.price_per_sqft < 8000 {
                 2.0
@@ -2167,24 +2163,16 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
                 0.0
             }
         }
-        "good society" => {
-            if property.society_quality_score >= 0.8 {
-                2.0
-            } else if property.society_quality_score >= 0.6 {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "reliable builder" | "trusted builder" => {
-            if property.builder_quality_score >= 0.8 {
-                2.0
-            } else if property.builder_quality_score >= 0.6 {
-                1.0
-            } else {
-                0.0
-            }
-        }
+        "good society" => match property.society_quality_score {
+            Some(score) if score >= 0.8 => 2.0,
+            Some(score) if score >= 0.6 => 1.0,
+            _ => 0.0,
+        },
+        "reliable builder" | "trusted builder" => match property.builder_quality_score {
+            Some(score) if score >= 0.8 => 2.0,
+            Some(score) if score >= 0.6 => 1.0,
+            _ => 0.0,
+        },
         "on time delivery" => {
             let status = property.possession_status.to_lowercase();
             if status.contains("delay") || status.contains("behind") {
@@ -2194,7 +2182,7 @@ fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
                 || status.contains("completed")
             {
                 2.0
-            } else if property.builder_quality_score >= 0.75 {
+            } else if property.builder_quality_score.is_some_and(|score| score >= 0.75) {
                 1.0
             } else {
                 0.0
@@ -2365,7 +2353,7 @@ fn format_legacy_display(preference: &str, property: &Property) -> String {
     match preference {
         "metro access" => format!("{} min to metro", property.metro_distance_mins),
         "quiet neighborhood" => {
-            if property.noise_score < 0.3 {
+            if property.noise_score.is_some_and(|score| score < 0.3) {
                 "Quiet neighborhood".into()
             } else {
                 "Moderately quiet area".into()
@@ -2374,14 +2362,14 @@ fn format_legacy_display(preference: &str, property: &Property) -> String {
         "value for money" => format!("{}/sqft — good value", property.price_per_sqft),
         "premium" => format!("{}/sqft — premium segment", property.price_per_sqft),
         "good society" => {
-            if property.society_quality_score >= 0.8 {
+            if property.society_quality_score.is_some_and(|score| score >= 0.8) {
                 "Strong society quality".into()
             } else {
                 "Decent society quality".into()
             }
         }
         "reliable builder" | "trusted builder" => {
-            if property.builder_quality_score >= 0.8 {
+            if property.builder_quality_score.is_some_and(|score| score >= 0.8) {
                 "Strong builder quality".into()
             } else {
                 "Acceptable builder quality".into()
@@ -2586,13 +2574,22 @@ fn legacy_negative_preference_evaluation(
 }
 
 fn lower_risk_evaluation(
-    value: f64,
+    value: Option<f64>,
     fact_key: &'static str,
     label: &'static str,
     good_max: f64,
     ok_max: f64,
     weight: f64,
 ) -> LocalPreferenceEvaluation {
+    let Some(value) = value else {
+        return LocalPreferenceEvaluation {
+            score_delta: 0.0,
+            fact_key,
+            display: format!("No {} proof", label),
+            status: "missing",
+            score: 0.0,
+        };
+    };
     if value <= good_max {
         LocalPreferenceEvaluation {
             score_delta: 2.0 * weight,
@@ -3060,15 +3057,15 @@ mod tests {
             possession_status: "Ready to Move".to_string(),
             metro_distance_mins,
             maintenance_cost_monthly: 6_000,
-            society_quality_score: 0.7,
-            builder_quality_score: 0.7,
-            document_completeness_score: 0.8,
-            litigation_risk: 0.1,
-            noise_score,
-            sunlight_score: 0.7,
-            airport_noise_score: 0.1,
-            waterlogging_risk_score: 0.1,
-            traffic_score: 0.6,
+            society_quality_score: Some(0.7),
+            builder_quality_score: Some(0.7),
+            document_completeness_score: Some(0.8),
+            litigation_risk: Some(0.1),
+            noise_score: Some(noise_score),
+            sunlight_score: Some(0.7),
+            airport_noise_score: Some(0.1),
+            waterlogging_risk_score: Some(0.1),
+            traffic_score: Some(0.6),
             days_on_market: 20,
             greenery_score: Some(0.6),
             open_space_score: Some(0.6),
@@ -4086,7 +4083,7 @@ mod tests {
             8,
             0.2,
         );
-        low_risk.waterlogging_risk_score = 0.1;
+        low_risk.waterlogging_risk_score = Some(0.1);
 
         let mut high_risk = local_property(
             "high-waterlogging",
@@ -4097,7 +4094,7 @@ mod tests {
             8,
             0.2,
         );
-        high_risk.waterlogging_risk_score = 0.85;
+        high_risk.waterlogging_risk_score = Some(0.85);
 
         let properties = vec![high_risk, low_risk];
         let society_names = local_society_names(&properties);
@@ -4144,7 +4141,7 @@ mod tests {
             8,
             0.2,
         );
-        low_traffic.traffic_score = 0.2;
+        low_traffic.traffic_score = Some(0.2);
 
         let mut heavy_traffic = local_property(
             "heavy-traffic",
@@ -4155,7 +4152,7 @@ mod tests {
             8,
             0.2,
         );
-        heavy_traffic.traffic_score = 0.9;
+        heavy_traffic.traffic_score = Some(0.9);
 
         let properties = vec![heavy_traffic, low_traffic];
         let society_names = local_society_names(&properties);
@@ -4324,10 +4321,10 @@ mod tests {
             8,
             0.7,
         );
-        semantic_fit.traffic_score = 0.9;
+        semantic_fit.traffic_score = Some(0.9);
         let mut weak_fit =
             local_property("weak-fit", "Whitefield", "weak-fit", 3, 19_000_000, 8, 0.7);
-        weak_fit.traffic_score = 0.9;
+        weak_fit.traffic_score = Some(0.9);
 
         let properties = vec![weak_fit, semantic_fit];
         let society_names = local_society_names(&properties);
@@ -4385,7 +4382,7 @@ mod tests {
             8,
             0.2,
         );
-        proved_but_risky.traffic_score = 0.9;
+        proved_but_risky.traffic_score = Some(0.9);
 
         let mut semantic_only = local_property(
             "semantic-only-risky",
@@ -4396,7 +4393,7 @@ mod tests {
             8,
             0.8,
         );
-        semantic_only.traffic_score = 0.9;
+        semantic_only.traffic_score = Some(0.9);
 
         let properties = vec![semantic_only, proved_but_risky];
         let society_names = local_society_names(&properties);
@@ -4447,7 +4444,7 @@ mod tests {
             8,
             0.2,
         );
-        stronger_builder.builder_quality_score = 0.9;
+        stronger_builder.builder_quality_score = Some(0.9);
 
         let mut weaker_builder = local_property(
             "weaker-builder",
@@ -4458,7 +4455,7 @@ mod tests {
             8,
             0.2,
         );
-        weaker_builder.builder_quality_score = 0.35;
+        weaker_builder.builder_quality_score = Some(0.35);
 
         let properties = vec![weaker_builder, stronger_builder];
         let society_names = local_society_names(&properties);

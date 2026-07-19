@@ -27,6 +27,7 @@ use super::{
     MaterializationId, MaterializationRecord, SourceWatermark,
 };
 
+pub const LEGACY_SEED_FACTS_ASSET_ID: &str = "legacy_seed_facts";
 pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
 pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
 pub const GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID: &str = "google_nearby_place_facts";

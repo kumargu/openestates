@@ -24,15 +24,24 @@ pub struct Property {
     pub possession_status: String,
     pub metro_distance_mins: u32,
     pub maintenance_cost_monthly: u32,
-    pub society_quality_score: f64,
-    pub builder_quality_score: f64,
-    pub document_completeness_score: f64,
-    pub litigation_risk: f64,
-    pub noise_score: f64,
-    pub sunlight_score: f64,
-    pub airport_noise_score: f64,
-    pub waterlogging_risk_score: f64,
-    pub traffic_score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub society_quality_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builder_quality_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_completeness_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub litigation_risk: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub noise_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sunlight_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub airport_noise_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waterlogging_risk_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traffic_score: Option<f64>,
     pub days_on_market: u32,
     #[serde(default)]
     pub greenery_score: Option<f64>,

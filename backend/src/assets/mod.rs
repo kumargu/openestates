@@ -106,7 +106,7 @@ pub use skill_facts::{
     read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactArtifactRows,
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactRecord, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID,
+    LEGACY_SEED_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
 pub use source_inputs::{
     AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,

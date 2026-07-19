@@ -99,6 +99,10 @@ async fn main() {
         .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
         .route(
+            "/api/admin/data-health",
+            get(routes::admin::data_health),
+        )
+        .route(
             "/api/admin/serving-bundle/reload",
             post(routes::admin::reload_serving_bundle),
         )

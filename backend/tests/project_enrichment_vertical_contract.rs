@@ -352,6 +352,13 @@ fn source_inputs(
             observed_at,
             &watermark,
         )),
+        legacy_seed_facts: Some(SkillFactsInput {
+            source: "legacy_seed".to_string(),
+            snapshot_date: "2026-07-14".to_string(),
+            facts: vec![],
+            fact_annotations: vec![],
+            source_watermarks: watermark.clone(),
+        }),
         google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),
             records: vec![GooglePlaceSnapshotRecord {
