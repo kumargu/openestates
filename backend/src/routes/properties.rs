@@ -1282,6 +1282,10 @@ struct ContextFactDefinition {
 #[derive(Clone, Deserialize)]
 struct BuyerContextDefinition {
     kind: String,
+    #[serde(default)]
+    priority: u32,
+    #[serde(default)]
+    surfaces: Vec<String>,
     title: String,
     subtitle: String,
     scope: String,
@@ -1291,6 +1295,20 @@ struct BuyerContextDefinition {
     #[serde(default)]
     media: Vec<String>,
     facts: Vec<ContextFactDefinition>,
+}
+
+fn evidence_section_definition(kind: &str) -> Option<&'static BuyerContextDefinition> {
+    buyer_context_definitions()
+        .iter()
+        .find(|definition| definition.kind == kind)
+}
+
+fn default_evidence_presentation() -> EvidencePresentation {
+    EvidencePresentation {
+        variant: "fact_list".to_string(),
+        density: "standard".to_string(),
+        max_preview_items: 4,
+    }
 }
 
 fn buyer_context_definitions() -> &'static [BuyerContextDefinition] {
@@ -1309,6 +1327,12 @@ fn build_buyer_context_panels(
 ) -> Vec<SourcePanel> {
     buyer_context_definitions()
         .iter()
+        .filter(|definition| {
+            definition
+                .surfaces
+                .iter()
+                .any(|surface| surface == "buyer_context")
+        })
         .filter_map(|definition| {
             let mut items =
                 collect_buyer_context_items(graph, property, projection, &definition.facts);
@@ -1748,56 +1772,15 @@ pub(crate) fn evidence_section_from_panel(
 }
 
 fn evidence_section_presentation(kind: &str) -> EvidencePresentation {
-    if let Some(presentation) = buyer_context_definitions()
-        .iter()
-        .find(|definition| definition.kind == kind)
+    evidence_section_definition(kind)
         .and_then(|definition| definition.presentation.clone())
-    {
-        return presentation;
-    }
-
-    match kind {
-        "market" => EvidencePresentation {
-            variant: "fact_grid".to_string(),
-            density: "standard".to_string(),
-            max_preview_items: 6,
-        },
-        "nearby" => EvidencePresentation {
-            variant: "fact_grid".to_string(),
-            density: "compact".to_string(),
-            max_preview_items: 6,
-        },
-        "reviews" | "community" => EvidencePresentation {
-            variant: "story".to_string(),
-            density: "standard".to_string(),
-            max_preview_items: 4,
-        },
-        "rera" => EvidencePresentation {
-            variant: "timeline".to_string(),
-            density: "compact".to_string(),
-            max_preview_items: 4,
-        },
-        _ => EvidencePresentation {
-            variant: "fact_list".to_string(),
-            density: "standard".to_string(),
-            max_preview_items: 4,
-        },
-    }
+        .unwrap_or_else(default_evidence_presentation)
 }
 
 fn evidence_section_priority(kind: &str) -> u32 {
-    match kind {
-        "home_state" => 5,
-        "approach_road" => 15,
-        "waterlogging_context" => 35,
-        "surroundings" => 36,
-        "rera" => 10,
-        "market" => 20,
-        "nearby" => 30,
-        "community" => 40,
-        "area" => 60,
-        _ => 100,
-    }
+    evidence_section_definition(kind)
+        .map(|definition| definition.priority)
+        .unwrap_or(100)
 }
 
 fn section_confidence_pct(items: &[SourceItem]) -> u8 {
@@ -1827,60 +1810,32 @@ fn section_summary(panel: &SourcePanel) -> String {
 }
 
 fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
-    for key in primary_section_keys(&panel.kind) {
-        if let Some(item) = panel.items.iter().find(|item| item.key == *key) {
-            return Some(item);
+    if let Some(definition) = evidence_section_definition(&panel.kind) {
+        for fact in &definition.facts {
+            if let Some(item) = panel.items.iter().find(|item| item.key == fact.key) {
+                return Some(item);
+            }
         }
     }
     panel.items.first()
 }
 
-fn primary_section_keys(kind: &str) -> &'static [&'static str] {
-    match kind {
-        "rera" => &["rera_number", "rera_status", "rera_completion_date"],
-        "home_state" => &["home_state", "home_age_bucket", "home_timeline_state"],
-        "approach_road" => &[
-            "approach_road_visual_available",
-            "approach_road_condition",
-            "access_road_quality",
-            "road_width",
+fn fallback_section_entity_ids(kind: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
+    let scope = evidence_section_definition(kind)
+        .map(|definition| definition.scope.as_str())
+        .unwrap_or("property");
+    entity_ids_for_section_scope(scope, entity_refs)
+}
+
+fn entity_ids_for_section_scope(scope: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
+    match scope {
+        "area" | "waterbody" | "poi" => vec![entity_refs.area_entity_id.clone()],
+        "society" => vec![entity_refs.society_entity_id.clone()],
+        "road_segment" => vec![
+            entity_refs.society_entity_id.clone(),
+            "road_segment:approach-road".to_string(),
         ],
-        "waterlogging_context" => &[
-            "waterlogging_detail",
-            "waterlogging_risk",
-            "lake_waterlogging_context",
-            "nearest_lake_distance_m",
-        ],
-        "surroundings" => &[
-            "stp_concern",
-            "high_tension_wire_concern",
-            "airport_distance_km",
-            "environment_sensitivity",
-        ],
-        "market" => &[
-            "listing_3bhk",
-            "listing_price_3bhk",
-            "market_project_status",
-            "market_starting_price_inr",
-            "official_project_url",
-            "project_maps_url",
-        ],
-        "nearby" => &[
-            "nearby_schools",
-            "nearby_metro_stations",
-            "nearby_hospitals",
-            "nearby_fitness",
-            "nearby_eateries",
-            "nearby_tech_parks",
-        ],
-        "community" => &["community_review_summary"],
-        "area" => &[
-            "metro_details",
-            "traffic_reality",
-            "waterlogging_detail",
-            "metro_status",
-        ],
-        _ => &[],
+        _ => vec![entity_refs.property_entity_id.clone()],
     }
 }
 
@@ -1940,22 +1895,6 @@ fn truncate_summary(value: &str, max_chars: usize) -> String {
     let mut out = trimmed.chars().take(max_chars).collect::<String>();
     out.push_str("...");
     out
-}
-
-fn fallback_section_entity_ids(kind: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
-    match kind {
-        "area" | "waterlogging_context" | "surroundings" => {
-            vec![entity_refs.area_entity_id.clone()]
-        }
-        "rera" | "market" | "nearby" | "reviews" | "community" | "home_state" => {
-            vec![entity_refs.society_entity_id.clone()]
-        }
-        "approach_road" => vec![
-            entity_refs.society_entity_id.clone(),
-            "road_segment:approach-road".to_string(),
-        ],
-        _ => vec![entity_refs.property_entity_id.clone()],
-    }
 }
 
 fn unique_sorted(mut values: Vec<String>) -> Vec<String> {

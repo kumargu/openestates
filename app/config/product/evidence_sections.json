@@ -1,6 +1,8 @@
 [
   {
     "kind": "home_state",
+    "priority": 5,
+    "surfaces": ["buyer_context"],
     "title": "Lifecycle",
     "subtitle": "Delivered, under-construction, age, and timeline facts.",
     "scope": "society",
@@ -32,7 +34,27 @@
     ]
   },
   {
+    "kind": "rera",
+    "priority": 10,
+    "title": "RERA file",
+    "subtitle": "Official project registration and delivery record.",
+    "scope": "society",
+    "relationship": "project registration",
+    "presentation": {
+      "variant": "timeline",
+      "density": "compact",
+      "max_preview_items": 4
+    },
+    "facts": [
+      { "key": "rera_number", "label": "Registration", "scope": "society", "relationship": "project registration" },
+      { "key": "rera_status", "label": "Status", "scope": "society", "relationship": "project registration" },
+      { "key": "rera_completion_date", "label": "Completion", "scope": "society", "relationship": "project registration" }
+    ]
+  },
+  {
     "kind": "approach_road",
+    "priority": 15,
+    "surfaces": ["buyer_context"],
     "title": "Approach road",
     "subtitle": "Last-lane access context from reviews and visual proof.",
     "scope": "road_segment",
@@ -44,6 +66,12 @@
     },
     "media": ["approach_road_visuals"],
     "facts": [
+      {
+        "key": "approach_road_visual_available",
+        "label": "Visual proof",
+        "scope": "society",
+        "relationship": "approach road"
+      },
       {
         "key": "approach_road_condition",
         "label": "Review signal",
@@ -65,7 +93,51 @@
     ]
   },
   {
+    "kind": "market",
+    "priority": 20,
+    "title": "Market trail",
+    "subtitle": "Pricing, appreciation, and nearby comparable signals.",
+    "scope": "society",
+    "relationship": "project market trail",
+    "presentation": {
+      "variant": "fact_grid",
+      "density": "standard",
+      "max_preview_items": 6
+    },
+    "facts": [
+      { "key": "listing_3bhk", "label": "3BHK listing", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_3bhk", "label": "3BHK listing price", "scope": "society", "relationship": "project market trail" },
+      { "key": "market_project_status", "label": "Builder inventory status", "scope": "society", "relationship": "project market trail" },
+      { "key": "market_starting_price_inr", "label": "Builder starting price", "scope": "society", "relationship": "project market trail" },
+      { "key": "official_project_url", "label": "Official project page", "scope": "society", "relationship": "project market trail" },
+      { "key": "project_maps_url", "label": "Project map", "scope": "society", "relationship": "project market trail" }
+    ]
+  },
+  {
+    "kind": "nearby",
+    "priority": 30,
+    "title": "Nearby",
+    "subtitle": "Map-backed places near the society.",
+    "scope": "society",
+    "relationship": "nearby map context",
+    "presentation": {
+      "variant": "fact_grid",
+      "density": "compact",
+      "max_preview_items": 6
+    },
+    "facts": [
+      { "key": "nearby_schools", "label": "Schools", "scope": "society", "relationship": "nearby map context" },
+      { "key": "nearby_metro_stations", "label": "Metro", "scope": "society", "relationship": "nearby map context" },
+      { "key": "nearby_hospitals", "label": "Hospitals", "scope": "society", "relationship": "nearby map context" },
+      { "key": "nearby_fitness", "label": "Cult / gyms", "scope": "society", "relationship": "nearby map context" },
+      { "key": "nearby_eateries", "label": "Eateries", "scope": "society", "relationship": "nearby map context" },
+      { "key": "nearby_tech_parks", "label": "Tech parks / offices", "scope": "society", "relationship": "nearby map context" }
+    ]
+  },
+  {
     "kind": "waterlogging_context",
+    "priority": 35,
+    "surfaces": ["buyer_context"],
     "title": "Waterlogging",
     "subtitle": "Flooding, lake, and drainage context scoped around the home.",
     "scope": "area",
@@ -110,6 +182,8 @@
   },
   {
     "kind": "surroundings",
+    "priority": 36,
+    "surfaces": ["buyer_context"],
     "title": "Surroundings",
     "subtitle": "Airport, STP, high-tension, pollution, and nearby externalities.",
     "scope": "area",
@@ -156,6 +230,46 @@
         "scope": "area",
         "relationship": "externality"
       }
+    ]
+  },
+  {
+    "kind": "community",
+    "priority": 40,
+    "title": "Community pulse",
+    "subtitle": "Resident and review context.",
+    "scope": "society",
+    "relationship": "resident and review context",
+    "presentation": {
+      "variant": "story",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "community_review_summary",
+        "label": "Review summary",
+        "scope": "society",
+        "relationship": "resident and review context"
+      }
+    ]
+  },
+  {
+    "kind": "area",
+    "priority": 60,
+    "title": "Area trail",
+    "subtitle": "Neighbourhood evidence around daily life.",
+    "scope": "area",
+    "relationship": "locality context",
+    "presentation": {
+      "variant": "fact_list",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      { "key": "metro_details", "label": "Metro access", "scope": "area", "relationship": "locality context" },
+      { "key": "traffic_reality", "label": "Traffic", "scope": "area", "relationship": "locality context" },
+      { "key": "waterlogging_detail", "label": "Waterlogging", "scope": "area", "relationship": "locality context" },
+      { "key": "metro_status", "label": "Metro access", "scope": "society", "relationship": "locality context" }
     ]
   }
 ]
