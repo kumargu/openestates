@@ -403,17 +403,17 @@ match preference {
 
 **Acceptance:**
 
-- [ ] Bundle entity counts: properties > 0, areas > 0, roads > 0 where inferred
-- [ ] Bundle includes edges table; row count documented
-- [ ] Search "3bhk whitefield under 2cr" uses property + society facts
-- [ ] Tiles show `entity_refs` and match reasons from leaves
-- [ ] Graph walk `society → served_by_road → road_segment` resolvable in unit test
-- [ ] **No `legacy_preference_score` or `local_fallback_allowed` in search hot path**
-- [ ] **`search/text.rs` has no `match preference` arms for product labels**
-- [ ] **`properties.rs` evidence sections driven by `evidence_sections.json`, not `match kind`**
-- [ ] **`data/search/fact_schema_registry.json` and `livability_theme_registry.json` deleted**
-- [ ] **`search/intent.rs` has no hardcoded `AREA_ALIASES`**
-- [ ] Net LOC reduction documented in PR (build + delete in same phase)
+- [x] Bundle entity counts: properties > 0, areas > 0, roads > 0 where inferred
+- [x] Bundle includes edges table; row count documented
+- [x] Search "3bhk whitefield under 2cr" uses property + society facts
+- [x] Tiles show `entity_refs` and match reasons from leaves
+- [x] Graph walk `society → served_by_road → road_segment` resolvable in unit test
+- [x] **No `legacy_preference_score` or `local_fallback_allowed` in search hot path**
+- [x] **`search/text.rs` has no `match preference` arms for product labels**
+- [x] **`properties.rs` evidence sections driven by `evidence_sections.json`, not `match kind`**
+- [x] **`data/search/fact_schema_registry.json` and `livability_theme_registry.json` deleted**
+- [x] **`search/intent.rs` has no hardcoded `AREA_ALIASES`**
+- [x] Net LOC reduction documented in PR (build + delete in same phase)
 
 **Storage check:**
 
@@ -425,25 +425,25 @@ match preference {
 
 ---
 
-### Phase 5 — UI truth consolidation (5–7 days) — partial ✅
+### Phase 5 — UI truth consolidation (5–7 days) — done ✅
 
 **Goal:** One signal, one surface; config-driven evidence sections.
 
 **Work:**
 
 1. Remove `riskSignalsFor` / `RiskBar` from `PropertyPage.tsx` ✅
-2. De-duplicate theme chips: brief owns risk/operating prose; pulse owns review receipts
-3. Evidence sections grouped by `evidence_sections.json` (backend) — extend to `ui.section_kind` from fact registry
+2. De-duplicate theme chips: brief owns risk/operating prose; pulse owns review receipts ✅
+3. Evidence sections grouped by `evidence_sections.json` (backend) — extend to `ui.section_kind` from fact registry ✅
 4. Delete `EvidenceSectionCard.tsx` orphan ✅
-5. Proof labels instead of confidence bars in evidence UI
-6. Update SEO meta copy
+5. Proof labels instead of confidence bars in evidence UI ✅
+6. Update SEO meta copy ✅
 
 **Acceptance:**
 
 - [x] No seed-derived risk on property page
-- [ ] Livability brief is single risk surface in action rail
-- [ ] New `fact_key` with `ui.section_kind` appears without frontend code change
-- [ ] `tsc --noEmit` clean
+- [x] Livability brief is single risk surface in action rail
+- [x] New `fact_key` with `ui.section_kind` appears without frontend code change
+- [x] `tsc --noEmit` clean
 
 **Not in this phase:** graph traversal summary API (Phase 10).
 

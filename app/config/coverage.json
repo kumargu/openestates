@@ -61,7 +61,7 @@
     },
     {
       "path": "app/config/dag/search_intent.json",
-      "role": "Buyer archetypes; area aliases migration target",
+      "role": "Buyer archetypes and Bengaluru area aliases (loaded at startup)",
       "primitive": "search"
     },
     {
@@ -132,12 +132,12 @@
   "legacy_migrate_to_app_config": [
     {
       "path": "data/search/fact_schema_registry.json",
-      "status": "merged",
+      "status": "deleted",
       "into": "app/config/dag/fact_registry.json (search_dimensions, preference_patterns retained)"
     },
     {
       "path": "data/product/livability_theme_registry.json",
-      "status": "merged",
+      "status": "deleted",
       "into": "app/config/dag/concern_taxonomy.json"
     },
     {
@@ -157,28 +157,6 @@
     }
   ],
   "still_hardcoded_in_rust_pending_migration": [
-    {
-      "location": "backend/src/search/intent.rs — AREA_ALIASES",
-      "target": "app/config/dag/search_intent.json area_aliases section",
-      "primitive": "search"
-    },
-    {
-      "location": "backend/src/search/intent.rs — POSITIVE/NEGATIVE_PREFERENCE_PATTERNS",
-      "target": "app/config/dag/fact_registry.json preference_patterns (partially merged)",
-      "primitive": "search",
-      "status": "done"
-    },
-    {
-      "location": "backend/src/search/schema.rs — include fact_schema_registry.json",
-      "target": "Load app/config/dag/fact_registry.json instead",
-      "primitive": "search",
-      "status": "done"
-    },
-    {
-      "location": "backend/src/livability_brief.rs — livability_theme_registry.json",
-      "target": "app/config/dag/concern_taxonomy.json + fact_registry.json",
-      "primitive": "ui"
-    },
     {
       "location": "backend/src/assets/registry.rs — embedded default asset graph",
       "target": "app/config/dag/asset_registry.json only (loader done, tests still use embedded)",
