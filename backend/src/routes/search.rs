@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
+
+use chrono::Utc;
 
 use axum::extract::{Query, State};
 use axum::Json;
@@ -141,7 +144,8 @@ pub async fn search_properties(
     // --- Log search event ---
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
     event.graph_nodes_hit = graph_nodes_hit;
-    event.enrichment_gaps = enrichment_gaps;
+    event.enrichment_gaps = enrichment_gaps.clone();
+    persist_enrichment_gaps(&enrichment_gaps);
 
     {
         let mut graph = state.knowledge.write().await;
@@ -1497,4 +1501,49 @@ mod tests {
         );
         assert_eq!(conf.label, "Low");
     }
+}
+
+fn persist_enrichment_gaps(gaps: &[EnrichmentGap]) {
+    if gaps.is_empty() {
+        return;
+    }
+
+    let path = enrichment_gaps_output_path();
+    let mut entries: Vec<serde_json::Value> = if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|payload| serde_json::from_str(&payload).ok())
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+
+    let recorded_at = Utc::now().to_rfc3339();
+    for gap in gaps {
+        entries.push(serde_json::json!({
+            "entity_id": gap.entity_id,
+            "missing_fact": gap.missing_fact,
+            "reason": gap.reason,
+            "recorded_at": recorded_at,
+        }));
+    }
+
+    if entries.len() > 500 {
+        let start = entries.len() - 500;
+        entries = entries.split_off(start);
+    }
+
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if let Ok(payload) = serde_json::to_string_pretty(&entries) {
+        let _ = std::fs::write(path, payload);
+    }
+}
+
+fn enrichment_gaps_output_path() -> PathBuf {
+    if let Ok(path) = std::env::var("OPENESTATES_ENRICHMENT_GAPS_PATH") {
+        return PathBuf::from(path);
+    }
+    PathBuf::from("data/validation/enrichment_gaps.json")
 }

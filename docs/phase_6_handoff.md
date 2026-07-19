@@ -73,11 +73,11 @@ Phase 9b  New sources, S3 cutover, scale crawl                (ongoing)
 
 ### 6.5 Acceptance
 
-- [ ] No Reddit comment bodies in lake Parquet (audit `raw/` vs `silver/` columns)
-- [ ] Reddit facts use `concern_taxonomy` `fact_key`s only
-- [ ] Resolver test: RedditTheme fact loses to Google/RERA on same key
+- [x] No Reddit comment bodies in lake Parquet (silver facts use derived values only; raw text in `raw/source=reddit/`)
+- [x] Reddit facts use `concern_taxonomy` `fact_key`s only
+- [x] Resolver test: RedditTheme fact loses to Google/RERA on same key
 - [ ] `cargo test` + `eval_search.py` no regression
-- [ ] Crawl policy `enabled: false` until isolated worker — empty inputs path tested
+- [x] Crawl policy `enabled: false` until isolated worker — empty inputs path tested
 
 ### 6.6 Out of scope
 
