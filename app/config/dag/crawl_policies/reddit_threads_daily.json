@@ -1,0 +1,19 @@
+{
+  "policy_id": "reddit_threads_daily",
+  "enabled": false,
+  "cadence": "daily",
+  "description": "Daily Reddit posts and comments for Bengaluru real-estate themes. Disabled until isolated reddit-fetcher container is deployed.",
+  "isolated_worker": {
+    "kind": "container",
+    "reason": "egress_ip_block",
+    "artifact_sink": "data/lake/assets/reddit_threads_daily/"
+  },
+  "skip_rules": [
+    {
+      "if": "env_flag",
+      "name": "OPENESTATES_SKIP_REDDIT",
+      "value": "1",
+      "action": "emit_empty_inputs"
+    }
+  ]
+}

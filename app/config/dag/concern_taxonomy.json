@@ -1,4 +1,5 @@
 {
+  "_comment": "LEAF DEFINITIONS — 78 fact_keys in 10 buckets. Each leaf = what CAN be said (fact_key, scopes, enrichment terms). Values live in lake facts Parquet.",
   "version": 1,
   "source": "Merged from livability_theme_registry + GitHub issue #2",
   "defaults": {

@@ -1,0 +1,4363 @@
+{
+  "version": 1,
+  "_comment": "LEAF SEARCH SEMANTICS \u2014 answers_preferences, scoring_hint, display_template per fact_key. Merged from concern_taxonomy + fact_schema_registry.",
+  "description": "Canonical leaf registry: search semantics + enrichment metadata per fact_key.",
+  "merged_from": [
+    "app/config/dag/concern_taxonomy.json",
+    "data/search/fact_schema_registry.json",
+    "data/product/livability_theme_registry.json"
+  ],
+  "defaults": {
+    "source_types": [
+      "Google",
+      "RedditTheme"
+    ],
+    "never_default": true
+  },
+  "legacy_key_map": {
+    "maintenance_charges": "operating.maintenance_charges",
+    "tanker_dependence": "operating.tanker_dependence",
+    "rajakaluve_risk": "risk.rajakaluve_proximity",
+    "high_tension_wires": "risk.ht_wire_nearby",
+    "approach_road_waterlogging": "risk.approach_road_waterlogging",
+    "approach_road_traffic": "risk.approach_road_traffic"
+  },
+  "search_dimensions": [
+    {
+      "rank": 1,
+      "dimension": "price_discovery",
+      "label": "price discovery",
+      "layer": "market",
+      "intent_terms": [
+        "worth",
+        "valuation",
+        "price",
+        "rate",
+        "per sqft",
+        "fair price",
+        "negotiation"
+      ],
+      "fact_keys": [
+        "price_per_sqft",
+        "pricing_insight",
+        "market_status",
+        "comparable_projects"
+      ],
+      "source_priority": [
+        "market_pricing",
+        "registered_transactions",
+        "rera",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 2,
+      "dimension": "legal_rera",
+      "label": "legal and RERA safety",
+      "layer": "proof",
+      "intent_terms": [
+        "rera",
+        "legal",
+        "clear title",
+        "litigation",
+        "approval",
+        "khata"
+      ],
+      "fact_keys": [
+        "rera_registered",
+        "rera_number",
+        "rera_land_litigation",
+        "rera_complaints_count"
+      ],
+      "source_priority": [
+        "rera",
+        "bbmp",
+        "court_records",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 3,
+      "dimension": "builder_trust",
+      "label": "builder trust",
+      "layer": "proof_plus_reputation",
+      "intent_terms": [
+        "builder",
+        "prestige",
+        "sobha",
+        "brigade",
+        "reliable builder",
+        "delivery"
+      ],
+      "fact_keys": [
+        "builder_delivery_rate",
+        "rera_builder_projects_count",
+        "rera_builder_revocations",
+        "builder_reputation"
+      ],
+      "source_priority": [
+        "rera",
+        "computed",
+        "google",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 4,
+      "dimension": "metro_access",
+      "label": "metro access",
+      "layer": "infrastructure",
+      "intent_terms": [
+        "metro",
+        "metro station",
+        "commute",
+        "connectivity",
+        "10 minute drive"
+      ],
+      "fact_keys": [
+        "metro_distance_km",
+        "nearest_operational_metro_station",
+        "metro_distance_mins",
+        "metro_distance",
+        "metro_status",
+        "metro_details",
+        "metro_access"
+      ],
+      "source_priority": [
+        "maps",
+        "computed",
+        "area_plan",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 5,
+      "dimension": "greenery",
+      "label": "greenery",
+      "layer": "lifestyle_support",
+      "intent_terms": [
+        "greenery",
+        "trees",
+        "tree cover",
+        "green cover",
+        "open space",
+        "landscaped",
+        "garden"
+      ],
+      "fact_keys": [
+        "greenery_score",
+        "open_space_score",
+        "green_cover",
+        "google_top_positives",
+        "sentiment_summary"
+      ],
+      "source_priority": [
+        "rera",
+        "satellite",
+        "google",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 6,
+      "dimension": "land_area",
+      "label": "project land area",
+      "layer": "proof",
+      "intent_terms": [
+        "acres",
+        "large campus",
+        "township",
+        "layout size",
+        "open land"
+      ],
+      "fact_keys": [
+        "rera_total_land_area_sqm",
+        "rera_land_area_sqm"
+      ],
+      "source_priority": [
+        "rera"
+      ]
+    },
+    {
+      "rank": 7,
+      "dimension": "maintenance",
+      "label": "maintenance",
+      "layer": "resident_support",
+      "intent_terms": [
+        "maintained",
+        "well maintained",
+        "clean",
+        "upkeep",
+        "association"
+      ],
+      "fact_keys": [
+        "maintenance_quality",
+        "maintenance_sentiment",
+        "society_quality_score",
+        "resident_sentiment"
+      ],
+      "source_priority": [
+        "google",
+        "reddit",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 8,
+      "dimension": "amenity_quality",
+      "label": "amenity quality",
+      "layer": "resident_support",
+      "intent_terms": [
+        "clubhouse",
+        "club house",
+        "pool",
+        "swimming pool",
+        "gym",
+        "amenities",
+        "sports"
+      ],
+      "fact_keys": [
+        "amenity_quality",
+        "clubhouse_quality",
+        "pool_quality",
+        "google_top_positives",
+        "resident_sentiment"
+      ],
+      "source_priority": [
+        "google",
+        "photos",
+        "reddit",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 9,
+      "dimension": "liveability",
+      "label": "liveability",
+      "layer": "resident_support",
+      "intent_terms": [
+        "families living",
+        "occupied",
+        "occupancy",
+        "people living",
+        "liveable",
+        "livable",
+        "calm"
+      ],
+      "fact_keys": [
+        "occupancy_signal",
+        "livability_sentiment",
+        "resident_sentiment",
+        "reddit_threads"
+      ],
+      "source_priority": [
+        "google",
+        "reddit",
+        "photos",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 10,
+      "dimension": "area_development",
+      "label": "area development",
+      "layer": "infrastructure",
+      "intent_terms": [
+        "developed",
+        "nothing around",
+        "upcoming area",
+        "future development",
+        "nearby development"
+      ],
+      "fact_keys": [
+        "area_development_signal",
+        "infrastructure_status",
+        "nearby_development",
+        "metro_status"
+      ],
+      "source_priority": [
+        "area_plan",
+        "maps",
+        "news",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 11,
+      "dimension": "water_supply",
+      "label": "water supply",
+      "layer": "risk",
+      "intent_terms": [
+        "water",
+        "borewell",
+        "cauvery",
+        "tanker",
+        "water issue"
+      ],
+      "fact_keys": [
+        "water_supply",
+        "water_supply_risk",
+        "resident_sentiment"
+      ],
+      "source_priority": [
+        "resident_review",
+        "google",
+        "reddit",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 12,
+      "dimension": "traffic_commute",
+      "label": "traffic and commute",
+      "layer": "risk",
+      "intent_terms": [
+        "traffic",
+        "commute",
+        "orr",
+        "road access",
+        "congestion",
+        "office"
+      ],
+      "fact_keys": [
+        "traffic_score",
+        "traffic_reality",
+        "commute_reality",
+        "metro_distance_mins"
+      ],
+      "source_priority": [
+        "maps",
+        "computed",
+        "reddit",
+        "google"
+      ]
+    },
+    {
+      "rank": 13,
+      "dimension": "flooding_waterlogging",
+      "label": "waterlogging risk",
+      "layer": "risk",
+      "intent_terms": [
+        "waterlogging",
+        "flooding",
+        "drainage",
+        "lake",
+        "lake distance",
+        "lake overflow",
+        "storm water"
+      ],
+      "fact_keys": [
+        "waterlogging_risk_score",
+        "waterlogging_risk",
+        "flooding_risk",
+        "nearest_lake_distance_m",
+        "lake_proximity",
+        "lake_waterlogging_context"
+      ],
+      "source_priority": [
+        "bbmp",
+        "news",
+        "maps",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 14,
+      "dimension": "noise_pollution",
+      "label": "noise and pollution",
+      "layer": "risk",
+      "intent_terms": [
+        "quiet",
+        "peaceful",
+        "calm",
+        "noise",
+        "pollution",
+        "airport",
+        "airport distance",
+        "airport noise",
+        "environment sensitivity",
+        "surroundings"
+      ],
+      "fact_keys": [
+        "noise_score",
+        "noise_level",
+        "airport_noise_score",
+        "airport_distance_km",
+        "pollution_signal",
+        "surroundings_signal",
+        "environment_sensitivity"
+      ],
+      "source_priority": [
+        "google",
+        "maps",
+        "computed",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 15,
+      "dimension": "social_infra",
+      "label": "schools hospitals retail",
+      "layer": "infrastructure",
+      "intent_terms": [
+        "school",
+        "metro",
+        "hospital",
+        "gym",
+        "cult",
+        "fitness",
+        "restaurant",
+        "cafe",
+        "tech park",
+        "office"
+      ],
+      "fact_keys": [
+        "school_access",
+        "hospital_access",
+        "retail_access",
+        "social_infra_score",
+        "nearby_schools",
+        "nearby_metro_stations",
+        "nearby_hospitals",
+        "nearby_fitness",
+        "nearby_eateries",
+        "nearby_tech_parks"
+      ],
+      "source_priority": [
+        "maps",
+        "computed",
+        "google",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 16,
+      "dimension": "rental_resale",
+      "label": "rental and resale demand",
+      "layer": "market",
+      "intent_terms": [
+        "rental",
+        "rent",
+        "resale",
+        "liquidity",
+        "tenant",
+        "yield"
+      ],
+      "fact_keys": [
+        "rental_yield_signal",
+        "resale_strength_score",
+        "market_activity",
+        "pricing_insight"
+      ],
+      "source_priority": [
+        "market_pricing",
+        "listing_velocity",
+        "reddit",
+        "google"
+      ]
+    },
+    {
+      "rank": 17,
+      "dimension": "construction_quality",
+      "label": "construction quality",
+      "layer": "resident_support",
+      "intent_terms": [
+        "construction quality",
+        "seepage",
+        "cracks",
+        "finish",
+        "quality issue"
+      ],
+      "fact_keys": [
+        "construction_quality",
+        "finish_quality",
+        "resident_sentiment",
+        "google_top_complaints"
+      ],
+      "source_priority": [
+        "resident_review",
+        "google",
+        "reddit",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 18,
+      "dimension": "security_gated",
+      "label": "security and gated community",
+      "layer": "lifestyle_support",
+      "intent_terms": [
+        "gated",
+        "security",
+        "safe",
+        "guard",
+        "layout safety"
+      ],
+      "fact_keys": [
+        "safety_rating",
+        "security_quality",
+        "gated_community",
+        "resident_sentiment"
+      ],
+      "source_priority": [
+        "google",
+        "reddit",
+        "seller_disclosure"
+      ]
+    },
+    {
+      "rank": 19,
+      "dimension": "vastu_facing",
+      "label": "vastu and facing",
+      "layer": "preference",
+      "intent_terms": [
+        "east facing",
+        "north facing",
+        "vastu",
+        "corner",
+        "facing"
+      ],
+      "fact_keys": [
+        "facing",
+        "vastu_signal",
+        "corner_unit"
+      ],
+      "source_priority": [
+        "seller_disclosure",
+        "listing",
+        "manual"
+      ]
+    },
+    {
+      "rank": 20,
+      "dimension": "parking_access",
+      "label": "parking and access",
+      "layer": "preference",
+      "intent_terms": [
+        "parking",
+        "visitor parking",
+        "road",
+        "lane",
+        "road width",
+        "access road",
+        "approach road",
+        "approach lane"
+      ],
+      "fact_keys": [
+        "parking_quality",
+        "visitor_parking",
+        "road_width",
+        "access_road_quality",
+        "approach_road_condition"
+      ],
+      "source_priority": [
+        "seller_disclosure",
+        "google",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 21,
+      "dimension": "possession_status",
+      "label": "possession status",
+      "layer": "proof",
+      "intent_terms": [
+        "ready to move",
+        "possession",
+        "under construction",
+        "delayed",
+        "completion",
+        "delivered",
+        "property age",
+        "old society",
+        "new property"
+      ],
+      "fact_keys": [
+        "home_state",
+        "home_age_years",
+        "home_age_bucket",
+        "home_timeline_state",
+        "possession_status",
+        "project_status",
+        "rera_status",
+        "rera_completion_date"
+      ],
+      "source_priority": [
+        "rera",
+        "seller_disclosure",
+        "google",
+        "reddit"
+      ]
+    },
+    {
+      "rank": 22,
+      "dimension": "plot_layout",
+      "label": "plot and layout quality",
+      "layer": "proof_plus_support",
+      "intent_terms": [
+        "plot",
+        "layout",
+        "road width",
+        "corner plot",
+        "site",
+        "villa plot"
+      ],
+      "fact_keys": [
+        "rera_project_type",
+        "plot_size_sqft",
+        "layout_quality",
+        "road_width"
+      ],
+      "source_priority": [
+        "rera",
+        "seller_disclosure",
+        "google",
+        "reddit"
+      ]
+    }
+  ],
+  "preference_patterns": {
+    "positive": [
+      {
+        "rank": 1,
+        "patterns": [
+          "green",
+          "greenery",
+          "many trees",
+          "tree cover",
+          "green cover",
+          "open space",
+          "open spaces",
+          "garden",
+          "landscaped",
+          "park view",
+          "park facing",
+          "internal park",
+          "internal parks"
+        ],
+        "label": "greenery",
+        "expanded_keys": [
+          "greenery_score",
+          "open_space_score",
+          "green_cover",
+          "google_top_positives",
+          "sentiment_summary"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 2,
+        "patterns": [
+          "near metro",
+          "metro access",
+          "metro station",
+          "metro"
+        ],
+        "label": "metro access",
+        "expanded_keys": [
+          "metro_distance_km",
+          "nearest_operational_metro_station",
+          "metro_distance_mins",
+          "metro_distance",
+          "metro_status",
+          "metro_details",
+          "metro_access"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 3,
+        "patterns": [
+          "clubhouse",
+          "club house",
+          "swimming pool",
+          "pool",
+          "amenities",
+          "amenity"
+        ],
+        "label": "amenity quality",
+        "expanded_keys": [
+          "amenity_quality",
+          "clubhouse_quality",
+          "pool_quality",
+          "google_top_positives",
+          "resident_sentiment"
+        ],
+        "weight": 0.9
+      },
+      {
+        "rank": 4,
+        "patterns": [
+          "well maintained",
+          "well-maintained",
+          "maintained",
+          "maintenance",
+          "layout maintained"
+        ],
+        "label": "maintenance",
+        "expanded_keys": [
+          "maintenance_quality",
+          "maintenance_sentiment",
+          "society_quality_score",
+          "resident_sentiment"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 5,
+        "patterns": [
+          "families living",
+          "occupied",
+          "occupancy",
+          "people living",
+          "liveable",
+          "livable"
+        ],
+        "label": "liveability",
+        "expanded_keys": [
+          "occupancy_signal",
+          "livability_sentiment",
+          "resident_sentiment",
+          "reddit_threads"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 6,
+        "patterns": [
+          "developed around",
+          "surrounding development",
+          "nothing around",
+          "area development",
+          "future development"
+        ],
+        "label": "area development",
+        "expanded_keys": [
+          "area_development_signal",
+          "infrastructure_status",
+          "nearby_development",
+          "metro_status"
+        ],
+        "weight": 0.7
+      },
+      {
+        "rank": 7,
+        "patterns": [
+          "appreciation",
+          "resale",
+          "hold",
+          "valuation",
+          "worth",
+          "price discovery"
+        ],
+        "label": "resale potential",
+        "expanded_keys": [
+          "resale_strength_score",
+          "pricing_insight",
+          "price_per_sqft",
+          "market_status"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 8,
+        "patterns": [
+          "water",
+          "water supply",
+          "borewell",
+          "cauvery",
+          "tanker"
+        ],
+        "label": "water supply",
+        "expanded_keys": [
+          "water_supply",
+          "water_supply_risk",
+          "resident_sentiment"
+        ],
+        "weight": 0.9
+      },
+      {
+        "rank": 9,
+        "patterns": [
+          "nearby",
+          "near by",
+          "school",
+          "schools",
+          "metro",
+          "metro station",
+          "hospital",
+          "hospitals",
+          "cult",
+          "gym",
+          "fitness",
+          "restaurant",
+          "restaurants",
+          "cafe",
+          "cafes",
+          "eatery",
+          "eateries",
+          "tech park",
+          "tech parks",
+          "office",
+          "offices"
+        ],
+        "label": "social infrastructure",
+        "expanded_keys": [
+          "school_access",
+          "hospital_access",
+          "retail_access",
+          "social_infra_score",
+          "nearby_schools",
+          "nearby_metro_stations",
+          "nearby_hospitals",
+          "nearby_fitness",
+          "nearby_eateries",
+          "nearby_tech_parks"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 10,
+        "patterns": [
+          "rental",
+          "rent",
+          "tenant",
+          "yield",
+          "resale demand",
+          "liquidity"
+        ],
+        "label": "rental and resale demand",
+        "expanded_keys": [
+          "rental_yield_signal",
+          "resale_strength_score",
+          "market_activity",
+          "pricing_insight"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 11,
+        "patterns": [
+          "good reviews",
+          "positive reviews",
+          "reviewed well",
+          "good google reviews",
+          "google reviews",
+          "google rating",
+          "highly rated",
+          "well reviewed"
+        ],
+        "label": "review quality",
+        "expanded_keys": [
+          "google_rating",
+          "google_review_count",
+          "google_top_positives",
+          "google_reviews_url"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 12,
+        "patterns": [
+          "resident feedback on reddit",
+          "reddit resident feedback",
+          "reddit feedback",
+          "reddit reviews",
+          "reddit discussions"
+        ],
+        "label": "reddit discussions",
+        "expanded_keys": [
+          "reddit_thread_count",
+          "reddit_total_score",
+          "reddit_total_comments",
+          "reddit_threads",
+          "reddit_top_concerns"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 13,
+        "patterns": [
+          "delivered society",
+          "delivered project",
+          "completed project",
+          "ready resale",
+          "ready to move"
+        ],
+        "label": "delivered society",
+        "expanded_keys": [
+          "home_state",
+          "home_age_bucket",
+          "possession_status",
+          "project_status",
+          "market_project_status"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 14,
+        "patterns": [
+          "new property",
+          "newly delivered",
+          "new society",
+          "recently delivered"
+        ],
+        "label": "new property",
+        "expanded_keys": [
+          "home_age_years",
+          "home_age_bucket",
+          "home_state"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 15,
+        "patterns": [
+          "old society",
+          "established society",
+          "mature society",
+          "older property"
+        ],
+        "label": "established society",
+        "expanded_keys": [
+          "home_age_bucket",
+          "home_state"
+        ],
+        "weight": 0.9
+      },
+      {
+        "rank": 16,
+        "patterns": [
+          "under construction",
+          "new launch",
+          "upcoming project"
+        ],
+        "label": "under construction",
+        "expanded_keys": [
+          "home_state",
+          "home_timeline_state",
+          "project_status",
+          "market_project_status"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 17,
+        "patterns": [
+          "approach road",
+          "access road",
+          "road width",
+          "wide road",
+          "good road access"
+        ],
+        "label": "approach road",
+        "expanded_keys": [
+          "access_road_quality",
+          "road_width",
+          "approach_road_condition",
+          "google_review_snippets",
+          "traffic_reality"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 18,
+        "patterns": [
+          "airport distance",
+          "near airport",
+          "airport access"
+        ],
+        "label": "airport access",
+        "expanded_keys": [
+          "airport_distance_km",
+          "airport_noise_score",
+          "noise_score"
+        ],
+        "weight": 0.6
+      },
+      {
+        "rank": 19,
+        "patterns": [
+          "lake distance",
+          "near lake",
+          "lake nearby",
+          "lake proximity"
+        ],
+        "label": "lake proximity",
+        "expanded_keys": [
+          "nearest_lake_distance_m",
+          "lake_proximity",
+          "lake_waterlogging_context",
+          "waterlogging_risk"
+        ],
+        "weight": 0.7
+      },
+      {
+        "rank": 20,
+        "patterns": [
+          "environment sensitivity",
+          "surroundings",
+          "noise pollution",
+          "pollution",
+          "quiet surroundings"
+        ],
+        "label": "environment sensitivity",
+        "expanded_keys": [
+          "environment_sensitivity",
+          "surroundings_signal",
+          "noise_score",
+          "pollution_signal",
+          "airport_noise_score",
+          "google_review_snippets"
+        ],
+        "weight": 0.8
+      }
+    ],
+    "negative": [
+      {
+        "rank": 1,
+        "patterns": [
+          "avoid waterlogging",
+          "no waterlogging",
+          "low waterlogging",
+          "not flood prone",
+          "avoid flooding",
+          "no flooding"
+        ],
+        "label": "waterlogging risk",
+        "expanded_keys": [
+          "waterlogging_risk_score",
+          "waterlogging_risk",
+          "waterlogging_detail",
+          "flooding_risk"
+        ],
+        "weight": 1.4
+      },
+      {
+        "rank": 2,
+        "patterns": [
+          "avoid traffic",
+          "less traffic",
+          "low traffic",
+          "no traffic",
+          "traffic free",
+          "traffic"
+        ],
+        "label": "traffic",
+        "expanded_keys": [
+          "traffic_score",
+          "traffic_reality",
+          "traffic",
+          "commute_reality"
+        ],
+        "weight": 1.3
+      },
+      {
+        "rank": 3,
+        "patterns": [
+          "avoid noise",
+          "less noise",
+          "low noise",
+          "no noise"
+        ],
+        "label": "noise",
+        "expanded_keys": [
+          "noise_score",
+          "noise_level",
+          "airport_noise_score"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 4,
+        "patterns": [
+          "avoid legal",
+          "no legal issue",
+          "no litigation",
+          "low litigation",
+          "clear title"
+        ],
+        "label": "legal risk",
+        "expanded_keys": [
+          "litigation_risk",
+          "legal_risk",
+          "rera_complaints",
+          "land_litigation"
+        ],
+        "weight": 1.5
+      },
+      {
+        "rank": 5,
+        "patterns": [
+          "avoid delayed",
+          "not delayed",
+          "no possession delay",
+          "avoid possession delay"
+        ],
+        "label": "delay risk",
+        "expanded_keys": [
+          "home_timeline_state",
+          "home_state",
+          "rera_delay_months",
+          "possession_delay",
+          "possession_status"
+        ],
+        "weight": 1.4
+      },
+      {
+        "rank": 6,
+        "patterns": [
+          "avoid bad road",
+          "avoid narrow road",
+          "bad approach road",
+          "narrow approach road",
+          "poor access road"
+        ],
+        "label": "approach road",
+        "expanded_keys": [
+          "access_road_quality",
+          "road_width",
+          "approach_road_condition",
+          "google_review_snippets",
+          "traffic_reality"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 7,
+        "patterns": [
+          "avoid airport noise",
+          "far from airport noise",
+          "low airport noise"
+        ],
+        "label": "environment sensitivity",
+        "expanded_keys": [
+          "environment_sensitivity",
+          "airport_noise_score",
+          "noise_score",
+          "pollution_signal",
+          "google_review_snippets"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 8,
+        "patterns": [
+          "avoid lake flooding",
+          "avoid lake waterlogging",
+          "not near lake",
+          "away from lake"
+        ],
+        "label": "lake proximity",
+        "expanded_keys": [
+          "nearest_lake_distance_m",
+          "lake_proximity",
+          "lake_waterlogging_context",
+          "waterlogging_risk",
+          "flooding_risk"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 9,
+        "patterns": [
+          "avoid stp",
+          "sewage treatment plant",
+          "sewage smell",
+          "stp smell"
+        ],
+        "label": "stp concern",
+        "expanded_keys": [
+          "stp_concern",
+          "google_review_snippets",
+          "resident_sentiment"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 10,
+        "patterns": [
+          "avoid high tension wires",
+          "high tension wires",
+          "power lines",
+          "ht line"
+        ],
+        "label": "high tension wires",
+        "expanded_keys": [
+          "high_tension_wire_concern",
+          "google_review_snippets",
+          "surroundings_signal"
+        ],
+        "weight": 1.0
+      }
+    ]
+  },
+  "numeric_constraints": [
+    {
+      "dimension": "land_area",
+      "label": "RERA land area",
+      "fact_keys": [
+        "rera_total_land_area_sqm",
+        "rera_land_area_sqm"
+      ],
+      "query_units": [
+        {
+          "unit": "acres",
+          "aliases": [
+            "acres",
+            "acre"
+          ],
+          "to_canonical": 4046.8564224
+        }
+      ],
+      "proof_sources": [
+        "Rera"
+      ],
+      "scoring_method": "rera-proof"
+    }
+  ],
+  "text_evidence": [
+    {
+      "dimension": "greenery",
+      "label": "greenery",
+      "aliases": [
+        "greenery",
+        "green",
+        "many trees",
+        "tree cover",
+        "green cover",
+        "open space",
+        "open spaces",
+        "garden",
+        "landscaped",
+        "park view",
+        "park facing",
+        "internal park",
+        "internal parks"
+      ],
+      "fact_keys": [
+        "greenery_score",
+        "open_space_score",
+        "green_cover",
+        "google_top_positives",
+        "sentiment_summary",
+        "best_quote",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "greenery",
+        "green spaces",
+        "green space",
+        "green cover",
+        "green covers",
+        "open spaces",
+        "open space",
+        "open-to-sky",
+        "landscaped",
+        "landscaping",
+        "park view",
+        "park facing",
+        "internal parks",
+        "forest trail",
+        "lush green",
+        "trees",
+        "tree-lined"
+      ],
+      "negative_terms": [
+        "limited greenery",
+        "few trees",
+        "few parks",
+        "no greenery",
+        "low greenery",
+        "lack of greenery",
+        "nil greenery",
+        "limited green"
+      ],
+      "display_label": "Green/open-space signal",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "amenity_quality",
+      "label": "amenity quality",
+      "aliases": [
+        "amenity quality",
+        "amenities",
+        "clubhouse",
+        "club house",
+        "pool",
+        "swimming pool"
+      ],
+      "fact_keys": [
+        "amenity_quality",
+        "clubhouse_quality",
+        "pool_quality",
+        "google_top_positives",
+        "sentiment_summary",
+        "best_quote",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "clubhouse",
+        "club house",
+        "pool",
+        "swimming pool",
+        "amenities",
+        "well maintained",
+        "decently maintained",
+        "sports",
+        "gym"
+      ],
+      "negative_terms": [
+        "poorly maintained",
+        "badly maintained",
+        "not maintained",
+        "closed pool",
+        "clubhouse not ready",
+        "no clubhouse",
+        "no amenities"
+      ],
+      "display_label": "Amenity signal",
+      "score_delta": 1.2
+    },
+    {
+      "dimension": "maintenance",
+      "label": "maintenance",
+      "aliases": [
+        "maintenance",
+        "well maintained",
+        "well-maintained",
+        "maintained",
+        "layout maintained"
+      ],
+      "fact_keys": [
+        "maintenance_quality",
+        "maintenance_sentiment",
+        "society_quality_score",
+        "google_top_positives",
+        "sentiment_summary",
+        "best_quote",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "well maintained",
+        "well-maintained",
+        "maintained",
+        "decently maintained",
+        "clean",
+        "managed well"
+      ],
+      "negative_terms": [
+        "poorly maintained",
+        "badly maintained",
+        "not maintained",
+        "maintenance issue",
+        "maintenance problems"
+      ],
+      "display_label": "Maintenance signal",
+      "score_delta": 1.3
+    },
+    {
+      "dimension": "metro_access",
+      "label": "metro access",
+      "aliases": [
+        "metro access",
+        "near metro",
+        "metro station",
+        "metro"
+      ],
+      "fact_keys": [
+        "metro_distance_km",
+        "nearest_operational_metro_station",
+        "metro_distance_mins",
+        "metro_distance",
+        "metro_status",
+        "metro_details",
+        "metro_access"
+      ],
+      "positive_terms": [
+        "metro",
+        "metro station",
+        "walkable to metro",
+        "near metro",
+        "10 minute drive",
+        "10 minutes drive"
+      ],
+      "negative_terms": [
+        "far from metro",
+        "no metro",
+        "metro is far",
+        "not near metro"
+      ],
+      "display_label": "Metro signal",
+      "score_delta": 1.2
+    },
+    {
+      "dimension": "liveability",
+      "label": "liveability",
+      "aliases": [
+        "liveability",
+        "livability",
+        "families living",
+        "occupied",
+        "occupancy",
+        "people living"
+      ],
+      "fact_keys": [
+        "occupancy_signal",
+        "livability_sentiment",
+        "resident_sentiment",
+        "sentiment_summary",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "families living",
+        "people living",
+        "occupied",
+        "residents",
+        "liveable",
+        "livable",
+        "calm"
+      ],
+      "negative_terms": [
+        "empty layout",
+        "no one living",
+        "deserted",
+        "not liveable",
+        "not livable"
+      ],
+      "display_label": "Liveability signal",
+      "score_delta": 1.0
+    },
+    {
+      "dimension": "area_development",
+      "label": "area development",
+      "aliases": [
+        "area development",
+        "developed around",
+        "surrounding development",
+        "future development"
+      ],
+      "fact_keys": [
+        "area_development_signal",
+        "infrastructure_status",
+        "nearby_development",
+        "metro_status",
+        "sentiment_summary",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "developing",
+        "upcoming",
+        "metro starts",
+        "nearby development",
+        "growth corridor",
+        "infrastructure"
+      ],
+      "negative_terms": [
+        "nothing around",
+        "not developed",
+        "poor infrastructure",
+        "isolated"
+      ],
+      "display_label": "Area development signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "home_state",
+      "label": "delivered society",
+      "aliases": [
+        "delivered society",
+        "delivered project",
+        "completed project",
+        "ready resale",
+        "ready to move"
+      ],
+      "fact_keys": [
+        "home_state",
+        "possession_status",
+        "project_status",
+        "market_project_status"
+      ],
+      "positive_terms": [
+        "delivered",
+        "ready to move",
+        "ready_to_move",
+        "completed"
+      ],
+      "negative_terms": [
+        "under_construction",
+        "under construction",
+        "delayed"
+      ],
+      "display_label": "Home state signal",
+      "score_delta": 1.2
+    },
+    {
+      "dimension": "home_age_bucket",
+      "label": "new property",
+      "aliases": [
+        "new property",
+        "newly delivered",
+        "new society",
+        "recently delivered"
+      ],
+      "fact_keys": [
+        "home_age_bucket",
+        "home_age_years",
+        "home_state"
+      ],
+      "positive_terms": [
+        "newly delivered",
+        "1-5 yrs old",
+        "1-5 years old",
+        "delivered"
+      ],
+      "negative_terms": [
+        "5-10 yrs old",
+        "10+ yrs old",
+        "delayed"
+      ],
+      "display_label": "Home age signal",
+      "score_delta": 1.0
+    },
+    {
+      "dimension": "home_age_bucket",
+      "label": "established society",
+      "aliases": [
+        "old society",
+        "established society",
+        "mature society",
+        "older property"
+      ],
+      "fact_keys": [
+        "home_age_bucket"
+      ],
+      "positive_terms": [
+        "5-10 yrs old",
+        "5-10 years old",
+        "10+ yrs old",
+        "10+ years old"
+      ],
+      "negative_terms": [
+        "newly delivered",
+        "under_construction",
+        "under construction"
+      ],
+      "display_label": "Home age signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "home_state",
+      "label": "under construction",
+      "aliases": [
+        "under construction",
+        "new launch",
+        "upcoming project"
+      ],
+      "fact_keys": [
+        "home_state",
+        "project_status",
+        "market_project_status"
+      ],
+      "positive_terms": [
+        "under_construction",
+        "under construction",
+        "ongoing"
+      ],
+      "negative_terms": [
+        "delivered",
+        "delayed"
+      ],
+      "display_label": "Home state signal",
+      "score_delta": 1.0
+    },
+    {
+      "dimension": "delay_risk",
+      "label": "delay risk",
+      "aliases": [
+        "delay risk",
+        "avoid delayed",
+        "not delayed",
+        "no possession delay",
+        "avoid possession delay"
+      ],
+      "fact_keys": [
+        "home_timeline_state",
+        "rera_delay_months",
+        "possession_delay",
+        "possession_status"
+      ],
+      "positive_terms": [
+        "on_track",
+        "on track",
+        "not delayed",
+        "delivered"
+      ],
+      "negative_terms": [
+        "delayed",
+        "possession delay"
+      ],
+      "display_label": "Delay risk signal",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "water_supply",
+      "label": "water supply",
+      "aliases": [
+        "water supply",
+        "water",
+        "borewell",
+        "cauvery",
+        "tanker"
+      ],
+      "fact_keys": [
+        "water_supply",
+        "water_supply_risk",
+        "resident_sentiment",
+        "google_top_complaints",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "cauvery",
+        "good water",
+        "no water issue",
+        "reliable water",
+        "water supply is good"
+      ],
+      "negative_terms": [
+        "water issue",
+        "water problem",
+        "tanker",
+        "borewell dry",
+        "no cauvery",
+        "shortage"
+      ],
+      "display_label": "Water supply signal",
+      "score_delta": 1.1
+    },
+    {
+      "dimension": "social_infrastructure",
+      "label": "social infrastructure",
+      "aliases": [
+        "social infrastructure",
+        "nearby",
+        "near by",
+        "school",
+        "hospital",
+        "tech park",
+        "office",
+        "retail",
+        "grocery",
+        "mall"
+      ],
+      "fact_keys": [
+        "school_access",
+        "hospital_access",
+        "retail_access",
+        "social_infra_score",
+        "nearby_schools",
+        "nearby_metro_stations",
+        "nearby_hospitals",
+        "nearby_fitness",
+        "nearby_eateries",
+        "nearby_tech_parks",
+        "sentiment_summary",
+        "reddit_threads"
+      ],
+      "positive_terms": [
+        "school",
+        "hospital",
+        "tech park",
+        "office",
+        "mall",
+        "grocery",
+        "retail",
+        "restaurants",
+        "developed social infrastructure",
+        "nearby"
+      ],
+      "negative_terms": [
+        "nothing around",
+        "no shops",
+        "no hospital",
+        "no school",
+        "poor social infrastructure"
+      ],
+      "display_label": "Social infrastructure signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "flooding_waterlogging",
+      "label": "waterlogging risk",
+      "aliases": [
+        "waterlogging risk",
+        "waterlogging",
+        "flooding",
+        "flood prone",
+        "drainage"
+      ],
+      "fact_keys": [
+        "waterlogging_risk",
+        "waterlogging_detail",
+        "flooding_risk"
+      ],
+      "positive_terms": [
+        "no waterlogging",
+        "low waterlogging",
+        "not flood prone",
+        "good drainage",
+        "well drained"
+      ],
+      "negative_terms": [
+        "waterlogging",
+        "flooding",
+        "flood prone",
+        "knee-deep water",
+        "poor drainage",
+        "storm water",
+        "heavy rainfall"
+      ],
+      "display_label": "Waterlogging risk signal",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "traffic_commute",
+      "label": "traffic",
+      "aliases": [
+        "traffic",
+        "commute",
+        "congestion",
+        "road access"
+      ],
+      "fact_keys": [
+        "traffic_reality",
+        "commute_reality",
+        "traffic"
+      ],
+      "positive_terms": [
+        "less traffic",
+        "low traffic",
+        "smooth commute",
+        "easy commute",
+        "good road access"
+      ],
+      "negative_terms": [
+        "traffic congestion",
+        "severe traffic",
+        "long commute",
+        "unpredictable",
+        "road digging",
+        "congestion"
+      ],
+      "display_label": "Traffic risk signal",
+      "score_delta": 1.3
+    },
+    {
+      "dimension": "approach_road",
+      "label": "approach road",
+      "aliases": [
+        "approach road",
+        "access road",
+        "road width",
+        "road access",
+        "lane",
+        "approach lane"
+      ],
+      "fact_keys": [
+        "access_road_quality",
+        "road_width",
+        "approach_road_condition",
+        "google_review_snippets",
+        "traffic_reality",
+        "commute_reality"
+      ],
+      "positive_terms": [
+        "wide road",
+        "good road",
+        "good access road",
+        "easy access",
+        "smooth approach",
+        "well connected"
+      ],
+      "negative_terms": [
+        "narrow road",
+        "bad road",
+        "poor road",
+        "poor access",
+        "approach road is bad",
+        "road digging",
+        "broken road",
+        "single lane"
+      ],
+      "display_label": "Approach road signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "airport_access",
+      "label": "airport access",
+      "aliases": [
+        "airport",
+        "airport distance",
+        "near airport",
+        "airport access"
+      ],
+      "fact_keys": [
+        "airport_distance_km",
+        "airport_noise_score",
+        "noise_score",
+        "google_review_snippets"
+      ],
+      "positive_terms": [
+        "near airport",
+        "airport access",
+        "airport road",
+        "airport is close"
+      ],
+      "negative_terms": [
+        "airport noise",
+        "flight noise",
+        "aircraft noise",
+        "too close to airport"
+      ],
+      "display_label": "Airport signal",
+      "score_delta": 0.6
+    },
+    {
+      "dimension": "lake_proximity",
+      "label": "lake proximity",
+      "aliases": [
+        "lake",
+        "lake distance",
+        "near lake",
+        "lake nearby",
+        "lake proximity"
+      ],
+      "fact_keys": [
+        "nearest_lake_distance_m",
+        "lake_proximity",
+        "lake_waterlogging_context",
+        "waterlogging_risk",
+        "flooding_risk",
+        "google_review_snippets"
+      ],
+      "positive_terms": [
+        "away from lake",
+        "not near lake",
+        "no lake flooding",
+        "lake view"
+      ],
+      "negative_terms": [
+        "near lake",
+        "lake overflow",
+        "lake flooding",
+        "lake smell",
+        "lake pollution",
+        "waterlogging near lake"
+      ],
+      "display_label": "Lake proximity signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "environment_sensitivity",
+      "label": "environment sensitivity",
+      "aliases": [
+        "environment sensitivity",
+        "surroundings",
+        "noise pollution",
+        "pollution",
+        "quiet surroundings"
+      ],
+      "fact_keys": [
+        "environment_sensitivity",
+        "surroundings_signal",
+        "noise_score",
+        "airport_noise_score",
+        "pollution_signal",
+        "google_review_snippets"
+      ],
+      "positive_terms": [
+        "quiet",
+        "peaceful",
+        "clean surroundings",
+        "low pollution",
+        "calm surroundings"
+      ],
+      "negative_terms": [
+        "noise",
+        "pollution",
+        "dust",
+        "smell",
+        "bad surroundings",
+        "construction noise",
+        "airport noise"
+      ],
+      "display_label": "Environment signal",
+      "score_delta": 0.8
+    },
+    {
+      "dimension": "stp_concern",
+      "label": "stp concern",
+      "aliases": [
+        "stp",
+        "sewage treatment plant",
+        "sewage smell",
+        "stp smell"
+      ],
+      "fact_keys": [
+        "stp_concern",
+        "google_review_snippets",
+        "resident_sentiment"
+      ],
+      "positive_terms": [
+        "stp maintained",
+        "no sewage smell",
+        "sewage treatment works"
+      ],
+      "negative_terms": [
+        "stp",
+        "sewage treatment plant",
+        "sewage smell",
+        "stp smell",
+        "bad smell from stp",
+        "sewage issue"
+      ],
+      "display_label": "STP signal",
+      "score_delta": 0.9
+    },
+    {
+      "dimension": "high_tension_wires",
+      "label": "high tension wires",
+      "aliases": [
+        "high tension wires",
+        "high tension line",
+        "ht line",
+        "power lines"
+      ],
+      "fact_keys": [
+        "high_tension_wire_concern",
+        "google_review_snippets",
+        "surroundings_signal"
+      ],
+      "positive_terms": [
+        "no high tension wires",
+        "away from power lines"
+      ],
+      "negative_terms": [
+        "high tension wires",
+        "high tension line",
+        "ht line",
+        "power lines",
+        "transmission line"
+      ],
+      "display_label": "High-tension wire signal",
+      "score_delta": 0.9
+    }
+  ],
+  "numeric_evidence": [
+    {
+      "dimension": "premium",
+      "label": "premium",
+      "aliases": [
+        "premium",
+        "luxury",
+        "high end",
+        "price per sqft",
+        "premium segment"
+      ],
+      "fact_keys": [
+        "price_per_sqft",
+        "rera_cost_per_unit",
+        "market_starting_price_inr"
+      ],
+      "direction": "HigherIsBetter",
+      "thresholds": [
+        20000,
+        12000
+      ],
+      "display_label": "Premium price signal",
+      "score_delta": 2.0
+    },
+    {
+      "dimension": "waterlogging_risk",
+      "label": "waterlogging risk",
+      "aliases": [
+        "waterlogging risk",
+        "waterlogging",
+        "flooding risk"
+      ],
+      "fact_keys": [
+        "waterlogging_risk_score"
+      ],
+      "direction": "LowerIsBetter",
+      "thresholds": [
+        0.2,
+        0.5
+      ],
+      "display_label": "waterlogging risk",
+      "score_delta": 1.4
+    },
+    {
+      "dimension": "traffic",
+      "label": "traffic",
+      "aliases": [
+        "traffic",
+        "traffic risk",
+        "commute congestion"
+      ],
+      "fact_keys": [
+        "traffic_score"
+      ],
+      "direction": "LowerIsBetter",
+      "thresholds": [
+        0.35,
+        0.6
+      ],
+      "display_label": "traffic risk",
+      "score_delta": 1.3
+    },
+    {
+      "dimension": "noise",
+      "label": "noise",
+      "aliases": [
+        "noise",
+        "noise risk",
+        "quiet"
+      ],
+      "fact_keys": [
+        "noise_score",
+        "airport_noise_score"
+      ],
+      "direction": "LowerIsBetter",
+      "thresholds": [
+        0.3,
+        0.5
+      ],
+      "display_label": "noise risk",
+      "score_delta": 1.0
+    }
+  ],
+  "facts": [
+    {
+      "fact_key": "operating.bwssb_unknown",
+      "bucket": "water_utilities",
+      "label": "piped water status unknown",
+      "lens": "operating",
+      "polarity": "neutral",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "bwssb",
+        "piped water unknown"
+      ],
+      "answers_preferences": [
+        "bwssb water"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "bwssb_or_piped_water_unknown",
+      "display_template": "piped water status unknown: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "operating.power_backup",
+      "bucket": "water_utilities",
+      "label": "power backup quality",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "power backup",
+        "generator",
+        "dg set"
+      ],
+      "answers_preferences": [
+        "power backup"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "power_backup_good",
+      "display_template": "power backup quality: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "operating.power_wiring_issue",
+      "bucket": "water_utilities",
+      "label": "power or wiring issues",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "wiring issue",
+        "power cut",
+        "electrical problem"
+      ],
+      "answers_preferences": [
+        "power issue"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "power_or_wiring_issue",
+      "display_template": "power or wiring issues: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.summer_water_shortage",
+      "bucket": "water_utilities",
+      "label": "summer water shortage",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "water shortage",
+        "summer water",
+        "no water"
+      ],
+      "answers_preferences": [
+        "water shortage",
+        "summer water"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "summer water shortage: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.tanker_dependence",
+      "bucket": "water_utilities",
+      "label": "tanker dependence",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "tanker",
+        "water tanker",
+        "tanker dependency"
+      ],
+      "answers_preferences": [
+        "tanker",
+        "tanker dependence"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "tanker dependence: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.utility_outage",
+      "bucket": "water_utilities",
+      "label": "utility outage",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "outage",
+        "no power",
+        "no water hours"
+      ],
+      "answers_preferences": [
+        "utility outage"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "utility_outage_reported",
+      "display_template": "utility outage: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.water_source",
+      "bucket": "water_utilities",
+      "label": "water source",
+      "lens": "operating",
+      "polarity": "neutral",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "water source",
+        "borewell",
+        "cauvery",
+        "bwssb"
+      ],
+      "answers_preferences": [
+        "water source",
+        "bwssb"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "water source: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "operating.water_supply_good",
+      "bucket": "water_utilities",
+      "label": "stable water supply",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "reliable water",
+        "good water supply"
+      ],
+      "answers_preferences": [
+        "water supply good"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "water_supply_good",
+      "display_template": "stable water supply: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.stable_water",
+      "bucket": "water_utilities",
+      "label": "stable water supply",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "stable water",
+        "good water supply",
+        "24x7 water"
+      ],
+      "answers_preferences": [
+        "reliable water",
+        "good water"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "stable water supply: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "risk.approach_road_waterlogging",
+      "bucket": "flooding_drainage",
+      "label": "approach-road waterlogging",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "road_segment",
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "waterlogging",
+        "flooded road",
+        "road floods"
+      ],
+      "answers_preferences": [
+        "waterlogging",
+        "flooding"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "approach-road waterlogging: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.basement_seepage",
+      "bucket": "flooding_drainage",
+      "label": "basement seepage",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "basement seepage",
+        "basement water",
+        "seepage"
+      ],
+      "answers_preferences": [
+        "basement seepage"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "basement seepage: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.nala_nearby",
+      "bucket": "flooding_drainage",
+      "label": "nala nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "nala",
+        "open drain",
+        "drain nearby"
+      ],
+      "answers_preferences": [
+        "nala"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "nala_nearby",
+      "display_template": "nala nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.open_drain_nearby",
+      "bucket": "flooding_drainage",
+      "label": "open drain nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society",
+        "road_segment"
+      ],
+      "enrichment_terms": [
+        "open drain",
+        "open nala"
+      ],
+      "answers_preferences": [
+        "open drain"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "open_drain_nearby",
+      "display_template": "open drain nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.rajakaluve_proximity",
+      "bucket": "flooding_drainage",
+      "label": "rajakaluve proximity",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "rajakaluve",
+        "storm drain",
+        "stormwater drain"
+      ],
+      "answers_preferences": [
+        "rajakaluve",
+        "stormwater"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "rajakaluve proximity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.ekhata_issue",
+      "bucket": "legal_documents",
+      "label": "e-khata issue",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "property",
+        "society"
+      ],
+      "enrichment_terms": [
+        "e-khata",
+        "ekhata",
+        "khata issue"
+      ],
+      "answers_preferences": [
+        "ekhata",
+        "khata"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "ekhata_issue",
+      "display_template": "e-khata issue: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.kharab_land",
+      "bucket": "legal_documents",
+      "label": "kharab land risk",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "kharab land",
+        "kharab"
+      ],
+      "answers_preferences": [
+        "kharab land"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "kharab_land_risk",
+      "display_template": "kharab land risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.litigation",
+      "bucket": "legal_documents",
+      "label": "litigation risk",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "builder"
+      ],
+      "enrichment_terms": [
+        "litigation",
+        "court case",
+        "legal dispute"
+      ],
+      "answers_preferences": [
+        "litigation"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "litigation_risk",
+      "display_template": "litigation risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.oc_status",
+      "bucket": "legal_documents",
+      "label": "OC status",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "property"
+      ],
+      "enrichment_terms": [
+        "oc missing",
+        "occupancy certificate",
+        "oc unclear"
+      ],
+      "answers_preferences": [
+        "oc",
+        "occupancy certificate"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "oc_missing_or_unclear",
+      "display_template": "OC status: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.sale_agreement_clause",
+      "bucket": "legal_documents",
+      "label": "sale agreement clause risk",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "property",
+        "society"
+      ],
+      "enrichment_terms": [
+        "sale agreement clause",
+        "promoter reserved land"
+      ],
+      "answers_preferences": [
+        "sale agreement"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "sale_agreement_clause_risk",
+      "display_template": "sale agreement clause risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.seller_documentation_delay",
+      "bucket": "legal_documents",
+      "label": "seller documentation delay",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "seller delay",
+        "documentation delay",
+        "seller not responding"
+      ],
+      "answers_preferences": [
+        "seller documentation"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "seller_documentation_delay",
+      "display_template": "seller documentation delay: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "legal.title_clear",
+      "bucket": "legal_documents",
+      "label": "title clear claimed",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "clear title",
+        "title clear"
+      ],
+      "answers_preferences": [
+        "clear title"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "title_clear_claimed",
+      "display_template": "title clear claimed: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "legal.uds_mismatch",
+      "bucket": "legal_documents",
+      "label": "UDS mismatch",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "uds mismatch",
+        "undivided share"
+      ],
+      "answers_preferences": [
+        "uds"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "uds_mismatch",
+      "display_template": "UDS mismatch: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.amenity_delivery",
+      "bucket": "builder_delivery",
+      "label": "amenity delivery risk",
+      "lens": "lifecycle",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "amenity not delivered",
+        "clubhouse not ready"
+      ],
+      "answers_preferences": [
+        "amenity delivery"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "amenity_delivery_risk",
+      "display_template": "amenity delivery risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.builder_delay",
+      "bucket": "builder_delivery",
+      "label": "builder delay risk",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "builder"
+      ],
+      "enrichment_terms": [
+        "delayed possession",
+        "possession delay",
+        "behind schedule"
+      ],
+      "answers_preferences": [
+        "builder delay",
+        "delayed"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "builder_delay_risk",
+      "display_template": "builder delay risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.builder_reputation_negative",
+      "bucket": "builder_delivery",
+      "label": "builder reputation concern",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "builder",
+        "society"
+      ],
+      "enrichment_terms": [
+        "bad builder",
+        "builder complaint",
+        "worst builder"
+      ],
+      "answers_preferences": [
+        "builder reputation"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "builder_reputation_negative",
+      "display_template": "builder reputation concern: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.handover_uncertainty",
+      "bucket": "builder_delivery",
+      "label": "handover uncertainty",
+      "lens": "lifecycle",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "property"
+      ],
+      "enrichment_terms": [
+        "handover delay",
+        "handover uncertainty"
+      ],
+      "answers_preferences": [
+        "handover"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "handover_uncertainty",
+      "display_template": "handover uncertainty: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.sample_flat_mismatch",
+      "bucket": "builder_delivery",
+      "label": "sample flat mismatch",
+      "lens": "lifecycle",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "sample flat",
+        "brochure mismatch"
+      ],
+      "answers_preferences": [
+        "sample flat"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "sample_flat_mismatch",
+      "display_template": "sample flat mismatch: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "market.hidden_charges",
+      "bucket": "builder_delivery",
+      "label": "hidden charges risk",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "property"
+      ],
+      "enrichment_terms": [
+        "hidden charges",
+        "add-on charges",
+        "extra charges"
+      ],
+      "answers_preferences": [
+        "hidden charges"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "hidden_charges_risk",
+      "display_template": "hidden charges risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.construction_quality",
+      "bucket": "builder_delivery",
+      "label": "construction quality",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "construction quality",
+        "poor construction",
+        "leakage"
+      ],
+      "answers_preferences": [
+        "construction quality"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "construction_quality_concern",
+      "display_template": "construction quality: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.association_responsiveness",
+      "bucket": "maintenance_association",
+      "label": "association responsiveness",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "association",
+        "management office",
+        "complaint",
+        "mc issue"
+      ],
+      "answers_preferences": [
+        "association",
+        "maintenance"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "association responsiveness: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.cam_unclear",
+      "bucket": "maintenance_association",
+      "label": "CAM or corpus unclear",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "cam unclear",
+        "corpus fund",
+        "maintenance breakdown unclear"
+      ],
+      "answers_preferences": [
+        "cam",
+        "corpus"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "cam_or_corpus_unclear",
+      "display_template": "CAM or corpus unclear: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.lift_reliability",
+      "bucket": "maintenance_association",
+      "label": "lift reliability",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "lift issue",
+        "lift problem",
+        "elevator",
+        "lift breakdown"
+      ],
+      "answers_preferences": [
+        "lift",
+        "elevator"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "lift reliability: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.maintenance_charges",
+      "bucket": "maintenance_association",
+      "label": "maintenance charges",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "maintenance charge",
+        "maintenance cost",
+        "monthly maintenance",
+        "association fee"
+      ],
+      "answers_preferences": [
+        "maintenance",
+        "maintenance charges"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "maintenance charges: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.maintenance_high",
+      "bucket": "maintenance_association",
+      "label": "high maintenance",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "high maintenance",
+        "expensive maintenance"
+      ],
+      "answers_preferences": [
+        "high maintenance"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "maintenance_high",
+      "display_template": "high maintenance: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.parking_pressure",
+      "bucket": "maintenance_association",
+      "label": "parking pressure",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "parking issue",
+        "parking problem",
+        "visitor parking"
+      ],
+      "answers_preferences": [
+        "parking"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "parking pressure: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.stp_smell",
+      "bucket": "maintenance_association",
+      "label": "STP smell",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "stp smell",
+        "sewage smell",
+        "stp issue"
+      ],
+      "answers_preferences": [
+        "stp",
+        "sewage smell"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "STP smell: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.tenant_voice_weak",
+      "bucket": "maintenance_association",
+      "label": "weak tenant voice",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "tenant voice",
+        "renter issues ignored"
+      ],
+      "answers_preferences": [
+        "tenant rights"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "tenant_voice_weak",
+      "display_template": "weak tenant voice: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "operating.waste_management",
+      "bucket": "maintenance_association",
+      "label": "waste management",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "garbage",
+        "waste management",
+        "trash"
+      ],
+      "answers_preferences": [
+        "waste",
+        "garbage"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "waste management: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "positive.maintenance_quality",
+      "bucket": "maintenance_association",
+      "label": "well-maintained common areas",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "well maintained",
+        "good maintenance",
+        "clean society"
+      ],
+      "answers_preferences": [
+        "good society",
+        "well maintained",
+        "maintenance",
+        "well-maintained",
+        "maintained",
+        "layout maintained",
+        "decently maintained"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "Maintenance signal",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.3,
+        "polarity": "positive"
+      }
+    },
+    {
+      "fact_key": "positive.maintenance_value",
+      "bucket": "maintenance_association",
+      "label": "maintenance value",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "maintenance value",
+        "worth the maintenance"
+      ],
+      "answers_preferences": [
+        "maintenance value"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "maintenance_value_good",
+      "display_template": "maintenance value: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "access.future_infra_dependency",
+      "bucket": "livability_access",
+      "label": "future infra dependency",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [
+        "future metro",
+        "depends on future road",
+        "infra promise"
+      ],
+      "answers_preferences": [
+        "future infra"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "future_infra_dependency",
+      "display_template": "future infra dependency: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "access.metro_good",
+      "bucket": "livability_access",
+      "label": "good metro access",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "metro nearby",
+        "metro access",
+        "metro station"
+      ],
+      "answers_preferences": [
+        "metro access"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "metro_access_good",
+      "display_template": "good metro access: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "access.tech_park",
+      "bucket": "livability_access",
+      "label": "tech park access",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "tech park",
+        "it park",
+        "office corridor"
+      ],
+      "answers_preferences": [
+        "tech park",
+        "commute"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "tech_park_access_good",
+      "display_template": "tech park access: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "access.traffic_high",
+      "bucket": "livability_access",
+      "label": "heavy traffic",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "road_segment"
+      ],
+      "enrichment_terms": [
+        "heavy traffic",
+        "traffic jam",
+        "congested"
+      ],
+      "answers_preferences": [
+        "traffic",
+        "heavy traffic"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "traffic_high",
+      "display_template": "heavy traffic: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "access.walkability_poor",
+      "bucket": "livability_access",
+      "label": "poor walkability",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "road_segment"
+      ],
+      "enrichment_terms": [
+        "unwalkable",
+        "no footpath",
+        "walkability"
+      ],
+      "answers_preferences": [
+        "walkability"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "walkability_poor",
+      "display_template": "poor walkability: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "positive.connectivity",
+      "bucket": "livability_access",
+      "label": "commute connectivity",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "metro",
+        "connectivity",
+        "commute",
+        "tech park"
+      ],
+      "answers_preferences": [
+        "metro access",
+        "commute"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "commute connectivity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.school_access",
+      "bucket": "livability_access",
+      "label": "school access",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "school",
+        "schools nearby",
+        "good school"
+      ],
+      "answers_preferences": [
+        "schools",
+        "school access",
+        "social infrastructure",
+        "nearby",
+        "near by",
+        "school",
+        "hospital",
+        "tech park",
+        "office",
+        "retail",
+        "grocery",
+        "mall"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "Social infrastructure signal",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9,
+        "polarity": "positive"
+      }
+    },
+    {
+      "fact_key": "risk.approach_road_traffic",
+      "bucket": "livability_access",
+      "label": "approach-road traffic",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "road_segment",
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "traffic",
+        "congestion",
+        "narrow road",
+        "bad road",
+        "approach road"
+      ],
+      "answers_preferences": [
+        "traffic",
+        "approach road"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "approach-road traffic: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.city_disconnect",
+      "bucket": "livability_access",
+      "label": "city disconnect",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [
+        "far from city",
+        "disconnected",
+        "peripheral"
+      ],
+      "answers_preferences": [
+        "city access"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "city_disconnect_risk",
+      "display_template": "city disconnect: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.commercial_creep",
+      "bucket": "livability_access",
+      "label": "commercial creep",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "commercial creep",
+        "commercialization"
+      ],
+      "answers_preferences": [
+        "commercial creep"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "commercial_creep",
+      "display_template": "commercial creep: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.noise",
+      "bucket": "livability_access",
+      "label": "noise risk",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "noise",
+        "noisy",
+        "sound pollution"
+      ],
+      "answers_preferences": [
+        "noise",
+        "quiet neighborhood"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "noise_risk",
+      "display_template": "noise risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "layout.cramped",
+      "bucket": "layout_space",
+      "label": "cramped layout",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "cramped",
+        "small rooms",
+        "narrow layout"
+      ],
+      "answers_preferences": [
+        "cramped layout"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "layout_cramped",
+      "display_template": "cramped layout: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "layout.efficient",
+      "bucket": "layout_space",
+      "label": "efficient layout",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "efficient layout",
+        "good layout"
+      ],
+      "answers_preferences": [
+        "layout"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "layout_efficient",
+      "display_template": "efficient layout: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "layout.parking_sufficient",
+      "bucket": "layout_space",
+      "label": "sufficient parking",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "property"
+      ],
+      "enrichment_terms": [
+        "enough parking",
+        "parking sufficient"
+      ],
+      "answers_preferences": [
+        "parking sufficient"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "parking_sufficient",
+      "display_template": "sufficient parking: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "layout.privacy",
+      "bucket": "layout_space",
+      "label": "good privacy",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "property",
+        "society"
+      ],
+      "enrichment_terms": [
+        "privacy",
+        "private",
+        "low overlooking"
+      ],
+      "answers_preferences": [
+        "privacy"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "privacy_good",
+      "display_template": "good privacy: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "layout.sunlight",
+      "bucket": "layout_space",
+      "label": "good sunlight",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "property"
+      ],
+      "enrichment_terms": [
+        "sunlight",
+        "ventilation",
+        "bright"
+      ],
+      "answers_preferences": [
+        "sunlight",
+        "facing"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "sunlight_good",
+      "display_template": "good sunlight: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.clubhouse",
+      "bucket": "layout_space",
+      "label": "clubhouse and amenities",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "clubhouse",
+        "amenities",
+        "swimming pool",
+        "gym"
+      ],
+      "answers_preferences": [
+        "clubhouse",
+        "amenities"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "clubhouse and amenities: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.greenery",
+      "bucket": "layout_space",
+      "label": "greenery",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "greenery",
+        "trees",
+        "open space",
+        "landscaped"
+      ],
+      "answers_preferences": [
+        "greenery",
+        "green cover"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "greenery: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.open_space",
+      "bucket": "layout_space",
+      "label": "good open space",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "open space",
+        "spacious",
+        "low density"
+      ],
+      "answers_preferences": [
+        "open space"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "open_space_good",
+      "display_template": "good open space: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "positive.security",
+      "bucket": "layout_space",
+      "label": "security",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "security",
+        "gated",
+        "guards",
+        "cctv"
+      ],
+      "answers_preferences": [
+        "security",
+        "safe society"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "security: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "risk.amenities_overcrowded",
+      "bucket": "layout_space",
+      "label": "overcrowded amenities",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "crowded pool",
+        "crowded gym",
+        "amenities overcrowded"
+      ],
+      "answers_preferences": [
+        "crowded amenities"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "amenities_overcrowded",
+      "display_template": "overcrowded amenities: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.tower_density",
+      "bucket": "layout_space",
+      "label": "high tower density",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "too many towers",
+        "dense",
+        "overcrowded towers"
+      ],
+      "answers_preferences": [
+        "tower density"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "tower_density_high",
+      "display_template": "high tower density: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "lifecycle.rental_demand",
+      "bucket": "market_liquidity",
+      "label": "rental demand",
+      "lens": "lifecycle",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "rental demand",
+        "tenant demand",
+        "rent yield"
+      ],
+      "answers_preferences": [
+        "rental demand"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "rental demand: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "lifecycle.resale_inventory",
+      "bucket": "market_liquidity",
+      "label": "resale inventory",
+      "lens": "lifecycle",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "resale",
+        "resale unit",
+        "owner sale"
+      ],
+      "answers_preferences": [
+        "resale"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "resale inventory: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "market.distress_sale",
+      "bucket": "market_liquidity",
+      "label": "distress sale signal",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "property",
+        "area"
+      ],
+      "enrichment_terms": [
+        "distress sale",
+        "urgent sale",
+        "dumping property"
+      ],
+      "answers_preferences": [
+        "distress sale"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "distress_sale_signal",
+      "display_template": "distress sale signal: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "market.inventory_overhang",
+      "bucket": "market_liquidity",
+      "label": "inventory overhang",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "unsold inventory",
+        "inventory overhang",
+        "stagnant market"
+      ],
+      "answers_preferences": [
+        "inventory overhang"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "inventory_overhang",
+      "display_template": "inventory overhang: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "market.nri_speculation",
+      "bucket": "market_liquidity",
+      "label": "NRI speculation signal",
+      "lens": "market",
+      "polarity": "neutral",
+      "scopes": [
+        "area"
+      ],
+      "enrichment_terms": [
+        "nri speculation",
+        "nri investment hype"
+      ],
+      "answers_preferences": [
+        "nri demand"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "nri_speculation_signal",
+      "display_template": "NRI speculation signal: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "market.price_above",
+      "bucket": "market_liquidity",
+      "label": "price above market",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "property",
+        "society"
+      ],
+      "enrichment_terms": [
+        "overpriced",
+        "above market",
+        "premium pricing"
+      ],
+      "answers_preferences": [
+        "premium pricing",
+        "overpriced"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "price_above_market",
+      "display_template": "price above market: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "market.price_reasonable",
+      "bucket": "market_liquidity",
+      "label": "reasonable price",
+      "lens": "market",
+      "polarity": "positive",
+      "scopes": [
+        "property",
+        "society"
+      ],
+      "enrichment_terms": [
+        "fair price",
+        "reasonable price",
+        "good value"
+      ],
+      "answers_preferences": [
+        "value for money",
+        "fair price"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "price_reasonable",
+      "display_template": "reasonable price: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    },
+    {
+      "fact_key": "market.rental_yield_low",
+      "bucket": "market_liquidity",
+      "label": "low rental yield",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "low rental yield",
+        "poor yield",
+        "rent does not cover emi"
+      ],
+      "answers_preferences": [
+        "rental yield"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "rental_yield_low",
+      "display_template": "low rental yield: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "market.resale_liquidity_risk",
+      "bucket": "market_liquidity",
+      "label": "resale liquidity risk",
+      "lens": "market",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "hard to sell",
+        "low liquidity",
+        "stuck inventory"
+      ],
+      "answers_preferences": [
+        "resale liquidity"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "resale_liquidity_risk",
+      "display_template": "resale liquidity risk: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.commercial_noise",
+      "bucket": "externalities",
+      "label": "nearby commercial noise",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "commercial noise",
+        "bar nearby",
+        "pub nearby"
+      ],
+      "answers_preferences": [
+        "commercial noise"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "nearby_commercial_noise",
+      "display_template": "nearby commercial noise: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.construction_dust",
+      "bucket": "externalities",
+      "label": "construction dust and noise",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "construction dust",
+        "construction noise",
+        "ongoing construction"
+      ],
+      "answers_preferences": [
+        "construction dust",
+        "construction noise"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "construction dust and noise: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.empty_towers",
+      "bucket": "externalities",
+      "label": "empty unsold towers",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "unsold",
+        "empty tower",
+        "vacant tower",
+        "low occupancy"
+      ],
+      "answers_preferences": [
+        "unsold towers",
+        "empty towers"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "empty unsold towers: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.garbage_yard_nearby",
+      "bucket": "externalities",
+      "label": "garbage yard nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "garbage yard",
+        "dump yard",
+        "landfill"
+      ],
+      "answers_preferences": [
+        "garbage yard"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "garbage_yard_nearby",
+      "display_template": "garbage yard nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.ht_wire_nearby",
+      "bucket": "externalities",
+      "label": "high-tension wire buffers",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "high tension",
+        "ht line",
+        "transmission line"
+      ],
+      "answers_preferences": [
+        "high tension",
+        "ht wire"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "display_template": "high-tension wire buffers: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "risk.undeveloped_surroundings",
+      "bucket": "externalities",
+      "label": "undeveloped surroundings",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "area",
+        "society"
+      ],
+      "enrichment_terms": [
+        "undeveloped",
+        "empty land around",
+        "isolated"
+      ],
+      "answers_preferences": [
+        "undeveloped surroundings"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "undeveloped_surroundings",
+      "display_template": "undeveloped surroundings: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "positive.association_responsive",
+      "bucket": "other",
+      "label": "responsive association",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "responsive association",
+        "good management"
+      ],
+      "answers_preferences": [
+        "responsive association"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google",
+        "RedditTheme"
+      ],
+      "issue2_key": "association_responsive",
+      "display_template": "responsive association: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.9
+      }
+    }
+  ],
+  "fact_count": 78
+}

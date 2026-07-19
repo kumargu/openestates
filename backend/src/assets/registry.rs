@@ -287,6 +287,13 @@ impl AssetRegistry {
         Ok(registry)
     }
 
+    pub fn from_config_file(path: &std::path::Path) -> Result<Self, RegistryError> {
+        let contents = std::fs::read_to_string(path).map_err(|err| RegistryError::ConfigIo(err.to_string()))?;
+        let file: crate::dag_config::AssetRegistryFile = serde_json::from_str(&contents)
+            .map_err(|err| RegistryError::ConfigParse(err.to_string()))?;
+        Self::new(file.assets)
+    }
+
     pub fn definitions(&self) -> &[AssetDefinition] {
         &self.definitions
     }
@@ -447,6 +454,8 @@ pub enum RegistryError {
     },
     SelfDependency(AssetId),
     Cycle(AssetId),
+    ConfigIo(String),
+    ConfigParse(String),
 }
 
 impl std::fmt::Display for RegistryError {
@@ -488,11 +497,31 @@ impl std::fmt::Display for RegistryError {
             ),
             Self::SelfDependency(asset_id) => write!(f, "asset {asset_id} depends on itself"),
             Self::Cycle(asset_id) => write!(f, "asset cycle detected at {asset_id}"),
+            Self::ConfigIo(err) => write!(f, "failed to read asset registry config: {err}"),
+            Self::ConfigParse(err) => write!(f, "failed to parse asset registry config: {err}"),
         }
     }
 }
 
 impl std::error::Error for RegistryError {}
+
+/// Preferred runtime registry: load `app/config/dag/asset_registry.json` when present,
+/// otherwise fall back to the embedded default graph.
+pub fn openestates_registry() -> AssetRegistry {
+    let path = crate::dag_config::asset_registry_path();
+    if path.exists() {
+        match AssetRegistry::from_config_file(&path) {
+            Ok(registry) => return registry,
+            Err(err) => {
+                eprintln!(
+                    "warning: failed to load asset registry from {}: {err}; using embedded default",
+                    path.display()
+                );
+            }
+        }
+    }
+    default_openestates_registry()
+}
 
 pub fn default_openestates_registry() -> AssetRegistry {
     AssetRegistry::new(vec![
@@ -1045,5 +1074,29 @@ mod tests {
             .iter()
             .position(|asset_id| asset_id == &id)
             .expect("asset id in registry")
+    }
+
+    #[test]
+    fn export_asset_registry_json_when_requested() {
+        if std::env::var("OPENESTATES_EXPORT_ASSET_REGISTRY").ok().as_deref() != Some("1") {
+            return;
+        }
+
+        let registry = default_openestates_registry();
+        let file = crate::dag_config::AssetRegistryFile {
+            version: 1,
+            description: Some(
+                "OpenEstates asset DAG. Exported from embedded registry; edit via DAG config."
+                    .to_string(),
+            ),
+            assets: registry.definitions().to_vec(),
+        };
+        let path = crate::dag_config::asset_registry_path();
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create app/config/dag");
+        }
+        let json = serde_json::to_string_pretty(&file).expect("serialize asset registry");
+        std::fs::write(&path, json).expect("write asset_registry.json");
+        eprintln!("exported asset registry to {}", path.display());
     }
 }

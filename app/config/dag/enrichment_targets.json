@@ -1,0 +1,636 @@
+{
+  "version": 1,
+  "_comment": "RE-ENRICHMENT PLANS \u2014 run by leaf or UI surface. Traverse society\u2192road\u2192area; project facts down to properties.",
+  "description": "Leaf- and surface-scoped enrichment plans. Run backward: leaf \u2192 traverse graph \u2192 enrich shared nodes \u2192 project down.",
+  "commands": {
+    "by_leaf": "openestates-enrich --leaf <fact_key>",
+    "by_surface": "openestates-enrich --surface <surface_id>",
+    "by_entity": "openestates-enrich --entity <entity_id>"
+  },
+  "targets": [
+    {
+      "target_id": "approach_road",
+      "kind": "surface",
+      "label": "approach road",
+      "leaf_keys": [
+        "risk.approach_road_traffic",
+        "risk.approach_road_waterlogging"
+      ],
+      "primary_scopes": [
+        "area",
+        "road_segment",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": "leaf_scope_includes_road_segment",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "google_nearby_place_facts",
+        "google_review_facts",
+        "image_media_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "monthly",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "water_utilities",
+      "kind": "surface",
+      "label": "water utilities",
+      "leaf_keys": [
+        "operating.bwssb_unknown",
+        "operating.power_backup",
+        "operating.power_wiring_issue",
+        "operating.summer_water_shortage",
+        "operating.tanker_dependence",
+        "operating.utility_outage",
+        "operating.water_source",
+        "operating.water_supply_good",
+        "positive.stable_water",
+        "risk.approach_road_waterlogging",
+        "risk.basement_seepage",
+        "risk.rajakaluve_proximity"
+      ],
+      "primary_scopes": [
+        "area",
+        "road_segment",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": "leaf_scope_includes_road_segment",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "google_review_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "flooding_drainage",
+      "kind": "surface",
+      "label": "flooding drainage",
+      "leaf_keys": [
+        "risk.approach_road_waterlogging",
+        "risk.basement_seepage",
+        "risk.nala_nearby",
+        "risk.open_drain_nearby",
+        "risk.rajakaluve_proximity"
+      ],
+      "primary_scopes": [
+        "area",
+        "road_segment",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": "leaf_scope_includes_road_segment",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "google_review_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "litigation_legal",
+      "kind": "surface",
+      "label": "litigation legal",
+      "leaf_keys": [
+        "legal.ekhata_issue",
+        "legal.kharab_land",
+        "legal.litigation",
+        "legal.oc_status",
+        "legal.sale_agreement_clause",
+        "legal.seller_documentation_delay",
+        "legal.title_clear",
+        "legal.uds_mismatch",
+        "lifecycle.builder_reputation_negative",
+        "operating.association_responsiveness"
+      ],
+      "primary_scopes": [
+        "area",
+        "builder",
+        "property",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "built_by",
+          "to": "builder",
+          "when": "leaf_scope_includes_builder",
+          "project_facts_to": [
+            "society"
+          ]
+        }
+      ],
+      "assets": [
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": false
+    },
+    {
+      "target_id": "home_state",
+      "kind": "surface",
+      "label": "home state",
+      "leaf_keys": [
+        "legal.oc_status",
+        "lifecycle.amenity_delivery",
+        "lifecycle.builder_delay",
+        "operating.construction_quality",
+        "risk.construction_dust"
+      ],
+      "primary_scopes": [
+        "area",
+        "builder",
+        "property",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "built_by",
+          "to": "builder",
+          "when": "leaf_scope_includes_builder",
+          "project_facts_to": [
+            "society"
+          ]
+        }
+      ],
+      "assets": [
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": false
+    },
+    {
+      "target_id": "builder_trust",
+      "kind": "surface",
+      "label": "builder trust",
+      "leaf_keys": [
+        "legal.seller_documentation_delay",
+        "lifecycle.amenity_delivery",
+        "lifecycle.builder_delay",
+        "lifecycle.builder_reputation_negative",
+        "lifecycle.handover_uncertainty",
+        "lifecycle.sample_flat_mismatch",
+        "market.hidden_charges",
+        "operating.construction_quality"
+      ],
+      "primary_scopes": [
+        "builder",
+        "property",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "built_by",
+          "to": "builder",
+          "when": "leaf_scope_includes_builder",
+          "project_facts_to": [
+            "society"
+          ]
+        }
+      ],
+      "assets": [
+        "google_review_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "metro_commute",
+      "kind": "surface",
+      "label": "metro commute",
+      "leaf_keys": [
+        "access.future_infra_dependency",
+        "access.metro_good",
+        "access.traffic_high",
+        "positive.connectivity",
+        "risk.approach_road_traffic"
+      ],
+      "primary_scopes": [
+        "area",
+        "road_segment",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": "leaf_scope_includes_road_segment",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        },
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "google_review_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "livability_positive",
+      "kind": "surface",
+      "label": "livability positive",
+      "leaf_keys": [
+        "operating.power_backup",
+        "operating.water_supply_good",
+        "positive.stable_water",
+        "legal.title_clear",
+        "positive.maintenance_quality",
+        "positive.maintenance_value",
+        "access.metro_good",
+        "access.tech_park",
+        "positive.connectivity",
+        "positive.school_access",
+        "layout.efficient",
+        "layout.parking_sufficient",
+        "layout.privacy",
+        "layout.sunlight",
+        "positive.clubhouse",
+        "positive.greenery",
+        "positive.open_space",
+        "positive.security",
+        "lifecycle.rental_demand",
+        "positive.association_responsive"
+      ],
+      "primary_scopes": [
+        "area",
+        "property",
+        "society"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "in_area",
+          "to": "area",
+          "when": "leaf_scope_includes_area",
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "google_review_facts",
+        "reddit_resident_facts",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "reddit_enabled": true
+    },
+    {
+      "target_id": "risk.approach_road_waterlogging",
+      "kind": "leaf",
+      "label": "approach-road waterlogging",
+      "leaf_keys": [
+        "risk.approach_road_waterlogging"
+      ],
+      "primary_scopes": [
+        "road_segment",
+        "society",
+        "area"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": true,
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "waterlogging",
+        "flooded road",
+        "road floods"
+      ]
+    },
+    {
+      "target_id": "legal.ekhata_issue",
+      "kind": "leaf",
+      "label": "e-khata issue",
+      "leaf_keys": [
+        "legal.ekhata_issue"
+      ],
+      "primary_scopes": [
+        "property",
+        "society"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "e-khata",
+        "ekhata",
+        "khata issue"
+      ]
+    },
+    {
+      "target_id": "legal.kharab_land",
+      "kind": "leaf",
+      "label": "kharab land risk",
+      "leaf_keys": [
+        "legal.kharab_land"
+      ],
+      "primary_scopes": [
+        "society",
+        "area"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "kharab land",
+        "kharab"
+      ]
+    },
+    {
+      "target_id": "legal.litigation",
+      "kind": "leaf",
+      "label": "litigation risk",
+      "leaf_keys": [
+        "legal.litigation"
+      ],
+      "primary_scopes": [
+        "society",
+        "builder"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "litigation",
+        "court case",
+        "legal dispute"
+      ]
+    },
+    {
+      "target_id": "legal.oc_status",
+      "kind": "leaf",
+      "label": "OC status",
+      "leaf_keys": [
+        "legal.oc_status"
+      ],
+      "primary_scopes": [
+        "society",
+        "property"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "oc missing",
+        "occupancy certificate",
+        "oc unclear"
+      ]
+    },
+    {
+      "target_id": "legal.sale_agreement_clause",
+      "kind": "leaf",
+      "label": "sale agreement clause risk",
+      "leaf_keys": [
+        "legal.sale_agreement_clause"
+      ],
+      "primary_scopes": [
+        "property",
+        "society"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "sale agreement clause",
+        "promoter reserved land"
+      ]
+    },
+    {
+      "target_id": "legal.seller_documentation_delay",
+      "kind": "leaf",
+      "label": "seller documentation delay",
+      "leaf_keys": [
+        "legal.seller_documentation_delay"
+      ],
+      "primary_scopes": [
+        "property"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "seller delay",
+        "documentation delay",
+        "seller not responding"
+      ]
+    },
+    {
+      "target_id": "legal.title_clear",
+      "kind": "leaf",
+      "label": "title clear claimed",
+      "leaf_keys": [
+        "legal.title_clear"
+      ],
+      "primary_scopes": [
+        "property"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "clear title",
+        "title clear"
+      ]
+    },
+    {
+      "target_id": "legal.uds_mismatch",
+      "kind": "leaf",
+      "label": "UDS mismatch",
+      "leaf_keys": [
+        "legal.uds_mismatch"
+      ],
+      "primary_scopes": [
+        "property"
+      ],
+      "traverse": [],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "uds mismatch",
+        "undivided share"
+      ]
+    },
+    {
+      "target_id": "risk.approach_road_traffic",
+      "kind": "leaf",
+      "label": "approach-road traffic",
+      "leaf_keys": [
+        "risk.approach_road_traffic"
+      ],
+      "primary_scopes": [
+        "road_segment",
+        "society",
+        "area"
+      ],
+      "traverse": [
+        {
+          "from": "society",
+          "edge": "served_by_road",
+          "to": "road_segment",
+          "when": true,
+          "project_facts_to": [
+            "society",
+            "property"
+          ]
+        }
+      ],
+      "assets": [
+        "reddit_resident_facts",
+        "google_review_facts"
+      ],
+      "refresh": "monthly",
+      "enrichment_terms": [
+        "traffic",
+        "congestion",
+        "narrow road",
+        "bad road",
+        "approach road"
+      ]
+    }
+  ],
+  "target_count": 18
+}

@@ -1,0 +1,501 @@
+{
+  "version": 1,
+  "description": "OpenEstates asset DAG. Exported from embedded registry; edit via DAG config.",
+  "assets": [
+    {
+      "id": "rera_registry_monthly",
+      "stage": "raw",
+      "description": "Monthly RERA registry snapshot for canonical project discovery.",
+      "dependencies": [],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "canonical_society_nodes",
+      "stage": "gold",
+      "description": "RERA-rooted canonical society identities and aliases.",
+      "dependencies": [
+        "rera_registry_monthly"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "authoritative",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "rera_legal_facts",
+      "stage": "silver",
+      "description": "RERA proof facts such as registration, land area, status, and builder.",
+      "dependencies": [
+        "rera_registry_monthly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "reddit_threads_daily",
+      "stage": "raw",
+      "description": "Daily Reddit posts and comments for hot Bengaluru real-estate themes.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "daily",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "from_run",
+            "key": "dt"
+          },
+          {
+            "kind": "from_run",
+            "key": "subreddit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "reddit_resident_facts",
+      "stage": "silver",
+      "description": "Resident-support facts extracted from Reddit evidence.",
+      "dependencies": [
+        "reddit_threads_daily",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "cheap",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "from_run",
+            "key": "dt"
+          },
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "reddit"
+          }
+        ]
+      }
+    },
+    {
+      "id": "google_places_weekly",
+      "stage": "raw",
+      "description": "Weekly Google Maps place and review metadata with navigable source links.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "weekly",
+      "cost_tier": "cheap",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "google"
+          }
+        ]
+      }
+    },
+    {
+      "id": "google_review_facts",
+      "stage": "silver",
+      "description": "Review-derived support facts for maintenance, amenities, and liveability.",
+      "dependencies": [
+        "google_places_weekly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "google"
+          }
+        ]
+      }
+    },
+    {
+      "id": "google_nearby_places_weekly",
+      "stage": "raw",
+      "description": "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, eateries, and offices.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "weekly",
+      "cost_tier": "cheap",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "google"
+          }
+        ]
+      }
+    },
+    {
+      "id": "google_nearby_place_facts",
+      "stage": "silver",
+      "description": "Nearby place support facts grouped by society and place category.",
+      "dependencies": [
+        "google_nearby_places_weekly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "google"
+          }
+        ]
+      }
+    },
+    {
+      "id": "community_review_summary_facts",
+      "stage": "silver",
+      "description": "Source-neutral community review summaries and dynamic themes from Google and Reddit evidence.",
+      "dependencies": [
+        "google_review_facts",
+        "reddit_resident_facts"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "community"
+          }
+        ]
+      },
+      "dependency_fan_in": [
+        {
+          "dependency": "google_review_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "reddit_resident_facts",
+          "policy": "all_current_partitions"
+        }
+      ],
+      "optional_dependencies": [
+        "reddit_resident_facts"
+      ]
+    },
+    {
+      "id": "prestige_inventory_weekly",
+      "stage": "raw",
+      "description": "Weekly source-native project inventory observations from Prestige.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "weekly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "prestige"
+          }
+        ]
+      }
+    },
+    {
+      "id": "market_project_facts",
+      "stage": "silver",
+      "description": "Typed current market observations with source URLs and observation time.",
+      "dependencies": [
+        "prestige_inventory_weekly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "prestige"
+          }
+        ]
+      }
+    },
+    {
+      "id": "external_listings_weekly",
+      "stage": "raw",
+      "description": "Weekly source-neutral property listing observations from external portals or feeds.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "weekly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "external_listing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "external_listing_facts",
+      "stage": "silver",
+      "description": "Source-neutral listing facts for price, area, BHK, and listing provenance.",
+      "dependencies": [
+        "external_listings_weekly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "external_listing"
+          }
+        ]
+      }
+    },
+    {
+      "id": "external_images_weekly",
+      "stage": "raw",
+      "description": "Weekly source-neutral project image observations from external portals or feeds.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "weekly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "external_image"
+          }
+        ]
+      }
+    },
+    {
+      "id": "image_media_facts",
+      "stage": "silver",
+      "description": "Source-backed image facts for hero images, galleries, and image provenance.",
+      "dependencies": [
+        "external_images_weekly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "external_image"
+          }
+        ]
+      }
+    },
+    {
+      "id": "metro_stations_monthly",
+      "stage": "raw",
+      "description": "Monthly geospatial snapshot of operational Namma Metro stations.",
+      "dependencies": [],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "openstreetmap"
+          }
+        ]
+      }
+    },
+    {
+      "id": "metro_proximity_facts",
+      "stage": "silver",
+      "description": "Nearest operational metro computed from RERA project and station coordinates.",
+      "dependencies": [
+        "metro_stations_monthly",
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "openstreetmap"
+          }
+        ]
+      }
+    },
+    {
+      "id": "builder_rera_aggregates",
+      "stage": "silver",
+      "description": "Builder portfolio aggregates computed from the current RERA registry.",
+      "dependencies": [
+        "rera_registry_monthly",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "home_state_signals",
+      "stage": "silver",
+      "description": "Buyer-facing home state and age from RERA now, with Google and Reddit support later.",
+      "dependencies": [
+        "rera_legal_facts"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "kg_society_view",
+      "stage": "gold",
+      "description": "Versioned society KG view merged by source precedence and fact policy.",
+      "dependencies": [
+        "canonical_society_nodes",
+        "rera_legal_facts",
+        "reddit_resident_facts",
+        "google_review_facts",
+        "community_review_summary_facts",
+        "google_nearby_place_facts",
+        "market_project_facts",
+        "external_listing_facts",
+        "image_media_facts",
+        "metro_proximity_facts",
+        "builder_rera_aggregates",
+        "home_state_signals"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      },
+      "dependency_fan_in": [
+        {
+          "dependency": "reddit_resident_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "google_review_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "community_review_summary_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "google_nearby_place_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "market_project_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "external_listing_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "image_media_facts",
+          "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "metro_proximity_facts",
+          "policy": "all_current_partitions"
+        }
+      ],
+      "optional_dependencies": [
+        "reddit_resident_facts",
+        "google_review_facts",
+        "community_review_summary_facts",
+        "google_nearby_place_facts",
+        "market_project_facts",
+        "external_listing_facts",
+        "image_media_facts",
+        "metro_proximity_facts",
+        "home_state_signals"
+      ]
+    },
+    {
+      "id": "search_serving_bundle",
+      "stage": "serving",
+      "description": "Local request-path bundle for KG facts, schema config, aliases, and indexes.",
+      "dependencies": [
+        "kg_society_view"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "serving",
+      "partition_policy": {
+        "kind": "global"
+      }
+    }
+  ]
+}

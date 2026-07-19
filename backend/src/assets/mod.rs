@@ -87,7 +87,7 @@ pub use reddit::{
     RedditThreadSnapshotRecord, REDDIT_THREADS_DAILY_ASSET_ID,
 };
 pub use registry::{
-    default_openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
+    default_openestates_registry, openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
     DependencyFanInPolicy, DependencyFanInRule, PartitionCoordinate, PartitionResolutionError,
     RefreshCadence, RegistryError, TrustTier,
 };

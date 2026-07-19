@@ -1,4 +1,5 @@
 pub mod assets;
+pub mod dag_config;
 pub mod community;
 pub mod livability_brief;
 pub mod data_loader;

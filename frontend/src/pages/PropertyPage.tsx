@@ -70,33 +70,16 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
 
 type DecisionTone = "compare" | "verify" | "negotiate";
 
-type RiskSignal = {
-  label: string;
-  value: number;
-};
-
-function clamp(value: number, min = 0, max = 1): number {
-  return Math.min(max, Math.max(min, value));
-}
-
 function normalizedDelta(value: number | null | undefined): number | null {
   if (value == null || !Number.isFinite(value)) return null;
   return Math.abs(value) <= 1 ? value * 100 : value;
 }
 
-function riskSignalsFor(p: PropertyDetailResponse["property"]): RiskSignal[] {
-  return [
-    { label: "Legal", value: clamp(p.litigation_risk) },
-    { label: "Waterlogging", value: clamp(p.waterlogging_risk_score) },
-    { label: "Traffic", value: clamp(1 - p.traffic_score) },
-    { label: "Noise", value: clamp(p.noise_score) },
-  ].sort((a, b) => b.value - a.value);
-}
-
-function riskLabel(value: number): "Low" | "Moderate" | "High" {
-  if (value <= 0.24) return "Low";
-  if (value <= 0.55) return "Moderate";
-  return "High";
+function riskThemesFromBrief(brief: PropertyDetailResponse["livability_brief"]): string[] {
+  if (!brief) return [];
+  return brief.blocks
+    .filter((block) => block.lens === "risk")
+    .flatMap((block) => block.themes);
 }
 
 function trustPercent(data: PropertyDetailResponse): number {
@@ -109,14 +92,12 @@ function buildDecision(data: PropertyDetailResponse): {
   tone: DecisionTone;
   summary: string;
 } {
-  const p = data.property;
   const delta = normalizedDelta(data.market_activity.price_vs_median?.pct_diff);
   const trust = trustPercent(data);
-  const risks = riskSignalsFor(p);
-  const topRisk = risks[0];
-  const topRiskLabel = riskLabel(topRisk.value);
+  const riskThemes = riskThemesFromBrief(data.livability_brief);
+  const earlySignal = data.livability_brief?.confidence_label === "Early signal";
 
-  if (trust < 60) {
+  if (!data.rera?.registered || trust < 60 || earlySignal) {
     return {
       label: "Needs document review",
       tone: "verify",
@@ -126,11 +107,11 @@ function buildDecision(data: PropertyDetailResponse): {
     };
   }
 
-  if (topRiskLabel === "High") {
+  if (riskThemes.length > 0) {
     return {
       label: "Verify risk before visit",
       tone: "verify",
-      summary: `${topRisk.label} risk is the main blocker. Clear that before treating this as a finalist.`,
+      summary: `${riskThemes[0]} is the main concern in the livability brief. Clear that before treating this as a finalist.`,
     };
   }
 
@@ -145,7 +126,7 @@ function buildDecision(data: PropertyDetailResponse): {
   return {
     label: "Worth comparing",
     tone: "compare",
-    summary: "Price, source, and risk are balanced enough to compare against other saved homes.",
+    summary: "Price, proof, and market context are balanced enough to compare against other saved homes.",
   };
 }
 
@@ -225,10 +206,9 @@ export function PropertyPage() {
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
     formatPrice(p.price),
     pricePerSqftLabel,
-    "Transparency scores, risk signals, and tradeoffs.",
+    "Proof-backed livability brief and market context.",
   ].filter(Boolean).join(". ");
   const decision = buildDecision(data);
-  const risks = riskSignalsFor(p);
   const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
   const sourcePanels = data.source_panels ?? [];
   const marketRows = [
@@ -422,14 +402,6 @@ export function PropertyPage() {
           </div>
           <div className="property-mini-card property-rail-intel">
             <div>
-              <h3>Risk list</h3>
-              <div className="property-risk-stack">
-                {risks.slice(0, 4).map((risk) => (
-                  <RiskBar key={risk.label} signal={risk} />
-                ))}
-              </div>
-            </div>
-            <div>
               <h3>Market pulse</h3>
               <div className="property-market-list">
                 {marketRows.map((row) => (
@@ -518,21 +490,6 @@ function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
             </div>
           );
         })}
-      </div>
-    </div>
-  );
-}
-
-
-function RiskBar({ signal }: { signal: RiskSignal }) {
-  const label = riskLabel(signal.value);
-  const tone = signal.value <= 0.24 ? "good" : signal.value <= 0.55 ? "watch" : "risk";
-
-  return (
-    <div className="property-risk-row">
-      <div>
-        <span>{signal.label}</span>
-        <strong className={`property-risk-label property-risk-label--${tone}`}>{label}</strong>
       </div>
     </div>
   );

@@ -1,0 +1,184 @@
+{
+  "_comment": "Config coverage audit. What is in app/config vs legacy data/ vs lake vs still hardcoded in Rust.",
+  "version": 1,
+  "last_reviewed": "2026-07-19",
+  "summary": {
+    "nodes_defined": "app/config/dag/ontology.json — 7 entity_types",
+    "edges_defined": "app/config/dag/ontology.json — 6 relations",
+    "leaves_defined": "app/config/dag/concern_taxonomy.json — 78 leaves, 10 buckets",
+    "leaf_semantics": "app/config/dag/fact_registry.json — search/display per fact_key",
+    "asset_dag": "app/config/dag/asset_registry.json",
+    "enrichment_plans": "app/config/dag/enrichment_targets.json",
+    "ui_surfaces": "app/config/dag/ui_surfaces.json — 6 surfaces",
+    "evidence_ui_sections": "app/config/product/evidence_sections.json — 4 property panels",
+    "discovery_home": "app/config/product/discovery_home.json — shelves + quotes"
+  },
+  "included_in_app_config": [
+    {
+      "path": "app/config/manifest.json",
+      "role": "Root index — read first",
+      "primitive": "meta"
+    },
+    {
+      "path": "app/config/dag/ontology.json",
+      "role": "Node types (entity_types) and edge types (relations)",
+      "primitive": "nodes + edges (schema)"
+    },
+    {
+      "path": "app/config/dag/concern_taxonomy.json",
+      "role": "Leaf definitions — fact_key, scopes, enrichment terms, issue #2 mapping",
+      "primitive": "leaves (schema)"
+    },
+    {
+      "path": "app/config/dag/fact_registry.json",
+      "role": "Leaf search semantics — answers_preferences, scoring_hint, display_template",
+      "primitive": "leaves (semantics)"
+    },
+    {
+      "path": "app/config/dag/resolution_policies.json",
+      "role": "Source tiers, confidence caps, conflict resolution when facts disagree",
+      "primitive": "proof"
+    },
+    {
+      "path": "app/config/dag/asset_registry.json",
+      "role": "Crawl/enrich/materialize asset DAG (raw → silver → gold → serving)",
+      "primitive": "pipeline"
+    },
+    {
+      "path": "app/config/dag/enrichment_targets.json",
+      "role": "Leaf/surface-scoped re-enrichment — traverse rules, assets, refresh",
+      "primitive": "enrichment"
+    },
+    {
+      "path": "app/config/dag/ui_surfaces.json",
+      "role": "Buyer UI surface → leaf_keys, traversal, React components",
+      "primitive": "ui"
+    },
+    {
+      "path": "app/config/dag/crawl_policies/",
+      "role": "Per-source skip/cadence/isolated worker (e.g. Reddit)",
+      "primitive": "crawl"
+    },
+    {
+      "path": "app/config/dag/search_intent.json",
+      "role": "Buyer archetypes; area aliases migration target",
+      "primitive": "search"
+    },
+    {
+      "path": "app/config/bootstrap/policy.json",
+      "role": "Bootstrap importer — output to lake only, confidence caps",
+      "primitive": "bootstrap"
+    },
+    {
+      "path": "app/config/bootstrap/edge_inference.json",
+      "role": "How to infer served_by_road, in_area, etc. — rules not instances",
+      "primitive": "bootstrap"
+    },
+    {
+      "path": "app/config/lake/layout.json",
+      "role": "Parquet zones, LakeKey patterns, table columns",
+      "primitive": "storage"
+    },
+    {
+      "path": "app/config/lake/sync.json",
+      "role": "S3/local sync policy, env vars, never-sync paths",
+      "primitive": "storage"
+    },
+    {
+      "path": "app/config/runtime/defaults.json",
+      "role": "Env var names, local paths, request-path read rules",
+      "primitive": "runtime"
+    },
+    {
+      "path": "app/config/product/discovery_home.json",
+      "role": "Landing copy, curated shelves, search_query per shelf",
+      "primitive": "product"
+    },
+    {
+      "path": "app/config/product/evidence_sections.json",
+      "role": "Property page evidence panels — presentation variant, fact keys per section",
+      "primitive": "ui"
+    }
+  ],
+  "belongs_in_lake_not_config": [
+    {
+      "current_path": "data/product/approach_road_visuals.json",
+      "role": "Street View frames per society — enriched media facts",
+      "target": "data/lake/silver/image_media_facts/ or gold facts on road_segment",
+      "reason": "Contains entity_ids and coordinates — instance data"
+    },
+    {
+      "role": "Entity instances (society:*, road:*, property:*)",
+      "target": "data/lake/gold/kg_society_view/.../entities.parquet"
+    },
+    {
+      "role": "Edge instances (society → road)",
+      "target": "data/lake/gold/.../edges.parquet"
+    },
+    {
+      "role": "Leaf fact values",
+      "target": "data/lake/gold/.../facts.parquet + serving bundle"
+    },
+    {
+      "role": "Promoted serving bundle version",
+      "target": "data/lake/manifests/assets/search_serving_bundle/.../current.json"
+    }
+  ],
+  "legacy_migrate_to_app_config": [
+    {
+      "path": "data/search/fact_schema_registry.json",
+      "status": "merged",
+      "into": "app/config/dag/fact_registry.json (search_dimensions, preference_patterns retained)"
+    },
+    {
+      "path": "data/product/livability_theme_registry.json",
+      "status": "merged",
+      "into": "app/config/dag/concern_taxonomy.json"
+    },
+    {
+      "path": "data/product/discovery_home.json",
+      "status": "copied",
+      "into": "app/config/product/discovery_home.json"
+    },
+    {
+      "path": "data/product/buyer_context_sections.json",
+      "status": "copied",
+      "into": "app/config/product/evidence_sections.json"
+    },
+    {
+      "path": "data/search/theme_inventory_report.json",
+      "status": "generated",
+      "note": "QA report — keep in data/validation/, not config"
+    }
+  ],
+  "still_hardcoded_in_rust_pending_migration": [
+    {
+      "location": "backend/src/search/intent.rs — AREA_ALIASES",
+      "target": "app/config/dag/search_intent.json area_aliases section",
+      "primitive": "search"
+    },
+    {
+      "location": "backend/src/search/intent.rs — POSITIVE/NEGATIVE_PREFERENCE_PATTERNS",
+      "target": "app/config/dag/fact_registry.json preference_patterns (partially merged)",
+      "primitive": "search"
+    },
+    {
+      "location": "backend/src/search/schema.rs — include fact_schema_registry.json",
+      "target": "Load app/config/dag/fact_registry.json instead",
+      "primitive": "search"
+    },
+    {
+      "location": "backend/src/livability_brief.rs — livability_theme_registry.json",
+      "target": "app/config/dag/concern_taxonomy.json + fact_registry.json",
+      "primitive": "ui"
+    },
+    {
+      "location": "backend/src/assets/registry.rs — embedded default asset graph",
+      "target": "app/config/dag/asset_registry.json only (loader done, tests still use embedded)",
+      "primitive": "pipeline"
+    }
+  ],
+  "pending_empty_scaffolds": [
+    "app/config/dag/source_adapters/ — one JSON per external source"
+  ]
+}

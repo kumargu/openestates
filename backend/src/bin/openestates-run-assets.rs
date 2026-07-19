@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
+    openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
     AssetId, AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
@@ -30,7 +30,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let lake_location = LakeStoreLocation::from_env(&project_root)?;
     let lake = lake_location.open()?;
-    let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+    let executor = AssetDagExecutor::new(openestates_registry(), lake.clone());
     let requested_at = Utc::now();
     let mut resume_manifest = if let Some(run_id) = &cli.resume_run_id {
         let manifest = AssetRunManifestStore::new(lake.clone())
@@ -595,7 +595,7 @@ mod tests {
         let temp = tempdir().unwrap();
         let lake = LakeStore::local(temp.path()).unwrap();
         let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
-        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let executor = AssetDagExecutor::new(openestates_registry(), lake.clone());
         let run_partition =
             AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
         let plan = executor.plan(&run_partition, now).await.unwrap();
@@ -622,7 +622,7 @@ mod tests {
         let temp = tempdir().unwrap();
         let lake = LakeStore::local(temp.path()).unwrap();
         let now = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
-        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let executor = AssetDagExecutor::new(openestates_registry(), lake.clone());
         let run_partition =
             AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
         let plan = executor.plan(&run_partition, now).await.unwrap();
@@ -661,7 +661,7 @@ mod tests {
             .await
             .unwrap();
 
-        let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
+        let executor = AssetDagExecutor::new(openestates_registry(), lake.clone());
         let run_partition =
             AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
         let plan = executor.plan(&run_partition, now).await.unwrap();

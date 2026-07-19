@@ -124,6 +124,45 @@ Backend endpoints should serve structured views: ranked results, property detail
 ### Search quality must be measurable
 Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
 
+### Config is the control plane — prefer it over hardcoding
+
+OpenEstates behaves like a **document database for product behavior**: most things that can vary should live in versioned JSON under `app/config/`, not in Rust match arms, Python `if` chains, or React component constants.
+
+**Git is source of truth for behavior; `data/lake/` is source of truth for enriched facts (Parquet).**
+
+```
+app/config/
+  dag/                         # ontology, leaves, assets, enrichment, UI surfaces
+  bootstrap/                   # import policies + edge inference rules only
+data/lake/                     # DAG assets + serving bundles (Parquet)
+```
+
+**Default rule:** if you are about to hardcode a list, threshold, label, skip policy, scoring weight, UI chip, or "new type" branch — **add a config entry instead** and make code load it generically.
+
+| Belongs in config | Belongs in code |
+|-------------------|-----------------|
+| New leaf `fact_key`, concern bucket, proof label threshold | Loaders, validators, generic iterators |
+| `answers_preferences`, `scoring_hint`, `display_template` | Deterministic scoring *engine*, not per-key logic |
+| Asset DAG edges, partitions, refresh cadence | Parquet writers, executors, lake key rules |
+| Crawl skip / defer / budget rules | Network I/O, parsing, normalization |
+| UI surface mapping (tile vs detail vs evidence) | Presentational components that render structured views |
+
+**Why this matters:**
+- **Expanding is editing JSON**, not redeploying logic — new Reddit concern, new source, new livability theme ≈ new config row.
+- **Agents stay token-efficient** — read `manifest.json`, then *one* file for the task (`concern_taxonomy.json` to add a leaf, `crawl_policies/` to change skip behavior).
+- **No fake defaults** — config can declare `never_default: true`; missing facts stay missing instead of `unwrap_or(0.5)`.
+- **One semantics owner** — skills emit `entity_id + fact_key + value + source`; registries own how that fact is scored, labeled, and surfaced.
+
+**Anti-patterns to remove on sight:**
+- Env-flag sprawl (`OPENESTATES_SKIP_*`) without a `crawl_policies/*.json` counterpart
+- Duplicate registries (`fact_schema_registry.json`, `livability_theme_registry.json`, hardcoded theme lists) — converge into `app/config/dag/`
+- Rust `match fact_key` or frontend `riskSignalsFor()` built from seed scores
+- Per-skill copies of `answers_preferences` / `scoring_hint` — belong in `fact_registry.json`
+
+**Loader contract:** `backend/src/dag_config/` validates config at startup; runtime prefers config with embedded fallback only until parity is proven. Python collectors and materializers read the same files.
+
+See `docs/dag_convergence_design.md` and `docs/dag_execution_plan.md` for the full migration phases.
+
 ---
 
 ## 4. Stack & Boundaries
@@ -159,8 +198,9 @@ The app must own: authoritative ranking inputs, listing data, context state, exp
 
 ### Skills own the domain, Rust owns the runtime
 - New knowledge dimension = new skill in `pipeline/skills/` that produces self-describing `SourcedFact`s
-- ZERO Rust code changes needed for new fact types — the skill declares `display_template`, `answers_preferences`, and `scoring_hint`
+- ZERO Rust code changes needed for new fact types — the skill declares `display_template`, `answers_preferences`, and `scoring_hint` in **`app/config/dag/fact_registry.json`** (Phase 2+), not in Rust
 - Do not add hardcoded match arms in Rust for new fact keys
+- Do not add hardcoded lists in frontend for buyer-facing signals — consume structured API views driven by config
 
 ---
 
@@ -284,6 +324,7 @@ Full design in `docs/architecture_v2.md`. Key layout:
 ```
 frontend/               React web app (Vite, port 5173)
 backend/                Rust + Axum (port 4000)
+  src/dag_config/       Load + validate app/config/dag/*.json
   src/state.rs          AppState — all in-memory data behind Arc
   src/data_loader.rs    Startup: load promoted serving bundle into memory
   src/models/           Serde structs
@@ -297,13 +338,17 @@ pipeline/               Python data collection
   pipeline/skills/      Deterministic adapters and fact normalizers
   pipeline/crawlers/    BaseCrawler, CrawlCache, RateLimiter
   pipeline/enrichment/  Offline enrichment adapters
-data/seed/              Flat JSON seed data
-data/lake/              DAG assets and promoted serving bundles
+data/seed/              Flat JSON seed data (bootstrap only — facts migrate to DAG)
+app/config/dag/         Control-plane: ontology, assets, leaves, policies
+app/config/bootstrap/   Bootstrap policies only — no entity instances
+data/lake/              DAG assets and promoted serving bundles (Parquet)
 data/cache/             Pipeline skill result cache
 docs/                   Architecture, cleanup plan, blueprints
 .claude/skills/        OpenEstates workflow skills
 days/                   Day spec files
 ```
+
+Read `app/config/dag/manifest.json` before editing any DAG config file.
 
 ---
 

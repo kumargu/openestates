@@ -1,0 +1,60 @@
+{
+  "_comment": "EDGE INFERENCE RULES — how served_by_road, in_area, built_by are derived from RERA/geocode/OSM. Rules only, not instances.",
+  "version": 1,
+  "description": "How bootstrap/enrichment infers typed edges. No society or road instances — rules only.",
+  "edge_rules": [
+    {
+      "edge": "in_society",
+      "from_entity_type": "property",
+      "to_entity_type": "society",
+      "inference": {
+        "methods": ["rera_project_match", "listing_society_slug", "title_parse"],
+        "min_confidence": 0.7
+      }
+    },
+    {
+      "edge": "in_area",
+      "from_entity_type": "society",
+      "to_entity_type": "area",
+      "inference": {
+        "methods": ["rera_locality", "geocode_micro_market", "listing_area_field"],
+        "min_confidence": 0.65
+      }
+    },
+    {
+      "edge": "built_by",
+      "from_entity_type": "society",
+      "to_entity_type": "builder",
+      "inference": {
+        "methods": ["rera_promoter_name", "builder_registry_alias"],
+        "min_confidence": 0.8
+      }
+    },
+    {
+      "edge": "served_by_road",
+      "from_entity_type": "society",
+      "to_entity_type": "road_segment",
+      "inference": {
+        "methods": [
+          "reverse_geocode_gate",
+          "openstreetmap_nearest_named_road",
+          "rera_address_approach_parse",
+          "street_view_road_axis"
+        ],
+        "min_confidence": 0.6,
+        "dedupe_by": "road_segment_entity_id"
+      },
+      "project_facts_to": ["society", "property"],
+      "enrichment_surfaces": ["approach_road", "flooding"]
+    },
+    {
+      "edge": "maps_to_place",
+      "from_entity_type": "society",
+      "to_entity_type": "place",
+      "inference": {
+        "methods": ["google_place_id", "google_text_search"],
+        "min_confidence": 0.75
+      }
+    }
+  ]
+}

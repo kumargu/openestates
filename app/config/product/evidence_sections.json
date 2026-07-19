@@ -1,0 +1,161 @@
+[
+  {
+    "kind": "home_state",
+    "title": "Lifecycle",
+    "subtitle": "Delivered, under-construction, age, and timeline facts.",
+    "scope": "society",
+    "relationship": "project lifecycle",
+    "presentation": {
+      "variant": "timeline",
+      "density": "compact",
+      "max_preview_items": 3
+    },
+    "facts": [
+      {
+        "key": "home_state",
+        "label": "Delivery state",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      },
+      {
+        "key": "home_age_bucket",
+        "label": "Age band",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      },
+      {
+        "key": "home_timeline_state",
+        "label": "Timeline",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      }
+    ]
+  },
+  {
+    "kind": "approach_road",
+    "title": "Approach road",
+    "subtitle": "Last-lane access context from reviews and visual proof.",
+    "scope": "road_segment",
+    "relationship": "gate approach",
+    "presentation": {
+      "variant": "media_grid",
+      "density": "standard",
+      "max_preview_items": 3
+    },
+    "media": ["approach_road_visuals"],
+    "facts": [
+      {
+        "key": "approach_road_condition",
+        "label": "Review signal",
+        "scope": "society",
+        "relationship": "approach road"
+      },
+      {
+        "key": "access_road_quality",
+        "label": "Road quality",
+        "scope": "road_segment",
+        "relationship": "approach road"
+      },
+      {
+        "key": "road_width",
+        "label": "Road width",
+        "scope": "road_segment",
+        "relationship": "approach road"
+      }
+    ]
+  },
+  {
+    "kind": "waterlogging_context",
+    "title": "Waterlogging",
+    "subtitle": "Flooding, lake, and drainage context scoped around the home.",
+    "scope": "area",
+    "relationship": "locality risk",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "waterlogging_detail",
+        "label": "Area waterlogging",
+        "scope": "area",
+        "relationship": "locality risk"
+      },
+      {
+        "key": "waterlogging_risk",
+        "label": "Waterlogging risk",
+        "scope": "area",
+        "relationship": "locality risk"
+      },
+      {
+        "key": "nearest_lake_distance_m",
+        "label": "Nearest lake",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      },
+      {
+        "key": "lake_proximity",
+        "label": "Lake proximity",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      },
+      {
+        "key": "lake_waterlogging_context",
+        "label": "Lake context",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      }
+    ]
+  },
+  {
+    "kind": "surroundings",
+    "title": "Surroundings",
+    "subtitle": "Airport, STP, high-tension, pollution, and nearby externalities.",
+    "scope": "area",
+    "relationship": "externality context",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "airport_distance_km",
+        "label": "Airport distance",
+        "scope": "poi",
+        "relationship": "externality"
+      },
+      {
+        "key": "airport_noise_score",
+        "label": "Airport noise",
+        "scope": "area",
+        "relationship": "externality"
+      },
+      {
+        "key": "stp_concern",
+        "label": "STP concern",
+        "scope": "society",
+        "relationship": "reviewed surroundings"
+      },
+      {
+        "key": "high_tension_wire_concern",
+        "label": "High-tension wires",
+        "scope": "society",
+        "relationship": "reviewed surroundings"
+      },
+      {
+        "key": "environment_sensitivity",
+        "label": "Environment",
+        "scope": "area",
+        "relationship": "externality"
+      },
+      {
+        "key": "surroundings_signal",
+        "label": "Surroundings",
+        "scope": "area",
+        "relationship": "externality"
+      }
+    ]
+  }
+]

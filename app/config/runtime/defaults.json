@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "description": "Runtime path and environment defaults. Not entity data.",
+  "project_root_resolution": "Parent of backend/ or OPENESTATES_PROJECT_ROOT if set",
+  "paths": {
+    "lake_local_default": "data/lake",
+    "cache_local": "data/cache",
+    "validation_local": "data/validation",
+    "dag_config_default": "app/config/dag",
+    "app_config_root": "app/config"
+  },
+  "environment_variables": {
+    "OPENESTATES_LAKE_URL": "Lake root: file:///abs/path or s3://bucket/prefix",
+    "OPENESTATES_DAG_CONFIG_ROOT": "Override DAG config directory (default app/config/dag)",
+    "OPENESTATES_SKIP_REDDIT": "Deprecated shim — prefer crawl_policies/reddit_threads_daily.json",
+    "OPENESTATES_EXPORT_ASSET_REGISTRY": "Set to 1 to export asset_registry.json from embedded Rust graph"
+  },
+  "ports": {
+    "backend_api": 4000,
+    "frontend_vite": 5173
+  },
+  "request_path_reads": [
+    "serving bundle (via lake current pointer)",
+    "in-memory indexes built at startup from serving bundle"
+  ],
+  "request_path_never_reads": [
+    "app/config/*",
+    "data/seed/*",
+    "data/cache/*",
+    "raw/silver/gold directly (only promoted serving bundle)"
+  ]
+}

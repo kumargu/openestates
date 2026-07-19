@@ -1,0 +1,58 @@
+{
+  "_comment": "Search intent config. Buyer archetypes and area alias migration target. Preference patterns largely live in fact_registry.json.",
+  "version": 1,
+  "description": "NL search parsing helpers. Area aliases still loaded from intent.rs until loader wires this file.",
+  "buyer_archetypes": [
+    {
+      "id": "family",
+      "label": "Family buyer",
+      "signals": ["family", "schools", "3BHK", "kids", "society quality"]
+    },
+    {
+      "id": "investor",
+      "label": "Investor",
+      "signals": ["investment", "rental yield", "appreciation", "resale"]
+    },
+    {
+      "id": "risk_averse",
+      "label": "Risk-averse",
+      "signals": ["legal", "rera", "litigation", "clear title", "reliable builder"]
+    },
+    {
+      "id": "value_buyer",
+      "label": "Value buyer",
+      "signals": ["affordable", "budget", "value for money", "2BHK"]
+    },
+    {
+      "id": "luxury_buyer",
+      "label": "Luxury buyer",
+      "signals": ["premium", "4BHK", "builder reputation", "luxury"]
+    },
+    {
+      "id": "end_user",
+      "label": "End user",
+      "signals": ["self use", "own stay", "long term"]
+    }
+  ],
+  "area_aliases": {
+    "_comment": "Canonical area name ← list of query aliases. Full list still in backend/src/search/intent.rs AREA_ALIASES — migrate next.",
+    "migration_status": "pending",
+    "city": "bengaluru",
+    "examples": [
+      {
+        "canonical": "Whitefield",
+        "aliases": ["whitefield", "wf", "itpl", "kadugodi", "varthur"]
+      },
+      {
+        "canonical": "Sarjapur Road",
+        "aliases": ["sarjapur", "sarjapur road", "sjr"]
+      }
+    ]
+  },
+  "hard_constraint_dimensions": [
+    {
+      "field": "land_area",
+      "registry_ref": "app/config/dag/fact_registry.json numeric_constraints"
+    }
+  ]
+}

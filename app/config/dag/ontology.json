@@ -1,4 +1,5 @@
 {
+  "_comment": "NODE TYPES (entity_types) and EDGE TYPES (relations). Schema only — instances live in data/lake/gold/.../entities.parquet and edges.parquet.",
   "version": 1,
   "entity_types": [
     { "id": "property", "prefix": "property:" },

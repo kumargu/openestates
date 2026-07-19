@@ -3,7 +3,10 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-const DISCOVERY_CONFIG_PATH: &str = "data/product/discovery_home.json";
+const DISCOVERY_CONFIG_PATHS: &[&str] = &[
+    "app/config/product/discovery_home.json",
+    "data/product/discovery_home.json",
+];
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct DiscoveryConfig {
@@ -29,26 +32,32 @@ pub struct DiscoveryShelfConfig {
 }
 
 pub fn load_discovery_config(project_root: &Path) -> DiscoveryConfig {
-    let path = project_root.join(DISCOVERY_CONFIG_PATH);
-    match fs::read_to_string(&path) {
-        Ok(content) => match serde_json::from_str(&content) {
-            Ok(config) => config,
+    for relative in DISCOVERY_CONFIG_PATHS {
+        let path = project_root.join(relative);
+        if !path.exists() {
+            continue;
+        }
+        match fs::read_to_string(&path) {
+            Ok(content) => match serde_json::from_str(&content) {
+                Ok(config) => return config,
+                Err(err) => {
+                    eprintln!(
+                        "WARN: Failed to parse discovery config at {}: {err}; trying next path",
+                        path.display()
+                    );
+                }
+            },
             Err(err) => {
                 eprintln!(
-                    "WARN: Failed to parse discovery config at {}: {err}; using defaults",
+                    "WARN: Failed to read discovery config at {}: {err}; trying next path",
                     path.display()
                 );
-                DiscoveryConfig::default()
             }
-        },
-        Err(err) => {
-            eprintln!(
-                "WARN: Failed to read discovery config at {}: {err}; using defaults",
-                path.display()
-            );
-            DiscoveryConfig::default()
         }
     }
+
+    eprintln!("WARN: No discovery config found; using defaults");
+    DiscoveryConfig::default()
 }
 
 impl Default for DiscoveryConfig {

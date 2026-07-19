@@ -1,0 +1,1723 @@
+[
+  {
+    "id": "Q01",
+    "query": "3 BHK Whitefield around 2.5 cr family friendly",
+    "category": "intent_clarity",
+    "num_results": 9,
+    "also_consider_count": 0,
+    "intent": {
+      "area": "Whitefield",
+      "bhk": 3,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": [],
+      "buyer_archetype": "family"
+    },
+    "top3": [
+      {
+        "title": "3 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.43,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Godrej Splendour",
+        "area": "Whitefield",
+        "match_score": 0.43,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Lakeside Habitat",
+        "area": "Whitefield",
+        "match_score": 0.43,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected family, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "area correctly detected: Whitefield"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "BHK correctly detected: 3"
+      }
+    ]
+  },
+  {
+    "id": "Q02",
+    "query": "quiet apartment near metro whitefield",
+    "category": "intent_clarity",
+    "num_results": 24,
+    "also_consider_count": 0,
+    "intent": {
+      "area": "Whitefield",
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "metro access",
+        "quiet neighborhood",
+        "social infrastructure"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "metro access",
+          "polarity": "positive",
+          "expanded_keys": [
+            "metro_distance_mins",
+            "metro_distance",
+            "metro_status",
+            "metro_details",
+            "metro_access",
+            "metro_distance_km",
+            "nearest_operational_metro_station"
+          ],
+          "weight": 1.1
+        },
+        {
+          "raw_text": "quiet neighborhood",
+          "polarity": "positive",
+          "expanded_keys": [
+            "noise_score",
+            "noise_level",
+            "airport_noise_score"
+          ],
+          "weight": 1.1
+        },
+        {
+          "raw_text": "social infrastructure",
+          "polarity": "positive",
+          "expanded_keys": [
+            "school_access",
+            "hospital_access",
+            "retail_access",
+            "social_infra_score",
+            "nearby_schools",
+            "nearby_metro_stations",
+            "nearby_hospitals",
+            "nearby_fitness",
+            "nearby_eateries",
+            "nearby_tech_parks"
+          ],
+          "weight": 0.8
+        }
+      ],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "3 BHK in SUMADHURA CAPITOL RESIDENCES",
+        "area": "Whitefield",
+        "match_score": 0.42,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in SUMADHURA CAPITOL RESIDENCES",
+        "area": "Whitefield",
+        "match_score": 0.42,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "1 BHK in Godrej Splendour",
+        "area": "Whitefield",
+        "match_score": 0.39,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['quiet', 'commute'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "area correctly detected: Whitefield"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q03",
+    "query": "good society for family in east bangalore",
+    "category": "intent_clarity",
+    "num_results": 52,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "good society",
+        "east facing"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "good society",
+          "polarity": "positive",
+          "expanded_keys": [
+            "society_quality_score",
+            "maintenance_quality",
+            "resident_sentiment"
+          ],
+          "weight": 1.1
+        },
+        {
+          "raw_text": "east facing",
+          "polarity": "positive",
+          "expanded_keys": [
+            "facing"
+          ],
+          "weight": 0.5
+        }
+      ],
+      "negative_preferences": [],
+      "buyer_archetype": "family"
+    },
+    "top3": [
+      {
+        "title": "2 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.09,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.09,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "1 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.09,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected family, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q04",
+    "query": "something calmer for my parents, less chaos, more breathing room",
+    "category": "soft_preference",
+    "num_results": 0,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": []
+    },
+    "top3": [],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['quiet', 'open_space'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q05",
+    "query": "good family project but not fake luxury and not too dense",
+    "category": "soft_preference",
+    "num_results": 19,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "premium"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "premium",
+          "polarity": "positive",
+          "expanded_keys": [
+            "price_per_sqft",
+            "amenity_quality",
+            "finish_quality",
+            "builder_reputation"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "negative_preferences": [],
+      "buyer_archetype": "family"
+    },
+    "top3": [
+      {
+        "title": "2 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.2,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.2,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.2,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected family, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": false,
+        "detail": "missing negative keys: ['premium', 'open_space'] (got: [])"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q06",
+    "query": "society that feels easier to live in, not just impressive on paper",
+    "category": "soft_preference",
+    "num_results": 11,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": [],
+      "buyer_archetype": "end_user"
+    },
+    "top3": [
+      {
+        "title": "3 BHK in SUMADHURA CAPITOL RESIDENCES",
+        "area": "Whitefield",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in SUMADHURA CAPITOL RESIDENCES",
+        "area": "Whitefield",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['livability'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q07",
+    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
+    "category": "soft_preference",
+    "num_results": 5,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "quiet neighborhood",
+        "greenery"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "quiet neighborhood",
+          "polarity": "positive",
+          "expanded_keys": [
+            "noise_score",
+            "noise_level",
+            "airport_noise_score"
+          ],
+          "weight": 1.1
+        },
+        {
+          "raw_text": "greenery",
+          "polarity": "positive",
+          "expanded_keys": [
+            "greenery_score",
+            "open_space_score",
+            "green_cover",
+            "google_top_positives",
+            "sentiment_summary"
+          ],
+          "weight": 0.8
+        }
+      ],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "2 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.59,
+        "match_label": "Good match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.59,
+        "match_label": "Good match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.33,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['quiet', 'open_space', 'greenery'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q08",
+    "query": "avoid water issues, no tanker dependency",
+    "category": "negative_preference",
+    "num_results": 3,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "water supply"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "water supply",
+          "polarity": "positive",
+          "expanded_keys": [
+            "water_supply",
+            "water_supply_risk",
+            "resident_sentiment"
+          ],
+          "weight": 0.9
+        }
+      ],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "1 BHK in PRESTIGE WATERFORD",
+        "area": "Pattandur Agrahara",
+        "match_score": 0.26,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in PRESTIGE WATERFORD",
+        "area": "Pattandur Agrahara",
+        "match_score": 0.26,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in PRESTIGE WATERFORD",
+        "area": "Pattandur Agrahara",
+        "match_score": 0.26,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": false,
+        "detail": "missing negative keys: ['water_issues'] (got: [])"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": false,
+        "detail": "no concerns found in top 5 results (expected some)"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q09",
+    "query": "don't want maintenance headaches or shady builder",
+    "category": "negative_preference",
+    "num_results": 52,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "maintenance"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "maintenance",
+          "polarity": "positive",
+          "expanded_keys": [
+            "maintenance_quality",
+            "maintenance_sentiment",
+            "society_quality_score",
+            "resident_sentiment"
+          ],
+          "weight": 1.1
+        }
+      ],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "2 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": false,
+        "detail": "missing negative keys: ['good_maintenance', 'builder_trust'] (got: [])"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": false,
+        "detail": "no concerns found in top 5 results (expected some)"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q10",
+    "query": "not too packed, avoid highway noise and construction dust",
+    "category": "negative_preference",
+    "num_results": 9,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "2 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": false,
+        "detail": "missing negative keys: ['open_space', 'quiet'] (got: [])"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": false,
+        "detail": "no concerns found in top 5 results (expected some)"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q11",
+    "query": "best investment opportunity in whitefield under 1.5 cr",
+    "category": "archetype",
+    "num_results": 6,
+    "also_consider_count": 0,
+    "intent": {
+      "area": "Whitefield",
+      "bhk": null,
+      "budget_max": 15000000,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": [],
+      "buyer_archetype": "investor"
+    },
+    "top3": [
+      {
+        "title": "1 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "1 BHK in Godrej Splendour",
+        "area": "Whitefield",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in Godrej Splendour",
+        "area": "Whitefield",
+        "match_score": 0.23,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected investor, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "area correctly detected: Whitefield"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q12",
+    "query": "safe legal paperwork, reliable builder, no risk",
+    "category": "archetype",
+    "num_results": 49,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "reliable builder"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "reliable builder",
+          "polarity": "positive",
+          "expanded_keys": [
+            "builder_quality_score",
+            "builder_reputation",
+            "rera_builder_projects_count",
+            "rera_builder_revocations",
+            "delivery_track_record"
+          ],
+          "weight": 1.3
+        }
+      ],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "2 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected riskAverse, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['legal_safety', 'builder_trust'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q13",
+    "query": "affordable 2BHK for young couple, good commute",
+    "category": "archetype",
+    "num_results": 12,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": 2,
+      "budget_max": null,
+      "preferences": [
+        "value for money"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "value for money",
+          "polarity": "positive",
+          "expanded_keys": [
+            "price_per_sqft",
+            "value_for_money",
+            "maintenance_cost"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "negative_preferences": [],
+      "buyer_archetype": "value_buyer"
+    },
+    "top3": [
+      {
+        "title": "2 BHK in ABHEE CELESTIAL CITY",
+        "area": "Sarjapur Road",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in GODREJ PARK RETREAT",
+        "area": "Sarjapur Road",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected valueBuyer, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['commute', 'value_for_money'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "BHK correctly detected: 2"
+      }
+    ]
+  },
+  {
+    "id": "Q14",
+    "query": "premium 4BHK, builder reputation matters, willing to pay more",
+    "category": "archetype",
+    "num_results": 10,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": 4,
+      "budget_max": null,
+      "preferences": [
+        "premium"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "premium",
+          "polarity": "positive",
+          "expanded_keys": [
+            "price_per_sqft",
+            "amenity_quality",
+            "finish_quality",
+            "builder_reputation"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "negative_preferences": [],
+      "buyer_archetype": "luxury_buyer"
+    },
+    "top3": [
+      {
+        "title": "4 BHK in CASAGRAND FLAMINGO",
+        "area": "HSR Layout",
+        "match_score": 0.09,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Raintree Park",
+        "area": "Whitefield",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected luxuryBuyer, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['premium'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "BHK correctly detected: 4"
+      }
+    ]
+  },
+  {
+    "id": "Q15",
+    "query": "cheap but also premium quality",
+    "category": "contradiction",
+    "num_results": 19,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "premium"
+      ],
+      "positive_preferences": [
+        {
+          "raw_text": "premium",
+          "polarity": "positive",
+          "expanded_keys": [
+            "price_per_sqft",
+            "amenity_quality",
+            "finish_quality",
+            "builder_reputation"
+          ],
+          "weight": 1.0
+        }
+      ],
+      "negative_preferences": [],
+      "buyer_archetype": "luxury_buyer"
+    },
+    "top3": [
+      {
+        "title": "2 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.07,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q16",
+    "query": "near whitefield but avoid traffic",
+    "category": "contradiction",
+    "num_results": 24,
+    "also_consider_count": 0,
+    "intent": {
+      "area": "Whitefield",
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [
+        "avoid traffic"
+      ],
+      "positive_preferences": [],
+      "negative_preferences": [
+        {
+          "raw_text": "traffic",
+          "polarity": "negative",
+          "expanded_keys": [
+            "traffic_score",
+            "traffic_reality",
+            "traffic",
+            "commute_reality"
+          ],
+          "weight": 1.3
+        }
+      ]
+    },
+    "top3": [
+      {
+        "title": "1 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Brigade Woods",
+        "area": "Whitefield",
+        "match_score": 0.13,
+        "match_label": "Weak match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": false,
+        "detail": "missing negative keys: ['commute'] (got: [])"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "area correctly detected: Whitefield"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q17",
+    "query": "good for family AND good investment",
+    "category": "dual_intent",
+    "num_results": 0,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": [],
+      "buyer_archetype": "family"
+    },
+    "top3": [],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": false,
+        "detail": "expected family, got None"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": false,
+        "detail": "missing canonical keys: ['family_friendly', 'investment'] (got: [])"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q18",
+    "query": "apartments",
+    "category": "edge_case",
+    "num_results": 0,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": []
+    },
+    "top3": [],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q19",
+    "query": "tell me what's actually good in bangalore",
+    "category": "edge_case",
+    "num_results": 7,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "2 BHK in Prestige Somerville",
+        "area": "Marathahalli\u2014Whitefield Road",
+        "match_score": 0.4,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Somerville",
+        "area": "Marathahalli\u2014Whitefield Road",
+        "match_score": 0.4,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "4 BHK in Prestige Somerville",
+        "area": "Marathahalli\u2014Whitefield Road",
+        "match_score": 0.4,
+        "match_label": "Partial match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  },
+  {
+    "id": "Q20",
+    "query": "something like prestige lakeside but cheaper",
+    "category": "edge_case",
+    "num_results": 19,
+    "also_consider_count": 0,
+    "intent": {
+      "area": null,
+      "bhk": null,
+      "budget_max": null,
+      "preferences": [],
+      "positive_preferences": [],
+      "negative_preferences": []
+    },
+    "top3": [
+      {
+        "title": "3 BHK in Prestige Lakeside Habitat",
+        "area": "Whitefield",
+        "match_score": 0.93,
+        "match_label": "Strong match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "2 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.53,
+        "match_label": "Good match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      },
+      {
+        "title": "3 BHK in Prestige Glenbrook",
+        "area": "Marathahalli",
+        "match_score": 0.53,
+        "match_label": "Good match",
+        "society_score": null,
+        "society_confidence": null,
+        "concerns_count": 0,
+        "has_explanation": false
+      }
+    ],
+    "avg_society_score": 0.0,
+    "checks": [
+      {
+        "check": "archetype_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "positive_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "negative_preferences",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "concern_surfacing",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "area_detection",
+        "passed": true,
+        "detail": "no expectation"
+      },
+      {
+        "check": "bhk_detection",
+        "passed": true,
+        "detail": "no expectation"
+      }
+    ]
+  }
+]

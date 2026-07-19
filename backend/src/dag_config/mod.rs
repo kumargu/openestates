@@ -1,0 +1,25 @@
+//! DAG control-plane config loaders (`app/config/dag/`).
+//!
+//! Git is the source of truth for graph **schemas** (not instances).
+//!
+//! | File | Primitive | Loaded by |
+//! |------|-----------|-----------|
+//! | `ontology.json` | Node + edge **types** | Future: KG validator |
+//! | `concern_taxonomy.json` | Leaf **definitions** | Enrichment skills |
+//! | `fact_registry.json` | Leaf **search semantics** | Materializer → search_metadata |
+//! | `resolution_policies.json` | Source conflict rules | Fact resolver |
+//! | `asset_registry.json` | Pipeline asset DAG | `openestates_registry()` |
+//! | `enrichment_targets.json` | Re-enrichment plans | `openestates-enrich` (pending) |
+//! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
+//! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
+//! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
+//!
+//! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
+//! See `app/config/coverage.json` for full audit.
+
+mod loader;
+
+pub use loader::{
+    asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
+    load_manifest, AssetRegistryFile, CrawlPolicyFile, DagConfigError, DagManifest,
+};

@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagRunManifest, AssetMaterializationStore, AssetPartition,
+    openestates_registry, AssetDagRunManifest, AssetMaterializationStore, AssetPartition,
     AssetPathBuilder, AssetPlanner, AssetRunManifestStore,
 };
 use backend::lake::LakeStoreLocation;
@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let lake_location = LakeStoreLocation::from_env(&project_root)?;
     let lake = lake_location.open()?;
     let materializations = AssetMaterializationStore::new(lake.clone());
-    let planner = AssetPlanner::new(default_openestates_registry(), materializations);
+    let planner = AssetPlanner::new(openestates_registry(), materializations);
     let partition = options.partition();
     let plan = planner
         .plan_partition_details(&partition, Utc::now())

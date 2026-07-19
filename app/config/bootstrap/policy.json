@@ -1,0 +1,30 @@
+{
+  "_comment": "BOOTSTRAP IMPORTER POLICY — writes entity/edge/fact instances to data/lake only. No society or road names here.",
+  "version": 1,
+  "description": "Bootstrap importer policy. Writes entity instances and edges to the lake only — never back into app/config/.",
+  "never_write_instances_to_config": true,
+  "output": {
+    "lake_asset": "legacy_seed_facts",
+    "silver_path": "data/lake/assets/legacy_seed_facts/",
+    "formats": ["parquet"]
+  },
+  "entity_types": ["property", "society", "area", "builder", "road_segment", "place"],
+  "source_priority": [
+    "rera_registry_monthly",
+    "canonical_society_nodes",
+    "google_places_weekly",
+    "openstreetmap",
+    "legacy_seed_import",
+    "seller_claim"
+  ],
+  "confidence_caps": {
+    "legacy_seed_import": 0.25,
+    "seller_claim": 0.4,
+    "inferred_edge": 0.6
+  },
+  "notes": [
+    "Gate coordinates from visuals are geometry hints, not verified road identity.",
+    "Edges are emitted only when inference confidence meets edge_inference.min_confidence.",
+    "Re-bootstrap and re-enrichment are safe: facts are versioned in the lake."
+  ]
+}

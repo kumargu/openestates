@@ -12,7 +12,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
@@ -20,6 +20,7 @@ from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_r
 logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge" / "nodes"
+DAG_ROOT = PROJECT_ROOT / "app" / "config" / "dag"
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
@@ -173,16 +174,29 @@ def record_source_failure(
     logger.error("Source collection failed for %s: %s", ", ".join(asset_ids), reason)
 
 
+def load_crawl_policy(policy_id: str) -> Optional[Dict[str, Any]]:
+    path = DAG_ROOT / "crawl_policies" / f"{policy_id}.json"
+    if not path.exists():
+        return None
+    with path.open(encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def skip_reddit_collection() -> bool:
     env = os.environ.get("OPENESTATES_SKIP_REDDIT")
-    if env is None:
-        # Default off until the isolated reddit-fetcher container is deployed.
-        return True
-    return str(env).lower() in (
-        "1",
-        "true",
-        "yes",
-    )
+    if env is not None:
+        return str(env).lower() in (
+            "1",
+            "true",
+            "yes",
+        )
+
+    policy = load_crawl_policy(REDDIT_THREADS_DAILY)
+    if policy is not None:
+        return not bool(policy.get("enabled", True))
+
+    # Legacy default when no crawl policy file exists.
+    return True
 
 
 def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:

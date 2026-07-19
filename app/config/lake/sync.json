@@ -1,0 +1,85 @@
+{
+  "_comment": "S3 SYNC POLICY — OPENESTATES_LAKE_URL, what syncs to S3, what stays local-only (data/cache, app/config).",
+  "version": 1,
+  "description": "Lake sync contract between local development and S3. Logical LakeKey paths are identical on both sides.",
+  "environment": {
+    "lake_url": {
+      "name": "OPENESTATES_LAKE_URL",
+      "local_default": "file://{project_root}/data/lake",
+      "production_example": "s3://openestates-prod/lake",
+      "staging_example": "s3://openestates-staging/lake"
+    },
+    "s3_credentials": {
+      "note": "Use standard AWS SDK env vars (AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, AWS_ENDPOINT_URL_S3). Never commit credentials to app/config.",
+      "backend_feature": "s3"
+    },
+    "dag_config": {
+      "name": "OPENESTATES_DAG_CONFIG_ROOT",
+      "default": "app/config/dag",
+      "sync": "never — Git only"
+    }
+  },
+  "sync_policy": {
+    "lake_root": {
+      "sync": true,
+      "direction": "bidirectional_with_care",
+      "scope": "entire lake root — raw, silver, gold, serving, manifests",
+      "rule": "Same relative keys locally and on S3. No path rewrites on promote."
+    },
+    "never_sync": [
+      {
+        "path": "data/cache/",
+        "reason": "Rebuildable — skill caches, tantivy hydration, LRU. Regenerated locally."
+      },
+      {
+        "path": "app/config/",
+        "reason": "Git is source of truth for config. Not stored in S3."
+      },
+      {
+        "path": "backend/target/",
+        "reason": "Build artifacts"
+      }
+    ],
+    "optional_sync": [
+      {
+        "path": "data/validation/",
+        "reason": "Eval baselines and QA reports. Useful for CI, not runtime."
+      }
+    ],
+    "legacy_local_only": [
+      {
+        "path": "data/seed/",
+        "reason": "Bootstrap import input. Absorbed into lake on import, then deprecated."
+      },
+      {
+        "path": "data/knowledge/",
+        "reason": "Pre-DAG format. Do not sync or use at runtime."
+      }
+    ]
+  },
+  "operations": {
+    "local_dev_default": {
+      "lake": "data/lake (no OPENESTATES_LAKE_URL set)",
+      "config": "app/config (from repo)"
+    },
+    "point_to_s3": {
+      "step_1": "export OPENESTATES_LAKE_URL=s3://your-bucket/lake",
+      "step_2": "backend reads/writes via object_store — zero code changes",
+      "step_3": "ensure S3 credentials in environment"
+    },
+    "cli_sync_examples": {
+      "push_local_to_s3": "aws s3 sync data/lake/ s3://openestates-prod/lake/ --delete",
+      "pull_s3_to_local": "aws s3 sync s3://openestates-prod/lake/ data/lake/",
+      "note": "Prefer OPENESTATES_LAKE_URL=s3:// for production runtime. Use aws sync for bulk seed/migration only."
+    },
+    "promotion": {
+      "description": "Promoting a serving bundle updates manifests/assets/search_serving_bundle/.../current.json in the lake. Sync propagates the pointer + new version folder.",
+      "runtime_reads": "current.json pointer → serving/search_bundle/version={version}/"
+    }
+  },
+  "integrity": {
+    "content_hash": "Parquet artifacts record sha256 in asset manifests",
+    "immutability": "Never overwrite a version= folder in place. Write new version, update current.json pointer.",
+    "lineage": "materialization_id links raw → silver → gold → serving"
+  }
+}

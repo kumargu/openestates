@@ -218,10 +218,12 @@ pub struct SourceAttribution {
     pub learned_at: String,
 }
 
+// Enriched media instances — migrate to data/lake (see app/config/coverage.json).
 const APPROACH_ROAD_VISUALS_JSON: &str =
     include_str!("../../../data/product/approach_road_visuals.json");
+// Property evidence panel layout — schema in app/config/product/evidence_sections.json.
 const BUYER_CONTEXT_SECTIONS_JSON: &str =
-    include_str!("../../../data/product/buyer_context_sections.json");
+    include_str!("../../../app/config/product/evidence_sections.json");
 static BUYER_CONTEXT_DEFINITIONS: OnceLock<Vec<BuyerContextDefinition>> = OnceLock::new();
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1295,7 +1297,7 @@ fn buyer_context_definitions() -> &'static [BuyerContextDefinition] {
     BUYER_CONTEXT_DEFINITIONS
         .get_or_init(|| {
             serde_json::from_str(BUYER_CONTEXT_SECTIONS_JSON)
-                .expect("data/product/buyer_context_sections.json should be valid")
+                .expect("app/config/product/evidence_sections.json should be valid")
         })
         .as_slice()
 }

@@ -1,4 +1,5 @@
 {
+  "_comment": "SOURCE CONFLICT RULES — which source tier wins, confidence caps per source_type, never_default prefixes for risk/operating facts.",
   "version": 1,
   "default_strategy": "prefer_highest_confidence",
   "source_tiers": [
