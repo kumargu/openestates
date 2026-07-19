@@ -24,6 +24,7 @@ use super::{
     RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
     ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
     SkillFactsInput, SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_AREA_NODES_ASSET_ID, CANONICAL_PROPERTY_NODES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
@@ -748,12 +749,25 @@ impl AssetDagExecutor {
         let support_rows = read_skill_fact_artifact_rows(&self.lake, &support_records).await?;
         let canonical_record =
             dependency_record(&asset_id, &parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
+        let property_record =
+            dependency_record(&asset_id, &parent_records, CANONICAL_PROPERTY_NODES_ASSET_ID)?;
+        let area_record =
+            dependency_record(&asset_id, &parent_records, CANONICAL_AREA_NODES_ASSET_ID)?;
         let canonical_rows =
             super::read_canonical_society_rows(&self.lake, canonical_record).await?;
+        let property_rows =
+            super::read_canonical_node_rows(&self.lake, property_record).await?;
+        let area_rows = super::read_canonical_node_rows(&self.lake, area_record).await?;
+        let mut canonical_entities = canonical_rows.entities;
+        canonical_entities.extend(property_rows.entities);
+        canonical_entities.extend(area_rows.entities);
+        let mut canonical_edges = canonical_rows.edges;
+        canonical_edges.extend(property_rows.edges);
+        canonical_edges.extend(area_rows.edges);
         let records = KgViewRecords::from_graph_with_asset_rows(
             graph,
-            &canonical_rows.entities,
-            &canonical_rows.edges,
+            &canonical_entities,
+            &canonical_edges,
             &support_rows.facts,
             &support_rows.fact_annotations,
         )?;
@@ -1060,6 +1074,14 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::CanonicalSocietyNodes,
         );
         executors.insert(
+            static_asset_id(CANONICAL_PROPERTY_NODES_ASSET_ID),
+            BuiltInAssetExecutor::CanonicalPropertyNodes,
+        );
+        executors.insert(
+            static_asset_id(CANONICAL_AREA_NODES_ASSET_ID),
+            BuiltInAssetExecutor::CanonicalAreaNodes,
+        );
+        executors.insert(
             static_asset_id(RERA_LEGAL_FACTS_ASSET_ID),
             BuiltInAssetExecutor::ReraLegalFacts,
         );
@@ -1155,6 +1177,8 @@ impl BuiltInAssetExecutorRegistry {
 enum BuiltInAssetExecutor {
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
+    CanonicalPropertyNodes,
+    CanonicalAreaNodes,
     ReraLegalFacts,
     RedditThreadsDaily,
     RedditResidentFacts,
@@ -1227,6 +1251,57 @@ impl BuiltInAssetExecutor {
                         &context.options.version,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::CanonicalPropertyNodes => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let record =
+                    super::CanonicalPropertyNodesMaterializer::new(context.dag.lake.clone())
+                        .materialize_for_run(
+                            &context.options.version,
+                            context.run_id.clone(),
+                            context.asset_partition.clone(),
+                            parent_materializations,
+                        )
+                        .await?;
+                Ok(ExecutedAsset::Record(record))
+            }
+            Self::CanonicalAreaNodes => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let parent_materializations = parent_records
+                    .iter()
+                    .map(|record| record.materialization_id.clone())
+                    .collect();
+                let record = super::CanonicalAreaNodesMaterializer::new(context.dag.lake.clone())
+                    .materialize_for_run(
+                        &context.options.version,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                        parent_materializations,
                     )
                     .await?;
                 Ok(ExecutedAsset::Record(record))
@@ -1788,8 +1863,28 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     CANONICAL_SOCIETY_NODES_ASSET_ID,
                 )?;
+                let property_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_PROPERTY_NODES_ASSET_ID,
+                )?;
+                let area_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_AREA_NODES_ASSET_ID,
+                )?;
                 let canonical_rows =
                     super::read_canonical_society_rows(&context.dag.lake, canonical_record).await?;
+                let property_rows =
+                    super::read_canonical_node_rows(&context.dag.lake, property_record).await?;
+                let area_rows =
+                    super::read_canonical_node_rows(&context.dag.lake, area_record).await?;
+                let mut canonical_entities = canonical_rows.entities;
+                canonical_entities.extend(property_rows.entities);
+                canonical_entities.extend(area_rows.entities);
+                let mut canonical_edges = canonical_rows.edges;
+                canonical_edges.extend(property_rows.edges);
+                canonical_edges.extend(area_rows.edges);
                 let parent_materializations = parent_records
                     .iter()
                     .map(|record| record.materialization_id.clone())
@@ -1802,8 +1897,8 @@ impl BuiltInAssetExecutor {
                         parent_materializations,
                         context.run_id.clone(),
                         context.asset_partition.clone(),
-                        &canonical_rows.entities,
-                        &canonical_rows.edges,
+                        &canonical_entities,
+                        &canonical_edges,
                         &support_rows.facts,
                         &support_rows.fact_annotations,
                     )
@@ -2036,6 +2131,7 @@ pub enum AssetDagExecutorError {
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
     Rera(ReraAssetError),
+    CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
         asset_id: AssetId,
     },
@@ -2130,6 +2226,7 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
             Self::Rera(err) => write!(f, "RERA asset execution failed: {err}"),
+            Self::CanonicalNodes(err) => write!(f, "canonical nodes asset execution failed: {err}"),
             Self::NoExecutor { asset_id } => {
                 write!(f, "no executor registered for planned asset {asset_id}")
             }
@@ -2253,6 +2350,7 @@ impl AssetDagExecutorError {
             | Self::Media(MediaAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
+            | Self::CanonicalNodes(super::CanonicalNodesError::Lake(err))
             | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
             | Self::SearchServingBundle(SearchServingBundleMaterializeError::Lake(err)) => {
                 err.is_retryable()
@@ -2338,6 +2436,12 @@ impl From<SkillFactMaterializeError> for AssetDagExecutorError {
 impl From<ReraAssetError> for AssetDagExecutorError {
     fn from(err: ReraAssetError) -> Self {
         Self::Rera(err)
+    }
+}
+
+impl From<super::CanonicalNodesError> for AssetDagExecutorError {
+    fn from(err: super::CanonicalNodesError) -> Self {
+        Self::CanonicalNodes(err)
     }
 }
 

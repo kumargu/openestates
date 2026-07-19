@@ -832,7 +832,7 @@ fn write_rera_projects(records: &[ReraProjectSnapshotRecord]) -> Result<Vec<u8>,
     write_batch(batch)
 }
 
-fn write_entities(records: &[KgViewEntityRecord]) -> Result<Vec<u8>, ReraAssetError> {
+pub(crate) fn write_entities(records: &[KgViewEntityRecord]) -> Result<Vec<u8>, ReraAssetError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("entity_id", DataType::Utf8, false),
         Field::new("entity_type", DataType::Utf8, false),
@@ -862,7 +862,7 @@ fn write_entities(records: &[KgViewEntityRecord]) -> Result<Vec<u8>, ReraAssetEr
     write_batch(batch)
 }
 
-fn write_edges(records: &[KgViewEdgeRecord]) -> Result<Vec<u8>, ReraAssetError> {
+pub(crate) fn write_edges(records: &[KgViewEdgeRecord]) -> Result<Vec<u8>, ReraAssetError> {
     let schema = Arc::new(Schema::new(vec![
         Field::new("from_entity_id", DataType::Utf8, false),
         Field::new("to_entity_id", DataType::Utf8, false),
@@ -929,7 +929,7 @@ fn write_mappings(records: &[ReraCanonicalMappingRecord]) -> Result<Vec<u8>, Rer
     write_batch(batch)
 }
 
-fn read_entities(bytes: Vec<u8>) -> Result<Vec<KgViewEntityRecord>, ReraAssetError> {
+pub(crate) fn read_entities(bytes: Vec<u8>) -> Result<Vec<KgViewEntityRecord>, ReraAssetError> {
     let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()?;
     let mut rows = Vec::new();
     for batch in &mut reader {
@@ -949,7 +949,7 @@ fn read_entities(bytes: Vec<u8>) -> Result<Vec<KgViewEntityRecord>, ReraAssetErr
     Ok(rows)
 }
 
-fn read_edges(bytes: Vec<u8>) -> Result<Vec<KgViewEdgeRecord>, ReraAssetError> {
+pub(crate) fn read_edges(bytes: Vec<u8>) -> Result<Vec<KgViewEdgeRecord>, ReraAssetError> {
     let mut reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))?.build()?;
     let mut rows = Vec::new();
     for batch in &mut reader {

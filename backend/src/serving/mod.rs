@@ -19,7 +19,8 @@ pub use materializer::{
     SearchServingBundleMaterializer,
 };
 pub use parquet::{
-    read_entities_parquet, read_facts_parquet, read_search_metadata_parquet, ParquetReadError,
+    read_edges_parquet, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
+    ParquetReadError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
 pub use tantivy_index::{
@@ -27,7 +28,7 @@ pub use tantivy_index::{
 };
 pub use types::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
-    ServingColumnSchema, ServingEntityFactRows, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
-    SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ServingColumnSchema, ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord,
+    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord, ServingTableSchema,
+    TrustPolicy, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };

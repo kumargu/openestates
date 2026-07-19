@@ -33,6 +33,16 @@ pub struct ServingFactRecord {
     pub learned_at: DateTime<Utc>,
 }
 
+/// One graph edge row in the request-path bundle.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ServingEdgeRecord {
+    pub from_entity_id: String,
+    pub edge_type: String,
+    pub to_entity_id: String,
+    pub confidence: f32,
+    pub source_type: String,
+}
+
 /// Search-specific metadata layered over canonical fact rows.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ServingSearchMetadataRecord {
@@ -129,6 +139,7 @@ impl ServingFactIndex {
 pub enum BundleArtifactKind {
     EntitiesParquet,
     FactsParquet,
+    EdgesParquet,
     SearchMetadataParquet,
     SchemaJson,
     TrustPolicyJson,
@@ -179,9 +190,13 @@ pub struct ServingBundleManifest {
     pub entity_count: u64,
     pub fact_count: u64,
     pub search_metadata_count: u64,
+    #[serde(default)]
+    pub edge_count: u64,
     pub entity_parquet_key: String,
     pub fact_parquet_key: String,
     pub search_metadata_parquet_key: String,
+    #[serde(default)]
+    pub edge_parquet_key: Option<String>,
     pub schema_key: String,
     pub trust_policy_key: String,
     pub tantivy_index_prefix: String,

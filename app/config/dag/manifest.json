@@ -15,10 +15,14 @@
     "ontology.json",
     "resolution_policies.json",
     "search_intent.json",
-    "ui_surfaces.json"
+    "ui_surfaces.json",
+    "entity_context.json"
   ],
   "pending": [
     "source_adapters/"
+  ],
+  "contract_only": [
+    "entity_context.json"
   ],
   "proof_labels": {
     "verified": 0.8,

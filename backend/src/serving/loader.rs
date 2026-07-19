@@ -8,10 +8,12 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    hydrate_tantivy_index, read_entities_parquet, read_facts_parquet, read_search_metadata_parquet,
-    ParquetReadError, ServingBundleManifest, ServingEntityRecord, ServingFactIndex,
-    TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    hydrate_tantivy_index, read_entities_parquet, read_edges_parquet, read_facts_parquet,
+    read_search_metadata_parquet, ParquetReadError, ServingBundleManifest, ServingEdgeRecord,
+    ServingEntityRecord, ServingFactIndex, TantivyIndexError, TantivyRecallIndex,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
+use crate::graph::GraphIndex;
 
 #[derive(Clone)]
 pub struct ServingBundleLoader {
@@ -23,6 +25,8 @@ pub struct ServingBundleLoader {
 pub struct LoadedServingBundle {
     pub manifest: ServingBundleManifest,
     pub entities: Vec<ServingEntityRecord>,
+    pub edges: Vec<ServingEdgeRecord>,
+    pub graph_index: GraphIndex,
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
     pub cache_dir: PathBuf,
@@ -71,10 +75,14 @@ impl ServingBundleLoader {
 
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
         let entities = load_entities(&self.lake, &manifest).await?;
+        let edges = load_edges(&self.lake, &manifest).await?;
+        let graph_index = GraphIndex::from_serving_edges(&edges);
         let fact_index = load_fact_index(&self.lake, &manifest).await?;
         Ok(Some(LoadedServingBundle {
             manifest,
             entities,
+            edges,
+            graph_index,
             recall_index,
             fact_index,
             cache_dir,
@@ -97,6 +105,18 @@ async fn load_entities(
         LakeKey::new(manifest.entity_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
     let entity_bytes = lake.get_bytes(&entity_key).await?;
     Ok(read_entities_parquet(&entity_bytes)?)
+}
+
+async fn load_edges(
+    lake: &LakeStore,
+    manifest: &ServingBundleManifest,
+) -> Result<Vec<ServingEdgeRecord>, ServingBundleLoadError> {
+    let Some(edge_key) = manifest.edge_parquet_key.as_ref() else {
+        return Ok(Vec::new());
+    };
+    let edge_key = LakeKey::new(edge_key.clone()).map_err(ServingBundleLoadError::Key)?;
+    let edge_bytes = lake.get_bytes(&edge_key).await?;
+    Ok(read_edges_parquet(&edge_bytes)?)
 }
 
 async fn load_fact_index(

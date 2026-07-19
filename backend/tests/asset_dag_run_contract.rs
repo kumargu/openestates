@@ -529,6 +529,24 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::new([("source", "legacy_seed")]),
     );
     write_current(&materializations, &legacy_seed_facts).await;
+    let canonical_property_nodes = materialization_in_partition(
+        "canonical_property_nodes",
+        AssetStage::Gold,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &canonical_property_nodes).await;
+    let canonical_area_nodes = materialization_in_partition(
+        "canonical_area_nodes",
+        AssetStage::Gold,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &canonical_area_nodes).await;
 
     let stale_kg = materialization_in_partition(
         "kg_society_view",
@@ -536,6 +554,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         "2026-07-12",
         vec![
             canonical.materialization_id.clone(),
+            canonical_property_nodes.materialization_id.clone(),
+            canonical_area_nodes.materialization_id.clone(),
             legacy_seed_facts.materialization_id.clone(),
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),
@@ -596,6 +616,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         "2026-07-13",
         vec![
             canonical.materialization_id.clone(),
+            canonical_property_nodes.materialization_id.clone(),
+            canonical_area_nodes.materialization_id.clone(),
             legacy_seed_facts.materialization_id.clone(),
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),

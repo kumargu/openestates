@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use chrono::Utc;
 
 use crate::assets::{
-    AssetPathBuilder, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
+    AssetPathBuilder, KgViewEdgeRecord, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
 use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint, DagConfigError};
 use crate::knowledge::{FactValue, KnowledgeGraph};
@@ -13,16 +13,17 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
 use super::parquet::{
-    write_entities_parquet, write_facts_parquet, write_search_metadata_parquet, ParquetWriteError,
+    write_entities_parquet, write_edges_parquet, write_facts_parquet, write_search_metadata_parquet,
+    ParquetWriteError,
 };
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
-    ServingColumnSchema, ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
-    ServingTableSchema, TrustPolicy,
+    ServingColumnSchema, ServingEdgeRecord, ServingEntityRecord, ServingFactRecord,
+    ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
 };
 
-const SERVING_BUNDLE_FORMAT_VERSION: u32 = 2;
+const SERVING_BUNDLE_FORMAT_VERSION: u32 = 3;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -55,10 +56,11 @@ impl ServingBundleBuilder {
         let current_annotations = current_serving_annotations(&records.fact_annotations);
         let search_metadata =
             serving_search_metadata_records(&current_facts, &current_annotations)?;
+        let edges = serving_edge_records(&records.edges);
         if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
             eprintln!("preference coverage report skipped: {err}");
         }
-        self.build_from_serving_records(entities, facts, search_metadata, bundle_version)
+        self.build_from_serving_records(entities, facts, search_metadata, edges, bundle_version)
             .await
     }
 
@@ -67,6 +69,7 @@ impl ServingBundleBuilder {
         entities: Vec<ServingEntityRecord>,
         facts: Vec<ServingFactRecord>,
         search_metadata: Vec<ServingSearchMetadataRecord>,
+        edges: Vec<ServingEdgeRecord>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
@@ -92,6 +95,17 @@ impl ServingBundleBuilder {
             fact_meta,
             "application/vnd.apache.parquet",
             Some(facts.len() as u64),
+        ));
+
+        let edge_key =
+            AssetPathBuilder::serving_bundle_key(&bundle_version, "edges/part-00000.parquet");
+        let edge_bytes = write_edges_parquet(&edges)?;
+        let edge_meta = self.lake.put_bytes(&edge_key, edge_bytes).await?;
+        artifacts.push(artifact(
+            BundleArtifactKind::EdgesParquet,
+            edge_meta,
+            "application/vnd.apache.parquet",
+            Some(edges.len() as u64),
         ));
 
         let search_metadata_key = AssetPathBuilder::serving_bundle_key(
@@ -148,9 +162,11 @@ impl ServingBundleBuilder {
             entity_count: entities.len() as u64,
             fact_count: facts.len() as u64,
             search_metadata_count: search_metadata.len() as u64,
+            edge_count: edges.len() as u64,
             entity_parquet_key: entity_key.to_string(),
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
+            edge_parquet_key: Some(edge_key.to_string()),
             schema_key: schema_key.to_string(),
             trust_policy_key: trust_policy_key.to_string(),
             tantivy_index_prefix: tantivy_prefix,
@@ -203,6 +219,17 @@ fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema 
                 ],
             },
             ServingTableSchema {
+                name: "edges".to_string(),
+                path: "edges/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("from_entity_id", "utf8"),
+                    required_column("edge_type", "utf8"),
+                    required_column("to_entity_id", "utf8"),
+                    required_column("confidence", "float32"),
+                    required_column("source_type", "utf8"),
+                ],
+            },
+            ServingTableSchema {
                 name: "search_metadata".to_string(),
                 path: "search_metadata/part-00000.parquet".to_string(),
                 columns: vec![
@@ -232,6 +259,28 @@ fn optional_column(name: &str, logical_type: &str) -> ServingColumnSchema {
         name: name.to_string(),
         logical_type: logical_type.to_string(),
         required: false,
+    }
+}
+
+fn serving_edge_records(edges: &[KgViewEdgeRecord]) -> Vec<ServingEdgeRecord> {
+    edges
+        .iter()
+        .map(|edge| ServingEdgeRecord {
+            from_entity_id: edge.from_entity_id.clone(),
+            edge_type: serving_edge_type(&edge.relation),
+            to_entity_id: edge.to_entity_id.clone(),
+            confidence: edge.weight,
+            source_type: edge.source_type.clone(),
+        })
+        .collect()
+}
+
+fn serving_edge_type(relation: &str) -> String {
+    match relation {
+        "SocietyInArea" => "in_area".to_string(),
+        "BuiltBy" => "built_by".to_string(),
+        "PropertyInSociety" => "in_society".to_string(),
+        other => other.to_string(),
     }
 }
 

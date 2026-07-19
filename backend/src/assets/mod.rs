@@ -9,6 +9,7 @@
 //! schema descriptors, trust policy, and current pointers.
 
 pub mod community;
+pub mod canonical_nodes;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
@@ -96,6 +97,12 @@ pub use rera::{
     CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+};
+pub use canonical_nodes::{
+    read_canonical_node_rows, area_rows_from_seed, property_rows_from_seed,
+    CanonicalAreaNodesMaterializer, CanonicalNodeRows, CanonicalNodesError,
+    CanonicalPropertyNodesMaterializer, CANONICAL_AREA_NODES_ASSET_ID,
+    CANONICAL_PROPERTY_NODES_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagResumeLease, AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep,

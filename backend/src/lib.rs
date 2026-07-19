@@ -1,3 +1,4 @@
+pub mod graph;
 pub mod assets;
 pub mod dag_config;
 pub mod community;

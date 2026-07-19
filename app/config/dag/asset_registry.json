@@ -435,11 +435,41 @@
       }
     },
     {
+      "id": "canonical_property_nodes",
+      "stage": "gold",
+      "description": "Property listing entities and in_society edges from seed and listings.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "canonical_area_nodes",
+      "stage": "gold",
+      "description": "Area entities and society in_area edges from seed profiles.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "kg_society_view",
       "stage": "gold",
       "description": "Versioned society KG view merged by source precedence and fact policy.",
       "dependencies": [
         "canonical_society_nodes",
+        "canonical_property_nodes",
+        "canonical_area_nodes",
         "legacy_seed_facts",
         "rera_legal_facts",
         "reddit_resident_facts",

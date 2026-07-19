@@ -22,6 +22,7 @@ use backend::assets::{
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
     IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, LEGACY_SEED_FACTS_ASSET_ID,
+    CANONICAL_AREA_NODES_ASSET_ID, CANONICAL_PROPERTY_NODES_ASSET_ID,
     MARKET_PROJECT_FACTS_ASSET_ID,
     METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
@@ -68,10 +69,10 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 16);
-    assert_eq!(report.manifest.succeeded_count, 16);
+    assert_eq!(report.manifest.planned_count, 18);
+    assert_eq!(report.manifest.succeeded_count, 18);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 16);
+    assert_eq!(report.executed_assets.len(), 18);
     for id in [
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
@@ -87,6 +88,8 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         HOME_STATE_SIGNALS_ASSET_ID,
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         LEGACY_SEED_FACTS_ASSET_ID,
+        CANONICAL_PROPERTY_NODES_ASSET_ID,
+        CANONICAL_AREA_NODES_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -101,7 +104,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 13);
+    assert_eq!(kg_record.parent_materializations.len(), 15);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -245,8 +248,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 20);
-    assert_eq!(report.executed_assets.len(), 20);
+    assert_eq!(report.manifest.planned_count, 22);
+    assert_eq!(report.executed_assets.len(), 22);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -266,6 +269,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         LEGACY_SEED_FACTS_ASSET_ID,
+        CANONICAL_PROPERTY_NODES_ASSET_ID,
+        CANONICAL_AREA_NODES_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -476,7 +481,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&home_state_record.materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 14);
+    assert_eq!(kg_record.parent_materializations.len(), 16);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
         92
@@ -534,8 +539,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 23);
-    assert_eq!(report.executed_assets.len(), 23);
+    assert_eq!(report.manifest.planned_count, 25);
+    assert_eq!(report.executed_assets.len(), 25);
     for id in [
         PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
         MARKET_PROJECT_FACTS_ASSET_ID,
@@ -558,6 +563,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
         LEGACY_SEED_FACTS_ASSET_ID,
+        CANONICAL_PROPERTY_NODES_ASSET_ID,
+        CANONICAL_AREA_NODES_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -1241,6 +1248,8 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     assert_eq!(
         report.executed_assets,
         vec![
+            asset_id(CANONICAL_AREA_NODES_ASSET_ID),
+            asset_id(CANONICAL_PROPERTY_NODES_ASSET_ID),
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),

@@ -19,7 +19,7 @@ use crate::parquet_data::{
     ANSWERS_PREFERENCES_COLUMN, SCORING_THRESHOLDS_COLUMN,
 };
 
-use super::{ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord};
+use super::{ServingEntityRecord, ServingEdgeRecord, ServingFactRecord, ServingSearchMetadataRecord};
 
 pub fn write_entities_parquet(
     entities: &[ServingEntityRecord],
@@ -541,4 +541,57 @@ impl From<parquet::errors::ParquetError> for ParquetReadError {
     fn from(err: parquet::errors::ParquetError) -> Self {
         Self::Parquet(err)
     }
+}
+
+pub fn write_edges_parquet(edges: &[ServingEdgeRecord]) -> Result<Vec<u8>, ParquetWriteError> {
+    let schema = Arc::new(Schema::new(vec![
+        Field::new("from_entity_id", DataType::Utf8, false),
+        Field::new("edge_type", DataType::Utf8, false),
+        Field::new("to_entity_id", DataType::Utf8, false),
+        Field::new("confidence", DataType::Float32, false),
+        Field::new("source_type", DataType::Utf8, false),
+    ]));
+    let batch = RecordBatch::try_new(
+        schema.clone(),
+        vec![
+            string_array(edges.iter().map(|edge| edge.from_entity_id.clone())),
+            string_array(edges.iter().map(|edge| edge.edge_type.clone())),
+            string_array(edges.iter().map(|edge| edge.to_entity_id.clone())),
+            Arc::new(Float32Array::from(
+                edges.iter().map(|edge| edge.confidence).collect::<Vec<_>>(),
+            )) as ArrayRef,
+            string_array(edges.iter().map(|edge| edge.source_type.clone())),
+        ],
+    )
+    .map_err(ParquetWriteError::Arrow)?;
+    write_batch(batch)
+}
+
+pub fn read_edges_parquet(bytes: &[u8]) -> Result<Vec<ServingEdgeRecord>, ParquetReadError> {
+    let mut records = Vec::new();
+    for batch in ParquetRecordBatchReaderBuilder::try_new(Bytes::copy_from_slice(bytes))?.build()? {
+        let batch = batch?;
+        let from_entity_id = string_column(&batch, "from_entity_id")?;
+        let edge_type = string_column(&batch, "edge_type")?;
+        let to_entity_id = string_column(&batch, "to_entity_id")?;
+        let confidence = batch
+            .column_by_name("confidence")
+            .and_then(|column| column.as_any().downcast_ref::<Float32Array>())
+            .ok_or_else(|| ParquetReadError::InvalidColumn {
+                name: "confidence".to_string(),
+                expected: "float32",
+            })?;
+        let source_type = string_column(&batch, "source_type")?;
+
+        for row in 0..batch.num_rows() {
+            records.push(ServingEdgeRecord {
+                from_entity_id: required_string(from_entity_id, row, "from_entity_id")?,
+                edge_type: required_string(edge_type, row, "edge_type")?,
+                to_entity_id: required_string(to_entity_id, row, "to_entity_id")?,
+                confidence: confidence.value(row),
+                source_type: required_string(source_type, row, "source_type")?,
+            });
+        }
+    }
+    Ok(records)
 }

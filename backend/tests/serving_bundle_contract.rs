@@ -33,6 +33,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     assert_eq!(manifest.entity_count, 2);
     assert_eq!(manifest.fact_count, 4);
     assert_eq!(manifest.search_metadata_count, 4);
+    assert_eq!(manifest.edge_count, 0);
     assert_eq!(
         manifest.entity_parquet_key,
         "serving/search_bundle/version=2026-07-12t18-30z/entities/part-00000.parquet"
@@ -103,7 +104,7 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let manifest_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/manifest.json").unwrap();
     let manifest_body = lake.get_text(&manifest_key).await.unwrap();
-    assert!(manifest_body.contains("\"format_version\": 2"));
+    assert!(manifest_body.contains("\"format_version\": 3"));
 
     let schema_key =
         LakeKey::new("serving/search_bundle/version=2026-07-12t18-30z/schema.json").unwrap();

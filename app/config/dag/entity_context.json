@@ -1,0 +1,76 @@
+{
+  "_comment": "FUTURE API CONTRACT — not implemented yet. Defines how EntityContext summary is composed from graph traversal. Rust composer and GET /api/entities/{id}/context come in Phase 10.",
+  "version": 1,
+  "description": "Graph-native UI: walk nodes/edges/leaves from an anchor entity, emit structured clauses then a summary paragraph. UI renders generically.",
+  "status": "contract_only",
+  "example_output": {
+    "anchor_entity_id": "society:prestige-waterford",
+    "summary_paragraph": "Prestige Waterford sits on ECC Road, where residents report monsoon waterlogging (Early signal). Deens Public School is nearby in Whitefield.",
+    "clauses": [
+      {
+        "text": "sits on ECC Road",
+        "traversal": ["served_by_road"],
+        "target_entity_id": "road:ecc-road",
+        "fact_key": null
+      },
+      {
+        "text": "monsoon waterlogging reported on the approach road",
+        "traversal": ["served_by_road"],
+        "target_entity_id": "road:ecc-road",
+        "fact_key": "risk.approach_road_waterlogging",
+        "proof_label": "early_signal"
+      },
+      {
+        "text": "Deens Public School is nearby",
+        "traversal": ["in_area", "near_place"],
+        "target_entity_id": "place:deens-public-school",
+        "fact_key": "positive.school_access",
+        "proof_label": "supported"
+      }
+    ]
+  },
+  "traversal": {
+    "ontology_ref": "app/config/dag/ontology.json",
+    "surface_traversals_ref": "app/config/dag/ui_surfaces.json",
+    "max_hops": 2,
+    "default_anchor_types": ["property", "society"],
+    "edge_priority": [
+      "in_society",
+      "served_by_road",
+      "in_area",
+      "built_by",
+      "maps_to_place",
+      "near_place"
+    ]
+  },
+  "compose": {
+    "clause_template_ref": "app/config/dag/fact_registry.json display_template",
+    "lens_order": ["risk", "operating", "lifecycle", "positive", "judgment"],
+    "max_clauses": 8,
+    "max_paragraph_words": 120,
+    "join_style": "deterministic_templates",
+    "llm_polish": false
+  },
+  "api": {
+    "planned_endpoints": [
+      "GET /api/entities/{entity_id}/context",
+      "GET /api/properties/{id}/context"
+    ],
+    "implementation_phase": 10,
+    "note": "API reads serving bundle entities + edges + facts only. Never reads app/config at request time; config is baked into materialized search_metadata and bundle manifest config_hash."
+  },
+  "data_prerequisites": [
+    "serving bundle includes edges.parquet (from gold kg_society_view)",
+    "entity types: society, road_segment, area, place, property in entities.parquet",
+    "leaf facts attachable to road_segment and place entities",
+    "edge inference policy produces served_by_road and in_area instances in lake"
+  ],
+  "pending_ontology": [
+    {
+      "edge": "near_place",
+      "from": "society",
+      "to": "place",
+      "reason": "School/metro/hospital proximity without full maps_to_place identity"
+    }
+  ]
+}

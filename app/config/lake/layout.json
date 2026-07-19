@@ -94,6 +94,7 @@
           "schema.json",
           "trust_policy.json",
           "entities/part-00000.parquet",
+          "edges/part-00000.parquet",
           "facts/part-00000.parquet",
           "search_metadata/part-00000.parquet",
           "tantivy_index/"
@@ -102,6 +103,13 @@
           {
             "name": "entities",
             "columns": ["entity_id", "entity_type", "name", "root_source", "searchable_text"]
+          },
+          {
+            "name": "edges",
+            "status": "planned_phase_4",
+            "source": "gold/kg_society_view/edges",
+            "columns": ["from_entity_id", "edge_type", "to_entity_id", "confidence", "source_type"],
+            "note": "Required for graph traversal UI (Phase 10). Not loaded by Rust API yet."
           },
           {
             "name": "facts",
