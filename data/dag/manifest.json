@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "description": "OpenEstates DAG control-plane config. Git is source of truth; lake stores artifacts only.",
+  "docs": {
+    "architecture": "docs/dag_convergence_design.md",
+    "execution": "docs/dag_execution_plan.md"
+  },
+  "includes": [
+    "ontology.json",
+    "resolution_policies.json",
+    "concern_taxonomy.json"
+  ],
+  "pending": [
+    "asset_registry.json",
+    "fact_registry.json",
+    "ui_surfaces.json",
+    "crawl_policies/",
+    "source_adapters/"
+  ],
+  "proof_labels": {
+    "verified": 0.8,
+    "supported": 0.6,
+    "early_signal": 0.35
+  },
+  "agent_routing": {
+    "add_leaf": "concern_taxonomy.json",
+    "add_entity_type": "ontology.json",
+    "add_source": "source_adapters/ + resolution_policies.json",
+    "add_crawl_asset": "asset_registry.json + crawl_policies/"
+  }
+}

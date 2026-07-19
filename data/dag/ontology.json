@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "entity_types": [
+    { "id": "property", "prefix": "property:" },
+    { "id": "society", "prefix": "society:" },
+    { "id": "area", "prefix": "area:" },
+    { "id": "builder", "prefix": "builder:" },
+    { "id": "road_segment", "prefix": "road:" },
+    { "id": "place", "prefix": "place:" },
+    { "id": "transaction", "prefix": "txn:", "optional": true }
+  ],
+  "relations": [
+    { "from": "property", "edge": "in_society", "to": "society" },
+    { "from": "society", "edge": "in_area", "to": "area" },
+    { "from": "society", "edge": "built_by", "to": "builder" },
+    { "from": "society", "edge": "served_by_road", "to": "road_segment" },
+    { "from": "society", "edge": "maps_to_place", "to": "place" },
+    { "from": "transaction", "edge": "for_property", "to": "property" }
+  ]
+}

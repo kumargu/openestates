@@ -1,0 +1,1519 @@
+{
+  "version": 1,
+  "source": "Merged from livability_theme_registry + GitHub issue #2",
+  "defaults": {
+    "source_types": [
+      "Google",
+      "RedditTheme"
+    ],
+    "never_default": true
+  },
+  "legacy_key_map": {
+    "maintenance_charges": "operating.maintenance_charges",
+    "tanker_dependence": "operating.tanker_dependence",
+    "rajakaluve_risk": "risk.rajakaluve_proximity",
+    "high_tension_wires": "risk.ht_wire_nearby",
+    "approach_road_waterlogging": "risk.approach_road_waterlogging",
+    "approach_road_traffic": "risk.approach_road_traffic"
+  },
+  "bucket_count": 10,
+  "leaf_count": 78,
+  "buckets": [
+    {
+      "id": "water_utilities",
+      "leaves": [
+        {
+          "fact_key": "operating.bwssb_unknown",
+          "label": "piped water status unknown",
+          "lens": "operating",
+          "polarity": "neutral",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "bwssb",
+            "piped water unknown"
+          ],
+          "preferences": [
+            "bwssb water"
+          ],
+          "issue2_key": "bwssb_or_piped_water_unknown"
+        },
+        {
+          "fact_key": "operating.power_backup",
+          "label": "power backup quality",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "power backup",
+            "generator",
+            "dg set"
+          ],
+          "preferences": [
+            "power backup"
+          ],
+          "issue2_key": "power_backup_good"
+        },
+        {
+          "fact_key": "operating.power_wiring_issue",
+          "label": "power or wiring issues",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "wiring issue",
+            "power cut",
+            "electrical problem"
+          ],
+          "preferences": [
+            "power issue"
+          ],
+          "issue2_key": "power_or_wiring_issue"
+        },
+        {
+          "fact_key": "operating.summer_water_shortage",
+          "label": "summer water shortage",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "water shortage",
+            "summer water",
+            "no water"
+          ],
+          "preferences": [
+            "water shortage",
+            "summer water"
+          ]
+        },
+        {
+          "fact_key": "operating.tanker_dependence",
+          "label": "tanker dependence",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "tanker",
+            "water tanker",
+            "tanker dependency"
+          ],
+          "preferences": [
+            "tanker",
+            "tanker dependence"
+          ]
+        },
+        {
+          "fact_key": "operating.utility_outage",
+          "label": "utility outage",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "outage",
+            "no power",
+            "no water hours"
+          ],
+          "preferences": [
+            "utility outage"
+          ],
+          "issue2_key": "utility_outage_reported"
+        },
+        {
+          "fact_key": "operating.water_source",
+          "label": "water source",
+          "lens": "operating",
+          "polarity": "neutral",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "water source",
+            "borewell",
+            "cauvery",
+            "bwssb"
+          ],
+          "preferences": [
+            "water source",
+            "bwssb"
+          ]
+        },
+        {
+          "fact_key": "operating.water_supply_good",
+          "label": "stable water supply",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "reliable water",
+            "good water supply"
+          ],
+          "preferences": [
+            "water supply good"
+          ],
+          "issue2_key": "water_supply_good"
+        },
+        {
+          "fact_key": "positive.stable_water",
+          "label": "stable water supply",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "stable water",
+            "good water supply",
+            "24x7 water"
+          ],
+          "preferences": [
+            "reliable water",
+            "good water"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flooding_drainage",
+      "leaves": [
+        {
+          "fact_key": "risk.approach_road_waterlogging",
+          "label": "approach-road waterlogging",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "road_segment",
+            "society",
+            "area"
+          ],
+          "terms": [
+            "waterlogging",
+            "flooded road",
+            "road floods"
+          ],
+          "preferences": [
+            "waterlogging",
+            "flooding"
+          ]
+        },
+        {
+          "fact_key": "risk.basement_seepage",
+          "label": "basement seepage",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "basement seepage",
+            "basement water",
+            "seepage"
+          ],
+          "preferences": [
+            "basement seepage"
+          ]
+        },
+        {
+          "fact_key": "risk.nala_nearby",
+          "label": "nala nearby",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "nala",
+            "open drain",
+            "drain nearby"
+          ],
+          "preferences": [
+            "nala"
+          ],
+          "issue2_key": "nala_nearby"
+        },
+        {
+          "fact_key": "risk.open_drain_nearby",
+          "label": "open drain nearby",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society",
+            "road_segment"
+          ],
+          "terms": [
+            "open drain",
+            "open nala"
+          ],
+          "preferences": [
+            "open drain"
+          ],
+          "issue2_key": "open_drain_nearby"
+        },
+        {
+          "fact_key": "risk.rajakaluve_proximity",
+          "label": "rajakaluve proximity",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "rajakaluve",
+            "storm drain",
+            "stormwater drain"
+          ],
+          "preferences": [
+            "rajakaluve",
+            "stormwater"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "legal_documents",
+      "leaves": [
+        {
+          "fact_key": "legal.ekhata_issue",
+          "label": "e-khata issue",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "property",
+            "society"
+          ],
+          "terms": [
+            "e-khata",
+            "ekhata",
+            "khata issue"
+          ],
+          "preferences": [
+            "ekhata",
+            "khata"
+          ],
+          "issue2_key": "ekhata_issue"
+        },
+        {
+          "fact_key": "legal.kharab_land",
+          "label": "kharab land risk",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "kharab land",
+            "kharab"
+          ],
+          "preferences": [
+            "kharab land"
+          ],
+          "issue2_key": "kharab_land_risk"
+        },
+        {
+          "fact_key": "legal.litigation",
+          "label": "litigation risk",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "builder"
+          ],
+          "terms": [
+            "litigation",
+            "court case",
+            "legal dispute"
+          ],
+          "preferences": [
+            "litigation"
+          ],
+          "issue2_key": "litigation_risk"
+        },
+        {
+          "fact_key": "legal.oc_status",
+          "label": "OC status",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "property"
+          ],
+          "terms": [
+            "oc missing",
+            "occupancy certificate",
+            "oc unclear"
+          ],
+          "preferences": [
+            "oc",
+            "occupancy certificate"
+          ],
+          "issue2_key": "oc_missing_or_unclear"
+        },
+        {
+          "fact_key": "legal.sale_agreement_clause",
+          "label": "sale agreement clause risk",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "property",
+            "society"
+          ],
+          "terms": [
+            "sale agreement clause",
+            "promoter reserved land"
+          ],
+          "preferences": [
+            "sale agreement"
+          ],
+          "issue2_key": "sale_agreement_clause_risk"
+        },
+        {
+          "fact_key": "legal.seller_documentation_delay",
+          "label": "seller documentation delay",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "seller delay",
+            "documentation delay",
+            "seller not responding"
+          ],
+          "preferences": [
+            "seller documentation"
+          ],
+          "issue2_key": "seller_documentation_delay"
+        },
+        {
+          "fact_key": "legal.title_clear",
+          "label": "title clear claimed",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "clear title",
+            "title clear"
+          ],
+          "preferences": [
+            "clear title"
+          ],
+          "issue2_key": "title_clear_claimed"
+        },
+        {
+          "fact_key": "legal.uds_mismatch",
+          "label": "UDS mismatch",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "uds mismatch",
+            "undivided share"
+          ],
+          "preferences": [
+            "uds"
+          ],
+          "issue2_key": "uds_mismatch"
+        }
+      ]
+    },
+    {
+      "id": "builder_delivery",
+      "leaves": [
+        {
+          "fact_key": "lifecycle.amenity_delivery",
+          "label": "amenity delivery risk",
+          "lens": "lifecycle",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "amenity not delivered",
+            "clubhouse not ready"
+          ],
+          "preferences": [
+            "amenity delivery"
+          ],
+          "issue2_key": "amenity_delivery_risk"
+        },
+        {
+          "fact_key": "lifecycle.builder_delay",
+          "label": "builder delay risk",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "builder"
+          ],
+          "terms": [
+            "delayed possession",
+            "possession delay",
+            "behind schedule"
+          ],
+          "preferences": [
+            "builder delay",
+            "delayed"
+          ],
+          "issue2_key": "builder_delay_risk"
+        },
+        {
+          "fact_key": "lifecycle.builder_reputation_negative",
+          "label": "builder reputation concern",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "builder",
+            "society"
+          ],
+          "terms": [
+            "bad builder",
+            "builder complaint",
+            "worst builder"
+          ],
+          "preferences": [
+            "builder reputation"
+          ],
+          "issue2_key": "builder_reputation_negative"
+        },
+        {
+          "fact_key": "lifecycle.handover_uncertainty",
+          "label": "handover uncertainty",
+          "lens": "lifecycle",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "property"
+          ],
+          "terms": [
+            "handover delay",
+            "handover uncertainty"
+          ],
+          "preferences": [
+            "handover"
+          ],
+          "issue2_key": "handover_uncertainty"
+        },
+        {
+          "fact_key": "lifecycle.sample_flat_mismatch",
+          "label": "sample flat mismatch",
+          "lens": "lifecycle",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "sample flat",
+            "brochure mismatch"
+          ],
+          "preferences": [
+            "sample flat"
+          ],
+          "issue2_key": "sample_flat_mismatch"
+        },
+        {
+          "fact_key": "market.hidden_charges",
+          "label": "hidden charges risk",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "property"
+          ],
+          "terms": [
+            "hidden charges",
+            "add-on charges",
+            "extra charges"
+          ],
+          "preferences": [
+            "hidden charges"
+          ],
+          "issue2_key": "hidden_charges_risk"
+        },
+        {
+          "fact_key": "operating.construction_quality",
+          "label": "construction quality",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "construction quality",
+            "poor construction",
+            "leakage"
+          ],
+          "preferences": [
+            "construction quality"
+          ],
+          "issue2_key": "construction_quality_concern"
+        }
+      ]
+    },
+    {
+      "id": "maintenance_association",
+      "leaves": [
+        {
+          "fact_key": "operating.association_responsiveness",
+          "label": "association responsiveness",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "association",
+            "management office",
+            "complaint",
+            "mc issue"
+          ],
+          "preferences": [
+            "association",
+            "maintenance"
+          ]
+        },
+        {
+          "fact_key": "operating.cam_unclear",
+          "label": "CAM or corpus unclear",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "cam unclear",
+            "corpus fund",
+            "maintenance breakdown unclear"
+          ],
+          "preferences": [
+            "cam",
+            "corpus"
+          ],
+          "issue2_key": "cam_or_corpus_unclear"
+        },
+        {
+          "fact_key": "operating.lift_reliability",
+          "label": "lift reliability",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "lift issue",
+            "lift problem",
+            "elevator",
+            "lift breakdown"
+          ],
+          "preferences": [
+            "lift",
+            "elevator"
+          ]
+        },
+        {
+          "fact_key": "operating.maintenance_charges",
+          "label": "maintenance charges",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "maintenance charge",
+            "maintenance cost",
+            "monthly maintenance",
+            "association fee"
+          ],
+          "preferences": [
+            "maintenance",
+            "maintenance charges"
+          ]
+        },
+        {
+          "fact_key": "operating.maintenance_high",
+          "label": "high maintenance",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "high maintenance",
+            "expensive maintenance"
+          ],
+          "preferences": [
+            "high maintenance"
+          ],
+          "issue2_key": "maintenance_high"
+        },
+        {
+          "fact_key": "operating.parking_pressure",
+          "label": "parking pressure",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "parking issue",
+            "parking problem",
+            "visitor parking"
+          ],
+          "preferences": [
+            "parking"
+          ]
+        },
+        {
+          "fact_key": "operating.stp_smell",
+          "label": "STP smell",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "stp smell",
+            "sewage smell",
+            "stp issue"
+          ],
+          "preferences": [
+            "stp",
+            "sewage smell"
+          ]
+        },
+        {
+          "fact_key": "operating.tenant_voice_weak",
+          "label": "weak tenant voice",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "tenant voice",
+            "renter issues ignored"
+          ],
+          "preferences": [
+            "tenant rights"
+          ],
+          "issue2_key": "tenant_voice_weak"
+        },
+        {
+          "fact_key": "operating.waste_management",
+          "label": "waste management",
+          "lens": "operating",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "garbage",
+            "waste management",
+            "trash"
+          ],
+          "preferences": [
+            "waste",
+            "garbage"
+          ]
+        },
+        {
+          "fact_key": "positive.maintenance_quality",
+          "label": "well-maintained common areas",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "well maintained",
+            "good maintenance",
+            "clean society"
+          ],
+          "preferences": [
+            "good society",
+            "well maintained"
+          ]
+        },
+        {
+          "fact_key": "positive.maintenance_value",
+          "label": "maintenance value",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "maintenance value",
+            "worth the maintenance"
+          ],
+          "preferences": [
+            "maintenance value"
+          ],
+          "issue2_key": "maintenance_value_good"
+        }
+      ]
+    },
+    {
+      "id": "livability_access",
+      "leaves": [
+        {
+          "fact_key": "access.future_infra_dependency",
+          "label": "future infra dependency",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area"
+          ],
+          "terms": [
+            "future metro",
+            "depends on future road",
+            "infra promise"
+          ],
+          "preferences": [
+            "future infra"
+          ],
+          "issue2_key": "future_infra_dependency"
+        },
+        {
+          "fact_key": "access.metro_good",
+          "label": "good metro access",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "metro nearby",
+            "metro access",
+            "metro station"
+          ],
+          "preferences": [
+            "metro access"
+          ],
+          "issue2_key": "metro_access_good"
+        },
+        {
+          "fact_key": "access.tech_park",
+          "label": "tech park access",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "tech park",
+            "it park",
+            "office corridor"
+          ],
+          "preferences": [
+            "tech park",
+            "commute"
+          ],
+          "issue2_key": "tech_park_access_good"
+        },
+        {
+          "fact_key": "access.traffic_high",
+          "label": "heavy traffic",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "road_segment"
+          ],
+          "terms": [
+            "heavy traffic",
+            "traffic jam",
+            "congested"
+          ],
+          "preferences": [
+            "traffic",
+            "heavy traffic"
+          ],
+          "issue2_key": "traffic_high"
+        },
+        {
+          "fact_key": "access.walkability_poor",
+          "label": "poor walkability",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "road_segment"
+          ],
+          "terms": [
+            "unwalkable",
+            "no footpath",
+            "walkability"
+          ],
+          "preferences": [
+            "walkability"
+          ],
+          "issue2_key": "walkability_poor"
+        },
+        {
+          "fact_key": "positive.connectivity",
+          "label": "commute connectivity",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "metro",
+            "connectivity",
+            "commute",
+            "tech park"
+          ],
+          "preferences": [
+            "metro access",
+            "commute"
+          ]
+        },
+        {
+          "fact_key": "positive.school_access",
+          "label": "school access",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "school",
+            "schools nearby",
+            "good school"
+          ],
+          "preferences": [
+            "schools",
+            "school access"
+          ]
+        },
+        {
+          "fact_key": "risk.approach_road_traffic",
+          "label": "approach-road traffic",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "road_segment",
+            "society",
+            "area"
+          ],
+          "terms": [
+            "traffic",
+            "congestion",
+            "narrow road",
+            "bad road",
+            "approach road"
+          ],
+          "preferences": [
+            "traffic",
+            "approach road"
+          ]
+        },
+        {
+          "fact_key": "risk.city_disconnect",
+          "label": "city disconnect",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area"
+          ],
+          "terms": [
+            "far from city",
+            "disconnected",
+            "peripheral"
+          ],
+          "preferences": [
+            "city access"
+          ],
+          "issue2_key": "city_disconnect_risk"
+        },
+        {
+          "fact_key": "risk.commercial_creep",
+          "label": "commercial creep",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "commercial creep",
+            "commercialization"
+          ],
+          "preferences": [
+            "commercial creep"
+          ],
+          "issue2_key": "commercial_creep"
+        },
+        {
+          "fact_key": "risk.noise",
+          "label": "noise risk",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "noise",
+            "noisy",
+            "sound pollution"
+          ],
+          "preferences": [
+            "noise",
+            "quiet neighborhood"
+          ],
+          "issue2_key": "noise_risk"
+        }
+      ]
+    },
+    {
+      "id": "layout_space",
+      "leaves": [
+        {
+          "fact_key": "layout.cramped",
+          "label": "cramped layout",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "cramped",
+            "small rooms",
+            "narrow layout"
+          ],
+          "preferences": [
+            "cramped layout"
+          ],
+          "issue2_key": "layout_cramped"
+        },
+        {
+          "fact_key": "layout.efficient",
+          "label": "efficient layout",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "efficient layout",
+            "good layout"
+          ],
+          "preferences": [
+            "layout"
+          ],
+          "issue2_key": "layout_efficient"
+        },
+        {
+          "fact_key": "layout.parking_sufficient",
+          "label": "sufficient parking",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "property"
+          ],
+          "terms": [
+            "enough parking",
+            "parking sufficient"
+          ],
+          "preferences": [
+            "parking sufficient"
+          ],
+          "issue2_key": "parking_sufficient"
+        },
+        {
+          "fact_key": "layout.privacy",
+          "label": "good privacy",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "property",
+            "society"
+          ],
+          "terms": [
+            "privacy",
+            "private",
+            "low overlooking"
+          ],
+          "preferences": [
+            "privacy"
+          ],
+          "issue2_key": "privacy_good"
+        },
+        {
+          "fact_key": "layout.sunlight",
+          "label": "good sunlight",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "property"
+          ],
+          "terms": [
+            "sunlight",
+            "ventilation",
+            "bright"
+          ],
+          "preferences": [
+            "sunlight",
+            "facing"
+          ],
+          "issue2_key": "sunlight_good"
+        },
+        {
+          "fact_key": "positive.clubhouse",
+          "label": "clubhouse and amenities",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "clubhouse",
+            "amenities",
+            "swimming pool",
+            "gym"
+          ],
+          "preferences": [
+            "clubhouse",
+            "amenities"
+          ]
+        },
+        {
+          "fact_key": "positive.greenery",
+          "label": "greenery",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "greenery",
+            "trees",
+            "open space",
+            "landscaped"
+          ],
+          "preferences": [
+            "greenery",
+            "green cover"
+          ]
+        },
+        {
+          "fact_key": "positive.open_space",
+          "label": "good open space",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "open space",
+            "spacious",
+            "low density"
+          ],
+          "preferences": [
+            "open space"
+          ],
+          "issue2_key": "open_space_good"
+        },
+        {
+          "fact_key": "positive.security",
+          "label": "security",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "security",
+            "gated",
+            "guards",
+            "cctv"
+          ],
+          "preferences": [
+            "security",
+            "safe society"
+          ]
+        },
+        {
+          "fact_key": "risk.amenities_overcrowded",
+          "label": "overcrowded amenities",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "crowded pool",
+            "crowded gym",
+            "amenities overcrowded"
+          ],
+          "preferences": [
+            "crowded amenities"
+          ],
+          "issue2_key": "amenities_overcrowded"
+        },
+        {
+          "fact_key": "risk.tower_density",
+          "label": "high tower density",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "too many towers",
+            "dense",
+            "overcrowded towers"
+          ],
+          "preferences": [
+            "tower density"
+          ],
+          "issue2_key": "tower_density_high"
+        }
+      ]
+    },
+    {
+      "id": "market_liquidity",
+      "leaves": [
+        {
+          "fact_key": "lifecycle.rental_demand",
+          "label": "rental demand",
+          "lens": "lifecycle",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "rental demand",
+            "tenant demand",
+            "rent yield"
+          ],
+          "preferences": [
+            "rental demand"
+          ]
+        },
+        {
+          "fact_key": "lifecycle.resale_inventory",
+          "label": "resale inventory",
+          "lens": "lifecycle",
+          "polarity": "neutral",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "resale",
+            "resale unit",
+            "owner sale"
+          ],
+          "preferences": [
+            "resale"
+          ]
+        },
+        {
+          "fact_key": "market.distress_sale",
+          "label": "distress sale signal",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "property",
+            "area"
+          ],
+          "terms": [
+            "distress sale",
+            "urgent sale",
+            "dumping property"
+          ],
+          "preferences": [
+            "distress sale"
+          ],
+          "issue2_key": "distress_sale_signal"
+        },
+        {
+          "fact_key": "market.inventory_overhang",
+          "label": "inventory overhang",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "unsold inventory",
+            "inventory overhang",
+            "stagnant market"
+          ],
+          "preferences": [
+            "inventory overhang"
+          ],
+          "issue2_key": "inventory_overhang"
+        },
+        {
+          "fact_key": "market.nri_speculation",
+          "label": "NRI speculation signal",
+          "lens": "market",
+          "polarity": "neutral",
+          "scopes": [
+            "area"
+          ],
+          "terms": [
+            "nri speculation",
+            "nri investment hype"
+          ],
+          "preferences": [
+            "nri demand"
+          ],
+          "issue2_key": "nri_speculation_signal"
+        },
+        {
+          "fact_key": "market.price_above",
+          "label": "price above market",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "property",
+            "society"
+          ],
+          "terms": [
+            "overpriced",
+            "above market",
+            "premium pricing"
+          ],
+          "preferences": [
+            "premium pricing",
+            "overpriced"
+          ],
+          "issue2_key": "price_above_market"
+        },
+        {
+          "fact_key": "market.price_reasonable",
+          "label": "reasonable price",
+          "lens": "market",
+          "polarity": "positive",
+          "scopes": [
+            "property",
+            "society"
+          ],
+          "terms": [
+            "fair price",
+            "reasonable price",
+            "good value"
+          ],
+          "preferences": [
+            "value for money",
+            "fair price"
+          ],
+          "issue2_key": "price_reasonable"
+        },
+        {
+          "fact_key": "market.rental_yield_low",
+          "label": "low rental yield",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "low rental yield",
+            "poor yield",
+            "rent does not cover emi"
+          ],
+          "preferences": [
+            "rental yield"
+          ],
+          "issue2_key": "rental_yield_low"
+        },
+        {
+          "fact_key": "market.resale_liquidity_risk",
+          "label": "resale liquidity risk",
+          "lens": "market",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "hard to sell",
+            "low liquidity",
+            "stuck inventory"
+          ],
+          "preferences": [
+            "resale liquidity"
+          ],
+          "issue2_key": "resale_liquidity_risk"
+        }
+      ]
+    },
+    {
+      "id": "externalities",
+      "leaves": [
+        {
+          "fact_key": "risk.commercial_noise",
+          "label": "nearby commercial noise",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "commercial noise",
+            "bar nearby",
+            "pub nearby"
+          ],
+          "preferences": [
+            "commercial noise"
+          ],
+          "issue2_key": "nearby_commercial_noise"
+        },
+        {
+          "fact_key": "risk.construction_dust",
+          "label": "construction dust and noise",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "construction dust",
+            "construction noise",
+            "ongoing construction"
+          ],
+          "preferences": [
+            "construction dust",
+            "construction noise"
+          ]
+        },
+        {
+          "fact_key": "risk.empty_towers",
+          "label": "empty unsold towers",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "unsold",
+            "empty tower",
+            "vacant tower",
+            "low occupancy"
+          ],
+          "preferences": [
+            "unsold towers",
+            "empty towers"
+          ]
+        },
+        {
+          "fact_key": "risk.garbage_yard_nearby",
+          "label": "garbage yard nearby",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "garbage yard",
+            "dump yard",
+            "landfill"
+          ],
+          "preferences": [
+            "garbage yard"
+          ],
+          "issue2_key": "garbage_yard_nearby"
+        },
+        {
+          "fact_key": "risk.ht_wire_nearby",
+          "label": "high-tension wire buffers",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "high tension",
+            "ht line",
+            "transmission line"
+          ],
+          "preferences": [
+            "high tension",
+            "ht wire"
+          ]
+        },
+        {
+          "fact_key": "risk.undeveloped_surroundings",
+          "label": "undeveloped surroundings",
+          "lens": "risk",
+          "polarity": "concern",
+          "scopes": [
+            "area",
+            "society"
+          ],
+          "terms": [
+            "undeveloped",
+            "empty land around",
+            "isolated"
+          ],
+          "preferences": [
+            "undeveloped surroundings"
+          ],
+          "issue2_key": "undeveloped_surroundings"
+        }
+      ]
+    },
+    {
+      "id": "other",
+      "leaves": [
+        {
+          "fact_key": "positive.association_responsive",
+          "label": "responsive association",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society"
+          ],
+          "terms": [
+            "responsive association",
+            "good management"
+          ],
+          "preferences": [
+            "responsive association"
+          ],
+          "issue2_key": "association_responsive"
+        }
+      ]
+    }
+  ]
+}
