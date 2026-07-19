@@ -1,0 +1,229 @@
+{
+  "themes": [
+    {
+      "key": "maintenance_charges",
+      "label": "maintenance charges",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["maintenance charge", "maintenance cost", "monthly maintenance", "association fee", "maintenance bill"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "lift_reliability",
+      "label": "lift reliability",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["lift issue", "lift problem", "elevator", "lift breakdown", "lift not working"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "water_source",
+      "label": "water source",
+      "lens": "operating",
+      "polarity": "neutral",
+      "scopes": ["society", "area"],
+      "terms": ["water source", "borewell", "cauvery", "bwssb", "water supply"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "tanker_dependence",
+      "label": "tanker dependence",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society", "area"],
+      "terms": ["tanker", "water tanker", "tanker dependency", "tanker water"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "summer_water_shortage",
+      "label": "summer water shortage",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society", "area"],
+      "terms": ["water shortage", "summer water", "no water", "low water pressure"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "stp_smell",
+      "label": "STP smell",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["stp smell", "sewage smell", "stp issue", "sewage treatment", "sewage problem"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "waste_management",
+      "label": "waste management",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["garbage", "waste management", "trash", "dumping"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "parking_pressure",
+      "label": "parking pressure",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["parking issue", "parking problem", "visitor parking", "car parking", "parking shortage"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "association_responsiveness",
+      "label": "association responsiveness",
+      "lens": "operating",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["association", "management office", "complaint", "resident welfare", "mc issue"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "approach_road_waterlogging",
+      "label": "approach-road waterlogging",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["road_segment", "society", "area"],
+      "terms": ["waterlogging", "water logging", "flooded road", "road floods", "stagnant water"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "rajakaluve_risk",
+      "label": "rajakaluve proximity",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["area", "society"],
+      "terms": ["rajakaluve", "storm drain", "stormwater drain", "drain encroachment"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "high_tension_wires",
+      "label": "high-tension wire buffers",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["society", "area"],
+      "terms": ["high tension", "ht line", "power lines", "transmission line", "high tension wire"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "basement_seepage",
+      "label": "basement seepage",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["basement seepage", "basement water", "seepage", "damp basement"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "construction_dust",
+      "label": "construction dust and noise",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["area", "society"],
+      "terms": ["construction dust", "construction noise", "ongoing construction", "builder construction"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "empty_towers",
+      "label": "empty unsold towers",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["society"],
+      "terms": ["unsold", "empty tower", "vacant tower", "low occupancy"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "approach_road_traffic",
+      "label": "approach-road traffic",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": ["road_segment", "society", "area"],
+      "terms": ["traffic", "congestion", "jam", "narrow road", "bad road", "approach road"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "stable_water",
+      "label": "stable water supply",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society"],
+      "terms": ["stable water", "good water supply", "24x7 water", "adequate water"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "greenery",
+      "label": "greenery",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society"],
+      "terms": ["greenery", "green", "trees", "open space", "landscaped", "park"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "clubhouse",
+      "label": "clubhouse and amenities",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society"],
+      "terms": ["clubhouse", "amenities", "swimming pool", "gym", "play area"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "maintenance_quality",
+      "label": "well-maintained common areas",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society"],
+      "terms": ["well maintained", "good maintenance", "clean society", "well kept"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "security",
+      "label": "security",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society"],
+      "terms": ["security", "gated", "guards", "cctv", "safe society"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "school_access",
+      "label": "school access",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society", "area"],
+      "terms": ["school", "schools nearby", "good school", "school access"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "connectivity",
+      "label": "commute connectivity",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": ["society", "area"],
+      "terms": ["metro", "connectivity", "commute", "tech park", "office access", "main road"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "rental_demand",
+      "label": "rental demand",
+      "lens": "lifecycle",
+      "polarity": "positive",
+      "scopes": ["society", "area"],
+      "terms": ["rental demand", "tenant demand", "good rental", "rent yield"],
+      "source_types": ["Google", "Reddit"]
+    },
+    {
+      "key": "resale_inventory",
+      "label": "resale inventory",
+      "lens": "lifecycle",
+      "polarity": "neutral",
+      "scopes": ["society"],
+      "terms": ["resale", "resale unit", "owner sale", "secondary market"],
+      "source_types": ["Google", "Reddit"]
+    }
+  ]
+}

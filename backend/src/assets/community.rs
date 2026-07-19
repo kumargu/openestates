@@ -241,10 +241,6 @@ fn push_fact(
     Ok(())
 }
 
-fn is_web_url(value: &str) -> bool {
-    value.starts_with("http://") || value.starts_with("https://")
-}
-
 fn sha256_hex(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
 

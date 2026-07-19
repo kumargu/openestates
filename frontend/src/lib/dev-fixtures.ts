@@ -640,24 +640,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       infrastructure_tags: area.infrastructure_tags,
       community_notes: area.community_notes,
     },
-    themes: {
-      value: { label: card.price_per_sqft <= area.median_price_per_sqft ? "strong" : "mixed", summary: "Benchmarked against the local fixture median." },
-      commute: { label: card.metro_distance_mins <= 15 ? "good" : "mixed", summary: "Commute quality depends on exact destination and peak timing." },
-      society: { label: "good", summary: "Society signal is backed by local fixture reviews and source tags." },
-      greenery: { label: card.area === "Bellandur" ? "good" : "mixed", summary: "Open-space quality varies by project." },
-      risk: { label: risk > 0.35 ? "mixed" : "good", summary: "Risk combines source, traffic, waterlogging, and legal checks." },
-      resale: { label: "good", summary: "Tracked corridors have active resale demand." },
-      market: { label: "good", summary: "Demand is active for well-priced inventory." },
-    },
-    tradeoffs: {
-      headline: "Strong candidate if the highlighted due-diligence checks clear.",
-      strengths: ["Clear source signals", "Comparable market benchmark", "Actionable locality context"],
-      cautions: ["Verify tower-level documents", "Check commute and monsoon access"],
-      components: [
-        { label: "Value", level: card.price_per_sqft <= area.median_price_per_sqft ? "strong" : "mixed" },
-        { label: "Trust", level: card.root_source === "rera" ? "strong" : "mixed" },
-      ],
-    },
     market_activity: {
       interest_level: card.price_per_sqft > 17000 ? "moderate" : "high",
       saves_last_7d: card.root_source === "rera" ? 18 : 7,

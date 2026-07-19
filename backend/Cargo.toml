@@ -37,3 +37,14 @@ uuid = { version = "1.23.4", features = ["v4", "serde"] }
 
 [dev-dependencies]
 tempfile = "3"
+
+# Keep the dev build's disk footprint bounded. The heavy dependency trees
+# (datafusion, arrow, parquet, tantivy) dominate target/debug/deps when compiled
+# with full debug symbols, and the incremental cache grows unbounded across builds.
+[profile.dev]
+incremental = false
+
+# Strip debug info from dependencies only; our own crates keep line-table info
+# so backtraces still resolve to file:line.
+[profile.dev.package."*"]
+debug = false

@@ -10,6 +10,7 @@ import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { TrustBadge } from "../components/TrustBadge.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
+import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
@@ -360,6 +361,10 @@ export function PropertyPage() {
         <main className="property-decision-main">
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
+          )}
+
+          {data.livability_brief && (
+            <LivabilityBriefCard brief={data.livability_brief} />
           )}
 
           <EvidenceStack

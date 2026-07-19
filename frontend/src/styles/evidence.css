@@ -1554,9 +1554,18 @@
   gap: 0.75rem;
 }
 
+.community-pulse__section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(24, 24, 24, 0.48);
+}
+
 .community-pulse__theme-row {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  align-items: start;
   gap: 0.45rem;
 }
 
@@ -1638,6 +1647,87 @@
 }
 
 .community-pulse__sources a {
+  font-size: 0.8rem;
+  color: rgba(42, 74, 122, 0.95);
+}
+
+.livability-brief {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.1rem 1.15rem;
+  border: 1px solid rgba(24, 24, 24, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.livability-brief__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.livability-brief__confidence {
+  flex-shrink: 0;
+  padding: 0.28rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(42, 122, 42, 0.1);
+  color: rgba(28, 88, 28, 0.95);
+}
+
+.livability-brief__flag {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: rgba(42, 74, 122, 0.95);
+}
+
+.livability-brief__blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.livability-brief__block h3 {
+  margin: 0 0 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(24, 24, 24, 0.55);
+}
+
+.livability-brief__block p {
+  margin: 0 0 0.65rem;
+  font-size: 0.96rem;
+  line-height: 1.65;
+  color: rgba(24, 24, 24, 0.88);
+}
+
+.livability-brief__themes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.livability-brief__chip {
+  padding: 0.24rem 0.58rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: rgba(24, 24, 24, 0.05);
+  color: rgba(24, 24, 24, 0.78);
+}
+
+.livability-brief__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+}
+
+.livability-brief__sources a {
   font-size: 0.8rem;
   color: rgba(42, 74, 122, 0.95);
 }

@@ -241,15 +241,16 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "records": [],
             "source_watermarks": [],
         }
-        with patch(
-            "pipeline.collect_asset_sources.collect_google_places",
-            return_value=google_input,
-        ):
-            output = collect_asset_sources(
-                request,
-                rera_fetch=lambda: ([rera_entry], "2026-07-14T09:30:00Z"),
-                reddit_collect=blocked_reddit,
-            )
+        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "0"}):
+            with patch(
+                "pipeline.collect_asset_sources.collect_google_places",
+                return_value=google_input,
+            ):
+                output = collect_asset_sources(
+                    request,
+                    rera_fetch=lambda: ([rera_entry], "2026-07-14T09:30:00Z"),
+                    reddit_collect=blocked_reddit,
+                )
 
         self.assertIn("rera_registry_monthly", output)
         self.assertEqual(output["google_places_weekly"], google_input)
@@ -971,11 +972,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
             result_builder=threads_to_skill_result,
         )
 
-        output = collect_asset_sources(
-            request,
-            rera_fetch=lambda: (rera_rows, "2026-07-10T08:00:00Z"),
-            reddit_collect=reddit_collect,
-        )
+        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "0"}):
+            output = collect_asset_sources(
+                request,
+                rera_fetch=lambda: (rera_rows, "2026-07-10T08:00:00Z"),
+                reddit_collect=reddit_collect,
+            )
 
         project = output["rera_registry_monthly"]["projects"][0]
         self.assertEqual(len(output["rera_registry_monthly"]["projects"]), 1)

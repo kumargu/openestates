@@ -179,8 +179,6 @@ export type PropertyDetailResponse = {
     infrastructure_tags: string[];
     community_notes: string;
   } | null;
-  themes: CompareThemes;
-  tradeoffs: TradeoffsResponse;
   market_activity: MarketActivityResponse;
   similar_properties: PropertyCard[];
   recommendation_branches?: RecommendationBranch[];
@@ -212,6 +210,7 @@ export type PropertyDetailResponse = {
     google_review_count?: number;
     google_reviews_url?: string;
   };
+  livability_brief?: LivabilityBrief;
 };
 
 /**
@@ -354,6 +353,21 @@ export type EvidenceSection = {
   community_pulse?: CommunityPulse;
 };
 
+export type LivabilityBriefBlock = {
+  lens: string;
+  title: string;
+  paragraph: string;
+  themes: string[];
+  fact_keys?: string[];
+};
+
+export type LivabilityBrief = {
+  blocks: LivabilityBriefBlock[];
+  lifecycle_flag?: string;
+  confidence_label: string;
+  source_urls: string[];
+};
+
 export type CommunityPulseQuote = {
   text: string;
   source_type: string;
@@ -422,35 +436,6 @@ export type SellerSummary = {
   completeness_pct: number;
   property_prompt?: string;
   documents_provided: string[];
-};
-
-export type ThemeLabel = "strong" | "good" | "mixed" | "weak";
-
-export type ThemeResult = {
-  label: ThemeLabel;
-  summary: string;
-};
-
-export type CompareThemes = {
-  value: ThemeResult;
-  commute: ThemeResult;
-  society: ThemeResult;
-  greenery: ThemeResult;
-  risk: ThemeResult;
-  resale: ThemeResult;
-  market: ThemeResult;
-};
-
-export type ThemeComponent = {
-  label: string;
-  level: ThemeLabel;
-};
-
-export type TradeoffsResponse = {
-  headline: string;
-  strengths: string[];
-  cautions: string[];
-  components: ThemeComponent[];
 };
 
 export type PriceVsMedian = {

@@ -1,5 +1,6 @@
 pub mod assets;
 pub mod community;
+pub mod livability_brief;
 pub mod data_loader;
 pub mod discovery;
 pub mod knowledge;

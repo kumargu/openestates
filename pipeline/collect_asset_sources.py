@@ -174,7 +174,11 @@ def record_source_failure(
 
 
 def skip_reddit_collection() -> bool:
-    return str(os.environ.get("OPENESTATES_SKIP_REDDIT") or "").lower() in (
+    env = os.environ.get("OPENESTATES_SKIP_REDDIT")
+    if env is None:
+        # Default off until the isolated reddit-fetcher container is deployed.
+        return True
+    return str(env).lower() in (
         "1",
         "true",
         "yes",

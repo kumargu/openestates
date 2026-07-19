@@ -95,10 +95,8 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
     onSaveChange?.();
   };
 
-  const tradeoffs = detail?.tradeoffs;
   const evidenceSummary = summarizeEvidence(detail?.evidence);
   const evidenceGlance = topEvidenceGlance(detail?.evidence, 2);
-  const topTradeoff = tradeoffs?.strengths[0] ?? tradeoffs?.cautions[0] ?? null;
 
   return (
     <div
@@ -209,9 +207,6 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
               {evidenceGlance.map((line) => (
                 <p key={line} className="side-panel-skim__line">{line}</p>
               ))}
-              {topTradeoff && (
-                <p className="side-panel-skim__tradeoff">{topTradeoff}</p>
-              )}
             </div>
           )}
         </div>

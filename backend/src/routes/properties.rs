@@ -12,8 +12,7 @@ use crate::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
 };
 use crate::scoring::{
-    self, compute_transparency_score, CompareThemes, MarketActivityResponse, TradeoffsResponse,
-    TransparencyScore,
+    self, compute_transparency_score, MarketActivityResponse, TransparencyScore,
 };
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
@@ -25,6 +24,10 @@ use crate::state::AppState;
 use crate::community::{
     community_evidence_from_fact_value, community_pulse_from_summary,
     deterministic_community_summarizer, CommunityPulse,
+};
+use crate::livability_brief::{
+    compose_livability_brief, filter_reddit_evidence, LivabilityBrief, LivabilityBriefInput,
+    LivabilityLens, StructuredFactSignal,
 };
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
@@ -68,8 +71,6 @@ pub struct PropertyDetail {
     pub evidence: PropertyEvidenceResponse,
     pub society: Option<crate::models::Society>,
     pub area: Option<crate::models::AreaProfile>,
-    pub themes: CompareThemes,
-    pub tradeoffs: TradeoffsResponse,
     pub market_activity: MarketActivityResponse,
     /// Similar properties from locally precomputed society embeddings.
     pub similar_properties: Vec<PropertyCard>,
@@ -123,6 +124,9 @@ pub struct PropertyDetail {
     /// Current external review evidence projected from the Parquet serving bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_reviews: Option<ExternalReviews>,
+    /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub livability_brief: Option<LivabilityBrief>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -806,6 +810,7 @@ fn collect_society_source_items(
 fn collect_community_evidence_records(
     graph: &crate::knowledge::KnowledgeGraph,
     society_id: &str,
+    area_name: Option<&str>,
     projection: Option<&SocietyFactProjection<'_>>,
 ) -> Vec<crate::community::CommunityEvidenceRecord> {
     // Primary source-neutral community keys. These are the current contract.
@@ -839,7 +844,166 @@ fn collect_community_evidence_records(
         records =
             collect_community_records_for_keys(graph, society_id, projection, LEGACY_FALLBACK_KEYS);
     }
-    records
+    records.extend(collect_area_community_records(
+        graph,
+        area_name.map(super::enrichment::area_node_id),
+    ));
+    filter_reddit_evidence(records)
+}
+
+fn collect_area_community_records(
+    graph: &crate::knowledge::KnowledgeGraph,
+    area_id: Option<String>,
+) -> Vec<crate::community::CommunityEvidenceRecord> {
+    let Some(area_id) = area_id else {
+        return Vec::new();
+    };
+    const AREA_FACT_KEYS: &[&str] = &[
+        "traffic_reality",
+        "waterlogging_detail",
+        "waterlogging_risk",
+        "lake_waterlogging_context",
+        "resident_discussion",
+        "google_review_snippets",
+    ];
+    collect_community_records_for_keys(graph, &area_id, None, AREA_FACT_KEYS)
+}
+
+fn collect_structured_livability_facts(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+) -> Vec<StructuredFactSignal> {
+    let society_id = society_node_id(&property.society_id);
+    let area_id = super::enrichment::area_node_id(&property.area);
+    let definitions: &[(&str, &str, LivabilityLens, &str)] = &[
+        ("home_state", "delivery state", LivabilityLens::Lifecycle, "society"),
+        (
+            "home_age_bucket",
+            "project age",
+            LivabilityLens::Lifecycle,
+            "society",
+        ),
+        (
+            "home_timeline_state",
+            "project timeline",
+            LivabilityLens::Lifecycle,
+            "society",
+        ),
+        (
+            "approach_road_condition",
+            "approach road access",
+            LivabilityLens::Risk,
+            "society",
+        ),
+        (
+            "access_road_quality",
+            "road quality",
+            LivabilityLens::Risk,
+            "road_segment",
+        ),
+        ("road_width", "road width", LivabilityLens::Risk, "road_segment"),
+        (
+            "waterlogging_detail",
+            "area waterlogging",
+            LivabilityLens::Risk,
+            "area",
+        ),
+        (
+            "waterlogging_risk",
+            "waterlogging risk",
+            LivabilityLens::Risk,
+            "area",
+        ),
+        ("stp_concern", "STP concern", LivabilityLens::Risk, "society"),
+        (
+            "high_tension_wire_concern",
+            "high-tension wires",
+            LivabilityLens::Risk,
+            "society",
+        ),
+        (
+            "nearby_schools",
+            "school access",
+            LivabilityLens::Positive,
+            "society",
+        ),
+        (
+            "nearby_metro_stations",
+            "metro access",
+            LivabilityLens::Positive,
+            "society",
+        ),
+    ];
+
+    let mut signals = Vec::new();
+    for (fact_key, label, lens, scope) in definitions {
+        let entity_id = match *scope {
+            "area" => area_id.as_str(),
+            _ => society_id.as_str(),
+        };
+        let has_fact = projection
+            .and_then(|projection| projection.latest_record(fact_key))
+            .is_some()
+            || graph.get_node(entity_id).is_some_and(|node| {
+                node.facts
+                    .iter()
+                    .any(|fact| fact.key == *fact_key)
+            });
+        if has_fact {
+            signals.push(StructuredFactSignal {
+                fact_key: (*fact_key).to_string(),
+                label: (*label).to_string(),
+                lens: *lens,
+            });
+        }
+    }
+    signals
+}
+
+fn build_livability_brief(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    society_name: &str,
+    projection: Option<&SocietyFactProjection<'_>>,
+    community_records: &[crate::community::CommunityEvidenceRecord],
+    community_pulse: Option<&CommunityPulse>,
+) -> Option<LivabilityBrief> {
+    let home_state_evidence = projection.map(|projection| projection.project_home_state());
+    let home_state = home_state_evidence
+        .as_ref()
+        .and_then(|evidence| evidence.state.as_deref());
+    let home_age_bucket = home_state_evidence
+        .as_ref()
+        .and_then(|evidence| evidence.age_bucket.as_deref());
+    let home_timeline_state = projection
+        .and_then(|projection| projection.latest_text("home_timeline_state"))
+        .map(|fact| fact.value);
+    let home_timeline_ref = home_timeline_state.as_deref();
+    let structured_facts = collect_structured_livability_facts(graph, property, projection);
+    let (community_positives, community_concerns, source_urls) =
+        if let Some(pulse) = community_pulse {
+            (
+                pulse.positives.as_slice(),
+                pulse.concerns.as_slice(),
+                pulse.source_urls.as_slice(),
+            )
+        } else {
+            (&[][..], &[][..], &[][..])
+        };
+
+    compose_livability_brief(&LivabilityBriefInput {
+        society_name,
+        area_name: &property.area,
+        home_state,
+        home_age_bucket,
+        home_timeline_state: home_timeline_ref,
+        evidence_records: community_records,
+        structured_facts: &structured_facts,
+        community_positives,
+        community_concerns,
+        source_urls,
+    })
 }
 
 fn enrich_community_pulse_source_urls(
@@ -1435,8 +1599,12 @@ pub(crate) fn build_source_panels(
         });
     }
 
-    let community_records =
-        collect_community_evidence_records(graph, &society_id, projection.as_ref());
+    let community_records = collect_community_evidence_records(
+        graph,
+        &society_id,
+        Some(property.area.as_str()),
+        projection.as_ref(),
+    );
     let mut community_pulse = if community_records.is_empty() {
         None
     } else {
@@ -2010,9 +2178,7 @@ pub async fn get_property(
         enrich_area(ap, &graph);
     }
 
-    // Compute themes, tradeoffs, market activity (KG-first scoring)
-    let themes = scoring::compute_themes(&property, area.as_ref(), society.as_ref(), &graph);
-    let tradeoffs = scoring::compute_tradeoffs(&property, area.as_ref(), society.as_ref(), &graph);
+    // Compute market activity context from listing facts.
     let market_activity = scoring::compute_market_activity(&property, area.as_ref());
 
     // Hold a read lock on sellers — no clone needed, just borrow for the
@@ -2172,6 +2338,31 @@ pub async fn get_property(
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
+    let community_pulse = source_panels
+        .iter()
+        .find(|panel| panel.kind == "community")
+        .and_then(|panel| panel.community_pulse.as_ref());
+    let society_projection = serving_bundle.as_ref().map(|bundle| {
+        SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id)
+    });
+    let community_records = collect_community_evidence_records(
+        &graph,
+        &society_node_id(&property.society_id),
+        Some(property.area.as_str()),
+        society_projection.as_ref(),
+    );
+    let society_display_name = society
+        .as_ref()
+        .map(|society| society.name.as_str())
+        .unwrap_or(property.society_id.as_str());
+    let livability_brief = build_livability_brief(
+        &graph,
+        &property,
+        society_display_name,
+        society_projection.as_ref(),
+        &community_records,
+        community_pulse,
+    );
     let evidence = build_property_evidence_response_from_panels(
         property.id.clone(),
         entity_refs.clone(),
@@ -2211,8 +2402,6 @@ pub async fn get_property(
         property,
         society,
         area,
-        themes,
-        tradeoffs,
         market_activity,
         similar_properties,
         recommendation_branches,
@@ -2233,6 +2422,7 @@ pub async fn get_property(
         data_freshness,
         confidence_score,
         external_reviews,
+        livability_brief,
     }))
 }
 

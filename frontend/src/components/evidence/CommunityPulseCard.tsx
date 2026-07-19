@@ -17,15 +17,11 @@ export function CommunityPulseCard({ pulse }: Props) {
 
   return (
     <div className="community-pulse">
-      <div className="community-pulse__header">
-        <span className="community-pulse__badge">{pulse.source_label}</span>
-        <span className="community-pulse__band">{pulse.sentiment_band}</span>
-      </div>
-
       <p className="community-pulse__paragraph">{pulse.paragraph}</p>
 
       {(pulse.positives.length > 0 || pulse.concerns.length > 0) && (
         <div className="community-pulse__themes">
+          <span className="community-pulse__section-label">From reviews</span>
           {pulse.positives.length > 0 && (
             <div className="community-pulse__theme-row">
               <span className="community-pulse__theme-label">Residents like</span>

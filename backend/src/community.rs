@@ -529,7 +529,36 @@ pub fn community_evidence_from_fact_value(
 }
 
 pub(crate) fn deterministic_summary(input: &CommunitySummaryInput<'_>) -> String {
-    compose_community_paragraph(input)
+    compose_living_read(input)
+}
+
+pub(crate) fn compose_living_read(input: &CommunitySummaryInput<'_>) -> String {
+    if input.text_evidence_count == 0 && input.rating.is_none() {
+        return clamp_paragraph_words(format!(
+            "{} feedback is still thin for this society.",
+            source_label_for_type_set(input.source_types)
+        ));
+    }
+
+    let mut sentences = Vec::new();
+    let positives = join_natural_list(input.positive_themes);
+    let concerns = join_natural_list(input.concern_themes);
+
+    if !input.positive_themes.is_empty() {
+        sentences.push(format!(
+            "Inside the society, residents repeatedly mention {positives}."
+        ));
+    }
+    if !input.concern_themes.is_empty() {
+        sentences.push(format!(
+            "The main cautions to verify are {concerns}."
+        ));
+    }
+    if sentences.is_empty() {
+        return compose_community_paragraph(input);
+    }
+
+    clamp_paragraph_words(sentences.join(" "))
 }
 
 pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> String {
@@ -581,17 +610,6 @@ pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> 
         sentences.push(format!(
             "{source_label} points to a {band} resident signal, but written review themes are still limited."
         ));
-    }
-
-    if let Some(highlight) = input
-        .evidence_texts
-        .iter()
-        .find(|text| !looks_like_generated_gap(text))
-    {
-        let excerpt = truncate_for_paragraph(highlight, 110);
-        if !sentences.iter().any(|sentence| sentence.contains(&excerpt)) {
-            sentences.push(format!("One recurring note: \"{excerpt}\""));
-        }
     }
 
     if input.text_evidence_count == 0 {
@@ -665,18 +683,6 @@ fn join_natural_list(values: &[String]) -> String {
             values[values.len() - 1]
         ),
     }
-}
-
-fn truncate_for_paragraph(value: &str, max_chars: usize) -> String {
-    let trimmed = value.trim();
-    if trimmed.chars().count() <= max_chars {
-        return trimmed.to_string();
-    }
-    let mut out = trimmed.chars().take(max_chars).collect::<String>();
-    if let Some(index) = out.rfind(' ') {
-        out.truncate(index);
-    }
-    format!("{out}...")
 }
 
 fn clamp_paragraph_words(mut text: String) -> String {
@@ -1079,7 +1085,7 @@ mod tests {
             .contains("Review text is not ingested yet"));
         assert_eq!(
             summaries[0].summary,
-            "Reddit feedback leans on resident themes: praise for amenities and greenery, with traffic as the main cautions. One recurring note: \"Calm layout with many trees, clubhouse, pool, but traffic is bad.\""
+            "Inside the society, residents repeatedly mention amenities and greenery. The main cautions to verify are traffic."
         );
     }
 
