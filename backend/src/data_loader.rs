@@ -340,6 +340,67 @@ fn representative_property_from_serving_society(
     }
 }
 
+fn bhk_from_property_slug(property_id: &str) -> Option<u32> {
+    let suffix = property_id.rsplit('-').next()?;
+    let digits = suffix.strip_suffix("bhk")?;
+    digits
+        .parse::<u32>()
+        .ok()
+        .filter(|value| (1..=6).contains(value))
+}
+
+fn bhk_from_title_prefix(title: &str) -> Option<u32> {
+    let lower = title.trim().to_lowercase();
+    let mut chars = lower.chars().peekable();
+    let mut digits = String::new();
+    while let Some(ch) = chars.peek() {
+        if ch.is_ascii_digit() {
+            digits.push(*ch);
+            chars.next();
+        } else {
+            break;
+        }
+    }
+    if digits.is_empty() {
+        return None;
+    }
+    let rest: String = chars.collect();
+    let rest = rest.trim_start_matches([' ', '-', '_']);
+    if rest.starts_with("bhk") {
+        return digits.parse().ok().filter(|value| (1..=6).contains(value));
+    }
+    None
+}
+
+fn resolve_serving_property_bhk(
+    property_id: &str,
+    rows: Option<&ServingEntityFactRows>,
+    title: &str,
+) -> u32 {
+    let from_fact = latest_numeric(rows, "bhk")
+        .unwrap_or(0.0)
+        .round()
+        .max(0.0) as u32;
+    if from_fact > 0 {
+        return from_fact;
+    }
+    bhk_from_property_slug(property_id)
+        .or_else(|| bhk_from_title_prefix(title))
+        .unwrap_or(0)
+}
+
+fn resolve_serving_property_area(
+    rows: Option<&ServingEntityFactRows>,
+    fact_index: &ServingFactIndex,
+    society_id: &str,
+) -> String {
+    let area = latest_text(rows, "area").unwrap_or_default();
+    if !area.trim().is_empty() {
+        return area;
+    }
+    serving_society_text(fact_index, society_id, "area").unwrap_or_default()
+}
+
 fn property_from_serving_entity(
     entity: &ServingEntityRecord,
     fact_index: &ServingFactIndex,
@@ -348,9 +409,12 @@ fn property_from_serving_entity(
     let rows = fact_index.entity(&entity.entity_id);
     let id = strip_entity_prefix(&entity.entity_id, "property:");
     let society_id = derive_society_id(&id);
-    let area: String = latest_text(rows, "area").unwrap_or_default();
+    let title = latest_text(rows, "title")
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| entity.name.clone());
+    let area = resolve_serving_property_area(rows, fact_index, &society_id);
     let area_slug = slug(&area);
-    let bhk = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
+    let bhk = resolve_serving_property_bhk(&id, rows, &title);
     let mut price = latest_numeric(rows, "price")
         .unwrap_or(0.0)
         .round()
@@ -384,9 +448,6 @@ fn property_from_serving_entity(
             .max(0.0) as u64
     };
 
-    let title = latest_text(rows, "title")
-        .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| entity.name.clone());
     let builder_name = latest_text(rows, "builder_name").unwrap_or_default();
     let description_summary = latest_text(rows, "description_summary").unwrap_or_else(|| {
         let project_name = project_name_from_title_or_id(&title, &id, bhk);
@@ -1537,6 +1598,40 @@ mod tests {
         let society = society_from_serving_entity(&entities[1], &fact_index);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
+    }
+
+    #[test]
+    fn serving_property_infers_bhk_from_slug_and_area_from_society_when_facts_missing() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "property:discovered-svamitva-soul-spring-3bhk".to_string(),
+            entity_type: "property".to_string(),
+            name: "3 BHK in Svamitva Soul Spring".to_string(),
+            root_source: Some("discovered".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "property:discovered-svamitva-soul-spring-3bhk",
+                    "title",
+                    FactValue::Text("3 BHK in Svamitva Soul Spring".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "society:svamitva-soul-spring",
+                    "area",
+                    FactValue::Text("Whitefield".to_string()),
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(properties.len(), 1);
+        let property = &properties[0];
+        assert_eq!(property.bhk, 3);
+        assert_eq!(property.area, "Whitefield");
     }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
