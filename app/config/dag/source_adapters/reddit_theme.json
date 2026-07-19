@@ -1,0 +1,55 @@
+{
+  "_comment": "Reddit theme adapter — derived concern signals only. Raw thread text stays in raw/source=reddit/; silver facts use canonical concern_taxonomy fact_keys.",
+  "version": 1,
+  "source_id": "reddit_theme",
+  "source_type": "RedditTheme",
+  "skill_id": "reddit_resident_facts",
+  "max_confidence": 0.45,
+  "compliance": {
+    "raw_text_allowed_in": ["raw/source=reddit/"],
+    "forbidden_silver_value_fields": ["selftext", "comment_body", "thread_title", "permalink"]
+  },
+  "derived_value": "mentioned",
+  "signal_map": [
+    {
+      "fact_key": "operating.tanker_dependence",
+      "match_terms": ["tanker", "water tanker", "tanker dependency", "tanker water"]
+    },
+    {
+      "fact_key": "operating.maintenance_charges",
+      "match_terms": ["maintenance charge", "maintenance cost", "monthly maintenance", "association fee"]
+    },
+    {
+      "fact_key": "risk.approach_road_waterlogging",
+      "match_terms": ["waterlogging", "floods", "flooding", "water logging", "stagnant water"]
+    },
+    {
+      "fact_key": "access.traffic_high",
+      "match_terms": ["traffic", "congestion", "gridlock", "peak hour", "heavy traffic"]
+    },
+    {
+      "fact_key": "risk.noise",
+      "match_terms": ["noise", "noisy", "highway noise", "airport noise"]
+    },
+    {
+      "fact_key": "operating.power_backup",
+      "match_terms": ["power backup", "generator", "dg set", "power cut"]
+    },
+    {
+      "fact_key": "operating.lift_reliability",
+      "match_terms": ["lift issue", "elevator", "lift breakdown", "lift not working"]
+    },
+    {
+      "fact_key": "positive.maintenance_quality",
+      "match_terms": ["good society", "well maintained", "family friendly", "peaceful society", "clean society"]
+    },
+    {
+      "fact_key": "lifecycle.builder_delay",
+      "match_terms": ["delayed", "delay", "behind schedule", "possession delay", "builder delay"]
+    },
+    {
+      "fact_key": "operating.stp_smell",
+      "match_terms": ["stp smell", "sewage smell", "sewage treatment"]
+    }
+  ]
+}

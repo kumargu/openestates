@@ -15,12 +15,11 @@
     "ontology.json",
     "resolution_policies.json",
     "search_intent.json",
+    "source_adapters/",
     "ui_surfaces.json",
     "entity_context.json"
   ],
-  "pending": [
-    "source_adapters/"
-  ],
+  "pending": [],
   "contract_only": [
     "entity_context.json"
   ],

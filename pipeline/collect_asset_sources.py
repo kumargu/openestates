@@ -818,10 +818,8 @@ def collect_reddit_assets(
     thread_fetch: Callable[[str, str], List[Dict[str, Any]]] = None,
     result_builder: Callable[[Dict[str, Any], List[Dict[str, Any]]], Any] = None,
 ) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    from pipeline.skills.search_reddit import (
-        fetch_reddit_threads_with_retry,
-        threads_to_skill_result,
-    )
+    from pipeline.skills.reddit_resident_facts import threads_to_concern_facts
+    from pipeline.skills.search_reddit import fetch_reddit_threads_with_retry
 
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
@@ -837,7 +835,7 @@ def collect_reddit_assets(
     if society_inputs is None:
         society_inputs = load_society_inputs_for_reddit()
     fetch_threads = thread_fetch or fetch_reddit_threads_with_retry
-    build_result = result_builder or threads_to_skill_result
+    build_result = result_builder or threads_to_concern_facts
     for slug, input_data in sorted(society_inputs.items()):
         query = input_data.get("query") or ""
         query_subreddit = input_data.get("subreddit") or subreddit

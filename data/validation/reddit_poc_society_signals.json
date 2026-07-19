@@ -1,0 +1,43 @@
+{
+  "_comment": "POC manual RedditTheme facts for issue #2 societies. Low confidence; resolver should prefer Google/RERA when both exist.",
+  "version": 1,
+  "source_type": "RedditTheme",
+  "max_confidence": 0.4,
+  "facts": [
+    {
+      "entity_id": "society:prestige-waterford",
+      "fact_key": "operating.tanker_dependence",
+      "value": "mentioned",
+      "confidence": 0.4,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-waterford"
+    },
+    {
+      "entity_id": "society:brigade-woods",
+      "fact_key": "access.traffic_high",
+      "value": "mentioned",
+      "confidence": 0.38,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-brigade"
+    },
+    {
+      "entity_id": "society:prestige-lakeside-habitat",
+      "fact_key": "positive.maintenance_quality",
+      "value": "mentioned",
+      "confidence": 0.42,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-lakeside"
+    },
+    {
+      "entity_id": "society:godrej-splendour",
+      "fact_key": "lifecycle.builder_delay",
+      "value": "mentioned",
+      "confidence": 0.35,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-godrej"
+    },
+    {
+      "entity_id": "society:prestige-park-grove",
+      "fact_key": "risk.approach_road_waterlogging",
+      "value": "mentioned",
+      "confidence": 0.4,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-parkgrove"
+    }
+  ]
+}

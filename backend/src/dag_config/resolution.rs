@@ -101,10 +101,24 @@ mod tests {
             &policies
         ));
         assert!(!better_source_type(
-            "LegacySeed",
+            "RedditTheme",
             "Google",
-            0.25,
+            0.45,
             0.8,
+            &policies
+        ));
+        assert!(better_source_type(
+            "Google",
+            "RedditTheme",
+            0.8,
+            0.45,
+            &policies
+        ));
+        assert!(better_source_type(
+            "Rera",
+            "RedditTheme",
+            0.9,
+            0.45,
             &policies
         ));
     }
