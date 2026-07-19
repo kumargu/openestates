@@ -219,7 +219,7 @@ async fn fanned_in_serving_support_facts_need_text_match_scoring_direction() {
 }
 
 #[test]
-fn negative_risk_preference_changes_rank_and_explanation_without_kg_data() {
+fn negative_risk_preference_changes_rank_and_explanation_with_graph_facts() {
     let mut low_risk = property(
         "low-waterlogging",
         "Whitefield",
@@ -237,7 +237,31 @@ fn negative_risk_preference_changes_rank_and_explanation_without_kg_data() {
     );
     high_risk.waterlogging_risk_score = Some(0.9);
 
-    let world = SearchWorld::new(vec![high_risk, low_risk]);
+    let mut world = SearchWorld::new(vec![high_risk, low_risk]);
+    world.add_society(
+        "low-waterlogging",
+        RootSource::Rera,
+        vec![sourced_fact(
+            "waterlogging_risk_score",
+            FactValue::Numeric(0.1),
+            SourceType::Rera,
+            1.0,
+            None,
+            Vec::new(),
+        )],
+    );
+    world.add_society(
+        "high-waterlogging",
+        RootSource::Rera,
+        vec![sourced_fact(
+            "waterlogging_risk_score",
+            FactValue::Numeric(0.9),
+            SourceType::Rera,
+            1.0,
+            None,
+            Vec::new(),
+        )],
+    );
 
     let results = world.run("3bhk whitefield avoid waterlogging");
     let ids = result_ids(&results);
@@ -247,8 +271,8 @@ fn negative_risk_preference_changes_rank_and_explanation_without_kg_data() {
         &results[0],
         "avoid waterlogging risk",
         "waterlogging_risk_score",
-        "local-risk",
-        Some("Seed"),
+        "graph-risk-numeric",
+        Some("Rera"),
     );
     assert!(
         results[0].match_score > results[1].match_score,

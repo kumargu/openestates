@@ -285,6 +285,28 @@ pub fn schema_preference_signal(
     }
 }
 
+pub fn expanded_keys_for_preference_label(label: &str, negative: bool) -> Vec<String> {
+    let patterns = if negative {
+        negative_preference_patterns()
+    } else {
+        positive_preference_patterns()
+    };
+    let normalized = label.trim().to_lowercase();
+    for pattern in patterns {
+        if pattern.label.eq_ignore_ascii_case(label) {
+            return pattern.expanded_keys.clone();
+        }
+        if pattern
+            .patterns
+            .iter()
+            .any(|term| normalized.contains(&term.to_lowercase()))
+        {
+            return pattern.expanded_keys.clone();
+        }
+    }
+    Vec::new()
+}
+
 pub fn fact_answers_text_schema(
     fact_key: &str,
     answers_preferences: &[String],

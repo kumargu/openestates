@@ -191,24 +191,8 @@ fn serving_candidate_ids(
     }
 }
 
-/// Legacy: maps a preference to a fact key (for nodes without answers_preferences).
-///
-/// TODO(Phase 2): Remove once KG property/society nodes carry `answers_preferences`
-/// on their facts. Currently needed because most nodes lack self-describing metadata.
-fn legacy_preference_to_fact_key(preference: &str) -> Option<&'static str> {
-    match preference {
-        "metro access" | "metro" | "near metro" => Some("metro_distance"),
-        "quiet neighborhood" | "quiet" | "peaceful" => Some("noise_level"),
-        "greenery" | "green" | "parks" => Some("greenery_score"),
-        "good society" | "well maintained" | "maintenance" => Some("maintenance_quality"),
-        "safe" | "safety" | "secure" => Some("safety_rating"),
-        "water supply" | "water" => Some("water_supply"),
-        _ => None,
-    }
-}
-
 // ---------------------------------------------------------------------------
-// Knowledge context builder — graph-first, legacy fallback
+// Knowledge context builder — graph-first
 // ---------------------------------------------------------------------------
 
 /// Build knowledge context from the graph for matched results.
@@ -381,13 +365,13 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
 
     if prefs.is_empty() {
         for pref in &intent.preferences {
+            let is_negative = pref.starts_with("avoid ");
             let normalized = pref
                 .strip_prefix("avoid ")
                 .unwrap_or(pref.as_str())
                 .to_string();
-            let candidate_fact_keys = legacy_preference_to_fact_key(&normalized)
-                .map(|fact| vec![fact.to_string()])
-                .unwrap_or_default();
+            let candidate_fact_keys =
+                crate::search::schema::expanded_keys_for_preference_label(&normalized, is_negative);
             prefs.push(GapPreference {
                 label: pref.clone(),
                 match_labels: vec![pref.clone(), normalized.clone()],
@@ -1386,22 +1370,18 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_fallback_for_nonexistent_society() {
+    fn test_no_graph_node_returns_none_for_preferences() {
         // When a society has no KG node, graph_preference_score_detailed returns None.
-        // The text search layer then falls back to legacy_preference_score, which
-        // handles standard preferences but returns 0.0 for builder-specific ones.
-        // This test ensures no panic and correct None return for unknown societies.
+        // Search should rely on serving/graph evidence only — no seed-field fallback.
         let graph = crate::knowledge::KnowledgeGraph::new();
 
-        // Society doesn't exist in the graph at all
         let result =
             graph_preference_score_detailed(&graph, "nonexistent-society", "reliable builder");
         assert!(
             result.is_none(),
-            "Should return None for non-existent society, allowing legacy fallback"
+            "Should return None for non-existent society"
         );
 
-        // Also verify standard preferences return None (triggering legacy path)
         let result = graph_preference_score_detailed(&graph, "nonexistent-society", "metro access");
         assert!(
             result.is_none(),
@@ -1410,10 +1390,9 @@ mod tests {
     }
 
     #[test]
-    fn test_legacy_fallback_no_kg_node_scores_via_legacy() {
-        // A property whose society has no KG node at all should still score
-        // through legacy scoring (based on property fields like metro_distance,
-        // noise_score, etc.) rather than panicking or returning zero results.
+    fn test_no_kg_node_still_matches_hard_constraints() {
+        // A property whose society has no KG node should still match hard constraints
+        // (area, BHK) but not receive legacy preference scoring.
         use crate::search::TextSearch;
 
         let graph = crate::knowledge::KnowledgeGraph::new();
@@ -1500,7 +1479,7 @@ mod tests {
         let result = &results[0];
         assert!(
             result.match_score > 0.0,
-            "Should have positive score from legacy scoring"
+            "Should have positive score from hard-constraint floor"
         );
 
         // Confidence should still be computed (low, since no KG node)

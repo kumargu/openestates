@@ -265,7 +265,6 @@ impl TextSearch {
                 let mut match_reasons: Vec<MatchReason> = Vec::new();
                 let mut pref_coverage: Vec<PreferenceCoverage> = Vec::new();
                 let mut graph_count: usize = 0;
-                let mut legacy_count: usize = 0;
                 let mut total_facts_consulted: usize = 0;
                 let mut positive_evidence_score = 0.0;
 
@@ -407,51 +406,11 @@ impl TextSearch {
                         }
                     }
 
-                    // Legacy fallback
-                    let legacy = if local_fallback_allowed(
-                        graph,
-                        serving_facts,
-                        &p.society_id,
-                        candidate_fact_keys,
-                    ) {
-                        legacy_preference_score(p, pref)
-                    } else {
-                        0.0
-                    };
-                    if legacy > 0.0 {
-                        score += legacy;
-                        positive_evidence_score += legacy.max(0.0);
-                        reasons.push(format!("matches preference: {}", pref));
-
-                        let norm_score = (legacy / 2.0).min(1.0);
-                        let fact_key = legacy_fact_key_for_preference(pref);
-                        match_reasons.push(MatchReason {
-                            preference: pref.clone(),
-                            fact_key: fact_key.clone(),
-                            display: format_legacy_display(pref, p),
-                            score: norm_score,
-                            confidence: 0.5,
-                            source_type: "Seed".into(),
-                            scoring_method: "local".into(),
-                        });
-                        pref_coverage.push(PreferenceCoverage {
-                            preference: pref.clone(),
-                            status: if norm_score > 0.5 {
-                                "matched"
-                            } else {
-                                "partial"
-                            }
-                            .into(),
-                            fact_key: Some(fact_key),
-                        });
-                        legacy_count += 1;
-                    } else {
-                        pref_coverage.push(PreferenceCoverage {
-                            preference: pref.clone(),
-                            status: "no_data".into(),
-                            fact_key: None,
-                        });
-                    }
+                    pref_coverage.push(PreferenceCoverage {
+                        preference: pref.clone(),
+                        status: "no_data".into(),
+                        fact_key: None,
+                    });
                 }
 
                 for pref in &negative_preferences {
@@ -518,58 +477,19 @@ impl TextSearch {
                         }
                     }
 
-                    let local_fallback = local_fallback_allowed(
-                        graph,
-                        serving_facts,
-                        &p.society_id,
-                        candidate_fact_keys,
-                    );
-                    if let Some(evaluation) = local_fallback
-                        .then(|| legacy_negative_preference_evaluation(p, pref))
-                        .flatten()
-                    {
-                        score += evaluation.score_delta;
-                        if evaluation.score_delta >= 0.0 {
-                            reasons.push(format!("avoids {}", pref));
-                        } else {
-                            reasons.push(format!("risk: {}", pref));
-                        }
-
-                        match_reasons.push(MatchReason {
-                            preference: format!("avoid {}", pref),
-                            fact_key: evaluation.fact_key.to_string(),
-                            display: evaluation.display,
-                            score: evaluation.score,
-                            confidence: 0.5,
-                            source_type: "Seed".into(),
-                            scoring_method: "local-risk".into(),
-                        });
-                        pref_coverage.push(PreferenceCoverage {
-                            preference: format!("avoid {}", pref),
-                            status: evaluation.status.to_string(),
-                            fact_key: Some(evaluation.fact_key.to_string()),
-                        });
-                        legacy_count += 1;
-                    } else {
-                        score -= negative_no_data_penalty(intent, pref);
-                        pref_coverage.push(PreferenceCoverage {
-                            preference: format!("avoid {}", pref),
-                            status: "no_data".into(),
-                            fact_key: None,
-                        });
-                    }
+                    score -= negative_no_data_penalty(intent, pref);
+                    pref_coverage.push(PreferenceCoverage {
+                        preference: format!("avoid {}", pref),
+                        status: "no_data".into(),
+                        fact_key: None,
+                    });
                 }
 
                 // Build explanation only when the query asked for constraints/preferences.
                 let has_positive_evidence =
                     has_positive_preference_evidence(&pref_coverage, &positive_preferences);
                 let match_explanation = if has_explainable_signals {
-                    let total = graph_count + legacy_count;
-                    let graph_pct = if total > 0 {
-                        (graph_count as f32 / total as f32) * 100.0
-                    } else {
-                        0.0
-                    };
+                    let graph_pct = if graph_count > 0 { 100.0 } else { 0.0 };
                     Some(MatchExplanation {
                         reasons: match_reasons,
                         preference_coverage: pref_coverage,
@@ -592,7 +512,7 @@ impl TextSearch {
                     if has_preferences {
                         score = score.max(minimum_evidence_floor(
                             positive_evidence_score,
-                            graph_count + legacy_count,
+                            graph_count,
                         ));
                     } else {
                         score = 1.0;
@@ -1472,20 +1392,6 @@ fn negative_no_data_penalty(intent: &SearchIntent, preference: &str) -> f64 {
         * NEGATIVE_NO_DATA_PENALTY_MULTIPLIER
 }
 
-fn local_fallback_allowed(
-    graph: Option<&KnowledgeGraph>,
-    serving_facts: Option<&ServingFactIndex>,
-    society_id: &str,
-    _candidate_fact_keys: &[String],
-) -> bool {
-    let node_id = society_node_id(society_id);
-    let has_graph_node = graph.and_then(|graph| graph.get_node(&node_id)).is_some();
-    let has_serving_node = serving_facts
-        .and_then(|serving_facts| serving_facts.entity(&node_id))
-        .is_some();
-    !has_graph_node && !has_serving_node
-}
-
 struct RankedEvidence {
     source_rank: usize,
     normalized_score: f64,
@@ -2120,142 +2026,6 @@ fn is_scoring_stopword(token: &str) -> bool {
     )
 }
 
-/// Legacy hardcoded preference scoring — used when the graph doesn't have
-/// self-describing scoring_hint metadata for this preference.
-///
-/// TODO(Phase 2): Remove once KG property nodes carry `answers_preferences` and
-/// `scoring_hint` on their facts. Currently KG property nodes have only 7-8 bare
-/// fact keys (area, city, bhk, price, etc.) with no scoring metadata, so this
-/// fallback is actively needed for all preference-based ranking.
-fn legacy_preference_score(property: &Property, preference: &str) -> f64 {
-    match preference {
-        "metro access" => {
-            if property.metro_distance_mins == 0 {
-                0.0
-            } else if property.metro_distance_mins <= 10 {
-                2.0
-            } else if property.metro_distance_mins <= 20 {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "quiet neighborhood" => match property.noise_score {
-            Some(score) if score < 0.3 => 2.0,
-            Some(score) if score < 0.5 => 1.0,
-            _ => 0.0,
-        },
-        "value for money" => {
-            if property.price_per_sqft < 8000 {
-                2.0
-            } else if property.price_per_sqft < 10000 {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "premium" => {
-            if property.price_per_sqft >= 12000 {
-                2.0
-            } else if property.price_per_sqft >= 10000 {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "good society" => match property.society_quality_score {
-            Some(score) if score >= 0.8 => 2.0,
-            Some(score) if score >= 0.6 => 1.0,
-            _ => 0.0,
-        },
-        "reliable builder" | "trusted builder" => match property.builder_quality_score {
-            Some(score) if score >= 0.8 => 2.0,
-            Some(score) if score >= 0.6 => 1.0,
-            _ => 0.0,
-        },
-        "on time delivery" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("delay") || status.contains("behind") {
-                0.0
-            } else if status.contains("ready")
-                || status.contains("delivered")
-                || status.contains("completed")
-            {
-                2.0
-            } else if property.builder_quality_score.is_some_and(|score| score >= 0.75) {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "greenery" => property.greenery_score.unwrap_or(0.0) * 2.0,
-        "new construction" | "under construction" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("under") || status.contains("construction") || status.contains("new")
-            {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        "ready to move" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("ready")
-                || status.contains("delivered")
-                || status.contains("completed")
-            {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        "new launch" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("new") || status.contains("launch") {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        "delayed" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("delay") || status.contains("behind") {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        "upcoming" => {
-            let status = property.possession_status.to_lowercase();
-            if status.contains("upcoming")
-                || status.contains("pre-launch")
-                || status.contains("future")
-            {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        "high floor" => {
-            if property.total_floors > 0 && property.floor >= property.total_floors - 2 {
-                2.0
-            } else if property.floor >= 10 {
-                1.0
-            } else {
-                0.0
-            }
-        }
-        "east facing" => {
-            if property.facing.to_lowercase().contains("east") {
-                2.0
-            } else {
-                0.0
-            }
-        }
-        _ => 0.0,
-    }
-}
-
 /// Check if a property's area is "nearby" the canonical search area.
 /// This catches sub-areas, micro-markets, and externally assigned areas that
 /// belong to the same macro area but don't exactly match the canonical name.
@@ -2325,65 +2095,6 @@ fn match_label_from_score(normalized: f64) -> String {
         "Partial match".to_string()
     } else {
         "Weak match".to_string()
-    }
-}
-
-/// Map a preference to its corresponding legacy fact key.
-fn legacy_fact_key_for_preference(preference: &str) -> String {
-    match preference {
-        "metro access" => "metro_distance_mins",
-        "quiet neighborhood" => "noise_score",
-        "value for money" => "price_per_sqft",
-        "premium" => "price_per_sqft",
-        "good society" => "society_quality_score",
-        "reliable builder" | "trusted builder" => "builder_quality_score",
-        "on time delivery" => "possession_status",
-        "greenery" => "greenery_score",
-        "new construction" | "under construction" | "ready to move" | "new launch" | "delayed"
-        | "upcoming" => "possession_status",
-        "high floor" => "floor",
-        "east facing" => "facing",
-        _ => "unknown",
-    }
-    .to_string()
-}
-
-/// Build a human-readable display string for a legacy preference match.
-fn format_legacy_display(preference: &str, property: &Property) -> String {
-    match preference {
-        "metro access" => format!("{} min to metro", property.metro_distance_mins),
-        "quiet neighborhood" => {
-            if property.noise_score.is_some_and(|score| score < 0.3) {
-                "Quiet neighborhood".into()
-            } else {
-                "Moderately quiet area".into()
-            }
-        }
-        "value for money" => format!("{}/sqft — good value", property.price_per_sqft),
-        "premium" => format!("{}/sqft — premium segment", property.price_per_sqft),
-        "good society" => {
-            if property.society_quality_score.is_some_and(|score| score >= 0.8) {
-                "Strong society quality".into()
-            } else {
-                "Decent society quality".into()
-            }
-        }
-        "reliable builder" | "trusted builder" => {
-            if property.builder_quality_score.is_some_and(|score| score >= 0.8) {
-                "Strong builder quality".into()
-            } else {
-                "Acceptable builder quality".into()
-            }
-        }
-        "on time delivery" => format!("Status: {}", property.possession_status),
-        "greenery" => "Green surroundings".into(),
-        "new construction" | "under construction" | "new launch" | "delayed" | "upcoming" => {
-            format!("Status: {}", property.possession_status)
-        }
-        "ready to move" => format!("Status: {}", property.possession_status),
-        "high floor" => format!("Floor {}/{}", property.floor, property.total_floors),
-        "east facing" => format!("Facing: {}", property.facing),
-        _ => format!("Matches {}", preference),
     }
 }
 
@@ -2523,132 +2234,6 @@ fn negative_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &
         .map_or(&[], |signal| signal.expanded_keys.as_slice())
 }
 
-struct LocalPreferenceEvaluation {
-    score_delta: f64,
-    fact_key: &'static str,
-    display: String,
-    status: &'static str,
-    score: f64,
-}
-
-fn legacy_negative_preference_evaluation(
-    property: &Property,
-    preference: &str,
-) -> Option<LocalPreferenceEvaluation> {
-    match preference {
-        "waterlogging risk" => Some(lower_risk_evaluation(
-            property.waterlogging_risk_score,
-            "waterlogging_risk_score",
-            "waterlogging",
-            0.2,
-            0.5,
-            1.4,
-        )),
-        "traffic" => Some(lower_risk_evaluation(
-            property.traffic_score,
-            "traffic_score",
-            "traffic",
-            0.35,
-            0.6,
-            1.3,
-        )),
-        "noise" => Some(lower_risk_evaluation(
-            property.noise_score,
-            "noise_score",
-            "noise",
-            0.3,
-            0.5,
-            1.0,
-        )),
-        "legal risk" => Some(lower_risk_evaluation(
-            property.litigation_risk,
-            "litigation_risk",
-            "legal",
-            0.15,
-            0.3,
-            1.5,
-        )),
-        "delay risk" => Some(delay_risk_evaluation(property)),
-        _ => None,
-    }
-}
-
-fn lower_risk_evaluation(
-    value: Option<f64>,
-    fact_key: &'static str,
-    label: &'static str,
-    good_max: f64,
-    ok_max: f64,
-    weight: f64,
-) -> LocalPreferenceEvaluation {
-    let Some(value) = value else {
-        return LocalPreferenceEvaluation {
-            score_delta: 0.0,
-            fact_key,
-            display: format!("No {} proof", label),
-            status: "missing",
-            score: 0.0,
-        };
-    };
-    if value <= good_max {
-        LocalPreferenceEvaluation {
-            score_delta: 2.0 * weight,
-            fact_key,
-            display: format!("Low {} risk", label),
-            status: "matched",
-            score: 1.0,
-        }
-    } else if value <= ok_max {
-        LocalPreferenceEvaluation {
-            score_delta: 0.7 * weight,
-            fact_key,
-            display: format!("Moderate {} risk", label),
-            status: "partial",
-            score: 0.5,
-        }
-    } else {
-        LocalPreferenceEvaluation {
-            score_delta: -2.0 * weight,
-            fact_key,
-            display: format!("High {} risk", label),
-            status: "partial",
-            score: 0.0,
-        }
-    }
-}
-
-fn delay_risk_evaluation(property: &Property) -> LocalPreferenceEvaluation {
-    let status = property.possession_status.to_lowercase();
-    if status.contains("delay") || status.contains("behind") {
-        LocalPreferenceEvaluation {
-            score_delta: -2.8,
-            fact_key: "possession_status",
-            display: format!("Delay risk in status: {}", property.possession_status),
-            status: "partial",
-            score: 0.0,
-        }
-    } else if status.contains("under") || status.contains("construction") {
-        LocalPreferenceEvaluation {
-            score_delta: -0.8,
-            fact_key: "possession_status",
-            display: format!(
-                "Handover still depends on status: {}",
-                property.possession_status
-            ),
-            status: "partial",
-            score: 0.4,
-        }
-    } else {
-        LocalPreferenceEvaluation {
-            score_delta: 2.0,
-            fact_key: "possession_status",
-            display: format!("No delay signal in status: {}", property.possession_status),
-            status: "matched",
-            score: 1.0,
-        }
-    }
-}
-
 /// Check if a property's society has a SocietyInArea edge to an area node
 /// whose name matches the intent area. This catches societies whose area
 /// fact doesn't exactly match the property's area field.
@@ -2688,7 +2273,7 @@ fn graph_area_match(society_id: &str, intent_area: &str, graph: Option<&Knowledg
 mod tests {
     use super::*;
     use crate::knowledge::edge::{Edge, Relation};
-    use crate::knowledge::fact::{FactValue, SourceType, SourcedFact};
+    use crate::knowledge::fact::{FactValue, ScoringDirection, SourceType, SourcedFact};
     use crate::knowledge::graph::KnowledgeGraph;
     use crate::knowledge::node::{Node, NodeType, RootSource};
     use crate::search::schema::SQM_PER_ACRE;
@@ -3131,6 +2716,28 @@ mod tests {
         fact
     }
 
+    fn preference_fact(
+        key: &str,
+        value: FactValue,
+        answers: Vec<&str>,
+        direction: ScoringDirection,
+        weight: f32,
+        thresholds: Vec<f64>,
+    ) -> SourcedFact {
+        use crate::knowledge::fact::ScoringHint;
+
+        let mut fact = SourcedFact::manual(key, value);
+        fact.confidence = 0.85;
+        fact.display_template = Some("{value}".to_string());
+        fact.answers_preferences = answers.into_iter().map(str::to_string).collect();
+        fact.scoring_hint = Some(ScoringHint {
+            direction,
+            weight,
+            thresholds,
+        });
+        fact
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn serving_fact(
         society_id: &str,
@@ -3384,7 +2991,7 @@ mod tests {
     }
 
     #[test]
-    fn test_search_ranks_local_preference_fit_before_weaker_match() {
+    fn test_search_ranks_graph_preference_fit_before_weaker_match() {
         let properties = vec![
             local_property(
                 "quiet-near-metro",
@@ -3406,6 +3013,51 @@ mod tests {
             ),
         ];
         let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "quiet-near-metro",
+            vec![
+                preference_fact(
+                    "metro_distance_mins",
+                    FactValue::Numeric(5.0),
+                    vec!["metro access"],
+                    ScoringDirection::LowerIsBetter,
+                    2.0,
+                    vec![10.0, 20.0],
+                ),
+                preference_fact(
+                    "noise_score",
+                    FactValue::Numeric(0.2),
+                    vec!["quiet neighborhood"],
+                    ScoringDirection::LowerIsBetter,
+                    2.0,
+                    vec![0.3, 0.5],
+                ),
+            ],
+        );
+        add_society_facts(
+            &mut graph,
+            "noisy-far-from-metro",
+            vec![
+                preference_fact(
+                    "metro_distance_mins",
+                    FactValue::Numeric(25.0),
+                    vec!["metro access"],
+                    ScoringDirection::LowerIsBetter,
+                    2.0,
+                    vec![10.0, 20.0],
+                ),
+                preference_fact(
+                    "noise_score",
+                    FactValue::Numeric(0.7),
+                    vec!["quiet neighborhood"],
+                    ScoringDirection::LowerIsBetter,
+                    2.0,
+                    vec![0.3, 0.5],
+                ),
+            ],
+        );
         let intent =
             crate::search::intent::parse_intent("quiet 3BHK near metro in Whitefield under 2Cr");
 
@@ -3415,7 +3067,7 @@ mod tests {
             &[],
             "quiet 3BHK near metro in Whitefield under 2Cr",
             &intent,
-            None,
+            Some(&graph),
         );
 
         assert_eq!(results.len(), 2);
@@ -3433,15 +3085,15 @@ mod tests {
             explanation
                 .reasons
                 .iter()
-                .any(|r| r.preference == "metro access" && r.scoring_method == "local"),
-            "metro preference should be explained by local scoring when no graph fact is present"
+                .any(|r| r.preference == "metro access" && r.scoring_method == "graph"),
+            "metro preference should be explained by graph scoring"
         );
         assert!(
             explanation
                 .reasons
                 .iter()
-                .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "local"),
-            "quiet preference should be explained by local scoring when no graph fact is present"
+                .any(|r| r.preference == "quiet neighborhood" && r.scoring_method == "graph"),
+            "quiet preference should be explained by graph scoring"
         );
     }
 
@@ -4098,6 +3750,17 @@ mod tests {
 
         let properties = vec![high_risk, low_risk];
         let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "low-waterlogging",
+            vec![numeric_fact("waterlogging_risk_score", 0.1)],
+        );
+        add_society_facts(
+            &mut graph,
+            "high-waterlogging",
+            vec![numeric_fact("waterlogging_risk_score", 0.85)],
+        );
         let intent =
             crate::search::intent::parse_intent("3BHK Whitefield under 2Cr avoid waterlogging");
 
@@ -4107,7 +3770,7 @@ mod tests {
             &[],
             "3BHK Whitefield under 2Cr avoid waterlogging",
             &intent,
-            None,
+            Some(&graph),
         );
 
         assert_eq!(results.len(), 2);
@@ -4125,8 +3788,8 @@ mod tests {
                 .reasons
                 .iter()
                 .any(|r| r.preference == "avoid waterlogging risk"
-                    && r.scoring_method == "local-risk"),
-            "avoid-waterlogging should be explained by local risk scoring"
+                    && r.scoring_method == "graph-risk-numeric"),
+            "avoid-waterlogging should be explained by graph risk scoring"
         );
     }
 
@@ -4156,6 +3819,17 @@ mod tests {
 
         let properties = vec![heavy_traffic, low_traffic];
         let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "low-traffic",
+            vec![numeric_fact("traffic_score", 0.2)],
+        );
+        add_society_facts(
+            &mut graph,
+            "heavy-traffic",
+            vec![numeric_fact("traffic_score", 0.9)],
+        );
         let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr less traffic");
 
         let results = TextSearch::search_with_intent(
@@ -4164,7 +3838,7 @@ mod tests {
             &[],
             "3BHK Whitefield under 2Cr less traffic",
             &intent,
-            None,
+            Some(&graph),
         );
 
         assert_eq!(results.len(), 2);
@@ -4397,6 +4071,27 @@ mod tests {
 
         let properties = vec![semantic_only, proved_but_risky];
         let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "proved-but-risky",
+            vec![
+                preference_fact(
+                    "noise_score",
+                    FactValue::Numeric(0.2),
+                    vec!["quiet neighborhood"],
+                    ScoringDirection::LowerIsBetter,
+                    2.0,
+                    vec![0.3, 0.5],
+                ),
+                numeric_fact("traffic_score", 0.2),
+            ],
+        );
+        add_society_facts(
+            &mut graph,
+            "semantic-only-risky",
+            vec![numeric_fact("traffic_score", 0.9)],
+        );
         let mut semantic_scores = std::collections::HashMap::new();
         semantic_scores.insert("semantic-only-risky".to_string(), 0.9);
         let extra_candidate_ids = vec![
@@ -4415,7 +4110,7 @@ mod tests {
             &[],
             "quiet 3bhk avoid traffic",
             &intent,
-            None,
+            Some(&graph),
             &[],
         );
 
@@ -4434,7 +4129,7 @@ mod tests {
     }
 
     #[test]
-    fn test_search_ranks_reliable_builder_locally() {
+    fn test_search_ranks_reliable_builder_from_graph_facts() {
         let mut stronger_builder = local_property(
             "stronger-builder",
             "Whitefield",
@@ -4459,6 +4154,31 @@ mod tests {
 
         let properties = vec![weaker_builder, stronger_builder];
         let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "stronger-builder",
+            vec![preference_fact(
+                "builder_quality_score",
+                FactValue::Numeric(0.9),
+                vec!["reliable builder"],
+                ScoringDirection::HigherIsBetter,
+                2.0,
+                vec![0.8, 0.6],
+            )],
+        );
+        add_society_facts(
+            &mut graph,
+            "weaker-builder",
+            vec![preference_fact(
+                "builder_quality_score",
+                FactValue::Numeric(0.35),
+                vec!["reliable builder"],
+                ScoringDirection::HigherIsBetter,
+                2.0,
+                vec![0.8, 0.6],
+            )],
+        );
         let intent =
             crate::search::intent::parse_intent("3BHK Whitefield under 2Cr reliable builder");
 
@@ -4468,7 +4188,7 @@ mod tests {
             &[],
             "3BHK Whitefield under 2Cr reliable builder",
             &intent,
-            None,
+            Some(&graph),
         );
 
         assert_eq!(results.len(), 2);
