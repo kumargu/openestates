@@ -563,18 +563,18 @@ match preference {
 
 ```text
 Stream A — Config & DAG loader        (Phases 0–1) ✅
-Stream B — Fact registry & resolver   (Phases 2–3)  ← NEXT
-Stream C — Entity + edges + **delete legacy**  (Phase 4)  ← NEXT after Phase 3
-Stream D — UI consolidation           (Phase 5, partial)
-Stream E — Reddit taxonomy pipeline   (Phase 6)
-Stream F — Search cleanup             (Phase 7)
-Stream G — Config-driven evidence UI  (Phase 8)
-Stream H — EntityContext graph API    (Phase 10 — last)
+Stream B — Fact registry & resolver   (Phases 2–3) ✅
+Stream C — Entity + edges + delete    (Phase 4) ✅
+Stream D — UI truth consolidation     (Phase 5) ✅
+Stream E — Reddit taxonomy pipeline   (Phase 6)  ← NEXT
+Stream F — Search cleanup             (Phase 7) ✅ merged into 4
+Stream G — Discovery + tiles          (Phase 8′) parallel
+Stream H — Road/place enrichment      (Phase 9a) before graph API
+Stream I — EntityContext graph API    (Phase 10 — last)
 ```
 
-**Critical path:** Phase 3 (done) → Phase 4 build + delete → eval green  
-**Graph UI path:** Phase 4 edges → Phase 10 API  
-**Can parallel:** Phase 5/8 after Phase 3; Phase 4 deletions batched with graph work
+**Critical path:** Phase 6 (Reddit signals) → Phase 9a (shared nodes) → Phase 10 (graph API)  
+**Can parallel:** Phase 8′ with Phase 6
 
 ### Graph UI readiness (config today, API later)
 
@@ -660,13 +660,13 @@ data/validation/resolution_audit.json
 
 ## 10. Immediate next actions
 
-**Phase 3 complete. Phase 4 = build graph + delete legacy.**
+**Phases 0–5 complete.** See [`phase_6_handoff.md`](./phase_6_handoff.md) for full roadmap.
 
-1. **Phase 3** (other session): bootstrap importer, kill `data_loader` score defaults
-2. **Phase 4A:** property/area/road nodes + edges in serving bundle + `GraphIndex`
-3. **Phase 4B:** delete legacy search scoring, old registries, `AREA_ALIASES`, `data/knowledge` stragglers
-4. **Gate:** `eval_search.py` green after each deletion batch
-5. **Do not start:** EntityContext HTTP API until Phase 4 edges ship
+1. **Phase 6:** `source_adapters/reddit_theme.json` + classifier → `concern_taxonomy` fact_keys
+2. **Phase 6:** No raw Reddit text in lake Parquet; resolver tests Reddit < Google/RERA
+3. **Phase 8′ (parallel):** discovery receipt copy; search tile chips from config
+4. **Phase 9a:** road/place enrichment + approach road visuals → lake
+5. **Do not start:** EntityContext HTTP API until Phase 9a has road facts in bundle
 
 ---
 
