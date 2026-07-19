@@ -8,7 +8,7 @@ use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{AreaProfile, Property, RegistrationDraft, Seller};
-use crate::search::intent::AREA_ALIASES;
+use crate::dag_config::area_alias_entries;
 use crate::state::AppState;
 
 /// Max registration creations per rate-limit window (60 seconds).
@@ -795,12 +795,12 @@ fn extract_area_from_text(text: &str, areas: &[AreaProfile]) -> Option<(String, 
 
     // Scan AREA_ALIASES for the longest alias match (same strategy as detect_area in intent.rs)
     let mut best: Option<(&str, usize)> = None;
-    for (aliases, canonical) in AREA_ALIASES {
-        for alias in *aliases {
+    for entry in area_alias_entries() {
+        for alias in &entry.aliases {
             if text_contains_phrase(&text_lower, alias) {
                 let len = alias.len();
                 if best.is_none() || len > best.unwrap().1 {
-                    best = Some((canonical, len));
+                    best = Some((entry.canonical.as_str(), len));
                 }
             }
         }

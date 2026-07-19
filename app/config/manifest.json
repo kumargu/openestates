@@ -54,10 +54,7 @@
     "s3_sync": "app/config/lake/sync.json",
     "coverage_audit": "app/config/coverage.json"
   },
-  "legacy_migrate_to_dag": [
-    "data/search/fact_schema_registry.json",
-    "data/product/livability_theme_registry.json"
-  ],
+  "legacy_migrate_to_dag": [],
   "legacy_import_only": [
     "data/seed/"
   ]

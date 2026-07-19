@@ -1,7 +1,7 @@
 {
   "_comment": "Search intent config. Buyer archetypes and area alias migration target. Preference patterns largely live in fact_registry.json.",
   "version": 1,
-  "description": "NL search parsing helpers. Area aliases still loaded from intent.rs until loader wires this file.",
+  "description": "NL search parsing helpers. Area aliases loaded from this file via dag_config.",
   "buyer_archetypes": [
     {
       "id": "family",
@@ -35,17 +35,72 @@
     }
   ],
   "area_aliases": {
-    "_comment": "Canonical area name ← list of query aliases. Full list still in backend/src/search/intent.rs AREA_ALIASES — migrate next.",
-    "migration_status": "pending",
     "city": "bengaluru",
-    "examples": [
+    "entries": [
       {
         "canonical": "Whitefield",
-        "aliases": ["whitefield", "wf", "itpl", "kadugodi", "varthur"]
+        "aliases": [
+          "whitefield",
+          "wf",
+          "kadugodi",
+          "varthur",
+          "itpl",
+          "hope farm",
+          "kundalahalli",
+          "pattandur agrahara",
+          "brookefield",
+          "nallurhalli",
+          "hagadur"
+        ]
       },
       {
         "canonical": "Sarjapur Road",
-        "aliases": ["sarjapur", "sarjapur road", "sjr"]
+        "aliases": ["sarjapur", "sarjapur road", "sjr", "doddakannelli", "carmelaram"]
+      },
+      {
+        "canonical": "Bellandur",
+        "aliases": ["bellandur", "outer ring road", "orr bellandur"]
+      },
+      {
+        "canonical": "HSR Layout",
+        "aliases": ["hsr", "hsr layout", "agara", "sector 1 hsr", "sector 2 hsr"]
+      },
+      {
+        "canonical": "North Bengaluru",
+        "aliases": [
+          "north bangalore",
+          "north bengaluru",
+          "north blr",
+          "devanahalli",
+          "hebbal",
+          "yelahanka",
+          "thanisandra",
+          "jakkur"
+        ]
+      },
+      {
+        "canonical": "Electronic City",
+        "aliases": ["electronic city", "ec", "ecity"]
+      },
+      {
+        "canonical": "Koramangala",
+        "aliases": ["koramangala", "koramangala 5th block"]
+      },
+      {
+        "canonical": "Marathahalli",
+        "aliases": ["marathahalli", "marathon halli"]
+      },
+      {
+        "canonical": "Indiranagar",
+        "aliases": ["indiranagar", "indira nagar"]
+      },
+      {
+        "canonical": "Jayanagar",
+        "aliases": ["jayanagar", "jaya nagar"]
+      },
+      {
+        "canonical": "Bannerghatta Road",
+        "aliases": ["bannerghatta", "bannerghatta road", "btm"]
       }
     ]
   },

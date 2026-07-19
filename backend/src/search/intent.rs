@@ -77,70 +77,7 @@ pub enum BuyerArchetype {
 /// Known area names and their aliases.
 /// Includes landmark/station names that map to the canonical area.
 ///
-/// NOTE: Currently Bengaluru-specific. For multi-city support, this should be
-/// restructured into a per-city map (e.g. HashMap<City, Vec<(aliases, canonical)>>)
-/// loaded from configuration rather than hardcoded. See also: extract_area_from_text
-/// in routes/registration.rs which depends on this list.
-pub const AREA_ALIASES: &[(&[&str], &str)] = &[
-    (
-        &[
-            "whitefield",
-            "wf",
-            "kadugodi",
-            "varthur",
-            "itpl",
-            "hope farm",
-            "kundalahalli",
-            "pattandur agrahara",
-            "brookefield",
-            "nallurhalli",
-            "hagadur",
-        ],
-        "Whitefield",
-    ),
-    (
-        &[
-            "sarjapur",
-            "sarjapur road",
-            "sjr",
-            "doddakannelli",
-            "carmelaram",
-        ],
-        "Sarjapur Road",
-    ),
-    (
-        &["bellandur", "outer ring road", "orr bellandur"],
-        "Bellandur",
-    ),
-    (
-        &["hsr", "hsr layout", "agara", "sector 1 hsr", "sector 2 hsr"],
-        "HSR Layout",
-    ),
-    (
-        &[
-            "north bangalore",
-            "north bengaluru",
-            "north blr",
-            "devanahalli",
-            "hebbal",
-            "yelahanka",
-            "thanisandra",
-            "jakkur",
-        ],
-        "North Bengaluru",
-    ),
-    (&["electronic city", "ec", "ecity"], "Electronic City"),
-    (&["koramangala", "koramangala 5th block"], "Koramangala"),
-    (&["marathahalli", "marathon halli"], "Marathahalli"),
-    (&["indiranagar", "indira nagar"], "Indiranagar"),
-    (&["jayanagar", "jaya nagar"], "Jayanagar"),
-    (
-        &["bannerghatta", "bannerghatta road", "btm"],
-        "Bannerghatta Road",
-    ),
-];
-
-/// Preference keywords to detect in the query.
+use crate::dag_config::area_alias_entries;
 ///
 /// IMPORTANT: Order matters — longer/more specific patterns must come BEFORE
 /// shorter ones. "under construction" must match before "new" would catch it.
@@ -402,18 +339,18 @@ pub fn parse_intent(query: &str) -> SearchIntent {
 fn detect_area(q: &str, excluded_areas: &[String]) -> Option<String> {
     // Check multi-word aliases first (longer matches take priority).
     let mut best: Option<(&str, usize)> = None;
-    for (aliases, canonical) in AREA_ALIASES {
+    for entry in area_alias_entries() {
         if excluded_areas
             .iter()
-            .any(|excluded| excluded.eq_ignore_ascii_case(canonical))
+            .any(|excluded| excluded.eq_ignore_ascii_case(&entry.canonical))
         {
             continue;
         }
-        for alias in *aliases {
+        for alias in &entry.aliases {
             if query_contains_pattern(q, alias) {
                 let len = alias.len();
                 if best.is_none() || len > best.unwrap().1 {
-                    best = Some((canonical, len));
+                    best = Some((entry.canonical.as_str(), len));
                 }
             }
         }
@@ -423,9 +360,13 @@ fn detect_area(q: &str, excluded_areas: &[String]) -> Option<String> {
 
 fn detect_excluded_areas(q: &str) -> Vec<String> {
     let mut excluded = Vec::new();
-    for (aliases, canonical) in AREA_ALIASES {
-        if aliases.iter().any(|alias| area_alias_is_excluded(q, alias)) {
-            push_unique(&mut excluded, canonical);
+    for entry in area_alias_entries() {
+        if entry
+            .aliases
+            .iter()
+            .any(|alias| area_alias_is_excluded(q, alias))
+        {
+            push_unique(&mut excluded, &entry.canonical);
         }
     }
     excluded

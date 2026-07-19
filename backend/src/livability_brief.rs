@@ -9,12 +9,10 @@ use std::sync::OnceLock;
 use serde::{Deserialize, Serialize};
 
 use crate::community::CommunityEvidenceRecord;
+use crate::dag_config::{dag_root, load_json};
 
 /// Reddit facts are accepted in the pipeline but excluded from brief composition for now.
 pub const REDDIT_EVIDENCE_ENABLED: bool = false;
-
-const THEME_REGISTRY_JSON: &str =
-    include_str!("../../data/product/livability_theme_registry.json");
 
 const LIVABILITY_BLOCK_MAX_WORDS: usize = 100;
 
@@ -50,8 +48,36 @@ pub struct LivabilityBrief {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-struct LivabilityThemeRegistry {
-    themes: Vec<LivabilityThemeDefinition>,
+struct ConcernTaxonomyFile {
+    #[serde(default)]
+    defaults: ConcernDefaults,
+    #[serde(default)]
+    buckets: Vec<ConcernBucket>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+struct ConcernDefaults {
+    #[serde(default)]
+    source_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct ConcernBucket {
+    #[serde(default)]
+    leaves: Vec<ConcernLeaf>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct ConcernLeaf {
+    fact_key: String,
+    label: String,
+    lens: String,
+    #[serde(default)]
+    polarity: String,
+    #[serde(default)]
+    scopes: Vec<String>,
+    #[serde(default)]
+    terms: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,6 +89,11 @@ struct LivabilityThemeDefinition {
     scopes: Vec<String>,
     terms: Vec<String>,
     source_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+struct LivabilityThemeRegistry {
+    themes: Vec<LivabilityThemeDefinition>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -144,8 +175,40 @@ pub fn compose_livability_brief(input: &LivabilityBriefInput<'_>) -> Option<Liva
 fn livability_theme_registry() -> &'static LivabilityThemeRegistry {
     static REGISTRY: OnceLock<LivabilityThemeRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        serde_json::from_str(THEME_REGISTRY_JSON)
-            .expect("livability_theme_registry.json must be valid JSON")
+        let path = dag_root().join("concern_taxonomy.json");
+        let taxonomy = load_json::<ConcernTaxonomyFile>(&path)
+            .expect("app/config/dag/concern_taxonomy.json is required for livability brief");
+        let source_types = if taxonomy.defaults.source_types.is_empty() {
+            vec!["Google".to_string(), "Reddit".to_string()]
+        } else {
+            taxonomy
+                .defaults
+                .source_types
+                .iter()
+                .map(|value| {
+                    if value == "RedditTheme" {
+                        "Reddit".to_string()
+                    } else {
+                        value.clone()
+                    }
+                })
+                .collect()
+        };
+        let themes = taxonomy
+            .buckets
+            .into_iter()
+            .flat_map(|bucket| bucket.leaves)
+            .map(|leaf| LivabilityThemeDefinition {
+                key: leaf.fact_key,
+                label: leaf.label,
+                lens: leaf.lens,
+                polarity: leaf.polarity,
+                scopes: leaf.scopes,
+                terms: leaf.terms,
+                source_types: source_types.clone(),
+            })
+            .collect();
+        LivabilityThemeRegistry { themes }
     })
 }
 

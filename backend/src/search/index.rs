@@ -4,7 +4,8 @@ use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
 use crate::serving::TantivyRecallHit;
 
-use super::intent::{SearchIntent, AREA_ALIASES};
+use super::intent::SearchIntent;
+use crate::dag_config::area_alias_entries;
 use super::semantic::SemanticRecallHit;
 
 /// In-memory recall index for local search.
@@ -151,11 +152,11 @@ impl SearchIndex {
         let area = normalize(area);
         self.extend_area_candidates(&area, &mut ids);
 
-        for (aliases, canonical) in AREA_ALIASES {
-            if !canonical.eq_ignore_ascii_case(&area) {
+        for entry in area_alias_entries() {
+            if !entry.canonical.eq_ignore_ascii_case(&area) {
                 continue;
             }
-            for alias in *aliases {
+            for alias in &entry.aliases {
                 self.extend_area_candidates(&normalize(alias), &mut ids);
             }
         }

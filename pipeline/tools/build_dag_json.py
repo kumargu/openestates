@@ -108,15 +108,15 @@ def schema_hints_for_fact_key(
 
 def build_fact_registry() -> Dict[str, Any]:
     taxonomy = load_json(DAG / "concern_taxonomy.json")
-    fact_schema = load_json(ROOT / "data/search/fact_schema_registry.json")
+    existing = load_json(DAG / "fact_registry.json")
     legacy_map = taxonomy.get("legacy_key_map", {})
-    legacy_schema = legacy_fact_key_map(fact_schema)
+    legacy_schema = legacy_fact_key_map(existing)
 
     facts: List[Dict[str, Any]] = []
     for bucket in taxonomy.get("buckets", []):
         for leaf in bucket.get("leaves", []):
             fact_key = leaf["fact_key"]
-            hints = schema_hints_for_fact_key(fact_key, fact_schema, legacy_schema)
+            hints = schema_hints_for_fact_key(fact_key, existing, legacy_schema)
             preferences = list(
                 dict.fromkeys(
                     leaf.get("preferences", [])
@@ -154,19 +154,15 @@ def build_fact_registry() -> Dict[str, Any]:
         "description": "Canonical leaf registry: search semantics + enrichment metadata per fact_key.",
         "merged_from": [
             "app/config/dag/concern_taxonomy.json",
-            "data/search/fact_schema_registry.json",
-            "data/product/livability_theme_registry.json",
+            "app/config/dag/fact_registry.json",
         ],
         "defaults": taxonomy.get("defaults", {}),
         "legacy_key_map": legacy_map,
-        "search_dimensions": fact_schema.get("theme_layers", []),
-        "preference_patterns": {
-            "positive": fact_schema.get("positive_preference_patterns", []),
-            "negative": fact_schema.get("negative_preference_patterns", []),
-        },
-        "numeric_constraints": fact_schema.get("numeric_constraints", []),
-        "text_evidence": fact_schema.get("text_evidence", []),
-        "numeric_evidence": fact_schema.get("numeric_evidence", []),
+        "search_dimensions": existing.get("search_dimensions", []),
+        "preference_patterns": existing.get("preference_patterns", {}),
+        "numeric_constraints": existing.get("numeric_constraints", []),
+        "text_evidence": existing.get("text_evidence", []),
+        "numeric_evidence": existing.get("numeric_evidence", []),
         "facts": facts,
         "fact_count": len(facts),
     }

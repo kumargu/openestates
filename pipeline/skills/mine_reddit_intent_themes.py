@@ -21,7 +21,7 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-REGISTRY_PATH = PROJECT_ROOT / "data" / "search" / "fact_schema_registry.json"
+REGISTRY_PATH = PROJECT_ROOT / "app" / "config" / "dag" / "fact_registry.json"
 LOCAL_TAXONOMY_PATH = PROJECT_ROOT / "data" / "reddit" / "taxonomy.json"
 LOCAL_REPORTS_DIR = PROJECT_ROOT / "data" / "reddit" / "reports"
 CACHE_DIR = PROJECT_ROOT / "data" / "cache" / "reddit_intent_themes"

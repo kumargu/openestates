@@ -12,9 +12,6 @@ pub const SQM_PER_ACRE: f64 = 4046.8564224;
 
 use crate::dag_config::{dag_root, load_json};
 
-const FACT_SCHEMA_REGISTRY_FALLBACK_JSON: &str =
-    include_str!("../../../data/search/fact_schema_registry.json");
-
 /// Search schema format version carried in serving bundles.
 pub const SEARCH_SCHEMA_VERSION: u32 = 2;
 
@@ -143,26 +140,17 @@ pub fn registry() -> &'static SearchSchemaConfig {
 
 fn load_search_schema_config() -> SearchSchemaConfig {
     let path = dag_root().join("fact_registry.json");
-    if path.exists() {
-        if let Ok(file) = load_json::<FactRegistrySearchFile>(&path) {
-            return SearchSchemaConfig {
-                version: SEARCH_SCHEMA_VERSION,
-                theme_layers: file.search_dimensions,
-                numeric_constraints: file.numeric_constraints,
-                positive_preference_patterns: file.preference_patterns.positive,
-                negative_preference_patterns: file.preference_patterns.negative,
-                text_evidence: file.text_evidence,
-                numeric_evidence: file.numeric_evidence,
-            };
-        }
+    let file = load_json::<FactRegistrySearchFile>(&path)
+        .expect("app/config/dag/fact_registry.json is required for search schema");
+    SearchSchemaConfig {
+        version: SEARCH_SCHEMA_VERSION,
+        theme_layers: file.search_dimensions,
+        numeric_constraints: file.numeric_constraints,
+        positive_preference_patterns: file.preference_patterns.positive,
+        negative_preference_patterns: file.preference_patterns.negative,
+        text_evidence: file.text_evidence,
+        numeric_evidence: file.numeric_evidence,
     }
-
-    let mut config: SearchSchemaConfig =
-        serde_json::from_str(FACT_SCHEMA_REGISTRY_FALLBACK_JSON).expect("valid fact schema registry");
-    if config.version == 0 {
-        config.version = SEARCH_SCHEMA_VERSION;
-    }
-    config
 }
 
 pub fn positive_preference_patterns() -> &'static [PreferencePatternSpec] {

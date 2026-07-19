@@ -2033,17 +2033,17 @@ fn is_scoring_stopword(token: &str) -> bool {
 /// Checks: alias list membership, substring containment, and same-city
 /// knowledge graph edges (future). Does NOT check exact match — caller does that.
 fn area_is_nearby(property_area: &str, canonical_area: &str) -> bool {
-    use super::intent::AREA_ALIASES;
+    use crate::dag_config::area_alias_entries;
 
     let prop_lower = property_area.to_lowercase();
     let canon_lower = canonical_area.to_lowercase();
 
     // 1. Property area is a known alias of the canonical area
-    for (aliases, canonical) in AREA_ALIASES {
-        if !canonical.eq_ignore_ascii_case(canonical_area) {
+    for entry in area_alias_entries() {
+        if !entry.canonical.eq_ignore_ascii_case(canonical_area) {
             continue;
         }
-        for alias in *aliases {
+        for alias in &entry.aliases {
             if prop_lower.contains(alias) || alias.contains(prop_lower.as_str()) {
                 return true;
             }
@@ -2053,14 +2053,14 @@ fn area_is_nearby(property_area: &str, canonical_area: &str) -> bool {
 
     // 2. Property area maps to the same canonical area via its own aliases
     //    e.g. property area "Varthur" → canonical "Whitefield", search area is "Whitefield"
-    for (aliases, canonical) in AREA_ALIASES {
-        if !canonical.eq_ignore_ascii_case(canonical_area) {
+    for entry in area_alias_entries() {
+        if !entry.canonical.eq_ignore_ascii_case(canonical_area) {
             continue;
         }
         // Check if any word in the property area matches an alias
         for word in prop_lower.split_whitespace() {
-            for alias in *aliases {
-                if *alias == word {
+            for alias in &entry.aliases {
+                if alias == word {
                     return true;
                 }
             }

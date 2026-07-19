@@ -20,6 +20,7 @@
 mod fact_registry;
 mod loader;
 mod resolution;
+mod search_intent;
 
 pub use fact_registry::{
     fact_registry_path, load_fact_registry, load_fact_registry_from_path, load_fact_registry_index,
@@ -33,4 +34,8 @@ pub use loader::{
 pub use resolution::{
     better_source_type, buyer_visible_fact, is_legacy_seed_source, load_resolution_policies,
     source_tier_rank, ResolutionPoliciesFile,
+};
+pub use search_intent::{
+    area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,
+    AreaAliasEntry, SearchIntentFile,
 };
