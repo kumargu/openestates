@@ -12,7 +12,7 @@ import { TrustBadge } from "./TrustBadge.tsx";
 import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
-import { evidenceProofLabel, summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
+import { evidenceReceiptLabel, summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -201,7 +201,7 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
               )}
               {evidenceSummary && (
                 <p className="side-panel-skim__proof">
-                  {evidenceSummary.factCount} facts · {evidenceProofLabel(evidenceSummary.heat)}
+                  {evidenceReceiptLabel(evidenceSummary)}
                 </p>
               )}
               {evidenceGlance.map((line) => (

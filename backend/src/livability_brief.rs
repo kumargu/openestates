@@ -43,6 +43,7 @@ pub struct LivabilityBrief {
     pub blocks: Vec<LivabilityBriefBlock>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle_flag: Option<String>,
+    #[serde(skip_serializing)]
     pub confidence_label: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_urls: Vec<String>,
@@ -243,6 +244,11 @@ fn derive_lifecycle_flag(input: &LivabilityBriefInput<'_>) -> Option<String> {
     None
 }
 
+fn cap_block_themes(mut themes: Vec<String>) -> Vec<String> {
+    themes.truncate(3);
+    themes
+}
+
 fn compose_operating_block(
     input: &LivabilityBriefInput<'_>,
     themes: Option<&Vec<String>>,
@@ -277,7 +283,7 @@ fn compose_operating_block(
         lens: "operating".to_string(),
         title: "Operating quality".to_string(),
         paragraph: clamp_block_words(format!("{opener} {body}")),
-        themes,
+        themes: cap_block_themes(themes),
         fact_keys: vec!["home_state".to_string()],
     })
 }
@@ -309,7 +315,7 @@ fn compose_risk_block(
         lens: "risk".to_string(),
         title: "Risk signals".to_string(),
         paragraph: clamp_block_words(paragraph),
-        themes,
+        themes: cap_block_themes(themes),
         fact_keys: vec![
             "approach_road_condition".to_string(),
             "waterlogging_detail".to_string(),
@@ -338,7 +344,7 @@ fn compose_positive_block(
         lens: "positive".to_string(),
         title: "Positive signals".to_string(),
         paragraph: clamp_block_words(paragraph),
-        themes,
+        themes: cap_block_themes(themes),
         fact_keys: vec![
             "nearby_schools".to_string(),
             "nearby_metro_stations".to_string(),

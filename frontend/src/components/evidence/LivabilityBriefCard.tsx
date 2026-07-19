@@ -21,7 +21,6 @@ export function LivabilityBriefCard({ brief }: Props) {
           <span>Before you shortlist</span>
           <h2>Livability brief</h2>
         </div>
-        <span className="livability-brief__confidence">{brief.confidence_label}</span>
       </div>
 
       {brief.lifecycle_flag && (

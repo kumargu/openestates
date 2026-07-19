@@ -83,7 +83,8 @@ pub struct PropertyDetail {
     /// Area intelligence from Reddit and other sources (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_intelligence: Option<AreaIntelligence>,
-    /// Composite transparency score (0-100) with breakdown.
+    /// Composite transparency score (0-100) with breakdown — internal only, not buyer-facing.
+    #[serde(skip_serializing)]
     pub transparency_score: TransparencyScore,
     /// Lowest price_per_sqft among properties in the same area.
     pub area_price_range_low: Option<u64>,
@@ -118,8 +119,8 @@ pub struct PropertyDetail {
     /// Data freshness — how recently and richly the society data was updated
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
-    /// Data confidence score — how trustworthy is this property's data?
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Data confidence score — how trustworthy is this property's data? Internal only.
+    #[serde(skip_serializing)]
     pub confidence_score: Option<ConfidenceScore>,
     /// Current external review evidence projected from the Parquet serving bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +205,7 @@ pub struct SourceItem {
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attributions: Vec<SourceAttribution>,
+    #[serde(skip_serializing)]
     pub confidence_pct: u8,
     pub learned_at: String,
 }
@@ -214,6 +216,7 @@ pub struct SourceAttribution {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub source_type: String,
+    #[serde(skip_serializing)]
     pub confidence_pct: u8,
     pub learned_at: String,
 }
@@ -287,6 +290,9 @@ pub struct EvidenceSection {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relationship: Option<String>,
     pub priority: u32,
+    pub constellation: String,
+    pub header_meta: String,
+    #[serde(skip_serializing)]
     pub confidence_pct: u8,
     pub source_types: Vec<String>,
     pub entity_ids: Vec<String>,
@@ -983,16 +989,12 @@ fn build_livability_brief(
         .map(|fact| fact.value);
     let home_timeline_ref = home_timeline_state.as_deref();
     let structured_facts = collect_structured_livability_facts(graph, property, projection);
-    let (community_positives, community_concerns, source_urls) =
-        if let Some(pulse) = community_pulse {
-            (
-                pulse.positives.as_slice(),
-                pulse.concerns.as_slice(),
-                pulse.source_urls.as_slice(),
-            )
-        } else {
-            (&[][..], &[][..], &[][..])
-        };
+    let (community_positives, community_concerns, source_urls) = if let Some(pulse) = community_pulse {
+        // Brief owns synthesized themes; pulse keeps review receipts only.
+        (&[][..], &[][..], pulse.source_urls.as_slice())
+    } else {
+        (&[][..], &[][..], &[][..])
+    };
 
     compose_livability_brief(&LivabilityBriefInput {
         society_name,
@@ -1284,6 +1286,8 @@ struct BuyerContextDefinition {
     kind: String,
     #[serde(default)]
     priority: u32,
+    #[serde(default)]
+    constellation: String,
     #[serde(default)]
     surfaces: Vec<String>,
     title: String,
@@ -1751,6 +1755,8 @@ pub(crate) fn evidence_section_from_panel(
         .map(|pulse| pulse.paragraph.clone())
         .unwrap_or_else(|| section_summary(&panel));
     let presentation = evidence_section_presentation(&panel.kind);
+    let constellation = evidence_section_constellation(&panel.kind);
+    let header_meta = section_header_meta(&panel, &source_types);
 
     EvidenceSection {
         priority: evidence_section_priority(&panel.kind),
@@ -1760,6 +1766,8 @@ pub(crate) fn evidence_section_from_panel(
         subtitle: panel.subtitle,
         scope: panel.scope,
         relationship: panel.relationship,
+        constellation,
+        header_meta,
         confidence_pct,
         source_types,
         entity_ids,
@@ -1768,6 +1776,62 @@ pub(crate) fn evidence_section_from_panel(
         missing: panel.missing,
         media: panel.media,
         community_pulse: panel.community_pulse,
+    }
+}
+
+fn evidence_section_constellation(kind: &str) -> String {
+    evidence_section_definition(kind)
+        .map(|definition| definition.constellation.clone())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| "trust".to_string())
+}
+
+fn section_header_meta(panel: &SourcePanel, source_types: &[String]) -> String {
+    let fact_count = if let Some(pulse) = panel.community_pulse.as_ref() {
+        pulse.quotes.len()
+    } else {
+        panel
+            .items
+            .iter()
+            .filter(|item| source_item_has_display_value(item))
+            .count()
+    };
+    if source_types.is_empty() {
+        format!("{fact_count} facts")
+    } else {
+        format!("{fact_count} facts · {}", source_types.join(", "))
+    }
+}
+
+fn source_item_has_display_value(item: &SourceItem) -> bool {
+    item.values.iter().any(|value| !value.trim().is_empty())
+        || !item.value.trim().is_empty()
+}
+
+fn dedup_community_pulse_against_brief(panels: &mut [SourcePanel], brief: &LivabilityBrief) {
+    let mut brief_themes = std::collections::BTreeSet::new();
+    for block in &brief.blocks {
+        for theme in &block.themes {
+            brief_themes.insert(theme.to_ascii_lowercase());
+        }
+    }
+    if brief_themes.is_empty() {
+        return;
+    }
+
+    for panel in panels.iter_mut() {
+        if panel.kind != "community" {
+            continue;
+        }
+        let Some(pulse) = panel.community_pulse.as_mut() else {
+            continue;
+        };
+        pulse
+            .positives
+            .retain(|theme| !brief_themes.contains(&theme.to_ascii_lowercase()));
+        pulse
+            .concerns
+            .retain(|theme| !brief_themes.contains(&theme.to_ascii_lowercase()));
     }
 }
 
@@ -2274,7 +2338,7 @@ pub async fn get_property(
     let builder_trust = extract_builder_trust(&graph, &property.society_id);
     let builder_portfolio = build_builder_portfolio(&graph, &properties, &property);
     let entity_refs = kg_entity_refs_for_property(&property, &graph);
-    let source_panels = build_source_panels(
+    let mut source_panels = build_source_panels(
         &graph,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
@@ -2304,6 +2368,9 @@ pub async fn get_property(
         &community_records,
         community_pulse,
     );
+    if let Some(brief) = livability_brief.as_ref() {
+        dedup_community_pulse_against_brief(&mut source_panels, brief);
+    }
     let evidence = build_property_evidence_response_from_panels(
         property.id.clone(),
         entity_refs.clone(),
@@ -2920,8 +2987,9 @@ mod serving_state_tests {
             .find(|section| section.kind == "rera")
             .expect("RERA section should be produced when RERA facts exist");
         assert_eq!(rera.priority, 10);
+        assert_eq!(rera.constellation, "trust");
+        assert_eq!(rera.header_meta, "1 facts · Google");
         assert_eq!(rera.summary, "Registration: PRM-UI-CONTRACT");
-        assert_eq!(rera.confidence_pct, 80);
         assert_eq!(rera.source_types, vec!["Google".to_string()]);
         assert_eq!(rera.entity_ids, vec!["society:sample".to_string()]);
         assert!(

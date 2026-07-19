@@ -87,7 +87,6 @@ export type RecommendationBranch = {
   evidence_delta: {
     fact_count: number;
     gap_count: number;
-    confidence_pct: number;
     fact_delta: number;
     gap_delta: number;
   };
@@ -184,7 +183,7 @@ export type PropertyDetailResponse = {
   recommendation_branches?: RecommendationBranch[];
   rera?: ReraInfo;
   area_intelligence?: AreaIntelligence;
-  transparency_score: TransparencyScore;
+  transparency_score?: TransparencyScore;
   area_price_range_low?: number;
   area_price_range_high?: number;
   seller?: SellerSummary;
@@ -302,7 +301,6 @@ export type SourceItem = {
   source_type: string;
   source_url?: string;
   attributions?: SourceAttribution[];
-  confidence_pct: number;
   learned_at: string;
 };
 
@@ -327,11 +325,18 @@ export type EvidenceMediaStrip = {
   frames: EvidenceMediaFrame[];
 };
 
+export type EvidenceConstellation =
+  | "value"
+  | "trust"
+  | "lifestyle"
+  | "risk"
+  | "commute"
+  | "investment";
+
 export type SourceAttribution = {
   value: string;
   source_url?: string;
   source_type: string;
-  confidence_pct: number;
   learned_at: string;
 };
 
@@ -343,7 +348,8 @@ export type EvidenceSection = {
   scope?: string;
   relationship?: string;
   priority: number;
-  confidence_pct: number;
+  constellation?: EvidenceConstellation;
+  header_meta?: string;
   source_types: string[];
   entity_ids: string[];
   presentation?: EvidencePresentation;
@@ -364,7 +370,6 @@ export type LivabilityBriefBlock = {
 export type LivabilityBrief = {
   blocks: LivabilityBriefBlock[];
   lifecycle_flag?: string;
-  confidence_label: string;
   source_urls: string[];
 };
 
@@ -383,7 +388,6 @@ export type CommunityPulse = {
   concerns: string[];
   quotes: CommunityPulseQuote[];
   source_urls: string[];
-  confidence_pct: number;
 };
 
 export type EvidencePresentation = {

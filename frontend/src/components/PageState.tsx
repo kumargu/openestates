@@ -31,7 +31,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {
-    loading: { title: "Loading property details...", subtitle: "Preparing the full transparency report." },
+    loading: { title: "Loading property details...", subtitle: "Gathering proof-backed facts and market context." },
     error: {
       title: "Property details unavailable",
       subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",

@@ -4,7 +4,6 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceResponse,
   SearchResultItem,
-  SourcePanel,
 } from "./types.ts";
 
 export type EvidenceConstellation =
@@ -19,9 +18,7 @@ export type EvidenceSummary = {
   factCount: number;
   gapCount: number;
   sectionCount: number;
-  confidencePct: number;
   sourceTypes: string[];
-  heat: "strong" | "moderate" | "sparse";
 };
 
 export type UniverseClusterId =
@@ -38,19 +35,6 @@ export type UniverseCluster = {
   results: SearchResultItem[];
 };
 
-const SECTION_CONSTELLATION: Record<string, EvidenceConstellation> = {
-  home_state: "trust",
-  approach_road: "commute",
-  waterlogging_context: "risk",
-  surroundings: "risk",
-  market: "value",
-  rera: "trust",
-  reviews: "lifestyle",
-  community: "lifestyle",
-  area: "commute",
-  nearby: "commute",
-};
-
 const CONSTELLATION_META: Record<
   EvidenceConstellation,
   { label: string; hint: string }
@@ -63,21 +47,14 @@ const CONSTELLATION_META: Record<
   investment: { label: "Investment", hint: "Demand, resale, upside" },
 };
 
-export function constellationForSection(kind: string): EvidenceConstellation {
-  return SECTION_CONSTELLATION[kind] ?? "trust";
+export function sectionConstellation(
+  section: Pick<EvidenceSection, "kind" | "constellation">,
+): EvidenceConstellation {
+  return section.constellation ?? "trust";
 }
 
 export function constellationMeta(id: EvidenceConstellation) {
   return CONSTELLATION_META[id];
-}
-
-const SECTION_DISPLAY_TITLES: Record<string, string> = {
-  area: "Commute & access",
-  approach_road: "Approach road facts",
-};
-
-export function sectionDisplayTitle(section: Pick<EvidenceSection, "kind" | "title">): string {
-  return SECTION_DISPLAY_TITLES[section.kind] ?? section.title;
 }
 
 export function visibleEvidenceSections(
@@ -112,10 +89,6 @@ export function summarizeEvidence(
     }
     return sum + section.items.length;
   }, 0);
-  const gapCount = 0;
-  const confidencePct = Math.round(
-    sections.reduce((sum, s) => sum + s.confidence_pct, 0) / sections.length,
-  );
   const sourceTypes = [
     ...new Set(sections.flatMap((section) => {
       if (section.community_pulse) {
@@ -125,31 +98,19 @@ export function summarizeEvidence(
     })),
   ].slice(0, 4);
 
-  let heat: EvidenceSummary["heat"] = "sparse";
-  if (factCount >= 12 && confidencePct >= 70) heat = "strong";
-  else if (factCount >= 5 && confidencePct >= 50) heat = "moderate";
-
   return {
     factCount,
-    gapCount,
+    gapCount: 0,
     sectionCount: sections.length,
-    confidencePct,
     sourceTypes,
-    heat,
   };
 }
 
-export function evidenceHeatClass(heat: EvidenceSummary["heat"]): string {
-  if (heat === "strong") return "evidence-heat--strong";
-  if (heat === "moderate") return "evidence-heat--moderate";
-  return "evidence-heat--sparse";
-}
-
-/** Qualitative proof label — no numeric confidence surfaced to users. */
-export function evidenceProofLabel(heat: EvidenceSummary["heat"]): string {
-  if (heat === "strong") return "strong proof";
-  if (heat === "moderate") return "growing proof";
-  return "early proof";
+export function evidenceReceiptLabel(summary: EvidenceSummary): string {
+  if (summary.sourceTypes.length === 0) {
+    return `${summary.factCount} facts`;
+  }
+  return `${summary.factCount} facts · ${summary.sourceTypes.slice(0, 2).join(", ")}`;
 }
 
 export function groupSectionsByConstellation(
@@ -157,7 +118,7 @@ export function groupSectionsByConstellation(
 ): Array<{ id: EvidenceConstellation; sections: EvidenceSection[] }> {
   const buckets = new Map<EvidenceConstellation, EvidenceSection[]>();
   for (const section of sections) {
-    const id = constellationForSection(section.kind);
+    const id = sectionConstellation(section);
     const list = buckets.get(id) ?? [];
     list.push(section);
     buckets.set(id, list);
@@ -175,23 +136,6 @@ export function groupSectionsByConstellation(
   return order
     .filter((id) => buckets.has(id))
     .map((id) => ({ id, sections: buckets.get(id)! }));
-}
-
-export function decisionReadLabel(
-  detail: Pick<PropertyDetailResponse, "confidence_score" | "rera" | "market_activity" | "property" | "transparency_score">,
-): string {
-  const trust =
-    detail.confidence_score?.overall != null
-      ? Math.round(detail.confidence_score.overall * 100)
-      : detail.transparency_score.overall;
-
-  if (trust < 60) return "Verify before token";
-  if ((detail.property.litigation_risk ?? 0) > 0.55) return "Risk needs clearing";
-  const delta = detail.market_activity.price_vs_median?.pct_diff;
-  if (delta != null && Math.abs(delta <= 1 ? delta * 100 : delta) > 8) {
-    return "Price needs support";
-  }
-  return "Calm family bet";
 }
 
 export const UNIVERSE_CLUSTER_MIN_RESULTS = 5;
@@ -214,7 +158,7 @@ export function clusterSearchResults(
     const label = result.match_label.toLowerCase();
     const score = result.match_score ?? 0;
 
-    if (summary && (summary.gapCount >= 3 || summary.heat === "sparse")) {
+    if (summary && summary.factCount < 3) {
       buckets.verify_proof.push(result);
       continue;
     }
@@ -257,13 +201,22 @@ export function topEvidenceGlance(
     .filter(Boolean);
 }
 
+export function briefHookLine(
+  brief: PropertyDetailResponse["livability_brief"],
+): string | null {
+  if (!brief) return null;
+  const riskBlock = brief.blocks.find((block) => block.lens === "risk");
+  if (riskBlock?.themes[0]) return riskBlock.themes[0];
+  const operatingBlock = brief.blocks.find((block) => block.lens === "operating");
+  if (operatingBlock?.themes[0]) return operatingBlock.themes[0];
+  return riskBlock?.paragraph ?? operatingBlock?.paragraph ?? null;
+}
+
 export function tileDecisionRead(
   result: SearchResultItem,
   summary: EvidenceSummary | null,
 ): string {
-  if (summary && summary.gapCount >= 3) return "Verify before token";
-  if (summary && summary.heat === "sparse") return "Proof still building";
-  if (result.confidence_score?.label) return result.confidence_score.label;
+  if (summary && summary.factCount < 3) return "Verify before token";
   if (result.match_label.toLowerCase().includes("strong")) return "Worth comparing";
   if (result.match_label.toLowerCase().includes("value")) return "Value-led option";
   return "Explore proof";
@@ -278,28 +231,4 @@ export function entityRefCount(card: PropertyCard): number {
   if (refs.builder_entity_id) count += 1;
   count += refs.source_entity_ids?.length ?? 0;
   return count;
-}
-
-/** Legacy fallback when detail.evidence is absent. */
-export function panelsToSections(panels: SourcePanel[]): EvidenceSection[] {
-  return panels.map((panel, index) => ({
-    kind: panel.kind ?? "source",
-    title: panel.title,
-    summary: panel.subtitle,
-    subtitle: "",
-    scope: panel.scope,
-    relationship: panel.relationship,
-    priority: index,
-    confidence_pct: 50,
-    source_types: [...new Set(panel.items.map((item) => item.source_type))],
-    entity_ids: panel.items.map((item) => item.entity_id),
-    items: panel.items,
-    presentation: {
-      variant: panel.media?.length ? "media_grid" : "fact_list",
-      density: "standard",
-      max_preview_items: 4,
-    },
-    missing: [],
-    media: panel.media ?? [],
-  }));
 }

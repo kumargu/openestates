@@ -474,6 +474,8 @@ mod tests {
                 scope: "society".to_string(),
                 relationship: None,
                 priority: 10,
+                constellation: "trust".to_string(),
+                header_meta: "1 facts · Google".to_string(),
                 confidence_pct: 80,
                 source_types: vec!["Google".to_string()],
                 entity_ids: vec!["society:sample".to_string()],

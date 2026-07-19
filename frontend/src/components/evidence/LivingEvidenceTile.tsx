@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type {
-  ConfidenceScore,
   PropertyCard,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
 import type { MatchResult } from "../../lib/search.ts";
 import { displayMatchReason, friendlyMatchLabel } from "../../lib/search.ts";
 import {
-  evidenceProofLabel,
+  evidenceReceiptLabel,
   summarizeEvidence,
   topEvidenceGlance,
 } from "../../lib/evidence.ts";
@@ -35,7 +34,6 @@ function isKnownText(value: string | null | undefined): value is string {
 type Props = {
   property: PropertyCard;
   match?: MatchResult;
-  confidenceScore?: ConfidenceScore;
   evidence?: PropertyEvidenceResponse;
   decisionRead?: string;
   explanationBlock?: React.ReactNode;
@@ -146,7 +144,7 @@ export function LivingEvidenceTile({
           )}
           {summary && (
             <p className="catalog-card__proof">
-              {summary.factCount} facts · {evidenceProofLabel(summary.heat)}
+              {evidenceReceiptLabel(summary)}
             </p>
           )}
           {explanationBlock && (

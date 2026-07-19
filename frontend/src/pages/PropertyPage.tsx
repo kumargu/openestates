@@ -15,7 +15,7 @@ import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
-import { panelsToSections, topEvidenceGlance } from "../lib/evidence.ts";
+import { briefHookLine, topEvidenceGlance } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -82,28 +82,19 @@ function riskThemesFromBrief(brief: PropertyDetailResponse["livability_brief"]):
     .flatMap((block) => block.themes);
 }
 
-function trustPercent(data: PropertyDetailResponse): number {
-  if (data.confidence_score?.overall != null) return Math.round(data.confidence_score.overall * 100);
-  return data.transparency_score.overall;
-}
-
 function buildDecision(data: PropertyDetailResponse): {
   label: string;
   tone: DecisionTone;
   summary: string;
 } {
   const delta = normalizedDelta(data.market_activity.price_vs_median?.pct_diff);
-  const trust = trustPercent(data);
   const riskThemes = riskThemesFromBrief(data.livability_brief);
-  const earlySignal = data.livability_brief?.confidence_label === "Early signal";
 
-  if (!data.rera?.registered || trust < 60 || earlySignal) {
+  if (!data.rera?.registered) {
     return {
       label: "Needs document review",
       tone: "verify",
-      summary: data.rera?.registered
-        ? "RERA is verified. Unit-level seller proof still needs review."
-        : "Regulatory and seller documents are not complete enough yet.",
+      summary: "Regulatory and seller documents are not complete enough yet.",
     };
   }
 
@@ -210,7 +201,6 @@ export function PropertyPage() {
   ].filter(Boolean).join(". ");
   const decision = buildDecision(data);
   const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
-  const sourcePanels = data.source_panels ?? [];
   const marketRows = [
     market_activity.interest_label,
     market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
@@ -219,12 +209,10 @@ export function PropertyPage() {
       : null,
     `Listed ${market_activity.days_on_market}d ago`,
   ].filter((row): row is string => row !== null);
-  const fallbackEvidenceSections = panelsToSections(sourcePanels);
-  const detailEvidenceSections = data.evidence?.sections?.length
-    ? data.evidence.sections
-    : fallbackEvidenceSections;
+  const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const proofGlance = topEvidenceGlance(data.evidence, 1)[0] ?? null;
+  const briefHook = briefHookLine(data.livability_brief);
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -339,6 +327,8 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
+          {/* Surface hierarchy: ApproachRoadTrail owns visual proof; brief owns risk prose;
+              approach_road evidence fold is excluded when trail is shown (ui_surfaces.json). */}
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
           )}
@@ -349,7 +339,6 @@ export function PropertyPage() {
 
           <EvidenceStack
             evidence={data.evidence}
-            fallbackSections={fallbackEvidenceSections}
             excludeKinds={showApproachTrail ? ["approach_road"] : []}
           />
 
@@ -389,6 +378,11 @@ export function PropertyPage() {
         </main>
 
         <aside className="property-action-rail">
+          {briefHook && (
+            <div className="property-mini-card property-rail-brief-hook">
+              <p>{briefHook}</p>
+            </div>
+          )}
           <div className="property-mini-card property-plan-entry-card">
             <span>{BUY_VS_RENT.kicker}</span>
             <h3>Would buying beat renting for you?</h3>

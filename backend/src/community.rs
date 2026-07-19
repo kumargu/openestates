@@ -33,6 +33,7 @@ pub struct CommunityPulse {
     pub concerns: Vec<String>,
     pub quotes: Vec<CommunityPulseQuote>,
     pub source_urls: Vec<String>,
+    #[serde(skip_serializing)]
     pub confidence_pct: u8,
 }
 

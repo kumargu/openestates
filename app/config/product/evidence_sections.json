@@ -2,6 +2,7 @@
   {
     "kind": "home_state",
     "priority": 5,
+    "constellation": "trust",
     "surfaces": ["buyer_context"],
     "title": "Lifecycle",
     "subtitle": "Delivered, under-construction, age, and timeline facts.",
@@ -36,6 +37,7 @@
   {
     "kind": "rera",
     "priority": 10,
+    "constellation": "trust",
     "title": "RERA file",
     "subtitle": "Official project registration and delivery record.",
     "scope": "society",
@@ -54,6 +56,7 @@
   {
     "kind": "approach_road",
     "priority": 15,
+    "constellation": "commute",
     "surfaces": ["buyer_context"],
     "title": "Approach road",
     "subtitle": "Last-lane access context from reviews and visual proof.",
@@ -95,6 +98,7 @@
   {
     "kind": "market",
     "priority": 20,
+    "constellation": "value",
     "title": "Market trail",
     "subtitle": "Pricing, appreciation, and nearby comparable signals.",
     "scope": "society",
@@ -116,6 +120,7 @@
   {
     "kind": "nearby",
     "priority": 30,
+    "constellation": "commute",
     "title": "Nearby",
     "subtitle": "Map-backed places near the society.",
     "scope": "society",
@@ -137,6 +142,7 @@
   {
     "kind": "waterlogging_context",
     "priority": 35,
+    "constellation": "risk",
     "surfaces": ["buyer_context"],
     "title": "Waterlogging",
     "subtitle": "Flooding, lake, and drainage context scoped around the home.",
@@ -183,6 +189,7 @@
   {
     "kind": "surroundings",
     "priority": 36,
+    "constellation": "risk",
     "surfaces": ["buyer_context"],
     "title": "Surroundings",
     "subtitle": "Airport, STP, high-tension, pollution, and nearby externalities.",
@@ -235,6 +242,7 @@
   {
     "kind": "community",
     "priority": 40,
+    "constellation": "lifestyle",
     "title": "Community pulse",
     "subtitle": "Resident and review context.",
     "scope": "society",
@@ -256,6 +264,7 @@
   {
     "kind": "area",
     "priority": 60,
+    "constellation": "commute",
     "title": "Area trail",
     "subtitle": "Neighbourhood evidence around daily life.",
     "scope": "area",

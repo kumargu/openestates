@@ -6,7 +6,7 @@
 import { useEffect, useState, useMemo, useCallback, type FormEvent } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { ConfidenceScore, PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchResultItem } from "../lib/types.ts";
+import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchResultItem } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
@@ -469,7 +469,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     return properties.filter((p) => p.area.toLowerCase().includes(filter));
   }, [properties, areaFilter]);
 
-  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation; confidenceScore?: ConfidenceScore }[] = useMemo(() => {
+  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
     if (useBackendResults) {
       return searchResponse.results.map((r) => ({
         property: r as PropertyCardType,
@@ -478,7 +478,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
           reason: r.match_reason,
         },
         explanation: r.match_explanation,
-        confidenceScore: r.confidence_score,
       }));
     }
     // No query — show all properties without match labels
@@ -597,7 +596,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     : "All Properties — OpenEstates";
   const helmetDescription = query
     ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
-    : `Browse ${totalCount} properties with full transparency reports on OpenEstates.`;
+    : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
 
   const renderTile = (result: SearchResultItem) => {
     const row = matchResults.find((entry) => entry.property.id === result.id);
@@ -607,7 +606,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       <LivingEvidenceTile
         property={result}
         match={row?.match}
-        confidenceScore={row?.confidenceScore ?? result.confidence_score}
         evidence={evidence}
         decisionRead={tileDecisionRead(result, evidenceSummary)}
         explanationBlock={
@@ -707,7 +705,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
                 ? savedCount > 0
                   ? `${savedCountLabel}. Open one for the full report or buy vs rent check.`
                   : "Your saved homes will stay here while you keep browsing."
-                : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "listings with full transparency reports"}`}
+                : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "proof-backed listings"}`}
             </p>
           </div>
         )}

@@ -5,7 +5,7 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { constellationForSection, constellationMeta, sectionDisplayTitle } from "../../lib/evidence.ts";
+import { constellationMeta, sectionConstellation } from "../../lib/evidence.ts";
 import {
   ChevronIcon,
   LinkIcon,
@@ -16,7 +16,6 @@ import { CommunityPulseCard } from "./CommunityPulseCard.tsx";
 
 type StackProps = {
   evidence: PropertyEvidenceResponse | undefined;
-  fallbackSections?: EvidenceSection[];
   excludeKinds?: string[];
 };
 
@@ -110,12 +109,6 @@ function FactRow({ item }: { item: SourceItem }) {
   );
 }
 
-function confidenceTone(pct: number): string {
-  if (pct >= 75) return "ev-fold--strong";
-  if (pct >= 50) return "ev-fold--moderate";
-  return "ev-fold--sparse";
-}
-
 function EvidenceMediaStripView({ strip }: { strip: EvidenceMediaStrip }) {
   const frames = strip.frames.filter((frame) => frame.image_url);
   if (frames.length === 0) return null;
@@ -144,6 +137,26 @@ function EvidenceMediaStripView({ strip }: { strip: EvidenceMediaStrip }) {
   );
 }
 
+function FactGridBody({ facts }: { facts: SourceItem[] }) {
+  return (
+    <div className="ev-fold__facts ev-fold__facts--grid">
+      {facts.map((item) => (
+        <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
+      ))}
+    </div>
+  );
+}
+
+function FactListBody({ facts }: { facts: SourceItem[] }) {
+  return (
+    <div className="ev-fold__facts">
+      {facts.map((item) => (
+        <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
+      ))}
+    </div>
+  );
+}
+
 function EvidenceFold({
   section,
   defaultOpen,
@@ -152,7 +165,7 @@ function EvidenceFold({
   defaultOpen: boolean;
 }) {
   const [open, setOpen] = useState(defaultOpen);
-  const constellation = constellationForSection(section.kind);
+  const constellation = sectionConstellation(section);
   const meta = constellationMeta(constellation);
   const facts = section.items.filter(
     (it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0),
@@ -166,23 +179,29 @@ function EvidenceFold({
 
   if (facts.length === 0 && media.length === 0 && !section.community_pulse) return null;
 
+  const variant = presentation.variant;
+  const FactBody = variant === "fact_grid" || variant === "risk_grid"
+    ? FactGridBody
+    : FactListBody;
+
   return (
-    <section className={`ev-fold ${confidenceTone(section.confidence_pct)} ev-fold--${constellation} ev-fold--variant-${presentation.variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}>
+    <section className={`ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}>
       <button type="button" className="ev-fold__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span className="ev-fold__spine" aria-hidden="true" />
         <span className="ev-fold__icon"><IconForKind kind={section.kind} size={18} /></span>
         <span className="ev-fold__headings">
           <span className="ev-fold__kicker">{meta.label}</span>
-          <span className="ev-fold__title">{sectionDisplayTitle(section)}</span>
+          <span className="ev-fold__title">{section.title}</span>
           <span className="ev-fold__read">
             {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
           </span>
         </span>
         <span className="ev-fold__meta">
           <span className="ev-fold__count">
-            {section.community_pulse
-              ? `${section.community_pulse.quotes.length} quotes`
-              : `${facts.length} facts${media.length > 0 ? ` · ${media.length} media` : ""}`}
+            {section.header_meta
+              ?? (section.community_pulse
+                ? `${section.community_pulse.quotes.length} quotes`
+                : `${facts.length} facts${media.length > 0 ? ` · ${media.length} media` : ""}`)}
           </span>
         </span>
         <span className="ev-fold__chevron"><ChevronIcon size={18} /></span>
@@ -190,31 +209,32 @@ function EvidenceFold({
 
       <div className="ev-fold__wrap">
         <div className="ev-fold__inner">
-          {section.community_pulse && (
+          {variant === "story" && section.community_pulse ? (
             <CommunityPulseCard pulse={section.community_pulse} />
+          ) : (
+            <>
+              {section.community_pulse && (
+                <CommunityPulseCard pulse={section.community_pulse} />
+              )}
+              {(variant === "media_grid" || media.length > 0) && media.map((strip) => (
+                <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
+              ))}
+              {facts.length > 0 && <FactBody facts={facts} />}
+            </>
           )}
-          {media.map((strip) => (
-            <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
-          ))}
-          <div className="ev-fold__facts">
-            {facts.map((item) => (
-              <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
-            ))}
-          </div>
         </div>
       </div>
     </section>
   );
 }
 
-export function EvidenceStack({ evidence, fallbackSections, excludeKinds = [] }: StackProps) {
-  const sections = evidence?.sections?.length ? evidence.sections : fallbackSections ?? [];
+export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
+  const sections = evidence?.sections ?? [];
   const excluded = new Set(excludeKinds);
 
   const ordered = [...sections]
     .filter((section) => !excluded.has(section.kind))
     .sort((a, b) => a.priority - b.priority);
-  // Dynamic: a fold exists only if it carries at least one real fact or media receipt.
   const folds = ordered.filter((s) =>
     s.community_pulse != null
     || s.items.some((it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0))
