@@ -48,6 +48,7 @@ Current tables (format v2):
 - `entities/part-00000.parquet` — entity_id, entity_type, name, root_source, searchable_text
 - `facts/part-00000.parquet` — entity_id, fact_key, typed value columns, confidence, source_*, learned_at
 - `search_metadata/part-00000.parquet` — entity_id, fact_key, display_template, answers_preferences, scoring_*
+- `edges/part-00000.parquet` — **planned Phase 4** — from_entity_id, edge_type, to_entity_id, confidence, source_type
 
 **Storage optimizations to keep and extend:**
 
@@ -70,47 +71,56 @@ Current tables (format v2):
 
 ### 1.3 Config storage
 
-DAG config files live in git (`data/dag/`), not the lake. They are small, diffable, and loaded at DAG plan time.
+DAG config lives in git (`app/config/`), not the lake. Small, diffable, loaded at DAG plan time and baked into materialized bundles.
 
 Optional later: snapshot config hash into serving `manifest.json` for reproducibility.
+
+See [`app/config/coverage.json`](../app/config/coverage.json) for config vs lake vs Rust hardcoding audit.
 
 ---
 
 ## 2. Config package (single source of product semantics)
 
-Create `data/dag/` and merge existing registries.
+Layout: `app/config/` (see [`storage_and_config_layout.md`](./storage_and_config_layout.md)).
 
 ```text
-data/dag/
-  manifest.json                 # version, includes[]
-  ontology.json                 # entity types + relations
-  fact_registry.json            # all leaves (merged)
-  concern_taxonomy.json         # issue #2 signals → fact_key mapping
-  resolution_policies.json
-  asset_registry.json           # exported from registry.rs
-  crawl_policies/
-    global.json
-    google_places_weekly.json
-    reddit_threads_daily.json
-    ...
-  source_adapters/
-    legacy_seed.json
-    reddit_theme.json
-    google_reviews.json
-    rera.json
-    registered_transactions.json  # stub for future
-  ui_surfaces.json              # section_kind, constellation, tile_chip rules
+app/config/
+  manifest.json                 # root index
+  coverage.json                 # audit + graph_ui_readiness
+  dag/
+    manifest.json
+    ontology.json               # entity types + relations
+    concern_taxonomy.json       # leaf definitions
+    fact_registry.json          # leaf search/display semantics
+    resolution_policies.json
+    asset_registry.json
+    enrichment_targets.json
+    ui_surfaces.json            # surface → traversal + leaf_keys
+    entity_context.json         # FUTURE API contract (Phase 10)
+    crawl_policies/
+    search_intent.json
+  bootstrap/
+    policy.json                 # importer rules → lake only
+    edge_inference.json         # how to infer served_by_road, in_area, …
+  lake/
+    layout.json                 # Parquet zones + serving bundle schema
+    sync.json
+  product/
+    discovery_home.json
+    evidence_sections.json
+  runtime/
+    defaults.json
 ```
 
 ### 2.1 Merge map (eliminate duplicate registries)
 
 | Current file | Fate |
 |--------------|------|
-| `data/search/fact_schema_registry.json` | Merge into `fact_registry.json` (search section) |
-| `data/product/livability_theme_registry.json` | Merge into `concern_taxonomy.json` + `fact_registry.json` |
-| `backend/src/assets/registry.rs` | Export to `asset_registry.json`; Rust becomes loader |
-| `data/product/buyer_context_sections.json` | Merge UI grouping into `ui_surfaces.json` |
-| `data/product/approach_road_visuals.json` | Keep as product overlay; reference fact_keys only |
+| `data/search/fact_schema_registry.json` | Merged into `app/config/dag/fact_registry.json` |
+| `data/product/livability_theme_registry.json` | Merged into `concern_taxonomy.json` + `fact_registry.json` |
+| `backend/src/assets/registry.rs` | Exported to `asset_registry.json`; Rust loader in `dag_config/` |
+| `data/product/buyer_context_sections.json` | Copied to `app/config/product/evidence_sections.json` |
+| `data/product/approach_road_visuals.json` | Move to lake as enriched media facts on `road_segment` |
 
 ### 2.2 Leaf schema (every fact)
 
@@ -169,11 +179,11 @@ Track and eliminate these as phases complete.
 
 | Location | What is hardcoded | Target |
 |----------|-------------------|--------|
-| `assets/registry.rs` | Full asset DAG | `data/dag/asset_registry.json` |
+| `assets/registry.rs` | Full asset DAG | `app/config/dag/asset_registry.json` ✅ loader |
 | `search/text.rs` | `legacy_preference_score`, `legacy_fact_key_for_preference` | Delete after bootstrap + eval |
 | `routes/search.rs` | `legacy_preference_to_fact_key` | Delete |
 | `search/intent.rs` | Preference → seed field key arrays | Read from `fact_registry.json` |
-| `search/schema.rs` | `include_str!(fact_schema_registry.json)` | Load unified `fact_registry.json` |
+| `search/schema.rs` | `include_str!(fact_schema_registry.json)` | Load `app/config/dag/fact_registry.json` |
 | `livability_brief.rs` | `include_str!(livability_theme_registry.json)` | Load `concern_taxonomy.json` |
 | `data_loader.rs` | `.unwrap_or(0.5)` on seed scores | Hydrate from facts; null if missing |
 | `routes/properties.rs` | Evidence section builders (`rera`, `reviews`, …) | Group facts by `ui.section_kind` from config |
@@ -184,7 +194,7 @@ Track and eliminate these as phases complete.
 
 | Location | What is hardcoded | Target |
 |----------|-------------------|--------|
-| `collect_asset_sources.py` | `OPENESTATES_SKIP_REDDIT` | `crawl_policies/reddit_threads_daily.json` |
+| `collect_asset_sources.py` | `OPENESTATES_SKIP_REDDIT` | `crawl_policies/reddit_threads_daily.json` ✅ |
 | `skills/search_reddit.py` | Ad hoc output shape | Emit `concern_taxonomy` signal keys only |
 | Asset source entity lists | Inline seeds | `data/dag/bootstrap/entity_seeds.json` |
 
@@ -193,10 +203,10 @@ Track and eliminate these as phases complete.
 | Location | What is hardcoded | Target |
 |----------|-------------------|--------|
 | `lib/evidence.ts` | `SECTION_CONSTELLATION`, `SECTION_DISPLAY_TITLES` | Backend sends `constellation` per section from config |
-| `pages/PropertyPage.tsx` | `riskSignalsFor()` seed scores | Remove; use `livability_brief` risk block |
-| `pages/PropertyPage.tsx` | `buildDecision()` seed trust/risk | Brief confidence + RERA + market only |
+| `pages/PropertyPage.tsx` | `riskSignalsFor()` seed scores | Remove ✅; use `livability_brief` risk block |
+| `pages/PropertyPage.tsx` | `buildDecision()` seed trust/risk | Brief confidence + RERA + market only ✅ |
 | `lib/types.ts` | Seed score fields on `Property` | Keep only listing fields; quality via evidence |
-| `components/evidence/EvidenceSectionCard.tsx` | Orphan | Delete |
+| `components/evidence/EvidenceSectionCard.tsx` | Orphan | Delete ✅ |
 | `main.tsx` meta | "transparency scores and tradeoffs" | Receipts/livability copy |
 
 ---
@@ -207,47 +217,48 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 0 — Design lock & config scaffold (3–5 days)
+### Phase 0 — Design lock & config scaffold ✅ (done)
 
 **Goal:** Files exist; no runtime behavior change.
 
 **Work:**
 
-1. Create `data/dag/manifest.json` and directory layout
-2. Draft `concern_taxonomy.json` from issue #2 + livability themes (~60 leaves)
-3. Draft `ontology.json` (entity types + relations)
-4. Draft `resolution_policies.json` + `ui_surfaces.json`
+1. Create `app/config/` and directory layout
+2. Draft `concern_taxonomy.json` from issue #2 + livability themes (78 leaves)
+3. Draft `ontology.json` (7 entity types + 6 relations)
+4. Draft `resolution_policies.json`, `ui_surfaces.json`, `enrichment_targets.json`
 5. Document confidence → proof label mapping
-6. Add cross-links in `dag_convergence_design.md`
+6. `coverage.json` audit + `lake/layout.json` storage contract
 
 **Acceptance:**
 
-- [x] `data/dag/` scaffold created (`manifest`, `ontology`, `resolution_policies`, `concern_taxonomy`)
+- [x] `app/config/` scaffold created
 - [x] 78 leaves merged from livability themes + issue #2
-- [x] `data/dag/README.md` — agent read-one-file-per-task routing
+- [x] `ui_surfaces.json` — 6 surfaces with traversal hops
+- [x] Storage section in `lake/layout.json` matches serving schema
+- [x] `entity_context.json` contract stub for future graph UI API
 - [ ] Every issue #2 signal maps to a `fact_key` or is explicitly deferred
-- [ ] `ui_surfaces.json` (Phase 1)
-- [ ] Storage section reviewed against `lake/keys.rs` and `serving/parquet.rs`
 
 **Token-cost rule:** agents and humans edit **one config file per PR**; load via `manifest.json` routing only.
 
 ---
 
-### Phase 1 — Config loaders, zero behavior change (5–7 days)
+### Phase 1 — Config loaders, zero behavior change ✅ (mostly done)
 
 **Goal:** Rust/Python load DAG config; existing tests pass.
 
 **Work:**
 
-1. Export `registry.rs` → `data/dag/asset_registry.json`
-2. Add `backend/src/dag_config/` module: load + validate JSON at startup (DAG plan only)
-3. `AssetRegistry::from_config()` with fallback to embedded default until parity proven
-4. Unit tests: config round-trip equals current topological order
-5. Move Reddit skip to `crawl_policies/reddit_threads_daily.json`; keep env override as deprecated shim
+1. Export `registry.rs` → `app/config/dag/asset_registry.json` ✅
+2. Add `backend/src/dag_config/` module ✅
+3. `openestates_registry()` with embedded fallback ✅
+4. Reddit skip → `crawl_policies/reddit_threads_daily.json` ✅
+5. Wire `discovery_home.json` + `evidence_sections.json` in routes ✅
 
 **Acceptance:**
 
-- [ ] `cargo test` asset registry tests pass from JSON loader
+- [x] `dag_config` loaders for manifest, asset registry, crawl policies
+- [ ] `cargo test` asset registry tests pass from JSON loader only (no embedded fallback)
 - [ ] `openestates-run-assets --dry-run` produces identical plan
 - [ ] Parquet output byte-identical for a fixed fixture run (or schema-compatible)
 
@@ -268,10 +279,10 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 **Acceptance:**
 
-- [ ] Search preference coverage report generated per run
-- [ ] Existing search tests pass
-- [ ] `eval_search.py` no regression on benchmark queries
-- [ ] `search_metadata` row count stable or explainable
+- [x] Search preference coverage report generated per run
+- [x] Existing search tests pass
+- [x] `eval_search.py` no regression on benchmark queries
+- [x] `search_metadata` row count stable or explainable
 
 **Storage check:** `search_metadata` Parquet schema unchanged; row content richer not wider.
 
@@ -303,52 +314,58 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 4 — Entity expansion: property + area (10–14 days)
+### Phase 4 — Entity expansion: property + area + edges (10–14 days)
 
-**Goal:** Serving bundle materializes full graph for search and UI.
+**Goal:** Serving bundle materializes full graph for search, evidence, and future EntityContext API.
 
 **Work:**
 
 1. `canonical_property_nodes` asset from listings + seed
-2. `canonical_area_nodes` from RERA localities + alias config
-3. KG edges: `property→society`, `society→area`, `society→road` (where known)
-4. Serving bundle includes `property:*`, `area:*`, optional `road:*`
-5. Search hard filters read property facts (BHK, price, area) from bundle
-6. `entity_refs` on search results populated for all listing cards
+2. `canonical_area_nodes` from RERA localities + `search_intent.json` aliases
+3. `road_segment` + `place` nodes where enrichment provides them
+4. KG edges in gold: `property→society`, `society→area`, `society→road`, `society→place`
+5. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `kg_society_view`)
+6. Rust loads edges into `AppState` (index by `from_entity_id` + `edge_type`)
+7. Search hard filters read property facts (BHK, price, area) from bundle
+8. `entity_refs` on search results populated for all listing cards
 
 **Acceptance:**
 
-- [ ] Bundle entity counts: properties > 0, areas > 0
+- [ ] Bundle entity counts: properties > 0, areas > 0, roads > 0 where inferred
+- [ ] Bundle includes edges table; row count documented
 - [ ] Search "3bhk whitefield under 2cr" uses property + society facts
 - [ ] Tiles show `entity_refs` and match reasons from leaves
-- [ ] Parquet entity table row growth documented
+- [ ] Graph walk `society → served_by_road → road_segment` resolvable in memory (no API yet)
 
 **Storage check:**
 
-- `entities.parquet` grows; consider `part-NNNNN.parquet` sharding if >500k rows (future)
+- `entities.parquet` + `edges.parquet` in serving bundle
+- `format_version` bump if edges table added
 - Tantivy index rebuild acceptable; keep in bundle version folder
 
 ---
 
-### Phase 5 — UI truth consolidation (5–7 days)
+### Phase 5 — UI truth consolidation (5–7 days) — partial ✅
 
 **Goal:** One signal, one surface; config-driven evidence sections.
 
 **Work:**
 
-1. Remove `riskSignalsFor` / `RiskBar` from `PropertyPage.tsx`
+1. Remove `riskSignalsFor` / `RiskBar` from `PropertyPage.tsx` ✅
 2. De-duplicate theme chips: brief owns risk/operating prose; pulse owns review receipts
-3. Evidence sections grouped by `ui.section_kind` from config (backend)
-4. Delete `EvidenceSectionCard.tsx` orphan
+3. Evidence sections grouped by `evidence_sections.json` (backend) — extend to `ui.section_kind` from fact registry
+4. Delete `EvidenceSectionCard.tsx` orphan ✅
 5. Proof labels instead of confidence bars in evidence UI
 6. Update SEO meta copy
 
 **Acceptance:**
 
-- [ ] No seed-derived risk on property page
+- [x] No seed-derived risk on property page
 - [ ] Livability brief is single risk surface in action rail
 - [ ] New `fact_key` with `ui.section_kind` appears without frontend code change
 - [ ] `tsc --noEmit` clean
+
+**Not in this phase:** graph traversal summary API (Phase 10).
 
 ---
 
@@ -395,14 +412,14 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 8 — Dynamic UI discovery (7–10 days)
+### Phase 8 — Config-driven evidence UI (5–7 days)
 
-**Goal:** Frontend discovers leaves via API metadata, not const maps.
+**Goal:** Frontend discovers section layout from API metadata, not const maps. **Still society-scoped — no graph traversal yet.**
 
 **Work:**
 
-1. API: evidence sections include `constellation`, `fact_keys[]`, `proof_label`
-2. Optional: `GET /api/config/fact-registry` for dev/debug (not request hot path)
+1. Backend: evidence sections include `constellation`, `fact_keys[]`, `proof_label` from `evidence_sections.json` + fact registry
+2. Wire `livability_brief` to `concern_taxonomy.json` (replace `livability_theme_registry`)
 3. Remove `SECTION_CONSTELLATION` hard map; use API fields
 4. Tile chips driven by `ui.tile_eligible` leaves on match reasons
 5. Livability brief `fact_keys` linked to evidence drill-down
@@ -411,6 +428,8 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 - [ ] Add a new leaf in config → appears in correct section after bundle promote (no React edit)
 - [ ] Compare page can show same evidence model
+
+**Prerequisite:** Phase 2 (`fact_registry` drives search_metadata).
 
 ---
 
@@ -433,20 +452,70 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
+### Phase 10 — EntityContext graph API + generic UI (7–10 days) — **API last**
+
+**Goal:** Dynamic buyer copy from graph traversal — e.g. *"Prestige Waterford sits on ECC Road, where residents report monsoon waterlogging. Deens Public School is nearby."*
+
+**Contract:** `app/config/dag/entity_context.json` (stub today; implementation reads baked bundle data, not live config).
+
+**Prerequisites (must be done first):**
+
+- Phase 4: `edges` table in serving bundle + Rust edge index
+- Phase 4: `road_segment` / `place` nodes with facts attachable upstream
+- Phase 8: config-driven evidence sections (parallel surface, not blocked)
+- Optional: `near_place` relation in `ontology.json` for proximity without full place identity
+
+**Work:**
+
+1. Rust `EntityContextComposer`: walk from anchor (`society:*` or `property:*`) using `ui_surfaces.json` traversal hops (baked into bundle manifest or startup config snapshot)
+2. Emit `clauses[]` then `summary_paragraph` via deterministic `display_template` + hop templates (no LLM on hot path)
+3. `GET /api/entities/{entity_id}/context` and `GET /api/properties/{id}/context`
+4. React: generic renderers by `presentation.variant`; property page consumes `summary` + `surfaces[]`
+5. Enrichment flywheel: traversal exposes missing facts on shared nodes (road, area) → `enrichment_targets.json`
+
+**Acceptance:**
+
+- [ ] Society page shows road-linked risk clause when `served_by_road` + road fact exists
+- [ ] No new React component per fact_key — variant-driven only
+- [ ] API p99 within search latency budget (local bundle only, no network)
+- [ ] `eval_search` unchanged — context endpoint is additive
+
+**Explicitly deferred:** LLM polish of summary paragraph; live config reads on request path.
+
+---
+
 ## 6. Workstreams (parallelizable)
 
 ```text
-Stream A — Config & DAG loader        (Phases 0–1)
-Stream B — Fact registry & resolver   (Phases 2–3)
-Stream C — Entity materialization     (Phase 4)
-Stream D — UI consolidation           (Phase 5)
+Stream A — Config & DAG loader        (Phases 0–1) ✅
+Stream B — Fact registry & resolver   (Phases 2–3)  ← NEXT
+Stream C — Entity + edges in bundle   (Phase 4)
+Stream D — UI consolidation           (Phase 5, partial)
 Stream E — Reddit taxonomy pipeline   (Phase 6)
 Stream F — Search cleanup             (Phase 7)
-Stream G — Dynamic UI                 (Phase 8)
+Stream G — Config-driven evidence UI  (Phase 8)
+Stream H — EntityContext graph API    (Phase 10 — last)
 ```
 
-**Critical path:** A → B → C → F (search needs property entities + real facts)  
-**Can parallel:** D after B starts; E after A; G after D+F
+**Critical path:** B → C → F (search needs property entities + real facts)  
+**Graph UI path:** C (edges in bundle) → H (API + generic renderers)  
+**Can parallel:** D after B starts; E after A; G after B; H only after C
+
+### Graph UI readiness (config today, API later)
+
+| Layer | Status | Location |
+|-------|--------|----------|
+| Node/edge schema | ✅ Ready | `ontology.json` |
+| Leaf defs + templates | ✅ Ready | `concern_taxonomy.json`, `fact_registry.json` |
+| Surface traversals | ✅ Ready | `ui_surfaces.json` |
+| Edge inference rules | ✅ Ready | `bootstrap/edge_inference.json` |
+| Gold edges Parquet | ✅ Schema | `lake/layout.json` |
+| Serving edges table | ❌ Gap | Phase 4 |
+| road/place instances | ❌ Gap | Phase 4 enrichment |
+| Rust graph walker | ❌ Gap | Phase 10 |
+| HTTP API | ❌ Deferred | Phase 10 |
+
+Full checklist: `app/config/coverage.json` → `graph_ui_readiness`.
 
 ---
 
@@ -503,22 +572,28 @@ data/validation/resolution_audit.json
 
 - [ ] One `fact_registry` / `concern_taxonomy` config drives search, brief, pulse, evidence
 - [ ] Serving bundle is the only runtime truth; no seed score defaults
-- [ ] Property + society + area entities in bundle
+- [ ] Property + society + area + road entities in bundle; **edges table loaded**
 - [ ] Crawl frequency/skip controlled by `crawl_policies/`
 - [ ] Legacy preference scoring deleted with eval green
 - [ ] UI shows proof labels, not numeric confidence
+- [ ] Config-driven evidence sections (Phase 8)
+- [ ] EntityContext graph summary API for property/society pages (Phase 10)
 - [ ] Parquet + S3 key layout unchanged in contract (format_version bumped only if needed)
 - [ ] Issue #2 acceptance criteria met for POC societies
 
 ---
 
-## 10. Immediate next actions (this week)
+## 10. Immediate next actions
 
-1. **Phase 0:** Create `data/dag/concern_taxonomy.json` (issue #2 + livability merge)
-2. **Phase 0:** Create `data/dag/ontology.json` + `resolution_policies.json`
-3. **Phase 1 spike:** Export `asset_registry.json` from current `registry.rs`
-4. **Quick win:** Remove seed risk list from `PropertyPage.tsx` (Phase 5 item; safe once brief exists)
-5. **Baseline:** Run `eval_search.py` and save snapshot before search changes
+**Build data/config layers now. API last.**
+
+1. **Phase 2:** Wire `fact_registry.json` → `search_metadata` materialization; baseline `eval_search.py` snapshot ✅
+2. **Phase 2:** Replace `search/schema.rs` embedded registry with `dag_config` loader ✅
+3. **Phase 3:** Legacy seed importer → silver facts; remove `data_loader.rs` score defaults
+4. **Phase 4:** Materialize `property:*`, `area:*`, `road:*` + **edges in serving bundle**
+5. **Do not start:** `GET /api/entities/{id}/context` until Phase 4 edges ship
+
+Config-only prep (no runtime): extend `ontology.json` with `near_place` when place enrichment is scoped.
 
 ---
 

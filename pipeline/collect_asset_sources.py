@@ -21,6 +21,54 @@ logger = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge" / "nodes"
 DAG_ROOT = PROJECT_ROOT / "app" / "config" / "dag"
+FACT_REGISTRY_PATH = DAG_ROOT / "fact_registry.json"
+_FACT_REGISTRY_CACHE = None  # type: Optional[Dict[str, Any]]
+
+
+def load_fact_registry_index():
+    # type: () -> Dict[str, Dict[str, Any]]
+    """Load fact_key → registry entry map (includes legacy_key_map aliases)."""
+    global _FACT_REGISTRY_CACHE
+    if _FACT_REGISTRY_CACHE is not None:
+        return _FACT_REGISTRY_CACHE
+
+    if not FACT_REGISTRY_PATH.exists():
+        _FACT_REGISTRY_CACHE = {}
+        return _FACT_REGISTRY_CACHE
+
+    payload = json.loads(FACT_REGISTRY_PATH.read_text(encoding="utf-8"))
+    index = {}  # type: Dict[str, Dict[str, Any]]
+    for entry in payload.get("facts", []):
+        fact_key = entry.get("fact_key")
+        if fact_key:
+            index[str(fact_key)] = entry
+    for legacy_key, canonical in (payload.get("legacy_key_map") or {}).items():
+        if canonical in index and legacy_key not in index:
+            index[str(legacy_key)] = index[str(canonical)]
+    _FACT_REGISTRY_CACHE = index
+    return index
+
+
+def annotation_from_registry(fact_key, skill_scoring=None):
+    # type: (str, Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]
+    entry = load_fact_registry_index().get(fact_key)
+    if not entry:
+        return None
+
+    scoring = entry.get("scoring_hint") or {}
+    direction = scoring.get("direction")
+    if direction == "text_match":
+        direction = "TextMatch"
+    elif direction == "numeric":
+        direction = scoring.get("numeric_direction") or "LowerIsBetter"
+
+    return {
+        "display_template": entry.get("display_template"),
+        "answers_preferences": entry.get("answers_preferences") or [],
+        "scoring_direction": direction,
+        "scoring_weight": scoring.get("weight"),
+        "scoring_thresholds": scoring.get("thresholds") or [],
+    }
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
 REDDIT_THREADS_DAILY = "reddit_threads_daily"
@@ -897,18 +945,31 @@ def skill_result_rows(
                 "input_hash": input_hash,
             }
         )
+        registry_annotation = annotation_from_registry(fact.key, scoring)
+        if registry_annotation:
+            display_template = registry_annotation["display_template"]
+            preferences = registry_annotation["answers_preferences"]
+            scoring_direction = registry_annotation["scoring_direction"]
+            scoring_weight = registry_annotation["scoring_weight"]
+            scoring_thresholds = registry_annotation["scoring_thresholds"]
+        else:
+            display_template = fact.display_template
+            preferences = fact.answers_preferences or []
+            scoring_direction = scoring.get("direction")
+            scoring_weight = scoring.get("weight")
+            scoring_thresholds = scoring.get("thresholds") or []
         annotations.append(
             {
                 "entity_id": entity_id,
                 "fact_key": fact.key,
-                "display_template": fact.display_template,
+                "display_template": display_template,
                 "answers_preferences_json": json.dumps(
-                    fact.answers_preferences or [], separators=(",", ":")
+                    preferences, separators=(",", ":")
                 ),
-                "scoring_direction": scoring.get("direction"),
-                "scoring_weight": scoring.get("weight"),
+                "scoring_direction": scoring_direction,
+                "scoring_weight": scoring_weight,
                 "scoring_thresholds_json": json.dumps(
-                    scoring.get("thresholds") or [], separators=(",", ":")
+                    scoring_thresholds, separators=(",", ":")
                 ),
             }
         )

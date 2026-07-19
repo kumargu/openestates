@@ -7,6 +7,7 @@ use chrono::Utc;
 use crate::assets::{
     AssetPathBuilder, KgViewFactAnnotationRecord, KgViewFactRecord, KgViewRecords,
 };
+use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint, DagConfigError};
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
@@ -52,7 +53,11 @@ impl ServingBundleBuilder {
         let entities = serving_entity_records(records, &current_facts);
         let facts = serving_fact_records(&current_facts)?;
         let current_annotations = current_serving_annotations(&records.fact_annotations);
-        let search_metadata = serving_search_metadata_records(&current_annotations)?;
+        let search_metadata =
+            serving_search_metadata_records(&current_facts, &current_annotations)?;
+        if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
+            eprintln!("preference coverage report skipped: {err}");
+        }
         self.build_from_serving_records(entities, facts, search_metadata, bundle_version)
             .await
     }
@@ -347,22 +352,167 @@ fn serving_fact_records(
 }
 
 fn serving_search_metadata_records(
+    facts: &[KgViewFactRecord],
     annotations: &[KgViewFactAnnotationRecord],
-) -> Result<Vec<ServingSearchMetadataRecord>, serde_json::Error> {
-    annotations
+) -> Result<Vec<ServingSearchMetadataRecord>, ServingBundleError> {
+    let registry = load_fact_registry_index().map_err(ServingBundleError::DagConfig)?;
+    let annotation_by_key = annotations
         .iter()
         .map(|annotation| {
-            Ok(ServingSearchMetadataRecord {
-                entity_id: annotation.entity_id.clone(),
-                fact_key: annotation.fact_key.clone(),
+            (
+                (
+                    annotation.entity_id.as_str(),
+                    annotation.fact_key.as_str(),
+                ),
+                annotation,
+            )
+        })
+        .collect::<HashMap<(&str, &str), &KgViewFactAnnotationRecord>>();
+
+    let mut seen = BTreeMap::<(&str, &str), ()>::new();
+    let mut records = Vec::with_capacity(facts.len());
+
+    for fact in facts {
+        let key = (fact.entity_id.as_str(), fact.fact_key.as_str());
+        if seen.contains_key(&key) {
+            continue;
+        }
+        seen.insert(key, ());
+
+        if let Some(entry) = registry.lookup(&fact.fact_key) {
+            let hint = entry.scoring_hint.as_ref();
+            records.push(ServingSearchMetadataRecord {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
+                display_template: entry.display_template.clone(),
+                answers_preferences: entry.answers_preferences.clone(),
+                scoring_direction: hint.map(scoring_direction_from_hint),
+                scoring_weight: hint.and_then(|hint| hint.weight),
+                scoring_thresholds: hint.map(|hint| hint.thresholds.clone()).unwrap_or_default(),
+            });
+            continue;
+        }
+
+        if let Some(annotation) = annotation_by_key.get(&key) {
+            records.push(ServingSearchMetadataRecord {
+                entity_id: fact.entity_id.clone(),
+                fact_key: fact.fact_key.clone(),
                 display_template: annotation.display_template.clone(),
                 answers_preferences: serde_json::from_str(&annotation.answers_preferences_json)?,
                 scoring_direction: annotation.scoring_direction.clone(),
                 scoring_weight: annotation.scoring_weight,
                 scoring_thresholds: serde_json::from_str(&annotation.scoring_thresholds_json)?,
-            })
+            });
+        }
+    }
+
+    records.sort_by(|left, right| {
+        left.entity_id
+            .cmp(&right.entity_id)
+            .then_with(|| left.fact_key.cmp(&right.fact_key))
+    });
+    Ok(records)
+}
+
+#[derive(Debug, serde::Serialize)]
+struct PreferenceCoverageReport {
+    generated_at: String,
+    society_count: usize,
+    preference_labels: Vec<PreferenceLabelCoverage>,
+    registry_gaps: Vec<RegistryGap>,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct PreferenceLabelCoverage {
+    label: String,
+    societies_with_match: u32,
+    society_coverage_pct: f64,
+}
+
+#[derive(Debug, serde::Serialize)]
+struct RegistryGap {
+    fact_key: String,
+    entity_count: u32,
+}
+
+fn write_preference_coverage_report(
+    entities: &[ServingEntityRecord],
+    facts: &[ServingFactRecord],
+    search_metadata: &[ServingSearchMetadataRecord],
+) -> Result<(), std::io::Error> {
+    let society_count = entities
+        .iter()
+        .filter(|entity| entity.entity_type == "Society")
+        .count();
+    if society_count == 0 {
+        return Ok(());
+    }
+
+    let metadata_by_entity_fact = search_metadata
+        .iter()
+        .map(|row| ((row.entity_id.as_str(), row.fact_key.as_str()), row))
+        .collect::<HashMap<(&str, &str), &ServingSearchMetadataRecord>>();
+
+    let mut label_hits = BTreeMap::<String, std::collections::HashSet<String>>::new();
+    for fact in facts {
+        if let Some(metadata) = metadata_by_entity_fact.get(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
+        {
+            for label in &metadata.answers_preferences {
+                label_hits
+                    .entry(label.to_lowercase())
+                    .or_default()
+                    .insert(fact.entity_id.clone());
+            }
+        }
+    }
+
+    let preference_labels = label_hits
+        .into_iter()
+        .map(|(label, societies)| {
+            let societies_with_match = societies.len() as u32;
+            PreferenceLabelCoverage {
+                label,
+                societies_with_match,
+                society_coverage_pct: (societies_with_match as f64 / society_count as f64) * 100.0,
+            }
         })
-        .collect()
+        .collect::<Vec<_>>();
+
+    let mut registry_gaps = BTreeMap::<String, u32>::new();
+    for fact in facts {
+        if !metadata_by_entity_fact.contains_key(&(fact.entity_id.as_str(), fact.fact_key.as_str())) {
+            *registry_gaps.entry(fact.fact_key.clone()).or_default() += 1;
+        }
+    }
+    let registry_gaps = registry_gaps
+        .into_iter()
+        .map(|(fact_key, entity_count)| RegistryGap {
+            fact_key,
+            entity_count,
+        })
+        .collect::<Vec<_>>();
+
+    let report = PreferenceCoverageReport {
+        generated_at: Utc::now().to_rfc3339(),
+        society_count,
+        preference_labels,
+        registry_gaps,
+    };
+
+    let output_path = preference_coverage_output_path();
+    if let Some(parent) = output_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    let payload = serde_json::to_string_pretty(&report)?;
+    std::fs::write(output_path, payload)?;
+    Ok(())
+}
+
+fn preference_coverage_output_path() -> PathBuf {
+    if let Ok(path) = std::env::var("OPENESTATES_PREFERENCE_COVERAGE_PATH") {
+        return PathBuf::from(path);
+    }
+    PathBuf::from("data/validation/preference_coverage.json")
 }
 
 async fn upload_tantivy_dir(
@@ -457,6 +607,7 @@ pub enum ServingBundleError {
     Key(crate::lake::keys::KeyError),
     Parquet(ParquetWriteError),
     Tantivy(TantivyIndexError),
+    DagConfig(DagConfigError),
     InvalidIndexPath(PathBuf),
 }
 
@@ -469,6 +620,7 @@ impl fmt::Display for ServingBundleError {
             Self::Key(err) => write!(f, "serving bundle key error: {err}"),
             Self::Parquet(err) => write!(f, "serving bundle Parquet error: {err}"),
             Self::Tantivy(err) => write!(f, "serving bundle Tantivy error: {err}"),
+            Self::DagConfig(err) => write!(f, "serving bundle DAG config error: {err}"),
             Self::InvalidIndexPath(path) => {
                 write!(
                     f,
@@ -515,5 +667,11 @@ impl From<ParquetWriteError> for ServingBundleError {
 impl From<TantivyIndexError> for ServingBundleError {
     fn from(err: TantivyIndexError) -> Self {
         Self::Tantivy(err)
+    }
+}
+
+impl From<DagConfigError> for ServingBundleError {
+    fn from(err: DagConfigError) -> Self {
+        Self::DagConfig(err)
     }
 }

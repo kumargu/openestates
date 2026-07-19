@@ -137,7 +137,7 @@ pub fn load_crawl_policy(policy_id: &str) -> Result<Option<CrawlPolicyFile>, Dag
     Ok(Some(load_json(&path)?))
 }
 
-fn load_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, DagConfigError> {
+pub fn load_json<T: for<'de> Deserialize<'de>>(path: &Path) -> Result<T, DagConfigError> {
     let contents = std::fs::read_to_string(path)?;
     Ok(serde_json::from_str(&contents)?)
 }

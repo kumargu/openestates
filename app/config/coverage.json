@@ -160,12 +160,14 @@
     {
       "location": "backend/src/search/intent.rs — POSITIVE/NEGATIVE_PREFERENCE_PATTERNS",
       "target": "app/config/dag/fact_registry.json preference_patterns (partially merged)",
-      "primitive": "search"
+      "primitive": "search",
+      "status": "done"
     },
     {
       "location": "backend/src/search/schema.rs — include fact_schema_registry.json",
       "target": "Load app/config/dag/fact_registry.json instead",
-      "primitive": "search"
+      "primitive": "search",
+      "status": "done"
     },
     {
       "location": "backend/src/livability_brief.rs — livability_theme_registry.json",
@@ -180,5 +182,72 @@
   ],
   "pending_empty_scaffolds": [
     "app/config/dag/source_adapters/ — one JSON per external source"
-  ]
+  ],
+  "graph_ui_readiness": {
+    "_comment": "EntityContext API (Phase 10) — verify config/lake before building API or generic UI",
+    "contract": "app/config/dag/entity_context.json",
+    "ready": [
+      {
+        "item": "Node types (property, society, area, road_segment, place)",
+        "location": "app/config/dag/ontology.json"
+      },
+      {
+        "item": "Edge types (in_society, in_area, served_by_road, maps_to_place, built_by)",
+        "location": "app/config/dag/ontology.json"
+      },
+      {
+        "item": "Leaf definitions + display_template per fact_key",
+        "location": "concern_taxonomy.json + fact_registry.json"
+      },
+      {
+        "item": "Surface → traversal hops + leaf_keys",
+        "location": "app/config/dag/ui_surfaces.json"
+      },
+      {
+        "item": "Edge inference rules (not instances)",
+        "location": "app/config/bootstrap/edge_inference.json"
+      },
+      {
+        "item": "Gold KG edges table schema",
+        "location": "app/config/lake/layout.json gold/kg_society_view"
+      },
+      {
+        "item": "EntityContext response contract (example clauses + prerequisites)",
+        "location": "app/config/dag/entity_context.json"
+      }
+    ],
+    "gaps_before_api": [
+      {
+        "gap": "Serving bundle has no edges table at runtime",
+        "fix_phase": 4,
+        "fix": "Materialize edges/part-00000.parquet into search_serving_bundle; load in Rust AppState"
+      },
+      {
+        "gap": "road_segment and place nodes sparse in lake",
+        "fix_phase": 4,
+        "fix": "canonical nodes + edge inference from bootstrap policy"
+      },
+      {
+        "gap": "Facts on road_segment entities (e.g. waterlogging on approach road)",
+        "fix_phase": 4,
+        "fix": "Enrich shared road nodes; project via served_by_road traversal"
+      },
+      {
+        "gap": "near_place edge for school/metro proximity",
+        "fix_phase": 4,
+        "fix": "Add relation to ontology.json when place enrichment ships"
+      },
+      {
+        "gap": "Rust has no generic graph walker",
+        "fix_phase": 10,
+        "fix": "EntityContext composer — after edges + facts in bundle"
+      },
+      {
+        "gap": "ui_surfaces.json not wired to API",
+        "fix_phase": 8,
+        "fix": "Evidence sections from config first; graph summary API last"
+      }
+    ],
+    "build_order": "Phase 2 (fact_registry) → Phase 3 (bootstrap facts) → Phase 4 (entities + edges in bundle) → Phase 8 (config-driven sections) → Phase 10 (EntityContext API + generic renderers)"
+  }
 }

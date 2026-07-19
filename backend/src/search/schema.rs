@@ -10,8 +10,36 @@ use super::intent::{ConstraintOperator, HardConstraint, Polarity, PreferenceSign
 #[cfg(test)]
 pub const SQM_PER_ACRE: f64 = 4046.8564224;
 
-const FACT_SCHEMA_REGISTRY_JSON: &str =
+use crate::dag_config::{dag_root, load_json};
+
+const FACT_SCHEMA_REGISTRY_FALLBACK_JSON: &str =
     include_str!("../../../data/search/fact_schema_registry.json");
+
+/// Search schema format version carried in serving bundles.
+pub const SEARCH_SCHEMA_VERSION: u32 = 2;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct FactRegistrySearchFile {
+    pub version: u32,
+    #[serde(default)]
+    pub search_dimensions: Vec<ThemeLayer>,
+    #[serde(default)]
+    pub preference_patterns: FactRegistryPreferencePatterns,
+    #[serde(default)]
+    pub numeric_constraints: Vec<NumericConstraintSchema>,
+    #[serde(default)]
+    pub text_evidence: Vec<TextEvidenceSchema>,
+    #[serde(default)]
+    pub numeric_evidence: Vec<NumericEvidenceSchema>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct FactRegistryPreferencePatterns {
+    #[serde(default)]
+    pub positive: Vec<PreferencePatternSpec>,
+    #[serde(default)]
+    pub negative: Vec<PreferencePatternSpec>,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[allow(dead_code)]
@@ -99,8 +127,7 @@ pub struct NumericEvidenceSchema {
 pub fn registry() -> &'static SearchSchemaConfig {
     static REGISTRY: OnceLock<SearchSchemaConfig> = OnceLock::new();
     REGISTRY.get_or_init(|| {
-        let mut config: SearchSchemaConfig =
-            serde_json::from_str(FACT_SCHEMA_REGISTRY_JSON).expect("valid fact schema registry");
+        let mut config = load_search_schema_config();
         config
             .theme_layers
             .sort_by(|left, right| left.rank.cmp(&right.rank));
@@ -112,6 +139,30 @@ pub fn registry() -> &'static SearchSchemaConfig {
             .sort_by(|left, right| left.rank.cmp(&right.rank));
         config
     })
+}
+
+fn load_search_schema_config() -> SearchSchemaConfig {
+    let path = dag_root().join("fact_registry.json");
+    if path.exists() {
+        if let Ok(file) = load_json::<FactRegistrySearchFile>(&path) {
+            return SearchSchemaConfig {
+                version: SEARCH_SCHEMA_VERSION,
+                theme_layers: file.search_dimensions,
+                numeric_constraints: file.numeric_constraints,
+                positive_preference_patterns: file.preference_patterns.positive,
+                negative_preference_patterns: file.preference_patterns.negative,
+                text_evidence: file.text_evidence,
+                numeric_evidence: file.numeric_evidence,
+            };
+        }
+    }
+
+    let mut config: SearchSchemaConfig =
+        serde_json::from_str(FACT_SCHEMA_REGISTRY_FALLBACK_JSON).expect("valid fact schema registry");
+    if config.version == 0 {
+        config.version = SEARCH_SCHEMA_VERSION;
+    }
+    config
 }
 
 pub fn positive_preference_patterns() -> &'static [PreferencePatternSpec] {
@@ -398,6 +449,20 @@ fn truncate_display(text: &str, max_chars: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn loads_search_schema_from_fact_registry_when_present() {
+        let path = dag_root().join("fact_registry.json");
+        if !path.exists() {
+            return;
+        }
+
+        let config = load_search_schema_config();
+        assert_eq!(config.version, SEARCH_SCHEMA_VERSION);
+        assert!(config.theme_layers.len() >= 20);
+        assert!(!config.positive_preference_patterns.is_empty());
+        assert!(!config.negative_preference_patterns.is_empty());
+    }
 
     #[test]
     fn loads_ranked_theme_registry() {

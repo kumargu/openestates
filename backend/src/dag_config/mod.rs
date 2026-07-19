@@ -17,9 +17,15 @@
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod fact_registry;
 mod loader;
 
+pub use fact_registry::{
+    fact_registry_path, load_fact_registry, load_fact_registry_from_path, load_fact_registry_index,
+    scoring_direction_from_hint, FactRegistryEntry, FactRegistryFile, FactRegistryIndex,
+    FactRegistryScoringHint,
+};
 pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
-    load_manifest, AssetRegistryFile, CrawlPolicyFile, DagConfigError, DagManifest,
+    load_json, load_manifest, AssetRegistryFile, CrawlPolicyFile, DagConfigError, DagManifest,
 };
