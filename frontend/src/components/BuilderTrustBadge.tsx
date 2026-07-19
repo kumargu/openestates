@@ -34,7 +34,7 @@ export function BuilderTrustBadge({ deliveryDisplay, deliveryRate, compact = fal
     border = "#fecaca";
   }
 
-  const text = deliveryDisplay || `Builder: ${Math.round(rate * 100)}% on time`;
+  const text = deliveryDisplay || "Builder delivery on file";
   const fontSize = compact ? "0.68rem" : "0.75rem";
   const padding = compact ? "0.1rem 0.4rem" : "0.2rem 0.55rem";
 

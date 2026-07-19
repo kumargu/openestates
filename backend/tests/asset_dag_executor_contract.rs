@@ -476,7 +476,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.parent_materializations.len(), 13);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        95
+        93
     );
 
     let serving_record = current_record(
@@ -485,7 +485,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 95);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 93);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -1757,11 +1757,11 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 price_max: Some(32_000_000.0),
                 area_sqft: Some(1_900.0),
                 area_sqft_min: Some(1_850.0),
-                area_sqft_max: Some(1_950.0),
+                area_sqft_max: Some(1_930.0),
                 price_per_sqft_min: Some(15_385.0),
                 price_per_sqft_max: Some(17_297.0),
                 price_display: Some("INR 3.0-3.2 Cr".to_string()),
-                area_display: Some("1850-1950".to_string()),
+                area_display: Some("1850-1930".to_string()),
                 price_per_sqft_display: Some("15385-17297".to_string()),
                 configuration: Some("3BHK".to_string()),
                 area_type: Some("super built-up".to_string()),

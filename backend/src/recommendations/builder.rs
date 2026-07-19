@@ -499,6 +499,7 @@ mod tests {
                     .collect(),
                 missing: (0..gaps).map(|idx| format!("gap {idx}")).collect(),
                 media: Vec::new(),
+                community_pulse: None,
             }]
         };
         let snapshot = summarize_evidence_sections(&sections);

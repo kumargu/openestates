@@ -84,8 +84,8 @@ export function ApproachRoadTrail({ sections }: Props) {
     <section className="area-trail" aria-labelledby="area-trail-title">
       <div className="area-trail__head">
         <div>
-          <span>Area trail</span>
-          <h2 id="area-trail-title">Approach road, with receipts</h2>
+          <span>Approach road</span>
+          <h2 id="area-trail-title">Gate-side approach, with receipts</h2>
         </div>
         <div className="area-trail__meta">
           {frames.length > 0 && <span>{frames.length} views</span>}

@@ -28,7 +28,7 @@ import {
   type PlanControlField,
   type PlanMilestone,
 } from "../features/home-plan/planFields.ts";
-import "../features/home-plan/home-plan.css";
+import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 
 function applyPreset(baseline: PlanInputs, preset: Exclude<PlanPreset, "Custom">): PlanInputs {
   if (preset === "Cautious market") return { ...baseline, appreciation: 4.5, equityReturn: 9, loanRate: 9.1 };
@@ -43,7 +43,7 @@ function BackIcon() {
 
 function LoadingPlan() {
   return (
-    <div className="home-plan-loading" aria-label="Loading home plan">
+    <div className="home-plan-loading" aria-label={BUY_VS_RENT.loading}>
       <div className="home-plan-loading-header" />
       <div className="home-plan-loading-pane">
         <div />
@@ -114,10 +114,10 @@ export function HomePlanPage() {
     prevProjectionRef.current = projection;
   }, [projection, horizon]);
 
-  if (!id) return <PageState variant="not_found" context="property" message="Pick a home first, then open its plan." />;
+  if (!id) return <PageState variant="not_found" context="property" message={BUY_VS_RENT.pickProperty} />;
   if (status === "loading") return <LoadingPlan />;
-  if (status === "not_found") return <PageState variant="not_found" context="property" message="This home is no longer available for planning." />;
-  if (status === "error") return <PageState variant="error" context="property" message="We could not load this plan. Go back to the property and try again." />;
+  if (status === "not_found") return <PageState variant="not_found" context="property" message={BUY_VS_RENT.unavailable} />;
+  if (status === "error") return <PageState variant="error" context="property" message={BUY_VS_RENT.loadError} />;
   if (!propertyData || !inputs || !projection || !loanJourney || !baselineLoanJourney) return null;
 
   const property = propertyData.property;
@@ -195,7 +195,7 @@ export function HomePlanPage() {
   return (
     <div className={`home-plan-shell home-plan-shell--${decisionTheme} home-plan-shell--view-${viewChapterClass}`}>
       <Helmet>
-        <title>{property.title} financial plan | OpenEstates</title>
+        <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
       </Helmet>
 
@@ -206,7 +206,7 @@ export function HomePlanPage() {
 
       <div className="home-plan-main">
         <div className="home-plan-canvas">
-          <section className="home-plan-hero" aria-label="Plan overview">
+          <section className="home-plan-hero" aria-label="Buy vs rent overview">
             <div className="home-plan-hero__rail">
               <PropertyOrigin
                 propertyId={id}

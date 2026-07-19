@@ -11,9 +11,9 @@ const SOURCE_COLORS: Record<string, { bg: string; color: string; border: string 
 
 function confidenceLabel(c: number): string {
   if (c >= 0.9) return "verified";
-  if (c >= 0.7) return `${Math.round(c * 100)}% confident`;
-  if (c >= 0.5) return `${Math.round(c * 100)}% confident`;
-  return "low confidence";
+  if (c >= 0.7) return "well supported";
+  if (c >= 0.5) return "likely";
+  return "tentative";
 }
 
 export function MatchReasonBadge({ reason }: { reason: MatchReason }) {
@@ -65,8 +65,7 @@ export function MatchReasonBadge({ reason }: { reason: MatchReason }) {
           }}
         >
           <div>Fact: {reason.fact_key}</div>
-          <div>Scored via: {reason.scoring_method}</div>
-          <div>Score contribution: {(reason.score * 100).toFixed(0)}%</div>
+          <div>Matched via: {reason.scoring_method}</div>
         </div>
       )}
     </div>

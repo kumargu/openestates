@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { PropertyDetailResponse } from "../../lib/types.ts";
+import { BUY_VS_RENT } from "./labels.ts";
 import type { PlanControlField } from "./planFields.ts";
 import { formatCurrency, type PlanInputs, type PlanProjection } from "./model.ts";
 
@@ -230,7 +231,7 @@ function SourcesPanel({ property }: Pick<PlanControlsProps, "property">) {
     {
       label: "Latest fact",
       value: freshestFact?.value ?? "None yet",
-      note: freshestFact ? `${freshestFact.source_type} · ${freshestFact.confidence_pct}% confidence` : "Assumptions below are editable until we have more data.",
+      note: freshestFact ? `Sourced from ${freshestFact.source_type}` : "Assumptions below are editable until we have more data.",
       confidence: freshestFact?.learned_at ? `Updated ${new Date(freshestFact.learned_at).toLocaleDateString("en-IN")}` : "—",
     },
   ];
@@ -282,11 +283,11 @@ export function PlanControls({
 
   return (
     <>
-      {open && <button type="button" className="home-plan-controls-backdrop" aria-label="Close plan editor" onClick={onClose} />}
+      {open && <button type="button" className="home-plan-controls-backdrop" aria-label={BUY_VS_RENT.closeEditor} onClick={onClose} />}
       <aside className={`home-plan-controls ${open ? "is-open" : ""}`} aria-hidden={!open}>
         <header className="home-plan-controls-header">
-          <div><span>Your plan</span><h2>{sectionTitle}</h2></div>
-          <button type="button" onClick={onClose} aria-label="Close plan editor"><ControlIcon name="close" /></button>
+          <div><span>{BUY_VS_RENT.assumptionsTitle}</span><h2>{sectionTitle}</h2></div>
+          <button type="button" onClick={onClose} aria-label={BUY_VS_RENT.closeEditor}><ControlIcon name="close" /></button>
         </header>
         <section className="home-plan-preset-selector" aria-label="Scenario presets">
           <div>

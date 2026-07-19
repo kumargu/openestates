@@ -5,13 +5,14 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { constellationForSection, constellationMeta } from "../../lib/evidence.ts";
+import { constellationForSection, constellationMeta, sectionDisplayTitle } from "../../lib/evidence.ts";
 import {
   ChevronIcon,
   LinkIcon,
   IconForKind,
   IconForLabel,
 } from "./EvidenceIcons.tsx";
+import { CommunityPulseCard } from "./CommunityPulseCard.tsx";
 
 type StackProps = {
   evidence: PropertyEvidenceResponse | undefined;
@@ -163,7 +164,7 @@ function EvidenceFold({
     max_preview_items: 4,
   };
 
-  if (facts.length === 0 && media.length === 0) return null;
+  if (facts.length === 0 && media.length === 0 && !section.community_pulse) return null;
 
   return (
     <section className={`ev-fold ${confidenceTone(section.confidence_pct)} ev-fold--${constellation} ev-fold--variant-${presentation.variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}>
@@ -172,20 +173,26 @@ function EvidenceFold({
         <span className="ev-fold__icon"><IconForKind kind={section.kind} size={18} /></span>
         <span className="ev-fold__headings">
           <span className="ev-fold__kicker">{meta.label}</span>
-          <span className="ev-fold__title">{section.title}</span>
-          <span className="ev-fold__read">{section.summary || section.subtitle}</span>
+          <span className="ev-fold__title">{sectionDisplayTitle(section)}</span>
+          <span className="ev-fold__read">
+            {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
+          </span>
         </span>
         <span className="ev-fold__meta">
           <span className="ev-fold__count">
-            {facts.length} facts{media.length > 0 ? ` · ${media.length} media` : ""}
+            {section.community_pulse
+              ? `${section.community_pulse.quotes.length} quotes`
+              : `${facts.length} facts${media.length > 0 ? ` · ${media.length} media` : ""}`}
           </span>
-          <span className="ev-fold__conf">{section.confidence_pct}%</span>
         </span>
         <span className="ev-fold__chevron"><ChevronIcon size={18} /></span>
       </button>
 
       <div className="ev-fold__wrap">
         <div className="ev-fold__inner">
+          {section.community_pulse && (
+            <CommunityPulseCard pulse={section.community_pulse} />
+          )}
           {media.map((strip) => (
             <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
           ))}
@@ -209,7 +216,8 @@ export function EvidenceStack({ evidence, fallbackSections, excludeKinds = [] }:
     .sort((a, b) => a.priority - b.priority);
   // Dynamic: a fold exists only if it carries at least one real fact or media receipt.
   const folds = ordered.filter((s) =>
-    s.items.some((it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0))
+    s.community_pulse != null
+    || s.items.some((it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0))
       || (s.media?.some((strip) => strip.frames.some((frame) => frame.image_url)) ?? false),
   );
 

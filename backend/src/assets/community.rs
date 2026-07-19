@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::community::{
-    deterministic_community_summarizer, CommunityEntitySummary, CommunityEvidenceRecord,
-    CommunityEvidenceSummaryEngine,
+    community_evidence_from_fact_value, deterministic_community_summarizer,
+    CommunityEntitySummary, CommunityEvidenceRecord, CommunityEvidenceSummaryEngine,
 };
 use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
@@ -72,32 +72,15 @@ fn skill_fact_to_community_evidence(fact: &SkillFactRecord) -> Option<CommunityE
         return None;
     }
     let value = serde_json::from_str::<FactValue>(&fact.value_json).ok()?;
-    let mut source_url = fact.source_url.clone();
-    let (text, numeric_value, tags) = match value {
-        FactValue::Numeric(value) => (None, Some(value), Vec::new()),
-        FactValue::Text(value) => {
-            if is_web_url(&value) {
-                source_url.get_or_insert(value);
-                (None, None, Vec::new())
-            } else {
-                (Some(value), None, Vec::new())
-            }
-        }
-        FactValue::Bool(_) => (None, None, Vec::new()),
-        FactValue::Tags(values) => (None, None, values),
-        FactValue::Score { value, explanation } => (Some(explanation), Some(value), Vec::new()),
-    };
-    Some(CommunityEvidenceRecord {
-        entity_id: fact.entity_id.clone(),
-        source_type: fact.source_type.clone(),
-        source_url,
-        fact_key: fact.fact_key.clone(),
-        text,
-        numeric_value,
-        tags,
-        confidence: fact.confidence,
-        learned_at: fact.learned_at,
-    })
+    community_evidence_from_fact_value(
+        &fact.entity_id,
+        &fact.source_type,
+        fact.source_url.clone(),
+        &fact.fact_key,
+        &value,
+        fact.confidence,
+        fact.learned_at,
+    )
 }
 
 fn append_summary_facts(
@@ -125,20 +108,6 @@ fn append_summary_facts(
         facts,
         annotations,
     )?;
-    if let Some(score) = summary.sentiment_score {
-        push_fact(
-            summary,
-            run_id,
-            "community_sentiment_score",
-            FactValue::Numeric(score),
-            "Community sentiment score: {value}",
-            &["good reviews", "high rating", "resident feedback"],
-            Some(("HigherIsBetter", 1.0, vec![80.0, 65.0])),
-            source_url.clone(),
-            facts,
-            annotations,
-        )?;
-    }
     if !summary.positive_themes.is_empty() {
         push_fact(
             summary,

@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, DiscoveryResponse, PropertyCard } from "../lib/types.ts";
 import { getAreaTracker, getDiscovery, getProperties, getStats, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
@@ -9,19 +9,10 @@ const InlineSearchExperience = lazy(() =>
   import("./ResultsPageA.tsx").then((m) => ({ default: m.SearchExperience }))
 );
 
-function useOnScreen(ref: React.RefObject<HTMLElement | null>) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); obs.disconnect(); } },
-      { threshold: 0.15 }
-    );
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, [ref]);
-  return visible;
+function formatPrice(price: number): string {
+  if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
+  if (price >= 100_000) return `${(price / 100_000).toFixed(0)} L`;
+  return price.toLocaleString("en-IN");
 }
 
 const ROTATING_WORDS = [
@@ -72,139 +63,31 @@ const POPULAR_SEARCHES = [
   "New launch Hebbal",
 ];
 
-function formatPrice(price: number): string {
-  if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `${(price / 100_000).toFixed(0)} L`;
-  return price.toLocaleString("en-IN");
-}
-
-/* ---------- Derived market stats ---------- */
-type TrendingHighlight = {
-  label: string;
-  value: string;
-  searchQuery: string;
-};
-
 type MarketSnapshot = {
   totalProperties: number;
   totalSocieties: number;
   totalAreas: number;
-  priceMin: number;
-  priceMax: number;
-  topBuilders: { name: string; count: number }[];
-  bhkBreakdown: Record<number, number>;
-  areaPropertyCounts: Record<string, number>;
-  trending: TrendingHighlight[];
 };
 
 function deriveMarketSnapshot(props: PropertyCard[]): MarketSnapshot {
-  const prices = props.map((p) => p.price);
-  const builderMap = new Map<string, number>();
-  const bhkMap: Record<number, number> = {};
   const areaMap: Record<string, number> = {};
-
   for (const p of props) {
-    builderMap.set(p.builder_name, (builderMap.get(p.builder_name) ?? 0) + 1);
-    bhkMap[p.bhk] = (bhkMap[p.bhk] ?? 0) + 1;
     areaMap[p.area] = (areaMap[p.area] ?? 0) + 1;
-  }
-
-  const topBuilders = [...builderMap.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([name, count]) => ({ name, count }));
-
-  // Derive trending highlights from real data
-  const trending: TrendingHighlight[] = [];
-
-  // Most listings area
-  const topArea = Object.entries(areaMap).sort(([, a], [, b]) => b - a)[0];
-  if (topArea) {
-    trending.push({
-      label: "Most active",
-      value: `${topArea[0]} — ${topArea[1]} listings`,
-      searchQuery: topArea[0],
-    });
-  }
-
-  // Best value area (lowest avg price/sqft)
-  const areaPrices: Record<string, number[]> = {};
-  for (const p of props) {
-    (areaPrices[p.area] ??= []).push(p.price_per_sqft);
-  }
-  const areaAvgs = Object.entries(areaPrices)
-    .map(([area, ps]) => ({ area, avg: ps.reduce((a, b) => a + b, 0) / ps.length }))
-    .filter((a) => (areaPrices[a.area]?.length ?? 0) >= 3)
-    .sort((a, b) => a.avg - b.avg);
-  if (areaAvgs.length > 0) {
-    trending.push({
-      label: "Best value",
-      value: `${areaAvgs[0].area} — ${Math.round(areaAvgs[0].avg).toLocaleString("en-IN")}/sqft avg`,
-      searchQuery: areaAvgs[0].area,
-    });
-  }
-
-  // Near metro count
-  const metroClose = props.filter((p) => p.metro_distance_mins <= 10).length;
-  if (metroClose > 0) {
-    trending.push({
-      label: "Near metro",
-      value: `${metroClose} properties within 10 min`,
-      searchQuery: "near metro",
-    });
-  }
-
-  // Ready to move count
-  const readyToMove = props.filter((p) => p.possession_status === "Ready to Move").length;
-  if (readyToMove > 0) {
-    trending.push({
-      label: "Ready to move",
-      value: `${readyToMove} available now`,
-      searchQuery: "ready to move",
-    });
-  }
-
-  // Premium segment
-  const premium = props.filter((p) => p.price >= 20_000_000).length;
-  if (premium > 0) {
-    trending.push({
-      label: "Premium",
-      value: `${premium} listings above 2 Cr`,
-      searchQuery: "premium 4BHK",
-    });
   }
 
   return {
     totalProperties: props.length,
     totalSocieties: new Set(props.map((p) => p.society_name)).size,
     totalAreas: Object.keys(areaMap).length,
-    priceMin: Math.min(...prices),
-    priceMax: Math.max(...prices),
-    topBuilders,
-    bhkBreakdown: bhkMap,
-    areaPropertyCounts: areaMap,
-    trending,
   };
 }
 
-/* ---------- Featured property (real data) ---------- */
-function pickFeatured(props: PropertyCard[]): PropertyCard | null {
-  // Pick a well-priced 3BHK with an image as the hero preview
-  const candidates = props.filter(
-    (p) => p.bhk === 3 && p.hero_image && p.transparency_tags.length > 0
-  );
-  if (candidates.length === 0) return props.find((p) => p.hero_image) ?? props[0] ?? null;
-  // Pick a stable one (middle-ish price)
-  candidates.sort((a, b) => a.price - b.price);
-  return candidates[Math.floor(candidates.length / 2)];
-}
-
 export function HomePage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
-  const activeView = searchParams.get("view") === "saved" ? "saved" : "cards";
-  const hasInlinePane = hasActiveSearch || activeView === "saved";
+  const hasInlinePane = hasActiveSearch;
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
@@ -213,10 +96,14 @@ export function HomePage() {
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
   const [sheetCount, setSheetCount] = useState(() => getSavedIds().length);
-  const pulseRef = useRef<HTMLElement | null>(null);
   const inlineResultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
-  const pulseVisible = useOnScreen(pulseRef);
+
+  useEffect(() => {
+    if (searchParams.get("view") === "saved") {
+      navigate("/results?view=saved", { replace: true });
+    }
+  }, [navigate, searchParams]);
 
   useEffect(() => {
     getProperties()
@@ -265,10 +152,9 @@ export function HomePage() {
     }, 90);
   }, [activeSearchQuery, hasInlinePane]);
 
-  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean; view?: "cards" | "saved" } = {}) => {
+  const commitSearch = useCallback((rawQuery: string, options: { scroll?: boolean } = {}) => {
     const q = rawQuery.trim();
     const nextParams = new URLSearchParams();
-    if (options.view === "saved") nextParams.set("view", "saved");
     setQuery(q);
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
@@ -279,7 +165,7 @@ export function HomePage() {
       setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
-      shouldScrollToResultsRef.current = options.scroll ?? options.view === "saved";
+      shouldScrollToResultsRef.current = false;
       setSearchParams(nextParams);
     }
   }, [setSearchParams]);
@@ -291,7 +177,7 @@ export function HomePage() {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    commitSearch(query, { view: "cards" });
+    commitSearch(query);
   };
 
   const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
@@ -303,7 +189,6 @@ export function HomePage() {
         totalAreas: platformStats.areas,
       }
     : derivedSnapshot;
-  const featured = properties.length > 0 ? pickFeatured(properties) : null;
 
   return (
     <div>
@@ -493,39 +378,6 @@ export function HomePage() {
           </div>
         )}
 
-        {/* Trending strip */}
-        {snapshot && snapshot.trending.length > 0 && (
-          <div
-            className="fade-up fade-up-delay-4 home-trending-strip"
-          >
-            <span
-              style={{
-                fontSize: "0.68rem",
-                textTransform: "uppercase",
-                letterSpacing: "0.08em",
-                color: "#999",
-                fontWeight: 700,
-                whiteSpace: "nowrap",
-                padding: "0.4rem 0.75rem 0.4rem 0",
-              }}
-            >
-              Area Tracker
-            </span>
-            {snapshot.trending.slice(0, 4).map((t, i, items) => (
-              <button
-                key={t.label}
-                type="button"
-                className={`home-trending-btn${i < items.length - 1 ? " home-trending-btn--divider" : ""}`}
-                onClick={() => {
-                  commitSearch(t.searchQuery);
-                }}
-              >
-                <span className="home-trending-label">{t.label}</span>
-                <span className="home-trending-value">{t.value}</span>
-              </button>
-            ))}
-          </div>
-        )}
       </section>
 
       {hasInlinePane && (
@@ -534,13 +386,7 @@ export function HomePage() {
             fallback={
               <div className="inline-results-shell">
                 <div className="inline-results-header">
-                  <span className="inline-results-kicker">
-                    {activeView === "saved" && !activeSearchQuery ? "Saved homes" : "Search results"}
-                  </span>
-                  <div className="results-view-switch" aria-hidden="true">
-                    <span className={activeView === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Results</span>
-                    <span className={activeView === "saved" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}>Saved</span>
-                  </div>
+                  <span className="inline-results-kicker">Search results</span>
                   <div className="skeleton-search-bar skeleton-bar" />
                 </div>
               </div>
@@ -554,154 +400,13 @@ export function HomePage() {
         </section>
       )}
 
-      {discovery?.shelves?.length ? (
+      {!hasInlinePane && discovery?.shelves?.length ? (
         <DiscoveryShelvesSection discovery={discovery} onSearch={commitSearch} />
       ) : null}
 
-      {/* Micro-market intelligence cards */}
       {snapshot && properties.length > 0 && (
         <MicroMarketsSection properties={properties} areaTracker={areaTracker} onSearch={commitSearch} />
       )}
-
-      {/* Market Pulse — real data snapshot */}
-      {snapshot && (
-        <section
-          ref={pulseRef}
-          className="home-pulse-section"
-          style={{
-            padding: "clamp(3rem, 6vw, 5rem) clamp(1.5rem, 4vw, 4rem)",
-          }}
-        >
-          <div
-            style={{
-              maxWidth: "960px",
-              margin: "0 auto",
-              opacity: pulseVisible ? 1 : 0,
-              transform: pulseVisible ? "translateY(0)" : "translateY(24px)",
-              transition: "opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1)",
-            }}
-          >
-            <h2 className="home-pulse-heading">Market pulse</h2>
-            <p style={{ color: "#888", marginBottom: "2rem", fontSize: "0.95rem" }}>
-              Live snapshot across {snapshot.totalAreas} micro-markets in Bengaluru
-            </p>
-
-            <div className="home-pulse-grid">
-              {/* Price range + BHK breakdown */}
-              <div className="home-pulse-card home-pulse-card--clay">
-                <p className="home-pulse-label">Price range</p>
-                <div style={{ display: "flex", alignItems: "baseline", gap: "0.5rem", marginBottom: "1rem" }}>
-                  <span className="home-pulse-metric home-pulse-metric--clay">
-                    {formatPrice(snapshot.priceMin)}
-                  </span>
-                  <span style={{ color: "#ccc" }}>&mdash;</span>
-                  <span className="home-pulse-metric home-pulse-metric--cool">
-                    {formatPrice(snapshot.priceMax)}
-                  </span>
-                </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-                  {Object.entries(snapshot.bhkBreakdown)
-                    .sort(([a], [b]) => Number(a) - Number(b))
-                    .map(([bhk, count]) => (
-                      <button
-                        key={bhk}
-                        type="button"
-                        className="home-pulse-bhk-btn"
-                        onClick={() => commitSearch(`${bhk}BHK`)}
-                      >
-                        {bhk} BHK <span style={{ color: "#aaa", marginLeft: "0.25rem" }}>{count}</span>
-                      </button>
-                    ))}
-                </div>
-              </div>
-
-              {/* Top builders */}
-              <div className="home-pulse-card home-pulse-card--cool">
-                <p className="home-pulse-label">Top builders</p>
-                <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
-                  {snapshot.topBuilders.map((b) => (
-                    <button
-                      key={b.name}
-                      type="button"
-                      className="home-pulse-builder-btn"
-                      onClick={() => commitSearch(b.name)}
-                    >
-                      <span style={{ fontWeight: 500 }}>{b.name}</span>
-                      <span style={{ fontSize: "0.75rem", color: "#999" }}>{b.count} listings</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Featured property preview — real data */}
-              {featured && (
-                <Link
-                  to={`/property/${featured.id}`}
-                  style={{ textDecoration: "none", color: "inherit" }}
-                >
-                  <div className="home-pulse-featured home-pulse-card--highlight">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem" }}>
-                      <p style={{ margin: 0, fontSize: "0.75rem", color: "#999", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-                        Sample transparency report
-                      </p>
-                      <span className="home-pulse-live">Live</span>
-                    </div>
-                    <p style={{ fontSize: "0.95rem", fontWeight: 600, margin: "0 0 0.15rem", color: "#1a1a1a" }}>
-                      {featured.title}
-                    </p>
-                    <p style={{ fontSize: "0.78rem", color: "#999", margin: "0 0 0.75rem" }}>
-                      {featured.area}, Bengaluru
-                    </p>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.5rem" }}>
-                      <span style={{ fontSize: "0.85rem", color: "#444" }}>Price</span>
-                      <span style={{ fontSize: "1.1rem", fontWeight: 700, color: "#b85a3c" }}>{formatPrice(featured.price)}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.75rem" }}>
-                      <span style={{ fontSize: "0.85rem", color: "#444" }}>Per sqft</span>
-                      <span style={{ fontSize: "0.95rem", fontWeight: 600, color: "#888" }}>
-                        {featured.price_per_sqft.toLocaleString("en-IN")} /sqft
-                      </span>
-                    </div>
-                    {featured.transparency_tags.length > 0 && (
-                      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginTop: "auto" }}>
-                        {featured.transparency_tags.slice(0, 3).map((tag) => {
-                          const isSellerRegistered = tag === "seller-registered";
-                          const isVerificationPending = tag === "verification-pending";
-                          return (
-                            <span
-                              key={tag}
-                              style={{
-                                fontSize: "0.7rem",
-                                padding: "0.2rem 0.55rem",
-                                borderRadius: "999px",
-                                backgroundColor: isSellerRegistered
-                                  ? "rgba(251, 191, 36, 0.15)"
-                                  : isVerificationPending
-                                  ? "rgba(156, 163, 175, 0.15)"
-                                  : "var(--color-positive-bg)",
-                                color: isSellerRegistered
-                                  ? "#92400e"
-                                  : isVerificationPending
-                                  ? "#6b7280"
-                                  : "var(--color-positive)",
-                                fontWeight: 500,
-                              }}
-                            >
-                              {tag.replace(/-/g, " ")}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                </Link>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Explore Bengaluru section removed — Area Price Strip covers this better */}
     </div>
   );
 }
@@ -737,7 +442,6 @@ type MicroMarket = {
   readyToMove: number;
   nearMetro: number;
   topBuilder: string;
-  avgRating: number | null;
   societies: number;
 };
 
@@ -758,7 +462,6 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
         builderCount[p.builder_name] = (builderCount[p.builder_name] ?? 0) + 1;
       }
       const topBuilder = Object.entries(builderCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-      const ratings = ps.filter((p) => p.google_rating && p.google_rating > 0).map((p) => p.google_rating!);
       const societies = new Set(ps.map((p) => p.society_name));
 
       return {
@@ -773,7 +476,6 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
         readyToMove: ps.filter((p) => p.possession_status === "ready").length,
         nearMetro: ps.filter((p) => p.metro_distance_mins <= 15).length,
         topBuilder,
-        avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
         societies: societies.size,
       };
     })
@@ -782,29 +484,22 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
 
 function deriveMicroMarketsFromTracker(
   tracker: AreaTrackerResponse,
-  properties: PropertyCard[],
+  _properties: PropertyCard[],
 ): MicroMarket[] {
-  return tracker.markets.map((market) => {
-    const ratings = properties
-      .filter((p) => p.area === market.name && p.google_rating && p.google_rating > 0)
-      .map((p) => p.google_rating!);
-
-    return {
-      area: market.name,
-      vibe: AREA_VIBES[market.name] ?? "",
-      avgPriceSqft: market.avg_price_per_sqft,
-      hasAvgPriceSqft: market.avg_price_per_sqft > 0,
-      priceMin: market.price_min,
-      priceMax: market.price_max,
-      count: market.listing_count,
-      bhks: market.bhks,
-      readyToMove: market.ready_to_move,
-      nearMetro: market.near_metro,
-      topBuilder: market.top_builder,
-      avgRating: ratings.length > 0 ? Math.round((ratings.reduce((a, b) => a + b, 0) / ratings.length) * 10) / 10 : null,
-      societies: market.societies,
-    };
-  });
+  return tracker.markets.map((market) => ({
+    area: market.name,
+    vibe: AREA_VIBES[market.name] ?? "",
+    avgPriceSqft: market.avg_price_per_sqft,
+    hasAvgPriceSqft: market.avg_price_per_sqft > 0,
+    priceMin: market.price_min,
+    priceMax: market.price_max,
+    count: market.listing_count,
+    bhks: market.bhks,
+    readyToMove: market.ready_to_move,
+    nearMetro: market.near_metro,
+    topBuilder: market.top_builder,
+    societies: market.societies,
+  }));
 }
 
 function MicroMarketCard({
@@ -895,11 +590,6 @@ function MicroMarketCard({
             {m.nearMetro} near metro
           </span>
         )}
-        {m.avgRating !== null && (
-          <span style={chipStyle("rgba(218,165,32,0.1)", "#8a6d00")}>
-            ★ {m.avgRating}
-          </span>
-        )}
       </div>
 
       {/* Top builder */}
@@ -940,7 +630,7 @@ function DiscoveryShelvesSection({
         <div className="home-discovery-heading-row">
           <div>
             <span className="home-discovery-kicker">Discovery shelves</span>
-            <h2 className="home-discovery-heading">Fewer homes. Better reasons.</h2>
+            <h2 className="home-discovery-heading">Curated by intent</h2>
           </div>
           <button
             type="button"
@@ -1005,7 +695,7 @@ function MicroMarketsSection({
   const maxAvg = Math.max(1, ...markets.filter((m) => m.hasAvgPriceSqft).map((m) => m.avgPriceSqft));
 
   return (
-    <section className="home-micro-section" style={{ padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem" }}>
+    <section id="area-tracker" className="home-micro-section" style={{ padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem" }}>
       <div style={{ maxWidth: "960px", margin: "0 auto" }}>
         <div style={{ marginBottom: "1.5rem" }}>
           <h2 className="home-micro-heading">Area Tracker</h2>

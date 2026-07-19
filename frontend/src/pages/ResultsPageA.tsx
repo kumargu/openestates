@@ -318,7 +318,7 @@ function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation 
       {/* Verified-data indicator */}
       {explanation.graph_driven_pct > 0 && (
         <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", margin: "0.3rem 0 0" }}>
-          {Math.round(explanation.graph_driven_pct)}% scored from verified data
+          Ranked using verified data
         </p>
       )}
     </div>
@@ -705,7 +705,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             <p>
               {viewMode === "saved"
                 ? savedCount > 0
-                  ? `${savedCountLabel}. Open one to see its full report or plan.`
+                  ? `${savedCountLabel}. Open one for the full report or buy vs rent check.`
                   : "Your saved homes will stay here while you keep browsing."
                 : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "listings with full transparency reports"}`}
             </p>
@@ -752,7 +752,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       )}
 
       {/* Area context bar — shown when backend search returns area info */}
-      {!isEmbedded && areaContext && <AreaContextBar ctx={areaContext} />}
+      {areaContext && <AreaContextBar ctx={areaContext} />}
 
       {!isEmbedded && (
         <div className="results-view-row">

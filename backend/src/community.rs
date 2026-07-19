@@ -10,6 +10,31 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+/// Target length for buyer-facing community pulse paragraphs.
+pub const COMMUNITY_PARAGRAPH_MAX_WORDS: usize = 85;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommunityPulseQuote {
+    pub text: String,
+    pub source_type: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub polarity: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct CommunityPulse {
+    pub source_label: String,
+    pub sentiment_band: String,
+    pub paragraph: String,
+    pub positives: Vec<String>,
+    pub concerns: Vec<String>,
+    pub quotes: Vec<CommunityPulseQuote>,
+    pub source_urls: Vec<String>,
+    pub confidence_pct: u8,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct CommunityEvidenceRecord {
@@ -33,6 +58,7 @@ pub struct CommunityEntitySummary {
     pub concern_themes: Vec<String>,
     pub review_highlights: Vec<String>,
     pub source_urls: Vec<String>,
+    pub source_types: Vec<String>,
     pub evidence_count: usize,
     pub confidence: f32,
     pub learned_at: DateTime<Utc>,
@@ -307,6 +333,7 @@ where
             concern_themes,
             review_highlights,
             source_urls,
+            source_types: source_types.into_iter().collect(),
             evidence_count: records.len(),
             confidence,
             learned_at,
@@ -437,65 +464,298 @@ fn summary_confidence(records: &[CommunityEvidenceRecord], text_evidence_count: 
     }
 }
 
-pub(crate) fn deterministic_summary(input: &CommunitySummaryInput<'_>) -> String {
-    let source_label = if input.source_types.is_empty() {
-        "Community"
-    } else if input.source_types.len() == 1 && input.source_types.contains("Google") {
-        "Google"
-    } else if input.source_types.len() == 1 && input.source_types.contains("Reddit") {
-        "Reddit"
-    } else {
-        "Community"
+pub fn community_pulse_from_summary(summary: &CommunityEntitySummary) -> CommunityPulse {
+    let source_label = source_label_for_types(&summary.source_types);
+    let sentiment_band = summary
+        .sentiment_score
+        .map(|score| sentiment_band_from_score(score).to_string())
+        .unwrap_or_else(|| "Early signal".to_string());
+    let quotes = bucket_review_quotes(
+        &summary.review_highlights,
+        &summary.positive_themes,
+        &summary.concern_themes,
+        &summary.source_urls,
+        &summary.source_types,
+    );
+    CommunityPulse {
+        source_label,
+        sentiment_band,
+        paragraph: summary.summary.clone(),
+        positives: summary.positive_themes.clone(),
+        concerns: summary.concern_themes.clone(),
+        quotes,
+        source_urls: summary.source_urls.clone(),
+        confidence_pct: (summary.confidence.clamp(0.0, 1.0) * 100.0).round() as u8,
+    }
+}
+
+pub fn community_evidence_from_fact_value(
+    entity_id: &str,
+    source_type: &str,
+    source_url: Option<String>,
+    fact_key: &str,
+    value: &crate::knowledge::FactValue,
+    confidence: f32,
+    learned_at: DateTime<Utc>,
+) -> Option<CommunityEvidenceRecord> {
+    let mut source_url = source_url;
+    let (text, numeric_value, tags) = match value {
+        crate::knowledge::FactValue::Numeric(value) => (None, Some(*value), Vec::new()),
+        crate::knowledge::FactValue::Text(value) => {
+            if is_web_url(value) {
+                source_url.get_or_insert_with(|| value.clone());
+                (None, None, Vec::new())
+            } else {
+                (Some(value.clone()), None, Vec::new())
+            }
+        }
+        crate::knowledge::FactValue::Bool(_) => (None, None, Vec::new()),
+        crate::knowledge::FactValue::Tags(values) => (None, None, values.clone()),
+        crate::knowledge::FactValue::Score { value, explanation } => {
+            (Some(explanation.clone()), Some(*value), Vec::new())
+        }
     };
+    Some(CommunityEvidenceRecord {
+        entity_id: entity_id.to_string(),
+        source_type: source_type.to_string(),
+        source_url,
+        fact_key: fact_key.to_string(),
+        text,
+        numeric_value,
+        tags,
+        confidence,
+        learned_at,
+    })
+}
 
-    let mut parts = Vec::new();
-    match (input.rating, input.review_count) {
-        (Some(rating), Some(count)) => parts.push(format!(
-            "{source_label} signal is {}: {:.1}/5 from {} reviews.",
-            rating_band(rating),
-            rating,
-            count
-        )),
-        (Some(rating), None) => parts.push(format!(
-            "{source_label} signal is {}: {:.1}/5.",
-            rating_band(rating),
-            rating
-        )),
-        (None, Some(count)) => parts.push(format!("{source_label} has {count} review signals.")),
-        (None, None) => parts.push(format!("{source_label} evidence is present.")),
-    }
+pub(crate) fn deterministic_summary(input: &CommunitySummaryInput<'_>) -> String {
+    compose_community_paragraph(input)
+}
 
-    if !input.positive_themes.is_empty() {
-        parts.push(format!(
-            "Positive themes: {}.",
-            input.positive_themes.join(", ")
+pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> String {
+    let source_label = source_label_for_type_set(input.source_types);
+    let band = input.rating.map(sentiment_band_from_rating);
+
+    if input.text_evidence_count == 0 && input.rating.is_none() {
+        return clamp_paragraph_words(format!(
+            "{source_label} feedback is still thin for this society."
         ));
     }
-    if !input.concern_themes.is_empty() {
-        parts.push(format!(
-            "Watch themes: {}.",
-            input.concern_themes.join(", ")
+
+    let mut sentences = Vec::new();
+    let positives = join_natural_list(input.positive_themes);
+    let concerns = join_natural_list(input.concern_themes);
+
+    if input.text_evidence_count > 0 {
+        match (
+            input.positive_themes.is_empty(),
+            input.concern_themes.is_empty(),
+            band,
+        ) {
+            (true, true, Some(band)) => sentences.push(format!(
+                "{source_label} feedback reads {band}, though recurring themes are still being extracted."
+            )),
+            (true, true, None) => sentences.push(format!(
+                "{source_label} feedback is available, though recurring themes are still being extracted."
+            )),
+            (false, true, Some(band)) => sentences.push(format!(
+                "{source_label} feedback is {band} on life inside the society, with residents repeatedly mentioning {positives}."
+            )),
+            (false, true, None) => sentences.push(format!(
+                "Residents repeatedly praise {positives} in {source_label} feedback."
+            )),
+            (true, false, Some(band)) => sentences.push(format!(
+                "{source_label} feedback is {band}, with recurring concerns around {concerns}."
+            )),
+            (true, false, None) => sentences.push(format!(
+                "{source_label} feedback flags recurring concerns around {concerns}."
+            )),
+            (false, false, Some(band)) => sentences.push(format!(
+                "{source_label} feedback is {band} overall. Residents praise {positives}. The main cautions are {concerns}."
+            )),
+            (false, false, None) => sentences.push(format!(
+                "{source_label} feedback leans on resident themes: praise for {positives}, with {concerns} as the main cautions."
+            )),
+        }
+    } else if let Some(band) = band {
+        sentences.push(format!(
+            "{source_label} points to a {band} resident signal, but written review themes are still limited."
         ));
     }
+
+    if let Some(highlight) = input
+        .evidence_texts
+        .iter()
+        .find(|text| !looks_like_generated_gap(text))
+    {
+        let excerpt = truncate_for_paragraph(highlight, 110);
+        if !sentences.iter().any(|sentence| sentence.contains(&excerpt)) {
+            sentences.push(format!("One recurring note: \"{excerpt}\""));
+        }
+    }
+
     if input.text_evidence_count == 0 {
-        parts.push(
-            "Review text is not ingested yet, so theme-level claims are unavailable.".to_string(),
+        sentences
+            .push("Treat this as directional until more review text is ingested.".to_string());
+    } else if input.rating.is_some() && input.review_count.unwrap_or(0) < 25 {
+        sentences.push(
+            "The written signal is still building, so weigh resident quotes over the headline read."
+                .to_string(),
         );
     }
 
-    parts.join(" ")
+    clamp_paragraph_words(sentences.join(" "))
+}
+
+pub fn source_label_for_types(source_types: &[String]) -> String {
+    let set = source_types.iter().cloned().collect::<BTreeSet<_>>();
+    source_label_for_type_set(&set)
+}
+
+fn source_label_for_type_set(source_types: &BTreeSet<String>) -> String {
+    if source_types.is_empty() {
+        "Community".to_string()
+    } else if source_types.len() == 1 && source_types.contains("Google") {
+        "Google review".to_string()
+    } else if source_types.len() == 1 && source_types.contains("Reddit") {
+        "Reddit".to_string()
+    } else if source_types.contains("Google") {
+        "Google review".to_string()
+    } else {
+        "Community".to_string()
+    }
+}
+
+pub fn sentiment_band_from_rating(rating: f64) -> &'static str {
+    rating_band(rating)
+}
+
+fn sentiment_band_from_score(score: f64) -> &'static str {
+    if score >= 84.0 {
+        "Positive"
+    } else if score >= 76.0 {
+        "Mixed-positive"
+    } else if score >= 68.0 {
+        "Mixed"
+    } else {
+        "Cautious"
+    }
 }
 
 fn rating_band(rating: f64) -> &'static str {
     if rating >= 4.2 {
-        "positive"
+        "broadly positive"
     } else if rating >= 3.8 {
         "mixed-positive"
     } else if rating >= 3.4 {
         "mixed"
     } else {
-        "weak"
+        "cautious"
     }
+}
+
+fn join_natural_list(values: &[String]) -> String {
+    match values.len() {
+        0 => String::new(),
+        1 => values[0].clone(),
+        2 => format!("{} and {}", values[0], values[1]),
+        _ => format!(
+            "{}, and {}",
+            values[..values.len() - 1].join(", "),
+            values[values.len() - 1]
+        ),
+    }
+}
+
+fn truncate_for_paragraph(value: &str, max_chars: usize) -> String {
+    let trimmed = value.trim();
+    if trimmed.chars().count() <= max_chars {
+        return trimmed.to_string();
+    }
+    let mut out = trimmed.chars().take(max_chars).collect::<String>();
+    if let Some(index) = out.rfind(' ') {
+        out.truncate(index);
+    }
+    format!("{out}...")
+}
+
+fn clamp_paragraph_words(mut text: String) -> String {
+    let words: Vec<&str> = text.split_whitespace().collect();
+    if words.len() <= COMMUNITY_PARAGRAPH_MAX_WORDS {
+        return text;
+    }
+    text = words
+        .into_iter()
+        .take(COMMUNITY_PARAGRAPH_MAX_WORDS)
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !text.ends_with('.') {
+        text.push('.');
+    }
+    text
+}
+
+fn bucket_review_quotes(
+    highlights: &[String],
+    positive_themes: &[String],
+    concern_themes: &[String],
+    source_urls: &[String],
+    source_types: &[String],
+) -> Vec<CommunityPulseQuote> {
+    let source_url = source_urls.first().cloned();
+    let source_type = source_types
+        .first()
+        .cloned()
+        .unwrap_or_else(|| "Google".to_string());
+    highlights
+        .iter()
+        .filter(|text| !looks_like_generated_gap(text))
+        .map(|text| {
+            let polarity = quote_polarity(text, positive_themes, concern_themes);
+            CommunityPulseQuote {
+                text: text.clone(),
+                source_type: source_type.clone(),
+                source_url: source_url.clone(),
+                polarity,
+            }
+        })
+        .take(5)
+        .collect()
+}
+
+fn quote_polarity(
+    text: &str,
+    positive_themes: &[String],
+    concern_themes: &[String],
+) -> String {
+    let haystack = text.to_ascii_lowercase();
+    let concern_hit = concern_themes.iter().any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
+        || community_theme_candidates().iter().any(|theme| {
+            theme.polarity == CommunityThemePolarity::Concern
+                && theme
+                    .terms
+                    .iter()
+                    .any(|term| contains_theme_term(&haystack, term))
+        });
+    let positive_hit = positive_themes.iter().any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
+        || community_theme_candidates().iter().any(|theme| {
+            theme.polarity == CommunityThemePolarity::Positive
+                && theme
+                    .terms
+                    .iter()
+                    .any(|term| contains_theme_term(&haystack, term))
+        });
+    if concern_hit && !positive_hit {
+        "concern".to_string()
+    } else if positive_hit {
+        "positive".to_string()
+    } else {
+        "neutral".to_string()
+    }
+}
+
+fn is_web_url(value: &str) -> bool {
+    value.starts_with("http://") || value.starts_with("https://")
 }
 
 fn document_haystack(document: &CommunityEvidenceRecord) -> String {
@@ -788,7 +1048,7 @@ mod tests {
         assert!(summaries[0].concern_themes.is_empty());
         assert!(summaries[0]
             .summary
-            .contains("Review text is not ingested yet"));
+            .contains("written review themes are still limited"));
         assert_eq!(summaries[0].confidence, 0.55);
         assert!(summaries[0].model.is_none());
     }
@@ -814,13 +1074,12 @@ mod tests {
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].positive_themes, vec!["amenities", "greenery"]);
         assert_eq!(summaries[0].concern_themes, vec!["traffic"]);
-        assert!(summaries[0].summary.contains("Positive themes"));
         assert!(!summaries[0]
             .summary
             .contains("Review text is not ingested yet"));
         assert_eq!(
             summaries[0].summary,
-            "Reddit evidence is present. Positive themes: amenities, greenery. Watch themes: traffic."
+            "Reddit feedback leans on resident themes: praise for amenities and greenery, with traffic as the main cautions. One recurring note: \"Calm layout with many trees, clubhouse, pool, but traffic is bad.\""
         );
     }
 
@@ -851,5 +1110,34 @@ mod tests {
         );
         assert_eq!(summaries[0].concern_themes, vec!["traffic"]);
         assert!(!summaries[0].summary.contains("noise"));
+    }
+
+    #[test]
+    fn paragraph_stays_within_word_limit() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap();
+        let summarizer = deterministic_community_summarizer();
+        let summaries = summarizer.summarize(&[CommunityEvidenceRecord {
+            entity_id: "society:example".to_string(),
+            source_type: "Google".to_string(),
+            source_url: Some("https://maps.google.com/example".to_string()),
+            fact_key: "google_review_snippets".to_string(),
+            text: None,
+            numeric_value: None,
+            tags: (0..8)
+                .map(|index| {
+                    format!(
+                        "Residents mention greenery, amenities, maintenance, connectivity, traffic, water, parking, and noise theme {index}."
+                    )
+                })
+                .collect(),
+            confidence: 0.85,
+            learned_at,
+        }]);
+
+        assert_eq!(summaries.len(), 1);
+        assert!(
+            summaries[0].summary.split_whitespace().count() <= COMMUNITY_PARAGRAPH_MAX_WORDS
+        );
+        assert!(!summaries[0].summary.contains("/5"));
     }
 }

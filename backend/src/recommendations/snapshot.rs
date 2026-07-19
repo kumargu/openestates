@@ -80,6 +80,7 @@ mod tests {
                 .collect(),
             missing: (0..gaps).map(|idx| format!("gap {idx}")).collect(),
             media: Vec::new(),
+            community_pulse: None,
         }
     }
 

@@ -351,6 +351,25 @@ export type EvidenceSection = {
   items: SourceItem[];
   missing: string[];
   media?: EvidenceMediaStrip[];
+  community_pulse?: CommunityPulse;
+};
+
+export type CommunityPulseQuote = {
+  text: string;
+  source_type: string;
+  source_url?: string;
+  polarity: "positive" | "concern" | "neutral" | string;
+};
+
+export type CommunityPulse = {
+  source_label: string;
+  sentiment_band: string;
+  paragraph: string;
+  positives: string[];
+  concerns: string[];
+  quotes: CommunityPulseQuote[];
+  source_urls: string[];
+  confidence_pct: number;
 };
 
 export type EvidencePresentation = {

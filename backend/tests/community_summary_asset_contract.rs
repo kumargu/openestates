@@ -32,12 +32,12 @@ fn google_rating_metadata_creates_summary_without_fake_themes() {
     assert_eq!(input.source, "community");
     assert!(input.facts.iter().any(|fact| {
         fact.fact_key == "community_review_summary"
-            && fact.value_json.contains("3.9/5 from 392 reviews")
-            && fact.value_json.contains("Review text is not ingested yet")
+            && fact.value_json.contains("written review themes are still limited")
     }));
-    assert!(input.facts.iter().any(|fact| {
-        fact.fact_key == "community_sentiment_score" && fact.value_json.contains("78")
-    }));
+    assert!(!input
+        .facts
+        .iter()
+        .any(|fact| fact.fact_key == "community_sentiment_score"));
     assert!(!input
         .facts
         .iter()
@@ -121,6 +121,7 @@ fn google_review_snippets_create_dynamic_theme_facts() {
     assert!(input.facts.iter().any(|fact| {
         fact.fact_key == "community_review_summary"
             && !fact.value_json.contains("Review text is not ingested yet")
+            && !fact.value_json.contains("/5")
     }));
     assert!(input.facts.iter().any(|fact| {
         fact.fact_key == "community_review_highlights"

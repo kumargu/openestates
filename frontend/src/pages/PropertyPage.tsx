@@ -7,11 +7,14 @@ import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
+import { TrustBadge } from "../components/TrustBadge.tsx";
+import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
-import { panelsToSections } from "../lib/evidence.ts";
+import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
+import { panelsToSections, topEvidenceGlance } from "../lib/evidence.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -73,10 +76,6 @@ type RiskSignal = {
 
 function clamp(value: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, value));
-}
-
-function pct(value: number): string {
-  return `${Math.round(value * 100)}%`;
 }
 
 function normalizedDelta(value: number | null | undefined): number | null {
@@ -244,6 +243,7 @@ export function PropertyPage() {
     ? data.evidence.sections
     : fallbackEvidenceSections;
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
+  const proofGlance = topEvidenceGlance(data.evidence, 1)[0] ?? null;
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -306,6 +306,26 @@ export function PropertyPage() {
           </div>
 
           <p className="property-brief-summary">{decision.summary}</p>
+
+          <div className="property-proof-strip">
+            {data.home_state_display && (
+              <span className="property-proof-strip__chip">{data.home_state_display}</span>
+            )}
+            <TrustBadge rootSource={data.root_source} compact />
+            {data.builder_trust?.delivery_display && (
+              <BuilderTrustBadge
+                deliveryDisplay={data.builder_trust.delivery_display}
+                deliveryRate={data.builder_trust.delivery_rate}
+                compact
+              />
+            )}
+            {data.rera?.registered && (
+              <span className="property-proof-strip__chip property-proof-strip__chip--positive">
+                RERA verified
+              </span>
+            )}
+            {proofGlance && <span className="property-proof-strip__read">{proofGlance}</span>}
+          </div>
 
           <div className="property-brief-tags">
             <span>{p.bhk} BHK</span>
@@ -385,11 +405,11 @@ export function PropertyPage() {
 
         <aside className="property-action-rail">
           <div className="property-mini-card property-plan-entry-card">
-            <span>Financial plan</span>
-            <h3>Would this home improve your position?</h3>
-            <p>Compare buying with renting and mutual funds, then inspect the repayment journey.</p>
+            <span>{BUY_VS_RENT.kicker}</span>
+            <h3>Would buying beat renting for you?</h3>
+            <p>Compare EMI, rent, and investing the difference — with a repayment timeline.</p>
             <Link to={`/property/${p.id}/plan`} className="property-plan-entry-link">
-              Open home plan
+              {BUY_VS_RENT.cta}
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M5 12h14M13 6l6 6-6 6" />
               </svg>
@@ -508,9 +528,6 @@ function RiskBar({ signal }: { signal: RiskSignal }) {
       <div>
         <span>{signal.label}</span>
         <strong className={`property-risk-label property-risk-label--${tone}`}>{label}</strong>
-      </div>
-      <div className="property-risk-track">
-        <span className={`property-risk-fill property-risk-fill--${tone}`} style={{ width: pct(signal.value) }} />
       </div>
     </div>
   );

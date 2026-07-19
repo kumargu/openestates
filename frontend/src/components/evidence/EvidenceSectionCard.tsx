@@ -75,9 +75,6 @@ export function EvidenceSectionCard({
           )}
         </div>
         <div className="evidence-section-card__meta">
-          <span className="evidence-section-card__confidence">
-            {section.confidence_pct}% conf
-          </span>
           <span className="evidence-section-card__count">
             {section.items.length} facts{mediaCount > 0 ? ` · ${mediaCount} views` : ""}
           </span>

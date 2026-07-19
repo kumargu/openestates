@@ -71,13 +71,24 @@ export function constellationMeta(id: EvidenceConstellation) {
   return CONSTELLATION_META[id];
 }
 
+const SECTION_DISPLAY_TITLES: Record<string, string> = {
+  area: "Commute & access",
+  approach_road: "Approach road facts",
+};
+
+export function sectionDisplayTitle(section: Pick<EvidenceSection, "kind" | "title">): string {
+  return SECTION_DISPLAY_TITLES[section.kind] ?? section.title;
+}
+
 export function visibleEvidenceSections(
   sections: EvidenceSection[] | undefined,
 ): EvidenceSection[] {
   if (!sections?.length) return [];
   return sections
     .filter((section) =>
-      section.items.length > 0 || (section.media?.some((strip) => strip.frames.length > 0) ?? false),
+      section.community_pulse != null
+      || section.items.length > 0
+      || (section.media?.some((strip) => strip.frames.length > 0) ?? false),
     )
     .sort((a, b) => a.priority - b.priority);
 }
@@ -90,13 +101,28 @@ export function summarizeEvidence(
   const sections = visibleEvidenceSections(evidence.sections);
   if (sections.length === 0) return null;
 
-  const factCount = sections.reduce((sum, s) => sum + s.items.length, 0);
+  const factCount = sections.reduce((sum, section) => {
+    if (section.community_pulse) {
+      const pulse = section.community_pulse;
+      return sum
+        + pulse.quotes.length
+        + pulse.positives.length
+        + pulse.concerns.length
+        + (pulse.paragraph.trim().length > 0 ? 1 : 0);
+    }
+    return sum + section.items.length;
+  }, 0);
   const gapCount = 0;
   const confidencePct = Math.round(
     sections.reduce((sum, s) => sum + s.confidence_pct, 0) / sections.length,
   );
   const sourceTypes = [
-    ...new Set(sections.flatMap((s) => s.source_types)),
+    ...new Set(sections.flatMap((section) => {
+      if (section.community_pulse) {
+        return [section.community_pulse.source_label.replace(/ review$/i, "")];
+      }
+      return section.source_types;
+    })),
   ].slice(0, 4);
 
   let heat: EvidenceSummary["heat"] = "sparse";
@@ -117,6 +143,13 @@ export function evidenceHeatClass(heat: EvidenceSummary["heat"]): string {
   if (heat === "strong") return "evidence-heat--strong";
   if (heat === "moderate") return "evidence-heat--moderate";
   return "evidence-heat--sparse";
+}
+
+/** Qualitative proof label — no numeric confidence surfaced to users. */
+export function evidenceProofLabel(heat: EvidenceSummary["heat"]): string {
+  if (heat === "strong") return "strong proof";
+  if (heat === "moderate") return "growing proof";
+  return "early proof";
 }
 
 export function groupSectionsByConstellation(
@@ -161,10 +194,13 @@ export function decisionReadLabel(
   return "Calm family bet";
 }
 
+export const UNIVERSE_CLUSTER_MIN_RESULTS = 5;
+
 export function clusterSearchResults(
   results: SearchResultItem[],
   evidenceById: Map<string, PropertyEvidenceResponse>,
 ): UniverseCluster[] {
+  if (results.length < UNIVERSE_CLUSTER_MIN_RESULTS) return [];
   const buckets: Record<UniverseClusterId, SearchResultItem[]> = {
     strong_fits: [],
     worth_comparing: [],

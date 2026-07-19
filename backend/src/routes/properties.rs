@@ -22,6 +22,10 @@ use crate::serving::{
 };
 use crate::state::AppState;
 
+use crate::community::{
+    community_evidence_from_fact_value, community_pulse_from_summary,
+    deterministic_community_summarizer, CommunityPulse,
+};
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 
@@ -176,6 +180,8 @@ pub struct SourcePanel {
     pub missing: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<EvidenceMediaStrip>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub community_pulse: Option<CommunityPulse>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -283,6 +289,8 @@ pub struct EvidenceSection {
     pub missing: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<EvidenceMediaStrip>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub community_pulse: Option<CommunityPulse>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -795,6 +803,112 @@ fn collect_society_source_items(
         .collect()
 }
 
+fn collect_community_evidence_records(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+    projection: Option<&SocietyFactProjection<'_>>,
+) -> Vec<crate::community::CommunityEvidenceRecord> {
+    // Primary source-neutral community keys. These are the current contract.
+    const PRIMARY_FACT_KEYS: &[&str] = &[
+        "google_rating",
+        "google_review_count",
+        "google_review_snippets",
+        "google_reviews_url",
+        "community_positive_themes",
+        "community_concern_themes",
+        "community_review_highlights",
+        "community_evidence_links",
+        "resident_discussion",
+    ];
+    // Legacy pre-DAG keys, only consulted when no primary facts exist, so stale
+    // generated quotes never leak alongside current evidence.
+    const LEGACY_FALLBACK_KEYS: &[&str] = &[
+        "resident_sentiment",
+        "sentiment_summary",
+        "best_quote",
+        "common_positives",
+        "common_complaints",
+        "google_sentiment",
+        "google_top_positives",
+        "google_top_negatives",
+        "google_common_themes",
+    ];
+
+    let mut records = collect_community_records_for_keys(graph, society_id, projection, PRIMARY_FACT_KEYS);
+    if records.is_empty() {
+        records =
+            collect_community_records_for_keys(graph, society_id, projection, LEGACY_FALLBACK_KEYS);
+    }
+    records
+}
+
+fn enrich_community_pulse_source_urls(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+    pulse: &mut CommunityPulse,
+) {
+    if let Some(node) = graph.get_node(society_id) {
+        if let Some(url) = google_reviews_url_from_facts(&node.facts, &node.name) {
+            if !pulse.source_urls.iter().any(|existing| existing == &url) {
+                pulse.source_urls.push(url);
+            }
+        }
+    }
+    pulse.source_urls.sort();
+    pulse.source_urls.dedup();
+    pulse.source_urls.truncate(5);
+}
+
+fn collect_community_records_for_keys(
+    graph: &crate::knowledge::KnowledgeGraph,
+    society_id: &str,
+    projection: Option<&SocietyFactProjection<'_>>,
+    keys: &[&str],
+) -> Vec<crate::community::CommunityEvidenceRecord> {
+    let mut records = Vec::new();
+    for key in keys {
+        if let Some(record) = projection
+            .and_then(|projection| projection.latest_record(key))
+            .and_then(|fact| {
+                community_evidence_from_fact_value(
+                    &fact.entity_id,
+                    &fact.source_type,
+                    fact.source_url.clone(),
+                    key,
+                    &fact.value,
+                    fact.confidence,
+                    fact.learned_at,
+                )
+            })
+        {
+            records.push(record);
+            continue;
+        }
+
+        if let Some(node) = graph.get_node(society_id) {
+            if let Some(fact) = node
+                .facts
+                .iter()
+                .filter(|fact| fact.key == *key)
+                .max_by_key(|fact| fact.version)
+            {
+                if let Some(record) = community_evidence_from_fact_value(
+                    society_id,
+                    &format!("{:?}", fact.source.source_type),
+                    fact.source.url.clone(),
+                    key,
+                    &fact.value,
+                    fact.confidence,
+                    fact.learned_at,
+                ) {
+                    records.push(record);
+                }
+            }
+        }
+    }
+    records
+}
+
 fn source_item_aliases(key: &str) -> &'static [&'static str] {
     match key {
         "market_project_status" => &["market_status"],
@@ -1049,6 +1163,7 @@ fn build_buyer_context_panels(
                 items,
                 missing: Vec::new(),
                 media,
+                community_pulse: None,
             })
         })
         .collect()
@@ -1216,6 +1331,7 @@ pub(crate) fn build_source_panels(
             items: rera_items,
             missing: vec![],
             media: vec![],
+            community_pulse: None,
         });
     }
 
@@ -1257,6 +1373,7 @@ pub(crate) fn build_source_panels(
         items: market_items,
         missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
         media: vec![],
+        community_pulse: None,
     });
 
     let mut area_items = collect_source_items(
@@ -1288,6 +1405,7 @@ pub(crate) fn build_source_panels(
         items: area_items,
         missing: vec![],
         media: vec![],
+        community_pulse: None,
     });
 
     let nearby_items = collect_society_source_items(
@@ -1313,94 +1431,53 @@ pub(crate) fn build_source_panels(
             items: nearby_items,
             missing: vec![],
             media: vec![],
+            community_pulse: None,
         });
     }
 
-    let mut community_items = collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("community_review_summary", "What we know"),
-            ("community_sentiment_score", "Signal score"),
-            ("community_positive_themes", "Repeated positives"),
-            ("community_concern_themes", "Repeated concerns"),
-            ("community_review_highlights", "Review highlights"),
-            ("community_evidence_links", "Evidence"),
-        ],
-    );
-    if community_items.is_empty() {
-        community_items.extend(collect_society_source_items(
-            graph,
-            &society_id,
-            projection.as_ref(),
-            &[
-                ("resident_sentiment", "Overall take"),
-                ("sentiment_summary", "What forums point to"),
-                ("best_quote", "Quote"),
-                ("common_positives", "Repeated positives"),
-                ("common_complaints", "Repeated concerns"),
-            ],
-        ));
-    }
-    let mut review_items = collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("google_rating", "Google rating"),
-            ("google_review_count", "Google review count"),
-            ("google_reviews_url", "Google review link"),
-            ("google_review_snippets", "Google highlights"),
-        ],
-    );
-    if review_items.is_empty() {
-        review_items.extend(collect_society_source_items(
-            graph,
-            &society_id,
-            projection.as_ref(),
-            &[
-                ("google_sentiment", "Google take"),
-                ("google_top_positives", "Google positives"),
-                ("google_top_negatives", "Google concerns"),
-                ("google_common_themes", "Google themes"),
-            ],
-        ));
+    let community_records =
+        collect_community_evidence_records(graph, &society_id, projection.as_ref());
+    let mut community_pulse = if community_records.is_empty() {
+        None
+    } else {
+        deterministic_community_summarizer()
+            .summarize(&community_records)
+            .into_iter()
+            .next()
+            .map(|summary| community_pulse_from_summary(&summary))
+    };
+    if let Some(pulse) = community_pulse.as_mut() {
+        enrich_community_pulse_source_urls(graph, &society_id, pulse);
     }
 
-    let has_theme_level_community_signal = community_items.iter().any(|item| {
-        matches!(
-            item.key.as_str(),
-            "community_positive_themes" | "community_concern_themes"
-        )
-    });
-    let has_review_snippets = review_items
-        .iter()
-        .any(|item| item.key == "google_review_snippets" && !item.values.is_empty());
-    community_items.extend(review_items);
-    let mut community_missing = Vec::new();
-    if !has_theme_level_community_signal {
-        community_missing
-            .push("Review themes are still being expanded across sources.".to_string());
+    if let Some(pulse) = community_pulse.clone() {
+        let mut community_missing = Vec::new();
+        if pulse.positives.is_empty() && pulse.concerns.is_empty() {
+            community_missing
+                .push("Review themes are still being expanded across sources.".to_string());
+        }
+        if pulse.quotes.is_empty() {
+            community_missing.push("Review snippets are still being extracted.".to_string());
+        }
+
+        panels.push(SourcePanel {
+            kind: "community".to_string(),
+            title: "Community pulse".to_string(),
+            subtitle: format!("{} · {}", pulse.source_label, pulse.sentiment_band),
+            scope: "society".to_string(),
+            relationship: Some("resident and review context".to_string()),
+            items: Vec::new(),
+            missing: community_missing,
+            media: vec![],
+            community_pulse: Some(pulse),
+        });
     }
-    if !has_review_snippets {
-        community_missing.push("Review snippets are still being extracted.".to_string());
-    }
-    panels.push(SourcePanel {
-        kind: "community".to_string(),
-        title: "Community pulse".to_string(),
-        subtitle: "Google reviews today; resident and Reddit signals can join the same pulse."
-            .to_string(),
-        scope: "society".to_string(),
-        relationship: Some("resident and review context".to_string()),
-        items: community_items,
-        missing: community_missing,
-        media: vec![],
-    });
 
     panels
         .into_iter()
-        .filter(|panel| !panel.items.is_empty() || !panel.media.is_empty())
+        .filter(|panel| {
+            !panel.items.is_empty() || !panel.media.is_empty() || panel.community_pulse.is_some()
+        })
         .collect()
 }
 
@@ -1468,8 +1545,17 @@ pub(crate) fn evidence_section_from_panel(
     if entity_ids.is_empty() {
         entity_ids = fallback_section_entity_ids(&panel.kind, entity_refs);
     }
-    let confidence_pct = section_confidence_pct(&panel.items);
-    let summary = section_summary(&panel);
+    let confidence_pct = panel
+        .community_pulse
+        .as_ref()
+        .map(|pulse| pulse.confidence_pct)
+        .filter(|_| panel.kind == "community")
+        .unwrap_or_else(|| section_confidence_pct(&panel.items));
+    let summary = panel
+        .community_pulse
+        .as_ref()
+        .map(|pulse| pulse.paragraph.clone())
+        .unwrap_or_else(|| section_summary(&panel));
     let presentation = evidence_section_presentation(&panel.kind);
 
     EvidenceSection {
@@ -1487,6 +1573,7 @@ pub(crate) fn evidence_section_from_panel(
         presentation,
         missing: panel.missing,
         media: panel.media,
+        community_pulse: panel.community_pulse,
     }
 }
 
@@ -1616,17 +1703,7 @@ fn primary_section_keys(kind: &str) -> &'static [&'static str] {
             "nearby_eateries",
             "nearby_tech_parks",
         ],
-        "community" => &[
-            "community_review_summary",
-            "google_rating",
-            "google_review_count",
-            "google_review_snippets",
-            "community_review_highlights",
-            "community_positive_themes",
-            "community_concern_themes",
-            "google_reviews_url",
-            "resident_sentiment",
-        ],
+        "community" => &["community_review_summary"],
         "area" => &[
             "metro_details",
             "traffic_reality",
@@ -2450,9 +2527,19 @@ mod serving_state_tests {
             keys.contains(&"rera_total_land_area_sqm"),
             "RERA land area should be visible in detail source panels: {keys:?}"
         );
+        let community = panels
+            .iter()
+            .find(|panel| panel.kind == "community")
+            .expect("community pulse should exist when Google review facts are present");
         assert!(
-            keys.contains(&"google_reviews_url"),
-            "Google review link should be visible in detail source panels: {keys:?}"
+            community
+                .community_pulse
+                .as_ref()
+                .is_some_and(|pulse| pulse
+                    .source_urls
+                    .iter()
+                    .any(|url| url == "https://example.com/current")),
+            "Google review link should be visible in community pulse sources"
         );
     }
 
@@ -2540,12 +2627,6 @@ mod serving_state_tests {
         let serving = ServingFactIndex::from_records(
             vec![
                 serving_fact(
-                    "community_review_summary",
-                    FactValue::Text("Google signal is mixed-positive: 3.9/5 from 392 reviews. Review text is not ingested yet.".to_string()),
-                    10,
-                ),
-                serving_fact("community_sentiment_score", FactValue::Numeric(78.0), 10),
-                serving_fact(
                     "community_positive_themes",
                     FactValue::Tags(vec!["greenery".to_string(), "amenities".to_string()]),
                     10,
@@ -2577,36 +2658,30 @@ mod serving_state_tests {
             .iter()
             .find(|panel| panel.kind == "community")
             .expect("community pulse should be backed by current summary and Google facts");
-        let community_keys = community
-            .items
-            .iter()
-            .map(|item| item.key.as_str())
-            .collect::<Vec<_>>();
+        let pulse = community
+            .community_pulse
+            .as_ref()
+            .expect("community pulse should expose structured read model");
 
-        assert!(community_keys.contains(&"community_review_summary"));
-        assert!(community_keys.contains(&"community_sentiment_score"));
-        assert!(community_keys.contains(&"community_positive_themes"));
-        assert!(community_keys.contains(&"community_review_highlights"));
-        assert!(community_keys.contains(&"google_rating"));
-        assert!(community_keys.contains(&"google_review_count"));
-        assert!(community_keys.contains(&"google_review_snippets"));
+        assert_eq!(pulse.source_label, "Google review");
+        assert_eq!(pulse.sentiment_band, "Mixed-positive");
+        assert!(pulse.paragraph.contains("greenery"));
+        assert!(pulse.paragraph.contains("amenities"));
+        assert!(pulse.paragraph.contains("traffic"));
+        assert!(!pulse.paragraph.contains("3.9"));
+        assert!(!pulse.paragraph.contains("/5"));
+        assert_eq!(pulse.positives, vec!["amenities", "greenery"]);
+        assert_eq!(pulse.concerns, vec!["traffic"]);
+        assert_eq!(pulse.quotes.len(), 2);
+        assert!(community.items.is_empty());
         assert!(
             panels.iter().all(|panel| panel.kind != "reviews"),
             "Google reviews should be a source inside Community pulse, not a separate panel"
         );
-        let snippet_item = community
-            .items
-            .iter()
-            .find(|item| item.key == "google_review_snippets")
-            .expect("review snippets should be exposed as bullet-ready values");
-        assert_eq!(snippet_item.value, "2 Google review highlights");
-        assert_eq!(snippet_item.values.len(), 2);
         assert!(!community
             .missing
             .iter()
             .any(|item| item.contains("Review text is not ingested")));
-        assert!(!community_keys.contains(&"best_quote"));
-        assert!(!community_keys.contains(&"google_top_positives"));
     }
 
     #[test]
@@ -2654,17 +2729,21 @@ mod serving_state_tests {
         let property = property();
 
         let panels = build_source_panels(&graph, &property, None);
-        let item = panels
+        let community = panels
             .iter()
-            .flat_map(|panel| panel.items.iter())
-            .find(|item| item.key == "google_reviews_url")
-            .expect("Google review facts should expose a navigable Maps search link");
-
-        assert_eq!(
-            item.value,
-            "https://www.google.com/maps/search/?api=1&query=Sample%20Society"
+            .find(|panel| panel.kind == "community")
+            .expect("Google review facts should produce a community pulse");
+        let pulse = community
+            .community_pulse
+            .as_ref()
+            .expect("community pulse should expose review source links");
+        assert!(
+            pulse.source_urls.iter().any(|url| {
+                url == "https://www.google.com/maps/search/?api=1&query=Sample%20Society"
+            }),
+            "Google review facts should expose a navigable Maps search link: {:?}",
+            pulse.source_urls
         );
-        assert_eq!(item.source_type, "Google");
     }
 
     #[test]
@@ -2740,10 +2819,11 @@ mod serving_state_tests {
         let response = build_property_evidence_response(&graph, &property(), None);
 
         assert!(
-            response
-                .sections
-                .iter()
-                .all(|section| !section.items.is_empty() || !section.media.is_empty()),
+            response.sections.iter().all(|section| {
+                !section.items.is_empty()
+                    || !section.media.is_empty()
+                    || section.community_pulse.is_some()
+            }),
             "missing-only sections should stay out of the user-facing evidence response"
         );
     }

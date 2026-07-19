@@ -6,7 +6,9 @@ import type {
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
 import type { MatchResult } from "../../lib/search.ts";
+import { displayMatchReason, friendlyMatchLabel } from "../../lib/search.ts";
 import {
+  evidenceProofLabel,
   summarizeEvidence,
   topEvidenceGlance,
 } from "../../lib/evidence.ts";
@@ -65,7 +67,8 @@ export function LivingEvidenceTile({
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
   ].filter((part): part is string => part !== null);
 
-  const whyLine = match?.reason || glances[0] || null;
+  const whyLine = displayMatchReason(match?.reason, glances[0] || null);
+  const matchLabel = match ? friendlyMatchLabel(match.label) : null;
 
   const handleSave = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -90,8 +93,8 @@ export function LivingEvidenceTile({
             className="catalog-card__image"
             loading="lazy"
           />
-          {match && (
-            <span className="catalog-card__kicker">{match.label}</span>
+          {matchLabel && (
+            <span className="catalog-card__kicker">{matchLabel}</span>
           )}
           <div className="catalog-card__actions" aria-label="Property actions">
             <button
@@ -131,9 +134,19 @@ export function LivingEvidenceTile({
             )}
           </div>
           {whyLine && <p className="catalog-card__why">{whyLine}</p>}
+          {(property.home_state_display || property.builder_delivery_display) && (
+            <div className="catalog-card__signals">
+              {property.home_state_display && (
+                <span className="catalog-card__signal">{property.home_state_display}</span>
+              )}
+              {property.builder_delivery_display && (
+                <span className="catalog-card__signal">{property.builder_delivery_display}</span>
+              )}
+            </div>
+          )}
           {summary && (
             <p className="catalog-card__proof">
-              {summary.factCount} facts · {summary.confidencePct}% confidence
+              {summary.factCount} facts · {evidenceProofLabel(summary.heat)}
             </p>
           )}
           {explanationBlock && (
