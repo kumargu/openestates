@@ -1,20 +1,23 @@
 /**
- * Results page with inline save actions and backend search integration.
+ * Results page with backend search integration.
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
-import { useEffect, useState, useMemo, useCallback, type FormEvent } from "react";
+import { useEffect, useState, useMemo, type FormEvent } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { PropertyCard as PropertyCardType, SearchResponse, SearchAreaContext, MatchExplanation, SearchResultItem } from "../lib/types.ts";
+import type {
+  PropertyCard as PropertyCardType,
+  SearchResponse,
+  SearchAreaContext,
+  MatchExplanation,
+  SearchResultItem,
+} from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
 import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
-import { PreferencePill } from "../components/PreferencePill.tsx";
-import { MatchReasonBadge } from "../components/MatchReasonBadge.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
-import { getSavedIds, SAVED_UPDATED_EVENT } from "../lib/sheet-store.ts";
 import { addRecentSearch } from "../lib/recent-searches.ts";
 import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
@@ -220,111 +223,6 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
   );
 }
 
-type ResultsViewMode = "cards" | "saved";
-
-function ViewModeSwitch({
-  mode,
-  sheetCount,
-  onChange,
-}: {
-  mode: ResultsViewMode;
-  sheetCount: number;
-  onChange: (mode: ResultsViewMode) => void;
-}) {
-  return (
-    <div className="results-view-switch" aria-label="Results view">
-      <button
-        type="button"
-        className={mode === "cards" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
-        onClick={() => onChange("cards")}
-        aria-pressed={mode === "cards"}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <rect x="3" y="3" width="7" height="7" rx="1.5" />
-          <rect x="14" y="3" width="7" height="7" rx="1.5" />
-          <rect x="3" y="14" width="7" height="7" rx="1.5" />
-          <rect x="14" y="14" width="7" height="7" rx="1.5" />
-        </svg>
-        Results
-      </button>
-      <button
-        type="button"
-        className={mode === "saved" ? "results-view-switch-btn results-view-switch-btn--active" : "results-view-switch-btn"}
-        onClick={() => onChange("saved")}
-        aria-pressed={mode === "saved"}
-      >
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-        </svg>
-        Saved
-        {sheetCount > 0 && <span>{sheetCount}</span>}
-      </button>
-    </div>
-  );
-}
-
-/* ---------- Match Explanation Block ---------- */
-
-function MatchExplanationBlock({ explanation }: { explanation: MatchExplanation }) {
-  const [expanded, setExpanded] = useState(false);
-  const allNoData = explanation.preference_coverage.every(pc => pc.status === "no_data");
-
-  if (allNoData) {
-    return (
-      <p style={{ fontSize: "0.72rem", color: "var(--color-text-muted)", margin: "0.35rem 0 0", lineHeight: 1.5 }}>
-        Not enough data to evaluate your preferences for this property yet. Matched on location and specs.
-      </p>
-    );
-  }
-
-  const visibleReasons = expanded ? explanation.reasons : explanation.reasons.slice(0, 3);
-  const hiddenCount = explanation.reasons.length - 3;
-
-  return (
-    <div style={{ marginTop: "0.35rem" }}>
-      {/* Preference coverage pills */}
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "0.3rem", marginBottom: "0.35rem" }}>
-        {explanation.preference_coverage.map(pc => (
-          <PreferencePill key={pc.preference} coverage={pc} />
-        ))}
-      </div>
-
-      {/* Match reasons */}
-      {visibleReasons.length > 0 && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-          {visibleReasons.map(r => (
-            <MatchReasonBadge key={`${r.fact_key}-${r.preference}`} reason={r} />
-          ))}
-          {!expanded && hiddenCount > 0 && (
-            <button
-              onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded(true); }}
-              style={{
-                background: "none",
-                border: "none",
-                color: "#3b5998",
-                fontSize: "0.72rem",
-                cursor: "pointer",
-                padding: "0.15rem 0",
-                textAlign: "left",
-                fontFamily: "inherit",
-              }}
-            >
-              +{hiddenCount} more {hiddenCount === 1 ? "reason" : "reasons"}
-            </button>
-          )}
-        </div>
-      )}
-
-      {/* Verified-data indicator */}
-      {explanation.graph_driven_pct > 0 && (
-        <p style={{ fontSize: "0.68rem", color: "var(--color-text-muted)", margin: "0.3rem 0 0" }}>
-          Ranked using verified data
-        </p>
-      )}
-    </div>
-  );
-}
-
 /* ---------- Search Experience ---------- */
 
 type SearchExperienceProps = {
@@ -335,38 +233,32 @@ type SearchExperienceProps = {
 export function SearchExperience({ variant = "page", onSearchCommit }: SearchExperienceProps) {
   const isEmbedded = variant === "embedded";
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
-  const [catalogProperties, setCatalogProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
   const [searchFailed, setSearchFailed] = useState(false);
   const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
-  const [savedIds, setSavedIds] = useState<string[]>(() => getSavedIds());
-  const refreshSavedIds = useCallback(() => setSavedIds(getSavedIds()), []);
 
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
-  const viewMode: ResultsViewMode = searchParams.get("view") === "saved" ? "saved" : "cards";
   const [searchInput, setSearchInput] = useState(query);
+
+  useEffect(() => {
+    if (searchParams.get("view") === "saved") {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("view");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     setSearchInput(query);
   }, [query]);
 
-  useEffect(() => {
-    window.addEventListener("storage", refreshSavedIds);
-    window.addEventListener(SAVED_UPDATED_EVENT, refreshSavedIds);
-    return () => {
-      window.removeEventListener("storage", refreshSavedIds);
-      window.removeEventListener(SAVED_UPDATED_EVENT, refreshSavedIds);
-    };
-  }, [refreshSavedIds]);
-
   const handleSearch = (e: FormEvent) => {
     e.preventDefault();
     const q = searchInput.trim();
     const nextParams = new URLSearchParams();
-    if (viewMode === "saved") nextParams.set("view", "saved");
     if (q) {
       sessionStorage.setItem("oe_search_query", q);
       onSearchCommit?.(q);
@@ -374,7 +266,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       setSearchParams(nextParams);
     } else {
       sessionStorage.removeItem("oe_search_query");
-      // Preserve area filter if present
       if (areaFilter) nextParams.set("area", areaFilter);
       setSearchParams(nextParams);
     }
@@ -382,46 +273,15 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
   const clearAreaFilter = () => {
     const nextParams = new URLSearchParams();
-    if (viewMode === "saved") nextParams.set("view", "saved");
     if (query) nextParams.set("q", query);
-    setSearchParams(nextParams);
-  };
-
-  const setViewMode = (mode: ResultsViewMode) => {
-    const nextParams = new URLSearchParams(searchParams);
-    if (mode === "saved") {
-      nextParams.set("view", "saved");
-    } else {
-      nextParams.delete("view");
-    }
     setSearchParams(nextParams);
   };
 
   const setQueryPreservingView = (nextQuery: string) => {
     const nextParams = new URLSearchParams();
-    if (viewMode === "saved") nextParams.set("view", "saved");
     if (nextQuery) nextParams.set("q", nextQuery);
     setSearchParams(nextParams);
   };
-
-  useEffect(() => {
-    if (query && viewMode !== "saved") {
-      setCatalogProperties([]);
-      return;
-    }
-
-    let cancelled = false;
-    getProperties()
-      .then((data) => {
-        if (!cancelled) setCatalogProperties(data);
-      })
-      .catch(() => {
-        if (!cancelled) setCatalogProperties([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [query, viewMode]);
 
   // When there's a search query, call the backend search API.
   // When there's no query, load all properties.
@@ -494,30 +354,10 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
   const propertiesById = useMemo(() => {
     const next = new Map<string, PropertyCardType>();
-    for (const property of catalogProperties) next.set(property.id, property);
     for (const property of properties) next.set(property.id, property);
     for (const { property } of matchResults) next.set(property.id, property);
     return next;
-  }, [catalogProperties, matchResults, properties]);
-
-  // Saved homes rendered as the same card grid, filtered to saved IDs.
-  const savedResults: SearchResultItem[] = useMemo(() => {
-    return savedIds
-      .map((id) => propertiesById.get(id))
-      .filter((property): property is PropertyCardType => Boolean(property))
-      .map((property) => ({
-        ...property,
-        match_score: 0,
-        match_label: "Saved",
-        match_reason: "Saved home",
-      }));
-  }, [savedIds, propertiesById]);
-
-  const missingSavedCount = useMemo(() => {
-    return savedIds.filter((id) => !propertiesById.has(id)).length;
-  }, [propertiesById, savedIds]);
-  const savedCount = savedResults.length;
-  const savedCountLabel = `${savedCount} ${savedCount === 1 ? "saved home" : "saved homes"}`;
+  }, [matchResults, properties]);
 
   const universeResults: SearchResultItem[] = useMemo(() => {
     if (useBackendResults && searchResponse) return searchResponse.results;
@@ -530,10 +370,9 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     }));
   }, [hasQuery, useBackendResults, searchResponse, filtered]);
 
-  const activeResults = viewMode === "saved" ? savedResults : universeResults;
   const propertyIds = useMemo(
-    () => activeResults.map((result) => result.id),
-    [activeResults],
+    () => universeResults.map((result) => result.id),
+    [universeResults],
   );
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
@@ -544,19 +383,15 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const intent = useBackendResults ? searchResponse.intent : null;
   const containerClass = isEmbedded ? "inline-results-shell" : "page-container";
   const headerClass = isEmbedded ? "inline-results-header" : "page-header";
-  const showEmbeddedSwitch = isEmbedded && (Boolean(query) || viewMode === "saved");
-  const kicker = viewMode === "saved" && !query ? "Saved homes" : "Search results";
-  const title = !isEmbedded && viewMode === "saved" ? "Saved" : "Properties";
+  const showEmbeddedKicker = isEmbedded && Boolean(query);
+  const kicker = "Search results";
+  const title = "Properties";
 
   if (status === "loading") return (
     <div className={containerClass}>
       <div className={headerClass}>
-        {showEmbeddedSwitch && <span className="inline-results-kicker">{kicker}</span>}
-        {showEmbeddedSwitch ? (
-          <ViewModeSwitch mode={viewMode} sheetCount={savedIds.length} onChange={setViewMode} />
-        ) : (
-          <h1>{title}</h1>
-        )}
+        {showEmbeddedKicker && <span className="inline-results-kicker">{kicker}</span>}
+        {!showEmbeddedKicker && <h1>{title}</h1>}
         <div className="skeleton-search-bar skeleton-bar" />
       </div>
       <div className="results-grid">
@@ -617,13 +452,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         match={row?.match}
         evidence={evidence}
         decisionRead={tileDecisionRead(result, evidenceSummary)}
-        explanationBlock={
-          row?.explanation && row.explanation.preference_coverage.length > 0 ? (
-            <MatchExplanationBlock explanation={row.explanation} />
-          ) : null
-        }
         onQuickView={setPanelPropertyId}
-        onSaveChange={refreshSavedIds}
       />
     );
   };
@@ -639,12 +468,8 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         <meta property="og:site_name" content="OpenEstates" />
       </Helmet>
       <div className={headerClass}>
-        {showEmbeddedSwitch && <span className="inline-results-kicker">{kicker}</span>}
-        {showEmbeddedSwitch ? (
-          <ViewModeSwitch mode={viewMode} sheetCount={savedIds.length} onChange={setViewMode} />
-        ) : (
-          <h1>{title}</h1>
-        )}
+        {showEmbeddedKicker && <span className="inline-results-kicker">{kicker}</span>}
+        {!showEmbeddedKicker && <h1>{title}</h1>}
 
         {/* Inline search bar for refining */}
         <form
@@ -695,7 +520,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
         {!query && (
           <div>
-            {viewMode !== "saved" && areaFilter && (
+            {areaFilter && (
               <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
                 <span
                   className="tag tag-neutral"
@@ -710,11 +535,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
               </div>
             )}
             <p>
-              {viewMode === "saved"
-                ? savedCount > 0
-                  ? `${savedCountLabel}. Open one for the full report or buy vs rent check.`
-                  : "Your saved homes will stay here while you keep browsing."
-                : `${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "proof-backed listings"}`}
+              {`${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "proof-backed listings"}`}
             </p>
           </div>
         )}
@@ -722,11 +543,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
       {/* Accessible live region — announces result count to screen readers */}
       <div aria-live="polite" className="sr-only">
-        {viewMode === "saved" && !query
-          ? savedCount > 0
-            ? `${savedCountLabel} saved.`
-            : "No saved homes yet."
-          : query
+        {query
           ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
@@ -761,15 +578,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}
 
-      {!isEmbedded && (
-        <div className="results-view-row">
-          <ViewModeSwitch mode={viewMode} sheetCount={savedIds.length} onChange={setViewMode} />
-        </div>
-      )}
-
-      {/* Knowledge graph insights removed — raw data not user-friendly yet */}
-
-      {viewMode === "cards" && matchResults.length === 0 && query && !waitingForSearchResults && (
+      {matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
           <h2>No properties match "{query}"</h2>
           <p>Try broadening your search or explore one of these suggestions.</p>
@@ -826,29 +635,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             </div>
           ))}
         </div>
-      ) : viewMode === "saved" ? (
-        savedResults.length > 0 ? (
-          <>
-            <UniverseBoard
-              results={savedResults}
-              evidenceById={evidenceById}
-              renderResult={renderTile}
-            />
-            {missingSavedCount > 0 && (
-              <p className="results-saved-footnote">
-                {missingSavedCount} saved {missingSavedCount === 1 ? "home is" : "homes are"} outside the loaded catalog. Refine your search to bring {missingSavedCount === 1 ? "it" : "them"} back.
-              </p>
-            )}
-          </>
-        ) : (
-          <div className="empty-state">
-            <h2>No saved homes yet</h2>
-            <p>Save homes from search to keep them here for later.</p>
-            <button type="button" className="empty-state-chip" onClick={() => setViewMode("cards")}>
-              Browse properties
-            </button>
-          </div>
-        )
       ) : (
         <UniverseBoard
           results={universeResults}
@@ -867,7 +653,6 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
             propertyId={panelPropertyId}
             card={panelCard}
             onClose={() => setPanelPropertyId(null)}
-            onSaveChange={refreshSavedIds}
           />
         );
       })()}

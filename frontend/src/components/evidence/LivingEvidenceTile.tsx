@@ -1,18 +1,15 @@
-import { useState } from "react";
 import { Link } from "react-router-dom";
 import type {
   PropertyCard,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
 import type { MatchResult } from "../../lib/search.ts";
-import { displayMatchReason, friendlyMatchLabel } from "../../lib/search.ts";
+import { displayMatchReason } from "../../lib/search.ts";
 import {
-  evidenceReceiptLabel,
   summarizeEvidence,
   topEvidenceGlance,
 } from "../../lib/evidence.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
-import { isSaved, toggleSaved } from "../../lib/sheet-store.ts";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
 function formatPrice(price: number): string {
@@ -36,22 +33,36 @@ type Props = {
   match?: MatchResult;
   evidence?: PropertyEvidenceResponse;
   decisionRead?: string;
-  explanationBlock?: React.ReactNode;
   onQuickView?: (id: string) => void;
-  onSaveChange?: () => void;
+  /** Landing/browse surfaces — same card shell, no match or proof chrome. */
+  variant?: "default" | "browse";
 };
+
+function tileProofChip(
+  property: PropertyCard,
+  summary: ReturnType<typeof summarizeEvidence>,
+): string | null {
+  if (summary) {
+    const source = summary.sourceTypes[0];
+    if (source) return `${summary.factCount} facts · ${source}`;
+    if (summary.factCount > 0) return `${summary.factCount} facts`;
+  }
+  if (isKnownText(property.home_state_display)) return property.home_state_display;
+  if (isKnownText(property.builder_delivery_display)) return property.builder_delivery_display;
+  return null;
+}
 
 export function LivingEvidenceTile({
   property,
   match,
   evidence,
-  explanationBlock,
+  decisionRead,
   onQuickView,
-  onSaveChange,
+  variant = "default",
 }: Props) {
-  const [onSheet, setOnSheet] = useState(() => isSaved(property.id));
-  const summary = summarizeEvidence(evidence);
-  const glances = topEvidenceGlance(evidence, 1);
+  const isBrowse = variant === "browse";
+  const summary = isBrowse ? null : summarizeEvidence(evidence);
+  const glances = isBrowse ? [] : topEvidenceGlance(evidence, 1);
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
     societyId: property.kg_entity_refs?.society_entity_id,
@@ -65,15 +76,9 @@ export function LivingEvidenceTile({
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
   ].filter((part): part is string => part !== null);
 
-  const whyLine = displayMatchReason(match?.reason, glances[0] || null);
-  const matchLabel = match ? friendlyMatchLabel(match.label) : null;
-
-  const handleSave = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setOnSheet(toggleSaved(property.id));
-    onSaveChange?.();
-  };
+  const whyLine = isBrowse ? null : displayMatchReason(match?.reason, glances[0] || null);
+  const decisionLine = isBrowse ? null : (decisionRead || whyLine);
+  const proofChip = isBrowse ? null : tileProofChip(property, summary);
 
   const handleQuickView = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -91,33 +96,22 @@ export function LivingEvidenceTile({
             className="catalog-card__image"
             loading="lazy"
           />
-          {matchLabel && (
-            <span className="catalog-card__kicker">{matchLabel}</span>
+          {onQuickView && (
+            <div className="catalog-card__actions" aria-label="Property actions">
+              <button
+                type="button"
+                onClick={handleQuickView}
+                className="catalog-card__action"
+                aria-label="Quick view"
+              >
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <line x1="12" y1="16" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12.01" y2="8" />
+                </svg>
+              </button>
+            </div>
           )}
-          <div className="catalog-card__actions" aria-label="Property actions">
-            <button
-              type="button"
-              onClick={handleSave}
-              className={`catalog-card__action${onSheet ? " catalog-card__action--saved" : ""}`}
-              aria-label={onSheet ? "Remove from saved" : "Save property"}
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill={onSheet ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-              </svg>
-            </button>
-            <button
-              type="button"
-              onClick={handleQuickView}
-              className="catalog-card__action"
-              aria-label="Quick view"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="16" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12.01" y2="8" />
-              </svg>
-            </button>
-          </div>
         </div>
 
         <div className="catalog-card__caption">
@@ -125,32 +119,22 @@ export function LivingEvidenceTile({
           <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
           <div className="catalog-card__foot">
             <span className="catalog-card__price">{formatPrice(property.price)}</span>
-            {hasKnownNumber(property.price_per_sqft) && (
+            {isBrowse && hasKnownNumber(property.google_rating) ? (
+              <span className="catalog-card__rating">
+                Google {property.google_rating.toFixed(1)}
+                {hasKnownNumber(property.google_review_count) ? ` · ${property.google_review_count}` : ""}
+              </span>
+            ) : hasKnownNumber(property.price_per_sqft) ? (
               <span className="catalog-card__ppsf">
                 {property.price_per_sqft.toLocaleString("en-IN")}/sqft
               </span>
-            )}
+            ) : null}
           </div>
-          {whyLine && !explanationBlock && (
-            <p className="catalog-card__why">{whyLine}</p>
+          {decisionLine && (
+            <p className="catalog-card__why">{decisionLine}</p>
           )}
-          {(property.home_state_display || property.builder_delivery_display) && (
-            <div className="catalog-card__signals">
-              {property.home_state_display && (
-                <span className="catalog-card__signal">{property.home_state_display}</span>
-              )}
-              {property.builder_delivery_display && (
-                <span className="catalog-card__signal">{property.builder_delivery_display}</span>
-              )}
-            </div>
-          )}
-          {summary && (
-            <p className="catalog-card__proof">
-              {evidenceReceiptLabel(summary)}
-            </p>
-          )}
-          {explanationBlock && (
-            <div className="catalog-card__explain">{explanationBlock}</div>
+          {proofChip && (
+            <span className="catalog-card__proof-chip">{proofChip}</span>
           )}
         </div>
       </Link>

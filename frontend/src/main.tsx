@@ -3,7 +3,7 @@ import "./styles/evidence.css";
 import "./styles/property-scene.css";
 import { StrictMode, useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Link, useLocation, useSearchParams } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
@@ -61,13 +61,7 @@ const NAV_ITEMS = [
   {
     to: "/results",
     label: "Properties",
-    matchFn: (path: string, view: string | null) =>
-      (path === "/results" || path.startsWith("/property/")) && view !== "saved",
-  },
-  {
-    to: "/results?view=saved",
-    label: "Saved",
-    matchFn: (path: string, view: string | null) => path === "/results" && view === "saved",
+    matchFn: (path: string) => path === "/results" || path.startsWith("/property/"),
   },
   {
     to: "/#area-tracker",
@@ -78,8 +72,6 @@ const NAV_ITEMS = [
 
 export function Nav() {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const activeView = searchParams.get("view");
   const isHome = location.pathname === "/";
   const path = location.pathname;
   const isHomePlan = /^\/property\/[^/]+\/plan$/.test(path);
@@ -142,7 +134,7 @@ export function Nav() {
         {/* Desktop nav links */}
         <div className="nav-links">
           {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} label={item.label} active={item.matchFn(path, activeView)} />
+            <NavLink key={item.to} to={item.to} label={item.label} active={item.matchFn(path)} />
           ))}
         </div>
         {/* Hamburger button — visible only on mobile via CSS */}
@@ -184,7 +176,7 @@ export function Nav() {
           <Link
             key={item.to}
             to={item.to}
-            className={`nav-drawer-link ${item.matchFn(path, activeView) ? "nav-drawer-link--active" : ""}`}
+            className={`nav-drawer-link ${item.matchFn(path) ? "nav-drawer-link--active" : ""}`}
             onClick={closeDrawer}
           >
             {item.label}
@@ -203,7 +195,6 @@ export function SiteFooter() {
     <footer className="site-footer">
       <div className="site-footer-links">
         <Link to="/results">Properties</Link>
-        <Link to="/results?view=saved">Saved</Link>
         <Link to="/#area-tracker">Area Tracker</Link>
       </div>
       <div className="site-footer-wordmark">OpenEstates</div>

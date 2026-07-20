@@ -1,23 +1,22 @@
 import { useCallback, useEffect, useState, useRef } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import type { AreaTrackerResponse, DiscoveryResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getAreas, getDiscovery, getProperties, type PlatformStats } from "../lib/api.ts";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
+import { getAreaTracker, getAreas, getProperties, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
-import { getSavedIds, SAVED_UPDATED_EVENT } from "../lib/sheet-store.ts";
 import { SearchExperience as InlineSearchExperience } from "./ResultsPageA.tsx";
+import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
+import { LandingPicksSection } from "../components/LandingPicksSection.tsx";
 
-function formatPrice(price: number): string {
-  if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
-  if (price >= 100_000) return `${(price / 100_000).toFixed(0)} L`;
-  return price.toLocaleString("en-IN");
-}
+const HERO_PROMISE = "Tell us the life you want. We'll help you find the right home.";
 
 const ROTATING_WORDS = [
   "transparent homes",
   "honest pricing",
   "trusted societies",
   "clear tradeoffs",
-  "real insights",
+  "your EMI plan",
+  "buy vs rent tradeoffs",
+  "EMI with a calculator",
 ];
 
 function RotatingText() {
@@ -60,6 +59,19 @@ const POPULAR_SEARCHES = [
   "New launch Hebbal",
 ];
 
+/* Rotating example queries — show users they can type in natural language. */
+const SEARCH_EXAMPLES = [
+  "Quiet 3BHK near good schools under 2.5Cr",
+  "Family-friendly society in Sarjapur with metro access",
+  "Ready-to-move 2BHK in HSR with a strong builder record",
+  "Low commute-pain home near Whitefield tech parks under 1.8Cr",
+  "Premium 4BHK in Hebbal with RERA proof and low traffic",
+  "Value flat with good resale near ORR, delivered on time",
+];
+
+const GHOST_ROTATE_MS = 3400;
+const GHOST_FADE_MS = 400;
+
 type MarketSnapshot = {
   totalProperties: number;
   totalSocieties: number;
@@ -88,17 +100,36 @@ export function HomePage() {
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
-  const [discovery, setDiscovery] = useState<DiscoveryResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState(activeSearchQuery);
   const [recents, setRecents] = useState<string[]>(() => getRecentSearches());
-  const [sheetCount, setSheetCount] = useState(() => getSavedIds().length);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [exampleIndex, setExampleIndex] = useState(0);
+  const [ghostFading, setGhostFading] = useState(false);
   const inlineResultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
 
+  const showGhost = !query && !searchFocused;
+  useEffect(() => {
+    if (!showGhost) {
+      setGhostFading(false);
+      return undefined;
+    }
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) return undefined;
+    const interval = window.setInterval(() => {
+      setGhostFading(true);
+      window.setTimeout(() => {
+        setExampleIndex((i) => (i + 1) % SEARCH_EXAMPLES.length);
+        setGhostFading(false);
+      }, GHOST_FADE_MS);
+    }, GHOST_ROTATE_MS);
+    return () => window.clearInterval(interval);
+  }, [showGhost]);
+
   useEffect(() => {
     if (searchParams.get("view") === "saved") {
-      navigate("/results?view=saved", { replace: true });
+      navigate("/results", { replace: true });
     }
   }, [navigate, searchParams]);
 
@@ -127,11 +158,6 @@ export function HomePage() {
           if (!cancelled) setAreaTracker(tracker);
         })
         .catch(() => {});
-      getDiscovery({ signal: controller.signal })
-        .then((home) => {
-          if (!cancelled) setDiscovery(home);
-        })
-        .catch(() => {});
     }, 750);
     return () => {
       cancelled = true;
@@ -143,26 +169,6 @@ export function HomePage() {
   useEffect(() => {
     setQuery(activeSearchQuery);
   }, [activeSearchQuery]);
-
-  useEffect(() => {
-    const refreshSheetCount = () => setSheetCount(getSavedIds().length);
-    const refreshOnVisible = () => {
-      if (!document.hidden) refreshSheetCount();
-    };
-
-    refreshSheetCount();
-    window.addEventListener("focus", refreshSheetCount);
-    window.addEventListener("storage", refreshSheetCount);
-    window.addEventListener(SAVED_UPDATED_EVENT, refreshSheetCount);
-    document.addEventListener("visibilitychange", refreshOnVisible);
-
-    return () => {
-      window.removeEventListener("focus", refreshSheetCount);
-      window.removeEventListener("storage", refreshSheetCount);
-      window.removeEventListener(SAVED_UPDATED_EVENT, refreshSheetCount);
-      document.removeEventListener("visibilitychange", refreshOnVisible);
-    };
-  }, []);
 
   useEffect(() => {
     if (!hasInlinePane || !shouldScrollToResultsRef.current) return;
@@ -249,18 +255,8 @@ export function HomePage() {
             lineHeight: 1.7,
           }}
         >
-          {discovery?.product_promise ?? "Property discovery that explains why, not just what."}
+          {HERO_PROMISE}
         </p>
-
-        {discovery?.quotes?.length ? (
-          <div className="home-proof-quotes fade-up fade-up-delay-1" aria-label="OpenEstates principles">
-            {discovery.quotes.slice(0, 3).map((quote) => (
-              <span key={quote.text} className={`home-proof-quote home-proof-quote--${quote.tone}`}>
-                {quote.text}
-              </span>
-            ))}
-          </div>
-        ) : null}
 
         {/* Search bar */}
         <p className="fade-up fade-up-delay-1 home-hero__kicker">
@@ -268,43 +264,40 @@ export function HomePage() {
         </p>
         <form
           onSubmit={handleSearch}
-          className="search-container home-search-form"
+          className={`home-composer fade-up fade-up-delay-1${searchFocused ? " home-composer--focused" : ""}`}
           aria-label="Property search"
           role="search"
         >
-          <div className="home-search-input-shell">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
+          <div className="home-composer__field">
+            <svg className="home-composer__lead" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
             <input
-              className="search-input"
+              className="home-composer__input"
               type="text"
-              placeholder="Try: 3BHK Whitefield under 1.5Cr"
+              placeholder={searchFocused ? "Area, BHK, budget, commute, schools, vibe…" : ""}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               aria-label="Describe the property you are looking for"
             />
-          </div>
-          <div className="home-search-actions">
-            <button
-              type="submit"
-              className="home-search-submit"
-            >
-              Search
+            {showGhost && (
+              <span
+                className={`home-composer__ghost${ghostFading ? " home-composer__ghost--fading" : ""}`}
+                aria-hidden="true"
+              >
+                {SEARCH_EXAMPLES[exampleIndex]}
+              </span>
+            )}
+            <button type="submit" className="home-composer__submit" aria-label="Search">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M5 12h14M13 6l6 6-6 6" />
+              </svg>
             </button>
           </div>
         </form>
-
-        {sheetCount > 0 && (
-          <Link
-            to="/results?view=saved"
-            className="home-saved-link fade-up fade-up-delay-2"
-            aria-label={`View your ${sheetCount} saved ${sheetCount === 1 ? "home" : "homes"}`}
-          >
-            {sheetCount} saved {sheetCount === 1 ? "home" : "homes"}
-          </Link>
-        )}
 
         {/* Error banner — non-blocking */}
         {loadError && (
@@ -409,315 +402,17 @@ export function HomePage() {
         </section>
       )}
 
-      {!hasInlinePane && discovery?.shelves?.length ? (
-        <DiscoveryShelvesSection discovery={discovery} onSearch={commitSearch} />
-      ) : null}
+      {!hasInlinePane && properties.length > 0 && (
+        <LandingPicksSection properties={properties} areaTracker={areaTracker} />
+      )}
 
       {!hasInlinePane && snapshot && properties.length > 0 && (
-        <MicroMarketsSection properties={properties} areaTracker={areaTracker} onSearch={commitSearch} />
+        <AreaTrackerSection
+          properties={properties}
+          areaTracker={areaTracker}
+          onSearch={commitSearch}
+        />
       )}
     </div>
-  );
-}
-
-/* ---------- Sub-components ---------- */
-
-/* ---------- Micro-Market Intelligence ---------- */
-
-const AREA_VIBES: Record<string, string> = {
-  Whitefield: "Tech hub with new metro access",
-  "Sarjapur Road": "Fast-growing IT corridor",
-  Bellandur: "Premium zone, lake concerns",
-  "HSR Layout": "Walkable startup neighbourhood",
-  Koramangala: "Bengaluru's most vibrant area",
-  Hebbal: "North Bengaluru premium corridor",
-  Marathahalli: "Affordable ORR hub",
-  Thanisandra: "Emerging north with IT access",
-  "Electronic City": "Affordable tech zone",
-  Hoodi: "Fast-developing metro hub",
-  Panathur: "Quiet residential pocket",
-  Varthur: "Emerging eastern suburb",
-};
-
-type MicroMarket = {
-  area: string;
-  vibe: string;
-  avgPriceSqft: number;
-  hasAvgPriceSqft: boolean;
-  priceMin: number;
-  priceMax: number;
-  count: number;
-  bhks: number[];
-  readyToMove: number;
-  nearMetro: number;
-  topBuilder: string;
-  societies: number;
-};
-
-function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
-  const byArea: Record<string, PropertyCard[]> = {};
-  for (const p of properties) {
-    (byArea[p.area] ??= []).push(p);
-  }
-
-  return Object.entries(byArea)
-    .filter(([, ps]) => ps.length >= 2)
-    .map(([area, ps]) => {
-      const prices = ps.map((p) => p.price_per_sqft).filter((price) => price > 0);
-      const projectPrices = ps.map((p) => p.price).filter((price) => price > 0);
-      const bhkSet = new Set(ps.map((p) => p.bhk));
-      const builderCount: Record<string, number> = {};
-      for (const p of ps) {
-        builderCount[p.builder_name] = (builderCount[p.builder_name] ?? 0) + 1;
-      }
-      const topBuilder = Object.entries(builderCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? "";
-      const societies = new Set(ps.map((p) => p.society_name));
-
-      return {
-        area,
-        vibe: AREA_VIBES[area] ?? "",
-        avgPriceSqft: prices.length > 0 ? Math.round(prices.reduce((a, b) => a + b, 0) / prices.length) : 0,
-        hasAvgPriceSqft: prices.length > 0,
-        priceMin: projectPrices.length > 0 ? Math.min(...projectPrices) : 0,
-        priceMax: projectPrices.length > 0 ? Math.max(...projectPrices) : 0,
-        count: ps.length,
-        bhks: Array.from(bhkSet).sort(),
-        readyToMove: ps.filter((p) => p.possession_status === "ready").length,
-        nearMetro: ps.filter((p) => p.metro_distance_mins <= 15).length,
-        topBuilder,
-        societies: societies.size,
-      };
-    })
-    .sort((a, b) => b.count - a.count);
-}
-
-function deriveMicroMarketsFromTracker(
-  tracker: AreaTrackerResponse,
-  _properties: PropertyCard[],
-): MicroMarket[] {
-  return tracker.markets.map((market) => ({
-    area: market.name,
-    vibe: AREA_VIBES[market.name] ?? "",
-    avgPriceSqft: market.avg_price_per_sqft,
-    hasAvgPriceSqft: market.avg_price_per_sqft > 0,
-    priceMin: market.price_min,
-    priceMax: market.price_max,
-    count: market.listing_count,
-    bhks: market.bhks,
-    readyToMove: market.ready_to_move,
-    nearMetro: market.near_metro,
-    topBuilder: market.top_builder,
-    societies: market.societies,
-  }));
-}
-
-function MicroMarketCard({
-  m,
-  maxAvg,
-  onSearch,
-}: {
-  m: MicroMarket;
-  maxAvg: number;
-  onSearch: (query: string) => void;
-}) {
-  const hasPriceRange = m.priceMin > 0 && m.priceMax > 0;
-  const pct = m.hasAvgPriceSqft ? (m.avgPriceSqft / maxAvg) * 100 : 0;
-  const barColor =
-    pct > 85 ? "var(--color-accent)" : pct > 60 ? "var(--color-cool-deep)" : "var(--color-cool)";
-
-  return (
-    <button
-      type="button"
-      className="home-micro-card"
-      onClick={() => onSearch(m.area)}
-    >
-      {/* Header */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "0.2rem" }}>
-        <span style={{ fontSize: "1.05rem", fontWeight: 600, color: "#1a1a1a", letterSpacing: "-0.01em" }}>
-          {m.area}
-        </span>
-        <span style={{ fontSize: "0.68rem", color: "#aaa", whiteSpace: "nowrap", marginLeft: "0.5rem" }}>
-          {m.count} listings
-        </span>
-      </div>
-      {m.vibe && (
-        <p style={{ margin: "0 0 0.85rem", fontSize: "0.78rem", color: "#999", lineHeight: 1.3 }}>
-          {m.vibe}
-        </p>
-      )}
-
-      {(m.hasAvgPriceSqft || hasPriceRange) && (
-        <div style={{ marginBottom: "0.85rem" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: "0.3rem" }}>
-            {m.hasAvgPriceSqft && (
-              <span className="home-micro-price">
-                {m.avgPriceSqft.toLocaleString("en-IN")}
-                <span style={{ fontSize: "0.7rem", color: "#999", fontWeight: 400, marginLeft: "0.2rem" }}>/sqft</span>
-              </span>
-            )}
-            {hasPriceRange && (
-              <span style={{ fontSize: "0.72rem", color: "#aaa", marginLeft: "auto" }}>
-                {formatPrice(m.priceMin)} – {formatPrice(m.priceMax)}
-              </span>
-            )}
-          </div>
-          {m.hasAvgPriceSqft && (
-            <div style={{ height: "4px", backgroundColor: "rgba(0,0,0,0.04)", borderRadius: "2px", overflow: "hidden" }}>
-              <div
-                style={{
-                  height: "100%",
-                  width: `${pct}%`,
-                  borderRadius: "2px",
-                  backgroundColor: barColor,
-                  transition: "width 0.6s cubic-bezier(0.16, 1, 0.3, 1)",
-                }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Signal chips */}
-      <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
-        {m.bhks.length > 0 && (
-          <span style={chipStyle("#f0f0f0", "#555")}>
-            {m.bhks.join(", ")} BHK
-          </span>
-        )}
-        {m.societies > 1 && (
-          <span style={chipStyle("#f0f0f0", "#555")}>
-            {m.societies} societies
-          </span>
-        )}
-        {m.readyToMove > 0 && (
-          <span style={chipStyle("var(--color-positive-bg)", "var(--color-positive)")}>
-            {m.readyToMove} ready
-          </span>
-        )}
-        {m.nearMetro > 0 && (
-          <span className="home-chip-cool">
-            {m.nearMetro} near metro
-          </span>
-        )}
-      </div>
-
-      {/* Top builder */}
-      {m.topBuilder && (
-        <p style={{ margin: "0.6rem 0 0", fontSize: "0.72rem", color: "#aaa" }}>
-          Top builder: <span style={{ color: "#777", fontWeight: 500 }}>{m.topBuilder}</span>
-        </p>
-      )}
-    </button>
-  );
-}
-
-function chipStyle(bg: string, color: string): React.CSSProperties {
-  return {
-    fontSize: "0.68rem",
-    padding: "0.15rem 0.5rem",
-    borderRadius: "999px",
-    backgroundColor: bg,
-    color,
-    fontWeight: 500,
-    whiteSpace: "nowrap",
-  };
-}
-
-function DiscoveryShelvesSection({
-  discovery,
-  onSearch,
-}: {
-  discovery: DiscoveryResponse;
-  onSearch: (query: string) => void;
-}) {
-  const shelves = discovery.shelves.filter((shelf) => shelf.cards.length > 0).slice(0, 5);
-  if (shelves.length === 0) return null;
-
-  return (
-    <section className="home-discovery-section" aria-label="Discovery shelves">
-      <div className="home-discovery-inner">
-        <div className="home-discovery-heading-row">
-          <div>
-            <span className="home-discovery-kicker">Discovery shelves</span>
-            <h2 className="home-discovery-heading">Curated by intent</h2>
-          </div>
-          <button
-            type="button"
-            className="home-discovery-all"
-            onClick={() => onSearch("transparent homes with proof")}
-          >
-            Explore by intent
-          </button>
-        </div>
-
-        <div className="home-discovery-grid">
-          {shelves.map((shelf) => (
-            <article key={shelf.id} className="home-discovery-shelf">
-              <div className="home-discovery-shelf__head">
-                <span>{shelf.receipt_copy}</span>
-                <h3>{shelf.title}</h3>
-                <p>{shelf.quote}</p>
-              </div>
-              <p className="home-discovery-shelf__desc">{shelf.description}</p>
-              <div className="home-discovery-cards">
-                {shelf.cards.slice(0, 3).map(({ property, reason }) => (
-                  <Link
-                    key={`${shelf.id}-${property.id}`}
-                    to={`/property/${property.id}`}
-                    className="home-discovery-card"
-                  >
-                    <strong>{property.society_name || property.title}</strong>
-                    <span>{property.area} · {property.bhk} BHK · {formatPrice(property.price)}</span>
-                    <em>{reason}</em>
-                  </Link>
-                ))}
-              </div>
-              <button
-                type="button"
-                className="home-discovery-search"
-                onClick={() => onSearch(shelf.search_query)}
-              >
-                Search this shelf
-              </button>
-            </article>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function MicroMarketsSection({
-  properties,
-  areaTracker,
-  onSearch,
-}: {
-  properties: PropertyCard[];
-  areaTracker: AreaTrackerResponse | null;
-  onSearch: (query: string) => void;
-}) {
-  const markets = areaTracker
-    ? deriveMicroMarketsFromTracker(areaTracker, properties)
-    : deriveMicroMarkets(properties);
-  if (markets.length < 2) return null;
-
-  const maxAvg = Math.max(1, ...markets.filter((m) => m.hasAvgPriceSqft).map((m) => m.avgPriceSqft));
-
-  return (
-    <section id="area-tracker" className="home-micro-section" style={{ padding: "2.5rem clamp(1.5rem, 4vw, 4rem) 2rem" }}>
-      <div style={{ maxWidth: "960px", margin: "0 auto" }}>
-        <div style={{ marginBottom: "1.5rem" }}>
-          <h2 className="home-micro-heading">Area Tracker</h2>
-          <p style={{ margin: 0, fontSize: "0.85rem", color: "#888" }}>
-            {markets.length} Bengaluru areas · {properties.length} listings · price, access, and trust signals
-          </p>
-        </div>
-        <div className="home-micro-grid">
-          {markets.map((m) => (
-            <MicroMarketCard key={m.area} m={m} maxAvg={maxAvg} onSearch={onSearch} />
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }

@@ -5,7 +5,6 @@ import type { BuilderPortfolio, EntityContextResponse, PropertyDetailResponse } 
 import { getProperty, getPropertyContext } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { TrustBadge } from "../components/TrustBadge.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
@@ -17,6 +16,10 @@ import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx"
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 import { briefHookLine, topEvidenceGlance } from "../lib/evidence.ts";
+import {
+  detailEvidenceExcludeKinds,
+  isRedundantHomeState,
+} from "../lib/property-signals.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -118,7 +121,7 @@ function buildDecision(data: PropertyDetailResponse): {
   return {
     label: "Worth comparing",
     tone: "compare",
-    summary: "Price, proof, and market context are balanced enough to compare against other saved homes.",
+    summary: "Price, proof, and market context are balanced enough to open the full report.",
   };
 }
 
@@ -128,11 +131,16 @@ export function PropertyPage() {
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [entityContext, setEntityContext] = useState<EntityContextResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
-  const [saved, setSaved] = useState(false);
+  const [contextStatus, setContextStatus] = useState<"loading" | "ready" | "empty">("loading");
 
   useEffect(() => {
     if (!id) return;
-    queueMicrotask(() => setSaved(isSaved(id)));
+    const contextController = new AbortController();
+    setData(null);
+    setEntityContext(null);
+    setStatus("loading");
+    setContextStatus("loading");
+
     getProperty(id)
       .then((d) => {
         setData(d);
@@ -141,9 +149,18 @@ export function PropertyPage() {
       .catch((err: Error) => {
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
-    getPropertyContext(id)
-      .then((context) => setEntityContext(context))
-      .catch(() => setEntityContext(null));
+    getPropertyContext(id, { signal: contextController.signal })
+      .then((context) => {
+        setEntityContext(context);
+        setContextStatus(context ? "ready" : "empty");
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setEntityContext(null);
+        setContextStatus("empty");
+      });
+
+    return () => contextController.abort();
   }, [id]);
 
   if (status === "loading") return (
@@ -183,12 +200,6 @@ export function PropertyPage() {
 
   const { property: p, society, market_activity } = data;
 
-  const handleSave = () => {
-    if (!id) return;
-    toggleSaved(id);
-    setSaved(!saved);
-  };
-
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
     ? `${p.price_per_sqft.toLocaleString("en-IN")} /sqft`
@@ -216,8 +227,20 @@ export function PropertyPage() {
   ].filter((row): row is string => row !== null);
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
-  const proofGlance = topEvidenceGlance(data.evidence, 1)[0] ?? null;
+  const evidenceExcludeKinds = detailEvidenceExcludeKinds(showApproachTrail);
+  const showHomeStateChip = Boolean(
+    data.home_state_display
+    && !isRedundantHomeState(
+      data.home_state_display,
+      data.project_status_display,
+      p.possession_status,
+    ),
+  );
+  const proofGlance = topEvidenceGlance(data.evidence, 1, evidenceExcludeKinds)[0] ?? null;
   const briefHook = briefHookLine(data.livability_brief);
+  const showContextSkeleton = contextStatus === "loading";
+  const showLivabilityBrief = Boolean(data.livability_brief && contextStatus === "empty");
+  const showBriefHookRail = Boolean(briefHook && !showLivabilityBrief);
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -282,7 +305,7 @@ export function PropertyPage() {
           <p className="property-brief-summary">{decision.summary}</p>
 
           <div className="property-proof-strip">
-            {data.home_state_display && (
+            {showHomeStateChip && (
               <span className="property-proof-strip__chip">{data.home_state_display}</span>
             )}
             <TrustBadge rootSource={data.root_source} compact />
@@ -316,17 +339,6 @@ export function PropertyPage() {
               possessionStatus={p.possession_status}
             />
           </div>
-
-          <button
-            onClick={handleSave}
-            className={`btn property-hero-save ${saved ? "btn-primary" : "btn-outline"}`}
-            aria-pressed={saved}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-            {saved ? "Saved" : "Save"}
-          </button>
         </div>
       </section>
 
@@ -340,7 +352,11 @@ export function PropertyPage() {
             <EntityContextCard context={entityContext} />
           )}
 
-          {data.livability_brief && !entityContext && (
+          {showContextSkeleton && (
+            <EntityContextSkeleton />
+          )}
+
+          {showLivabilityBrief && data.livability_brief && (
             <LivabilityBriefCard
               brief={data.livability_brief}
               evidenceSections={data.evidence?.sections}
@@ -349,6 +365,7 @@ export function PropertyPage() {
 
           <EvidenceStack
             evidence={data.evidence}
+            excludeKinds={evidenceExcludeKinds}
           />
 
           {data.builder_portfolio && (
@@ -387,7 +404,7 @@ export function PropertyPage() {
         </main>
 
         <aside className="property-action-rail">
-          {briefHook && (
+          {showBriefHookRail && briefHook && (
             <div className="property-mini-card property-rail-brief-hook">
               <span>Before you shortlist</span>
               <p>{briefHook}</p>
@@ -417,6 +434,21 @@ export function PropertyPage() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function EntityContextSkeleton() {
+  return (
+    <section className="property-evidence-section entity-context-card" aria-label="Neighborhood context loading">
+      <div className="property-section-heading">
+        <span>Before you shortlist</span>
+      </div>
+      <div className="entity-context-card__skeleton">
+        <div className="skeleton-bar" />
+        <div className="skeleton-bar" />
+        <div className="skeleton-bar" />
+      </div>
+    </section>
   );
 }
 

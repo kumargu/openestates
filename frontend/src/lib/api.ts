@@ -11,6 +11,11 @@ import type {
   SearchResponse,
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
+import {
+  filterListableProperties,
+  filterListableSearchResponse,
+  isListableProperty,
+} from "./property-filters.ts";
 
 const API_BASE = import.meta.env.VITE_API_BASE
   ?? (import.meta.env.DEV ? "" : "http://127.0.0.1:4000");
@@ -71,7 +76,7 @@ export function getHealth(): Promise<{ service: string; status: string }> {
 }
 
 export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]> {
-  return fetchJson("/api/properties", options);
+  return fetchJson<PropertyCard[]>("/api/properties", options).then(filterListableProperties);
 }
 
 export function getProperty(id: string): Promise<PropertyDetailResponse> {
@@ -82,10 +87,13 @@ export function getPropertyEvidence(id: string): Promise<PropertyEvidenceRespons
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
 }
 
-export async function getPropertyContext(id: string): Promise<EntityContextResponse | null> {
+export async function getPropertyContext(
+  id: string,
+  options: ApiFetchOptions = {},
+): Promise<EntityContextResponse | null> {
   const path = `/api/properties/${encodeURIComponent(id)}/context`;
   try {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetch(`${API_BASE}${path}`, { signal: options.signal });
     if (res.status === 404) return null;
     if (!res.ok) {
       const fixture = getDevFixture<EntityContextResponse>(path);
@@ -128,6 +136,7 @@ export function searchProperties(query: string): Promise<SearchResponse> {
   if (existing) return existing;
 
   const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`)
+    .then(filterListableSearchResponse)
     .finally(() => {
       if (inFlightSearches.get(key) === request) {
         inFlightSearches.delete(key);
@@ -138,7 +147,13 @@ export function searchProperties(query: string): Promise<SearchResponse> {
 }
 
 export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryResponse> {
-  return fetchJson("/api/discovery", options);
+  return fetchJson<DiscoveryResponse>("/api/discovery", options).then((response) => ({
+    ...response,
+    shelves: response.shelves.map((shelf) => ({
+      ...shelf,
+      cards: shelf.cards.filter((card) => isListableProperty(card.property)),
+    })),
+  }));
 }
 
 export type PlatformStats = {

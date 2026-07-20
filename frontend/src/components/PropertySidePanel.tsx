@@ -7,12 +7,12 @@ import { Link } from "react-router-dom";
 import type { PropertyDetailResponse, PropertyCard as PropertyCardType } from "../lib/types.ts";
 import { getProperty } from "../lib/api.ts";
 import { ImageWithFallback } from "./ImageWithFallback.tsx";
-import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
 import { TrustBadge } from "./TrustBadge.tsx";
 import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 import { evidenceReceiptLabel, summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
+import { isRedundantHomeState } from "../lib/property-signals.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `\u20B9${(price / 10_000_000).toFixed(1)} Cr`;
@@ -34,13 +34,11 @@ type Props = {
   propertyId: string;
   card: PropertyCardType;
   onClose: () => void;
-  onSaveChange?: () => void;
 };
 
-export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: Props) {
+export function PropertySidePanel({ propertyId, card, onClose }: Props) {
   const [detail, setDetail] = useState<PropertyDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saved, setSaved] = useState(() => isSaved(propertyId));
   const [closing, setClosing] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
   const specs = [
@@ -90,13 +88,16 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
     if (e.target === e.currentTarget) handleClose();
   };
 
-  const handleSave = () => {
-    setSaved(toggleSaved(propertyId));
-    onSaveChange?.();
-  };
-
   const evidenceSummary = summarizeEvidence(detail?.evidence);
-  const evidenceGlance = topEvidenceGlance(detail?.evidence, 2);
+  const evidenceGlance = topEvidenceGlance(detail?.evidence, 2, ["approach_road"]);
+  const showHomeStateChip = Boolean(
+    card.home_state_display
+    && !isRedundantHomeState(
+      card.home_state_display,
+      detail?.project_status_display,
+      card.possession_status,
+    ),
+  );
 
   return (
     <div
@@ -193,7 +194,7 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
 
           {!loading && (
             <div className="side-panel-skim">
-              {card.home_state_display && (
+              {showHomeStateChip && (
                 <span className="side-panel-skim__chip">{card.home_state_display}</span>
               )}
               {card.builder_delivery_display && (
@@ -213,15 +214,6 @@ export function PropertySidePanel({ propertyId, card, onClose, onSaveChange }: P
 
         {/* Sticky footer actions */}
         <div className="side-panel-footer">
-          <button
-            className={`side-panel-save-btn ${saved ? "side-panel-save-btn--saved" : ""}`}
-            onClick={handleSave}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill={saved ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" />
-            </svg>
-            {saved ? "Saved" : "Save"}
-          </button>
           <Link to={`/property/${propertyId}`} className="side-panel-full-btn">
             Full details
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

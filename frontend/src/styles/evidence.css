@@ -147,6 +147,12 @@
   color: #aaa;
 }
 
+.catalog-card__rating {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--color-cool-deep);
+}
+
 .catalog-card__why {
   margin: 0.35rem 0 0;
   font-size: 0.76rem;
@@ -172,6 +178,22 @@
   background: rgba(0, 0, 0, 0.04);
   color: #666;
   font-weight: 500;
+}
+
+.catalog-card__proof-chip {
+  align-self: flex-start;
+  margin-top: 0.35rem;
+  font-size: 0.66rem;
+  padding: 0.18rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(63, 92, 138, 0.08);
+  color: #3f5c8a;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
 }
 
 .catalog-card__proof {
@@ -1699,43 +1721,25 @@
   overflow-wrap: anywhere;
 }
 
-.entity-context-card__clauses {
-  list-style: none;
-  margin: 0.85rem 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-}
-
-.entity-context-card__clauses li {
+.entity-context-card__skeleton {
   display: grid;
-  grid-template-columns: 1.1rem minmax(0, 1fr);
-  gap: 0.45rem;
-  align-items: start;
-  padding: 0.55rem 0.65rem;
-  border-radius: 0.55rem;
-  background: rgba(24, 24, 24, 0.03);
-  min-width: 0;
+  gap: 0.65rem;
 }
 
-.entity-context-card__icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  margin-top: 0.1rem;
-  color: rgba(24, 24, 24, 0.55);
+.entity-context-card__skeleton .skeleton-bar {
+  height: 0.9rem;
 }
 
-.entity-context-card__clause-text {
-  font-size: 0.9rem;
-  color: rgba(24, 24, 24, 0.9);
-  min-width: 0;
-  overflow-wrap: anywhere;
+.entity-context-card__skeleton .skeleton-bar:first-child {
+  width: 96%;
 }
 
-.entity-context-card__more {
-  color: rgba(24, 24, 24, 0.58);
+.entity-context-card__skeleton .skeleton-bar:nth-child(2) {
+  width: 88%;
+}
+
+.entity-context-card__skeleton .skeleton-bar:last-child {
+  width: 64%;
 }
 
 .livability-brief {
