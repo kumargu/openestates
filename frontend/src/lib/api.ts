@@ -16,6 +16,11 @@ const API_BASE = import.meta.env.VITE_API_BASE
   ?? (import.meta.env.DEV ? "" : "http://127.0.0.1:4000");
 const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API !== "false"
   && (import.meta.env.DEV || import.meta.env.VITE_USE_FIXTURE_API === "true");
+const inFlightSearches = new Map<string, Promise<SearchResponse>>();
+
+type ApiFetchOptions = {
+  signal?: AbortSignal;
+};
 
 function getDevFixture<T>(path: string): T | null {
   if (!ENABLE_DEV_FIXTURES) return null;
@@ -23,9 +28,13 @@ function getDevFixture<T>(path: string): T | null {
   return fixture === null ? null : fixture as T;
 }
 
-async function fetchJson<T>(path: string): Promise<T> {
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+async function fetchJson<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   try {
-    const res = await fetch(`${API_BASE}${path}`);
+    const res = await fetch(`${API_BASE}${path}`, { signal: options.signal });
     if (!res.ok) {
       const fixture = getDevFixture<T>(path);
       if (fixture !== null) return fixture;
@@ -37,6 +46,7 @@ async function fetchJson<T>(path: string): Promise<T> {
     }
     return res.json();
   } catch (error) {
+    if (isAbortError(error)) throw error;
     const fixture = getDevFixture<T>(path);
     if (fixture !== null) return fixture;
     throw error;
@@ -60,8 +70,8 @@ export function getHealth(): Promise<{ service: string; status: string }> {
   return fetchJson("/api/health");
 }
 
-export function getProperties(): Promise<PropertyCard[]> {
-  return fetchJson("/api/properties");
+export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]> {
+  return fetchJson("/api/properties", options);
 }
 
 export function getProperty(id: string): Promise<PropertyDetailResponse> {
@@ -100,24 +110,35 @@ export function getPropertyEvidenceBatch(
   });
 }
 
-export function getAreas(): Promise<AreaListItem[]> {
-  return fetchJson("/api/areas");
+export function getAreas(options?: ApiFetchOptions): Promise<AreaListItem[]> {
+  return fetchJson("/api/areas", options);
 }
 
 export function getArea(id: string): Promise<AreaDetail> {
   return fetchJson(`/api/areas/${encodeURIComponent(id)}`);
 }
 
-export function getAreaTracker(): Promise<AreaTrackerResponse> {
-  return fetchJson("/api/areas/tracker");
+export function getAreaTracker(options?: ApiFetchOptions): Promise<AreaTrackerResponse> {
+  return fetchJson("/api/areas/tracker", options);
 }
 
 export function searchProperties(query: string): Promise<SearchResponse> {
-  return fetchJson(`/api/search?q=${encodeURIComponent(query)}`);
+  const key = query.trim();
+  const existing = inFlightSearches.get(key);
+  if (existing) return existing;
+
+  const request = fetchJson<SearchResponse>(`/api/search?q=${encodeURIComponent(query)}`)
+    .finally(() => {
+      if (inFlightSearches.get(key) === request) {
+        inFlightSearches.delete(key);
+      }
+    });
+  inFlightSearches.set(key, request);
+  return request;
 }
 
-export function getDiscovery(): Promise<DiscoveryResponse> {
-  return fetchJson("/api/discovery");
+export function getDiscovery(options?: ApiFetchOptions): Promise<DiscoveryResponse> {
+  return fetchJson("/api/discovery", options);
 }
 
 export type PlatformStats = {
@@ -126,10 +147,10 @@ export type PlatformStats = {
   areas: number;
 };
 
-export async function getStats(): Promise<PlatformStats> {
+export async function getStats(options?: ApiFetchOptions): Promise<PlatformStats> {
   const [props, areas] = await Promise.all([
-    getProperties(),
-    getAreas(),
+    getProperties(options),
+    getAreas(options),
   ]);
   const societyCount = new Set(props.map((p) => p.society_name).filter(Boolean)).size;
 

@@ -1,13 +1,10 @@
-import { lazy, Suspense, useCallback, useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, DiscoveryResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getDiscovery, getProperties, getStats, type PlatformStats } from "../lib/api.ts";
+import { getAreaTracker, getAreas, getDiscovery, getProperties, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { getSavedIds, SAVED_UPDATED_EVENT } from "../lib/sheet-store.ts";
-
-const InlineSearchExperience = lazy(() =>
-  import("./ResultsPageA.tsx").then((m) => ({ default: m.SearchExperience }))
-);
+import { SearchExperience as InlineSearchExperience } from "./ResultsPageA.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -107,31 +104,39 @@ export function HomePage() {
 
   useEffect(() => {
     if (hasActiveSearch) return;
+    const controller = new AbortController();
     let cancelled = false;
-    getProperties()
-      .then((data) => {
-        if (!cancelled) setProperties(data);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError(true);
-      });
-    getStats()
-      .then((stats) => {
-        if (!cancelled) setPlatformStats(stats);
-      })
-      .catch(() => {});
-    getAreaTracker()
-      .then((tracker) => {
-        if (!cancelled) setAreaTracker(tracker);
-      })
-      .catch(() => {});
-    getDiscovery()
-      .then((home) => {
-        if (!cancelled) setDiscovery(home);
-      })
-      .catch(() => {});
+    const timer = window.setTimeout(() => {
+      Promise.all([getProperties({ signal: controller.signal }), getAreas({ signal: controller.signal })])
+        .then(([props, areas]) => {
+          if (cancelled) return;
+          setProperties(props);
+          setPlatformStats({
+            properties: props.length,
+            societies: new Set(props.map((p) => p.society_name).filter(Boolean)).size,
+            areas: areas.length,
+          });
+        })
+        .catch((error) => {
+          if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
+            setLoadError(true);
+          }
+        });
+      getAreaTracker({ signal: controller.signal })
+        .then((tracker) => {
+          if (!cancelled) setAreaTracker(tracker);
+        })
+        .catch(() => {});
+      getDiscovery({ signal: controller.signal })
+        .then((home) => {
+          if (!cancelled) setDiscovery(home);
+        })
+        .catch(() => {});
+    }, 750);
     return () => {
       cancelled = true;
+      controller.abort();
+      window.clearTimeout(timer);
     };
   }, [hasActiveSearch]);
 
@@ -397,21 +402,10 @@ export function HomePage() {
 
       {hasInlinePane && (
         <section ref={inlineResultsRef} className="home-inline-results-anchor" aria-label="Search results">
-          <Suspense
-            fallback={
-              <div className="inline-results-shell">
-                <div className="inline-results-header">
-                  <span className="inline-results-kicker">Search results</span>
-                  <div className="skeleton-search-bar skeleton-bar" />
-                </div>
-              </div>
-            }
-          >
-            <InlineSearchExperience
-              variant="embedded"
-              onSearchCommit={handleInlineSearchCommit}
-            />
-          </Suspense>
+          <InlineSearchExperience
+            variant="embedded"
+            onSearchCommit={handleInlineSearchCommit}
+          />
         </section>
       )}
 
