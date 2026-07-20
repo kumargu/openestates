@@ -6,6 +6,8 @@ use serde::Serialize;
 use crate::models::Property;
 use crate::serving::ServingEntityRecord;
 
+use super::schema;
+
 /// Local query/document embedding boundary for semantic recall.
 ///
 /// The scorer must not treat these vectors as proof. They only expand the
@@ -199,13 +201,13 @@ fn semantic_tokens(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     for token in &base_tokens {
         push_token(&mut tokens, token);
-        for expanded in token_expansions(token) {
+        for expanded in schema::semantic_expansion_tokens(token) {
             push_token(&mut tokens, expanded);
         }
     }
     for window in base_tokens.windows(2) {
         let phrase = format!("{} {}", window[0], window[1]);
-        for expanded in phrase_expansions(&phrase) {
+        for expanded in schema::semantic_expansion_tokens(&phrase) {
             push_token(&mut tokens, expanded);
         }
         push_token(&mut tokens, &phrase.replace(' ', "_"));
@@ -217,7 +219,7 @@ fn raw_tokens(text: &str) -> Vec<String> {
     text.split(|ch: char| !ch.is_ascii_alphanumeric())
         .filter_map(|token| {
             let token = token.trim().to_lowercase();
-            if token.len() >= 2 && !is_stopword(&token) {
+            if token.len() >= 2 && !schema::semantic_stopwords().contains(&token) {
                 Some(token)
             } else {
                 None
@@ -231,46 +233,6 @@ fn push_token(tokens: &mut Vec<String>, token: &str) {
         return;
     }
     tokens.push(token.to_string());
-}
-
-fn token_expansions(token: &str) -> &'static [&'static str] {
-    match token {
-        "parents" | "senior" | "seniors" => &["family", "hospital", "quiet", "safe"],
-        "kids" | "children" => &["family", "school", "play", "park"],
-        "peaceful" | "calm" => &["quiet", "low_noise", "livability"],
-        "cramped" => &["density", "open_space", "large_campus"],
-        "spacious" => &["open_space", "large_campus"],
-        "green" | "greenery" | "trees" | "landscaped" => &["open_space", "park", "nature"],
-        "resident" | "residents" => &["community", "review", "lived_experience"],
-        "marketing" | "hype" => &["builder_claim", "low_trust"],
-        "enduse" | "enduser" => &["liveability", "occupancy", "maintenance"],
-        "resale" => &["liquidity", "market", "investment"],
-        "overpriced" => &["value", "price_per_sqft", "premium"],
-        "traffic" | "congestion" => &["commute", "road", "risk"],
-        "approach" => &["road", "access", "connectivity"],
-        "hospital" => &["healthcare", "parents"],
-        "school" | "schools" => &["family", "kids"],
-        "office" | "offices" => &["tech_park", "commute"],
-        "metro" => &["transit", "commute", "connectivity"],
-        "clubhouse" | "pool" | "amenities" | "amenity" => &["amenity_quality", "society"],
-        "safe" | "trusted" | "reliable" => &["risk", "builder", "verified"],
-        _ => &[],
-    }
-}
-
-fn phrase_expansions(phrase: &str) -> &'static [&'static str] {
-    match phrase {
-        "not cramped" => &["open_space", "large_campus", "low_density"],
-        "actual residents" => &["resident", "community", "review", "lived_experience"],
-        "investor hype" => &["marketing", "speculation", "low_trust"],
-        "tech park" | "tech parks" | "it park" | "it parks" => {
-            &["office", "commute", "employment_hub"]
-        }
-        "approach road" | "approach roads" => &["road", "access", "connectivity"],
-        "good reviews" => &["review_quality", "google_rating", "resident"],
-        "family friendly" => &["family", "school", "kids", "hospital"],
-        _ => &[],
-    }
 }
 
 fn token_weight(token: &str) -> f32 {
@@ -310,34 +272,6 @@ fn cosine_similarity(a: &[f32], b: &[f32]) -> f64 {
         .zip(b.iter())
         .map(|(left, right)| (*left as f64) * (*right as f64))
         .sum::<f64>()
-}
-
-fn is_stopword(token: &str) -> bool {
-    matches!(
-        token,
-        "a" | "an"
-            | "and"
-            | "are"
-            | "as"
-            | "at"
-            | "be"
-            | "but"
-            | "for"
-            | "from"
-            | "i"
-            | "if"
-            | "in"
-            | "is"
-            | "it"
-            | "near"
-            | "not"
-            | "of"
-            | "or"
-            | "the"
-            | "to"
-            | "want"
-            | "with"
-    )
 }
 
 #[cfg(test)]

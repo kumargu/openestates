@@ -24,6 +24,8 @@ pub struct EntityContextFile {
     pub traversal: EntityContextTraversalConfig,
     #[serde(default)]
     pub categories: Vec<EntityContextCategoryConfig>,
+    #[serde(default)]
+    pub fact_templates: Vec<EntityContextFactTemplate>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -62,6 +64,12 @@ pub struct EntityContextCategoryConfig {
     pub terms: Vec<String>,
     #[serde(default)]
     pub source_priority: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EntityContextFactTemplate {
+    pub fact_key: String,
+    pub template: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -234,7 +242,8 @@ fn collect_fact_candidates(
         if is_weak_visual_fact(&fact.fact_key) {
             continue;
         }
-        let Some(text) = fact_display_text(&bundle.fact_index, entity_id, fact, category) else {
+        let Some(text) = fact_display_text(config, &bundle.fact_index, entity_id, fact, category)
+        else {
             continue;
         };
         candidates.push(CandidateClause {
@@ -546,12 +555,13 @@ fn is_weak_visual_fact(fact_key: &str) -> bool {
 }
 
 fn fact_display_text(
+    config: &EntityContextFile,
     fact_index: &ServingFactIndex,
     entity_id: &str,
     fact: &ServingFactRecord,
     category: &EntityContextCategoryConfig,
 ) -> Option<String> {
-    if let Some(text) = special_fact_text(fact) {
+    if let Some(text) = configured_fact_text(config, fact) {
         return Some(text);
     }
 
@@ -584,25 +594,18 @@ fn fact_display_text(
     }
 }
 
-fn special_fact_text(fact: &ServingFactRecord) -> Option<String> {
-    match fact.fact_key.as_str() {
-        "risk.approach_road_waterlogging" => {
-            Some("Residents mention waterlogging on the approach road.".to_string())
-        }
-        "risk.approach_road_traffic" => {
-            Some("Peak-hour traffic builds on the approach road.".to_string())
-        }
-        "google_rating" => {
-            fact_value_text(&fact.value).map(|value| format!("Google reviews rate it {value}/5."))
-        }
-        "community_positive_themes" => {
-            fact_value_text(&fact.value).map(|value| format!("Reviews praise {value}."))
-        }
-        "community_concern_themes" => {
-            fact_value_text(&fact.value).map(|value| format!("Resident cautions mention {value}."))
-        }
-        _ => None,
-    }
+fn configured_fact_text(config: &EntityContextFile, fact: &ServingFactRecord) -> Option<String> {
+    let template = config
+        .fact_templates
+        .iter()
+        .find(|template| template.fact_key == fact.fact_key)?;
+    let rendered = if template.template.contains("{value}") {
+        let value = fact_value_text(&fact.value)?;
+        template.template.replace("{value}", &value)
+    } else {
+        template.template.clone()
+    };
+    Some(ensure_sentence(rendered))
 }
 
 fn fact_value_text(value: &FactValue) -> Option<String> {

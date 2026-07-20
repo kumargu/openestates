@@ -5,6 +5,7 @@ use crate::routes::enrichment::society_node_id;
 use crate::serving::TantivyRecallHit;
 
 use super::intent::SearchIntent;
+use super::schema;
 use super::semantic::SemanticRecallHit;
 use crate::dag_config::area_alias_entries;
 
@@ -86,7 +87,7 @@ impl SearchIndex {
                 .price_by_id
                 .iter()
                 .filter_map(|(id, price)| {
-                    if *price <= budget_max {
+                    if price_satisfies_budget(*price, budget_max) {
                         Some(id.clone())
                     } else {
                         None
@@ -294,6 +295,10 @@ fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
+pub(crate) fn price_satisfies_budget(price: u64, budget_max: u64) -> bool {
+    price > 0 && price <= budget_max
+}
+
 fn tokenize(value: &str) -> Vec<String> {
     value
         .split(|ch: char| !ch.is_ascii_alphanumeric())
@@ -309,28 +314,9 @@ fn tokenize(value: &str) -> Vec<String> {
 }
 
 fn is_query_stopword(token: &str) -> bool {
-    matches!(
-        token,
-        "and"
-            | "the"
-            | "for"
-            | "with"
-            | "near"
-            | "under"
-            | "below"
-            | "within"
-            | "upto"
-            | "bhk"
-            | "cr"
-            | "crore"
-            | "lakhs"
-            | "lakh"
-            | "avoid"
-            | "less"
-            | "low"
-            | "not"
-            | "no"
-    )
+    schema::query_stopwords()
+        .iter()
+        .any(|stopword| stopword.eq_ignore_ascii_case(token))
 }
 
 #[cfg(test)]

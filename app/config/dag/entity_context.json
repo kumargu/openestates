@@ -124,6 +124,28 @@
       "source_priority": ["Reddit", "Google", "LocalContextSeed", "Computed"]
     }
   ],
+  "fact_templates": [
+    {
+      "fact_key": "risk.approach_road_waterlogging",
+      "template": "Residents mention waterlogging on the approach road."
+    },
+    {
+      "fact_key": "risk.approach_road_traffic",
+      "template": "Peak-hour traffic builds on the approach road."
+    },
+    {
+      "fact_key": "google_rating",
+      "template": "Google reviews rate it {value}/5."
+    },
+    {
+      "fact_key": "community_positive_themes",
+      "template": "Reviews praise {value}."
+    },
+    {
+      "fact_key": "community_concern_themes",
+      "template": "Resident cautions mention {value}."
+    }
+  ],
   "api": {
     "endpoints": [
       "GET /api/entities/{entity_id}/context",

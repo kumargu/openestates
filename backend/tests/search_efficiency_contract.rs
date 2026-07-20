@@ -10,6 +10,7 @@ const DISTRACTORS_PER_BUCKET: usize = 800;
 const MAX_RECALL_CANDIDATE_RATIO: f64 = 0.01;
 const MAX_INDEXED_SEARCH_DURATION: Duration = Duration::from_millis(750);
 const MAX_SEMANTIC_SCAN_DURATION: Duration = Duration::from_millis(250);
+const MAX_SEMANTIC_SEARCH_PIPELINE_DURATION: Duration = Duration::from_millis(900);
 
 #[test]
 fn indexed_search_prunes_large_mock_corpus_before_ranking() {
@@ -123,16 +124,145 @@ fn semantic_recall_scans_large_mock_corpus_under_budget() {
     );
 }
 
+#[test]
+fn semantic_recall_bridges_buyer_language_without_claiming_proof() {
+    let properties = vec![
+        property_with_description(
+            "senior-healthcare-fit".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Senior friendly apartment with quiet low-noise blocks, family safety, and quick hospital access.",
+        ),
+        property_with_description(
+            "amenity-fit".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Clubhouse, pool, gym, and active weekend sports programming for residents.",
+        ),
+        property_with_description(
+            "commute-fit".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Office commute convenience with tech park access and metro connectivity.",
+        ),
+    ];
+    let society_names = society_names(&properties);
+    let index = SearchIndex::build(&properties);
+    let embedder = HashSemanticEmbedder::default();
+    let semantic_index = SemanticSearchIndex::from_properties(&properties, &embedder);
+    let query = "peaceful home for parents";
+    let intent = parse_intent(query);
+
+    assert_eq!(
+        index.recall_ids(query, &intent).len(),
+        properties.len(),
+        "lexical recall should be broad when buyer language uses synonyms"
+    );
+
+    let semantic_hits = semantic_index.search(query, &embedder, 8);
+    let semantic_scores = index.property_scores_for_semantic_hits(&semantic_hits);
+    let semantic_candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
+
+    assert!(
+        semantic_scores
+            .get("senior-healthcare-fit")
+            .is_some_and(|score| *score > 0.0),
+        "semantic recall should map parent/peaceful language to senior, quiet, and hospital text: {semantic_scores:?}"
+    );
+
+    let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+        &properties,
+        Some(&index),
+        Some(&semantic_candidate_ids),
+        Some(&semantic_scores),
+        None,
+        &society_names,
+        &[],
+        query,
+        &intent,
+        None,
+        &[],
+    );
+
+    assert_eq!(results[0].card.id, "senior-healthcare-fit");
+    assert!(
+        results[0].semantic_score.is_some(),
+        "semantic fit should be visible as metadata on the ranked result"
+    );
+    let explanation = results[0]
+        .match_explanation
+        .as_ref()
+        .expect("buyer-language preferences should produce coverage metadata");
+    assert!(
+        explanation.preference_coverage.iter().any(|coverage| {
+            coverage.preference == "quiet neighborhood" && coverage.status == "no_data"
+        }),
+        "semantic recall must not turn a soft vector hit into evidence proof: {:?}",
+        explanation.preference_coverage
+    );
+}
+
+#[test]
+fn semantic_plus_text_search_pipeline_stays_under_latency_budget() {
+    let properties = mock_property_corpus();
+    let society_names = society_names(&properties);
+    let index = SearchIndex::build(&properties);
+    let embedder = HashSemanticEmbedder::default();
+    let semantic_index = SemanticSearchIndex::from_properties(&properties, &embedder);
+
+    for query in [
+        "3BHK Whitefield under 2Cr",
+        "near metro low traffic",
+        "peaceful home for parents near hospital",
+    ] {
+        let intent = parse_intent(query);
+        let started = Instant::now();
+        let semantic_hits = semantic_index.search(query, &embedder, 128);
+        let semantic_scores = index.property_scores_for_semantic_hits(&semantic_hits);
+        let semantic_candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
+        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            &properties,
+            Some(&index),
+            Some(&semantic_candidate_ids),
+            Some(&semantic_scores),
+            None,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+            &[],
+        );
+        let elapsed = started.elapsed();
+
+        assert!(
+            !results.is_empty(),
+            "semantic pipeline returned no results for {query}"
+        );
+        assert!(
+            elapsed <= MAX_SEMANTIC_SEARCH_PIPELINE_DURATION,
+            "semantic+text search pipeline took {elapsed:?} for {query:?} over {} properties",
+            properties.len()
+        );
+    }
+}
+
 fn mock_property_corpus() -> Vec<Property> {
     let mut properties = Vec::new();
 
     for i in 0..MATCHING_PROPERTIES {
-        properties.push(property(
+        let mut matched = property_with_description(
             format!("match-whitefield-3bhk-{i}"),
             "Whitefield",
             3,
             18_000_000,
-        ));
+            "Whitefield apartment with metro connectivity, low traffic access, quiet blocks, and family-friendly healthcare reach.",
+        );
+        matched.traffic_score = Some(0.1);
+        properties.push(matched);
     }
 
     for i in 0..DISTRACTORS_PER_BUCKET {
@@ -178,6 +308,22 @@ fn society_names(properties: &[Property]) -> HashMap<String, String> {
 }
 
 fn property(id: String, area: &str, bhk: u32, price: u64) -> Property {
+    property_with_description(
+        id,
+        area,
+        bhk,
+        price,
+        "Generated mock property for search efficiency contract.",
+    )
+}
+
+fn property_with_description(
+    id: String,
+    area: &str,
+    bhk: u32,
+    price: u64,
+    description_summary: &str,
+) -> Property {
     Property {
         id: id.clone(),
         title: format!("{bhk} BHK efficiency test home in {area}"),
@@ -217,7 +363,7 @@ fn property(id: String, area: &str, bhk: u32, price: u64) -> Property {
         offers_last_7d: None,
         images: Vec::new(),
         hero_image: String::new(),
-        description_summary: "Generated mock property for search efficiency contract.".to_string(),
+        description_summary: description_summary.to_string(),
         transparency_tags: Vec::new(),
         source_reference: "search-efficiency-contract".to_string(),
         seller_id: None,

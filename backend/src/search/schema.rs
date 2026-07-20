@@ -5,7 +5,9 @@ use serde::{Deserialize, Serialize};
 use crate::knowledge::fact::SourceType;
 use crate::knowledge::FactValue;
 
-use super::intent::{ConstraintOperator, HardConstraint, Polarity, PreferenceSignal};
+use super::intent::{
+    BuyerArchetype, ConstraintOperator, HardConstraint, Polarity, PreferenceSignal,
+};
 
 #[cfg(test)]
 pub const SQM_PER_ACRE: f64 = 4046.8564224;
@@ -18,6 +20,8 @@ pub const SEARCH_SCHEMA_VERSION: u32 = 2;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct FactRegistrySearchFile {
     pub version: u32,
+    #[serde(default)]
+    pub runtime: SearchRuntimePolicy,
     #[serde(default)]
     pub search_dimensions: Vec<ThemeLayer>,
     #[serde(default)]
@@ -43,6 +47,8 @@ struct FactRegistryPreferencePatterns {
 pub struct SearchSchemaConfig {
     pub version: u32,
     #[serde(default)]
+    pub runtime: SearchRuntimePolicy,
+    #[serde(default)]
     pub theme_layers: Vec<ThemeLayer>,
     #[serde(default)]
     pub numeric_constraints: Vec<NumericConstraintSchema>,
@@ -54,6 +60,238 @@ pub struct SearchSchemaConfig {
     pub text_evidence: Vec<TextEvidenceSchema>,
     #[serde(default)]
     pub numeric_evidence: Vec<NumericEvidenceSchema>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct SearchRuntimePolicy {
+    #[serde(default)]
+    pub query_stopwords: Vec<String>,
+    #[serde(default)]
+    pub scoring_stopwords: Vec<String>,
+    #[serde(default)]
+    pub placeholder_display_values: Vec<String>,
+    #[serde(default)]
+    pub negative_fact_key_terms: Vec<String>,
+    #[serde(default)]
+    pub negative_preference_allow_terms: Vec<String>,
+    #[serde(default)]
+    pub fact_key_self_describe_excluded_suffixes: Vec<String>,
+    #[serde(default)]
+    pub fact_key_self_describe_excluded_exact: Vec<String>,
+    #[serde(default)]
+    pub registry_fact_key_required_preferences: Vec<String>,
+    #[serde(default)]
+    pub semantic_stopwords: Vec<String>,
+    #[serde(default)]
+    pub accepted_tradeoffs: Vec<IntentPhraseGroup>,
+    #[serde(default)]
+    pub unsupported_inventory_types: Vec<IntentPhraseGroup>,
+    #[serde(default)]
+    pub buyer_archetypes: Vec<BuyerArchetypePattern>,
+    #[serde(default)]
+    pub preference_key_overrides: Vec<PreferenceKeyOverride>,
+    #[serde(default)]
+    pub semantic_expansions: Vec<SemanticExpansionSpec>,
+    #[serde(default)]
+    pub ranking: SearchRankingPolicy,
+    #[serde(default)]
+    pub lifecycle_value_terms: LifecycleValueTerms,
+    #[serde(default)]
+    pub lifecycle_compatibility_rules: Vec<LifecycleCompatibilityRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct IntentPhraseGroup {
+    pub label: String,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BuyerArchetypePattern {
+    pub archetype: BuyerArchetype,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PreferenceKeyOverride {
+    pub preference: String,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    #[serde(default)]
+    pub expanded_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SemanticExpansionSpec {
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    #[serde(default)]
+    pub expanded_tokens: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchRankingPolicy {
+    #[serde(default = "default_min_support_evidence_confidence")]
+    pub min_support_evidence_confidence: f32,
+    #[serde(default = "default_min_llm_evidence_confidence")]
+    pub min_llm_evidence_confidence: f32,
+    #[serde(default = "default_negative_no_data_penalty_multiplier")]
+    pub negative_no_data_penalty_multiplier: f64,
+    #[serde(default = "default_min_semantic_recall_score")]
+    pub min_semantic_recall_score: f64,
+    #[serde(default = "default_semantic_candidate_fit_weight")]
+    pub semantic_candidate_fit_weight: f64,
+    #[serde(default = "default_semantic_candidate_fit_cap")]
+    pub semantic_candidate_fit_cap: f64,
+    #[serde(default = "default_broad_local_recall_multiplier")]
+    pub broad_local_recall_multiplier: usize,
+    #[serde(default = "default_broad_local_recall_min_extra")]
+    pub broad_local_recall_min_extra: usize,
+    #[serde(default = "default_positive_evidence_floor_ratio")]
+    pub positive_evidence_floor_ratio: f64,
+    #[serde(default = "default_no_positive_evidence_score_multiplier")]
+    pub no_positive_evidence_score_multiplier: f64,
+    #[serde(default = "default_nearby_area_score_penalty")]
+    pub nearby_area_score_penalty: f64,
+    #[serde(default = "default_graph_area_score_penalty")]
+    pub graph_area_score_penalty: f64,
+    #[serde(default = "default_min_score_with_positive_evidence")]
+    pub min_score_with_positive_evidence: f64,
+    #[serde(default = "default_max_score_with_positive_evidence")]
+    pub max_score_with_positive_evidence: f64,
+    #[serde(default = "default_min_score_with_risk_only_evidence")]
+    pub min_score_with_risk_only_evidence: f64,
+    #[serde(default = "default_min_score_with_constraint_only")]
+    pub min_score_with_constraint_only: f64,
+    #[serde(default = "default_fact_coverage_threshold")]
+    pub fact_coverage_threshold: f64,
+}
+
+impl Default for SearchRankingPolicy {
+    fn default() -> Self {
+        Self {
+            min_support_evidence_confidence: default_min_support_evidence_confidence(),
+            min_llm_evidence_confidence: default_min_llm_evidence_confidence(),
+            negative_no_data_penalty_multiplier: default_negative_no_data_penalty_multiplier(),
+            min_semantic_recall_score: default_min_semantic_recall_score(),
+            semantic_candidate_fit_weight: default_semantic_candidate_fit_weight(),
+            semantic_candidate_fit_cap: default_semantic_candidate_fit_cap(),
+            broad_local_recall_multiplier: default_broad_local_recall_multiplier(),
+            broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
+            positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
+            no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
+            nearby_area_score_penalty: default_nearby_area_score_penalty(),
+            graph_area_score_penalty: default_graph_area_score_penalty(),
+            min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
+            max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
+            min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
+            min_score_with_constraint_only: default_min_score_with_constraint_only(),
+            fact_coverage_threshold: default_fact_coverage_threshold(),
+        }
+    }
+}
+
+fn default_min_support_evidence_confidence() -> f32 {
+    0.60
+}
+
+fn default_min_llm_evidence_confidence() -> f32 {
+    0.75
+}
+
+fn default_negative_no_data_penalty_multiplier() -> f64 {
+    1.2
+}
+
+fn default_min_semantic_recall_score() -> f64 {
+    0.08
+}
+
+fn default_semantic_candidate_fit_weight() -> f64 {
+    1.0
+}
+
+fn default_semantic_candidate_fit_cap() -> f64 {
+    0.25
+}
+
+fn default_broad_local_recall_multiplier() -> usize {
+    4
+}
+
+fn default_broad_local_recall_min_extra() -> usize {
+    64
+}
+
+fn default_positive_evidence_floor_ratio() -> f64 {
+    0.60
+}
+
+fn default_no_positive_evidence_score_multiplier() -> f64 {
+    0.40
+}
+
+fn default_nearby_area_score_penalty() -> f64 {
+    -0.35
+}
+
+fn default_graph_area_score_penalty() -> f64 {
+    -0.25
+}
+
+fn default_min_score_with_positive_evidence() -> f64 {
+    0.2
+}
+
+fn default_max_score_with_positive_evidence() -> f64 {
+    0.45
+}
+
+fn default_min_score_with_risk_only_evidence() -> f64 {
+    0.1
+}
+
+fn default_min_score_with_constraint_only() -> f64 {
+    0.01
+}
+
+fn default_fact_coverage_threshold() -> f64 {
+    25.0
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LifecycleValueTerms {
+    #[serde(default)]
+    pub ready: Vec<String>,
+    #[serde(default)]
+    pub under_construction: Vec<String>,
+    #[serde(default)]
+    pub delay: Vec<String>,
+    #[serde(default)]
+    pub new_age: Vec<String>,
+    #[serde(default)]
+    pub established_age: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct LifecycleCompatibilityRule {
+    #[serde(default)]
+    pub preferences: Vec<String>,
+    #[serde(default)]
+    pub require_any_groups: Vec<String>,
+    #[serde(default)]
+    pub require_fact_key_any_groups: Vec<FactKeyGroupAllowance>,
+    #[serde(default)]
+    pub reject_any_groups: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct FactKeyGroupAllowance {
+    pub fact_key: String,
+    #[serde(default)]
+    pub groups: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +382,7 @@ fn load_search_schema_config() -> SearchSchemaConfig {
         .expect("app/config/dag/fact_registry.json is required for search schema");
     SearchSchemaConfig {
         version: SEARCH_SCHEMA_VERSION,
+        runtime: file.runtime,
         theme_layers: file.search_dimensions,
         numeric_constraints: file.numeric_constraints,
         positive_preference_patterns: file.preference_patterns.positive,
@@ -151,6 +390,99 @@ fn load_search_schema_config() -> SearchSchemaConfig {
         text_evidence: file.text_evidence,
         numeric_evidence: file.numeric_evidence,
     }
+}
+
+pub fn runtime_policy() -> &'static SearchRuntimePolicy {
+    &registry().runtime
+}
+
+pub fn ranking_policy() -> &'static SearchRankingPolicy {
+    &runtime_policy().ranking
+}
+
+pub fn query_stopwords() -> &'static [String] {
+    &runtime_policy().query_stopwords
+}
+
+pub fn scoring_stopwords() -> &'static [String] {
+    &runtime_policy().scoring_stopwords
+}
+
+pub fn placeholder_display_values() -> &'static [String] {
+    &runtime_policy().placeholder_display_values
+}
+
+pub fn negative_fact_key_terms() -> &'static [String] {
+    &runtime_policy().negative_fact_key_terms
+}
+
+pub fn negative_preference_allow_terms() -> &'static [String] {
+    &runtime_policy().negative_preference_allow_terms
+}
+
+pub fn fact_key_self_describe_excluded_suffixes() -> &'static [String] {
+    &runtime_policy().fact_key_self_describe_excluded_suffixes
+}
+
+pub fn fact_key_self_describe_excluded_exact() -> &'static [String] {
+    &runtime_policy().fact_key_self_describe_excluded_exact
+}
+
+pub fn registry_fact_key_required_preferences() -> &'static [String] {
+    &runtime_policy().registry_fact_key_required_preferences
+}
+
+pub fn semantic_stopwords() -> &'static [String] {
+    &runtime_policy().semantic_stopwords
+}
+
+pub fn accepted_tradeoffs() -> &'static [IntentPhraseGroup] {
+    &runtime_policy().accepted_tradeoffs
+}
+
+pub fn unsupported_inventory_types() -> &'static [IntentPhraseGroup] {
+    &runtime_policy().unsupported_inventory_types
+}
+
+pub fn buyer_archetype_patterns() -> &'static [BuyerArchetypePattern] {
+    &runtime_policy().buyer_archetypes
+}
+
+pub fn preference_key_overrides() -> &'static [PreferenceKeyOverride] {
+    &runtime_policy().preference_key_overrides
+}
+
+pub fn semantic_expansion_tokens(pattern: &str) -> Vec<&'static str> {
+    runtime_policy()
+        .semantic_expansions
+        .iter()
+        .find(|expansion| {
+            expansion
+                .patterns
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(pattern))
+        })
+        .map(|expansion| {
+            expansion
+                .expanded_tokens
+                .iter()
+                .map(String::as_str)
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn lifecycle_compatibility_rule(
+    preference: &str,
+) -> Option<&'static LifecycleCompatibilityRule> {
+    runtime_policy()
+        .lifecycle_compatibility_rules
+        .iter()
+        .find(|rule| {
+            rule.preferences
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(preference))
+        })
 }
 
 pub fn positive_preference_patterns() -> &'static [PreferencePatternSpec] {
@@ -472,6 +804,25 @@ mod tests {
         assert!(config.theme_layers.len() >= 20);
         assert!(!config.positive_preference_patterns.is_empty());
         assert!(!config.negative_preference_patterns.is_empty());
+        assert!(config
+            .runtime
+            .query_stopwords
+            .contains(&"under".to_string()));
+        assert!(config
+            .runtime
+            .scoring_stopwords
+            .contains(&"property".to_string()));
+        assert!(config
+            .runtime
+            .registry_fact_key_required_preferences
+            .contains(&"delivered society".to_string()));
+        assert!(config
+            .runtime
+            .semantic_stopwords
+            .contains(&"want".to_string()));
+        assert!(config.runtime.ranking.semantic_candidate_fit_cap > 0.0);
+        assert!(config.runtime.ranking.fact_coverage_threshold >= 1.0);
+        assert!(!config.runtime.lifecycle_compatibility_rules.is_empty());
     }
 
     #[test]

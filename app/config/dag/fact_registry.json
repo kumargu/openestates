@@ -14,6 +14,719 @@
     ],
     "never_default": true
   },
+  "runtime": {
+    "query_stopwords": [
+      "and",
+      "the",
+      "for",
+      "with",
+      "near",
+      "under",
+      "below",
+      "within",
+      "upto",
+      "bhk",
+      "cr",
+      "crore",
+      "lakhs",
+      "lakh",
+      "avoid",
+      "less",
+      "low",
+      "not",
+      "no"
+    ],
+    "scoring_stopwords": [
+      "a",
+      "an",
+      "and",
+      "are",
+      "at",
+      "above",
+      "below",
+      "by",
+      "for",
+      "from",
+      "in",
+      "is",
+      "near",
+      "no",
+      "not",
+      "of",
+      "or",
+      "over",
+      "the",
+      "to",
+      "under",
+      "with",
+      "without",
+      "acre",
+      "acres",
+      "bhk",
+      "cr",
+      "crore",
+      "flat",
+      "flats",
+      "home",
+      "homes",
+      "house",
+      "houses",
+      "lakh",
+      "lakhs",
+      "property",
+      "properties"
+    ],
+    "semantic_stopwords": [
+      "a",
+      "an",
+      "and",
+      "are",
+      "as",
+      "at",
+      "be",
+      "but",
+      "for",
+      "from",
+      "i",
+      "if",
+      "in",
+      "is",
+      "it",
+      "near",
+      "not",
+      "of",
+      "or",
+      "the",
+      "to",
+      "want",
+      "with"
+    ],
+    "accepted_tradeoffs": [
+      {
+        "label": "traffic",
+        "patterns": [
+          "can tolerate traffic",
+          "tolerate traffic",
+          "ok with traffic",
+          "okay with traffic",
+          "fine with traffic",
+          "accept traffic",
+          "traffic is fine",
+          "bad traffic but"
+        ]
+      }
+    ],
+    "unsupported_inventory_types": [
+      {
+        "label": "plot",
+        "patterns": [
+          "plot",
+          "plots",
+          "plotted development"
+        ]
+      },
+      {
+        "label": "villa",
+        "patterns": [
+          "villa",
+          "villas",
+          "villa style"
+        ]
+      },
+      {
+        "label": "row house",
+        "patterns": [
+          "row house",
+          "row houses",
+          "rowhouse"
+        ]
+      },
+      {
+        "label": "independent house",
+        "patterns": [
+          "independent house",
+          "independent home"
+        ]
+      }
+    ],
+    "buyer_archetypes": [
+      {
+        "archetype": "family",
+        "patterns": [
+          "family",
+          "kids",
+          "children",
+          "school"
+        ]
+      },
+      {
+        "archetype": "investor",
+        "patterns": [
+          "investment",
+          "investor",
+          "rental",
+          "resale",
+          "appreciation"
+        ]
+      },
+      {
+        "archetype": "risk_averse",
+        "patterns": [
+          "risk averse",
+          "safe bet",
+          "low risk",
+          "verified",
+          "legal clear"
+        ]
+      },
+      {
+        "archetype": "luxury_buyer",
+        "patterns": [
+          "luxury",
+          "premium",
+          "high end",
+          "high-end"
+        ]
+      },
+      {
+        "archetype": "value_buyer",
+        "patterns": [
+          "value",
+          "affordable",
+          "budget"
+        ]
+      },
+      {
+        "archetype": "end_user",
+        "patterns": [
+          "end use",
+          "end-user",
+          "self use",
+          "own stay",
+          "live in"
+        ]
+      }
+    ],
+    "preference_key_overrides": [
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "hospital",
+          "hospitals",
+          "medical",
+          "clinic"
+        ],
+        "expanded_keys": [
+          "hospital_access",
+          "nearby_hospitals"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "school",
+          "schools",
+          "kids",
+          "children"
+        ],
+        "expanded_keys": [
+          "school_access",
+          "nearby_schools"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "metro",
+          "metro station"
+        ],
+        "expanded_keys": [
+          "nearby_metro_stations",
+          "metro_access"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "gym",
+          "fitness",
+          "cult"
+        ],
+        "expanded_keys": [
+          "nearby_fitness"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "restaurant",
+          "restaurants",
+          "cafe",
+          "cafes",
+          "eatery",
+          "eateries"
+        ],
+        "expanded_keys": [
+          "nearby_eateries",
+          "retail_access"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "tech park",
+          "tech parks",
+          "office",
+          "offices"
+        ],
+        "expanded_keys": [
+          "nearby_tech_parks"
+        ]
+      }
+    ],
+    "semantic_expansions": [
+      {
+        "patterns": [
+          "parents",
+          "senior",
+          "seniors"
+        ],
+        "expanded_tokens": [
+          "family",
+          "hospital",
+          "quiet",
+          "safe"
+        ]
+      },
+      {
+        "patterns": [
+          "kids",
+          "children"
+        ],
+        "expanded_tokens": [
+          "family",
+          "school",
+          "play",
+          "park"
+        ]
+      },
+      {
+        "patterns": [
+          "peaceful",
+          "calm"
+        ],
+        "expanded_tokens": [
+          "quiet",
+          "low_noise",
+          "livability"
+        ]
+      },
+      {
+        "patterns": [
+          "cramped"
+        ],
+        "expanded_tokens": [
+          "density",
+          "open_space",
+          "large_campus"
+        ]
+      },
+      {
+        "patterns": [
+          "spacious"
+        ],
+        "expanded_tokens": [
+          "open_space",
+          "large_campus"
+        ]
+      },
+      {
+        "patterns": [
+          "green",
+          "greenery",
+          "trees",
+          "landscaped"
+        ],
+        "expanded_tokens": [
+          "open_space",
+          "park",
+          "nature"
+        ]
+      },
+      {
+        "patterns": [
+          "resident",
+          "residents"
+        ],
+        "expanded_tokens": [
+          "community",
+          "review",
+          "lived_experience"
+        ]
+      },
+      {
+        "patterns": [
+          "marketing",
+          "hype"
+        ],
+        "expanded_tokens": [
+          "builder_claim",
+          "low_trust"
+        ]
+      },
+      {
+        "patterns": [
+          "enduse",
+          "enduser"
+        ],
+        "expanded_tokens": [
+          "liveability",
+          "occupancy",
+          "maintenance"
+        ]
+      },
+      {
+        "patterns": [
+          "resale"
+        ],
+        "expanded_tokens": [
+          "liquidity",
+          "market",
+          "investment"
+        ]
+      },
+      {
+        "patterns": [
+          "overpriced"
+        ],
+        "expanded_tokens": [
+          "value",
+          "price_per_sqft",
+          "premium"
+        ]
+      },
+      {
+        "patterns": [
+          "traffic",
+          "congestion"
+        ],
+        "expanded_tokens": [
+          "commute",
+          "road",
+          "risk"
+        ]
+      },
+      {
+        "patterns": [
+          "approach"
+        ],
+        "expanded_tokens": [
+          "road",
+          "access",
+          "connectivity"
+        ]
+      },
+      {
+        "patterns": [
+          "hospital"
+        ],
+        "expanded_tokens": [
+          "healthcare",
+          "parents"
+        ]
+      },
+      {
+        "patterns": [
+          "school",
+          "schools"
+        ],
+        "expanded_tokens": [
+          "family",
+          "kids"
+        ]
+      },
+      {
+        "patterns": [
+          "office",
+          "offices"
+        ],
+        "expanded_tokens": [
+          "tech_park",
+          "commute"
+        ]
+      },
+      {
+        "patterns": [
+          "metro"
+        ],
+        "expanded_tokens": [
+          "transit",
+          "commute",
+          "connectivity"
+        ]
+      },
+      {
+        "patterns": [
+          "clubhouse",
+          "pool",
+          "amenities",
+          "amenity"
+        ],
+        "expanded_tokens": [
+          "amenity_quality",
+          "society"
+        ]
+      },
+      {
+        "patterns": [
+          "safe",
+          "trusted",
+          "reliable"
+        ],
+        "expanded_tokens": [
+          "risk",
+          "builder",
+          "verified"
+        ]
+      },
+      {
+        "patterns": [
+          "not cramped"
+        ],
+        "expanded_tokens": [
+          "open_space",
+          "large_campus",
+          "low_density"
+        ]
+      },
+      {
+        "patterns": [
+          "actual residents"
+        ],
+        "expanded_tokens": [
+          "resident",
+          "community",
+          "review",
+          "lived_experience"
+        ]
+      },
+      {
+        "patterns": [
+          "investor hype"
+        ],
+        "expanded_tokens": [
+          "marketing",
+          "speculation",
+          "low_trust"
+        ]
+      },
+      {
+        "patterns": [
+          "tech park",
+          "tech parks",
+          "it park",
+          "it parks"
+        ],
+        "expanded_tokens": [
+          "office",
+          "commute",
+          "employment_hub"
+        ]
+      },
+      {
+        "patterns": [
+          "approach road",
+          "approach roads"
+        ],
+        "expanded_tokens": [
+          "road",
+          "access",
+          "connectivity"
+        ]
+      },
+      {
+        "patterns": [
+          "good reviews"
+        ],
+        "expanded_tokens": [
+          "review_quality",
+          "google_rating",
+          "resident"
+        ]
+      },
+      {
+        "patterns": [
+          "family friendly"
+        ],
+        "expanded_tokens": [
+          "family",
+          "school",
+          "kids",
+          "hospital"
+        ]
+      }
+    ],
+    "ranking": {
+      "min_support_evidence_confidence": 0.6,
+      "min_llm_evidence_confidence": 0.75,
+      "negative_no_data_penalty_multiplier": 1.2,
+      "min_semantic_recall_score": 0.08,
+      "semantic_candidate_fit_weight": 1.0,
+      "semantic_candidate_fit_cap": 0.25,
+      "broad_local_recall_multiplier": 4,
+      "broad_local_recall_min_extra": 64,
+      "positive_evidence_floor_ratio": 0.6,
+      "no_positive_evidence_score_multiplier": 0.4,
+      "nearby_area_score_penalty": -0.35,
+      "graph_area_score_penalty": -0.25,
+      "min_score_with_positive_evidence": 0.2,
+      "max_score_with_positive_evidence": 0.45,
+      "min_score_with_risk_only_evidence": 0.1,
+      "min_score_with_constraint_only": 0.01,
+      "fact_coverage_threshold": 25.0
+    },
+    "placeholder_display_values": [
+      "",
+      "unknown",
+      "not specified",
+      "n/a",
+      "na",
+      "none",
+      "no data",
+      "no_data",
+      "missing",
+      "gap",
+      "-",
+      "0"
+    ],
+    "negative_fact_key_terms": [
+      "negative",
+      "negatives",
+      "complaint",
+      "complaints",
+      "concern",
+      "risk"
+    ],
+    "negative_preference_allow_terms": [
+      "avoid",
+      "risk",
+      "negative",
+      "complaint",
+      "concern"
+    ],
+    "fact_key_self_describe_excluded_suffixes": [
+      "_date"
+    ],
+    "fact_key_self_describe_excluded_exact": [
+      "rera_status",
+      "rera_completion_date",
+      "rera_original_completion_date"
+    ],
+    "registry_fact_key_required_preferences": [
+      "ready to move",
+      "delivered society",
+      "new property",
+      "established society",
+      "under construction",
+      "new launch",
+      "delayed",
+      "avoid delay risk"
+    ],
+    "lifecycle_value_terms": {
+      "ready": [
+        "ready to move",
+        "ready_to_move",
+        "delivered",
+        "completed"
+      ],
+      "under_construction": [
+        "under construction",
+        "under_construction",
+        "ongoing",
+        "new launch",
+        "upcoming"
+      ],
+      "delay": [
+        "delayed",
+        "delay"
+      ],
+      "new_age": [
+        "newly delivered",
+        "1-5 yrs old",
+        "1-5 years old"
+      ],
+      "established_age": [
+        "5-10 yrs old",
+        "5-10 years old",
+        "10+ yrs old",
+        "10+ years old",
+        "old society",
+        "established",
+        "mature"
+      ]
+    },
+    "lifecycle_compatibility_rules": [
+      {
+        "preferences": [
+          "ready to move",
+          "delivered society"
+        ],
+        "require_any_groups": [
+          "ready"
+        ],
+        "require_fact_key_any_groups": [
+          {
+            "fact_key": "home_age_bucket",
+            "groups": [
+              "new_age",
+              "established_age"
+            ]
+          }
+        ],
+        "reject_any_groups": [
+          "under_construction",
+          "delay"
+        ]
+      },
+      {
+        "preferences": [
+          "under construction",
+          "new launch"
+        ],
+        "require_any_groups": [
+          "under_construction"
+        ],
+        "reject_any_groups": [
+          "ready"
+        ]
+      },
+      {
+        "preferences": [
+          "new property"
+        ],
+        "require_any_groups": [
+          "new_age"
+        ]
+      },
+      {
+        "preferences": [
+          "established society"
+        ],
+        "require_any_groups": [
+          "established_age"
+        ]
+      },
+      {
+        "preferences": [
+          "delayed",
+          "avoid delay risk"
+        ],
+        "require_any_groups": [
+          "delay"
+        ]
+      }
+    ]
+  },
   "legacy_key_map": {
     "maintenance_charges": "operating.maintenance_charges",
     "tanker_dependence": "operating.tanker_dependence",
@@ -661,6 +1374,7 @@
           "metro_distance",
           "metro_status",
           "metro_details",
+          "nearby_metro_stations",
           "metro_access"
         ],
         "weight": 1.1
@@ -881,6 +1595,10 @@
           "delivered society",
           "delivered project",
           "completed project",
+          "completed",
+          "delivered",
+          "ready possession",
+          "immediate possession",
           "ready resale",
           "ready to move"
         ],
@@ -929,7 +1647,14 @@
         "rank": 16,
         "patterns": [
           "under construction",
+          "ongoing",
+          "in progress",
           "new launch",
+          "newly launched",
+          "just launched",
+          "upcoming",
+          "pre-launch",
+          "future project",
           "upcoming project"
         ],
         "label": "under construction",
@@ -1009,6 +1734,214 @@
           "pollution_signal",
           "airport_noise_score",
           "google_review_snippets"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 21,
+        "patterns": [
+          "reliable builder",
+          "dependable builder",
+          "safe builder"
+        ],
+        "label": "reliable builder",
+        "expanded_keys": [
+          "builder_quality_score",
+          "builder_reputation",
+          "rera_builder_projects_count",
+          "rera_builder_revocations",
+          "delivery_track_record"
+        ],
+        "weight": 1.3
+      },
+      {
+        "rank": 22,
+        "patterns": [
+          "trusted builder",
+          "good builder",
+          "reputed builder"
+        ],
+        "label": "trusted builder",
+        "expanded_keys": [
+          "builder_quality_score",
+          "builder_reputation",
+          "rera_builder_projects_count",
+          "rera_builder_revocations"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 23,
+        "patterns": [
+          "on time delivery",
+          "no delays",
+          "timely delivery"
+        ],
+        "label": "on time delivery",
+        "expanded_keys": [
+          "rera_delay_months",
+          "builder_delivery_rate",
+          "delivery_track_record",
+          "possession_status"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 24,
+        "patterns": [
+          "quiet",
+          "peaceful",
+          "calm"
+        ],
+        "label": "quiet neighborhood",
+        "expanded_keys": [
+          "noise_score",
+          "noise_level",
+          "airport_noise_score"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 25,
+        "patterns": [
+          "value",
+          "affordable",
+          "budget"
+        ],
+        "label": "value for money",
+        "expanded_keys": [
+          "price_per_sqft",
+          "value_for_money",
+          "maintenance_cost"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 26,
+        "patterns": [
+          "premium",
+          "luxury",
+          "high end",
+          "high-end"
+        ],
+        "label": "premium",
+        "expanded_keys": [
+          "price_per_sqft",
+          "amenity_quality",
+          "finish_quality",
+          "builder_reputation"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 27,
+        "patterns": [
+          "good society",
+          "well maintained",
+          "well-maintained"
+        ],
+        "label": "good society",
+        "expanded_keys": [
+          "society_quality_score",
+          "maintenance_quality",
+          "resident_sentiment"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 28,
+        "patterns": [
+          "new construction"
+        ],
+        "label": "new construction",
+        "expanded_keys": [
+          "possession_status",
+          "project_status"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 29,
+        "patterns": [
+          "delayed",
+          "behind schedule"
+        ],
+        "label": "delayed",
+        "expanded_keys": [
+          "rera_delay_months",
+          "possession_delay",
+          "possession_status"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 30,
+        "patterns": [
+          "top floor",
+          "high floor"
+        ],
+        "label": "high floor",
+        "expanded_keys": [
+          "floor"
+        ],
+        "weight": 0.6
+      },
+      {
+        "rank": 31,
+        "patterns": [
+          "east facing",
+          "east"
+        ],
+        "label": "east facing",
+        "expanded_keys": [
+          "facing"
+        ],
+        "weight": 0.5
+      },
+      {
+        "rank": 32,
+        "patterns": [
+          "ready to move",
+          "ready possession",
+          "immediate possession",
+          "delivered",
+          "completed"
+        ],
+        "label": "ready to move",
+        "expanded_keys": [
+          "home_state",
+          "home_age_bucket",
+          "possession_status",
+          "project_status",
+          "market_project_status"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 33,
+        "patterns": [
+          "new launch",
+          "newly launched",
+          "just launched"
+        ],
+        "label": "new launch",
+        "expanded_keys": [
+          "possession_status",
+          "project_status"
+        ],
+        "weight": 0.9
+      },
+      {
+        "rank": 34,
+        "patterns": [
+          "upcoming",
+          "pre-launch",
+          "future project"
+        ],
+        "label": "upcoming",
+        "expanded_keys": [
+          "possession_status",
+          "project_status"
         ],
         "weight": 0.8
       }
@@ -1372,6 +2305,7 @@
         "metro_distance",
         "metro_status",
         "metro_details",
+        "nearby_metro_stations",
         "metro_access"
       ],
       "positive_terms": [

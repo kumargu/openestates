@@ -79,225 +79,6 @@ pub enum BuyerArchetype {
 ///
 use crate::dag_config::area_alias_entries;
 ///
-/// IMPORTANT: Order matters — longer/more specific patterns must come BEFORE
-/// shorter ones. "under construction" must match before "new" would catch it.
-/// "ready to move" must match before "ready" alone.
-///
-/// The answers_preferences values here align with buyer-facing status facts from
-/// the serving bundle. Raw RERA approval/date facts are not lifecycle proof.
-const POSITIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
-    // Project status patterns (specific phrases first)
-    (
-        &[
-            "ready to move",
-            "ready possession",
-            "immediate possession",
-            "delivered",
-            "completed",
-        ],
-        "ready to move",
-        &[
-            "home_state",
-            "home_age_bucket",
-            "possession_status",
-            "project_status",
-            "market_project_status",
-        ],
-        1.2,
-    ),
-    (
-        &["under construction", "ongoing", "in progress"],
-        "under construction",
-        &["possession_status", "project_status"],
-        1.0,
-    ),
-    (
-        &["new launch", "newly launched", "just launched"],
-        "new launch",
-        &["possession_status", "project_status"],
-        0.9,
-    ),
-    (
-        &["delayed", "behind schedule"],
-        "delayed",
-        &["rera_delay_months", "possession_delay", "possession_status"],
-        0.8,
-    ),
-    (
-        &["upcoming", "pre-launch", "future project"],
-        "upcoming",
-        &["possession_status", "project_status"],
-        0.8,
-    ),
-    // Builder trust patterns
-    (
-        &["reliable builder", "dependable builder", "safe builder"],
-        "reliable builder",
-        &[
-            "builder_quality_score",
-            "builder_reputation",
-            "rera_builder_projects_count",
-            "rera_builder_revocations",
-            "delivery_track_record",
-        ],
-        1.3,
-    ),
-    (
-        &["trusted builder", "good builder", "reputed builder"],
-        "trusted builder",
-        &[
-            "builder_quality_score",
-            "builder_reputation",
-            "rera_builder_projects_count",
-            "rera_builder_revocations",
-        ],
-        1.2,
-    ),
-    (
-        &["on time delivery", "no delays", "timely delivery"],
-        "on time delivery",
-        &[
-            "rera_delay_months",
-            "builder_delivery_rate",
-            "delivery_track_record",
-            "possession_status",
-        ],
-        1.2,
-    ),
-    // General preferences
-    (
-        &["near metro", "metro access", "metro"],
-        "metro access",
-        &[
-            "metro_distance_mins",
-            "metro_distance",
-            "metro_status",
-            "metro_details",
-            "metro_access",
-        ],
-        1.1,
-    ),
-    (
-        &["quiet", "peaceful", "calm"],
-        "quiet neighborhood",
-        &["noise_score", "noise_level", "airport_noise_score"],
-        1.1,
-    ),
-    (
-        &["value", "affordable", "budget"],
-        "value for money",
-        &["price_per_sqft", "value_for_money", "maintenance_cost"],
-        1.0,
-    ),
-    (
-        &["premium", "luxury", "high end", "high-end"],
-        "premium",
-        &[
-            "price_per_sqft",
-            "amenity_quality",
-            "finish_quality",
-            "builder_reputation",
-        ],
-        1.0,
-    ),
-    (
-        &["good society", "well maintained", "well-maintained"],
-        "good society",
-        &[
-            "society_quality_score",
-            "maintenance_quality",
-            "resident_sentiment",
-        ],
-        1.1,
-    ),
-    (
-        &["green", "greenery", "garden"],
-        "greenery",
-        &["greenery_score", "open_space_score", "green_cover"],
-        0.8,
-    ),
-    (
-        &["new construction"],
-        "new construction",
-        &["possession_status", "project_status"],
-        0.8,
-    ),
-    (&["top floor", "high floor"], "high floor", &["floor"], 0.6),
-    (&["east facing", "east"], "east facing", &["facing"], 0.5),
-];
-
-const NEGATIVE_PREFERENCE_PATTERNS: &[(&[&str], &str, &[&str], f32)] = &[
-    (
-        &[
-            "avoid waterlogging",
-            "no waterlogging",
-            "low waterlogging",
-            "not flood prone",
-            "avoid flooding",
-            "no flooding",
-        ],
-        "waterlogging risk",
-        &[
-            "waterlogging_risk_score",
-            "waterlogging_risk",
-            "waterlogging_detail",
-            "flooding_risk",
-        ],
-        1.4,
-    ),
-    (
-        &[
-            "avoid traffic",
-            "less traffic",
-            "low traffic",
-            "no traffic",
-            "traffic free",
-        ],
-        "traffic",
-        &[
-            "traffic_score",
-            "traffic_reality",
-            "traffic",
-            "commute_reality",
-        ],
-        1.3,
-    ),
-    (
-        &["avoid noise", "less noise", "low noise", "no noise"],
-        "noise",
-        &["noise_score", "noise_level", "airport_noise_score"],
-        1.0,
-    ),
-    (
-        &[
-            "avoid legal",
-            "no legal issue",
-            "no litigation",
-            "low litigation",
-            "clear title",
-        ],
-        "legal risk",
-        &[
-            "litigation_risk",
-            "legal_risk",
-            "rera_complaints",
-            "land_litigation",
-        ],
-        1.5,
-    ),
-    (
-        &[
-            "avoid delayed",
-            "not delayed",
-            "no possession delay",
-            "avoid possession delay",
-        ],
-        "delay risk",
-        &["rera_delay_months", "possession_delay", "possession_status"],
-        1.4,
-    ),
-];
-
 /// Parse a natural-language search query into structured intent.
 pub fn parse_intent(query: &str) -> SearchIntent {
     let q = query.to_lowercase();
@@ -507,7 +288,7 @@ fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
 }
 
 fn detect_positive_preferences(q: &str) -> Vec<PreferenceSignal> {
-    let mut prefs = detect_preference_signals(q, POSITIVE_PREFERENCE_PATTERNS, Polarity::Positive);
+    let mut prefs: Vec<PreferenceSignal> = Vec::new();
     for pattern in schema::positive_preference_patterns() {
         if !pattern
             .patterns
@@ -518,28 +299,43 @@ fn detect_positive_preferences(q: &str) -> Vec<PreferenceSignal> {
         }
 
         if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
-            for key in &pattern.expanded_keys {
-                if !existing
-                    .expanded_keys
-                    .iter()
-                    .any(|existing| existing == key)
-                {
-                    existing.expanded_keys.push(key.clone());
-                }
-            }
+            merge_expanded_keys(existing, &pattern.expanded_keys);
+            apply_preference_key_overrides(q, existing);
             existing.weight = existing.weight.max(pattern.weight);
         } else {
-            prefs.push(schema::schema_preference_signal(
-                pattern,
-                Polarity::Positive,
-            ));
+            let mut signal = schema::schema_preference_signal(pattern, Polarity::Positive);
+            apply_preference_key_overrides(q, &mut signal);
+            prefs.push(signal);
         }
     }
     prefs
 }
 
+fn apply_preference_key_overrides(q: &str, signal: &mut PreferenceSignal) {
+    for override_rule in schema::preference_key_overrides() {
+        if !override_rule
+            .preference
+            .eq_ignore_ascii_case(&signal.raw_text)
+            || !query_contains_any_pattern(q, &override_rule.patterns)
+        {
+            continue;
+        }
+
+        signal.expanded_keys = override_rule.expanded_keys.clone();
+        return;
+    }
+}
+
+fn merge_expanded_keys(signal: &mut PreferenceSignal, keys: &[String]) {
+    for key in keys {
+        if !signal.expanded_keys.iter().any(|existing| existing == key) {
+            signal.expanded_keys.push(key.clone());
+        }
+    }
+}
+
 fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
-    let mut prefs = detect_preference_signals(q, NEGATIVE_PREFERENCE_PATTERNS, Polarity::Negative);
+    let mut prefs: Vec<PreferenceSignal> = Vec::new();
     for pattern in schema::negative_preference_patterns() {
         if !pattern
             .patterns
@@ -550,15 +346,7 @@ fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
         }
 
         if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
-            for key in &pattern.expanded_keys {
-                if !existing
-                    .expanded_keys
-                    .iter()
-                    .any(|existing| existing == key)
-                {
-                    existing.expanded_keys.push(key.clone());
-                }
-            }
+            merge_expanded_keys(existing, &pattern.expanded_keys);
             existing.weight = existing.weight.max(pattern.weight);
         } else {
             prefs.push(schema::schema_preference_signal(
@@ -572,70 +360,22 @@ fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
 
 fn detect_accepted_tradeoffs(q: &str) -> Vec<String> {
     let mut accepted = Vec::new();
-
-    if query_contains_any_phrase(
-        q,
-        &[
-            "can tolerate traffic",
-            "tolerate traffic",
-            "ok with traffic",
-            "okay with traffic",
-            "fine with traffic",
-            "accept traffic",
-            "traffic is fine",
-            "bad traffic but",
-        ],
-    ) {
-        push_unique(&mut accepted, "traffic");
+    for group in schema::accepted_tradeoffs() {
+        if query_contains_any_pattern(q, &group.patterns) {
+            push_unique(&mut accepted, &group.label);
+        }
     }
-
     accepted
 }
 
 fn detect_unsupported_inventory_types(q: &str) -> Vec<String> {
     let mut inventory_types = Vec::new();
-    for (label, patterns) in [
-        ("plot", &["plot", "plots", "plotted development"][..]),
-        ("villa", &["villa", "villas", "villa style"][..]),
-        ("row house", &["row house", "row houses", "rowhouse"][..]),
-        (
-            "independent house",
-            &["independent house", "independent home"][..],
-        ),
-    ] {
-        if patterns
-            .iter()
-            .any(|pattern| query_contains_pattern(q, pattern))
-        {
-            push_unique(&mut inventory_types, label);
+    for group in schema::unsupported_inventory_types() {
+        if query_contains_any_pattern(q, &group.patterns) {
+            push_unique(&mut inventory_types, &group.label);
         }
     }
-
     inventory_types
-}
-
-fn detect_preference_signals(
-    q: &str,
-    patterns_table: &[(&[&str], &str, &[&str], f32)],
-    polarity: Polarity,
-) -> Vec<PreferenceSignal> {
-    let mut prefs: Vec<PreferenceSignal> = Vec::new();
-    for (patterns, label, expanded_keys, weight) in patterns_table {
-        for pattern in *patterns {
-            if query_contains_pattern(q, pattern) {
-                if !prefs.iter().any(|p| p.raw_text == *label) {
-                    prefs.push(PreferenceSignal {
-                        raw_text: label.to_string(),
-                        polarity: polarity.clone(),
-                        expanded_keys: expanded_keys.iter().map(|key| key.to_string()).collect(),
-                        weight: *weight,
-                    });
-                }
-                break;
-            }
-        }
-    }
-    prefs
 }
 
 fn display_preferences(
@@ -654,43 +394,13 @@ fn display_preferences(
 }
 
 fn detect_buyer_archetype(q: &str) -> Option<BuyerArchetype> {
-    if contains_any(q, &["family", "kids", "children", "school"]) {
-        Some(BuyerArchetype::Family)
-    } else if contains_any(
-        q,
-        &["investment", "investor", "rental", "resale", "appreciation"],
-    ) {
-        Some(BuyerArchetype::Investor)
-    } else if contains_any(
-        q,
-        &[
-            "risk averse",
-            "safe bet",
-            "low risk",
-            "verified",
-            "legal clear",
-        ],
-    ) {
-        Some(BuyerArchetype::RiskAverse)
-    } else if contains_any(q, &["luxury", "premium", "high end", "high-end"]) {
-        Some(BuyerArchetype::LuxuryBuyer)
-    } else if contains_any(q, &["value", "affordable", "budget"]) {
-        Some(BuyerArchetype::ValueBuyer)
-    } else if contains_any(
-        q,
-        &["end use", "end-user", "self use", "own stay", "live in"],
-    ) {
-        Some(BuyerArchetype::EndUser)
-    } else {
-        None
-    }
+    schema::buyer_archetype_patterns()
+        .iter()
+        .find(|pattern| query_contains_any_pattern(q, &pattern.patterns))
+        .map(|pattern| pattern.archetype.clone())
 }
 
-fn contains_any(q: &str, patterns: &[&str]) -> bool {
-    query_contains_any_phrase(q, patterns)
-}
-
-fn query_contains_any_phrase(q: &str, patterns: &[&str]) -> bool {
+fn query_contains_any_pattern(q: &str, patterns: &[String]) -> bool {
     patterns
         .iter()
         .any(|pattern| query_contains_pattern(q, pattern))
@@ -759,6 +469,24 @@ mod tests {
             .preferences
             .contains(&"social infrastructure".to_string()));
         assert!(!intent.preferences.contains(&"greenery".to_string()));
+    }
+
+    #[test]
+    fn hospital_query_prioritizes_hospital_social_infra_keys() {
+        let intent = parse_intent("peaceful home for parents near hospital");
+        let signal = intent
+            .positive_preferences
+            .iter()
+            .find(|signal| signal.raw_text == "social infrastructure")
+            .expect("hospital should request social infrastructure");
+
+        assert_eq!(
+            &signal.expanded_keys[..2],
+            [
+                "hospital_access".to_string(),
+                "nearby_hospitals".to_string()
+            ]
+        );
     }
 
     #[test]

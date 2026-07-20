@@ -14,6 +14,7 @@ REPEATS = int(os.environ.get("SEARCH_LATENCY_REPEATS", "6"))
 QUERIES = [
     ("waterford", 175),
     ("wateford", 175),
+    ("watefrord", 175),
     ("3BHK Whitefield under 2Cr", 200),
     ("family friendly 3BHK", 250),
     ("metro", 350),
