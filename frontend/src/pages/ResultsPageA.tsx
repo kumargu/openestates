@@ -405,6 +405,11 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   };
 
   useEffect(() => {
+    if (query && viewMode !== "saved") {
+      setCatalogProperties([]);
+      return;
+    }
+
     let cancelled = false;
     getProperties()
       .then((data) => {
@@ -416,7 +421,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [query, viewMode]);
 
   // When there's a search query, call the backend search API.
   // When there's no query, load all properties.
@@ -460,7 +465,9 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     };
   }, [query, onSearchCommit]);
 
-  const useBackendResults = query && searchResponse && !searchFailed;
+  const hasQuery = query.trim().length > 0;
+  const useBackendResults = hasQuery && searchResponse !== null && !searchFailed;
+  const waitingForSearchResults = hasQuery && searchResponse === null && !searchFailed;
 
   // Apply area filter client-side (from homepage area card clicks)
   const filtered = useMemo(() => {
@@ -480,9 +487,10 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         explanation: r.match_explanation,
       }));
     }
+    if (hasQuery) return [];
     // No query — show all properties without match labels
     return filtered.map((p) => ({ property: p }));
-  }, [useBackendResults, searchResponse, filtered]);
+  }, [hasQuery, useBackendResults, searchResponse, filtered]);
 
   const propertiesById = useMemo(() => {
     const next = new Map<string, PropertyCardType>();
@@ -513,13 +521,14 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
   const universeResults: SearchResultItem[] = useMemo(() => {
     if (useBackendResults && searchResponse) return searchResponse.results;
+    if (hasQuery) return [];
     return filtered.map((property) => ({
       ...property,
       match_score: 0,
       match_label: "Browse",
       match_reason: "In catalog",
     }));
-  }, [useBackendResults, searchResponse, filtered]);
+  }, [hasQuery, useBackendResults, searchResponse, filtered]);
 
   const activeResults = viewMode === "saved" ? savedResults : universeResults;
   const propertyIds = useMemo(
@@ -529,7 +538,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
-  const totalCount = useBackendResults ? searchResponse.total_results : filtered.length;
+  const totalCount = useBackendResults ? searchResponse.total_results : hasQuery ? 0 : filtered.length;
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
@@ -760,7 +769,7 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
 
       {/* Knowledge graph insights removed — raw data not user-friendly yet */}
 
-      {viewMode === "cards" && matchResults.length === 0 && query && (
+      {viewMode === "cards" && matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
           <h2>No properties match "{query}"</h2>
           <p>Try broadening your search or explore one of these suggestions.</p>
@@ -800,7 +809,24 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
         </div>
       )}
 
-      {viewMode === "saved" ? (
+      {waitingForSearchResults ? (
+        <div className="results-grid" aria-label="Loading search results">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton-card">
+              <div className="skeleton-card-image skeleton-bar" />
+              <div className="skeleton-card-body">
+                <div className="skeleton-card-title skeleton-bar" />
+                <div className="skeleton-card-location skeleton-bar" />
+                <div className="skeleton-card-price skeleton-bar" />
+                <div className="skeleton-card-tags">
+                  <div className="skeleton-card-tag skeleton-bar" />
+                  <div className="skeleton-card-tag skeleton-bar" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : viewMode === "saved" ? (
         savedResults.length > 0 ? (
           <>
             <UniverseBoard

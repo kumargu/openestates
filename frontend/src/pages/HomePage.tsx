@@ -106,19 +106,34 @@ export function HomePage() {
   }, [navigate, searchParams]);
 
   useEffect(() => {
+    if (hasActiveSearch) return;
+    let cancelled = false;
     getProperties()
-      .then(setProperties)
-      .catch(() => setLoadError(true));
+      .then((data) => {
+        if (!cancelled) setProperties(data);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError(true);
+      });
     getStats()
-      .then(setPlatformStats)
+      .then((stats) => {
+        if (!cancelled) setPlatformStats(stats);
+      })
       .catch(() => {});
     getAreaTracker()
-      .then(setAreaTracker)
+      .then((tracker) => {
+        if (!cancelled) setAreaTracker(tracker);
+      })
       .catch(() => {});
     getDiscovery()
-      .then(setDiscovery)
+      .then((home) => {
+        if (!cancelled) setDiscovery(home);
+      })
       .catch(() => {});
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [hasActiveSearch]);
 
   useEffect(() => {
     setQuery(activeSearchQuery);
@@ -404,7 +419,7 @@ export function HomePage() {
         <DiscoveryShelvesSection discovery={discovery} onSearch={commitSearch} />
       ) : null}
 
-      {snapshot && properties.length > 0 && (
+      {!hasInlinePane && snapshot && properties.length > 0 && (
         <MicroMarketsSection properties={properties} areaTracker={areaTracker} onSearch={commitSearch} />
       )}
     </div>
