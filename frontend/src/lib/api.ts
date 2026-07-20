@@ -3,6 +3,7 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
+  EntityContextResponse,
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
@@ -11,7 +12,8 @@ import type {
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
 
-const API_BASE = import.meta.env.VITE_API_BASE ?? "http://127.0.0.1:4000";
+const API_BASE = import.meta.env.VITE_API_BASE
+  ?? (import.meta.env.DEV ? "" : "http://127.0.0.1:4000");
 const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API !== "false"
   && (import.meta.env.DEV || import.meta.env.VITE_USE_FIXTURE_API === "true");
 
@@ -68,6 +70,24 @@ export function getProperty(id: string): Promise<PropertyDetailResponse> {
 
 export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+}
+
+export async function getPropertyContext(id: string): Promise<EntityContextResponse | null> {
+  const path = `/api/properties/${encodeURIComponent(id)}/context`;
+  try {
+    const res = await fetch(`${API_BASE}${path}`);
+    if (res.status === 404) return null;
+    if (!res.ok) {
+      const fixture = getDevFixture<EntityContextResponse>(path);
+      if (fixture !== null) return fixture;
+      throw new Error(`API ${res.status}: ${await res.text().catch(() => res.statusText)}`);
+    }
+    return res.json();
+  } catch (error) {
+    const fixture = getDevFixture<EntityContextResponse>(path);
+    if (fixture !== null) return fixture;
+    throw error;
+  }
 }
 
 export function getPropertyEvidenceBatch(

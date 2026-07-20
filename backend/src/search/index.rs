@@ -5,8 +5,8 @@ use crate::routes::enrichment::society_node_id;
 use crate::serving::TantivyRecallHit;
 
 use super::intent::SearchIntent;
-use crate::dag_config::area_alias_entries;
 use super::semantic::SemanticRecallHit;
+use crate::dag_config::area_alias_entries;
 
 /// In-memory recall index for local search.
 ///
@@ -187,10 +187,79 @@ impl SearchIndex {
             }
             if let Some(token_ids) = self.by_token.get(&token) {
                 ids.extend(token_ids.iter().cloned());
+                continue;
+            }
+            for (indexed_token, token_ids) in &self.by_token {
+                if token_matches_query(&token, indexed_token) {
+                    ids.extend(token_ids.iter().cloned());
+                }
             }
         }
         ids
     }
+}
+
+/// Match a query token against indexed text, tolerating minor typos in society names.
+pub fn token_matches_query(query_token: &str, candidate_token: &str) -> bool {
+    if query_token == candidate_token {
+        return true;
+    }
+    if query_token.len() < 4 || candidate_token.len() < 4 {
+        return false;
+    }
+    if candidate_token.starts_with(query_token) || query_token.starts_with(candidate_token) {
+        return true;
+    }
+    let max_distance = if query_token.len().max(candidate_token.len()) >= 8 {
+        2
+    } else {
+        1
+    };
+    levenshtein_distance(query_token, candidate_token) <= max_distance
+}
+
+/// Match a query token against a lowercased field value.
+pub fn text_field_matches_term(field_lower: &str, term: &str) -> bool {
+    if field_lower.contains(term) {
+        return true;
+    }
+    if term.len() < 4 {
+        return false;
+    }
+    for word in field_lower.split(|c: char| !c.is_ascii_alphanumeric()) {
+        if token_matches_query(term, word) {
+            return true;
+        }
+    }
+    false
+}
+
+fn levenshtein_distance(left: &str, right: &str) -> usize {
+    if left == right {
+        return 0;
+    }
+    if left.is_empty() {
+        return right.len();
+    }
+    if right.is_empty() {
+        return left.len();
+    }
+
+    let left_chars: Vec<char> = left.chars().collect();
+    let right_chars: Vec<char> = right.chars().collect();
+    let mut prev: Vec<usize> = (0..=right_chars.len()).collect();
+    let mut curr = vec![0; right_chars.len() + 1];
+
+    for (i, left_char) in left_chars.iter().enumerate() {
+        curr[0] = i + 1;
+        for (j, right_char) in right_chars.iter().enumerate() {
+            let cost = usize::from(left_char != right_char);
+            curr[j + 1] = (prev[j + 1] + 1).min(curr[j] + 1).min(prev[j] + cost);
+        }
+        std::mem::swap(&mut prev, &mut curr);
+    }
+
+    prev[right_chars.len()]
 }
 
 fn intersect_candidate(candidate: &mut Option<HashSet<String>>, next: HashSet<String>) {
@@ -262,4 +331,21 @@ fn is_query_stopword(token: &str) -> bool {
             | "not"
             | "no"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn token_matches_query_handles_waterford_typo() {
+        assert!(token_matches_query("wateford", "waterford"));
+        assert!(token_matches_query("waterford", "waterford"));
+        assert!(!token_matches_query("xyz", "waterford"));
+    }
+
+    #[test]
+    fn text_field_matches_term_handles_society_name() {
+        assert!(text_field_matches_term("prestige waterford", "wateford"));
+    }
 }

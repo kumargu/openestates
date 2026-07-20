@@ -2339,6 +2339,21 @@ body {
   background: linear-gradient(145deg, rgba(255, 250, 247, 0.98), rgba(247, 244, 239, 0.94));
 }
 
+.property-rail-brief-hook > span {
+  color: var(--color-accent);
+  font-size: 0.66rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.property-rail-brief-hook p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
 .property-plan-entry-card > span {
   color: var(--color-accent);
   font-size: 0.66rem;
@@ -3454,6 +3469,36 @@ body {
   .tag {
     min-height: 32px;
     padding: 0.3rem 0.65rem;
+  }
+
+  .property-decision-page {
+    overflow-x: clip;
+  }
+
+  .property-brief-hero,
+  .property-decision-layout {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .property-decision-page,
+  .property-brief-hero,
+  .property-brief-copy,
+  .property-decision-layout,
+  .property-decision-main,
+  .property-action-rail {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+  }
+
+  .property-brief-hero > *,
+  .property-decision-layout > *,
+  .property-decision-main > *,
+  .property-action-rail > * {
+    width: 100%;
+    max-width: calc(100dvw - 3rem);
+    min-width: 0;
   }
 }
 

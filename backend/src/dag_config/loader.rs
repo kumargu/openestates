@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -87,7 +88,18 @@ impl From<RegistryError> for DagConfigError {
     }
 }
 
+static PROJECT_DAG_ROOT: OnceLock<PathBuf> = OnceLock::new();
+
+/// Pin DAG config to the repo root so search and loaders work regardless of process cwd.
+pub fn set_project_dag_root(project_root: &Path) {
+    let _ = PROJECT_DAG_ROOT.set(project_root.join("app/config/dag"));
+}
+
 pub fn dag_root() -> PathBuf {
+    if let Some(root) = PROJECT_DAG_ROOT.get() {
+        return root.clone();
+    }
+
     if let Ok(root) = std::env::var("OPENESTATES_DAG_CONFIG_ROOT") {
         return PathBuf::from(root);
     }

@@ -205,11 +205,32 @@ export function briefHookLine(
   brief: PropertyDetailResponse["livability_brief"],
 ): string | null {
   if (!brief) return null;
-  const riskBlock = brief.blocks.find((block) => block.lens === "risk");
-  if (riskBlock?.themes[0]) return riskBlock.themes[0];
-  const operatingBlock = brief.blocks.find((block) => block.lens === "operating");
-  if (operatingBlock?.themes[0]) return operatingBlock.themes[0];
-  return riskBlock?.paragraph ?? operatingBlock?.paragraph ?? null;
+
+  const blocks = brief.blocks ?? [];
+  const judgmentBlock = blocks.find((block) => block.lens === "judgment");
+  const riskBlock = blocks.find((block) => block.lens === "risk");
+  const operatingBlock = blocks.find((block) => block.lens === "operating");
+  const pick = riskBlock?.themes.length
+    ? riskBlock
+    : judgmentBlock ?? operatingBlock;
+  if (!pick?.paragraph.trim()) return null;
+
+  const firstSentence = pick.paragraph
+    .split(/(?<=[.!?])\s+/)
+    .map((part) => part.trim())
+    .find((part) => part.length > 0);
+  if (!firstSentence || firstSentence.length < 24) {
+    return null;
+  }
+
+  const normalized = firstSentence.toLowerCase();
+  if (pick.themes.some((theme) => normalized === theme.toLowerCase())) {
+    return null;
+  }
+
+  return firstSentence.length > 140
+    ? `${firstSentence.slice(0, 137).trimEnd()}...`
+    : firstSentence;
 }
 
 export function tileDecisionRead(

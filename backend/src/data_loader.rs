@@ -95,7 +95,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     );
 
     println!("Request-time AI disabled: search uses only local serving bundle data");
-    let discovery_config = load_discovery_config(project_root);
+    let discovery_config = load_discovery_config();
 
     AppState {
         properties: RwLock::new(properties),
@@ -377,10 +377,7 @@ fn resolve_serving_property_bhk(
     rows: Option<&ServingEntityFactRows>,
     title: &str,
 ) -> u32 {
-    let from_fact = latest_numeric(rows, "bhk")
-        .unwrap_or(0.0)
-        .round()
-        .max(0.0) as u32;
+    let from_fact = latest_numeric(rows, "bhk").unwrap_or(0.0).round().max(0.0) as u32;
     if from_fact > 0 {
         return from_fact;
     }
@@ -813,7 +810,8 @@ fn latest_fact<'a>(
     fact_key: &str,
 ) -> Option<&'a crate::serving::ServingFactRecord> {
     let policies = resolution_policies();
-    rows?.facts
+    rows?
+        .facts
         .iter()
         .filter(|fact| {
             fact.fact_key == fact_key
@@ -1151,7 +1149,10 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                 maintenance_cost_monthly: fact_numeric(node, "maintenance_cost_monthly") as u32,
                 society_quality_score: optional_fact_numeric(node, "society_quality_score"),
                 builder_quality_score: optional_fact_numeric(node, "builder_quality_score"),
-                document_completeness_score: optional_fact_numeric(node, "document_completeness_score"),
+                document_completeness_score: optional_fact_numeric(
+                    node,
+                    "document_completeness_score",
+                ),
                 litigation_risk: optional_fact_numeric(node, "litigation_risk"),
                 noise_score: optional_fact_numeric(node, "noise_score"),
                 sunlight_score: optional_fact_numeric(node, "sunlight_score"),
@@ -1949,6 +1950,16 @@ mod tests {
         value: FactValue,
         confidence: f32,
     ) -> crate::serving::ServingFactRecord {
+        serving_fact_with_source(entity_id, fact_key, value, confidence, "Computed")
+    }
+
+    fn serving_fact_with_source(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        confidence: f32,
+        source_type: &str,
+    ) -> crate::serving::ServingFactRecord {
         crate::serving::ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
@@ -1963,11 +1974,41 @@ mod tests {
             value_text: None,
             value,
             confidence,
-            source_type: "Computed".to_string(),
+            source_type: source_type.to_string(),
             source_url: None,
             model: None,
             skill_id: Some("test".to_string()),
             learned_at: Utc.timestamp_opt(1, 0).unwrap(),
         }
+    }
+
+    #[test]
+    fn reddit_theme_fact_loses_to_google_on_same_fact_key() {
+        let entity_id = "society:prestige-waterford";
+        let index = crate::serving::ServingFactIndex::from_records(
+            vec![
+                serving_fact_with_source(
+                    entity_id,
+                    "operating.tanker_dependence",
+                    FactValue::Text("mentioned".to_string()),
+                    0.4,
+                    "RedditTheme",
+                ),
+                serving_fact_with_source(
+                    entity_id,
+                    "operating.tanker_dependence",
+                    FactValue::Text("high".to_string()),
+                    0.9,
+                    "Google",
+                ),
+            ],
+            vec![],
+        );
+        let rows = index.entity(entity_id).expect("entity rows");
+
+        assert_eq!(
+            latest_text(Some(rows), "operating.tanker_dependence"),
+            Some("high".to_string())
+        );
     }
 }

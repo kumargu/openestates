@@ -87,6 +87,7 @@ pub struct ServingFactIndex {
 pub struct ServingEntityFactRows {
     pub facts: Vec<ServingFactRecord>,
     pub search_metadata: Vec<ServingSearchMetadataRecord>,
+    search_metadata_by_fact_key: HashMap<String, Vec<usize>>,
 }
 
 impl ServingFactIndex {
@@ -103,11 +104,16 @@ impl ServingFactIndex {
                 .push(fact);
         }
         for metadata in search_metadata {
-            by_entity
+            let fact_key = metadata.fact_key.to_ascii_lowercase();
+            let rows = by_entity
                 .entry(metadata.entity_id.clone())
+                .or_default();
+            let index = rows.search_metadata.len();
+            rows.search_metadata.push(metadata);
+            rows.search_metadata_by_fact_key
+                .entry(fact_key)
                 .or_default()
-                .search_metadata
-                .push(metadata);
+                .push(index);
         }
         Self { by_entity }
     }
@@ -131,6 +137,23 @@ impl ServingFactIndex {
             .values()
             .flat_map(|rows| rows.facts.iter())
             .collect()
+    }
+}
+
+impl ServingEntityFactRows {
+    pub fn search_metadata_for_fact_key<'a>(
+        &'a self,
+        fact_key: &str,
+    ) -> impl Iterator<Item = &'a ServingSearchMetadataRecord> {
+        let fact_key = fact_key.to_ascii_lowercase();
+        self.search_metadata_by_fact_key
+            .get(&fact_key)
+            .into_iter()
+            .flat_map(|indices| {
+                indices
+                    .iter()
+                    .filter_map(|index| self.search_metadata.get(*index))
+            })
     }
 }
 

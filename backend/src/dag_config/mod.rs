@@ -29,7 +29,8 @@ pub use fact_registry::{
 };
 pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
-    load_json, load_manifest, AssetRegistryFile, CrawlPolicyFile, DagConfigError, DagManifest,
+    load_json, load_manifest, set_project_dag_root, AssetRegistryFile, CrawlPolicyFile,
+    DagConfigError, DagManifest,
 };
 pub use resolution::{
     better_source_type, buyer_visible_fact, is_legacy_seed_source, load_resolution_policies,

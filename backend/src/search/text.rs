@@ -510,10 +510,8 @@ impl TextSearch {
                     !positive_preferences.is_empty() || !negative_preferences.is_empty();
                 if score <= 0.0 && has_constraints {
                     if has_preferences {
-                        score = score.max(minimum_evidence_floor(
-                            positive_evidence_score,
-                            graph_count,
-                        ));
+                        score =
+                            score.max(minimum_evidence_floor(positive_evidence_score, graph_count));
                     } else {
                         score = 1.0;
                         reasons.push("matches search criteria".to_string());
@@ -997,7 +995,7 @@ fn serving_preference_evidence(
 
     let mut best_structured: Option<RankedEvidence> = None;
     for fact in &rows.facts {
-        let Some(metadata) = rows.search_metadata.iter().find(|metadata| {
+        let Some(metadata) = rows.search_metadata_for_fact_key(&fact.fact_key).find(|metadata| {
             let answers_preference = metadata_answers_preference(metadata, preference);
             let key_matches = candidate_fact_keys
                 .iter()
@@ -1005,12 +1003,11 @@ fn serving_preference_evidence(
             let metadata_can_expand = answers_preference
                 && !preference_requires_registry_fact_key(preference)
                 && fact_key_can_self_describe_preference(&fact.fact_key);
-            metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
-                && if candidate_fact_keys.is_empty() {
-                    metadata_can_expand
-                } else {
-                    key_matches || metadata_can_expand
-                }
+            if candidate_fact_keys.is_empty() {
+                metadata_can_expand
+            } else {
+                key_matches || metadata_can_expand
+            }
         }) else {
             continue;
         };
@@ -1169,9 +1166,8 @@ fn serving_negative_preference_evidence(
 
     for fact in &rows.facts {
         let metadata = rows
-            .search_metadata
-            .iter()
-            .find(|metadata| metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key));
+            .search_metadata_for_fact_key(&fact.fact_key)
+            .next();
         let Some(evidence) = negative_evidence_from_fact(
             &fact.fact_key,
             &fact.value,
@@ -1967,7 +1963,7 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
 
         for (field_value, weight, field_name) in &fields {
             let field_lower = field_value.to_lowercase();
-            if field_lower.contains(term) {
+            if crate::search::index::text_field_matches_term(&field_lower, term) {
                 total_score += weight;
                 if !term_matched {
                     reasons.push(format!("matched '{}' in {}", term, field_name));
@@ -1978,7 +1974,7 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
 
         // Also check transparency tags.
         for tag in &property.transparency_tags {
-            if tag.to_lowercase().contains(term) {
+            if crate::search::index::text_field_matches_term(&tag.to_lowercase(), term) {
                 total_score += 1.0;
                 if !term_matched {
                     reasons.push(format!("matched '{}' in tags", term));

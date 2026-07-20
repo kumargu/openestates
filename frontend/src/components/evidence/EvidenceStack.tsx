@@ -185,7 +185,10 @@ function EvidenceFold({
     : FactListBody;
 
   return (
-    <section className={`ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}>
+    <section
+      id={`evidence-${section.kind}`}
+      className={`ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}
+    >
       <button type="button" className="ev-fold__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
         <span className="ev-fold__spine" aria-hidden="true" />
         <span className="ev-fold__icon"><IconForKind kind={section.kind} size={18} /></span>

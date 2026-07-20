@@ -256,7 +256,7 @@ export const fixtureDiscovery: DiscoveryResponse = {
       quote: "Good price, proof attached.",
       description: "Lower per-sqft options with visible source signals.",
       search_query: "good value with proof",
-      proof_label: "Price + source facts",
+      receipt_copy: "Price + RERA + Google",
       cards: fixtureProperties
         .filter((property) => property.price_per_sqft > 0)
         .sort((a, b) => a.price_per_sqft - b.price_per_sqft)
@@ -272,7 +272,7 @@ export const fixtureDiscovery: DiscoveryResponse = {
       quote: "Shorter commute, cleaner proof.",
       description: "Homes with closer metro access or stronger traffic signals.",
       search_query: "near metro low traffic",
-      proof_label: "Access facts",
+      receipt_copy: "Metro + traffic signals",
       cards: fixtureProperties
         .filter((property) => property.metro_distance_mins > 0 && property.metro_distance_mins <= 15)
         .sort((a, b) => a.metro_distance_mins - b.metro_distance_mins)
@@ -288,7 +288,7 @@ export const fixtureDiscovery: DiscoveryResponse = {
       quote: "More life-fit, less guesswork.",
       description: "3BHK+ homes with society, risk, and review signals.",
       search_query: "family friendly 3BHK",
-      proof_label: "Society + risk facts",
+      receipt_copy: "Society + risk + reviews",
       cards: fixtureProperties
         .filter((property) => property.bhk >= 3)
         .slice(0, 3)
@@ -382,6 +382,50 @@ export function getFixtureResponse(path: string): unknown | null {
     return card ? makeDetail(card) : null;
   }
 
+  const contextMatch = pathname.match(/^\/api\/properties\/([^/]+)\/context$/);
+  if (contextMatch) {
+    const id = decodeURIComponent(contextMatch[1]);
+    const card = fixtureProperties.find((property) => property.id === id);
+    if (!card) return null;
+    return {
+      anchor_entity_id: "society:prestige-lakeside-habitat",
+      summary_paragraph:
+        "Approach road visuals are available. Monsoon waterlogging is reported on the approach road.",
+      clauses: [
+        {
+          text: "approach road visuals are available",
+          traversal: ["served_by_road"],
+          target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
+          fact_key: "media.approach_road_frames",
+          category_id: "location",
+        },
+        {
+          text: "monsoon waterlogging reported on the approach road",
+          traversal: ["served_by_road"],
+          target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
+          fact_key: "risk.approach_road_waterlogging",
+          category_id: "cautions",
+        },
+      ],
+      category_groups: [
+        {
+          id: "cautions",
+          label: "Cautions",
+          items: [
+            {
+              text: "monsoon waterlogging reported on the approach road",
+              traversal: ["served_by_road"],
+              target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
+              fact_key: "risk.approach_road_waterlogging",
+              polarity: "concern",
+              category_id: "cautions",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
   return null;
 }
 
@@ -462,6 +506,28 @@ function parseIntent(query: string): {
   return { area, bhk, budgetMax, preferences };
 }
 
+function levenshtein(left: string, right: string): number {
+  if (left === right) return 0;
+  if (left.length === 0) return right.length;
+  if (right.length === 0) return left.length;
+
+  const prev = Array.from({ length: right.length + 1 }, (_, index) => index);
+  const curr = new Array<number>(right.length + 1);
+
+  for (let i = 0; i < left.length; i += 1) {
+    curr[0] = i + 1;
+    for (let j = 0; j < right.length; j += 1) {
+      const cost = left[i] === right[j] ? 0 : 1;
+      curr[j + 1] = Math.min(curr[j] + 1, prev[j + 1] + 1, prev[j] + cost);
+    }
+    for (let j = 0; j < prev.length; j += 1) {
+      prev[j] = curr[j];
+    }
+  }
+
+  return prev[right.length];
+}
+
 function scoreFixtureProperty(
   property: PropertyCard,
   query: string,
@@ -512,6 +578,19 @@ function scoreFixtureProperty(
     reasons.push("ready to move");
   }
   if (searchable.includes(query)) score += 20;
+  const queryTokens = query.split(/\s+/).filter((token) => token.length >= 4);
+  if (
+    queryTokens.some((token) =>
+      searchable.split(/[^a-z0-9]+/).some((word) => {
+        if (word.length < 4) return false;
+        if (word.includes(token) || token.includes(word)) return true;
+        return levenshtein(token, word) <= (Math.max(token.length, word.length) >= 8 ? 2 : 1);
+      }),
+    )
+  ) {
+    score += 20;
+    reasons.push(`matched "${query}" with fuzzy society recall`);
+  }
   if (property.root_source === "rera") score += 5;
 
   return {

@@ -31,7 +31,7 @@ pub struct DiscoveryShelf {
     pub quote: String,
     pub description: String,
     pub search_query: String,
-    pub proof_label: String,
+    pub receipt_copy: String,
     pub cards: Vec<DiscoveryShelfCard>,
 }
 
@@ -109,7 +109,7 @@ fn build_shelf(config: &DiscoveryShelfConfig, candidates: &[DiscoveryCandidate])
         quote: config.quote.clone(),
         description: config.description.clone(),
         search_query: config.search_query.clone(),
-        proof_label: config.proof_label.clone(),
+        receipt_copy: config.receipt_copy.clone(),
         cards: cards_for_shelf(&config.id, candidates),
     }
 }

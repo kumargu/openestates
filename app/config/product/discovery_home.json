@@ -30,7 +30,7 @@
       "quote": "Good price, proof attached.",
       "description": "Lower per-sqft options with visible source signals.",
       "search_query": "good value with proof",
-      "proof_label": "Price + source facts"
+      "receipt_copy": "Price + RERA + Google"
     },
     {
       "id": "low_commute_pain",
@@ -38,7 +38,7 @@
       "quote": "Shorter commute, cleaner proof.",
       "description": "Homes with closer metro access or stronger traffic signals.",
       "search_query": "near metro low traffic",
-      "proof_label": "Access facts"
+      "receipt_copy": "Metro + traffic signals"
     },
     {
       "id": "family_ready",
@@ -46,7 +46,7 @@
       "quote": "More life-fit, less guesswork.",
       "description": "3BHK+ homes with society, risk, and review signals.",
       "search_query": "family friendly 3BHK",
-      "proof_label": "Society + risk facts"
+      "receipt_copy": "Society + risk + reviews"
     },
     {
       "id": "premium_explainable",
@@ -54,7 +54,7 @@
       "quote": "If it's expensive, it should explain itself.",
       "description": "Higher-ticket homes with stronger proof or brand signals.",
       "search_query": "premium explainable homes",
-      "proof_label": "Price + trust facts"
+      "receipt_copy": "Builder + trust facts"
     },
     {
       "id": "area_tracker_picks",
@@ -62,7 +62,7 @@
       "quote": "Area signals first.",
       "description": "Homes from active micro-markets with enough local context.",
       "search_query": "area tracker picks",
-      "proof_label": "Area facts"
+      "receipt_copy": "Area crawl + local context"
     }
   ]
 }

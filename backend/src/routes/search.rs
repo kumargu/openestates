@@ -409,14 +409,14 @@ fn serving_has_gap_evidence(
                 .candidate_fact_keys
                 .iter()
                 .any(|key| fact.fact_key.eq_ignore_ascii_case(key))
-                || rows.search_metadata.iter().any(|metadata| {
-                    metadata.fact_key.eq_ignore_ascii_case(&fact.fact_key)
-                        && metadata.answers_preferences.iter().any(|answer| {
+                || rows.search_metadata_for_fact_key(&fact.fact_key)
+                    .any(|metadata| {
+                        metadata.answers_preferences.iter().any(|answer| {
                             pref.match_labels
                                 .iter()
                                 .any(|label| fuzzy_preference_match(answer, label))
                         })
-                }))
+                    }))
     })
 }
 

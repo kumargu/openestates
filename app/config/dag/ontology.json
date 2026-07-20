@@ -16,6 +16,7 @@
     { "from": "society", "edge": "built_by", "to": "builder" },
     { "from": "society", "edge": "served_by_road", "to": "road_segment" },
     { "from": "society", "edge": "maps_to_place", "to": "place" },
+    { "from": "society", "edge": "near_place", "to": "place" },
     { "from": "transaction", "edge": "for_property", "to": "property" }
   ]
 }

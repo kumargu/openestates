@@ -26,6 +26,8 @@ async fn main() {
         .parent()
         .expect("backend must be inside project root")
         .to_path_buf();
+    backend::local_env::load_project_env(&project_root);
+    backend::dag_config::set_project_dag_root(&project_root);
 
     let state = Arc::new(data_loader::load_app_state(&project_root).await);
     let bind_address =
@@ -51,6 +53,14 @@ async fn main() {
         .route(
             "/api/properties/evidence/batch",
             post(routes::properties::get_property_evidence_batch),
+        )
+        .route(
+            "/api/properties/{id}/context",
+            get(routes::entity_context::property_context),
+        )
+        .route(
+            "/api/entities/{entity_id}/context",
+            get(routes::entity_context::entity_context),
         )
         .route("/api/areas", get(routes::areas::list_areas))
         .route("/api/areas/tracker", get(routes::areas::area_tracker))
@@ -98,10 +108,7 @@ async fn main() {
         // Sitemap endpoint
         .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
-        .route(
-            "/api/admin/data-health",
-            get(routes::admin::data_health),
-        )
+        .route("/api/admin/data-health", get(routes::admin::data_health))
         .route(
             "/api/admin/serving-bundle/reload",
             post(routes::admin::reload_serving_bundle),

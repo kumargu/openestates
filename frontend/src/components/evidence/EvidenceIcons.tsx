@@ -41,6 +41,16 @@ export function TrendIcon({ size = 16, style }: IconProps) {
   );
 }
 
+export function TrendDownIcon({ size = 16, style }: IconProps) {
+  return (
+    <svg {...base(size, style)}>
+      <path d="M3 7l6 6 4-4 8 8" />
+      <path d="M21 17h-5" />
+      <path d="M21 17v-5" />
+    </svg>
+  );
+}
+
 export function PinIcon({ size = 16, style }: IconProps) {
   return (
     <svg {...base(size, style)}>

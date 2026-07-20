@@ -124,7 +124,7 @@ check "GET /api/discovery returns quotes" \
 
 check "GET /api/discovery returns shelves with cards" \
   "${BASE}/api/discovery" \
-  '.shelves | type == "array" and length > 0 and (.[0] | has("id", "title", "quote", "description", "search_query", "proof_label", "cards")) and (.[0].cards | type == "array" and length > 0)' \
+  '.shelves | type == "array" and length > 0 and (.[0] | has("id", "title", "quote", "description", "search_query", "receipt_copy", "cards")) and (.[0].cards | type == "array" and length > 0)' \
   "expected shelf metadata and property cards"
 
 # ── Properties List ──
@@ -198,6 +198,38 @@ if [[ -n "$FIRST_ID" ]]; then
     '.evidence.property_id == .property.id and (.evidence.sections | type == "array" and length > 0)' \
     "expected property detail to expose evidence.sections for one-call UI rendering"
 
+  CONTEXT_CODE=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "${BASE}/api/properties/${FIRST_ID}/context" 2>/dev/null || echo "000")
+  if [[ "$CONTEXT_CODE" == "200" ]]; then
+    PASS=$((PASS + 1))
+    printf "  %s GET /api/properties/:id/context returns graph summary\n" "$(green "✓")"
+    check "Property context has summary + clauses" \
+      "${BASE}/api/properties/${FIRST_ID}/context" \
+      '.anchor_entity_id != null and (.summary_paragraph | type == "string") and (.clauses | type == "array") and (.category_groups | type == "array")' \
+      "expected anchor_entity_id, summary_paragraph, clauses array, and category_groups array"
+    check "Property context suppresses raw fact keys" \
+      "${BASE}/api/properties/${FIRST_ID}/context" \
+      '(.summary_paragraph | test("risk\\.|nearby_|approach-road|nearby-schools") | not)' \
+      "expected graph summary to hide raw fact keys and bootstrap slugs"
+  elif [[ "$CONTEXT_CODE" == "404" ]]; then
+    PASS=$((PASS + 1))
+    printf "  %s GET /api/properties/:id/context returns 404 (no graph clauses yet)\n" "$(green "✓")"
+  else
+    FAIL=$((FAIL + 1))
+    printf "  %s GET /api/properties/:id/context — expected 200 or 404, got %s\n" "$(red "✗")" "$CONTEXT_CODE"
+  fi
+
+  WATERFORD_CONTEXT_CODE=$(curl -s -o /tmp/oe_waterford_context.json -w "%{http_code}" "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" 2>/dev/null || echo "000")
+  if [[ "$WATERFORD_CONTEXT_CODE" == "200" ]]; then
+    check "Waterford context has high-quality graph categories" \
+      "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" \
+      '([.category_groups[].id] | index("location") and (index("transit") or index("work") or index("education"))) and (.summary_paragraph | test("ECC Road|Deens|Metro|Bagmane|Manipal|Shantiniketan"))' \
+      "expected Waterford summary to include recognizable road/nearby graph context"
+    check "Waterford context stays concise and clean" \
+      "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" \
+      '(.summary_paragraph | split(" ") | length) <= 120 and (.summary_paragraph | test("risk\\.|nearby_|approach-road|nearby-schools") | not)' \
+      "expected Waterford summary under word cap with no raw keys"
+  fi
+
   check "Property evidence sections have render fields" \
     "${BASE}/api/properties/${FIRST_ID}/evidence" \
     '.sections | all(has("kind", "title", "summary", "priority", "confidence_pct", "source_types", "entity_ids", "items", "missing"))' \
@@ -252,6 +284,16 @@ check "Empty search returns empty results" \
   "${BASE}/api/search?q=" \
   '.results | length == 0' \
   "expected empty results for empty query"
+
+check "GET /api/search?q=waterford returns Prestige Waterford" \
+  "${BASE}/api/search?q=waterford" \
+  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
+  "expected society-name recall for waterford"
+
+check "GET /api/search?q=wateford tolerates typo" \
+  "${BASE}/api/search?q=wateford" \
+  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
+  "expected fuzzy recall for wateford typo"
 
 # ── Areas ──
 echo ""

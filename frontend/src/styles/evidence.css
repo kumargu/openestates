@@ -616,6 +616,14 @@
   font-size: 0.64rem;
 }
 
+.area-trail--visual-only .area-trail__hero {
+  min-height: 22rem;
+}
+
+.area-trail--visual-only .area-trail__strip {
+  margin-top: 0.75rem;
+}
+
 .area-trail__body {
   display: grid;
   grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.85fr);
@@ -1507,6 +1515,10 @@
   }
 }
 
+.ev-fold__inner > .community-pulse {
+  padding: 0.15rem 1rem 0.85rem 1.6rem;
+}
+
 .community-pulse {
   display: flex;
   flex-direction: column;
@@ -1562,19 +1574,47 @@
   color: rgba(24, 24, 24, 0.48);
 }
 
-.community-pulse__theme-row {
-  display: grid;
-  grid-template-columns: 7.5rem 1fr;
-  align-items: start;
-  gap: 0.45rem;
-}
-
 .community-pulse__theme-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.76rem;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   color: rgba(24, 24, 24, 0.52);
+}
+
+.community-pulse__theme-label--positive {
+  color: rgba(28, 88, 28, 0.92);
+}
+
+.community-pulse__theme-label--concern {
+  color: rgba(122, 88, 8, 0.95);
+}
+
+.community-pulse__theme-row {
+  display: grid;
+  grid-template-columns: minmax(8.5rem, 9.5rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .community-pulse__theme-row {
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+}
+
+.community-pulse__quote-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.45rem;
+}
+
+.community-pulse__quote-head p {
+  margin: 0;
 }
 
 .community-pulse__chips {
@@ -1651,6 +1691,53 @@
   color: rgba(42, 74, 122, 0.95);
 }
 
+.entity-context-card__summary {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.55;
+  color: rgba(24, 24, 24, 0.88);
+  overflow-wrap: anywhere;
+}
+
+.entity-context-card__clauses {
+  list-style: none;
+  margin: 0.85rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.entity-context-card__clauses li {
+  display: grid;
+  grid-template-columns: 1.1rem minmax(0, 1fr);
+  gap: 0.45rem;
+  align-items: start;
+  padding: 0.55rem 0.65rem;
+  border-radius: 0.55rem;
+  background: rgba(24, 24, 24, 0.03);
+  min-width: 0;
+}
+
+.entity-context-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 0.1rem;
+  color: rgba(24, 24, 24, 0.55);
+}
+
+.entity-context-card__clause-text {
+  font-size: 0.9rem;
+  color: rgba(24, 24, 24, 0.9);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.entity-context-card__more {
+  color: rgba(24, 24, 24, 0.58);
+}
+
 .livability-brief {
   display: flex;
   flex-direction: column;
@@ -1683,6 +1770,13 @@
   font-size: 0.86rem;
   font-weight: 600;
   color: rgba(42, 74, 122, 0.95);
+}
+
+.livability-brief__summary {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.65;
+  color: rgba(24, 24, 24, 0.88);
 }
 
 .livability-brief__blocks {
@@ -1719,6 +1813,16 @@
   font-size: 0.8rem;
   background: rgba(24, 24, 24, 0.05);
   color: rgba(24, 24, 24, 0.78);
+}
+
+.livability-brief__chip--link {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.livability-brief__chip--link:hover {
+  background: rgba(24, 24, 24, 0.09);
 }
 
 .livability-brief__sources {

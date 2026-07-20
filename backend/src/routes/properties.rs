@@ -5,15 +5,12 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use url::Url;
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
 };
-use crate::scoring::{
-    self, compute_transparency_score, MarketActivityResponse, TransparencyScore,
-};
+use crate::scoring::{self, compute_transparency_score, MarketActivityResponse, TransparencyScore};
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
 use crate::serving::{
@@ -25,12 +22,12 @@ use crate::community::{
     community_evidence_from_fact_value, community_pulse_from_summary,
     deterministic_community_summarizer, CommunityPulse,
 };
+use crate::knowledge::node::NodeType;
+use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 use crate::livability_brief::{
     compose_livability_brief, filter_reddit_evidence, LivabilityBrief, LivabilityBriefInput,
     LivabilityLens, StructuredFactSignal,
 };
-use crate::knowledge::node::NodeType;
-use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 
 use super::enrichment::{
     enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
@@ -221,9 +218,6 @@ pub struct SourceAttribution {
     pub learned_at: String,
 }
 
-// Enriched media instances — migrate to data/lake (see app/config/coverage.json).
-const APPROACH_ROAD_VISUALS_JSON: &str =
-    include_str!("../../../data/product/approach_road_visuals.json");
 // Property evidence panel layout — schema in app/config/product/evidence_sections.json.
 const BUYER_CONTEXT_SECTIONS_JSON: &str =
     include_str!("../../../app/config/product/evidence_sections.json");
@@ -254,7 +248,6 @@ pub struct EvidenceMediaFrame {
 
 #[derive(Deserialize)]
 struct ApproachRoadVisualRecord {
-    entity_id: String,
     provider: String,
     coverage_quality: String,
     frames: Vec<ApproachRoadVisualFrameRecord>,
@@ -269,6 +262,8 @@ struct ApproachRoadVisualFrameRecord {
     pitch: f64,
     fov: f64,
     capture_date: String,
+    #[serde(default)]
+    image_url: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -847,7 +842,8 @@ fn collect_community_evidence_records(
         "google_common_themes",
     ];
 
-    let mut records = collect_community_records_for_keys(graph, society_id, projection, PRIMARY_FACT_KEYS);
+    let mut records =
+        collect_community_records_for_keys(graph, society_id, projection, PRIMARY_FACT_KEYS);
     if records.is_empty() {
         records =
             collect_community_records_for_keys(graph, society_id, projection, LEGACY_FALLBACK_KEYS);
@@ -885,7 +881,12 @@ fn collect_structured_livability_facts(
     let society_id = society_node_id(&property.society_id);
     let area_id = super::enrichment::area_node_id(&property.area);
     let definitions: &[(&str, &str, LivabilityLens, &str)] = &[
-        ("home_state", "delivery state", LivabilityLens::Lifecycle, "society"),
+        (
+            "home_state",
+            "delivery state",
+            LivabilityLens::Lifecycle,
+            "society",
+        ),
         (
             "home_age_bucket",
             "project age",
@@ -910,7 +911,12 @@ fn collect_structured_livability_facts(
             LivabilityLens::Risk,
             "road_segment",
         ),
-        ("road_width", "road width", LivabilityLens::Risk, "road_segment"),
+        (
+            "road_width",
+            "road width",
+            LivabilityLens::Risk,
+            "road_segment",
+        ),
         (
             "waterlogging_detail",
             "area waterlogging",
@@ -923,7 +929,12 @@ fn collect_structured_livability_facts(
             LivabilityLens::Risk,
             "area",
         ),
-        ("stp_concern", "STP concern", LivabilityLens::Risk, "society"),
+        (
+            "stp_concern",
+            "STP concern",
+            LivabilityLens::Risk,
+            "society",
+        ),
         (
             "high_tension_wire_concern",
             "high-tension wires",
@@ -953,11 +964,9 @@ fn collect_structured_livability_facts(
         let has_fact = projection
             .and_then(|projection| projection.latest_record(fact_key))
             .is_some()
-            || graph.get_node(entity_id).is_some_and(|node| {
-                node.facts
-                    .iter()
-                    .any(|fact| fact.key == *fact_key)
-            });
+            || graph
+                .get_node(entity_id)
+                .is_some_and(|node| node.facts.iter().any(|fact| fact.key == *fact_key));
         if has_fact {
             signals.push(StructuredFactSignal {
                 fact_key: (*fact_key).to_string(),
@@ -976,7 +985,26 @@ fn build_livability_brief(
     projection: Option<&SocietyFactProjection<'_>>,
     community_records: &[crate::community::CommunityEvidenceRecord],
     community_pulse: Option<&CommunityPulse>,
+    serving_bundle: Option<&crate::serving::LoadedServingBundle>,
 ) -> Option<LivabilityBrief> {
+    let society_anchor = crate::routes::enrichment::society_node_id(&property.society_id);
+    if let Some(bundle) = serving_bundle {
+        if let Some(context) =
+            crate::entity_context::compose_entity_context(&society_anchor, bundle)
+        {
+            let lifecycle_flag = lifecycle_flag_from_projection(projection);
+            return Some(LivabilityBrief {
+                summary_paragraph: Some(context.summary_paragraph),
+                blocks: Vec::new(),
+                lifecycle_flag,
+                confidence_label: "Graph context".to_string(),
+                source_urls: community_pulse
+                    .map(|pulse| pulse.source_urls.clone())
+                    .unwrap_or_default(),
+            });
+        }
+    }
+
     let home_state_evidence = projection.map(|projection| projection.project_home_state());
     let home_state = home_state_evidence
         .as_ref()
@@ -989,12 +1017,13 @@ fn build_livability_brief(
         .map(|fact| fact.value);
     let home_timeline_ref = home_timeline_state.as_deref();
     let structured_facts = collect_structured_livability_facts(graph, property, projection);
-    let (community_positives, community_concerns, source_urls) = if let Some(pulse) = community_pulse {
-        // Brief owns synthesized themes; pulse keeps review receipts only.
-        (&[][..], &[][..], pulse.source_urls.as_slice())
-    } else {
-        (&[][..], &[][..], &[][..])
-    };
+    let (community_positives, community_concerns, source_urls) =
+        if let Some(pulse) = community_pulse {
+            // Brief owns synthesized themes; pulse keeps review receipts only.
+            (&[][..], &[][..], pulse.source_urls.as_slice())
+        } else {
+            (&[][..], &[][..], &[][..])
+        };
 
     compose_livability_brief(&LivabilityBriefInput {
         society_name,
@@ -1106,18 +1135,24 @@ fn entity_scope(entity_id: &str) -> &'static str {
     }
 }
 
-fn approach_road_media_for(property: &crate::models::Property) -> Option<EvidenceMediaStrip> {
-    let api_key = std::env::var("GOOGLE_STREET_VIEW_API_KEY")
-        .or_else(|_| std::env::var("GOOGLE_PLACES_API_KEY"))
-        .or_else(|_| std::env::var("GOOGLE_MAPS_API_KEY"))
-        .ok()
-        .filter(|key| !key.trim().is_empty())?;
-    let records: Vec<ApproachRoadVisualRecord> =
-        serde_json::from_str(APPROACH_ROAD_VISUALS_JSON).ok()?;
-    let entity_ids = approach_road_entity_candidates(property);
-    let record = records
-        .into_iter()
-        .find(|record| entity_ids.contains(&record.entity_id))?;
+fn approach_road_media_for(
+    property: &crate::models::Property,
+    serving_facts: Option<&ServingFactIndex>,
+    graph_index: Option<&crate::graph::GraphIndex>,
+) -> Option<EvidenceMediaStrip> {
+    let api_key = crate::street_view::google_maps_api_key()?;
+    let facts = serving_facts?;
+    let road_entity_id = resolve_road_segment_entity_id(property, facts, graph_index)?;
+    let fact = facts
+        .entity(&road_entity_id)?
+        .facts
+        .iter()
+        .find(|fact| fact.fact_key == "media.approach_road_frames")?;
+    let payload = match &fact.value {
+        FactValue::Text(text) => text.as_str(),
+        _ => return None,
+    };
+    let record: ApproachRoadVisualRecord = serde_json::from_str(payload).ok()?;
     if record.coverage_quality == "missing" || record.frames.is_empty() {
         return None;
     }
@@ -1145,79 +1180,67 @@ fn approach_road_media_for(property: &crate::models::Property) -> Option<Evidenc
     })
 }
 
-fn approach_road_entity_candidates(property: &crate::models::Property) -> HashSet<String> {
-    let mut candidates = HashSet::new();
-    candidates.insert(society_node_id(&property.society_id));
-    candidates.insert(normalized_society_entity_id(&property.society_id));
-    candidates.insert(format!(
-        "society:{}",
-        slugify_entity_component(&property.society_id)
-    ));
-    candidates.insert(format!(
-        "society:{}",
-        slugify_entity_component(&property.title)
-    ));
-    candidates
-}
-
-fn normalized_society_entity_id(value: &str) -> String {
-    let normalized = value.trim().to_lowercase().replace(['_', ' '], "-");
-    if normalized.starts_with("society:") {
-        normalized
-    } else if let Some(slug) = normalized.strip_prefix("soc-") {
-        format!("society:{slug}")
-    } else {
-        format!("society:{normalized}")
+fn resolve_road_segment_entity_id(
+    property: &crate::models::Property,
+    serving_facts: &ServingFactIndex,
+    graph_index: Option<&crate::graph::GraphIndex>,
+) -> Option<String> {
+    let society_id = crate::routes::enrichment::society_node_id(&property.society_id);
+    if let Some(index) = graph_index {
+        let steps = index.walk_out(&society_id, &["served_by_road"], 1);
+        if let Some(step) = steps.iter().find(|step| {
+            has_approach_road_frames(serving_facts, &step.to_entity_id)
+                && step.to_entity_id.starts_with("road_segment:")
+        }) {
+            return Some(step.to_entity_id.clone());
+        }
+        if let Some(step) = steps
+            .iter()
+            .find(|step| has_approach_road_frames(serving_facts, &step.to_entity_id))
+        {
+            return Some(step.to_entity_id.clone());
+        }
     }
+    let slug = society_id
+        .strip_prefix("society:")
+        .unwrap_or(society_id.as_str());
+    let fallback = format!("road_segment:{slug}-approach");
+    has_approach_road_frames(serving_facts, &fallback).then_some(fallback)
 }
 
-fn slugify_entity_component(value: &str) -> String {
-    value
-        .trim()
-        .to_lowercase()
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '-' })
-        .collect::<String>()
-        .split('-')
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join("-")
+fn has_approach_road_frames(serving_facts: &ServingFactIndex, entity_id: &str) -> bool {
+    serving_facts.entity(entity_id).is_some_and(|rows| {
+        rows.facts
+            .iter()
+            .any(|fact| fact.fact_key == "media.approach_road_frames")
+    })
 }
 
 fn approach_road_media_frame(
     frame: ApproachRoadVisualFrameRecord,
     api_key: &str,
 ) -> Option<EvidenceMediaFrame> {
-    let mut image_url = Url::parse("https://maps.googleapis.com/maps/api/streetview").ok()?;
-    image_url
-        .query_pairs_mut()
-        .append_pair("size", "640x420")
-        .append_pair("pano", &frame.pano_id)
-        .append_pair("heading", &format!("{:.1}", frame.heading))
-        .append_pair("pitch", &format!("{:.1}", frame.pitch))
-        .append_pair("fov", &format!("{:.1}", frame.fov))
-        .append_pair("source", "outdoor")
-        .append_pair("key", api_key);
-
-    let mut source_url = Url::parse("https://www.google.com/maps/@").ok()?;
-    source_url
-        .query_pairs_mut()
-        .append_pair("api", "1")
-        .append_pair("map_action", "pano")
-        .append_pair("pano", &frame.pano_id)
-        .append_pair("heading", &format!("{:.1}", frame.heading))
-        .append_pair("pitch", &format!("{:.1}", frame.pitch))
-        .append_pair("fov", &format!("{:.1}", frame.fov));
+    let street_input = crate::street_view::StreetViewFrameInput {
+        pano_id: frame.pano_id.clone(),
+        heading: frame.heading,
+        pitch: frame.pitch,
+        fov: frame.fov,
+    };
+    let image_url = frame
+        .image_url
+        .filter(|url| !url.trim().is_empty())
+        .or_else(|| crate::street_view::street_view_static_url(&street_input, api_key))?;
+    let source_url = crate::street_view::street_view_pano_url(&street_input)?;
 
     Some(EvidenceMediaFrame {
         label: frame.label,
         distance_from_gate_m: frame.distance_from_gate_m,
-        image_url: image_url.to_string(),
+        image_url,
         heading: frame.heading,
         pitch: frame.pitch,
         fov: frame.fov,
         capture_date: frame.capture_date,
-        source_url: source_url.to_string(),
+        source_url,
     })
 }
 
@@ -1328,6 +1351,8 @@ fn build_buyer_context_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
+    serving_facts: Option<&ServingFactIndex>,
+    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     buyer_context_definitions()
         .iter()
@@ -1343,7 +1368,9 @@ fn build_buyer_context_panels(
             let media = definition
                 .media
                 .iter()
-                .filter_map(|media_kind| context_media_for(media_kind, property))
+                .filter_map(|media_kind| {
+                    context_media_for(media_kind, property, serving_facts, graph_index)
+                })
                 .inspect(|media| {
                     items.push(evidence_media_source_item(media));
                 })
@@ -1477,9 +1504,11 @@ fn with_context_scope(mut item: SourceItem, fact: &ContextFactDefinition) -> Sou
 fn context_media_for(
     media_kind: &str,
     property: &crate::models::Property,
+    serving_facts: Option<&ServingFactIndex>,
+    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Option<EvidenceMediaStrip> {
     match media_kind {
-        "approach_road_visuals" => approach_road_media_for(property),
+        "approach_road_visuals" => approach_road_media_for(property, serving_facts, graph_index),
         _ => None,
     }
 }
@@ -1488,6 +1517,7 @@ pub(crate) fn build_source_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     serving_facts: Option<&ServingFactIndex>,
+    graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     let society_id = society_node_id(&property.society_id);
     let area_id = super::enrichment::area_node_id(&property.area);
@@ -1499,6 +1529,8 @@ pub(crate) fn build_source_panels(
         graph,
         property,
         projection.as_ref(),
+        serving_facts,
+        graph_index,
     ));
 
     let rera_items = collect_society_source_items(
@@ -1689,6 +1721,7 @@ fn build_property_evidence_response(
         graph,
         property,
         serving_bundle.map(|bundle| &bundle.fact_index),
+        serving_bundle.map(|bundle| &bundle.graph_index),
     );
     build_property_evidence_response_from_panels(
         property.id.clone(),
@@ -1804,8 +1837,29 @@ fn section_header_meta(panel: &SourcePanel, source_types: &[String]) -> String {
 }
 
 fn source_item_has_display_value(item: &SourceItem) -> bool {
-    item.values.iter().any(|value| !value.trim().is_empty())
-        || !item.value.trim().is_empty()
+    item.values.iter().any(|value| !value.trim().is_empty()) || !item.value.trim().is_empty()
+}
+
+fn lifecycle_flag_from_projection(
+    projection: Option<&SocietyFactProjection<'_>>,
+) -> Option<String> {
+    let projection = projection?;
+    let evidence = projection.project_home_state();
+    let state = evidence.state.as_deref()?.to_ascii_lowercase();
+    if state.contains("under construction") || state.contains("upcoming") {
+        return Some("understand-before-you-buy".to_string());
+    }
+    if state.contains("delivered") || state.contains("ready") {
+        if evidence
+            .age_bucket
+            .as_deref()
+            .is_some_and(|age| age.contains('+') || age.contains("year"))
+        {
+            return Some("livability-first".to_string());
+        }
+        return Some("ready-to-move".to_string());
+    }
+    None
 }
 
 fn dedup_community_pulse_against_brief(panels: &mut [SourcePanel], brief: &LivabilityBrief) {
@@ -2342,14 +2396,15 @@ pub async fn get_property(
         &graph,
         &property,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+        serving_bundle.as_ref().map(|bundle| &bundle.graph_index),
     );
     let community_pulse = source_panels
         .iter()
         .find(|panel| panel.kind == "community")
         .and_then(|panel| panel.community_pulse.as_ref());
-    let society_projection = serving_bundle.as_ref().map(|bundle| {
-        SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id)
-    });
+    let society_projection = serving_bundle
+        .as_ref()
+        .map(|bundle| SocietyFactProjection::from_index(&bundle.fact_index, &property.society_id));
     let community_records = collect_community_evidence_records(
         &graph,
         &society_node_id(&property.society_id),
@@ -2367,6 +2422,7 @@ pub async fn get_property(
         society_projection.as_ref(),
         &community_records,
         community_pulse,
+        serving_bundle.as_deref(),
     );
     if let Some(brief) = livability_brief.as_ref() {
         dedup_community_pulse_against_brief(&mut source_panels, brief);
@@ -2715,7 +2771,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let panels = build_source_panels(&graph, &property, Some(&serving), None);
         let keys = panels
             .iter()
             .flat_map(|panel| panel.items.iter().map(|item| item.key.as_str()))
@@ -2730,13 +2786,10 @@ mod serving_state_tests {
             .find(|panel| panel.kind == "community")
             .expect("community pulse should exist when Google review facts are present");
         assert!(
-            community
-                .community_pulse
-                .as_ref()
-                .is_some_and(|pulse| pulse
-                    .source_urls
-                    .iter()
-                    .any(|url| url == "https://example.com/current")),
+            community.community_pulse.as_ref().is_some_and(|pulse| pulse
+                .source_urls
+                .iter()
+                .any(|url| url == "https://example.com/current")),
             "Google review link should be visible in community pulse sources"
         );
     }
@@ -2754,7 +2807,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let panels = build_source_panels(&graph, &property, Some(&serving), None);
         let item = panels
             .iter()
             .flat_map(|panel| panel.items.iter())
@@ -2785,7 +2838,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let panels = build_source_panels(&graph, &property, Some(&serving), None);
         let nearby = panels
             .iter()
             .find(|panel| panel.kind == "nearby")
@@ -2851,7 +2904,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let panels = build_source_panels(&graph, &property, Some(&serving), None);
         let community = panels
             .iter()
             .find(|panel| panel.kind == "community")
@@ -2899,7 +2952,7 @@ mod serving_state_tests {
             Vec::<ServingSearchMetadataRecord>::new(),
         );
 
-        let panels = build_source_panels(&graph, &property, Some(&serving));
+        let panels = build_source_panels(&graph, &property, Some(&serving), None);
         let approach = panels
             .iter()
             .find(|panel| panel.kind == "approach_road")
@@ -2926,7 +2979,7 @@ mod serving_state_tests {
         let graph = legacy_graph_without_review_url();
         let property = property();
 
-        let panels = build_source_panels(&graph, &property, None);
+        let panels = build_source_panels(&graph, &property, None, None);
         let community = panels
             .iter()
             .find(|panel| panel.kind == "community")

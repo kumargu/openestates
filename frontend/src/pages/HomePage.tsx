@@ -645,7 +645,7 @@ function DiscoveryShelvesSection({
           {shelves.map((shelf) => (
             <article key={shelf.id} className="home-discovery-shelf">
               <div className="home-discovery-shelf__head">
-                <span>{shelf.proof_label}</span>
+                <span>{shelf.receipt_copy}</span>
                 <h3>{shelf.title}</h3>
                 <p>{shelf.quote}</p>
               </div>

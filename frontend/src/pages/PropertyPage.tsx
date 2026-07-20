@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse } from "../lib/types.ts";
-import { getProperty } from "../lib/api.ts";
+import type { BuilderPortfolio, EntityContextResponse, PropertyDetailResponse } from "../lib/types.ts";
+import { getProperty, getPropertyContext } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { isSaved, toggleSaved } from "../lib/sheet-store.ts";
@@ -12,6 +12,7 @@ import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
+import { EntityContextCard } from "../components/evidence/EntityContextCard.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
@@ -77,7 +78,7 @@ function normalizedDelta(value: number | null | undefined): number | null {
 
 function riskThemesFromBrief(brief: PropertyDetailResponse["livability_brief"]): string[] {
   if (!brief) return [];
-  return brief.blocks
+  return (brief.blocks ?? [])
     .filter((block) => block.lens === "risk")
     .flatMap((block) => block.themes);
 }
@@ -125,6 +126,7 @@ export function PropertyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
+  const [entityContext, setEntityContext] = useState<EntityContextResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
   const [saved, setSaved] = useState(false);
 
@@ -139,6 +141,9 @@ export function PropertyPage() {
       .catch((err: Error) => {
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
+    getPropertyContext(id)
+      .then((context) => setEntityContext(context))
+      .catch(() => setEntityContext(null));
   }, [id]);
 
   if (status === "loading") return (
@@ -327,19 +332,23 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
-          {/* Surface hierarchy: ApproachRoadTrail owns visual proof; brief owns risk prose;
-              approach_road evidence fold is excluded when trail is shown (ui_surfaces.json). */}
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
           )}
 
-          {data.livability_brief && (
-            <LivabilityBriefCard brief={data.livability_brief} />
+          {entityContext && (
+            <EntityContextCard context={entityContext} />
+          )}
+
+          {data.livability_brief && !entityContext && (
+            <LivabilityBriefCard
+              brief={data.livability_brief}
+              evidenceSections={data.evidence?.sections}
+            />
           )}
 
           <EvidenceStack
             evidence={data.evidence}
-            excludeKinds={showApproachTrail ? ["approach_road"] : []}
           />
 
           {data.builder_portfolio && (
@@ -380,6 +389,7 @@ export function PropertyPage() {
         <aside className="property-action-rail">
           {briefHook && (
             <div className="property-mini-card property-rail-brief-hook">
+              <span>Before you shortlist</span>
               <p>{briefHook}</p>
             </div>
           )}

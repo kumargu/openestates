@@ -3,6 +3,7 @@ pub mod areas;
 pub mod claims;
 pub mod discovery;
 pub mod enrichment;
+pub mod entity_context;
 pub mod interests;
 pub mod properties;
 pub mod registration;

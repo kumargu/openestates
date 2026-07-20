@@ -1,4 +1,5 @@
 import type { CommunityPulse } from "../../lib/types.ts";
+import { TrendDownIcon, TrendIcon } from "./EvidenceIcons.tsx";
 
 type Props = {
   pulse: CommunityPulse;
@@ -24,7 +25,10 @@ export function CommunityPulseCard({ pulse }: Props) {
           <span className="community-pulse__section-label">From reviews</span>
           {pulse.positives.length > 0 && (
             <div className="community-pulse__theme-row">
-              <span className="community-pulse__theme-label">Residents like</span>
+              <span className="community-pulse__theme-label community-pulse__theme-label--positive">
+                <TrendIcon size={14} />
+                Residents like
+              </span>
               <div className="community-pulse__chips">
                 {pulse.positives.map((theme) => (
                   <span key={theme} className="community-pulse__chip community-pulse__chip--positive">
@@ -36,7 +40,10 @@ export function CommunityPulseCard({ pulse }: Props) {
           )}
           {pulse.concerns.length > 0 && (
             <div className="community-pulse__theme-row">
-              <span className="community-pulse__theme-label">Worth checking</span>
+              <span className="community-pulse__theme-label community-pulse__theme-label--concern">
+                <TrendDownIcon size={14} />
+                Worth checking
+              </span>
               <div className="community-pulse__chips">
                 {pulse.concerns.map((theme) => (
                   <span key={theme} className="community-pulse__chip community-pulse__chip--concern">
@@ -53,7 +60,11 @@ export function CommunityPulseCard({ pulse }: Props) {
         <div className="community-pulse__quotes">
           {[...positiveQuotes, ...concernQuotes, ...neutralQuotes].map((quote) => (
             <blockquote key={quote.text} className={`community-pulse__quote community-pulse__quote--${quote.polarity}`}>
-              <p>{quote.text}</p>
+              <div className="community-pulse__quote-head">
+                {quote.polarity === "positive" ? <TrendIcon size={14} /> : null}
+                {quote.polarity === "concern" ? <TrendDownIcon size={14} /> : null}
+                <p>{quote.text}</p>
+              </div>
               <footer>
                 <span>{polarityLabel(quote.polarity)}</span>
                 <span>{quote.source_type}</span>

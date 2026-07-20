@@ -66,7 +66,7 @@ export type DiscoveryShelf = {
   quote: string;
   description: string;
   search_query: string;
-  proof_label: string;
+  receipt_copy: string;
   cards: DiscoveryShelfCard[];
 };
 
@@ -368,9 +368,34 @@ export type LivabilityBriefBlock = {
 };
 
 export type LivabilityBrief = {
-  blocks: LivabilityBriefBlock[];
+  summary_paragraph?: string;
+  blocks?: LivabilityBriefBlock[];
   lifecycle_flag?: string;
   source_urls: string[];
+};
+
+export type EntityContextClause = {
+  text: string;
+  traversal: string[];
+  target_entity_id: string;
+  fact_key?: string | null;
+  polarity?: "positive" | "concern" | string | null;
+  category_id?: string | null;
+  source_type?: string | null;
+  confidence?: number | null;
+};
+
+export type EntityContextCategoryGroup = {
+  id: string;
+  label: string;
+  items: EntityContextClause[];
+};
+
+export type EntityContextResponse = {
+  anchor_entity_id: string;
+  summary_paragraph: string;
+  clauses: EntityContextClause[];
+  category_groups?: EntityContextCategoryGroup[];
 };
 
 export type CommunityPulseQuote = {

@@ -131,7 +131,9 @@ export function LivingEvidenceTile({
               </span>
             )}
           </div>
-          {whyLine && <p className="catalog-card__why">{whyLine}</p>}
+          {whyLine && !explanationBlock && (
+            <p className="catalog-card__why">{whyLine}</p>
+          )}
           {(property.home_state_display || property.builder_delivery_display) && (
             <div className="catalog-card__signals">
               {property.home_state_display && (
