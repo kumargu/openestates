@@ -2876,6 +2876,41 @@ body {
   box-shadow: var(--shadow-sm);
 }
 
+.builder-norecord-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.builder-norecord-card > div > span {
+  display: block;
+  margin-bottom: 0.22rem;
+  color: var(--color-accent);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.builder-norecord-card h3 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.builder-norecord-card p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+  text-align: right;
+}
+
 .builder-record-header {
   display: flex;
   justify-content: space-between;

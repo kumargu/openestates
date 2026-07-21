@@ -305,9 +305,19 @@ export function PropertyPage() {
             excludeKinds={evidenceExcludeKinds}
           />
 
-          {data.builder_portfolio && (
+          {data.builder_portfolio ? (
             <section className="property-evidence-section">
               <BuilderRecordPanel portfolio={data.builder_portfolio} />
+            </section>
+          ) : isKnownText(p.builder_name) && (
+            <section className="property-evidence-section">
+              <div className="builder-norecord-card">
+                <div>
+                  <span>Builder record</span>
+                  <h3>{p.builder_name}</h3>
+                </div>
+                <p>No other ongoing projects tracked in RERA.</p>
+              </div>
             </section>
           )}
 
