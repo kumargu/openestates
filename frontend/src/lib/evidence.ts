@@ -57,7 +57,7 @@ const BAND_META: Record<EvidenceBand, { label: string }> = {
 
 /** Maps evidence section kinds to buyer-facing bands on the property page. */
 const SECTION_BAND: Record<string, EvidenceBand> = {
-  home_state: "home",
+  home_state: "records",
   market: "home",
   rera: "records",
   approach_road: "area",
@@ -68,7 +68,7 @@ const SECTION_BAND: Record<string, EvidenceBand> = {
   area: "area",
 };
 
-const BAND_ORDER: EvidenceBand[] = ["home", "area", "records"];
+const BAND_ORDER: EvidenceBand[] = ["records", "home", "area"];
 
 export function sectionBand(
   section: Pick<EvidenceSection, "kind" | "constellation">,
@@ -85,6 +85,15 @@ export function bandMeta(band: EvidenceBand) {
   return BAND_META[band];
 }
 
+function sortSectionsInBand(band: EvidenceBand, sections: EvidenceSection[]): EvidenceSection[] {
+  const sorted = [...sections].sort((a, b) => a.priority - b.priority);
+  if (band !== "records") return sorted;
+  const reraIndex = sorted.findIndex((section) => section.kind === "rera");
+  if (reraIndex <= 0) return sorted;
+  const [rera] = sorted.splice(reraIndex, 1);
+  return [rera, ...sorted];
+}
+
 export function groupSectionsByBand(
   sections: EvidenceSection[],
 ): Array<{ id: EvidenceBand; sections: EvidenceSection[] }> {
@@ -97,7 +106,7 @@ export function groupSectionsByBand(
   }
   return BAND_ORDER
     .filter((id) => buckets.has(id))
-    .map((id) => ({ id, sections: buckets.get(id)! }));
+    .map((id) => ({ id, sections: sortSectionsInBand(id, buckets.get(id)!) }));
 }
 
 function compactTileText(value: string, max = 72): string {
