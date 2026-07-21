@@ -5,7 +5,7 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { constellationMeta, sectionConstellation } from "../../lib/evidence.ts";
+import { constellationMeta, displaySourceType, sectionConstellation } from "../../lib/evidence.ts";
 import {
   ChevronIcon,
   LinkIcon,
@@ -56,6 +56,7 @@ function compactValue(value: string): string {
 /** A single fact row — renders only when it has a real value. */
 function FactRow({ item }: { item: SourceItem }) {
   const url = itemSourceUrl(item);
+  const sourceLabel = displaySourceType(item.source_type);
   const values = item.values?.filter(Boolean) ?? [];
   const hasValue = values.length > 0 || (item.value && item.value.trim().length > 0);
   if (!hasValue) return null;
@@ -98,7 +99,9 @@ function FactRow({ item }: { item: SourceItem }) {
         )}
       </div>
       <div className="ev-fact__meta">
-        <span className="ev-fact__source">{item.source_type}</span>
+        {sourceLabel && (
+          <span className="ev-fact__source">{sourceLabel}</span>
+        )}
         {url && (
           <a className="ev-fact__link" href={url} target="_blank" rel="noreferrer" aria-label="Open source">
             <LinkIcon size={13} />
@@ -199,14 +202,6 @@ function EvidenceFold({
             {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
           </span>
         </span>
-        <span className="ev-fold__meta">
-          <span className="ev-fold__count">
-            {section.header_meta
-              ?? (section.community_pulse
-                ? `${section.community_pulse.quotes.length} quotes`
-                : `${facts.length} facts${media.length > 0 ? ` · ${media.length} media` : ""}`)}
-          </span>
-        </span>
         <span className="ev-fold__chevron"><ChevronIcon size={18} /></span>
       </button>
 
@@ -249,8 +244,8 @@ export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
   return (
     <section className="evidence-stack">
       <div className="property-section-heading">
-        <span>Evidence stack</span>
-        <h2>What we know, layered by proof</h2>
+        <span>Sources</span>
+        <h2>Property context</h2>
       </div>
 
       <div className="evidence-stack__folds">

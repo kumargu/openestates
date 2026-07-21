@@ -22,7 +22,6 @@ import { addRecentSearch } from "../lib/recent-searches.ts";
 import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
 import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
-import { summarizeEvidence, tileDecisionRead } from "../lib/evidence.ts";
 
 /* ---------- Area Context Bar ---------- */
 
@@ -442,20 +441,12 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
     ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
     : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
 
-  const renderTile = (result: SearchResultItem) => {
-    const row = matchResults.find((entry) => entry.property.id === result.id);
-    const evidence = evidenceById.get(result.id);
-    const evidenceSummary = summarizeEvidence(evidence);
-    return (
-      <LivingEvidenceTile
-        property={result}
-        match={row?.match}
-        evidence={evidence}
-        decisionRead={tileDecisionRead(result, evidenceSummary)}
-        onQuickView={setPanelPropertyId}
-      />
-    );
-  };
+  const renderTile = (result: SearchResultItem) => (
+    <LivingEvidenceTile
+      property={result}
+      onQuickView={setPanelPropertyId}
+    />
+  );
 
   return (
     <div className={containerClass}>

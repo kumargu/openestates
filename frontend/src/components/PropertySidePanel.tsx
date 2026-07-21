@@ -11,7 +11,6 @@ import { TrustBadge } from "./TrustBadge.tsx";
 import { ProjectStatusTag } from "./ProjectStatusTag.tsx";
 import { DataFreshnessBadge } from "./DataFreshnessBadge.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
-import { evidenceReceiptLabel, summarizeEvidence, topEvidenceGlance } from "../lib/evidence.ts";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
 
 function formatPrice(price: number): string {
@@ -88,8 +87,6 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
     if (e.target === e.currentTarget) handleClose();
   };
 
-  const evidenceSummary = summarizeEvidence(detail?.evidence);
-  const evidenceGlance = topEvidenceGlance(detail?.evidence, 2, ["approach_road"]);
   const showHomeStateChip = Boolean(
     card.home_state_display
     && !isRedundantHomeState(
@@ -200,14 +197,6 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
               {card.builder_delivery_display && (
                 <span className="side-panel-skim__chip">{card.builder_delivery_display}</span>
               )}
-              {evidenceSummary && (
-                <p className="side-panel-skim__proof">
-                  {evidenceReceiptLabel(evidenceSummary)}
-                </p>
-              )}
-              {evidenceGlance.map((line) => (
-                <p key={line} className="side-panel-skim__line">{line}</p>
-              ))}
             </div>
           )}
         </div>

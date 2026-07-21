@@ -1,7 +1,6 @@
 import type {
   EvidenceSection,
   PropertyCard,
-  PropertyDetailResponse,
   PropertyEvidenceResponse,
   SearchResultItem,
 } from "./types.ts";
@@ -89,14 +88,14 @@ export function summarizeEvidence(
     }
     return sum + section.items.length;
   }, 0);
-  const sourceTypes = [
+  const sourceTypes = humanizeSourceTypes([
     ...new Set(sections.flatMap((section) => {
       if (section.community_pulse) {
         return [section.community_pulse.source_label.replace(/ review$/i, "")];
       }
       return section.source_types;
     })),
-  ].slice(0, 4);
+  ]).slice(0, 4);
 
   return {
     factCount,
@@ -106,11 +105,26 @@ export function summarizeEvidence(
   };
 }
 
-export function evidenceReceiptLabel(summary: EvidenceSummary): string {
-  if (summary.sourceTypes.length === 0) {
-    return `${summary.factCount} facts`;
-  }
-  return `${summary.factCount} facts · ${summary.sourceTypes.slice(0, 2).join(", ")}`;
+const INTERNAL_SOURCE_TYPES = new Set(["computed", "manual", "system"]);
+
+/** Hide pipeline source types from buyer-facing UI. */
+export function displaySourceType(sourceType: string | undefined): string | null {
+  if (!sourceType) return null;
+  const lowered = sourceType.trim().toLowerCase();
+  if (INTERNAL_SOURCE_TYPES.has(lowered)) return null;
+  if (lowered === "rera") return "RERA";
+  return sourceType;
+}
+
+export function humanizeSourceTypes(types: string[]): string[] {
+  return types
+    .map(displaySourceType)
+    .filter((value): value is string => value !== null);
+}
+
+export function evidenceReceiptLabel(summary: EvidenceSummary): string | null {
+  if (summary.sourceTypes.length === 0) return null;
+  return summary.sourceTypes.slice(0, 2).join(" · ");
 }
 
 export function groupSectionsByConstellation(
@@ -178,11 +192,11 @@ export function clusterSearchResults(
   }
 
   const defs: Array<{ id: UniverseClusterId; label: string; hint: string }> = [
-    { id: "strong_fits", label: "Strong fits", hint: "Best alignment with your search" },
-    { id: "worth_comparing", label: "Worth comparing", hint: "Solid options to shortlist" },
-    { id: "verify_proof", label: "Verify proof first", hint: "Promising but evidence gaps remain" },
-    { id: "value_angle", label: "Value angle", hint: "Price-led opportunities" },
-    { id: "explore", label: "Explore further", hint: "Broader matches in this world" },
+    { id: "strong_fits", label: "Strong fits", hint: "Closest to your search" },
+    { id: "worth_comparing", label: "Worth comparing", hint: "More options in this search" },
+    { id: "verify_proof", label: "Thinner context", hint: "Fewer linked sources so far" },
+    { id: "value_angle", label: "Value angle", hint: "Price-led matches" },
+    { id: "explore", label: "Explore further", hint: "Broader matches" },
   ];
 
   return defs
@@ -193,54 +207,16 @@ export function clusterSearchResults(
 export function topEvidenceGlance(
   evidence: PropertyEvidenceResponse | undefined,
   limit = 2,
+  excludeKinds: string[] = [],
 ): string[] {
-  const sections = visibleEvidenceSections(evidence?.sections);
+  const excluded = new Set(excludeKinds);
+  const sections = visibleEvidenceSections(evidence?.sections).filter(
+    (section) => !excluded.has(section.kind),
+  );
   return sections
     .slice(0, limit)
     .map((section) => section.summary || section.title)
     .filter(Boolean);
-}
-
-export function briefHookLine(
-  brief: PropertyDetailResponse["livability_brief"],
-): string | null {
-  if (!brief) return null;
-
-  const blocks = brief.blocks ?? [];
-  const judgmentBlock = blocks.find((block) => block.lens === "judgment");
-  const riskBlock = blocks.find((block) => block.lens === "risk");
-  const operatingBlock = blocks.find((block) => block.lens === "operating");
-  const pick = riskBlock?.themes.length
-    ? riskBlock
-    : judgmentBlock ?? operatingBlock;
-  if (!pick?.paragraph.trim()) return null;
-
-  const firstSentence = pick.paragraph
-    .split(/(?<=[.!?])\s+/)
-    .map((part) => part.trim())
-    .find((part) => part.length > 0);
-  if (!firstSentence || firstSentence.length < 24) {
-    return null;
-  }
-
-  const normalized = firstSentence.toLowerCase();
-  if (pick.themes.some((theme) => normalized === theme.toLowerCase())) {
-    return null;
-  }
-
-  return firstSentence.length > 140
-    ? `${firstSentence.slice(0, 137).trimEnd()}...`
-    : firstSentence;
-}
-
-export function tileDecisionRead(
-  result: SearchResultItem,
-  summary: EvidenceSummary | null,
-): string {
-  if (summary && summary.factCount < 3) return "Verify before token";
-  if (result.match_label.toLowerCase().includes("strong")) return "Worth comparing";
-  if (result.match_label.toLowerCase().includes("value")) return "Value-led option";
-  return "Explore proof";
 }
 
 export function entityRefCount(card: PropertyCard): number {

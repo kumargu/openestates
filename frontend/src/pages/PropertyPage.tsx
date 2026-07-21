@@ -15,7 +15,6 @@ import { EntityContextCard } from "../components/evidence/EntityContextCard.tsx"
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
-import { briefHookLine, topEvidenceGlance } from "../lib/evidence.ts";
 import {
   detailEvidenceExcludeKinds,
   isRedundantHomeState,
@@ -70,59 +69,6 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     jsonLd.image = p.hero_image;
   }
   return jsonLd;
-}
-
-type DecisionTone = "compare" | "verify" | "negotiate";
-
-function normalizedDelta(value: number | null | undefined): number | null {
-  if (value == null || !Number.isFinite(value)) return null;
-  return Math.abs(value) <= 1 ? value * 100 : value;
-}
-
-function riskThemesFromBrief(brief: PropertyDetailResponse["livability_brief"]): string[] {
-  if (!brief) return [];
-  return (brief.blocks ?? [])
-    .filter((block) => block.lens === "risk")
-    .flatMap((block) => block.themes);
-}
-
-function buildDecision(data: PropertyDetailResponse): {
-  label: string;
-  tone: DecisionTone;
-  summary: string;
-} {
-  const delta = normalizedDelta(data.market_activity.price_vs_median?.pct_diff);
-  const riskThemes = riskThemesFromBrief(data.livability_brief);
-
-  if (!data.rera?.registered) {
-    return {
-      label: "Needs document review",
-      tone: "verify",
-      summary: "Regulatory and seller documents are not complete enough yet.",
-    };
-  }
-
-  if (riskThemes.length > 0) {
-    return {
-      label: "Verify risk before visit",
-      tone: "verify",
-      summary: `${riskThemes[0]} is the main concern in the livability brief. Clear that before treating this as a finalist.`,
-    };
-  }
-
-  if (delta !== null && delta > 8) {
-    return {
-      label: "Price needs support",
-      tone: "negotiate",
-      summary: "Ask is above the local benchmark; compare recent resale prices before a visit.",
-    };
-  }
-
-  return {
-    label: "Worth comparing",
-    tone: "compare",
-    summary: "Price, proof, and market context are balanced enough to open the full report.",
-  };
 }
 
 export function PropertyPage() {
@@ -213,9 +159,8 @@ export function PropertyPage() {
     `in ${society?.name ? society.name + ", " : ""}${p.area}`,
     formatPrice(p.price),
     pricePerSqftLabel,
-    "Proof-backed livability brief and market context.",
+    `${p.area}, ${p.city}`,
   ].filter(Boolean).join(". ");
-  const decision = buildDecision(data);
   const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
   const marketRows = [
     market_activity.interest_label,
@@ -236,11 +181,11 @@ export function PropertyPage() {
       p.possession_status,
     ),
   );
-  const proofGlance = topEvidenceGlance(data.evidence, 1, evidenceExcludeKinds)[0] ?? null;
-  const briefHook = briefHookLine(data.livability_brief);
   const showContextSkeleton = contextStatus === "loading";
-  const showLivabilityBrief = Boolean(data.livability_brief && contextStatus === "empty");
-  const showBriefHookRail = Boolean(briefHook && !showLivabilityBrief);
+  const showLivabilityBrief = Boolean(
+    data.livability_brief?.summary_paragraph?.trim()
+    && contextStatus === "empty",
+  );
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -287,9 +232,6 @@ export function PropertyPage() {
         />
 
         <div className="property-brief-copy">
-          <span className={`property-verdict property-verdict--${decision.tone}`}>
-            {decision.label}
-          </span>
           <h1>
             {p.title}
           </h1>
@@ -301,8 +243,6 @@ export function PropertyPage() {
             <strong>{formatPrice(p.price)}</strong>
             {pricePerSqftLabel && <span>{pricePerSqftLabel}</span>}
           </div>
-
-          <p className="property-brief-summary">{decision.summary}</p>
 
           <div className="property-proof-strip">
             {showHomeStateChip && (
@@ -321,7 +261,6 @@ export function PropertyPage() {
                 RERA verified
               </span>
             )}
-            {proofGlance && <span className="property-proof-strip__read">{proofGlance}</span>}
           </div>
 
           <div className="property-brief-tags">
@@ -357,10 +296,7 @@ export function PropertyPage() {
           )}
 
           {showLivabilityBrief && data.livability_brief && (
-            <LivabilityBriefCard
-              brief={data.livability_brief}
-              evidenceSections={data.evidence?.sections}
-            />
+            <LivabilityBriefCard brief={data.livability_brief} />
           )}
 
           <EvidenceStack
@@ -404,12 +340,6 @@ export function PropertyPage() {
         </main>
 
         <aside className="property-action-rail">
-          {showBriefHookRail && briefHook && (
-            <div className="property-mini-card property-rail-brief-hook">
-              <span>Before you shortlist</span>
-              <p>{briefHook}</p>
-            </div>
-          )}
           <div className="property-mini-card property-plan-entry-card">
             <span>{BUY_VS_RENT.kicker}</span>
             <h3>Would buying beat renting for you?</h3>
@@ -441,7 +371,7 @@ function EntityContextSkeleton() {
   return (
     <section className="property-evidence-section entity-context-card" aria-label="Neighborhood context loading">
       <div className="property-section-heading">
-        <span>Before you shortlist</span>
+        <span>Neighborhood</span>
       </div>
       <div className="entity-context-card__skeleton">
         <div className="skeleton-bar" />

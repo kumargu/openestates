@@ -1,14 +1,7 @@
 import { Link } from "react-router-dom";
 import type {
   PropertyCard,
-  PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import type { MatchResult } from "../../lib/search.ts";
-import { displayMatchReason } from "../../lib/search.ts";
-import {
-  summarizeEvidence,
-  topEvidenceGlance,
-} from "../../lib/evidence.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
@@ -30,39 +23,17 @@ function isKnownText(value: string | null | undefined): value is string {
 
 type Props = {
   property: PropertyCard;
-  match?: MatchResult;
-  evidence?: PropertyEvidenceResponse;
-  decisionRead?: string;
   onQuickView?: (id: string) => void;
-  /** Landing/browse surfaces — same card shell, no match or proof chrome. */
+  /** Landing/browse surfaces — same card shell, minimal meta. */
   variant?: "default" | "browse";
 };
 
-function tileProofChip(
-  property: PropertyCard,
-  summary: ReturnType<typeof summarizeEvidence>,
-): string | null {
-  if (summary) {
-    const source = summary.sourceTypes[0];
-    if (source) return `${summary.factCount} facts · ${source}`;
-    if (summary.factCount > 0) return `${summary.factCount} facts`;
-  }
-  if (isKnownText(property.home_state_display)) return property.home_state_display;
-  if (isKnownText(property.builder_delivery_display)) return property.builder_delivery_display;
-  return null;
-}
-
 export function LivingEvidenceTile({
   property,
-  match,
-  evidence,
-  decisionRead,
   onQuickView,
   variant = "default",
 }: Props) {
   const isBrowse = variant === "browse";
-  const summary = isBrowse ? null : summarizeEvidence(evidence);
-  const glances = isBrowse ? [] : topEvidenceGlance(evidence, 1);
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
     societyId: property.kg_entity_refs?.society_entity_id,
@@ -76,9 +47,6 @@ export function LivingEvidenceTile({
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
   ].filter((part): part is string => part !== null);
 
-  const whyLine = isBrowse ? null : displayMatchReason(match?.reason, glances[0] || null);
-  const decisionLine = isBrowse ? null : (decisionRead || whyLine);
-  const proofChip = isBrowse ? null : tileProofChip(property, summary);
 
   const handleQuickView = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -130,12 +98,6 @@ export function LivingEvidenceTile({
               </span>
             ) : null}
           </div>
-          {decisionLine && (
-            <p className="catalog-card__why">{decisionLine}</p>
-          )}
-          {proofChip && (
-            <span className="catalog-card__proof-chip">{proofChip}</span>
-          )}
         </div>
       </Link>
     </article>
