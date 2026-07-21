@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   EvidenceMediaStrip,
   EvidenceSection,
@@ -7,7 +7,6 @@ import type {
 } from "../../lib/types.ts";
 import { constellationMeta, displaySourceType, sectionConstellation } from "../../lib/evidence.ts";
 import {
-  ChevronIcon,
   LinkIcon,
   IconForKind,
   IconForLabel,
@@ -18,6 +17,10 @@ type StackProps = {
   evidence: PropertyEvidenceResponse | undefined;
   excludeKinds?: string[];
 };
+
+function sectionKey(section: EvidenceSection): string {
+  return `${section.kind}-${section.title}`;
+}
 
 function itemSourceUrl(item: SourceItem): string | undefined {
   return item.source_url ?? item.attributions?.find((a) => a.source_url)?.source_url;
@@ -53,7 +56,6 @@ function compactValue(value: string): string {
   return `${trimmed.slice(0, 159).trimEnd()}...`;
 }
 
-/** A single fact row — renders only when it has a real value. */
 function FactRow({ item }: { item: SourceItem }) {
   const url = itemSourceUrl(item);
   const sourceLabel = displaySourceType(item.source_type);
@@ -160,14 +162,7 @@ function FactListBody({ facts }: { facts: SourceItem[] }) {
   );
 }
 
-function EvidenceFold({
-  section,
-  defaultOpen,
-}: {
-  section: EvidenceSection;
-  defaultOpen: boolean;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
+function useSectionContent(section: EvidenceSection) {
   const constellation = sectionConstellation(section);
   const meta = constellationMeta(constellation);
   const facts = section.items.filter(
@@ -179,65 +174,110 @@ function EvidenceFold({
     density: "standard",
     max_preview_items: 4,
   };
-
-  if (facts.length === 0 && media.length === 0 && !section.community_pulse) return null;
-
   const variant = presentation.variant;
   const FactBody = variant === "fact_grid" || variant === "risk_grid"
     ? FactGridBody
     : FactListBody;
 
-  return (
-    <section
-      id={`evidence-${section.kind}`}
-      className={`ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density} ${open ? "ev-fold--open" : ""}`}
-    >
-      <button type="button" className="ev-fold__head" onClick={() => setOpen((v) => !v)} aria-expanded={open}>
-        <span className="ev-fold__spine" aria-hidden="true" />
-        <span className="ev-fold__icon"><IconForKind kind={section.kind} size={18} /></span>
-        <span className="ev-fold__headings">
-          <span className="ev-fold__kicker">{meta.label}</span>
-          <span className="ev-fold__title">{section.title}</span>
-          <span className="ev-fold__read">
-            {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
-          </span>
-        </span>
-        <span className="ev-fold__chevron"><ChevronIcon size={18} /></span>
-      </button>
+  return { constellation, meta, facts, media, presentation, variant, FactBody };
+}
 
-      <div className="ev-fold__wrap">
-        <div className="ev-fold__inner">
-          {variant === "story" && section.community_pulse ? (
-            <CommunityPulseCard pulse={section.community_pulse} />
-          ) : (
-            <>
-              {section.community_pulse && (
-                <CommunityPulseCard pulse={section.community_pulse} />
-              )}
-              {(variant === "media_grid" || media.length > 0) && media.map((strip) => (
-                <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
-              ))}
-              {facts.length > 0 && <FactBody facts={facts} />}
-            </>
-          )}
-        </div>
-      </div>
-    </section>
+function EvidenceTile({
+  section,
+  active,
+  onSelect,
+}: {
+  section: EvidenceSection;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const { constellation, meta } = useSectionContent(section);
+
+  return (
+    <button
+      type="button"
+      className={`ev-tile ev-tile--${constellation} ${active ? "ev-tile--active" : ""}`}
+      onClick={onSelect}
+      aria-pressed={active}
+    >
+      <span className="ev-tile__spine" aria-hidden="true" />
+      <span className="ev-tile__icon"><IconForKind kind={section.kind} size={18} /></span>
+      <span className="ev-tile__headings">
+        <span className="ev-tile__kicker">{meta.label}</span>
+        <span className="ev-tile__title">{section.title}</span>
+        <span className="ev-tile__read">
+          {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
+        </span>
+      </span>
+    </button>
   );
 }
 
+function EvidenceDetailPanel({ section }: { section: EvidenceSection }) {
+  const { constellation, meta, facts, media, presentation, variant, FactBody } = useSectionContent(section);
+
+  return (
+    <div
+      id={`evidence-${section.kind}`}
+      className={`ev-detail ev-detail--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density}`}
+    >
+      <div className="ev-detail__head">
+        <span className="ev-detail__kicker">{meta.label}</span>
+        <h3 className="ev-detail__title">{section.title}</h3>
+        {(section.summary || section.subtitle) && (
+          <p className="ev-detail__lead">
+            {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
+          </p>
+        )}
+      </div>
+
+      <div className="ev-detail__body">
+        {variant === "story" && section.community_pulse ? (
+          <CommunityPulseCard pulse={section.community_pulse} />
+        ) : (
+          <>
+            {section.community_pulse && (
+              <CommunityPulseCard pulse={section.community_pulse} />
+            )}
+            {(variant === "media_grid" || media.length > 0) && media.map((strip) => (
+              <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
+            ))}
+            {facts.length > 0 && <FactBody facts={facts} />}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function defaultOpenKey(folds: EvidenceSection[]): string | null {
+  if (folds.length === 0) return null;
+  const rera = folds.find((section) => section.kind === "rera");
+  if (rera) return sectionKey(rera);
+  return sectionKey(folds[0]);
+}
+
+function hasRenderableContent(section: EvidenceSection): boolean {
+  const facts = section.items.filter(
+    (it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0),
+  );
+  const media = section.media?.filter((strip) => strip.frames.some((frame) => frame.image_url)) ?? [];
+  return facts.length > 0 || media.length > 0 || section.community_pulse != null;
+}
+
 export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
-  const sections = evidence?.sections ?? [];
   const excluded = new Set(excludeKinds);
 
-  const ordered = [...sections]
-    .filter((section) => !excluded.has(section.kind))
-    .sort((a, b) => a.priority - b.priority);
-  const folds = ordered.filter((s) =>
-    s.community_pulse != null
-    || s.items.some((it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0))
-      || (s.media?.some((strip) => strip.frames.some((frame) => frame.image_url)) ?? false),
-  );
+  const folds = useMemo(() => {
+    const sections = evidence?.sections ?? [];
+    return [...sections]
+      .filter((section) => !excluded.has(section.kind))
+      .sort((a, b) => a.priority - b.priority)
+      .filter(hasRenderableContent);
+  }, [evidence?.sections, excludeKinds]);
+
+  const [openKey, setOpenKey] = useState<string | null>(() => defaultOpenKey(folds));
+  const openSection = folds.find((section) => sectionKey(section) === openKey) ?? null;
 
   if (folds.length === 0) return null;
 
@@ -248,16 +288,26 @@ export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
         <h2>Property context</h2>
       </div>
 
-      <div className="evidence-stack__folds">
-        {folds.map((section, index) => (
-          <EvidenceFold
-            key={`${section.kind}-${section.title}`}
-            section={section}
-            defaultOpen={index === 0}
-          />
-        ))}
+      <div className="evidence-stack__tiles" role="tablist" aria-label="Property context topics">
+        {folds.map((section) => {
+          const key = sectionKey(section);
+          const active = openKey === key;
+          return (
+            <EvidenceTile
+              key={key}
+              section={section}
+              active={active}
+              onSelect={() => setOpenKey(active ? null : key)}
+            />
+          );
+        })}
       </div>
 
+      {openSection && (
+        <div className="evidence-stack__detail" role="tabpanel">
+          <EvidenceDetailPanel section={openSection} />
+        </div>
+      )}
     </section>
   );
 }

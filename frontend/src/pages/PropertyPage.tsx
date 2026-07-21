@@ -300,6 +300,7 @@ export function PropertyPage() {
           )}
 
           <EvidenceStack
+            key={id}
             evidence={data.evidence}
             excludeKinds={evidenceExcludeKinds}
           />
