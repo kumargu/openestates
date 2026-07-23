@@ -25,7 +25,7 @@ pub struct AppState {
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,
-    /// Product-facing discovery copy and shelf metadata loaded from data/product.
+    /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
     pub discovery_config: DiscoveryConfig,
     /// The knowledge graph — the brain that learns from every search.
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,

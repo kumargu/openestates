@@ -396,6 +396,9 @@ export type EntityContextResponse = {
   summary_paragraph: string;
   clauses: EntityContextClause[];
   category_groups?: EntityContextCategoryGroup[];
+  source_type?: string | null;
+  confidence?: number | null;
+  learned_at?: string | null;
 };
 
 export type CommunityPulseQuote = {
@@ -596,6 +599,7 @@ export type PreferenceSignal = {
   raw_text: string;
   polarity: "positive" | "negative";
   expanded_keys: string[];
+  gap_keys?: string[];
   weight: number;
 };
 

@@ -1,6 +1,6 @@
 # Next Plan — Phases 6–10 (after 0–5 complete)
 
-> **Status:** Phases 0–5 committed (`ab9e302`). This doc is the roadmap + Phase 6 implementation brief.  
+> **Status:** Phases 0–5 committed (`ab9e302`). Phase 6 complete — Reddit concern pipeline operational with POC import, compliance audit, and enrichment gap flywheel stub.
 > **Parent:** [`dag_execution_plan.md`](./dag_execution_plan.md)
 
 ---
@@ -14,6 +14,7 @@
 | 3 | ✅ Legacy seed → sourced facts; no fake score defaults |
 | 4 | ✅ Property/area nodes, serving edges, `GraphIndex`, legacy search scoring deleted |
 | 5 | ✅ Config-driven evidence UI; buyer-facing scores stripped; brief/pulse dedup |
+| 6 | ✅ Reddit concern pipeline — taxonomy keys, POC import, resolver tests, compliance audit |
 
 **Foundation in place:** config owns semantics, bundle owns instances, Rust engine is thin, graph index exists (no summary API yet).
 
@@ -22,9 +23,7 @@
 ## Recommended sequence
 
 ```text
-Phase 6   Reddit concern pipeline (data flywheel, issue #2)     ← START HERE
-    ↓
-Phase 8′  Discovery + search tiles + drill-down (UI remnants)  (parallel OK)
+Phase 8′  Discovery + search tiles + drill-down (UI remnants)  ← START HERE
     ↓
 Phase 9a  Road/place enrichment + visuals → lake                (unblocks graph copy)
     ↓
@@ -48,7 +47,7 @@ Phase 9b  New sources, S3 cutover, scale crawl                (ongoing)
 | Task | File |
 |------|------|
 | Add `source_adapters/reddit_theme.json` | max confidence 0.45, signal_key → `fact_key` map from `concern_taxonomy.json` |
-| Register in `dag/manifest.json` `includes` | alongside `legacy_seed.json` |
+| Register in `dag/manifest.json` `includes` | alongside the other real source adapters |
 | Verify `crawl_policies/reddit_threads_daily.json` | disabled by default; skip rules documented |
 | Cap in `resolution_policies.json` | `RedditTheme` loses to Google/RERA in resolver tests |
 
@@ -76,7 +75,7 @@ Phase 9b  New sources, S3 cutover, scale crawl                (ongoing)
 - [x] No Reddit comment bodies in lake Parquet (silver facts use derived values only; raw text in `raw/source=reddit/`)
 - [x] Reddit facts use `concern_taxonomy` `fact_key`s only
 - [x] Resolver test: RedditTheme fact loses to Google/RERA on same key
-- [ ] `cargo test` + `eval_search.py` no regression
+- [x] `cargo test` + `eval_search.py` no regression (run with Python 3.10+ and live backend)
 - [x] Crawl policy `enabled: false` until isolated worker — empty inputs path tested
 
 ### 6.6 Out of scope

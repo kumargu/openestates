@@ -38,6 +38,9 @@ pub struct LivabilityBriefBlock {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LivabilityBrief {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub summary_paragraph: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<LivabilityBriefBlock>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub lifecycle_flag: Option<String>,
@@ -128,8 +131,16 @@ pub fn compose_livability_brief(input: &LivabilityBriefInput<'_>) -> Option<Liva
     let mined = mine_theme_hits(input.evidence_records);
     let mut lens_themes = group_hits_by_lens(&mined, input.structured_facts);
 
-    merge_community_themes(&mut lens_themes, input.community_positives, LivabilityLens::Positive);
-    merge_community_themes(&mut lens_themes, input.community_concerns, LivabilityLens::Risk);
+    merge_community_themes(
+        &mut lens_themes,
+        input.community_positives,
+        LivabilityLens::Positive,
+    );
+    merge_community_themes(
+        &mut lens_themes,
+        input.community_concerns,
+        LivabilityLens::Risk,
+    );
 
     let lifecycle_flag = derive_lifecycle_flag(input);
     let has_signal = !lens_themes.values().any(|themes| !themes.is_empty())
@@ -141,7 +152,8 @@ pub fn compose_livability_brief(input: &LivabilityBriefInput<'_>) -> Option<Liva
     }
 
     let mut blocks = Vec::new();
-    if let Some(block) = compose_operating_block(input, lens_themes.get(&LivabilityLens::Operating)) {
+    if let Some(block) = compose_operating_block(input, lens_themes.get(&LivabilityLens::Operating))
+    {
         blocks.push(block);
     }
     if let Some(block) = compose_risk_block(input, lens_themes.get(&LivabilityLens::Risk)) {
@@ -165,6 +177,7 @@ pub fn compose_livability_brief(input: &LivabilityBriefInput<'_>) -> Option<Liva
     };
 
     Some(LivabilityBrief {
+        summary_paragraph: None,
         blocks,
         lifecycle_flag,
         confidence_label,
@@ -333,12 +346,13 @@ fn compose_operating_block(
         ),
     };
 
-    let body = if themes.is_empty() {
+    let headline_themes = cap_block_themes(themes.clone());
+    let body = if headline_themes.is_empty() {
         "Verify maintenance charges, lift uptime, water source, tanker dependence, STP handling, waste management, parking pressure, and how well the association responds to complaints on your visit.".to_string()
     } else {
         format!(
             "Recurring resident signals point to {}.",
-            join_natural_list(&themes)
+            join_natural_list(&headline_themes)
         )
     };
 
@@ -397,10 +411,11 @@ fn compose_positive_block(
         return None;
     }
 
+    let headline_themes = cap_block_themes(themes.clone());
     let paragraph = format!(
-        "Positive signals to look for at {} include {}. Societies with mature resident communities and predictable monthly expenses tend to feel safer for both end-use and rental investors.",
-        input.society_name,
-        join_natural_list(&themes)
+        "Residents repeatedly praise {} at {}. Mature communities with predictable monthly costs tend to feel safer for end-use and rental investors.",
+        join_natural_list(&headline_themes),
+        input.society_name
     );
 
     Some(LivabilityBriefBlock {
@@ -580,17 +595,17 @@ mod tests {
 
         let brief = compose_livability_brief(&input).expect("brief should exist");
         assert!(brief.blocks.len() >= 3);
-        assert!(brief
-            .blocks
-            .iter()
-            .any(|block| block.lens == "operating"));
+        assert!(brief.blocks.iter().any(|block| block.lens == "operating"));
         assert!(brief.blocks.iter().any(|block| block.lens == "risk"));
         assert!(brief.blocks.iter().any(|block| block.lens == "positive"));
         assert!(brief
             .lifecycle_flag
             .as_deref()
             .is_some_and(|flag| flag.contains("livability")));
-        assert!(!brief.blocks.iter().any(|block| block.paragraph.contains('"')));
+        assert!(!brief
+            .blocks
+            .iter()
+            .any(|block| block.paragraph.contains('"')));
     }
 
     #[test]

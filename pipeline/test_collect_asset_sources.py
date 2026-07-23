@@ -21,6 +21,10 @@ from pipeline.skills.fetch_google_review_links import (
     FetchGoogleReviewLinksSkill,
     fetch_google_places_nearby_text,
 )
+from pipeline.skills.generated_context_summary import (
+    detect_openai_compatible_provider,
+    select_summary_model,
+)
 from pipeline.skills.search_reddit import (
     RedditSourceBlocked,
     RedditSourceInvalidResponse,
@@ -29,6 +33,38 @@ from pipeline.skills.search_reddit import (
     fetch_reddit_threads_with_retry,
     threads_to_skill_result,
 )
+
+
+class SummaryProviderFixture:
+    def __init__(self, provider="openai-compatible"):
+        self.name = provider
+        self.model = "summary-test-model"
+
+    def generate(self, prompt, max_tokens, temperature):
+        if "Property: " in prompt:
+            property_name = prompt.split("Property: ", 1)[1].splitlines()[0]
+        else:
+            property_name = "Example Home"
+        area = "Bengaluru"
+        evidence = prompt.split("Evidence:", 1)[-1]
+        if "area " in evidence:
+            area = evidence.split("area ", 1)[1].split(";", 1)[0].split(",", 1)[0]
+        summary = (
+            f"If you are looking at {property_name}, treat it as a practical option in {area} "
+            "where the useful evidence is about road context, approach visibility, and daily routine "
+            "fit. The Street View frames give you a grounded way to inspect the access around the "
+            "gate before visiting. That helps when you are checking whether the basic project facts "
+            "match your weekday routine and weekend errands. Access still has tradeoffs, so verify "
+            "the exact road condition, available route, and unit before shortlisting. The summary "
+            "stays with the supplied evidence and avoids unsupported claims."
+        )
+        return SimpleNamespace(
+            provider=self.name,
+            model=self.model,
+            summary=summary,
+            load_ms=0,
+            generation_ms=1,
+        )
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
@@ -45,6 +81,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     "area": "Whitefield",
                     "city": "Bengaluru",
                     "project_key": "PRM-RAINTREE",
+                    "latitude": 12.9698,
+                    "longitude": 77.75,
                 }
             ],
         }
@@ -103,9 +141,24 @@ class CollectAssetSourcesTest(unittest.TestCase):
         ]
         self.assertEqual(
             {fact["fact_key"] for fact in profile_facts},
-            {"title", "area", "city", "source_scan_selected"},
+            {
+                "title",
+                "area",
+                "city",
+                "geo.latitude",
+                "geo.longitude",
+                "source_scan_selected",
+            },
         )
-        self.assertEqual(len(output["detail_fact_annotations"]), 6)
+        latitude_fact = next(
+            fact for fact in profile_facts if fact["fact_key"] == "geo.latitude"
+        )
+        self.assertEqual(latitude_fact["value_type"], "numeric")
+        self.assertEqual(
+            json.loads(latitude_fact["value_json"]),
+            {"type": "Numeric", "data": 12.9698},
+        )
+        self.assertEqual(len(output["detail_fact_annotations"]), 8)
         self.assertEqual(
             output["source_watermarks"][1],
             {
@@ -283,8 +336,151 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         self.assertEqual(output["reddit_threads_daily"]["records"], [])
         self.assertEqual(output["reddit_threads_daily"]["subreddit"], "BangaloreRealEstates")
-        self.assertEqual(output["reddit_resident_facts"]["facts"], [])
+        poc_facts = output["reddit_resident_facts"]["facts"]
+        self.assertGreaterEqual(len(poc_facts), 10)
+        self.assertEqual(poc_facts[0]["source_type"], "RedditTheme")
+        self.assertEqual(
+            json.loads(poc_facts[0]["value_json"])["data"],
+            "mentioned",
+        )
         self.assertNotIn("source_failures", output)
+
+    def test_generated_context_summaries_are_generated_by_configured_provider(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-20"]]},
+            "planned_at": "2026-07-20T00:00:00Z",
+            "requested_assets": ["generated_context_summaries"],
+        }
+        with patch(
+            "pipeline.skills.generated_context_summary.build_provider_from_env",
+            return_value=SummaryProviderFixture(),
+        ):
+            output = collect_asset_sources(request)
+
+        summaries = output["generated_context_summaries"]
+        self.assertEqual(summaries["source"], "local_summary")
+        self.assertEqual(summaries["snapshot_date"], "2026-07-20")
+        self.assertEqual(len(summaries["facts"]), 14)
+        metadata = [
+            json.loads(json.loads(fact["value_json"])["data"])
+            for fact in summaries["facts"]
+            if fact["fact_key"] == "generated_context_summary_metadata"
+        ]
+        self.assertEqual(len(metadata), 7)
+        self.assertTrue(all(row["provider"] == "openai-compatible" for row in metadata))
+        self.assertTrue(all(row["quality_status"] == "passed" for row in metadata))
+        self.assertNotIn("source_failures", output)
+
+    def test_generated_context_summaries_are_scoped_to_requested_entities(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-20"]]},
+            "planned_at": "2026-07-20T00:00:00Z",
+            "requested_assets": ["generated_context_summaries"],
+            "source_entities": [
+                {
+                    "entity_id": "society:prestige-waterford",
+                    "name": "Prestige Waterford",
+                    "area": "Pattandur Agrahara",
+                    "city": "Bengaluru",
+                },
+                {
+                    "entity_id": "society:brigade-woods",
+                    "name": "Brigade Woods",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                },
+            ],
+        }
+        with patch(
+            "pipeline.skills.generated_context_summary.build_provider_from_env",
+            return_value=SummaryProviderFixture(),
+        ):
+            output = collect_asset_sources(request)
+
+        summaries = output["generated_context_summaries"]
+        self.assertEqual(len(summaries["facts"]), 4)
+        self.assertEqual(
+            {
+                fact["entity_id"]
+                for fact in summaries["facts"]
+                if fact["fact_key"] == "generated_context_summary"
+            },
+            {
+                "society:prestige-waterford",
+                "society:brigade-woods",
+            },
+        )
+        self.assertNotIn("source_failures", output)
+
+    def test_generated_context_summaries_reject_mock_provider(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-20"]]},
+            "planned_at": "2026-07-20T00:00:00Z",
+            "requested_assets": ["generated_context_summaries"],
+        }
+        with patch(
+            "pipeline.skills.generated_context_summary.build_provider_from_env",
+            return_value=SummaryProviderFixture(provider="mock"),
+        ):
+            output = collect_asset_sources(request)
+
+        self.assertIn("source_failures", output)
+        self.assertIn("generated_context_summaries", output["source_failures"])
+
+    def test_generated_context_summaries_require_configured_provider(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-20"]]},
+            "planned_at": "2026-07-20T00:00:00Z",
+            "requested_assets": ["generated_context_summaries"],
+        }
+        with patch.dict(
+            "os.environ",
+            {"OPENESTATES_SUMMARY_AUTODETECT": "0"},
+            clear=True,
+        ):
+            output = collect_asset_sources(request)
+
+        self.assertIn("source_failures", output)
+        self.assertIn("generated_context_summaries", output["source_failures"])
+        self.assertNotIn("generated_context_summaries", output)
+
+    def test_summary_provider_model_selection_uses_configured_preference(self):
+        self.assertEqual(
+            select_summary_model(
+                ["tiny-embed", "qwen2.5:1.5b-instruct", "llama3.2:3b"],
+                ["llama3.2:3b", "qwen2.5:1.5b-instruct"],
+                None,
+            ),
+            "llama3.2:3b",
+        )
+        self.assertEqual(
+            select_summary_model(["tiny-embed", "gemma3:1b"], [], None),
+            "gemma3:1b",
+        )
+
+    def test_summary_provider_autodetects_configured_local_endpoint(self):
+        config = {
+            "auto_detect": True,
+            "probe_timeout_seconds": 0.1,
+            "preferred_model_order": ["llama3.2:3b"],
+            "openai_compatible_endpoints": [
+                {
+                    "id": "ollama",
+                    "base_url": "http://127.0.0.1:11434/v1",
+                    "model_list_url": "http://127.0.0.1:11434/api/tags",
+                    "model_list_shape": "ollama_tags",
+                }
+            ],
+        }
+        with patch(
+            "pipeline.skills.generated_context_summary.fetch_json",
+            return_value={"models": [{"name": "llama3.2:3b"}]},
+        ):
+            provider = detect_openai_compatible_provider(config, None, None)
+
+        self.assertIsNotNone(provider)
+        self.assertEqual(provider.name, "openai-compatible")
+        self.assertEqual(provider.model, "llama3.2:3b")
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -502,6 +698,41 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(records[0]["storage_policy"], "link_only")
         self.assertNotIn("confidence", records[0])
 
+    def test_external_image_collection_uses_magicbricks_project_page_fallback(self):
+        html = """
+            <html>
+              <img data-src="https://img.staticmb.com/mbimages/project/example-green-tower.jpg" alt="Example Green tower">
+            </html>
+        """
+        with patch("pipeline.sources.external_images.fetch_html", return_value=html) as fetch:
+            output = collect_asset_sources(
+                {
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                            "city": "Bengaluru",
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        fetch.assert_called_once_with(
+            "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs"
+        )
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["source_name"], "MagicBricks")
+        self.assertEqual(
+            records[0]["source_page_url"],
+            "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+        )
+        self.assertEqual(records[0]["image_kind"], "exterior")
+
     def test_stale_google_collection_forces_skill_refresh(self):
         calls = []
         result = SkillResult(
@@ -695,6 +926,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     "place_id": "{}-1".format(category),
                     "place_url": "https://maps.google.com/{}".format(category),
                     "distance_km": 1.2,
+                    "latitude": 12.972,
+                    "longitude": 77.596,
                     "rating": 4.2,
                     "review_count": 42,
                     "primary_type": category,
@@ -707,7 +940,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
 
         self.assertEqual(output["snapshot_date"], "2026-07-14")
-        self.assertEqual(len(output["records"]), 6)
+        self.assertEqual(len(output["records"]), 5)
         school = output["records"][0]
         self.assertEqual(school["entity_id"], "society:rera-example-green")
         self.assertEqual(school["project_key"], "PRM-EXAMPLE-GREEN")
@@ -715,6 +948,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(school["category"], "school")
         self.assertEqual(school["place_name"], "Example school")
         self.assertEqual(school["distance_km"], 1.2)
+        self.assertEqual(school["latitude"], 12.972)
+        self.assertEqual(school["longitude"], 77.596)
         self.assertEqual(school["primary_type"], "school")
         self.assertEqual(school["place_types"], ["school"])
         self.assertEqual(school["fetch_source"], "fixture_nearby")
@@ -773,14 +1008,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "types": ["gym"],
                     }
                 )
-            elif query.startswith("restaurant cafe near"):
-                payload["places"][0].update(
-                    {
-                        "displayName": {"text": "Example Cafe"},
-                        "primaryType": "cafe",
-                        "types": ["cafe", "restaurant"],
-                    }
-                )
             elif query.startswith("tech park office near"):
                 payload["places"][0].update(
                     {
@@ -812,7 +1039,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     },
                 )
 
-        self.assertEqual(len(requests), 7)
+        self.assertEqual(len(requests), 6)
         school_request = json.loads(requests[1].data.decode("utf-8"))
         self.assertEqual(
             school_request["locationBias"]["circle"]["center"]["latitude"], 12.9716
@@ -825,12 +1052,19 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(metro_request["locationBias"]["circle"]["radius"], 6000)
         fitness_request = json.loads(requests[4].data.decode("utf-8"))
         self.assertEqual(fitness_request["locationBias"]["circle"]["radius"], 3500)
-        self.assertEqual(len(output["records"]), 6)
+        tech_park_request = json.loads(requests[5].data.decode("utf-8"))
+        self.assertEqual(
+            tech_park_request["locationBias"]["circle"]["radius"],
+            15000,
+        )
+        self.assertEqual(len(output["records"]), 5)
         school = output["records"][0]
         self.assertEqual(school["query"], "school near Example Green Whitefield Bengaluru")
         self.assertEqual(school["place_name"], "Example School")
         self.assertEqual(school["place_id"], "places/school")
         self.assertEqual(school["distance_km"], 0.0)
+        self.assertEqual(school["latitude"], 12.9716)
+        self.assertEqual(school["longitude"], 77.5946)
         self.assertEqual(school["rating"], 4.1)
         self.assertEqual(school["review_count"], 120)
         self.assertEqual(school["primary_type"], "school")
@@ -876,6 +1110,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["place_name"], "Example Gym")
+        self.assertEqual(records[0]["latitude"], 12.9730)
+        self.assertEqual(records[0]["longitude"], 77.5946)
 
     def test_google_nearby_does_not_collect_bus_stop_as_metro(self):
         nearby = {

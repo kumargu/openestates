@@ -123,6 +123,10 @@ async fn serving_bundle_writes_parquet_manifest_and_hydratable_tantivy_index() {
     let recall = TantivyRecallIndex::open(hydrated.path()).unwrap();
     let hits = recall.search("whitefield greenery trees", 5).unwrap();
     assert_eq!(hits[0].entity_id, "society:green-acre-whitefield");
+    assert_eq!(hits[0].entity_type, "society");
+    assert_eq!(hits[0].name, "Green Acre Whitefield");
+    assert!(hits[0].matched_fields.iter().any(|field| field == "name"));
+    assert!(hits[0].matched_fields.iter().any(|field| field == "body"));
 }
 
 #[test]

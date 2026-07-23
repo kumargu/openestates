@@ -61,6 +61,7 @@ pub async fn discovery_home(State(state): State<Arc<AppState>>) -> Json<Discover
 
     let candidates: Vec<DiscoveryCandidate> = properties
         .iter()
+        .filter(|property| property.is_listable())
         .map(|property| {
             let card =
                 enrich_property_card_with_sellers(property, &state.societies, &graph, &sellers);

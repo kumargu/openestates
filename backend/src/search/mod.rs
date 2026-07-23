@@ -1,12 +1,24 @@
+pub mod engine;
+pub mod geo;
 pub mod index;
 pub mod intent;
+pub mod resolver;
 pub mod schema;
 pub mod semantic;
 pub mod text;
 
+pub use engine::{
+    CandidateScore, SearchDiagnostics, SearchEngine, SearchLayerTiming, SearchRecallDiagnostics,
+    SearchRelaxation,
+};
 pub use index::SearchIndex;
 pub use intent::SearchIntent;
-pub use semantic::{HashSemanticEmbedder, SemanticEmbedder, SemanticSearchIndex};
+#[cfg(feature = "fastembed")]
+pub use semantic::FastEmbedSemanticEmbedder;
+pub use semantic::{
+    semantic_embedding_documents_from_serving_entities, HashSemanticEmbedder, SemanticEmbedder,
+    SemanticEmbeddingDocument, SemanticSearchIndex,
+};
 pub use text::TextSearch;
 
 use serde::Serialize;
@@ -132,6 +144,12 @@ pub struct SearchResponse {
     /// Knowledge graph provenance for the results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_context: Option<KnowledgeContext>,
+    /// Internal search diagnostics used by benchmarks and milestone validation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_diagnostics: Option<SearchDiagnostics>,
+    /// Deterministic relaxations applied after exact constraints produced no results.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relaxations: Vec<SearchRelaxation>,
     /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_status: Option<String>,

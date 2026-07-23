@@ -1115,6 +1115,20 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             {"type": "Text", "data": f"{detail.latitude},{detail.longitude}"},
             "Location: {value}",
         )
+        add_fact(
+            "geo.latitude",
+            {"type": "Numeric", "data": float(detail.latitude)},
+            "Latitude: {value}",
+            ["coordinates", "location", "latitude"],
+            {"direction": "LowerIsBetter", "weight": 0.0},
+        )
+        add_fact(
+            "geo.longitude",
+            {"type": "Numeric", "data": float(detail.longitude)},
+            "Longitude: {value}",
+            ["coordinates", "location", "longitude"],
+            {"direction": "LowerIsBetter", "weight": 0.0},
+        )
 
     # --- Portal URL ---
     add_fact(

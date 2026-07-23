@@ -16,6 +16,8 @@ use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Seller, Society};
+#[cfg(feature = "fastembed")]
+use crate::search::FastEmbedSemanticEmbedder;
 use crate::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use crate::serving::{
     LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
@@ -65,9 +67,9 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         properties.len()
     );
 
-    let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
+    let semantic_embedder = semantic_embedder_from_env();
     let semantic_index =
-        SemanticSearchIndex::from_serving_entities(&bundle.entities, semantic_embedder.as_ref());
+        semantic_index_from_bundle(bundle, semantic_embedder.as_ref(), &properties);
     println!(
         "Built semantic search index with {} documents using {}",
         semantic_index.len(),
@@ -115,6 +117,112 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         registration_rate_limiter: RwLock::new((Instant::now(), 0)),
         publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
+}
+
+fn semantic_embedder_from_env() -> Arc<dyn SemanticEmbedder> {
+    match std::env::var("OPENESTATES_SEMANTIC_EMBEDDER") {
+        Ok(value) if value.eq_ignore_ascii_case("fastembed") => fastembed_semantic_embedder(),
+        _ => Arc::new(HashSemanticEmbedder::default()),
+    }
+}
+
+#[cfg(feature = "fastembed")]
+fn fastembed_semantic_embedder() -> Arc<dyn SemanticEmbedder> {
+    match FastEmbedSemanticEmbedder::try_new_all_minilm_l6_v2() {
+        Ok(embedder) => Arc::new(embedder),
+        Err(err) => {
+            eprintln!("WARN: fastembed semantic embedder unavailable; falling back to hash: {err}");
+            Arc::new(HashSemanticEmbedder::default())
+        }
+    }
+}
+
+fn semantic_index_from_bundle(
+    bundle: &LoadedServingBundle,
+    embedder: &dyn SemanticEmbedder,
+    properties: &[Property],
+) -> SemanticSearchIndex {
+    if !bundle.semantic_embeddings.is_empty() {
+        let index =
+            SemanticSearchIndex::from_embedding_records(&bundle.semantic_embeddings, embedder);
+        if !index.is_empty() {
+            return index;
+        }
+        eprintln!(
+            "WARN: semantic embeddings exist but none match {}; semantic recall disabled for this model",
+            embedder.model_id()
+        );
+        return SemanticSearchIndex::default();
+    }
+
+    if embedder.model_id().starts_with("fastembed-") {
+        eprintln!(
+            "WARN: no precomputed semantic embeddings found for {}; semantic recall disabled instead of embedding corpus at API startup",
+            embedder.model_id()
+        );
+        return SemanticSearchIndex::default();
+    }
+
+    let semantic_entities = semantic_serving_entities_for_bundle(bundle, properties);
+    SemanticSearchIndex::from_serving_entities(&semantic_entities, embedder)
+}
+
+#[cfg(not(feature = "fastembed"))]
+fn fastembed_semantic_embedder() -> Arc<dyn SemanticEmbedder> {
+    eprintln!(
+        "WARN: OPENESTATES_SEMANTIC_EMBEDDER=fastembed ignored because the backend was built without the `fastembed` feature"
+    );
+    Arc::new(HashSemanticEmbedder::default())
+}
+
+pub fn semantic_serving_entities_for_bundle(
+    bundle: &LoadedServingBundle,
+    properties: &[Property],
+) -> Vec<ServingEntityRecord> {
+    semantic_serving_entities(&bundle.entities, &bundle.fact_index, properties)
+}
+
+fn semantic_serving_entities(
+    entities: &[ServingEntityRecord],
+    fact_index: &ServingFactIndex,
+    properties: &[Property],
+) -> Vec<ServingEntityRecord> {
+    let mut semantic_entities = entities.to_vec();
+    let existing = entities
+        .iter()
+        .map(|entity| entity.entity_id.as_str())
+        .collect::<BTreeSet<_>>();
+    let property_societies = properties
+        .iter()
+        .map(|property| society_entity_id(&property.society_id))
+        .collect::<BTreeSet<_>>();
+
+    for (entity_id, rows) in fact_index.rows() {
+        if !entity_id.starts_with("society:")
+            || existing.contains(entity_id)
+            || !property_societies.contains(entity_id)
+        {
+            continue;
+        }
+        let name = latest_text(Some(rows), "title").unwrap_or_else(|| {
+            title_case_slug(strip_entity_prefix(entity_id, "society:").as_str())
+        });
+        let fact_text = rows
+            .facts
+            .iter()
+            .map(|fact| format!("{} {}", fact.fact_key, fact_to_text(&fact.value)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        semantic_entities.push(ServingEntityRecord {
+            entity_id: entity_id.to_string(),
+            entity_type: "society".to_string(),
+            name: name.clone(),
+            root_source: None,
+            searchable_text: format!("{entity_id} society {name} {fact_text}"),
+        });
+    }
+
+    semantic_entities
 }
 
 pub async fn load_serving_bundle(
@@ -194,11 +302,14 @@ pub fn properties_from_serving_records(
         .filter(|entity| entity.entity_type == "property")
         .map(|entity| property_from_serving_entity(entity, fact_index, bundle_version))
         .collect::<Vec<_>>();
-    if properties.is_empty() {
-        properties =
-            representative_properties_from_serving_societies(entities, fact_index, bundle_version);
-    }
+    properties.extend(representative_properties_from_serving_societies(
+        entities,
+        fact_index,
+        bundle_version,
+    ));
+    properties.retain(|property| property.is_listable());
     properties.sort_by(|left, right| left.id.cmp(&right.id));
+    properties.dedup_by(|left, right| left.id == right.id);
     properties
 }
 
@@ -215,8 +326,7 @@ fn representative_properties_from_serving_societies(
     fact_index
         .rows()
         .filter(|(entity_id, rows)| {
-            entity_id.starts_with("society:")
-                && latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
+            entity_id.starts_with("society:") && has_representative_property_signal(rows)
         })
         .flat_map(|(entity_id, rows)| {
             let entity = entities_by_id.get(entity_id).copied();
@@ -234,6 +344,16 @@ fn representative_properties_from_serving_societies(
                 .collect::<Vec<_>>()
         })
         .collect()
+}
+
+fn has_representative_property_signal(rows: &ServingEntityFactRows) -> bool {
+    latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
+        || latest_numeric(Some(rows), "market_starting_price_inr")
+            .is_some_and(|price| price.is_finite() && price > 0.0)
+        || rows
+            .facts
+            .iter()
+            .any(|fact| bhk_from_serving_fact_key(&fact.fact_key).is_some())
 }
 
 fn representative_property_from_serving_society(
@@ -1624,6 +1744,12 @@ mod tests {
                     FactValue::Text("Whitefield".to_string()),
                     0.9,
                 ),
+                serving_fact(
+                    "property:discovered-svamitva-soul-spring-3bhk",
+                    "price",
+                    FactValue::Numeric(18_000_000.0),
+                    0.9,
+                ),
             ],
             Vec::new(),
         );
@@ -1633,6 +1759,170 @@ mod tests {
         let property = &properties[0];
         assert_eq!(property.bhk, 3);
         assert_eq!(property.area, "Whitefield");
+    }
+
+    #[test]
+    fn serving_society_market_price_creates_representative_property_without_source_scan() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:prestige-elm-park".to_string(),
+            entity_type: "society".to_string(),
+            name: "Prestige Elm Park".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:prestige-elm-park",
+                    "rera_registered",
+                    FactValue::Bool(true),
+                    1.0,
+                ),
+                serving_fact(
+                    "society:prestige-elm-park",
+                    "market_starting_price_inr",
+                    FactValue::Numeric(12_500_000.0),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:prestige-elm-park",
+                    "market_project_status",
+                    FactValue::Text("New Launch".to_string()),
+                    0.95,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(properties.len(), 1);
+        let property = &properties[0];
+        assert_eq!(property.id, "discovered-prestige-elm-park-3bhk");
+        assert_eq!(property.price, 12_500_000);
+        assert_eq!(property.possession_status, "New Launch");
+        assert!(property
+            .transparency_tags
+            .iter()
+            .any(|tag| tag == "RERA verified"));
+    }
+
+    #[test]
+    fn serving_direct_properties_do_not_hide_market_backed_societies() {
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "property:discovered-prestige-waterford-3bhk".to_string(),
+                entity_type: "property".to_string(),
+                name: "3 BHK in Prestige Waterford".to_string(),
+                root_source: Some("external_listing".to_string()),
+                searchable_text: "3 BHK in Prestige Waterford".to_string(),
+            },
+            ServingEntityRecord {
+                entity_id: "society:prestige-elm-park".to_string(),
+                entity_type: "society".to_string(),
+                name: "Prestige Elm Park".to_string(),
+                root_source: Some("builder_official".to_string()),
+                searchable_text: "Prestige Elm Park".to_string(),
+            },
+        ];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "property:discovered-prestige-waterford-3bhk",
+                    "price",
+                    FactValue::Numeric(24_000_000.0),
+                    0.9,
+                ),
+                serving_fact(
+                    "society:prestige-elm-park",
+                    "market_starting_price_inr",
+                    FactValue::Numeric(12_500_000.0),
+                    0.95,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let ids = properties
+            .iter()
+            .map(|property| property.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(properties.len(), 2);
+        assert!(ids.contains(&"discovered-prestige-waterford-3bhk"));
+        assert!(ids.contains(&"discovered-prestige-elm-park-3bhk"));
+    }
+
+    #[test]
+    fn serving_representative_properties_are_deduped_by_runtime_id() {
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "society:prestige-elm-park".to_string(),
+                entity_type: "society".to_string(),
+                name: "Prestige Elm Park".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+            ServingEntityRecord {
+                entity_id: "society:rera-elm-park-alias".to_string(),
+                entity_type: "society".to_string(),
+                name: "Prestige Elm Park".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+        ];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:prestige-elm-park",
+                    "market_starting_price_inr",
+                    FactValue::Numeric(12_500_000.0),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:rera-elm-park-alias",
+                    "market_starting_price_inr",
+                    FactValue::Numeric(12_500_000.0),
+                    0.95,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert_eq!(
+            properties
+                .iter()
+                .filter(|property| property.id == "discovered-prestige-elm-park-3bhk")
+                .count(),
+            1
+        );
+    }
+
+    #[test]
+    fn serving_society_without_price_signal_stays_out_of_runtime_catalog() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:rera-only-project".to_string(),
+            entity_type: "society".to_string(),
+            name: "RERA Only Project".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "society:rera-only-project",
+                "rera_registered",
+                FactValue::Bool(true),
+                1.0,
+            )],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert!(
+            properties.is_empty(),
+            "RERA-only projects without pricing should not become listable homes"
+        );
     }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
@@ -2009,6 +2299,88 @@ mod tests {
         assert_eq!(
             latest_text(Some(rows), "operating.tanker_dependence"),
             Some("high".to_string())
+        );
+    }
+
+    #[test]
+    fn serving_properties_without_price_are_excluded_from_runtime_catalog() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "property:discovered-prestige-lakeside-habitat-3bhk".to_string(),
+            entity_type: "property".to_string(),
+            name: "3 BHK in Prestige Lakeside Habitat".to_string(),
+            root_source: Some("discovered".to_string()),
+            searchable_text: "3 BHK in Prestige Lakeside Habitat".to_string(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "property:discovered-prestige-lakeside-habitat-3bhk",
+                "title",
+                FactValue::Text("3 BHK in Prestige Lakeside Habitat".to_string()),
+                0.8,
+            )],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        assert!(
+            properties.is_empty(),
+            "zero-price homes must not enter the catalog"
+        );
+    }
+
+    #[test]
+    fn semantic_entities_include_fact_only_societies_for_recall() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "property:discovered-prestige-waterford-3bhk".to_string(),
+            entity_type: "property".to_string(),
+            name: "3 BHK in Prestige Waterford".to_string(),
+            root_source: Some("generated".to_string()),
+            searchable_text: "3 BHK in Prestige Waterford".to_string(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "property:discovered-prestige-waterford-3bhk",
+                    "price",
+                    FactValue::Numeric(24_000_000.0),
+                    0.9,
+                ),
+                serving_fact(
+                    "society:prestige-waterford",
+                    "title",
+                    FactValue::Text("Prestige Waterford".to_string()),
+                    0.9,
+                ),
+                serving_fact(
+                    "society:prestige-waterford",
+                    "nearby_hospitals",
+                    FactValue::Text(
+                        "Manipal Hospital Whitefield (2.0 km, strong parent healthcare access)"
+                            .to_string(),
+                    ),
+                    0.82,
+                ),
+            ],
+            vec![],
+        );
+        let properties = properties_from_serving_records(&entities, &fact_index, "test");
+        let semantic_entities = semantic_serving_entities(&entities, &fact_index, &properties);
+        let embedder = HashSemanticEmbedder::default();
+        let semantic_index =
+            SemanticSearchIndex::from_serving_entities(&semantic_entities, &embedder);
+        let search_index = SearchIndex::build(&properties);
+        let hits = semantic_index.search("peaceful home for parents near hospital", &embedder, 16);
+        let scores = search_index.property_scores_for_semantic_hits(&hits);
+
+        assert!(
+            semantic_entities
+                .iter()
+                .any(|entity| entity.entity_id == "society:prestige-waterford"),
+            "fact-only society should be added to semantic documents"
+        );
+        assert!(
+            scores.contains_key("discovered-prestige-waterford-3bhk"),
+            "semantic society hit should map back to the Waterford property: {scores:?}"
         );
     }
 }

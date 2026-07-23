@@ -37,6 +37,8 @@
   position: relative;
   isolation: isolate;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   color: var(--plan-ink);
   background:
     radial-gradient(ellipse 88% 72% at 50% 34%, transparent 60%, rgba(60, 42, 28, 0.04) 100%),
@@ -139,7 +141,7 @@
 }
 
 .home-plan-header,
-.home-plan-main {
+.home-plan-body {
   position: relative;
   z-index: 1;
 }
@@ -201,15 +203,126 @@
   color: var(--plan-brand);
 }
 
+/* ── Body: left rail + main stage ───────────────────────────────────────── */
+
+.home-plan-body {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+}
+
+.home-plan-assumption-rail {
+  flex-shrink: 0;
+  width: 7.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: clamp(1.35rem, 2.5vw, 1.75rem) clamp(0.75rem, 1.5vw, 1.25rem);
+  padding-left: clamp(1rem, 2.5vw, 1.75rem);
+  background: transparent;
+  position: sticky;
+  top: 60px;
+  align-self: flex-start;
+  max-height: calc(100vh - 60px);
+  overflow-y: auto;
+}
+
+.home-plan-assumption-rail__dials {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.home-plan-dial {
+  display: grid;
+  gap: 0.3rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid rgba(50, 38, 30, 0.06);
+}
+
+.home-plan-dial:last-child {
+  border-bottom: 0;
+}
+
+.home-plan-dial__label {
+  color: var(--plan-faint);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+}
+
+.home-plan-dial__control {
+  display: grid;
+  grid-template-columns: 1.5rem 1fr 1.5rem;
+  align-items: center;
+  gap: 0.15rem;
+}
+
+.home-plan-dial__step {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: var(--plan-muted);
+  background: transparent;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 140ms ease, background 140ms ease;
+}
+
+.home-plan-dial__step:hover:not(:disabled) {
+  color: var(--plan-ink);
+  background: rgba(50, 38, 30, 0.06);
+}
+
+.home-plan-dial__step:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.home-plan-dial__value {
+  color: var(--plan-ink);
+  font-size: 0.8rem;
+  font-weight: 620;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  letter-spacing: -0.02em;
+  user-select: none;
+}
+
+.home-plan-assumption-rail__reset {
+  margin-top: 0.35rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.home-plan-assumption-rail__reset:hover {
+  color: var(--plan-brand);
+}
+
 /* ── Main layout ──────────────────────────────────────────────────────── */
 
 .home-plan-main {
-  width: min(1180px, calc(100% - 2rem));
-  margin: 0 auto;
-  padding: clamp(1.5rem, 3vw, 2.5rem) 0 5rem;
+  flex: 1;
+  min-width: 0;
+  padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1rem, 3vw, 2.5rem) 5rem;
 }
 
 .home-plan-canvas {
+  width: min(1100px, 100%);
+  margin: 0 auto;
   display: grid;
   gap: clamp(1.25rem, 2.5vw, 2rem);
 }
@@ -464,12 +577,16 @@
   padding: 0;
 }
 
-.home-plan-verdict__breakdown > div,
 .home-plan-verdict__tile {
+  display: grid;
+  justify-items: start;
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--plan-line);
   border-radius: 12px;
   background: var(--plan-glass);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
 .home-plan-verdict__tile--buy {
@@ -477,7 +594,7 @@
   border-color: rgba(207, 106, 74, 0.22);
 }
 
-.home-plan-verdict__tile--buy dd {
+.home-plan-verdict__tile--buy > strong {
   color: var(--plan-buy-deep);
 }
 
@@ -487,9 +604,43 @@
   border-color: rgba(100, 140, 200, 0.28);
 }
 
-.home-plan-verdict__tile--rent dd,
-.home-plan-verdict__tile--highlight dd {
+.home-plan-verdict__tile--rent > strong,
+.home-plan-verdict__tile--highlight > strong {
   color: var(--plan-cool-deep);
+}
+
+.home-plan-verdict__tile--buy.is-selected {
+  border-color: var(--plan-buy);
+}
+
+.home-plan-verdict__tile--rent.is-selected {
+  border-color: var(--plan-rent);
+}
+
+.home-plan-verdict__tile-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 650;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.home-plan-verdict__tile-label i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.home-plan-verdict__tile--buy .home-plan-verdict__tile-label i {
+  color: var(--plan-buy);
+}
+
+.home-plan-verdict__tile--rent .home-plan-verdict__tile-label i {
+  color: var(--plan-rent);
 }
 
 .home-plan-verdict__breakdown--3 {
@@ -500,15 +651,7 @@
   grid-template-columns: repeat(4, 1fr);
 }
 
-.home-plan-verdict__breakdown dt {
-  color: var(--plan-faint);
-  font-size: 0.68rem;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.home-plan-verdict__breakdown dd {
+.home-plan-verdict__tile > strong {
   margin: 0.3rem 0 0;
   font-size: 0.95rem;
   font-weight: 700;
@@ -636,86 +779,6 @@
 
 .home-plan-graph {
   margin-top: 0.25rem;
-}
-
-.home-plan-graph-legend {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  padding: 0 0.15rem 0.65rem;
-}
-
-.home-plan-graph-legend > p {
-  margin: 0 0 0 auto;
-  color: var(--plan-faint);
-  font-size: 0.72rem;
-}
-
-.home-plan-graph-legend button {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  padding: 0.5rem 0.7rem;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  color: var(--plan-ink);
-  text-align: left;
-  background: transparent;
-  cursor: pointer;
-  transition: border-color 160ms ease, background 160ms ease;
-}
-
-.home-plan-graph-legend button.is-selected {
-  border-color: var(--plan-line-strong);
-  background: var(--plan-glass);
-}
-
-.home-plan-legend-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.home-plan-legend-dot--buy {
-  background: var(--plan-buy);
-  box-shadow: 0 0 0 3px rgba(207, 106, 74, 0.18);
-}
-
-.home-plan-legend-dot--rent {
-  background: var(--plan-rent);
-  box-shadow: 0 0 0 3px rgba(100, 140, 200, 0.2);
-}
-
-.home-plan-graph-legend button:has(.home-plan-legend-dot--buy) strong {
-  color: var(--plan-buy-deep);
-}
-
-.home-plan-graph-legend button:has(.home-plan-legend-dot--rent) strong {
-  color: var(--plan-cool-deep);
-}
-
-.home-plan-graph-legend button.is-selected small {
-  color: var(--plan-ink);
-  font-weight: 650;
-}
-
-.home-plan-graph-legend span {
-  display: flex;
-  align-items: baseline;
-  gap: 0.45rem;
-}
-
-.home-plan-graph-legend strong {
-  font-size: 0.78rem;
-  font-weight: 650;
-}
-
-.home-plan-graph-legend small {
-  color: var(--plan-faint);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
 }
 
 .home-plan-graph-svg {
@@ -1071,6 +1134,56 @@
 
 .home-plan-instruments__edit:hover {
   background: #342820;
+}
+
+/* Compact assumption rail (left column) ----------------------------------- */
+
+.home-plan-instruments--rail {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  width: 9.5rem;
+  align-self: stretch;
+  gap: 0.65rem;
+  padding: 0.75rem 0.65rem;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__hint {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__chips {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 0.35rem;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__chip {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  padding: 0.5rem 0.55rem;
+  border-radius: 10px;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__chip small {
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__chip strong {
+  font-size: 0.82rem;
+}
+
+.home-plan-instruments--rail .home-plan-instruments__edit {
+  width: 100%;
+  margin-top: auto;
+  padding: 0.58rem 0.5rem;
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 /* ── Pay off loan (open canvas — clay + cool accents) ───────────────────── */
@@ -1677,24 +1790,44 @@
     padding-inline: 1rem;
   }
 
+  .home-plan-body {
+    flex-direction: column;
+  }
+
+  .home-plan-assumption-rail {
+    position: static;
+    width: 100%;
+    max-height: none;
+    padding: 0.75rem 1rem 0.5rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.5rem 1rem;
+  }
+
+  .home-plan-assumption-rail__dials {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 0.75rem;
+  }
+
+  .home-plan-dial {
+    border-bottom: 0;
+    padding: 0.25rem 0;
+  }
+
+  .home-plan-assumption-rail__reset {
+    margin-top: 0;
+    flex-shrink: 0;
+  }
+
   .home-plan-main {
-    width: calc(100% - 1.25rem);
+    padding-inline: 1rem;
   }
 
   .home-plan-verdict__headline {
     max-width: none;
-  }
-
-  .home-plan-instruments {
-    grid-template-columns: 1fr;
-  }
-
-  .home-plan-instruments__hint {
-    white-space: normal;
-  }
-
-  .home-plan-instruments__edit {
-    width: 100%;
   }
 
   .home-plan-verdict__breakdown {
@@ -1739,19 +1872,6 @@
   .home-plan-view-tabs--compact .home-plan-view-tabs__seg button {
     padding: 0.34rem 0.58rem;
     font-size: 0.7rem;
-  }
-
-  .home-plan-graph-legend {
-    display: grid;
-    grid-template-columns: 1fr;
-  }
-
-  .home-plan-graph-legend > p {
-    margin-left: 0;
-  }
-
-  .home-plan-graph-legend button {
-    width: 100%;
   }
 
   .home-plan-graph-svg {

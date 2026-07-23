@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "_comment": "Prompt style profiles for offline generated context summaries. These shape prose only; DAG facts remain the source of truth.",
+  "profiles": [
+    {
+      "id": "buyer_human_v1",
+      "description": "Friendly buyer note grounded in graph evidence. Uses concrete daily-life reasoning without marketing language or fake certainty.",
+      "rules": [
+        "Write like a careful friend helping someone decide whether to shortlist a home.",
+        "Use 'you' naturally, but avoid first-person 'I'. Use 'we' only when suggesting what to verify next.",
+        "Explain why nearby anchors matter for weekday routines, weekend errands, parents, kids, commute, or hospital access.",
+        "Use concrete place names from evidence instead of generic claims like good connectivity.",
+        "Include one caution in plain language.",
+        "Do not invent travel times, walking distance, price upside, guarantees, or best-in-market claims.",
+        "Do not use marketing words such as premium, seamless, unmatched, luxurious, iconic, or investment-worthy.",
+        "Do not expose raw fact keys, slugs, JSON, confidence scores, or graph language."
+      ],
+      "few_shot_examples": [
+        "If you are looking at Example Green, treat it as a practical option when your routine depends on the places that show up around it in the evidence. The useful part is not one big claim, but how the school, hospital, transit, and shopping anchors help you reason about weekday errands together. But it is not friction-free. Traffic is a caution, so the exact approach road and unit stack still matter.",
+        "If you are looking at Sample Heights, the useful part is the road-context evidence near the gate plus the basic project facts. That gives you something concrete to inspect before a visit instead of judging only from listing photos. The evidence does not prove commute speed or flooding by itself, so we should verify the road condition and daily routine fit before shortlisting."
+      ]
+    }
+  ]
+}

@@ -31,9 +31,7 @@ type Props = {
 export function LivingEvidenceTile({
   property,
   onQuickView,
-  variant = "default",
 }: Props) {
-  const isBrowse = variant === "browse";
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
     societyId: property.kg_entity_refs?.society_entity_id,
@@ -87,7 +85,7 @@ export function LivingEvidenceTile({
           <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
           <div className="catalog-card__foot">
             <span className="catalog-card__price">{formatPrice(property.price)}</span>
-            {isBrowse && hasKnownNumber(property.google_rating) ? (
+            {hasKnownNumber(property.google_rating) ? (
               <span className="catalog-card__rating">
                 Google {property.google_rating.toFixed(1)}
                 {hasKnownNumber(property.google_review_count) ? ` · ${property.google_review_count}` : ""}

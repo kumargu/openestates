@@ -77,6 +77,8 @@ def records_for_entity(
     source_pages = explicit_source_pages(input_data)
     if not source_pages:
         source_pages = magicbricks_pages_from_kg(project_root, entity_id, society_name)
+    if not source_pages:
+        source_pages = magicbricks_source_pages(input_data, society_name)
     records = []  # type: List[Dict[str, Any]]
     for source_page in source_pages:
         page_url = required_page_url(source_page)
@@ -152,6 +154,23 @@ def magicbricks_pages_from_kg(
         seen.add(url)
         pages.append({"source_page_url": url, "source_name": "magicbricks"})
     return pages
+
+
+def magicbricks_source_pages(
+    input_data: Dict[str, Any], society_name: str
+) -> List[Dict[str, Any]]:
+    city = magicbricks_city_slug(optional_string(input_data.get("city")))
+    project_slug = slug(society_name)
+    if not project_slug or not city:
+        return []
+    return [
+        {
+            "source_name": "MagicBricks",
+            "source_page_url": "https://www.magicbricks.com/project-{}-for-sale-in-{}-pppfs".format(
+                project_slug, city
+            ),
+        }
+    ]
 
 
 def image_candidates_from_html(
@@ -318,6 +337,13 @@ def partition_values(request: Dict[str, Any]) -> Dict[str, str]:
 def normalized_planned_at(request: Dict[str, Any]) -> str:
     value = str(request.get("planned_at") or "").strip()
     return value or datetime.now(timezone.utc).isoformat()
+
+
+def magicbricks_city_slug(value: Optional[str]) -> str:
+    text = slug(value or "bangalore")
+    if text in ("bengaluru", "bangaluru"):
+        return "bangalore"
+    return text or "bangalore"
 
 
 def optional_string(value: Any) -> Optional[str]:

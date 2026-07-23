@@ -22,6 +22,7 @@ pub struct SearchIndex {
     by_property_node: HashMap<String, String>,
     by_society_node: HashMap<String, Vec<String>>,
     by_token: HashMap<String, Vec<String>>,
+    position_by_id: HashMap<String, usize>,
     price_by_id: HashMap<String, u64>,
 }
 
@@ -35,6 +36,9 @@ impl SearchIndex {
     }
 
     pub fn insert(&mut self, property: &Property) {
+        self.position_by_id
+            .entry(property.id.clone())
+            .or_insert_with(|| self.all_ids.len());
         push_unique(&mut self.all_ids, &property.id);
         push_unique(
             self.by_area.entry(normalize(&property.area)).or_default(),
@@ -98,9 +102,9 @@ impl SearchIndex {
         }
 
         if candidate.is_none() {
-            let token_ids = self.token_candidates(query);
+            let token_ids = self.token_candidates_ranked(query);
             if !token_ids.is_empty() {
-                candidate = Some(token_ids);
+                return token_ids;
             }
         }
 
@@ -115,12 +119,13 @@ impl SearchIndex {
     pub fn property_ids_for_entity_hits(&self, hits: &[TantivyRecallHit]) -> Vec<String> {
         let mut ids = Vec::new();
         for hit in hits {
-            if !hit.entity_id.starts_with("society:") {
-                continue;
-            }
-            if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
-                for property_id in property_ids {
-                    push_unique(&mut ids, property_id);
+            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
+                push_unique(&mut ids, property_id);
+            } else if hit.entity_id.starts_with("society:") {
+                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
+                    for property_id in property_ids {
+                        push_unique(&mut ids, property_id);
+                    }
                 }
             }
         }
@@ -180,23 +185,42 @@ impl SearchIndex {
         }
     }
 
-    fn token_candidates(&self, query: &str) -> HashSet<String> {
+    fn token_candidates_ranked(&self, query: &str) -> Vec<String> {
+        let mut scores = HashMap::<String, u32>::new();
         let mut ids = HashSet::new();
         for token in tokenize(query) {
             if is_query_stopword(&token) {
                 continue;
             }
             if let Some(token_ids) = self.by_token.get(&token) {
-                ids.extend(token_ids.iter().cloned());
+                for id in token_ids {
+                    ids.insert(id.clone());
+                    *scores.entry(id.clone()).or_insert(0) += 3;
+                }
                 continue;
             }
             for (indexed_token, token_ids) in &self.by_token {
                 if token_matches_query(&token, indexed_token) {
-                    ids.extend(token_ids.iter().cloned());
+                    for id in token_ids {
+                        ids.insert(id.clone());
+                        *scores.entry(id.clone()).or_insert(0) += 1;
+                    }
                 }
             }
         }
+        let mut ids = ids.into_iter().collect::<Vec<_>>();
+        ids.sort_by(|left, right| {
+            scores
+                .get(right)
+                .unwrap_or(&0)
+                .cmp(scores.get(left).unwrap_or(&0))
+                .then_with(|| self.corpus_position(left).cmp(&self.corpus_position(right)))
+        });
         ids
+    }
+
+    fn corpus_position(&self, id: &str) -> usize {
+        self.position_by_id.get(id).copied().unwrap_or(usize::MAX)
     }
 }
 
@@ -333,5 +357,81 @@ mod tests {
     #[test]
     fn text_field_matches_term_handles_society_name() {
         assert!(text_field_matches_term("prestige waterford", "wateford"));
+    }
+
+    #[test]
+    fn property_ids_for_entity_hits_maps_property_and_society_hits() {
+        let properties = vec![
+            test_property("prop-1", "soc-one"),
+            test_property("prop-2", "soc-one"),
+        ];
+        let index = SearchIndex::build(&properties);
+        let hits = vec![
+            TantivyRecallHit {
+                entity_id: "property:prop-1".to_string(),
+                entity_type: "property".to_string(),
+                name: "Property One".to_string(),
+                score: 1.0,
+                matched_fields: vec!["name".to_string()],
+            },
+            TantivyRecallHit {
+                entity_id: "society:one".to_string(),
+                entity_type: "society".to_string(),
+                name: "Society One".to_string(),
+                score: 1.0,
+                matched_fields: vec!["name".to_string()],
+            },
+        ];
+
+        let ids = index.property_ids_for_entity_hits(&hits);
+
+        assert_eq!(ids, vec!["prop-1".to_string(), "prop-2".to_string()]);
+    }
+
+    fn test_property(id: &str, society_id: &str) -> Property {
+        Property {
+            id: id.to_string(),
+            title: id.to_string(),
+            area: "Whitefield".to_string(),
+            area_id: "whitefield".to_string(),
+            city: "Bengaluru".to_string(),
+            society_id: society_id.to_string(),
+            builder_name: "Builder".to_string(),
+            property_type: "Apartment".to_string(),
+            listing_type: "Resale".to_string(),
+            bhk: 3,
+            price: 10_000_000,
+            price_per_sqft: 10_000,
+            carpet_area_sqft: 1_000,
+            super_builtup_sqft: 1_200,
+            floor: 1,
+            total_floors: 10,
+            facing: "East".to_string(),
+            possession_status: "Ready".to_string(),
+            metro_distance_mins: 10,
+            maintenance_cost_monthly: 5_000,
+            society_quality_score: None,
+            builder_quality_score: None,
+            document_completeness_score: None,
+            litigation_risk: None,
+            noise_score: None,
+            sunlight_score: None,
+            airport_noise_score: None,
+            waterlogging_risk_score: None,
+            traffic_score: None,
+            days_on_market: 1,
+            greenery_score: None,
+            open_space_score: None,
+            resale_strength_score: None,
+            interest_level: None,
+            saves_last_7d: None,
+            offers_last_7d: None,
+            images: Vec::new(),
+            hero_image: String::new(),
+            description_summary: String::new(),
+            transparency_tags: Vec::new(),
+            source_reference: "unit-test".to_string(),
+            seller_id: None,
+        }
     }
 }

@@ -35,26 +35,11 @@ pub fn source_tier_rank(source_type: &str, policies: &ResolutionPoliciesFile) ->
         .unwrap_or(u32::MAX)
 }
 
-pub fn is_internal_only_fact_key(fact_key: &str, prefixes: &[String]) -> bool {
-    prefixes
-        .iter()
-        .any(|prefix| fact_key.starts_with(prefix))
-}
-
-pub fn is_legacy_seed_source(source_type: &str) -> bool {
-    normalize_source_type(source_type) == "legacy_seed"
-}
-
 pub fn buyer_visible_fact(
-    fact_key: &str,
-    source_type: &str,
-    policies: &ResolutionPoliciesFile,
+    _fact_key: &str,
+    _source_type: &str,
+    _policies: &ResolutionPoliciesFile,
 ) -> bool {
-    if is_legacy_seed_source(source_type)
-        && is_internal_only_fact_key(fact_key, &policies.never_default_fact_prefixes)
-    {
-        return false;
-    }
     true
 }
 
@@ -83,7 +68,6 @@ fn normalize_source_type(source_type: &str) -> String {
         .replace('_', "")
         .to_ascii_lowercase()
         .replace("reddittheme", "reddit_theme")
-        .replace("legacyseed", "legacy_seed")
 }
 
 #[cfg(test)]
@@ -91,15 +75,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn legacy_seed_loses_to_rera_by_tier() {
+    fn configured_sources_order_by_tier() {
         let policies = load_resolution_policies().expect("resolution policies load");
-        assert!(better_source_type(
-            "Rera",
-            "LegacySeed",
-            0.25,
-            0.25,
-            &policies
-        ));
+        assert!(better_source_type("Rera", "Google", 1.0, 0.8, &policies));
         assert!(!better_source_type(
             "RedditTheme",
             "Google",
@@ -124,20 +102,11 @@ mod tests {
     }
 
     #[test]
-    fn internal_only_prefixes_match_risk_and_operating() {
+    fn buyer_visible_fact_allows_source_backed_facts() {
         let policies = load_resolution_policies().expect("resolution policies load");
-        assert!(is_internal_only_fact_key(
-            "risk.noise_level",
-            &policies.never_default_fact_prefixes
-        ));
-        assert!(!buyer_visible_fact(
-            "risk.noise_level",
-            "LegacySeed",
-            &policies
-        ));
         assert!(buyer_visible_fact(
             "market.price_per_sqft",
-            "LegacySeed",
+            "Rera",
             &policies
         ));
     }

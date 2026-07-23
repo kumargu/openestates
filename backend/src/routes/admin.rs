@@ -41,24 +41,27 @@ pub async fn data_health(
     let bundle = state.serving_bundle.read().await;
     let payload = bundle.as_ref().map(|loaded| {
         let all_facts = loaded.fact_index.all_facts();
-        let legacy_seed_fact_count = all_facts
+        let reddit_theme_fact_count = all_facts
             .iter()
-            .filter(|fact| fact.source_type.eq_ignore_ascii_case("LegacySeed"))
+            .filter(|fact| fact.source_type.eq_ignore_ascii_case("RedditTheme"))
             .count() as u64;
-        let legacy_seed_entity_count = all_facts
+        let reddit_theme_entity_count = all_facts
             .iter()
-            .filter(|fact| fact.source_type.eq_ignore_ascii_case("LegacySeed"))
+            .filter(|fact| fact.source_type.eq_ignore_ascii_case("RedditTheme"))
             .map(|fact| fact.entity_id.as_str())
             .collect::<std::collections::BTreeSet<_>>()
             .len() as u64;
 
         serde_json::json!({
             "serving_bundle": serving_bundle_summary(loaded),
-            "bootstrap": {
-                "legacy_seed_fact_count": legacy_seed_fact_count,
-                "legacy_seed_entity_count": legacy_seed_entity_count,
+            "reddit_theme": {
+                "fact_count": reddit_theme_fact_count,
+                "entity_count": reddit_theme_entity_count,
+                "poc_import_path": "data/validation/reddit_poc_society_signals.json",
             },
             "preference_coverage_path": "data/validation/preference_coverage.json",
+            "enrichment_gaps_path": "data/validation/enrichment_gaps.json",
+            "enrichment_priority_path": "data/validation/enrichment_priority_queue.json",
         })
     });
 

@@ -164,7 +164,17 @@ function MarketControls({
           value={inputs.appreciation}
           onChange={(value) => onInputChange("appreciation", value)}
         />
-        <RangeControl label="Rent inflation" valueLabel={`${inputs.rentInflation.toFixed(1)}%`} min={2} max={10} step={0.5} value={inputs.rentInflation} onChange={(value) => onInputChange("rentInflation", value)} />
+        <RangeControl
+          field="rentInflation"
+          focused={focusField === "rentInflation"}
+          label="Rent inflation"
+          valueLabel={`${inputs.rentInflation.toFixed(1)}%`}
+          min={2}
+          max={12}
+          step={0.5}
+          value={inputs.rentInflation}
+          onChange={(value) => onInputChange("rentInflation", value)}
+        />
       </section>
 
       <section className="home-plan-control-block">

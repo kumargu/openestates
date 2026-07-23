@@ -544,6 +544,8 @@ def fetch_google_places_nearby_text(
                 "place_id": place_id or None,
                 "place_url": url,
                 "distance_km": rounded_distance_km(origin, destination),
+                "latitude": destination["latitude"] if destination else None,
+                "longitude": destination["longitude"] if destination else None,
                 "rating": parse_float(place.get("rating")),
                 "review_count": parse_int(place.get("userRatingCount")),
                 "primary_type": clean_text(place.get("primaryType")) or None,
@@ -615,7 +617,7 @@ def nearby_search_radius_meters(category: str) -> int:
     if normalized == "eatery":
         return 3_000
     if normalized == "tech_park":
-        return 8_000
+        return 15_000
     if normalized == "mall":
         return 10_000
     if normalized == "park":

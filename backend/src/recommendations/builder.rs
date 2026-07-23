@@ -133,6 +133,7 @@ fn recall_candidates(
                 graph,
                 property,
                 serving_bundle.map(|bundle| &bundle.fact_index),
+                serving_bundle.map(|bundle| &bundle.graph_index),
             );
             let sections = source_panels
                 .into_iter()
@@ -285,7 +286,12 @@ fn pick_trust_branch(
         .filter(|candidate| !used_ids.contains(&candidate.property.id))
         .filter(|candidate| {
             let risk = candidate.property.litigation_risk.unwrap_or(1.0)
-                + (1.0 - candidate.property.document_completeness_score.unwrap_or(0.0)) * 0.35;
+                + (1.0
+                    - candidate
+                        .property
+                        .document_completeness_score
+                        .unwrap_or(0.0))
+                    * 0.35;
             risk + 0.08 < current_risk
         })
         .min_by(|left, right| {

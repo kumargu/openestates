@@ -288,7 +288,8 @@ impl AssetRegistry {
     }
 
     pub fn from_config_file(path: &std::path::Path) -> Result<Self, RegistryError> {
-        let contents = std::fs::read_to_string(path).map_err(|err| RegistryError::ConfigIo(err.to_string()))?;
+        let contents = std::fs::read_to_string(path)
+            .map_err(|err| RegistryError::ConfigIo(err.to_string()))?;
         let file: crate::dag_config::AssetRegistryFile = serde_json::from_str(&contents)
             .map_err(|err| RegistryError::ConfigParse(err.to_string()))?;
         Self::new(file.assets)
@@ -604,7 +605,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         asset(
             "google_nearby_places_weekly",
             AssetStage::Raw,
-            "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, eateries, and offices.",
+            "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, and offices.",
             &["canonical_society_nodes"],
             RefreshCadence::Weekly,
             CostTier::Cheap,
@@ -772,32 +773,32 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
-            "legacy_seed_facts",
+            "generated_context_summaries",
             AssetStage::Silver,
-            "Low-confidence bootstrap facts imported from data/seed JSON.",
-            &["canonical_society_nodes"],
+            "Offline local-model buyer summaries generated from graph context envelopes and validated before serving.",
+            &[],
             RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Support,
+            CostTier::Moderate,
+            TrustTier::Derived,
         )
         .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "legacy_seed")],
+            &["dt"],
+            &[("source", "local_summary")],
         )),
         asset(
-            "canonical_property_nodes",
+            "canonical_road_nodes",
             AssetStage::Gold,
-            "Property listing entities and in_society edges from seed and listings.",
+            "Road segment and place entities with served_by_road edges from approach road visuals.",
             &["canonical_society_nodes"],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
         ),
         asset(
-            "canonical_area_nodes",
-            AssetStage::Gold,
-            "Area entities and society in_area edges from seed profiles.",
-            &["canonical_society_nodes"],
+            "approach_road_graph_facts",
+            AssetStage::Silver,
+            "Approach road media and shared-node concern facts for road_segment and place entities.",
+            &["canonical_road_nodes"],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
@@ -808,9 +809,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "Versioned society KG view merged by source precedence and fact policy.",
             &[
                 "canonical_society_nodes",
-                "canonical_property_nodes",
-                "canonical_area_nodes",
-                "legacy_seed_facts",
+                "canonical_road_nodes",
                 "rera_legal_facts",
                 "reddit_resident_facts",
                 "google_review_facts",
@@ -822,6 +821,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "metro_proximity_facts",
                 "builder_rera_aggregates",
                 "home_state_signals",
+                "approach_road_graph_facts",
+                "generated_context_summaries",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -856,7 +857,10 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "metro_proximity_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
-        .with_optional_dependency("legacy_seed_facts")
+        .with_dependency_fan_in_policy(
+            "generated_context_summaries",
+            DependencyFanInPolicy::AllCurrentPartitions,
+        )
         .with_optional_dependency("reddit_resident_facts")
         .with_optional_dependency("google_review_facts")
         .with_optional_dependency("community_review_summary_facts")
@@ -968,6 +972,15 @@ mod tests {
                 )
                 .unwrap(),
             AssetPartition::new([("source", "community")])
+        );
+        assert_eq!(
+            registry
+                .partition_for(
+                    &AssetId::new("generated_context_summaries").unwrap(),
+                    &run_partition
+                )
+                .unwrap(),
+            AssetPartition::new([("dt", "2026-07-13"), ("source", "local_summary")])
         );
         assert_eq!(
             registry
@@ -1113,7 +1126,11 @@ mod tests {
 
     #[test]
     fn export_asset_registry_json_when_requested() {
-        if std::env::var("OPENESTATES_EXPORT_ASSET_REGISTRY").ok().as_deref() != Some("1") {
+        if std::env::var("OPENESTATES_EXPORT_ASSET_REGISTRY")
+            .ok()
+            .as_deref()
+            != Some("1")
+        {
             return;
         }
 

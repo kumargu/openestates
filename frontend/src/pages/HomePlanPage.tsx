@@ -4,14 +4,12 @@ import { Link, useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
-import { AssumptionStrip } from "../features/home-plan/AssumptionStrip.tsx";
 import { MilestoneHint } from "../features/home-plan/MilestoneHint.tsx";
-import { PlanControls, type PlanControlSection, type PlanPreset } from "../features/home-plan/PlanControls.tsx";
+import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph, type PlanScenarioId } from "../features/home-plan/PlanGraph.tsx";
 import { PlanViewTabs, type PlanView } from "../features/home-plan/PlanViewTabs.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { RepaymentJourney } from "../features/home-plan/RepaymentJourney.tsx";
-import { TimeRail } from "../features/home-plan/TimeRail.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
 import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import {
@@ -25,16 +23,10 @@ import {
 import {
   buildMilestones,
   describePlanChange,
-  type PlanControlField,
   type PlanMilestone,
 } from "../features/home-plan/planFields.ts";
+import "../features/home-plan/home-plan.css";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
-
-function applyPreset(baseline: PlanInputs, preset: Exclude<PlanPreset, "Custom">): PlanInputs {
-  if (preset === "Cautious market") return { ...baseline, appreciation: 4.5, equityReturn: 9, loanRate: 9.1 };
-  if (preset === "Strong growth") return { ...baseline, appreciation: 8, equityReturn: 11, loanRate: 7.8 };
-  return baseline;
-}
 
 function BackIcon() {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
@@ -63,15 +55,10 @@ export function HomePlanPage() {
   const [horizon, setHorizon] = useState(10);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [selectedScenario, setSelectedScenario] = useState<PlanScenarioId>("buy");
-  const [controlsOpen, setControlsOpen] = useState(false);
-  const [controlSection, setControlSection] = useState<PlanControlSection>("financing");
-  const [focusField, setFocusField] = useState<PlanControlField | null>(null);
-  const [preset, setPreset] = useState<PlanPreset>("Base scenario");
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(2);
   const [loanYear, setLoanYear] = useState(5);
   const [changeNote, setChangeNote] = useState<string | null>(null);
   const [milestoneHint, setMilestoneHint] = useState<PlanMilestone | null>(null);
-  const [showFocusHint, setShowFocusHint] = useState(true);
   const prevProjectionRef = useRef<PlanProjection | null>(null);
   const changeNoteTimer = useRef<number | null>(null);
 
@@ -138,7 +125,6 @@ export function HomePlanPage() {
   const monthlyGapSummary = monthlyGap >= 0
     ? `Buying costs ${formatCurrency(monthlyGap)} more per month than renting`
     : `Buying costs ${formatCurrency(Math.abs(monthlyGap))} less per month than renting`;
-  const maxYear = projection.points.length - 1;
   const loanFreeYear = projection.points.find((point, index, points) => (
     point.year > inputs.purchaseYear
     && point.loanBalance <= 0
@@ -166,12 +152,6 @@ export function HomePlanPage() {
     setHorizon(year);
     setPreviewYear(null);
     setMilestoneHint(null);
-  };
-
-  const openControls = (section: PlanControlSection, field: PlanControlField) => {
-    setControlSection(section);
-    setFocusField(field);
-    setControlsOpen(true);
   };
 
   const handleMilestonePress = (milestone: PlanMilestone) => {
@@ -204,106 +184,81 @@ export function HomePlanPage() {
         <Link to={`/property/${id}`} className="home-plan-back-link"><BackIcon /> Property</Link>
       </header>
 
-      <div className="home-plan-main">
-        <div className="home-plan-canvas">
-          <section className="home-plan-hero" aria-label="Buy vs rent overview">
-            <div className="home-plan-hero__rail">
-              <PropertyOrigin
-                propertyId={id}
-                title={property.title}
-                area={property.area}
-                price={property.price}
+      <div className="home-plan-body">
+        <PlanAssumptionRail
+          inputs={inputs}
+          onInputChange={updateInput}
+          onReset={resetPlan}
+        />
+
+        <div className="home-plan-main">
+          <div className="home-plan-canvas">
+            <section className="home-plan-hero" aria-label="Buy vs rent overview">
+              <div className="home-plan-hero__rail">
+                <PropertyOrigin
+                  propertyId={id}
+                  title={property.title}
+                  area={property.area}
+                  price={property.price}
+                />
+                <PlanViewTabs view={view} onChange={changeView} compact />
+              </div>
+
+              <div className="home-plan-hero__stage">
+                <PlanWhisper />
+              </div>
+            </section>
+
+            {view === "payoff" ? (
+              <RepaymentJourney
+                journey={loanJourney}
+                baselineJourney={baselineLoanJourney}
+                extraEmisPerYear={extraEmisPerYear}
+                selectedYear={loanYear}
+                onExtraEmisChange={setExtraEmisPerYear}
+                onSelectYear={setLoanYear}
               />
-              <PlanViewTabs view={view} onChange={changeView} compact />
-            </div>
-
-            <div className="home-plan-hero__stage">
-              <PlanWhisper />
-            </div>
-          </section>
-
-          {view === "payoff" ? (
-            <RepaymentJourney
-              journey={loanJourney}
-              baselineJourney={baselineLoanJourney}
-              extraEmisPerYear={extraEmisPerYear}
-              selectedYear={loanYear}
-              onExtraEmisChange={setExtraEmisPerYear}
-              onSelectYear={setLoanYear}
-            />
-          ) : (
-            <>
-              <VerdictBlock
-                view={view}
-                activeYear={activeYear}
-                buyWins={buyWins}
-                advantage={advantage}
-                isPreview={previewYear !== null}
-                breakEvenYear={projection.breakEvenYear}
-                homeEquity={homeEquity}
-                monthlyGap={monthlyGap}
-                monthlyGapSummary={monthlyGapSummary}
-                changeNote={changeNote}
-                monthlyEmi={projection.monthlyEmi}
-                monthlyRent={monthlyRent}
-                buyNetWorth={activePoint.buyNetWorth}
-                rentNetWorth={activePoint.rentNetWorth}
-              />
-
-              <MilestoneHint milestone={milestoneHint} />
-
-              <section className="home-plan-stage" aria-label="Projection over time">
-                <PlanGraph
-                  projection={projection}
-                  horizon={horizon}
-                  metric={metric}
-                  selected={selectedScenario}
-                  milestones={milestones}
-                  hintedMilestoneYear={milestoneHint?.year ?? null}
-                  showFocusHint={showFocusHint}
-                  onHorizonChange={chooseHorizon}
-                  onPreviewYearChange={setPreviewYear}
-                  onSelect={setSelectedScenario}
-                  onMilestonePress={handleMilestonePress}
-                  onDismissFocusHint={() => setShowFocusHint(false)}
+            ) : (
+              <>
+                <VerdictBlock
+                  view={view}
+                  activeYear={activeYear}
+                  buyWins={buyWins}
+                  advantage={advantage}
+                  isPreview={previewYear !== null}
+                  breakEvenYear={projection.breakEvenYear}
+                  homeEquity={homeEquity}
+                  monthlyGap={monthlyGap}
+                  monthlyGapSummary={monthlyGapSummary}
+                  changeNote={changeNote}
+                  monthlyEmi={projection.monthlyEmi}
+                  monthlyRent={monthlyRent}
+                  buyNetWorth={activePoint.buyNetWorth}
+                  rentNetWorth={activePoint.rentNetWorth}
+                  selectedScenario={selectedScenario}
+                  onSelectScenario={setSelectedScenario}
                 />
 
-                <TimeRail
-                  horizon={horizon}
-                  maxYear={maxYear}
-                  milestones={milestones}
-                  hintedMilestoneYear={milestoneHint?.year ?? null}
-                  onChange={chooseHorizon}
-                  onMilestonePress={handleMilestonePress}
-                />
-              </section>
+                <MilestoneHint milestone={milestoneHint} />
 
-              <AssumptionStrip
-                inputs={inputs}
-                activeField={controlsOpen ? focusField : null}
-                onEdit={openControls}
-              />
-            </>
-          )}
+                <section className="home-plan-stage" aria-label="Projection over time">
+                  <PlanGraph
+                    projection={projection}
+                    horizon={horizon}
+                    metric={metric}
+                    selected={selectedScenario}
+                    milestones={milestones}
+                    hintedMilestoneYear={milestoneHint?.year ?? null}
+                    onHorizonChange={chooseHorizon}
+                    onPreviewYearChange={setPreviewYear}
+                    onMilestonePress={handleMilestonePress}
+                  />
+                </section>
+              </>
+            )}
+          </div>
         </div>
       </div>
-
-      <PlanControls
-        open={controlsOpen}
-        section={controlSection}
-        focusField={focusField}
-        preset={preset}
-        inputs={inputs}
-        projection={projection}
-        extraEmisPerYear={extraEmisPerYear}
-        property={propertyData}
-        onClose={() => { setControlsOpen(false); setFocusField(null); }}
-        onSectionChange={setControlSection}
-        onPresetChange={choosePreset}
-        onInputChange={updateInput}
-        onExtraEmisChange={setExtraEmisPerYear}
-        onReset={resetPlan}
-      />
     </div>
   );
 }

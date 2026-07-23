@@ -72,7 +72,6 @@ data/dag/
   ontology.json                # entity types + allowed relations
   fact_registry.json           # canonical fact keys, display, search, resolution
   source_adapters/
-    legacy_seed.json           # bootstrap current seed/listing data
     rera.json
     google_places.json
     reddit.json
@@ -121,7 +120,7 @@ Example:
       "id": "registered_transaction_facts",
       "stage": "silver",
       "description": "Registered sale/lease transaction observations.",
-      "dependencies": ["canonical_property_nodes"],
+      "dependencies": ["kg_society_view"],
       "optional_dependencies": ["rera_legal_facts"],
       "refresh": { "cadence": "monthly", "ttl_days": 45 },
       "cost_tier": "expensive",
@@ -294,7 +293,7 @@ Per fact:
   },
   "resolution": {
     "strategy": "prefer_highest_confidence",
-    "source_priority": ["google", "reddit", "area_plan", "legacy_seed"],
+    "source_priority": ["google", "reddit", "area_plan"],
     "never_default": true
   },
   "ui_surfaces": {
@@ -314,40 +313,11 @@ Per fact:
 
 Each source adapter maps raw input → `SourcedFact` rows.
 
-### 8.1 Legacy bootstrap (current data)
+### 8.1 Bootstrap status
 
-```json
-{
-  "source_id": "legacy_seed",
-  "trust_tier": "legacy",
-  "default_confidence": 0.25,
-  "source_type": "LegacySeed",
-  "maps": [
-    {
-      "input_path": "data/seed/properties/*.json",
-      "entity_type": "property",
-      "entity_id_field": "id",
-      "fields": [
-        { "from": "price_per_sqft", "fact_key": "market.price_per_sqft", "value_type": "numeric" },
-        { "from": "floor", "fact_key": "listing.floor", "value_type": "numeric" },
-        { "from": "facing", "fact_key": "listing.facing", "value_type": "text" }
-      ]
-    },
-    {
-      "input_path": "data/seed/societies/*.json",
-      "entity_type": "society",
-      "entity_id_field": "id",
-      "fields": [
-        { "from": "noise_score", "fact_key": "risk.noise_level", "value_type": "numeric", "internal_only": true },
-        { "from": "waterlogging_risk_score", "fact_key": "risk.waterlogging", "value_type": "numeric", "internal_only": true },
-        { "from": "society_quality_score", "fact_key": "operating.society_quality", "value_type": "numeric", "internal_only": true }
-      ]
-    }
-  ]
-}
-```
-
-`internal_only: true` = available for audit/backfill and low-confidence ranking fallback, but **not rendered** until superseded by source-backed facts.
+Legacy seed JSON is no longer a source adapter. Bootstrap output should come
+from DAG-backed source assets and write entity or edge instances only to the
+lake, never to `app/config/` and never through local seed files.
 
 ### 8.2 Future transaction source (no DAG reshape)
 
@@ -479,10 +449,10 @@ Delete `legacy_preference_score` only after:
 - [ ] Loader validates JSON against existing DAG tests
 - [ ] Move Reddit skip to crawl policy config
 
-### Phase 2 — Bootstrap import
-- [ ] `legacy_seed` source adapter imports current seed/listing data as low-confidence facts
+### Phase 2 — Bootstrap cleanup
+- [x] Remove legacy seed JSON as a source adapter
 - [ ] Stop fake defaults in `data_loader.rs`
-- [ ] Coverage report artifact
+- [ ] Coverage report artifact for real source-backed facts
 
 ### Phase 3 — Entity expansion
 - [ ] Materialize `property:*` and `area:*` in serving bundle

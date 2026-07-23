@@ -530,36 +530,7 @@ pub fn community_evidence_from_fact_value(
 }
 
 pub(crate) fn deterministic_summary(input: &CommunitySummaryInput<'_>) -> String {
-    compose_living_read(input)
-}
-
-pub(crate) fn compose_living_read(input: &CommunitySummaryInput<'_>) -> String {
-    if input.text_evidence_count == 0 && input.rating.is_none() {
-        return clamp_paragraph_words(format!(
-            "{} feedback is still thin for this society.",
-            source_label_for_type_set(input.source_types)
-        ));
-    }
-
-    let mut sentences = Vec::new();
-    let positives = join_natural_list(input.positive_themes);
-    let concerns = join_natural_list(input.concern_themes);
-
-    if !input.positive_themes.is_empty() {
-        sentences.push(format!(
-            "Inside the society, residents repeatedly mention {positives}."
-        ));
-    }
-    if !input.concern_themes.is_empty() {
-        sentences.push(format!(
-            "The main cautions to verify are {concerns}."
-        ));
-    }
-    if sentences.is_empty() {
-        return compose_community_paragraph(input);
-    }
-
-    clamp_paragraph_words(sentences.join(" "))
+    compose_community_paragraph(input)
 }
 
 pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> String {
@@ -614,8 +585,7 @@ pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> 
     }
 
     if input.text_evidence_count == 0 {
-        sentences
-            .push("Treat this as directional until more review text is ingested.".to_string());
+        sentences.push("Treat this as directional until more review text is ingested.".to_string());
     } else if input.rating.is_some() && input.review_count.unwrap_or(0) < 25 {
         sentences.push(
             "The written signal is still building, so weigh resident quotes over the headline read."
@@ -730,13 +700,11 @@ fn bucket_review_quotes(
         .collect()
 }
 
-fn quote_polarity(
-    text: &str,
-    positive_themes: &[String],
-    concern_themes: &[String],
-) -> String {
+fn quote_polarity(text: &str, positive_themes: &[String], concern_themes: &[String]) -> String {
     let haystack = text.to_ascii_lowercase();
-    let concern_hit = concern_themes.iter().any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
+    let concern_hit = concern_themes
+        .iter()
+        .any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
         || community_theme_candidates().iter().any(|theme| {
             theme.polarity == CommunityThemePolarity::Concern
                 && theme
@@ -744,7 +712,9 @@ fn quote_polarity(
                     .iter()
                     .any(|term| contains_theme_term(&haystack, term))
         });
-    let positive_hit = positive_themes.iter().any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
+    let positive_hit = positive_themes
+        .iter()
+        .any(|theme| haystack.contains(&theme.to_ascii_lowercase()))
         || community_theme_candidates().iter().any(|theme| {
             theme.polarity == CommunityThemePolarity::Positive
                 && theme
@@ -1084,10 +1054,9 @@ mod tests {
         assert!(!summaries[0]
             .summary
             .contains("Review text is not ingested yet"));
-        assert_eq!(
-            summaries[0].summary,
-            "Inside the society, residents repeatedly mention amenities and greenery. The main cautions to verify are traffic."
-        );
+        assert!(summaries[0].summary.contains("amenities"));
+        assert!(summaries[0].summary.contains("greenery"));
+        assert!(summaries[0].summary.contains("traffic"));
     }
 
     #[test]
@@ -1142,9 +1111,7 @@ mod tests {
         }]);
 
         assert_eq!(summaries.len(), 1);
-        assert!(
-            summaries[0].summary.split_whitespace().count() <= COMMUNITY_PARAGRAPH_MAX_WORDS
-        );
+        assert!(summaries[0].summary.split_whitespace().count() <= COMMUNITY_PARAGRAPH_MAX_WORDS);
         assert!(!summaries[0].summary.contains("/5"));
     }
 }

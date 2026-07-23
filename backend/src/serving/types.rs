@@ -56,6 +56,20 @@ pub struct ServingSearchMetadataRecord {
     pub scoring_thresholds: Vec<f64>,
 }
 
+/// One precomputed semantic vector row in the request-path bundle.
+///
+/// These rows are serving indexes, not facts. They may widen recall and carry a
+/// soft score, but the search scorer must still use sourced facts for proof.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ServingEmbeddingRecord {
+    pub entity_id: String,
+    pub entity_type: String,
+    pub model_id: String,
+    pub dimensions: u32,
+    pub document_text_hash: String,
+    pub embedding: Vec<f32>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ServingBundleSchema {
     pub format_version: u32,
@@ -105,9 +119,7 @@ impl ServingFactIndex {
         }
         for metadata in search_metadata {
             let fact_key = metadata.fact_key.to_ascii_lowercase();
-            let rows = by_entity
-                .entry(metadata.entity_id.clone())
-                .or_default();
+            let rows = by_entity.entry(metadata.entity_id.clone()).or_default();
             let index = rows.search_metadata.len();
             rows.search_metadata.push(metadata);
             rows.search_metadata_by_fact_key
@@ -164,6 +176,7 @@ pub enum BundleArtifactKind {
     FactsParquet,
     EdgesParquet,
     SearchMetadataParquet,
+    SemanticEmbeddingsParquet,
     SchemaJson,
     TrustPolicyJson,
     TantivyIndexFile,
@@ -220,6 +233,8 @@ pub struct ServingBundleManifest {
     pub search_metadata_parquet_key: String,
     #[serde(default)]
     pub edge_parquet_key: Option<String>,
+    #[serde(default)]
+    pub semantic_embedding_parquet_key: Option<String>,
     pub schema_key: String,
     pub trust_policy_key: String,
     pub tantivy_index_prefix: String,

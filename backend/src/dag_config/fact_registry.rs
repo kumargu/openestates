@@ -11,11 +11,19 @@ pub struct FactRegistryFile {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
+    pub runtime: FactRegistryRuntime,
+    #[serde(default)]
     pub legacy_key_map: HashMap<String, String>,
     #[serde(default)]
     pub facts: Vec<FactRegistryEntry>,
     #[serde(default)]
     pub fact_count: Option<u32>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct FactRegistryRuntime {
+    #[serde(default)]
+    pub multi_value_fact_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -63,13 +71,11 @@ impl FactRegistryIndex {
     }
 
     pub fn lookup(&self, fact_key: &str) -> Option<&FactRegistryEntry> {
-        self.by_key
-            .get(fact_key)
-            .or_else(|| {
-                self.legacy_key_map
-                    .get(fact_key)
-                    .and_then(|canonical| self.by_key.get(canonical))
-            })
+        self.by_key.get(fact_key).or_else(|| {
+            self.legacy_key_map
+                .get(fact_key)
+                .and_then(|canonical| self.by_key.get(canonical))
+        })
     }
 
     pub fn fact_count(&self) -> usize {
@@ -123,6 +129,10 @@ mod tests {
             "expected >= 78 facts, got {}",
             registry.facts.len()
         );
+        assert!(registry
+            .runtime
+            .multi_value_fact_keys
+            .contains(&"nearby_hospitals".to_string()));
     }
 
     #[test]

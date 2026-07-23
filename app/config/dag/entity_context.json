@@ -1,162 +1,34 @@
 {
-  "_comment": "EntityContext summary contract. Runtime reads only the promoted serving bundle; this config is compiled into Rust and controls generic category selection.",
-  "version": 2,
-  "description": "Build a bounded graph context envelope for any property/society, then compose one factual paragraph plus evidence groups.",
-  "status": "implemented",
-  "example_output": {
-    "anchor_entity_id": "society:prestige-waterford",
-    "summary_paragraph": "Prestige Waterford sits on ECC Road in Pattandur Agrahara. Nearby are Deens Public School, Manipal Hospital Whitefield, and Prestige Shantiniketan mall. For commute, Hopefarm Channasandra metro, Seegehalli metro, and Bagmane Tech Park are nearby. Google reviews rate it 4.4/5; residents mention traffic as the main caution.",
-    "category_groups": [
-      { "id": "location", "label": "Location", "items": [] },
-      { "id": "transit", "label": "Transit", "items": [] },
-      { "id": "cautions", "label": "Cautions", "items": [] }
-    ]
+  "_comment": "Entity context now serves offline generated buyer summaries from the promoted serving bundle. Runtime does not compose graph prose, scan lake Parquet, or call an LLM.",
+  "version": 3,
+  "description": "Serve one generated buyer-context paragraph for a property, society, or area when a passed summary fact exists in the serving bundle.",
+  "status": "implemented_generated_asset",
+  "generated_summary": {
+    "asset_id": "generated_context_summaries",
+    "summary_fact_key": "generated_context_summary",
+    "metadata_fact_key": "generated_context_summary_metadata",
+    "quality_status_required": "passed",
+    "provider_required": true,
+    "disallowed_providers": ["mock"],
+    "style_profile_ref": "app/config/dag/summary_styles.json#buyer_human_v1",
+    "storage_shape": "batch parquet partition; many entity summaries per run partition"
   },
-  "traversal": {
-    "ontology_ref": "app/config/dag/ontology.json",
-    "surface_traversals_ref": "app/config/dag/ui_surfaces.json",
-    "max_hops": 2,
-    "default_anchor_types": ["property", "society"],
-    "edge_priority": [
-      "in_society",
-      "served_by_road",
-      "in_area",
-      "near_place",
-      "maps_to_place"
-    ]
-  },
-  "compose": {
-    "max_total_candidates": 40,
-    "max_paragraph_words": 120,
-    "slot_order": [
-      "location",
-      "daily_needs",
-      "education",
-      "healthcare",
-      "transit",
-      "work",
-      "reviews",
-      "cautions"
-    ],
-    "join_style": "deterministic_templates",
-    "llm_polish": false
-  },
-  "categories": [
-    {
-      "id": "location",
-      "label": "Location",
-      "max_items": 3,
-      "polarity": "location",
-      "edge_types": ["served_by_road", "in_area"],
-      "entity_prefixes": ["road:", "road_segment:", "area:"],
-      "source_priority": ["LocalContextSeed", "Google", "Rera", "Computed"]
-    },
-    {
-      "id": "transit",
-      "label": "Transit",
-      "max_items": 3,
-      "polarity": "location",
-      "edge_types": ["near_place", "maps_to_place"],
-      "fact_keys": ["nearby_metro_stations", "nearest_operational_metro_station", "metro_status"],
-      "terms": ["metro", "station", "rail"],
-      "source_priority": ["Google", "LocalContextSeed", "Computed"]
-    },
-    {
-      "id": "education",
-      "label": "Schools",
-      "max_items": 3,
-      "polarity": "location",
-      "edge_types": ["near_place", "maps_to_place"],
-      "fact_keys": ["nearby_schools"],
-      "terms": ["school", "college", "academy"],
-      "source_priority": ["Google", "LocalContextSeed"]
-    },
-    {
-      "id": "healthcare",
-      "label": "Hospitals",
-      "max_items": 2,
-      "polarity": "location",
-      "edge_types": ["near_place", "maps_to_place"],
-      "fact_keys": ["nearby_hospitals"],
-      "terms": ["hospital", "clinic", "medical"],
-      "source_priority": ["Google", "LocalContextSeed"]
-    },
-    {
-      "id": "work",
-      "label": "Work Hubs",
-      "max_items": 3,
-      "polarity": "location",
-      "edge_types": ["near_place", "maps_to_place"],
-      "fact_keys": ["nearby_tech_parks"],
-      "terms": ["tech park", "office", "business park", "bagmane", "google", "amazon"],
-      "source_priority": ["Google", "LocalContextSeed"]
-    },
-    {
-      "id": "daily_needs",
-      "label": "Daily Needs",
-      "max_items": 3,
-      "polarity": "location",
-      "edge_types": ["near_place", "maps_to_place"],
-      "fact_keys": ["nearby_fitness", "nearby_eateries"],
-      "terms": ["mall", "market", "grocery", "restaurant", "cafe", "hotel", "marriott", "fitness", "gym"],
-      "source_priority": ["Google", "LocalContextSeed"]
-    },
-    {
-      "id": "reviews",
-      "label": "Reviews",
-      "max_items": 2,
-      "polarity": "positive",
-      "fact_keys": ["google_rating", "community_review_summary", "community_positive_themes"],
-      "source_priority": ["Google", "Reddit", "CommunitySummary", "Computed"]
-    },
-    {
-      "id": "cautions",
-      "label": "Cautions",
-      "max_items": 3,
-      "polarity": "concern",
-      "fact_keys": [
-        "risk.approach_road_waterlogging",
-        "risk.approach_road_traffic",
-        "community_concern_themes",
-        "traffic_summary",
-        "waterlogging_summary"
-      ],
-      "source_priority": ["Reddit", "Google", "LocalContextSeed", "Computed"]
-    }
-  ],
-  "fact_templates": [
-    {
-      "fact_key": "risk.approach_road_waterlogging",
-      "template": "Residents mention waterlogging on the approach road."
-    },
-    {
-      "fact_key": "risk.approach_road_traffic",
-      "template": "Peak-hour traffic builds on the approach road."
-    },
-    {
-      "fact_key": "google_rating",
-      "template": "Google reviews rate it {value}/5."
-    },
-    {
-      "fact_key": "community_positive_themes",
-      "template": "Reviews praise {value}."
-    },
-    {
-      "fact_key": "community_concern_themes",
-      "template": "Resident cautions mention {value}."
-    }
-  ],
   "api": {
     "endpoints": [
       "GET /api/entities/{entity_id}/context",
       "GET /api/properties/{id}/context"
     ],
-    "note": "API reads serving bundle entities + edges + facts only. It never scans lake Parquet or calls LLMs at request time."
+    "response_shape": {
+      "summary_paragraph": "string",
+      "clauses": [],
+      "category_groups": []
+    },
+    "note": "404 means no generated summary is currently promoted for the resolved entity. The UI loads this endpoint asynchronously and hides the section on 404."
   },
-  "data_prerequisites": [
-    "serving bundle includes edges.parquet from gold kg_society_view",
-    "entity types: society, road_segment, area, place, property in entities.parquet",
-    "leaf facts attachable to society, road_segment, area, and place entities",
-    "edge inference policy can produce served_by_road, in_area, maps_to_place, and near_place instances"
-  ]
+  "serving_contract": {
+    "source_asset": "generated_context_summaries",
+    "fan_in_asset": "kg_society_view",
+    "serving_asset": "search_serving_bundle",
+    "request_path": "serving bundle fact lookup only"
+  }
 }

@@ -25,7 +25,6 @@
   ],
   "request_path_never_reads": [
     "app/config/*",
-    "data/seed/*",
     "data/cache/*",
     "raw/silver/gold directly (only promoted serving bundle)"
   ]

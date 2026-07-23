@@ -1,0 +1,102 @@
+{
+  "_comment": "Curated local graph for showcase societies — roads, schools, metro, offices. Merged into canonical_road_nodes at materialization.",
+  "version": 1,
+  "graphs": [
+    {
+      "society_id": "society:prestige-waterford",
+      "entities": [
+        {
+          "entity_id": "road:ecc-road",
+          "entity_type": "road_segment",
+          "name": "ECC Road"
+        },
+        {
+          "entity_id": "place:deens-public-school",
+          "entity_type": "place",
+          "name": "Deens Public School"
+        },
+        {
+          "entity_id": "place:hopefarm-channasandra-metro",
+          "entity_type": "place",
+          "name": "Hopefarm Channasandra metro"
+        },
+        {
+          "entity_id": "place:prestige-shantiniketan-mall",
+          "entity_type": "place",
+          "name": "Prestige Shantiniketan mall"
+        },
+        {
+          "entity_id": "place:manipal-hospital-whitefield",
+          "entity_type": "place",
+          "name": "Manipal Hospital Whitefield"
+        },
+        {
+          "entity_id": "place:whitefield-marriott",
+          "entity_type": "place",
+          "name": "Whitefield Marriott"
+        },
+        {
+          "entity_id": "place:bagmane-tech-park",
+          "entity_type": "place",
+          "name": "Bagmane Tech Park"
+        },
+        {
+          "entity_id": "place:seegehalli-metro",
+          "entity_type": "place",
+          "name": "Seegehalli metro"
+        }
+      ],
+      "edges": [
+        {
+          "to_entity_id": "road:ecc-road",
+          "relation": "served_by_road",
+          "weight": 0.92
+        },
+        {
+          "to_entity_id": "place:deens-public-school",
+          "relation": "near_place",
+          "weight": 0.88
+        },
+        {
+          "to_entity_id": "place:hopefarm-channasandra-metro",
+          "relation": "near_place",
+          "weight": 0.86
+        },
+        {
+          "to_entity_id": "place:prestige-shantiniketan-mall",
+          "relation": "near_place",
+          "weight": 0.84
+        },
+        {
+          "to_entity_id": "place:manipal-hospital-whitefield",
+          "relation": "near_place",
+          "weight": 0.84
+        },
+        {
+          "to_entity_id": "place:whitefield-marriott",
+          "relation": "near_place",
+          "weight": 0.8
+        },
+        {
+          "to_entity_id": "place:bagmane-tech-park",
+          "relation": "near_place",
+          "weight": 0.87
+        },
+        {
+          "to_entity_id": "place:seegehalli-metro",
+          "relation": "near_place",
+          "weight": 0.82
+        }
+      ],
+      "facts": [
+        {
+          "entity_id": "road:ecc-road",
+          "fact_key": "risk.approach_road_waterlogging",
+          "value": "mentioned",
+          "confidence": 0.42,
+          "source_type": "RedditTheme"
+        }
+      ]
+    }
+  ]
+}

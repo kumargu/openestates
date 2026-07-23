@@ -60,6 +60,8 @@ pub struct PreferenceSignal {
     pub raw_text: String,
     pub polarity: Polarity,
     pub expanded_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub gap_keys: Vec<String>,
     pub weight: f32,
 }
 
@@ -98,6 +100,10 @@ pub fn parse_intent(query: &str) -> SearchIntent {
                 .any(|accepted| accepted.eq_ignore_ascii_case(&pref.raw_text))
         })
         .collect();
+    let positive_preferences = remove_positive_preferences_conflicting_with_negatives(
+        positive_preferences,
+        &negative_preferences,
+    );
     let unsupported_inventory_types = detect_unsupported_inventory_types(&q);
     let buyer_archetype = detect_buyer_archetype(&q);
     let preferences = display_preferences(&positive_preferences, &negative_preferences);
@@ -194,7 +200,7 @@ fn detect_budget(q: &str) -> Option<u64> {
     for i in 0..tokens.len() {
         let is_budget_prefix = matches!(
             tokens[i],
-            "under" | "below" | "budget" | "max" | "within" | "upto"
+            "under" | "undr" | "below" | "budget" | "max" | "within" | "upto" | "up"
         );
         if !is_budget_prefix {
             continue;
@@ -208,6 +214,7 @@ fn detect_budget(q: &str) -> Option<u64> {
     // Also try standalone patterns like "1.5cr" without prefix
     for token in &tokens {
         if let Some(amount) = parse_single_amount(token) {
+            let token = clean_amount_token(token);
             // Only use standalone if it looks like a budget (has cr/l/lakh suffix)
             if token.ends_with("cr")
                 || token.ends_with("crore")
@@ -230,17 +237,17 @@ fn parse_amount(tokens: &[&str]) -> Option<u64> {
     }
 
     // Try "1.5 cr", "80 lakhs", "1.5cr"
-    let first = tokens[0];
+    let first = clean_amount_token(tokens[0]);
 
     // Case: "1.5cr" or "80L" (number + suffix in one token)
-    if let Some(amount) = parse_single_amount(first) {
+    if let Some(amount) = parse_single_amount(&first) {
         return Some(amount);
     }
 
     // Case: "1.5 cr" or "80 lakhs" (number then suffix)
     if tokens.len() >= 2 {
         if let Ok(num) = first.parse::<f64>() {
-            let suffix = tokens[1];
+            let suffix = clean_amount_token(tokens[1]);
             if suffix.starts_with("cr") {
                 return Some((num * 10_000_000.0) as u64);
             } else if suffix.starts_with("l") {
@@ -254,7 +261,7 @@ fn parse_amount(tokens: &[&str]) -> Option<u64> {
 
 fn parse_single_amount(token: &str) -> Option<u64> {
     // "1.5cr" -> 15_000_000, "80l" -> 8_000_000
-    let token = token.trim();
+    let token = clean_amount_token(token);
     if token.len() < 2 {
         return None;
     }
@@ -283,6 +290,12 @@ fn parse_single_amount(token: &str) -> Option<u64> {
     }
 }
 
+fn clean_amount_token(token: &str) -> String {
+    token
+        .trim_matches(|ch: char| ch.is_ascii_punctuation() && ch != '+' && ch != '-')
+        .to_ascii_lowercase()
+}
+
 fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
     schema::detect_hard_constraints(q)
 }
@@ -300,6 +313,7 @@ fn detect_positive_preferences(q: &str) -> Vec<PreferenceSignal> {
 
         if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
             merge_expanded_keys(existing, &pattern.expanded_keys);
+            merge_gap_keys(existing, &pattern.gap_keys);
             apply_preference_key_overrides(q, existing);
             existing.weight = existing.weight.max(pattern.weight);
         } else {
@@ -322,6 +336,7 @@ fn apply_preference_key_overrides(q: &str, signal: &mut PreferenceSignal) {
         }
 
         signal.expanded_keys = override_rule.expanded_keys.clone();
+        signal.gap_keys = override_rule.gap_keys.clone();
         return;
     }
 }
@@ -330,6 +345,14 @@ fn merge_expanded_keys(signal: &mut PreferenceSignal, keys: &[String]) {
     for key in keys {
         if !signal.expanded_keys.iter().any(|existing| existing == key) {
             signal.expanded_keys.push(key.clone());
+        }
+    }
+}
+
+fn merge_gap_keys(signal: &mut PreferenceSignal, keys: &[String]) {
+    for key in keys {
+        if !signal.gap_keys.iter().any(|existing| existing == key) {
+            signal.gap_keys.push(key.clone());
         }
     }
 }
@@ -347,6 +370,7 @@ fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
 
         if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
             merge_expanded_keys(existing, &pattern.expanded_keys);
+            merge_gap_keys(existing, &pattern.gap_keys);
             existing.weight = existing.weight.max(pattern.weight);
         } else {
             prefs.push(schema::schema_preference_signal(
@@ -356,6 +380,49 @@ fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
         }
     }
     prefs
+}
+
+fn remove_positive_preferences_conflicting_with_negatives(
+    positive_preferences: Vec<PreferenceSignal>,
+    negative_preferences: &[PreferenceSignal],
+) -> Vec<PreferenceSignal> {
+    if negative_preferences.is_empty() {
+        return positive_preferences;
+    }
+
+    positive_preferences
+        .into_iter()
+        .filter(|positive| {
+            !negative_preferences
+                .iter()
+                .any(|negative| preferences_conflict(positive, negative))
+        })
+        .collect()
+}
+
+fn preferences_conflict(positive: &PreferenceSignal, negative: &PreferenceSignal) -> bool {
+    if positive.raw_text.eq_ignore_ascii_case(&negative.raw_text) {
+        return true;
+    }
+
+    positive.expanded_keys.iter().any(|positive_key| {
+        is_specific_conflict_key(positive_key)
+            && negative
+                .expanded_keys
+                .iter()
+                .any(|negative_key| positive_key.eq_ignore_ascii_case(negative_key))
+    })
+}
+
+fn is_specific_conflict_key(key: &str) -> bool {
+    !matches!(
+        key,
+        "price_per_sqft"
+            | "pricing_insight"
+            | "resident_sentiment"
+            | "google_review_snippets"
+            | "sentiment_summary"
+    )
 }
 
 fn detect_accepted_tradeoffs(q: &str) -> Vec<String> {
@@ -550,6 +617,19 @@ mod tests {
         let intent = parse_intent("3 bhk below 80l");
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.budget_max, Some(8_000_000));
+    }
+
+    #[test]
+    fn parses_punctuated_and_typo_budget_phrases() {
+        let intent = parse_intent("witefield 3bhk undr 2.5cr, gud reviews");
+
+        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.budget_max, Some(25_000_000));
+        assert!(has_positive_label(&intent, "review quality"));
+
+        let sentence = parse_intent("Budget below 1.5Cr.");
+        assert_eq!(sentence.budget_max, Some(15_000_000));
     }
 
     #[test]
@@ -832,6 +912,11 @@ mod tests {
             .contains(&"google_rating".to_string()));
         assert!(!google.preferences.contains(&"greenery".to_string()));
 
+        let long_form = parse_intent(
+            "Show homes with real review receipts.\nI want Google review strength, resident snippets and community proof.",
+        );
+        assert!(has_positive_label(&long_form, "review quality"));
+
         let reddit = parse_intent("resident feedback on reddit Prestige Raintree Park");
         let resident_preference = reddit
             .positive_preferences
@@ -842,5 +927,170 @@ mod tests {
             .expanded_keys
             .contains(&"reddit_thread_count".to_string()));
         assert!(!reddit.preferences.contains(&"greenery".to_string()));
+    }
+
+    #[test]
+    fn legal_and_builder_language_maps_to_structured_preferences() {
+        let legal = parse_intent(
+            "Need safe paperwork, RERA clarity and clean legal receipts.\nAvoid projects where possession or legal status is unclear.",
+        );
+        assert!(has_positive_label(&legal, "legal safety"));
+        assert!(has_positive_label(&legal, "ready to move"));
+
+        let builder = parse_intent(
+            "Prefer an experienced builder with a visible RERA track record and builder project count.",
+        );
+        assert!(has_expanded_positive_key(
+            &builder,
+            "rera_builder_projects_count"
+        ));
+        assert!(has_positive_label(&builder, "legal safety"));
+    }
+
+    #[test]
+    fn listing_receipt_language_maps_to_listing_evidence() {
+        let listing = parse_intent(
+            "Need a larger 4BHK or premium family apartment with price proof.\nBudget can stretch, but I want listing source and area details.",
+        );
+
+        assert!(has_positive_label(&listing, "premium"));
+        assert!(has_positive_label(&listing, "listing evidence"));
+        assert!(has_expanded_positive_key(&listing, "listing_price_4bhk"));
+        assert!(has_expanded_positive_key(
+            &listing,
+            "listing_area_sqft_4bhk"
+        ));
+
+        let receipts = parse_intent(
+            "Prestige Waterford 3BHK. I want an explainable premium option with legal and listing receipts.",
+        );
+        assert!(has_positive_label(&receipts, "legal safety"));
+        assert!(has_positive_label(&receipts, "listing evidence"));
+        assert!(has_expanded_positive_key(&receipts, "rera_status"));
+        assert!(has_expanded_positive_key(&receipts, "listing_price_3bhk"));
+    }
+
+    #[test]
+    fn data_gap_language_carries_configured_gap_keys() {
+        let water = parse_intent("avoid water issues, no tanker dependency");
+        let water_pref = water
+            .negative_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "water issues")
+            .expect("water issues should be detected");
+        assert!(water_pref
+            .gap_keys
+            .contains(&"operating.tanker_dependence".to_string()));
+        assert!(water_pref
+            .gap_keys
+            .contains(&"water_supply_risk".to_string()));
+
+        let approvals = parse_intent(
+            "BBMP approval issues are a hard no. Need approval documents and OC-like confidence.",
+        );
+        let legal = approvals
+            .positive_preferences
+            .iter()
+            .find(|preference| preference.raw_text == "legal safety")
+            .expect("legal safety should be detected");
+        assert_eq!(
+            legal.gap_keys,
+            vec![
+                "bbmp_approval_status".to_string(),
+                "occupancy_certificate_status".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn legal_risk_query_maps_to_proof_dimensions() {
+        let intent = parse_intent(
+            "Legal risk is a hard no: complaints, litigation and builder revocations should be checked from RERA.\nShow options with those receipts, not guesses.",
+        );
+
+        assert!(has_positive_label(&intent, "legal safety"));
+        assert!(has_positive_label(&intent, "reliable builder"));
+        assert!(has_expanded_positive_key(
+            &intent,
+            "rera_builder_revocations"
+        ));
+    }
+
+    #[test]
+    fn monsoon_drainage_language_maps_to_negative_risks() {
+        let intent = parse_intent(
+            "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.",
+        );
+
+        assert!(has_negative_label(&intent, "waterlogging risk"));
+        assert!(has_negative_label(&intent, "approach road"));
+    }
+
+    #[test]
+    fn family_and_investment_query_extracts_both_preferences() {
+        let intent = parse_intent("good for family AND good investment");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::Family));
+        assert!(has_positive_label(&intent, "family friendly"));
+        assert!(has_positive_label(&intent, "resale potential"));
+    }
+
+    #[test]
+    fn water_issue_query_is_negative_not_positive_water_supply() {
+        let intent = parse_intent("avoid water issues, no tanker dependency");
+
+        assert!(has_negative_label(&intent, "water issues"));
+        assert!(!has_positive_label(&intent, "water supply"));
+    }
+
+    #[test]
+    fn maintenance_and_shady_builder_query_extracts_negative_risks() {
+        let intent = parse_intent("don't want maintenance headaches or shady builder");
+
+        assert!(has_negative_label(&intent, "maintenance"));
+        assert!(has_negative_label(&intent, "builder trust"));
+        assert!(!has_positive_label(&intent, "maintenance"));
+    }
+
+    #[test]
+    fn soft_parent_query_extracts_quiet_and_open_space() {
+        let intent =
+            parse_intent("something calmer for my parents, less chaos, more breathing room");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::Family));
+        assert!(has_positive_label(&intent, "quiet neighborhood"));
+        assert!(has_expanded_positive_key(&intent, "open_space_score"));
+        assert!(!has_negative_label(&intent, "density risk"));
+    }
+
+    #[test]
+    fn value_commute_query_extracts_value_buyer_and_commute() {
+        let intent = parse_intent("affordable 2BHK for young couple, good commute");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::ValueBuyer));
+        assert_eq!(intent.bhk, Some(2));
+        assert!(has_positive_label(&intent, "commute"));
+        assert!(has_positive_label(&intent, "value for money"));
+    }
+
+    fn has_positive_label(intent: &SearchIntent, label: &str) -> bool {
+        intent
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.raw_text == label)
+    }
+
+    fn has_negative_label(intent: &SearchIntent, label: &str) -> bool {
+        intent
+            .negative_preferences
+            .iter()
+            .any(|preference| preference.raw_text == label)
+    }
+
+    fn has_expanded_positive_key(intent: &SearchIntent, key: &str) -> bool {
+        intent
+            .positive_preferences
+            .iter()
+            .any(|preference| preference.expanded_keys.contains(&key.to_string()))
     }
 }

@@ -139,7 +139,7 @@
     {
       "id": "google_nearby_places_weekly",
       "stage": "raw",
-      "description": "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, eateries, and offices.",
+      "description": "Weekly Google Maps nearby place observations for schools, metro, hospitals, fitness, and offices.",
       "dependencies": [
         "canonical_society_nodes"
       ],
@@ -213,6 +213,29 @@
       "optional_dependencies": [
         "reddit_resident_facts"
       ]
+    },
+    {
+      "id": "generated_context_summaries",
+      "stage": "silver",
+      "description": "Offline local-model buyer summaries generated from graph context envelopes and validated before serving.",
+      "dependencies": [],
+      "refresh": "on_change",
+      "cost_tier": "moderate",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "composite",
+        "coordinates": [
+          {
+            "kind": "from_run",
+            "key": "dt"
+          },
+          {
+            "kind": "static",
+            "key": "source",
+            "value": "local_summary"
+          }
+        ]
+      }
     },
     {
       "id": "prestige_inventory_weekly",
@@ -414,30 +437,9 @@
       }
     },
     {
-      "id": "legacy_seed_facts",
-      "stage": "silver",
-      "description": "Low-confidence bootstrap facts imported from data/seed JSON.",
-      "dependencies": [
-        "canonical_society_nodes"
-      ],
-      "refresh": "on_change",
-      "cost_tier": "free",
-      "trust_tier": "support",
-      "partition_policy": {
-        "kind": "composite",
-        "coordinates": [
-          {
-            "kind": "static",
-            "key": "source",
-            "value": "legacy_seed"
-          }
-        ]
-      }
-    },
-    {
-      "id": "canonical_property_nodes",
+      "id": "canonical_road_nodes",
       "stage": "gold",
-      "description": "Property listing entities and in_society edges from seed and listings.",
+      "description": "Road segment and place entities with served_by_road edges from approach road visuals.",
       "dependencies": [
         "canonical_society_nodes"
       ],
@@ -449,11 +451,11 @@
       }
     },
     {
-      "id": "canonical_area_nodes",
-      "stage": "gold",
-      "description": "Area entities and society in_area edges from seed profiles.",
+      "id": "approach_road_graph_facts",
+      "stage": "silver",
+      "description": "Approach road media and shared-node concern facts for road_segment and place entities.",
       "dependencies": [
-        "canonical_society_nodes"
+        "canonical_road_nodes"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -468,9 +470,7 @@
       "description": "Versioned society KG view merged by source precedence and fact policy.",
       "dependencies": [
         "canonical_society_nodes",
-        "canonical_property_nodes",
-        "canonical_area_nodes",
-        "legacy_seed_facts",
+        "canonical_road_nodes",
         "rera_legal_facts",
         "reddit_resident_facts",
         "google_review_facts",
@@ -481,7 +481,9 @@
         "image_media_facts",
         "metro_proximity_facts",
         "builder_rera_aggregates",
-        "home_state_signals"
+        "home_state_signals",
+        "approach_road_graph_facts",
+        "generated_context_summaries"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -521,10 +523,13 @@
         {
           "dependency": "metro_proximity_facts",
           "policy": "all_current_partitions"
+        },
+        {
+          "dependency": "generated_context_summaries",
+          "policy": "all_current_partitions"
         }
       ],
       "optional_dependencies": [
-        "legacy_seed_facts",
         "reddit_resident_facts",
         "google_review_facts",
         "community_review_summary_facts",

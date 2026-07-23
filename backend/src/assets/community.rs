@@ -1,8 +1,8 @@
 use std::fmt;
 
 use crate::community::{
-    community_evidence_from_fact_value, deterministic_community_summarizer,
-    CommunityEntitySummary, CommunityEvidenceRecord, CommunityEvidenceSummaryEngine,
+    community_evidence_from_fact_value, deterministic_community_summarizer, CommunityEntitySummary,
+    CommunityEvidenceRecord, CommunityEvidenceSummaryEngine,
 };
 use crate::knowledge::FactValue;
 use crate::lake::LakeStore;

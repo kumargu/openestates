@@ -111,10 +111,24 @@
     "facts": [
       { "key": "listing_3bhk", "label": "3BHK listing", "scope": "society", "relationship": "project market trail" },
       { "key": "listing_price_3bhk", "label": "3BHK listing price", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_range_3bhk", "label": "3BHK listing price range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_3bhk", "label": "3BHK listing area", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_range_3bhk", "label": "3BHK listing area range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_per_sqft_range_3bhk", "label": "3BHK listing rate range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_type_3bhk", "label": "3BHK area basis", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_url_3bhk", "label": "3BHK listing source", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_name_3bhk", "label": "3BHK source name", "scope": "society", "relationship": "project market trail" },
       { "key": "market_project_status", "label": "Builder inventory status", "scope": "society", "relationship": "project market trail" },
       { "key": "market_starting_price_inr", "label": "Builder starting price", "scope": "society", "relationship": "project market trail" },
+      { "key": "market_bhk_options", "label": "Configurations", "scope": "society", "relationship": "project market trail" },
+      { "key": "market_total_units", "label": "Homes", "scope": "society", "relationship": "project market trail" },
+      { "key": "builder_reported_land_area_acres", "label": "Builder project area", "scope": "society", "relationship": "project market trail" },
       { "key": "official_project_url", "label": "Official project page", "scope": "society", "relationship": "project market trail" },
-      { "key": "project_maps_url", "label": "Project map", "scope": "society", "relationship": "project market trail" }
+      { "key": "project_maps_url", "label": "Project map", "scope": "society", "relationship": "project market trail" },
+      { "key": "pricing_3bhk", "label": "3BHK pricing", "scope": "society", "relationship": "project market trail" },
+      { "key": "price_per_sqft", "label": "Market rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "price_appreciation", "label": "Price movement", "scope": "society", "relationship": "project market trail" },
+      { "key": "comparable_projects", "label": "Nearby comparables", "scope": "society", "relationship": "project market trail" }
     ]
   },
   {
@@ -131,12 +145,11 @@
       "max_preview_items": 6
     },
     "facts": [
-      { "key": "nearby_schools", "label": "Schools", "scope": "society", "relationship": "nearby map context" },
-      { "key": "nearby_metro_stations", "label": "Metro", "scope": "society", "relationship": "nearby map context" },
-      { "key": "nearby_hospitals", "label": "Hospitals", "scope": "society", "relationship": "nearby map context" },
-      { "key": "nearby_fitness", "label": "Cult / gyms", "scope": "society", "relationship": "nearby map context" },
-      { "key": "nearby_eateries", "label": "Eateries", "scope": "society", "relationship": "nearby map context" },
-      { "key": "nearby_tech_parks", "label": "Tech parks / offices", "scope": "society", "relationship": "nearby map context" }
+      { "key": "nearby_schools", "label": "Schools", "scope": "society", "relationship": "nearby map context", "max_values": 4 },
+      { "key": "nearby_metro_stations", "label": "Metro", "scope": "society", "relationship": "nearby map context", "max_values": 2 },
+      { "key": "nearby_hospitals", "label": "Hospitals", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
+      { "key": "nearby_fitness", "label": "Cult / gyms", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
+      { "key": "nearby_tech_parks", "label": "Tech parks / offices", "scope": "society", "relationship": "nearby map context", "max_values": 3 }
     ]
   },
   {
@@ -259,26 +272,6 @@
         "scope": "society",
         "relationship": "resident and review context"
       }
-    ]
-  },
-  {
-    "kind": "area",
-    "priority": 60,
-    "constellation": "commute",
-    "title": "Area trail",
-    "subtitle": "Neighbourhood evidence around daily life.",
-    "scope": "area",
-    "relationship": "locality context",
-    "presentation": {
-      "variant": "fact_list",
-      "density": "standard",
-      "max_preview_items": 4
-    },
-    "facts": [
-      { "key": "metro_details", "label": "Metro access", "scope": "area", "relationship": "locality context" },
-      { "key": "traffic_reality", "label": "Traffic", "scope": "area", "relationship": "locality context" },
-      { "key": "waterlogging_detail", "label": "Waterlogging", "scope": "area", "relationship": "locality context" },
-      { "key": "metro_status", "label": "Metro access", "scope": "society", "relationship": "locality context" }
     ]
   }
 ]

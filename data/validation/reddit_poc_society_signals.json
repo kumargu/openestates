@@ -2,7 +2,7 @@
   "_comment": "POC manual RedditTheme facts for issue #2 societies. Low confidence; resolver should prefer Google/RERA when both exist.",
   "version": 1,
   "source_type": "RedditTheme",
-  "max_confidence": 0.4,
+  "max_confidence": 0.45,
   "facts": [
     {
       "entity_id": "society:prestige-waterford",
@@ -38,6 +38,76 @@
       "value": "mentioned",
       "confidence": 0.4,
       "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-parkgrove"
+    },
+    {
+      "entity_id": "society:prestige-raintree-park",
+      "fact_key": "access.traffic_high",
+      "value": "mentioned",
+      "confidence": 0.39,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-raintree"
+    },
+    {
+      "entity_id": "society:abhee-celestial-city",
+      "fact_key": "operating.maintenance_charges",
+      "value": "mentioned",
+      "confidence": 0.37,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-abhee"
+    },
+    {
+      "entity_id": "society:sarang-by-sumadhura-phase-2",
+      "fact_key": "lifecycle.builder_delay",
+      "value": "mentioned",
+      "confidence": 0.36,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-sarang"
+    },
+    {
+      "entity_id": "society:vaswani-starlight",
+      "fact_key": "operating.power_backup",
+      "value": "mentioned",
+      "confidence": 0.41,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-vaswani"
+    },
+    {
+      "entity_id": "society:sumadhura-capitol-residences",
+      "fact_key": "risk.noise",
+      "value": "mentioned",
+      "confidence": 0.38,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-capitol"
+    },
+    {
+      "entity_id": "society:prestige-somerville",
+      "fact_key": "operating.lift_reliability",
+      "value": "mentioned",
+      "confidence": 0.4,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-somerville"
+    },
+    {
+      "entity_id": "society:adarsh-tropica",
+      "fact_key": "operating.stp_smell",
+      "value": "mentioned",
+      "confidence": 0.35,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-adarsh"
+    },
+    {
+      "entity_id": "society:godrej-park-retreat",
+      "fact_key": "positive.maintenance_quality",
+      "value": "mentioned",
+      "confidence": 0.43,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-godrej-park"
+    },
+    {
+      "entity_id": "society:sobha-neopolis",
+      "fact_key": "risk.approach_road_waterlogging",
+      "value": "mentioned",
+      "confidence": 0.39,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-sobha-neo"
+    },
+    {
+      "entity_id": "society:brigade-cornerstone-utopia",
+      "fact_key": "operating.tanker_dependence",
+      "value": "mentioned",
+      "confidence": 0.4,
+      "source_url": "https://reddit.com/r/BangaloreRealEstates/comments/poc-brigade-utopia"
     }
   ]
 }

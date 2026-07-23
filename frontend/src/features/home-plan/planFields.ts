@@ -7,7 +7,8 @@ export type PlanControlField =
   | "loanRate"
   | "appreciation"
   | "equityReturn"
-  | "currentRentThousands";
+  | "currentRentThousands"
+  | "rentInflation";
 
 export type AssumptionChip = {
   label: string;
@@ -29,6 +30,7 @@ export function assumptionChips(inputs: PlanInputs): AssumptionChip[] {
     { label: "Home growth", value: `${inputs.appreciation.toFixed(1)}%`, section: "market", field: "appreciation" },
     { label: "Fund return", value: `${inputs.equityReturn.toFixed(1)}%`, section: "market", field: "equityReturn" },
     { label: "Rent", value: `₹${inputs.currentRentThousands.toFixed(0)}K/mo`, section: "market", field: "currentRentThousands" },
+    { label: "Rent inflation", value: `${inputs.rentInflation.toFixed(1)}%/yr`, section: "market", field: "rentInflation" },
   ];
 }
 

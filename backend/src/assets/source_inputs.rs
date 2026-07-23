@@ -9,9 +9,10 @@ use super::{
     RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
     SkillFactRecord, SourceWatermark, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    LEGACY_SEED_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    GENERATED_CONTEXT_SUMMARIES_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
+    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
@@ -31,8 +32,6 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reddit_resident_facts: Option<SkillFactsInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub legacy_seed_facts: Option<SkillFactsInput>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_places_weekly: Option<GooglePlacesWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_nearby_places_weekly: Option<GoogleNearbyPlacesWeeklyInput>,
@@ -44,6 +43,8 @@ pub struct AssetSourceInputs {
     pub external_images_weekly: Option<ExternalImagesWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metro_stations_monthly: Option<MetroStationsMonthlyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generated_context_summaries: Option<SkillFactsInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -59,13 +60,13 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID,
             REDDIT_THREADS_DAILY_ASSET_ID,
             REDDIT_RESIDENT_FACTS_ASSET_ID,
-            LEGACY_SEED_FACTS_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             METRO_STATIONS_MONTHLY_ASSET_ID,
+            GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -78,13 +79,13 @@ impl AssetSourceInputs {
             RERA_REGISTRY_MONTHLY_ASSET_ID
                 | REDDIT_THREADS_DAILY_ASSET_ID
                 | REDDIT_RESIDENT_FACTS_ASSET_ID
-                | LEGACY_SEED_FACTS_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID
                 | EXTERNAL_LISTINGS_WEEKLY_ASSET_ID
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | METRO_STATIONS_MONTHLY_ASSET_ID
+                | GENERATED_CONTEXT_SUMMARIES_ASSET_ID
         )
     }
 
@@ -336,4 +337,115 @@ pub struct SkillFactsInput {
     pub fact_annotations: Vec<SkillFactAnnotationRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_watermarks: Vec<SourceWatermark>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    use super::super::{
+        AssetFreshness, AssetPartition, AssetPlanEntry, AssetStage, CostTier,
+        FreshnessReferenceKind, MaterializationId, PlanDecision, RefreshCadence, TrustTier,
+    };
+
+    #[test]
+    fn generated_context_summaries_are_supported_source_inputs() {
+        let asset_id = AssetId::new(GENERATED_CONTEXT_SUMMARIES_ASSET_ID).unwrap();
+
+        assert!(AssetSourceInputs::supports_asset(&asset_id));
+        assert!(AssetSourceInputs::supported_asset_ids()
+            .iter()
+            .any(|supported| supported == &asset_id));
+    }
+
+    #[test]
+    fn generated_context_summaries_deserialize_as_skill_facts_input() {
+        let payload = serde_json::json!({
+            "generated_context_summaries": {
+                "source": "local_summary",
+                "snapshot_date": "2026-07-20",
+                "facts": [],
+                "fact_annotations": [],
+                "source_watermarks": [
+                    {
+                        "source": "generated_context_summaries",
+                        "high_watermark": "2026-07-20T00:00:00Z"
+                    }
+                ]
+            }
+        });
+
+        let inputs: AssetSourceInputs = serde_json::from_value(payload).unwrap();
+        let summaries = inputs.generated_context_summaries.unwrap();
+
+        assert_eq!(summaries.source, "local_summary");
+        assert_eq!(summaries.snapshot_date, "2026-07-20");
+        assert_eq!(summaries.source_watermarks.len(), 1);
+    }
+
+    #[test]
+    fn forced_google_nearby_facts_request_raw_nearby_source_input() {
+        let plan = test_plan([test_run_entry(GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID)]);
+
+        let collection_plan = AssetSourceInputs::collection_plan(&plan);
+
+        assert!(collection_plan
+            .requested_assets
+            .iter()
+            .any(|asset_id| asset_id.as_str() == GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID));
+        assert!(collection_plan
+            .force_assets
+            .iter()
+            .any(|asset_id| asset_id.as_str() == GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID));
+    }
+
+    #[test]
+    fn forced_raw_source_asset_is_requested_by_collection_plan() {
+        let plan = test_plan([test_run_entry(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID)]);
+
+        let collection_plan = AssetSourceInputs::collection_plan(&plan);
+
+        assert_eq!(
+            collection_plan.requested_assets,
+            vec![AssetId::new(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID).unwrap()]
+        );
+    }
+
+    fn test_plan(entries: impl IntoIterator<Item = AssetPlanEntry>) -> AssetDagPlan {
+        AssetDagPlan {
+            run_id: MaterializationId::new(),
+            partition: AssetPartition::global(),
+            planned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 22, 12, 0, 0).unwrap(),
+            entries: entries.into_iter().collect(),
+        }
+    }
+
+    fn test_run_entry(asset_id: &str) -> AssetPlanEntry {
+        AssetPlanEntry {
+            asset_id: AssetId::new(asset_id).unwrap(),
+            partition: AssetPartition::global(),
+            stage: AssetStage::Raw,
+            dependencies: Vec::new(),
+            refresh: RefreshCadence::Weekly,
+            cost_tier: CostTier::Free,
+            trust_tier: TrustTier::Support,
+            decision: PlanDecision::Run,
+            reason: Some(PlanReason::Forced),
+            current_materialization_id: None,
+            current_version: None,
+            current_created_at: None,
+            current_parent_materializations: Vec::new(),
+            dependency_snapshot: Vec::new(),
+            freshness: AssetFreshness {
+                cadence: RefreshCadence::Weekly,
+                reference_kind: FreshnessReferenceKind::Missing,
+                reference_value: None,
+                reference_time: None,
+                current_age_seconds: None,
+                max_age_seconds: Some(7 * 24 * 60 * 60),
+                is_stale: true,
+            },
+        }
+    }
 }

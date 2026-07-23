@@ -23,18 +23,17 @@ use super::{
     ProjectEnrichmentMaterializer, RedditThreadSnapshotMaterializeError,
     RedditThreadSnapshotMaterializer, RedditThreadsDailyInput, ReraAssetError,
     ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactsInput, SourceWatermark, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    CANONICAL_AREA_NODES_ASSET_ID, CANONICAL_PROPERTY_NODES_ASSET_ID,
+    SkillFactsInput, SourceWatermark, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_ROAD_NODES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    LEGACY_SEED_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
+    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -749,21 +748,19 @@ impl AssetDagExecutor {
         let support_rows = read_skill_fact_artifact_rows(&self.lake, &support_records).await?;
         let canonical_record =
             dependency_record(&asset_id, &parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
-        let property_record =
-            dependency_record(&asset_id, &parent_records, CANONICAL_PROPERTY_NODES_ASSET_ID)?;
-        let area_record =
-            dependency_record(&asset_id, &parent_records, CANONICAL_AREA_NODES_ASSET_ID)?;
+        let road_record =
+            dependency_record(&asset_id, &parent_records, CANONICAL_ROAD_NODES_ASSET_ID).ok();
         let canonical_rows =
             super::read_canonical_society_rows(&self.lake, canonical_record).await?;
-        let property_rows =
-            super::read_canonical_node_rows(&self.lake, property_record).await?;
-        let area_rows = super::read_canonical_node_rows(&self.lake, area_record).await?;
+        let road_rows = if let Some(record) = road_record {
+            super::read_canonical_road_rows(&self.lake, record).await?
+        } else {
+            super::canonical_nodes::CanonicalNodeRows::default()
+        };
         let mut canonical_entities = canonical_rows.entities;
-        canonical_entities.extend(property_rows.entities);
-        canonical_entities.extend(area_rows.entities);
+        canonical_entities.extend(road_rows.entities);
         let mut canonical_edges = canonical_rows.edges;
-        canonical_edges.extend(property_rows.edges);
-        canonical_edges.extend(area_rows.edges);
+        canonical_edges.extend(road_rows.edges);
         let records = KgViewRecords::from_graph_with_asset_rows(
             graph,
             &canonical_entities,
@@ -1074,12 +1071,8 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::CanonicalSocietyNodes,
         );
         executors.insert(
-            static_asset_id(CANONICAL_PROPERTY_NODES_ASSET_ID),
-            BuiltInAssetExecutor::CanonicalPropertyNodes,
-        );
-        executors.insert(
-            static_asset_id(CANONICAL_AREA_NODES_ASSET_ID),
-            BuiltInAssetExecutor::CanonicalAreaNodes,
+            static_asset_id(CANONICAL_ROAD_NODES_ASSET_ID),
+            BuiltInAssetExecutor::CanonicalRoadNodes,
         );
         executors.insert(
             static_asset_id(RERA_LEGAL_FACTS_ASSET_ID),
@@ -1092,10 +1085,6 @@ impl BuiltInAssetExecutorRegistry {
         executors.insert(
             static_asset_id(REDDIT_RESIDENT_FACTS_ASSET_ID),
             BuiltInAssetExecutor::RedditResidentFacts,
-        );
-        executors.insert(
-            static_asset_id(LEGACY_SEED_FACTS_ASSET_ID),
-            BuiltInAssetExecutor::LegacySeedFacts,
         );
         executors.insert(
             static_asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID),
@@ -1158,6 +1147,14 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::HomeStateSignals,
         );
         executors.insert(
+            static_asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::ApproachRoadGraphFacts,
+        );
+        executors.insert(
+            static_asset_id(GENERATED_CONTEXT_SUMMARIES_ASSET_ID),
+            BuiltInAssetExecutor::GeneratedContextSummaries,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1177,12 +1174,10 @@ impl BuiltInAssetExecutorRegistry {
 enum BuiltInAssetExecutor {
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
-    CanonicalPropertyNodes,
-    CanonicalAreaNodes,
+    CanonicalRoadNodes,
     ReraLegalFacts,
     RedditThreadsDaily,
     RedditResidentFacts,
-    LegacySeedFacts,
     GooglePlacesWeekly,
     GoogleReviewFacts,
     GoogleNearbyPlacesWeekly,
@@ -1198,6 +1193,8 @@ enum BuiltInAssetExecutor {
     MetroProximityFacts,
     BuilderReraAggregates,
     HomeStateSignals,
+    ApproachRoadGraphFacts,
+    GeneratedContextSummaries,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1255,7 +1252,7 @@ impl BuiltInAssetExecutor {
                     .await?;
                 Ok(ExecutedAsset::Record(record))
             }
-            Self::CanonicalPropertyNodes => {
+            Self::CanonicalRoadNodes => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
                     .dag
@@ -1270,33 +1267,7 @@ impl BuiltInAssetExecutor {
                     .iter()
                     .map(|record| record.materialization_id.clone())
                     .collect();
-                let record =
-                    super::CanonicalPropertyNodesMaterializer::new(context.dag.lake.clone())
-                        .materialize_for_run(
-                            &context.options.version,
-                            context.run_id.clone(),
-                            context.asset_partition.clone(),
-                            parent_materializations,
-                        )
-                        .await?;
-                Ok(ExecutedAsset::Record(record))
-            }
-            Self::CanonicalAreaNodes => {
-                ensure_global_partition(context.asset_id, context.asset_partition)?;
-                let parent_records = context
-                    .dag
-                    .dependency_materialization_records(
-                        context.asset_id,
-                        &context.options.partition,
-                        context.records_by_asset,
-                        context.dependency_snapshot,
-                    )
-                    .await?;
-                let parent_materializations = parent_records
-                    .iter()
-                    .map(|record| record.materialization_id.clone())
-                    .collect();
-                let record = super::CanonicalAreaNodesMaterializer::new(context.dag.lake.clone())
+                let record = super::CanonicalRoadNodesMaterializer::new(context.dag.lake.clone())
                     .materialize_for_run(
                         &context.options.version,
                         context.run_id.clone(),
@@ -1373,16 +1344,6 @@ impl BuiltInAssetExecutor {
                     .options
                     .source_inputs
                     .reddit_resident_facts
-                    .as_ref()
-                    .ok_or_else(|| source_input_error(&context))?;
-                let materialization = execute_skill_fact_asset(context, input).await?;
-                Ok(ExecutedAsset::SkillFacts(materialization))
-            }
-            Self::LegacySeedFacts => {
-                let input = context
-                    .options
-                    .source_inputs
-                    .legacy_seed_facts
                     .as_ref()
                     .ok_or_else(|| source_input_error(&context))?;
                 let materialization = execute_skill_fact_asset(context, input).await?;
@@ -1839,6 +1800,29 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::ApproachRoadGraphFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = super::approach_road_graph_facts_input(
+                    context.run_id,
+                    context.options.planned_at,
+                )?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::GeneratedContextSummaries => {
+                let input = if let Some(input) = context
+                    .options
+                    .source_inputs
+                    .generated_context_summaries
+                    .as_ref()
+                {
+                    input
+                } else {
+                    return Err(source_input_error(&context));
+                };
+                let materialization = execute_skill_fact_asset(context, input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1863,28 +1847,23 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     CANONICAL_SOCIETY_NODES_ASSET_ID,
                 )?;
-                let property_record = dependency_record(
+                let road_record = dependency_record(
                     context.asset_id,
                     &parent_records,
-                    CANONICAL_PROPERTY_NODES_ASSET_ID,
-                )?;
-                let area_record = dependency_record(
-                    context.asset_id,
-                    &parent_records,
-                    CANONICAL_AREA_NODES_ASSET_ID,
-                )?;
+                    CANONICAL_ROAD_NODES_ASSET_ID,
+                )
+                .ok();
                 let canonical_rows =
                     super::read_canonical_society_rows(&context.dag.lake, canonical_record).await?;
-                let property_rows =
-                    super::read_canonical_node_rows(&context.dag.lake, property_record).await?;
-                let area_rows =
-                    super::read_canonical_node_rows(&context.dag.lake, area_record).await?;
+                let road_rows = if let Some(record) = road_record {
+                    super::read_canonical_road_rows(&context.dag.lake, record).await?
+                } else {
+                    super::canonical_nodes::CanonicalNodeRows::default()
+                };
                 let mut canonical_entities = canonical_rows.entities;
-                canonical_entities.extend(property_rows.entities);
-                canonical_entities.extend(area_rows.entities);
+                canonical_entities.extend(road_rows.entities);
                 let mut canonical_edges = canonical_rows.edges;
-                canonical_edges.extend(property_rows.edges);
-                canonical_edges.extend(area_rows.edges);
+                canonical_edges.extend(road_rows.edges);
                 let parent_materializations = parent_records
                     .iter()
                     .map(|record| record.materialization_id.clone())
@@ -2132,6 +2111,7 @@ pub enum AssetDagExecutorError {
     SkillFact(SkillFactMaterializeError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
+    ApproachRoadGraph(super::ApproachRoadGraphError),
     NoExecutor {
         asset_id: AssetId,
     },
@@ -2227,6 +2207,9 @@ impl fmt::Display for AssetDagExecutorError {
             Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
             Self::Rera(err) => write!(f, "RERA asset execution failed: {err}"),
             Self::CanonicalNodes(err) => write!(f, "canonical nodes asset execution failed: {err}"),
+            Self::ApproachRoadGraph(err) => {
+                write!(f, "approach road graph asset execution failed: {err}")
+            }
             Self::NoExecutor { asset_id } => {
                 write!(f, "no executor registered for planned asset {asset_id}")
             }
@@ -2445,6 +2428,12 @@ impl From<super::CanonicalNodesError> for AssetDagExecutorError {
     }
 }
 
+impl From<super::ApproachRoadGraphError> for AssetDagExecutorError {
+    fn from(err: super::ApproachRoadGraphError) -> Self {
+        Self::ApproachRoadGraph(err)
+    }
+}
+
 fn ensure_global_partition(
     asset_id: &AssetId,
     partition: &AssetPartition,
@@ -2542,6 +2531,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_listings_weekly.is_none()
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.metro_stations_monthly.is_none()
+        && source_inputs.generated_context_summaries.is_none()
 }
 
 #[cfg(test)]

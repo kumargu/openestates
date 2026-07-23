@@ -520,33 +520,33 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &home_state_facts).await;
-    let legacy_seed_facts = materialization_in_partition(
-        "legacy_seed_facts",
+    let canonical_road_nodes = materialization_in_partition(
+        "canonical_road_nodes",
+        AssetStage::Gold,
+        "2026-07-13",
+        vec![canonical.materialization_id.clone()],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &canonical_road_nodes).await;
+    let approach_road_graph_facts = materialization_in_partition(
+        "approach_road_graph_facts",
         AssetStage::Silver,
         "2026-07-13",
-        vec![canonical.materialization_id.clone()],
-        now,
-        AssetPartition::new([("source", "legacy_seed")]),
-    );
-    write_current(&materializations, &legacy_seed_facts).await;
-    let canonical_property_nodes = materialization_in_partition(
-        "canonical_property_nodes",
-        AssetStage::Gold,
-        "2026-07-13",
-        vec![canonical.materialization_id.clone()],
+        vec![canonical_road_nodes.materialization_id.clone()],
         now,
         AssetPartition::global(),
     );
-    write_current(&materializations, &canonical_property_nodes).await;
-    let canonical_area_nodes = materialization_in_partition(
-        "canonical_area_nodes",
-        AssetStage::Gold,
+    write_current(&materializations, &approach_road_graph_facts).await;
+    let generated_context_summaries = materialization_in_partition(
+        "generated_context_summaries",
+        AssetStage::Silver,
         "2026-07-13",
-        vec![canonical.materialization_id.clone()],
+        Vec::new(),
         now,
-        AssetPartition::global(),
+        AssetPartition::new([("dt", "2026-07-13"), ("source", "local_summary")]),
     );
-    write_current(&materializations, &canonical_area_nodes).await;
+    write_current(&materializations, &generated_context_summaries).await;
 
     let stale_kg = materialization_in_partition(
         "kg_society_view",
@@ -554,9 +554,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         "2026-07-12",
         vec![
             canonical.materialization_id.clone(),
-            canonical_property_nodes.materialization_id.clone(),
-            canonical_area_nodes.materialization_id.clone(),
-            legacy_seed_facts.materialization_id.clone(),
+            canonical_road_nodes.materialization_id.clone(),
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),
             google_facts.materialization_id.clone(),
@@ -568,6 +566,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
             home_state_facts.materialization_id.clone(),
+            approach_road_graph_facts.materialization_id.clone(),
+            generated_context_summaries.materialization_id.clone(),
         ],
         now - Duration::hours(1),
         AssetPartition::global(),
@@ -616,9 +616,7 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         "2026-07-13",
         vec![
             canonical.materialization_id.clone(),
-            canonical_property_nodes.materialization_id.clone(),
-            canonical_area_nodes.materialization_id.clone(),
-            legacy_seed_facts.materialization_id.clone(),
+            canonical_road_nodes.materialization_id.clone(),
             rera_facts.materialization_id.clone(),
             reddit_facts_old.materialization_id.clone(),
             reddit_facts_new.materialization_id.clone(),
@@ -631,6 +629,8 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             metro_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
             home_state_facts.materialization_id.clone(),
+            approach_road_graph_facts.materialization_id.clone(),
+            generated_context_summaries.materialization_id.clone(),
         ],
         now,
         AssetPartition::global(),

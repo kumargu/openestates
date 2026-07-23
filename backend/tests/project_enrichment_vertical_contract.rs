@@ -7,8 +7,9 @@ use backend::assets::{
     RedditThreadsDailyInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
     BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
+    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
+    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
@@ -46,6 +47,7 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
+        GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
         "kg_society_view",
         "search_serving_bundle",
     ] {
@@ -116,7 +118,13 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
             "market_bhk_options",
             "listing_3bhk",
             "listing_price_3bhk",
+            "listing_price_range_3bhk",
             "listing_area_sqft_3bhk",
+            "listing_area_sqft_range_3bhk",
+            "listing_price_per_sqft_range_3bhk",
+            "listing_area_type_3bhk",
+            "listing_source_url_3bhk",
+            "listing_source_name_3bhk",
             "official_project_url",
             "nearest_operational_metro_station",
             "metro_distance_km",
@@ -133,6 +141,29 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
             .unwrap();
         assert_eq!(market_fact.source_type, "BuilderOfficial");
         assert!(market_fact.source_url.is_some());
+        let listing_fact = rows
+            .facts
+            .iter()
+            .find(|fact| fact.fact_key == "listing_price_range_3bhk")
+            .expect("MagicBricks/external listing facts should reach serving");
+        assert_eq!(listing_fact.source_type, "ExternalListing");
+        assert!(
+            listing_fact
+                .source_url
+                .as_deref()
+                .is_some_and(|url| url.contains("listings.example")),
+            "listing fact should retain source URL: {:?}",
+            listing_fact.source_url
+        );
+        let listing_source_name = rows
+            .facts
+            .iter()
+            .find(|fact| fact.fact_key == "listing_source_name_3bhk")
+            .expect("external listing source name should reach serving");
+        assert_eq!(
+            listing_source_name.value,
+            FactValue::Text("MagicBricks".to_string())
+        );
     }
 
     let builder_rows = loaded
@@ -291,7 +322,7 @@ fn source_inputs(
         .map(|project| ExternalListingObservationRecord {
             entity_id: canonical_id(project.registration),
             project_key: Some(project.registration.to_string()),
-            source_name: "FixtureListings".to_string(),
+            source_name: "MagicBricks".to_string(),
             source_url: Some(format!("https://listings.example/{}", project.source_slug)),
             price: Some(project.price),
             price_min: Some(project.price),
@@ -352,13 +383,11 @@ fn source_inputs(
             observed_at,
             &watermark,
         )),
-        legacy_seed_facts: Some(SkillFactsInput {
-            source: "legacy_seed".to_string(),
-            snapshot_date: "2026-07-14".to_string(),
-            facts: vec![],
-            fact_annotations: vec![],
-            source_watermarks: watermark.clone(),
-        }),
+        generated_context_summaries: Some(generated_context_summary_input(
+            "society:prestige-raintree-park",
+            "Prestige Raintree Park has a generated context fixture.",
+            observed_at,
+        )),
         google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),
             records: vec![GooglePlaceSnapshotRecord {
@@ -417,6 +446,55 @@ fn source_inputs(
             source_watermarks: watermark,
         }),
         ..AssetSourceInputs::default()
+    }
+}
+
+fn generated_context_summary_input(
+    entity_id: &str,
+    summary: &str,
+    learned_at: chrono::DateTime<Utc>,
+) -> SkillFactsInput {
+    let metadata = r#"{"provider":"local-llama","quality_status":"passed"}"#.to_string();
+    SkillFactsInput {
+        source: "generated_context_summaries".to_string(),
+        snapshot_date: learned_at.date_naive().to_string(),
+        facts: vec![
+            SkillFactRecord {
+                entity_id: entity_id.to_string(),
+                fact_key: "generated_context_summary".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(summary.to_string())).unwrap(),
+                confidence: 0.72,
+                source_type: "Computed".to_string(),
+                source_url: None,
+                model: Some("fixture-local-summary".to_string()),
+                skill_id: Some("generated_context_summary_local".to_string()),
+                triggered_by: Some("asset_dag".to_string()),
+                learned_at,
+                run_id: "generated-summary-fixture".to_string(),
+                input_hash: "sha256:generated-summary-fixture".to_string(),
+            },
+            SkillFactRecord {
+                entity_id: entity_id.to_string(),
+                fact_key: "generated_context_summary_metadata".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(metadata)).unwrap(),
+                confidence: 0.72,
+                source_type: "Computed".to_string(),
+                source_url: None,
+                model: Some("fixture-local-summary".to_string()),
+                skill_id: Some("generated_context_summary_local".to_string()),
+                triggered_by: Some("asset_dag".to_string()),
+                learned_at,
+                run_id: "generated-summary-fixture".to_string(),
+                input_hash: "sha256:generated-summary-fixture".to_string(),
+            },
+        ],
+        fact_annotations: Vec::new(),
+        source_watermarks: vec![SourceWatermark {
+            source: "generated_context_summaries".to_string(),
+            high_watermark: learned_at.to_rfc3339(),
+        }],
     }
 }
 

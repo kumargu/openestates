@@ -10,6 +10,8 @@ pub struct SearchIntentFile {
     pub version: u32,
     #[serde(default)]
     pub area_aliases: AreaAliasConfig,
+    #[serde(default)]
+    pub resolution: SearchResolutionConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -23,6 +25,24 @@ pub struct AreaAliasConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct AreaAliasEntry {
     pub canonical: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct SearchResolutionConfig {
+    #[serde(default)]
+    pub min_resolvable_entity_name_chars: usize,
+    #[serde(default)]
+    pub ignored_entity_names: Vec<String>,
+    #[serde(default)]
+    pub place_families: Vec<SearchPlaceFamilyAlias>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchPlaceFamilyAlias {
+    pub id: String,
+    pub label: String,
     #[serde(default)]
     pub aliases: Vec<String>,
 }
@@ -47,6 +67,15 @@ pub fn area_alias_entries() -> &'static [AreaAliasEntry] {
             _ => embedded_area_aliases(),
         })
         .as_slice()
+}
+
+pub fn search_resolution_config() -> &'static SearchResolutionConfig {
+    static CONFIG: OnceLock<SearchResolutionConfig> = OnceLock::new();
+    CONFIG.get_or_init(|| {
+        load_search_intent()
+            .map(|file| file.resolution)
+            .unwrap_or_default()
+    })
 }
 
 fn embedded_area_aliases() -> Vec<AreaAliasEntry> {
@@ -151,11 +180,10 @@ mod tests {
         }
         let file = load_search_intent().expect("search_intent.json should parse");
         assert!(!file.area_aliases.entries.is_empty());
-        assert!(
-            file.area_aliases
-                .entries
-                .iter()
-                .any(|entry| entry.canonical == "Whitefield")
-        );
+        assert!(file
+            .area_aliases
+            .entries
+            .iter()
+            .any(|entry| entry.canonical == "Whitefield"));
     }
 }

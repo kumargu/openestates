@@ -1044,6 +1044,7 @@ impl MockSearchWorld {
             Some(&self.search_index),
             Some(&candidate_ids),
             Some(&semantic_scores),
+            None,
             Some(&self.serving_facts),
             &self.society_names,
             &[],

@@ -13,7 +13,7 @@ use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::dag_config::{better_source_type, load_resolution_policies};
+use crate::dag_config::{better_source_type, load_fact_registry, load_resolution_policies};
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
 use crate::parquet_data::{
@@ -316,6 +316,8 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<(), KgSocietyViewMaterializeError> {
+        let support_place_entities = support_place_entities(support_facts)?;
+        merge_synthesized_entities(&mut self.entities, support_place_entities);
         let mut accepted_entities: HashSet<String> = self
             .entities
             .iter()
@@ -409,6 +411,115 @@ impl KgViewRecords {
                 .unwrap_or(0);
         }
     }
+}
+
+fn merge_synthesized_entities(
+    entities: &mut Vec<KgViewEntityRecord>,
+    synthesized: Vec<KgViewEntityRecord>,
+) {
+    if synthesized.is_empty() {
+        return;
+    }
+    let mut positions = entities
+        .iter()
+        .enumerate()
+        .map(|(index, entity)| (entity.entity_id.clone(), index))
+        .collect::<HashMap<_, _>>();
+    for entity in synthesized {
+        if let Some(index) = positions.get(&entity.entity_id).copied() {
+            let existing = &mut entities[index];
+            existing.entity_type.clone_from(&entity.entity_type);
+            existing.name.clone_from(&entity.name);
+            existing.root_source.clone_from(&entity.root_source);
+            existing.created_at = existing.created_at.min(entity.created_at);
+            existing.updated_at = existing.updated_at.max(entity.updated_at);
+        } else {
+            positions.insert(entity.entity_id.clone(), entities.len());
+            entities.push(entity);
+        }
+    }
+    entities.sort_by(|left, right| left.entity_id.cmp(&right.entity_id));
+}
+
+fn support_place_entities(
+    support_facts: &[SkillFactRecord],
+) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
+    let mut by_entity = BTreeMap::<String, SupportPlaceEntity>::new();
+    for fact in support_facts
+        .iter()
+        .filter(|fact| fact.entity_id.starts_with("place:"))
+    {
+        let value = serde_json::from_str::<FactValue>(&fact.value_json)?;
+        let entry = by_entity
+            .entry(fact.entity_id.clone())
+            .or_insert_with(|| SupportPlaceEntity {
+                entity_id: fact.entity_id.clone(),
+                name: None,
+                has_latitude: false,
+                has_longitude: false,
+                root_source: Some(fact.source_type.to_ascii_lowercase()),
+                created_at: fact.learned_at,
+                updated_at: fact.learned_at,
+            });
+        entry.created_at = entry.created_at.min(fact.learned_at);
+        entry.updated_at = entry.updated_at.max(fact.learned_at);
+        if entry.root_source.is_none() && !fact.source_type.trim().is_empty() {
+            entry.root_source = Some(fact.source_type.to_ascii_lowercase());
+        }
+        match (fact.fact_key.as_str(), value) {
+            ("place.name", FactValue::Text(name)) if !name.trim().is_empty() => {
+                entry.name = Some(name.trim().to_string());
+            }
+            ("geo.latitude", FactValue::Numeric(latitude)) if valid_latitude(latitude) => {
+                entry.has_latitude = true;
+            }
+            ("geo.longitude", FactValue::Numeric(longitude)) if valid_longitude(longitude) => {
+                entry.has_longitude = true;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(by_entity
+        .into_values()
+        .filter_map(|entity| entity.into_record())
+        .collect())
+}
+
+struct SupportPlaceEntity {
+    entity_id: String,
+    name: Option<String>,
+    has_latitude: bool,
+    has_longitude: bool,
+    root_source: Option<String>,
+    created_at: DateTime<Utc>,
+    updated_at: DateTime<Utc>,
+}
+
+impl SupportPlaceEntity {
+    fn into_record(self) -> Option<KgViewEntityRecord> {
+        let name = self.name?;
+        if !self.has_latitude || !self.has_longitude {
+            return None;
+        }
+        Some(KgViewEntityRecord {
+            entity_id: self.entity_id,
+            entity_type: "place".to_string(),
+            name,
+            root_source: self.root_source,
+            fact_count: 0,
+            created_at: self.created_at,
+            updated_at: self.updated_at,
+        })
+    }
+}
+
+fn valid_latitude(value: f64) -> bool {
+    value.is_finite() && (-90.0..=90.0).contains(&value)
+}
+
+fn valid_longitude(value: f64) -> bool {
+    value.is_finite() && (-180.0..=180.0).contains(&value)
 }
 
 fn slug(value: &str) -> String {
@@ -1083,11 +1194,15 @@ fn metadata_json(metadata: &HashMap<String, String>) -> String {
 }
 
 fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
+    let multi_value_fact_keys = multi_value_fact_keys();
     let mut by_key = BTreeMap::<FactDedupeKey, KgViewFactRecord>::new();
     for fact in facts {
         let key = FactDedupeKey {
             entity_id: fact.entity_id.clone(),
             fact_key: fact.fact_key.clone(),
+            repeat_identity: multi_value_fact_keys
+                .contains(fact.fact_key.as_str())
+                .then(|| repeat_fact_identity(&fact)),
         };
         match by_key.get(&key) {
             Some(existing) if better_fact(existing, &fact) => {
@@ -1103,6 +1218,23 @@ fn dedupe_facts(facts: Vec<KgViewFactRecord>) -> Vec<KgViewFactRecord> {
     let mut facts = by_key.into_values().collect::<Vec<_>>();
     sort_facts(&mut facts);
     facts
+}
+
+fn multi_value_fact_keys() -> HashSet<String> {
+    load_fact_registry()
+        .map(|registry| registry.runtime.multi_value_fact_keys.into_iter().collect())
+        .unwrap_or_default()
+}
+
+fn repeat_fact_identity(fact: &KgViewFactRecord) -> RepeatFactIdentity {
+    RepeatFactIdentity {
+        source_type: fact.source_type.clone(),
+        source_url_or_value: fact
+            .source_url
+            .clone()
+            .unwrap_or_else(|| fact.value_json.clone()),
+        skill_id: fact.skill_id.clone(),
+    }
 }
 
 fn sort_facts(facts: &mut [KgViewFactRecord]) {
@@ -1151,6 +1283,14 @@ fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> boo
 struct FactDedupeKey {
     entity_id: String,
     fact_key: String,
+    repeat_identity: Option<RepeatFactIdentity>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct RepeatFactIdentity {
+    source_type: String,
+    source_url_or_value: String,
+    skill_id: Option<String>,
 }
 
 fn dedupe_fact_annotations(
@@ -1285,7 +1425,7 @@ mod tests {
                 source_type: SourceType::Google,
                 url: None,
                 model: None,
-                skill_id: Some("legacy_seed".to_string()),
+                skill_id: Some("google_places".to_string()),
                 triggered_by: None,
             },
             learned_at,
@@ -1358,6 +1498,55 @@ mod tests {
             .fact_annotations
             .iter()
             .any(|annotation| annotation.entity_id == "society:prestige-lavender-fields"));
+    }
+
+    #[test]
+    fn merge_preserves_repeatable_nearby_facts_by_source() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 7, 22, 7, 0, 0).unwrap();
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(Node::new(
+            "society:sumadhura-eden-garden",
+            NodeType::Society,
+            "Sumadhura Eden Garden",
+        ));
+
+        let mut aster = skill_fact(
+            "society:sumadhura-eden-garden",
+            "nearby_hospitals",
+            FactValue::Text("Aster Hospital Whitefield Bangalore (4.7 km, 4.7 rating)".to_string()),
+            learned_at,
+        );
+        aster.source_url = Some("https://www.google.com/maps/place/aster".to_string());
+        aster.skill_id = Some("fetch_google_nearby_places".to_string());
+
+        let mut manipal = skill_fact(
+            "society:sumadhura-eden-garden",
+            "nearby_hospitals",
+            FactValue::Text("Manipal Hospital Whitefield (5.1 km, 4.7 rating)".to_string()),
+            learned_at,
+        );
+        manipal.source_url = Some("https://www.google.com/maps/place/manipal".to_string());
+        manipal.skill_id = Some("fetch_google_nearby_places".to_string());
+
+        let records = KgViewRecords::from_graph_with_skill_facts(&graph, &[aster, manipal], &[])
+            .expect("repeatable nearby facts should merge");
+        let hospital_values = records
+            .facts
+            .iter()
+            .filter(|fact| {
+                fact.entity_id == "society:sumadhura-eden-garden"
+                    && fact.fact_key == "nearby_hospitals"
+            })
+            .filter_map(|fact| fact.value_text.as_deref())
+            .collect::<Vec<_>>();
+
+        assert_eq!(hospital_values.len(), 2);
+        assert!(hospital_values
+            .iter()
+            .any(|value| value.contains("Aster Hospital")));
+        assert!(hospital_values
+            .iter()
+            .any(|value| value.contains("Manipal Hospital")));
     }
 
     fn skill_fact(

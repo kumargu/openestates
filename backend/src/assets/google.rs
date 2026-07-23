@@ -29,7 +29,7 @@ use super::{
 pub const GOOGLE_PLACES_WEEKLY_ASSET_ID: &str = "google_places_weekly";
 pub const GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID: &str = "google_nearby_places_weekly";
 const GOOGLE_PLACE_FORMAT_VERSION: u32 = 2;
-const GOOGLE_NEARBY_PLACE_FORMAT_VERSION: u32 = 2;
+const GOOGLE_NEARBY_PLACE_FORMAT_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct GooglePlaceSnapshotRecord {
@@ -59,6 +59,10 @@ pub struct GoogleNearbyPlaceRecord {
     pub place_id: Option<String>,
     pub place_url: String,
     pub distance_km: Option<f64>,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
     pub rating: Option<f64>,
     pub review_count: Option<u64>,
     pub primary_type: Option<String>,
@@ -412,8 +416,18 @@ fn google_nearby_place_facts_from_rows(
     aliases: &HashMap<String, String>,
 ) -> Result<SkillFactsInput, GooglePlaceAssetError> {
     let mut rows_by_fact = BTreeMap::<(String, String), Vec<GoogleNearbyPlaceRecord>>::new();
+    let mut facts = Vec::new();
+    let mut annotations = Vec::new();
+    let mut emitted_place_fact_keys = HashSet::<(String, String)>::new();
     for row in rows {
         if let Some(fact_key) = nearby_fact_key(&row.category) {
+            append_google_nearby_place_identity_facts(
+                &row,
+                run_id,
+                &mut facts,
+                &mut annotations,
+                &mut emitted_place_fact_keys,
+            )?;
             rows_by_fact
                 .entry((row.entity_id.clone(), fact_key.to_string()))
                 .or_default()
@@ -429,8 +443,6 @@ fn google_nearby_place_facts_from_rows(
         }
     }
 
-    let mut facts = Vec::new();
-    let mut annotations = Vec::new();
     for ((entity_id, fact_key), mut grouped_rows) in rows_by_fact {
         grouped_rows.retain(|row| nearby_row_has_serving_evidence(&fact_key, row));
         if grouped_rows.is_empty() {
@@ -495,6 +507,220 @@ fn google_nearby_place_facts_from_rows(
         fact_annotations: annotations,
         source_watermarks: nearby_record.source_watermarks.clone(),
     })
+}
+
+fn append_google_nearby_place_identity_facts(
+    row: &GoogleNearbyPlaceRecord,
+    run_id: &MaterializationId,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    emitted_fact_keys: &mut HashSet<(String, String)>,
+) -> Result<(), GooglePlaceAssetError> {
+    if !valid_optional_coordinate(row.latitude, row.longitude) {
+        return Ok(());
+    }
+    let (Some(latitude), Some(longitude)) = (row.latitude, row.longitude) else {
+        return Ok(());
+    };
+
+    let entity_id = nearby_place_entity_id(row);
+    push_nearby_place_fact_once(
+        row,
+        run_id,
+        &entity_id,
+        "place.name",
+        FactValue::Text(row.place_name.clone()),
+        "Place name: {value}",
+        &["nearby", "landmark", "place"],
+        facts,
+        annotations,
+        emitted_fact_keys,
+    )?;
+    push_nearby_place_fact_once(
+        row,
+        run_id,
+        &entity_id,
+        "place.category",
+        FactValue::Text(row.category.clone()),
+        "Place category: {value}",
+        &["nearby", "landmark", "place"],
+        facts,
+        annotations,
+        emitted_fact_keys,
+    )?;
+    push_nearby_place_fact_once(
+        row,
+        run_id,
+        &entity_id,
+        "geo.latitude",
+        FactValue::Numeric(latitude),
+        "Latitude: {value}",
+        &["coordinates", "location", "latitude"],
+        facts,
+        annotations,
+        emitted_fact_keys,
+    )?;
+    push_nearby_place_fact_once(
+        row,
+        run_id,
+        &entity_id,
+        "geo.longitude",
+        FactValue::Numeric(longitude),
+        "Longitude: {value}",
+        &["coordinates", "location", "longitude"],
+        facts,
+        annotations,
+        emitted_fact_keys,
+    )?;
+    push_nearby_place_fact_once(
+        row,
+        run_id,
+        &entity_id,
+        "google_place_url",
+        FactValue::Text(row.place_url.clone()),
+        "Google place: {value}",
+        &["google maps", "nearby", "landmark"],
+        facts,
+        annotations,
+        emitted_fact_keys,
+    )?;
+
+    if let Some(place_id) = row
+        .place_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+    {
+        push_nearby_place_fact_once(
+            row,
+            run_id,
+            &entity_id,
+            "google_place_id",
+            FactValue::Text(place_id.to_string()),
+            "Google place id: {value}",
+            &["google maps", "nearby", "landmark"],
+            facts,
+            annotations,
+            emitted_fact_keys,
+        )?;
+    }
+    if let Some(rating) = row.rating {
+        push_nearby_place_fact_once(
+            row,
+            run_id,
+            &entity_id,
+            "google_rating",
+            FactValue::Numeric(rating),
+            "Google rating: {value}",
+            &["google rating", "reviews"],
+            facts,
+            annotations,
+            emitted_fact_keys,
+        )?;
+    }
+    if let Some(review_count) = row.review_count {
+        push_nearby_place_fact_once(
+            row,
+            run_id,
+            &entity_id,
+            "google_review_count",
+            FactValue::Numeric(review_count as f64),
+            "Google reviews: {value}",
+            &["google reviews", "review count"],
+            facts,
+            annotations,
+            emitted_fact_keys,
+        )?;
+    }
+    if !row.place_types.is_empty() {
+        push_nearby_place_fact_once(
+            row,
+            run_id,
+            &entity_id,
+            "place.types",
+            FactValue::Tags(row.place_types.clone()),
+            "Place types: {value}",
+            &["nearby", "landmark", "place"],
+            facts,
+            annotations,
+            emitted_fact_keys,
+        )?;
+    }
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+fn push_nearby_place_fact_once(
+    row: &GoogleNearbyPlaceRecord,
+    run_id: &MaterializationId,
+    entity_id: &str,
+    fact_key: &str,
+    value: FactValue,
+    display_template: &str,
+    answers_preferences: &[&str],
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+    emitted_fact_keys: &mut HashSet<(String, String)>,
+) -> Result<(), GooglePlaceAssetError> {
+    if !emitted_fact_keys.insert((entity_id.to_string(), fact_key.to_string())) {
+        return Ok(());
+    }
+    let value_type = fact_value_type(&value);
+    let value_json = serde_json::to_string(&value)?;
+    facts.push(SkillFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: value_type.to_string(),
+        value_json: value_json.clone(),
+        confidence: row.confidence,
+        source_type: "Google".to_string(),
+        source_url: Some(row.place_url.clone()),
+        model: None,
+        skill_id: Some("fetch_google_nearby_places".to_string()),
+        triggered_by: Some(row.query.clone()),
+        learned_at: row.fetched_at,
+        run_id: run_id.to_string(),
+        input_hash: format!(
+            "sha256:{}",
+            sha256_hex(format!("{entity_id}:{fact_key}:{value_json}").as_bytes())
+        ),
+    });
+    annotations.push(SkillFactAnnotationRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        display_template: Some(display_template.to_string()),
+        answers_preferences_json: serde_json::to_string(answers_preferences)?,
+        scoring_direction: None,
+        scoring_weight: None,
+        scoring_thresholds_json: "[]".to_string(),
+    });
+    Ok(())
+}
+
+fn nearby_place_entity_id(row: &GoogleNearbyPlaceRecord) -> String {
+    let stable_source = row
+        .place_id
+        .as_deref()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or(&row.place_url);
+    let mut stable_slug = slug(stable_source);
+    if stable_slug.is_empty() {
+        stable_slug = sha256_hex(stable_source.as_bytes())
+            .chars()
+            .take(12)
+            .collect();
+    }
+    format!("place:google:{stable_slug}")
+}
+
+fn fact_value_type(value: &FactValue) -> &'static str {
+    match value {
+        FactValue::Numeric(_) => "numeric",
+        FactValue::Text(_) => "text",
+        FactValue::Bool(_) => "bool",
+        FactValue::Tags(_) => "tags",
+        FactValue::Score { .. } => "score",
+    }
 }
 
 fn append_google_review_facts(
@@ -959,6 +1185,8 @@ fn write_nearby_places_parquet(
         Field::new("place_id", DataType::Utf8, true),
         Field::new("place_url", DataType::Utf8, false),
         Field::new("distance_km", DataType::Float64, true),
+        Field::new("latitude", DataType::Float64, true),
+        Field::new("longitude", DataType::Float64, true),
         Field::new("rating", DataType::Float64, true),
         Field::new("review_count", DataType::UInt64, true),
         Field::new("primary_type", DataType::Utf8, true),
@@ -978,6 +1206,8 @@ fn write_nearby_places_parquet(
             optional_string_array(records.iter().map(|record| record.place_id.clone())),
             string_array(records.iter().map(|record| record.place_url.clone())),
             optional_f64_array(records.iter().map(|record| record.distance_km)),
+            optional_f64_array(records.iter().map(|record| record.latitude)),
+            optional_f64_array(records.iter().map(|record| record.longitude)),
             optional_f64_array(records.iter().map(|record| record.rating)),
             optional_u64_array(records.iter().map(|record| record.review_count)),
             optional_string_array(records.iter().map(|record| record.primary_type.clone())),
@@ -1013,6 +1243,8 @@ fn read_nearby_places_parquet(
         let place_id = string_column(&batch, "place_id")?;
         let place_url = string_column(&batch, "place_url")?;
         let distance_km = f64_column(&batch, "distance_km")?;
+        let latitude = optional_f64_column(&batch, "latitude");
+        let longitude = optional_f64_column(&batch, "longitude");
         let rating = f64_column(&batch, "rating")?;
         let review_count = u64_column(&batch, "review_count")?;
         let primary_type = optional_string_column(&batch, "primary_type");
@@ -1029,6 +1261,8 @@ fn read_nearby_places_parquet(
                 place_id: optional_string(place_id, row),
                 place_url: required_string(place_url, row, "place_url")?,
                 distance_km: optional_f64(distance_km, row),
+                latitude: optional_f64_from_column(latitude, row),
+                longitude: optional_f64_from_column(longitude, row),
                 rating: optional_f64(rating, row),
                 review_count: optional_u64(review_count, row),
                 primary_type: optional_string_from_column(primary_type, row),
@@ -1159,6 +1393,12 @@ fn validate_nearby_input(
                 record.entity_id
             )));
         }
+        if !valid_optional_coordinate(record.latitude, record.longitude) {
+            return Err(GooglePlaceAssetError::InvalidInput(format!(
+                "Google nearby row for {} has invalid coordinates",
+                record.entity_id
+            )));
+        }
         if record
             .rating
             .is_some_and(|rating| !rating.is_finite() || !(0.0..=5.0).contains(&rating))
@@ -1217,9 +1457,6 @@ fn nearby_fact_key(category: &str) -> Option<&'static str> {
         }
         "hospital" | "hospitals" => Some("nearby_hospitals"),
         "fitness" | "gym" | "gyms" | "cult" | "sports" => Some("nearby_fitness"),
-        "eatery" | "eateries" | "cafe" | "cafes" | "restaurant" | "restaurants" => {
-            Some("nearby_eateries")
-        }
         "tech_park" | "tech_parks" | "office" | "offices" => Some("nearby_tech_parks"),
         _ => None,
     }
@@ -1318,15 +1555,6 @@ fn nearby_row_matches_fact_key(fact_key: &str, row: &GoogleNearbyPlaceRecord) ->
                 .iter()
                 .any(|marker| name.contains(marker))
         }
-        "nearby_eateries" => {
-            !has_place_types
-                || place_types.iter().any(|value| {
-                    matches!(
-                        value.as_str(),
-                        "restaurant" | "cafe" | "coffee_shop" | "bakery" | "meal_takeaway" | "food"
-                    )
-                })
-        }
         "nearby_tech_parks" => {
             if [" road", " bus stop", " metro station"]
                 .iter()
@@ -1376,13 +1604,8 @@ fn nearby_evidence_policy(fact_key: &str) -> NearbyEvidencePolicy {
             strong_local_distance_km: None,
             min_review_count_for_far: None,
         },
-        "nearby_eateries" => NearbyEvidencePolicy {
-            max_distance_km: 3.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
         "nearby_tech_parks" => NearbyEvidencePolicy {
-            max_distance_km: 8.0,
+            max_distance_km: 15.0,
             strong_local_distance_km: None,
             min_review_count_for_far: None,
         },
@@ -1400,7 +1623,6 @@ fn nearby_display_label(fact_key: &str) -> &'static str {
         "nearby_metro_stations" => "Nearby metro",
         "nearby_hospitals" => "Nearby hospitals",
         "nearby_fitness" => "Nearby fitness",
-        "nearby_eateries" => "Nearby eateries",
         "nearby_tech_parks" => "Nearby tech parks and offices",
         _ => "Nearby places",
     }
@@ -1412,7 +1634,6 @@ fn nearby_answers_preferences(fact_key: &str) -> Vec<&'static str> {
         "nearby_metro_stations" => vec!["nearby", "metro", "metro station", "commute"],
         "nearby_hospitals" => vec!["nearby", "hospital", "hospitals"],
         "nearby_fitness" => vec!["nearby", "gym", "fitness", "cult"],
-        "nearby_eateries" => vec!["nearby", "restaurant", "cafe", "eateries"],
         "nearby_tech_parks" => vec!["nearby", "tech park", "office", "offices", "commute"],
         _ => vec!["nearby"],
     }
@@ -1471,6 +1692,12 @@ fn optional_string_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a 
     batch
         .column_by_name(name)
         .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+}
+
+fn optional_f64_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a Float64Array> {
+    batch
+        .column_by_name(name)
+        .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
 }
 
 fn f64_column<'a>(
@@ -1537,6 +1764,40 @@ fn string_list_column(
 
 fn optional_f64(column: &Float64Array, row: usize) -> Option<f64> {
     (!column.is_null(row)).then(|| column.value(row))
+}
+
+fn optional_f64_from_column(column: Option<&Float64Array>, row: usize) -> Option<f64> {
+    column.and_then(|column| optional_f64(column, row))
+}
+
+fn valid_optional_coordinate(latitude: Option<f64>, longitude: Option<f64>) -> bool {
+    match (latitude, longitude) {
+        (Some(latitude), Some(longitude)) => {
+            latitude.is_finite()
+                && longitude.is_finite()
+                && (-90.0..=90.0).contains(&latitude)
+                && (-180.0..=180.0).contains(&longitude)
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+fn slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut pending_dash = false;
+    for character in value.trim().to_ascii_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            pending_dash = false;
+        } else {
+            pending_dash = true;
+        }
+    }
+    output
 }
 
 fn optional_u64(column: &UInt64Array, row: usize) -> Option<u64> {

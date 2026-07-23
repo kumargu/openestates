@@ -12,12 +12,9 @@ type PlanGraphProps = {
   selected: PlanScenarioId;
   milestones: PlanMilestone[];
   hintedMilestoneYear: number | null;
-  showFocusHint: boolean;
   onHorizonChange: (year: number) => void;
   onPreviewYearChange: (year: number | null) => void;
-  onSelect: (scenario: PlanScenarioId) => void;
   onMilestonePress: (milestone: PlanMilestone) => void;
-  onDismissFocusHint: () => void;
 };
 
 type GraphSeries = {
@@ -76,12 +73,9 @@ export function PlanGraph({
   selected,
   milestones,
   hintedMilestoneYear,
-  showFocusHint,
   onHorizonChange,
   onPreviewYearChange,
-  onSelect,
   onMilestonePress,
-  onDismissFocusHint,
 }: PlanGraphProps) {
   const [hoverYear, setHoverYear] = useState<number | null>(null);
   const series = graphSeries(projection, metric);
@@ -130,34 +124,6 @@ export function PlanGraph({
 
   return (
     <div className="home-plan-graph">
-      <div className="home-plan-graph-legend">
-        {series.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            className={selected === item.id ? "is-selected" : ""}
-            onClick={() => {
-              onSelect(item.id);
-              onDismissFocusHint();
-            }}
-            aria-pressed={selected === item.id}
-          >
-            <i className={`home-plan-legend-dot home-plan-legend-dot--${item.id}`} />
-            <span>
-              <strong>{item.id === "buy" ? "Buy path" : "Rent + SIP"}</strong>
-              <small>{formatCurrency(item.values[activeYear] ?? 0, true)}</small>
-            </span>
-          </button>
-        ))}
-        <p>
-          {showFocusHint
-            ? "Highlight a path — both stay on the chart"
-            : hoverYear === null
-              ? "Move across the chart to see other years"
-              : `Year ${activeYear} — tap chart to keep`}
-        </p>
-      </div>
-
       <svg
         className="home-plan-graph-svg"
         viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}

@@ -45,6 +45,7 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
 
     let cards: Vec<PropertyCard> = properties
         .iter()
+        .filter(|property| property.is_listable())
         .map(|p| {
             let card = enrich_property_card_with_sellers(p, &state.societies, &graph, &sellers);
             overlay_serving_google_reviews(card, &p.society_id, serving_facts)
@@ -595,16 +596,6 @@ fn is_low_signal_source_value(key: &str, value: &str) -> bool {
     }
 }
 
-fn collect_source_items(
-    graph: &crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    keys: &[(&str, &str)],
-) -> Vec<SourceItem> {
-    keys.iter()
-        .filter_map(|(key, label)| source_item(graph, node_id, key, label))
-        .collect()
-}
-
 fn serving_source_item(
     projection: &SocietyFactProjection<'_>,
     key: &str,
@@ -703,7 +694,7 @@ fn serving_multi_source_item(
             .then_with(|| left.value.cmp(&right.value))
     });
     values.dedup_by(|left, right| left.value == right.value && left.source_url == right.source_url);
-    values.truncate(5);
+    values.truncate(source_value_limit(fact_key));
     if values.is_empty() {
         return None;
     }
@@ -808,6 +799,28 @@ fn collect_society_source_items(
                 })
         })
         .collect()
+}
+
+fn section_fact_key_labels(section_kind: &str) -> Vec<(&'static str, &'static str)> {
+    evidence_section_definition(section_kind)
+        .filter(|definition| !definition.facts.is_empty())
+        .map(|definition| {
+            definition
+                .facts
+                .iter()
+                .map(|fact| (fact.key.as_str(), fact.label.as_str()))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn source_value_limit(fact_key: &str) -> usize {
+    buyer_context_definitions()
+        .iter()
+        .flat_map(|definition| definition.facts.iter())
+        .find(|fact| fact.key == fact_key)
+        .and_then(|fact| fact.max_values)
+        .unwrap_or(5)
 }
 
 fn collect_community_evidence_records(
@@ -985,26 +998,7 @@ fn build_livability_brief(
     projection: Option<&SocietyFactProjection<'_>>,
     community_records: &[crate::community::CommunityEvidenceRecord],
     community_pulse: Option<&CommunityPulse>,
-    serving_bundle: Option<&crate::serving::LoadedServingBundle>,
 ) -> Option<LivabilityBrief> {
-    let society_anchor = crate::routes::enrichment::society_node_id(&property.society_id);
-    if let Some(bundle) = serving_bundle {
-        if let Some(context) =
-            crate::entity_context::compose_entity_context(&society_anchor, bundle)
-        {
-            let lifecycle_flag = lifecycle_flag_from_projection(projection);
-            return Some(LivabilityBrief {
-                summary_paragraph: Some(context.summary_paragraph),
-                blocks: Vec::new(),
-                lifecycle_flag,
-                confidence_label: "Graph context".to_string(),
-                source_urls: community_pulse
-                    .map(|pulse| pulse.source_urls.clone())
-                    .unwrap_or_default(),
-            });
-        }
-    }
-
     let home_state_evidence = projection.map(|projection| projection.project_home_state());
     let home_state = home_state_evidence
         .as_ref()
@@ -1302,6 +1296,8 @@ struct ContextFactDefinition {
     label: String,
     scope: String,
     relationship: String,
+    #[serde(default)]
+    max_values: Option<usize>,
 }
 
 #[derive(Clone, Deserialize)]
@@ -1520,7 +1516,6 @@ pub(crate) fn build_source_panels(
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
     let society_id = society_node_id(&property.society_id);
-    let area_id = super::enrichment::area_node_id(&property.area);
     let projection =
         serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
 
@@ -1561,35 +1556,9 @@ pub(crate) fn build_source_panels(
         });
     }
 
-    let market_items = collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("market_starting_price_inr", "Builder starting price"),
-            ("market_bhk_options", "Configurations"),
-            ("market_project_status", "Builder inventory status"),
-            ("market_total_units", "Homes"),
-            ("builder_reported_land_area_acres", "Builder project area"),
-            ("official_project_url", "Official project page"),
-            ("project_maps_url", "Project map"),
-            ("listing_3bhk", "3BHK listing"),
-            ("listing_price_3bhk", "3BHK listing price"),
-            ("listing_price_range_3bhk", "3BHK listing price range"),
-            ("listing_area_sqft_3bhk", "3BHK listing area"),
-            ("listing_area_sqft_range_3bhk", "3BHK listing area range"),
-            (
-                "listing_price_per_sqft_range_3bhk",
-                "3BHK listing rate range",
-            ),
-            ("listing_area_type_3bhk", "3BHK area basis"),
-            ("listing_source_url_3bhk", "3BHK listing source"),
-            ("pricing_3bhk", "3BHK pricing"),
-            ("price_per_sqft", "Market rate"),
-            ("price_appreciation", "Price movement"),
-            ("comparable_projects", "Nearby comparables"),
-        ],
-    );
+    let market_fact_keys = section_fact_key_labels("market");
+    let market_items =
+        collect_society_source_items(graph, &society_id, projection.as_ref(), &market_fact_keys);
     panels.push(SourcePanel {
         kind: "market".to_string(),
         title: "Market trail".to_string(),
@@ -1602,51 +1571,9 @@ pub(crate) fn build_source_panels(
         community_pulse: None,
     });
 
-    let mut area_items = collect_source_items(
-        graph,
-        &area_id,
-        &[
-            ("metro_details", "Metro access"),
-            ("traffic_reality", "Traffic"),
-            ("waterlogging_detail", "Waterlogging"),
-            ("school_quality", "Schools"),
-        ],
-    );
-    area_items.extend(collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("metro_status", "Metro access"),
-            ("nearest_operational_metro_station", "Nearest station"),
-            ("metro_distance_km", "Station distance"),
-        ],
-    ));
-    panels.push(SourcePanel {
-        kind: "area".to_string(),
-        title: "Area trail".to_string(),
-        subtitle: "Neighbourhood evidence around daily life.".to_string(),
-        scope: "area".to_string(),
-        relationship: Some("locality context".to_string()),
-        items: area_items,
-        missing: vec![],
-        media: vec![],
-        community_pulse: None,
-    });
-
-    let nearby_items = collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("nearby_schools", "Schools"),
-            ("nearby_metro_stations", "Metro"),
-            ("nearby_hospitals", "Hospitals"),
-            ("nearby_fitness", "Cult / gyms"),
-            ("nearby_eateries", "Eateries"),
-            ("nearby_tech_parks", "Tech parks / offices"),
-        ],
-    );
+    let nearby_fact_keys = section_fact_key_labels("nearby");
+    let nearby_items =
+        collect_society_source_items(graph, &society_id, projection.as_ref(), &nearby_fact_keys);
     if !nearby_items.is_empty() {
         panels.push(SourcePanel {
             kind: "nearby".to_string(),
@@ -1838,28 +1765,6 @@ fn section_header_meta(panel: &SourcePanel, source_types: &[String]) -> String {
 
 fn source_item_has_display_value(item: &SourceItem) -> bool {
     item.values.iter().any(|value| !value.trim().is_empty()) || !item.value.trim().is_empty()
-}
-
-fn lifecycle_flag_from_projection(
-    projection: Option<&SocietyFactProjection<'_>>,
-) -> Option<String> {
-    let projection = projection?;
-    let evidence = projection.project_home_state();
-    let state = evidence.state.as_deref()?.to_ascii_lowercase();
-    if state.contains("under construction") || state.contains("upcoming") {
-        return Some("understand-before-you-buy".to_string());
-    }
-    if state.contains("delivered") || state.contains("ready") {
-        if evidence
-            .age_bucket
-            .as_deref()
-            .is_some_and(|age| age.contains('+') || age.contains("year"))
-        {
-            return Some("livability-first".to_string());
-        }
-        return Some("ready-to-move".to_string());
-    }
-    None
 }
 
 fn dedup_community_pulse_against_brief(panels: &mut [SourcePanel], brief: &LivabilityBrief) {
@@ -2203,6 +2108,14 @@ pub async fn get_property(
                 }),
             )
         })?;
+    if !property.is_listable() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "property_not_found".to_string(),
+            }),
+        ));
+    }
 
     let serving_bundle = state.serving_bundle.read().await.clone();
 
@@ -2422,7 +2335,6 @@ pub async fn get_property(
         society_projection.as_ref(),
         &community_records,
         community_pulse,
-        serving_bundle.as_deref(),
     );
     if let Some(brief) = livability_brief.as_ref() {
         dedup_community_pulse_against_brief(&mut source_panels, brief);
@@ -3103,6 +3015,61 @@ mod serving_state_tests {
         );
     }
 
+    #[test]
+    fn market_trail_uses_configured_builder_and_external_listing_facts() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                typed_serving_fact(
+                    "market_project_status",
+                    FactValue::Text("Ready to Move".to_string()),
+                    "BuilderOfficial",
+                    Some("https://builder.example/project"),
+                    10,
+                ),
+                typed_serving_fact(
+                    "listing_source_name_3bhk",
+                    FactValue::Text("MagicBricks".to_string()),
+                    "ExternalListing",
+                    Some("https://www.magicbricks.com/example-green"),
+                    11,
+                ),
+                typed_serving_fact(
+                    "listing_price_range_3bhk",
+                    FactValue::Text("INR 2.5 Cr - 3.5 Cr".to_string()),
+                    "ExternalListing",
+                    Some("https://www.magicbricks.com/example-green"),
+                    11,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let market_panel = build_source_panels(&graph, &property, Some(&serving), None)
+            .into_iter()
+            .find(|panel| panel.kind == "market")
+            .expect("Market trail should render when builder or listing facts exist");
+        let market = evidence_section_from_panel(
+            market_panel,
+            &kg_entity_refs_for_property(&property, &graph),
+        );
+
+        assert_eq!(
+            market.source_types,
+            vec!["BuilderOfficial".to_string(), "ExternalListing".to_string()]
+        );
+        assert!(market.items.iter().any(|item| {
+            item.key == "listing_source_name_3bhk"
+                && item.label == "3BHK source name"
+                && item.value == "MagicBricks"
+                && item.source_type == "ExternalListing"
+        }));
+        assert!(market.items.iter().any(
+            |item| item.key == "market_project_status" && item.source_type == "BuilderOfficial"
+        ));
+    }
+
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {
         let mut graph = crate::knowledge::KnowledgeGraph::new();
         let mut node = Node::new("society:sample", NodeType::Society, "Sample Society");
@@ -3186,6 +3153,26 @@ mod serving_state_tests {
         source_url: Option<String>,
         learned_at: i64,
     ) -> ServingFactRecord {
+        typed_serving_fact(
+            key,
+            value,
+            if key.starts_with("rera_") {
+                "Rera"
+            } else {
+                "Google"
+            },
+            source_url.as_deref(),
+            learned_at,
+        )
+    }
+
+    fn typed_serving_fact(
+        key: &str,
+        value: FactValue,
+        source_type: &str,
+        source_url: Option<&str>,
+        learned_at: i64,
+    ) -> ServingFactRecord {
         ServingFactRecord {
             entity_id: "society:sample".to_string(),
             fact_key: key.to_string(),
@@ -3193,12 +3180,8 @@ mod serving_state_tests {
             value_text: None,
             value,
             confidence: 0.9,
-            source_type: if key.starts_with("rera_") {
-                "Rera".to_string()
-            } else {
-                "Google".to_string()
-            },
-            source_url,
+            source_type: source_type.to_string(),
+            source_url: source_url.map(str::to_string),
             model: None,
             skill_id: None,
             learned_at: Utc.timestamp_opt(learned_at, 0).unwrap(),

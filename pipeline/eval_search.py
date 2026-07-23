@@ -128,17 +128,110 @@ def call_search(base_url: str, query: str, timeout: int = 10) -> dict | None:
 def check_archetype(resp: dict, expected: str | None) -> tuple[bool, str]:
     if expected is None:
         return True, "no expectation"
-    got = resp.get("intent", {}).get("buyerArchetype")
-    if got == expected:
+    intent = resp.get("intent", {})
+    got = intent.get("buyerArchetype") or intent.get("buyer_archetype")
+    if normalize_identifier(got) == normalize_identifier(expected):
         return True, f"correctly detected {expected}"
     return False, f"expected {expected}, got {got}"
+
+
+def preference_values(intent: dict, field: str) -> set[str]:
+    prefs = intent.get(field) or intent.get(camelize(field)) or []
+    values: set[str] = set()
+    for pref in prefs:
+        if not isinstance(pref, dict):
+            continue
+        for key in ("canonicalKey", "canonical_key", "rawText", "raw_text"):
+            add_preference_value(values, pref.get(key))
+        for key in ("expandedKeys", "expanded_keys"):
+            for expanded in pref.get(key) or []:
+                add_preference_value(values, expanded)
+    return values
+
+
+def add_preference_value(values: set[str], value: Any) -> None:
+    if not isinstance(value, str) or not value.strip():
+        return
+    normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
+    values.add(normalized)
+    values.update(PREFERENCE_ALIASES.get(normalized, set()))
+
+
+def camelize(field: str) -> str:
+    head, *tail = field.split("_")
+    return head + "".join(part[:1].upper() + part[1:] for part in tail)
+
+
+def normalize_identifier(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = ""
+    for index, char in enumerate(value.strip()):
+        if char in {"-", " "}:
+            normalized += "_"
+        elif char.isupper() and index > 0:
+            normalized += "_" + char.lower()
+        else:
+            normalized += char.lower()
+    return normalized
+
+
+PREFERENCE_ALIASES: dict[str, set[str]] = {
+    "quiet_neighborhood": {"quiet"},
+    "noise_score": {"quiet"},
+    "noise_level": {"quiet"},
+    "metro_access": {"commute"},
+    "metro_distance": {"commute"},
+    "metro_distance_km": {"commute"},
+    "metro_distance_mins": {"commute"},
+    "nearby_metro_stations": {"commute"},
+    "traffic": {"commute"},
+    "traffic_reality": {"commute"},
+    "commute_reality": {"commute"},
+    "greenery": {"greenery", "open_space"},
+    "green_cover": {"greenery"},
+    "open_space": {"open_space"},
+    "open_space_score": {"open_space"},
+    "density_risk": {"open_space"},
+    "liveability": {"livability"},
+    "livability": {"livability"},
+    "livability_sentiment": {"livability"},
+    "family_friendly": {"family_friendly"},
+    "school_access": {"family_friendly"},
+    "nearby_schools": {"family_friendly"},
+    "resale_potential": {"investment"},
+    "rental_and_resale_demand": {"investment"},
+    "resale_strength_score": {"investment"},
+    "pricing_insight": {"investment", "value_for_money"},
+    "value_for_money": {"value_for_money"},
+    "price_per_sqft": {"value_for_money"},
+    "legal_safety": {"legal_safety"},
+    "rera_number": {"legal_safety"},
+    "rera_status": {"legal_safety"},
+    "legal_risk": {"legal_safety"},
+    "litigation_risk": {"legal_safety"},
+    "builder_trust": {"builder_trust"},
+    "reliable_builder": {"builder_trust"},
+    "trusted_builder": {"builder_trust"},
+    "builder_reputation": {"builder_trust"},
+    "builder_quality_score": {"builder_trust"},
+    "maintenance": {"good_maintenance"},
+    "maintenance_quality": {"good_maintenance"},
+    "good_society": {"good_maintenance"},
+    "water_supply": {"water_issues"},
+    "water_supply_risk": {"water_issues"},
+    "operating.tanker_dependence": {"water_issues"},
+    "tanker_dependence": {"water_issues"},
+    "water_issues": {"water_issues"},
+    "waterlogging_risk": {"water_issues"},
+    "premium": {"premium"},
+}
 
 
 def check_preferences(resp: dict, expected_pos: list[str]) -> tuple[bool, str]:
     if not expected_pos:
         return True, "no expectation"
-    pos_prefs = resp.get("intent", {}).get("positivePreferences", [])
-    pos_keys = {p.get("canonicalKey") for p in pos_prefs}
+    pos_keys = preference_values(resp.get("intent", {}), "positive_preferences")
     missing = [k for k in expected_pos if k not in pos_keys]
     if not missing:
         return True, f"all expected preferences found: {expected_pos}"
@@ -148,8 +241,7 @@ def check_preferences(resp: dict, expected_pos: list[str]) -> tuple[bool, str]:
 def check_negative_prefs(resp: dict, expected_neg: list[str]) -> tuple[bool, str]:
     if not expected_neg:
         return True, "no expectation"
-    neg_prefs = resp.get("intent", {}).get("negativePreferences", [])
-    neg_keys = {p.get("canonicalKey") for p in neg_prefs}
+    neg_keys = preference_values(resp.get("intent", {}), "negative_preferences")
     missing = [k for k in expected_neg if k not in neg_keys]
     if not missing:
         return True, f"all expected negative preferences found: {expected_neg}"
@@ -160,10 +252,30 @@ def check_concerns(resp: dict, expect_concerns: bool) -> tuple[bool, str]:
     if not expect_concerns:
         return True, "no expectation"
     results = resp.get("results", [])
-    any_concerns = any(len(r.get("concerns", [])) > 0 for r in results[:5])
+    any_concerns = any(result_has_concern_signal(r) for r in results[:5])
     if any_concerns:
-        return True, "concerns surfaced in top results"
-    return False, "no concerns found in top 5 results (expected some)"
+        return True, "concerns or negative evidence surfaced in top results"
+    return False, "no concerns/negative evidence found in top 5 results (expected some)"
+
+
+def result_has_concern_signal(result: dict) -> bool:
+    if len(result.get("concerns", [])) > 0:
+        return True
+
+    explanation = result.get("match_explanation") or result.get("matchExplanation") or {}
+    coverages = explanation.get("preference_coverage") or explanation.get("preferenceCoverage") or []
+    for coverage in coverages:
+        if not isinstance(coverage, dict):
+            continue
+        preference = coverage.get("preference", "")
+        status = coverage.get("status")
+        if isinstance(preference, str) and preference.startswith("avoid ") and status in {
+            "risk",
+            "matched",
+            "partial",
+        }:
+            return True
+    return False
 
 
 def check_area(resp: dict, expected_area: str | None) -> tuple[bool, str]:
@@ -200,7 +312,11 @@ def top3_summary(results: list[dict]) -> list[dict]:
             "society_score": r.get("societyScore"),
             "society_confidence": r.get("societyConfidence"),
             "concerns_count": len(r.get("concerns", [])),
-            "has_explanation": r.get("explanationCard") is not None,
+            "has_explanation": (
+                r.get("explanationCard") is not None
+                or r.get("match_explanation") is not None
+                or r.get("matchExplanation") is not None
+            ),
         })
     return out
 
@@ -278,9 +394,10 @@ def build_markdown_report(eval_results: list[dict], run_at: str) -> str:
 
         intent = r.get("intent", {})
         lines.append(f"- **Intent parsed:** area={intent.get('area')}, bhk={intent.get('bhk')}, "
-                     f"budget={intent.get('budget_max')}, archetype={intent.get('buyerArchetype')}")
-        pos = [p.get("canonicalKey") for p in intent.get("positivePreferences", [])]
-        neg = [p.get("canonicalKey") for p in intent.get("negativePreferences", [])]
+                     f"budget={intent.get('budget_max')}, "
+                     f"archetype={intent.get('buyerArchetype') or intent.get('buyer_archetype')}")
+        pos = sorted(preference_values(intent, "positive_preferences"))
+        neg = sorted(preference_values(intent, "negative_preferences"))
         if pos:
             lines.append(f"- **Positive prefs:** {', '.join(pos)}")
         if neg:

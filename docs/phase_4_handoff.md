@@ -48,7 +48,7 @@ Rust runtime         Generic engine: load bundle, index edges, score from search
 |-------|--------|
 | 0–1 | `app/config/` scaffold, `dag_config` loaders |
 | 2 | `fact_registry.json` → `search_metadata` materialization; schema loads from config |
-| 3 | `legacy_seed_facts` asset, resolver, `data_loader` without fake score defaults |
+| 3 | seed JSON removed; resolver and `data_loader` use source-backed DAG facts |
 
 **Baseline eval:** `data/validation/eval_search_phase1_baseline.json`  
 **Preference coverage:** written on bundle build to `data/validation/preference_coverage.json`
@@ -61,8 +61,7 @@ Rust runtime         Generic engine: load bundle, index edges, score from search
 
 | Asset | Source | Output entity prefix |
 |-------|--------|----------------------|
-| `canonical_property_nodes` | listings + seed + external listings | `property:*` |
-| `canonical_area_nodes` | RERA localities + aliases | `area:*` |
+| `canonical_society_nodes` | RERA registry | `society:*` |
 | road / place nodes | enrichment + `bootstrap/edge_inference.json` | `road:*`, `place:*` |
 
 - Register assets in `app/config/dag/asset_registry.json`
@@ -210,7 +209,7 @@ Mark removed items in `app/config/coverage.json` (`still_hardcoded_in_rust_pendi
 ## Suggested PR sequence
 
 ```text
-PR 1  canonical_property_nodes + canonical_area_nodes + search hard filters + entity_refs
+PR 1  canonical society/road nodes + search hard filters + entity_refs
 PR 2  gold edges + serving edges.parquet + GraphIndex + walk unit tests
 PR 3  delete search legacy scoring (text.rs + search.rs) — eval gate
 PR 4  wire evidence_sections.json, delete properties.rs match arms

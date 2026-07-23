@@ -70,11 +70,6 @@
       "primitive": "bootstrap"
     },
     {
-      "path": "app/config/dag/source_adapters/legacy_seed.json",
-      "role": "Seed JSON field → fact_key mapping for legacy_seed_facts silver asset",
-      "primitive": "bootstrap"
-    },
-    {
       "path": "app/config/bootstrap/edge_inference.json",
       "role": "How to infer served_by_road, in_area, etc. — rules not instances",
       "primitive": "bootstrap"
@@ -112,10 +107,10 @@
   ],
   "belongs_in_lake_not_config": [
     {
-      "current_path": "data/product/approach_road_visuals.json",
-      "role": "Street View frames per society — enriched media facts",
-      "target": "data/lake/silver/image_media_facts/ or gold facts on road_segment",
-      "reason": "Contains entity_ids and coordinates — instance data"
+      "current_path": "data/validation/approach_road_visuals.json",
+      "role": "Bootstrap coords for approach road DAG assets — not a runtime API read",
+      "target": "data/lake/silver/approach_road_graph_facts + gold/canonical_road_nodes",
+      "reason": "Instance data materialized into lake; properties API reads serving bundle facts"
     },
     {
       "role": "Entity instances (society:*, road:*, property:*)",
@@ -147,12 +142,12 @@
     },
     {
       "path": "data/product/discovery_home.json",
-      "status": "copied",
+      "status": "deleted",
       "into": "app/config/product/discovery_home.json"
     },
     {
       "path": "data/product/buyer_context_sections.json",
-      "status": "copied",
+      "status": "deleted",
       "into": "app/config/product/evidence_sections.json"
     },
     {
@@ -204,36 +199,19 @@
     ],
     "gaps_before_api": [
       {
-        "gap": "Serving bundle has no edges table at runtime",
-        "fix_phase": 4,
-        "fix": "Materialize edges/part-00000.parquet into search_serving_bundle; load in Rust AppState"
-      },
-      {
-        "gap": "road_segment and place nodes sparse in lake",
-        "fix_phase": 4,
-        "fix": "canonical nodes + edge inference from bootstrap policy"
-      },
-      {
-        "gap": "Facts on road_segment entities (e.g. waterlogging on approach road)",
-        "fix_phase": 4,
-        "fix": "Enrich shared road nodes; project via served_by_road traversal"
-      },
-      {
-        "gap": "near_place edge for school/metro proximity",
-        "fix_phase": 4,
-        "fix": "Add relation to ontology.json when place enrichment ships"
-      },
-      {
-        "gap": "Rust has no generic graph walker",
-        "fix_phase": 10,
-        "fix": "EntityContext composer — after edges + facts in bundle"
-      },
-      {
-        "gap": "ui_surfaces.json not wired to API",
-        "fix_phase": 8,
-        "fix": "Evidence sections from config first; graph summary API last"
+        "gap": "Search tile chips + discovery shelves not fully config-driven",
+        "fix_phase": "Gate A — done",
+        "fix": "MatchReason from fact_registry; receipt copy in discovery_home.json"
       }
     ],
-    "build_order": "Phase 2 (fact_registry) → Phase 3 (bootstrap facts) → Phase 4 (entities + edges in bundle) → Phase 8 (config-driven sections) → Phase 10 (EntityContext API + generic renderers)"
+    "resolved": [
+      "Serving bundle edges table + GraphIndex at runtime (Phase 4)",
+      "Config-driven evidence sections (Phase 5)",
+      "Reddit concern pipeline scaffold (Phase 6)",
+      "Gate A surface truth — single discovery config, receipt copy, brief drill-down",
+      "Gate B — canonical_road_nodes + approach_road_graph_facts in DAG; bundle-backed approach road media",
+      "Gate C — EntityContext composer + GET /api/properties/{id}/context + EntityContextCard"
+    ],
+    "build_order": "Gate A (surface truth) → Gate B (road/place lake) → Gate C (EntityContext API). See docs/phase_final_handoff.md"
   }
 }

@@ -157,7 +157,7 @@ app/config/
   "scoring_hint": { "direction": "LowerIsBetter", "weight": 1.5, "thresholds": [] },
   "resolution": {
     "strategy": "prefer_highest_confidence",
-    "source_priority": ["google", "reddit_theme", "legacy_seed"],
+    "source_priority": ["google", "reddit_theme"],
     "never_default": true
   },
   "proof_label_thresholds": {
@@ -311,28 +311,28 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 ---
 
-### Phase 3 — Legacy bootstrap import (7–10 days)
+### Phase 3 — Bootstrap cleanup (7–10 days)
 
-**Goal:** Current seed/listing data becomes low-confidence sourced facts; stop fake defaults.
+**Goal:** Source-backed DAG facts replace local seed/bootstrap data; stop fake defaults.
 
 **Work:**
 
-1. Implement `source_adapters/legacy_seed.json` importer asset (`legacy_seed_facts`)
-2. Map seed JSON → `entity_id` + `fact_key` + `source_type: LegacySeed` + `confidence: 0.25`
-3. Mark risk/quality leaves `internal_only: true` until superseded
+1. Remove local seed JSON as a DAG/runtime input
+2. Hydrate buyer-facing listing fields from source-backed DAG facts
+3. Mark risk/quality leaves `internal_only: true` until supported by real evidence
 4. Change `data_loader.rs`: hydrate `Property` listing fields from property facts; remove score defaults
 5. Resolver applies `resolution_policies.json`
 
 **Acceptance:**
 
 - [x] No `unwrap_or(0.5)` on quality/risk fields in `data_loader.rs`
-- [x] Coverage report shows bootstrap fact counts per entity
+- [x] Coverage report shows source-backed fact coverage per entity
 - [x] Property page no longer shows identical fake risk bars
-- [x] Legacy facts visible in admin/data-health, not as buyer proof
+- [x] Legacy seed facts are absent from admin/data-health and buyer proof
 
 **Storage check:**
 
-- New silver asset: `legacy_seed_facts` under standard `silver/facts/...` layout
+- No new seed/import asset; real crawlers and enrichment assets write standard Parquet facts
 - Serving bundle `fact_count` increases; `entities` may add `property:*`
 
 ---
@@ -345,14 +345,13 @@ Each phase has **deliverables**, **acceptance criteria**, and **storage checks**
 
 #### 4A — Graph materialization (build)
 
-1. `canonical_property_nodes` asset from listings + seed
-2. `canonical_area_nodes` from RERA localities + `search_intent.json` aliases
-3. `road_segment` + `place` nodes where enrichment provides them
-4. KG edges in gold: `property→society`, `society→area`, `society→road`, `society→place`
-5. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `kg_society_view`)
-6. Rust loads edges into `AppState` via `GraphIndex` (`edges_from` / `edges_to`)
-7. Bounded `walk_out(anchor, hops, max_depth=2)` — unit tests only, no HTTP (Phase 10)
-8. Search hard filters read property facts (BHK, price, area) from bundle
+1. `canonical_society_nodes` from RERA-backed project identity
+2. `road_segment` + `place` nodes where enrichment provides them
+3. KG edges in gold from DAG assets: `society→area`, `society→road`, `society→place`
+4. **Serving bundle includes `edges/part-00000.parquet`** (copied from gold `kg_society_view`)
+5. Rust loads edges into `AppState` via `GraphIndex` (`edges_from` / `edges_to`)
+6. Bounded `walk_out(anchor, hops, max_depth=2)` — unit tests only, no HTTP (Phase 10)
+7. Search hard filters read property facts (BHK, price, area) from promoted serving facts
 9. `entity_refs` on search results populated for all listing cards
 
 #### 4B — Legacy deletion + **thin the Rust engine** (required, same phase)
@@ -449,25 +448,25 @@ match preference {
 
 ---
 
-### Phase 6 — Reddit concern pipeline (7–10 days)
+### Phase 6 — Reddit concern pipeline ✅
 
 **Goal:** Issue #2 taxonomy operational; derived signals only.
 
-**Work:**
+**Delivered:**
 
 1. `source_adapters/reddit_theme.json` — derived signals, max confidence 0.45, no raw text
-2. Classifier maps threads → `concern_taxonomy` signal keys
-3. `reddit_resident_facts` emits `SourcedFact` rows per society/area
-4. Crawl policy: disabled by default; isolated worker config stub
-5. Seed POC: 10–20 societies from issue #2 qualitative table as manual/low-confidence facts
-6. Enrichment queue: search demand → `entity_selector` priority
+2. `reddit_theme_classifier` + `reddit_resident_facts` → `concern_taxonomy` fact_keys
+3. POC import (`reddit_poc_import`) loads 15 societies when crawl is skipped
+4. Crawl policy disabled by default; empty-input path emits POC facts
+5. `enrichment_gaps.json` logging from search + `enrichment_priority.py` stub
+6. `audit_reddit_compliance.py` for silver/serving Parquet checks
 
 **Acceptance:**
 
-- [ ] No Reddit comment bodies in lake Parquet
-- [ ] `community_concern_themes` aligns with taxonomy keys
-- [ ] Reddit facts lose to Google/RERA in resolver tests
-- [ ] Compliance note in issue #2 satisfied
+- [x] No Reddit comment bodies in lake Parquet (derived values only)
+- [x] Reddit facts use `concern_taxonomy` fact_keys only
+- [x] Reddit facts lose to Google/RERA in resolver + data_loader tests
+- [x] Admin data-health exposes RedditTheme counts
 
 **Storage check:** Reddit artifacts stay in `raw/source=reddit/` partitions; facts in standard silver layout.
 
@@ -566,15 +565,15 @@ Stream A — Config & DAG loader        (Phases 0–1) ✅
 Stream B — Fact registry & resolver   (Phases 2–3) ✅
 Stream C — Entity + edges + delete    (Phase 4) ✅
 Stream D — UI truth consolidation     (Phase 5) ✅
-Stream E — Reddit taxonomy pipeline   (Phase 6)  ← NEXT
+Stream E — Reddit taxonomy pipeline   (Phase 6) ✅
 Stream F — Search cleanup             (Phase 7) ✅ merged into 4
-Stream G — Discovery + tiles          (Phase 8′) parallel
+Stream G — Discovery + tiles          (Phase 8′) ← NEXT
 Stream H — Road/place enrichment      (Phase 9a) before graph API
 Stream I — EntityContext graph API    (Phase 10 — last)
 ```
 
-**Critical path:** Phase 6 (Reddit signals) → Phase 9a (shared nodes) → Phase 10 (graph API)  
-**Can parallel:** Phase 8′ with Phase 6
+**Critical path:** Phase 9a (shared nodes) → Phase 10 (graph API)
+**Can parallel:** Phase 8′ with Phase 9a
 
 ### Graph UI readiness (config today, API later)
 
@@ -660,13 +659,11 @@ data/validation/resolution_audit.json
 
 ## 10. Immediate next actions
 
-**Phases 0–5 complete.** See [`phase_6_handoff.md`](./phase_6_handoff.md) for full roadmap.
+**Phases 0–6 complete.** See [`phase_6_handoff.md`](./phase_6_handoff.md) for full roadmap.
 
-1. **Phase 6:** `source_adapters/reddit_theme.json` + classifier → `concern_taxonomy` fact_keys
-2. **Phase 6:** No raw Reddit text in lake Parquet; resolver tests Reddit < Google/RERA
-3. **Phase 8′ (parallel):** discovery receipt copy; search tile chips from config
-4. **Phase 9a:** road/place enrichment + approach road visuals → lake
-5. **Do not start:** EntityContext HTTP API until Phase 9a has road facts in bundle
+1. **Phase 8′:** discovery receipt copy; search tile chips from config
+2. **Phase 9a:** road/place enrichment + approach road visuals → lake
+3. **Do not start:** EntityContext HTTP API until Phase 9a has road facts in bundle
 
 ---
 

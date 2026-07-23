@@ -180,6 +180,41 @@ See `docs/dag_convergence_design.md` and `docs/dag_execution_plan.md` for the fu
 - Rust: durable API layer, request path, in-memory serving state. If the user is waiting → Rust.
 - Communication: structured JSON files or defined API contracts. No shared code.
 
+### Rust crate dependencies
+
+This environment currently cannot resolve Cargo's default sparse index host
+`index.crates.io`, even though `static.crates.io` and GitHub are reachable.
+Use the git index protocol when adding or validating crates from crates.io:
+
+```bash
+cd backend
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo add <crate>@<version>
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check
+```
+
+For optional or heavy dependencies, keep them behind a feature and validate the
+feature explicitly:
+
+```bash
+CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git cargo check --features <feature>
+```
+
+Prefer crates.io versioned dependencies over GitHub dependencies. Use GitHub
+only for forks, unreleased fixes, or temporary patches. If a GitHub dependency
+has a crates.io release, switch back to the crates.io crate once it validates.
+
+Keep lockfile churn narrow:
+- Use `cargo add <crate>@<version>` or a targeted manifest edit, then inspect
+  `backend/Cargo.lock`.
+- Avoid broad `cargo update` unless the task is explicitly to refresh the Rust
+  dependency graph.
+- If Cargo tries to use sparse and fails with `Could not resolve host:
+  index.crates.io`, rerun with `CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git`.
+
+Longer term, the clean fix is to allow `index.crates.io` DNS/network access or
+configure an internal sparse registry mirror. The git index path is a local
+workaround, not the ideal permanent registry strategy.
+
 ---
 
 ## 5. Architecture Principles

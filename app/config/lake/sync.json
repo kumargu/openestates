@@ -48,10 +48,6 @@
     ],
     "legacy_local_only": [
       {
-        "path": "data/seed/",
-        "reason": "Bootstrap import input. Absorbed into lake on import, then deprecated."
-      },
-      {
         "path": "data/knowledge/",
         "reason": "Pre-DAG format. Do not sync or use at runtime."
       }

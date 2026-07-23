@@ -43,6 +43,7 @@ frontend/dist/
 data/reddit_cache/
 
 # Generated/cached data
+.fastembed_cache/
 data/cache/
 data/lake/
 data/knowledge/search_log/

@@ -8,7 +8,6 @@
     "google",
     "computed",
     "reddit_theme",
-    "legacy_seed",
     "seller_claim"
   ],
   "never_default_fact_prefixes": [
@@ -19,15 +18,14 @@
   ],
   "source_caps": {
     "reddit_theme": 0.45,
-    "legacy_seed": 0.25,
     "seller_claim": 0.4
   },
   "overrides": {
     "legal.rera_registered": {
-      "source_priority": ["rera", "computed", "legacy_seed"]
+      "source_priority": ["rera", "computed"]
     },
     "market.transaction.price_per_sqft": {
-      "source_priority": ["registered_transactions", "google", "legacy_seed"]
+      "source_priority": ["registered_transactions", "google"]
     }
   }
 }

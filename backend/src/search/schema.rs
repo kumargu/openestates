@@ -121,6 +121,8 @@ pub struct PreferenceKeyOverride {
     pub patterns: Vec<String>,
     #[serde(default)]
     pub expanded_keys: Vec<String>,
+    #[serde(default)]
+    pub gap_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +159,20 @@ pub struct SearchRankingPolicy {
     pub nearby_area_score_penalty: f64,
     #[serde(default = "default_graph_area_score_penalty")]
     pub graph_area_score_penalty: f64,
+    #[serde(default)]
+    pub geo_distance_fact_keys: Vec<String>,
+    #[serde(default = "default_nearby_distance_full_score_km")]
+    pub nearby_distance_full_score_km: f64,
+    #[serde(default = "default_nearby_distance_zero_score_km")]
+    pub nearby_distance_zero_score_km: f64,
+    #[serde(default = "default_nearby_distance_bonus_cap")]
+    pub nearby_distance_bonus_cap: f64,
+    #[serde(default = "default_named_place_full_score_km")]
+    pub named_place_full_score_km: f64,
+    #[serde(default = "default_named_place_zero_score_km")]
+    pub named_place_zero_score_km: f64,
+    #[serde(default = "default_named_place_score_weight")]
+    pub named_place_score_weight: f64,
     #[serde(default = "default_min_score_with_positive_evidence")]
     pub min_score_with_positive_evidence: f64,
     #[serde(default = "default_max_score_with_positive_evidence")]
@@ -184,6 +200,13 @@ impl Default for SearchRankingPolicy {
             no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
             nearby_area_score_penalty: default_nearby_area_score_penalty(),
             graph_area_score_penalty: default_graph_area_score_penalty(),
+            geo_distance_fact_keys: Vec::new(),
+            nearby_distance_full_score_km: default_nearby_distance_full_score_km(),
+            nearby_distance_zero_score_km: default_nearby_distance_zero_score_km(),
+            nearby_distance_bonus_cap: default_nearby_distance_bonus_cap(),
+            named_place_full_score_km: default_named_place_full_score_km(),
+            named_place_zero_score_km: default_named_place_zero_score_km(),
+            named_place_score_weight: default_named_place_score_weight(),
             min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
             max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
             min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
@@ -239,6 +262,30 @@ fn default_nearby_area_score_penalty() -> f64 {
 
 fn default_graph_area_score_penalty() -> f64 {
     -0.25
+}
+
+fn default_nearby_distance_full_score_km() -> f64 {
+    0.75
+}
+
+fn default_nearby_distance_zero_score_km() -> f64 {
+    3.0
+}
+
+fn default_nearby_distance_bonus_cap() -> f64 {
+    0.8
+}
+
+fn default_named_place_full_score_km() -> f64 {
+    0.75
+}
+
+fn default_named_place_zero_score_km() -> f64 {
+    5.0
+}
+
+fn default_named_place_score_weight() -> f64 {
+    2.0
 }
 
 fn default_min_score_with_positive_evidence() -> f64 {
@@ -332,6 +379,8 @@ pub struct PreferencePatternSpec {
     pub patterns: Vec<String>,
     pub label: String,
     pub expanded_keys: Vec<String>,
+    #[serde(default)]
+    pub gap_keys: Vec<String>,
     pub weight: f32,
 }
 
@@ -601,6 +650,7 @@ pub fn schema_preference_signal(
         raw_text: pattern.label.clone(),
         polarity,
         expanded_keys: pattern.expanded_keys.clone(),
+        gap_keys: pattern.gap_keys.clone(),
         weight: pattern.weight,
     }
 }

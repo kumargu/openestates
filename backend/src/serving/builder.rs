@@ -13,8 +13,8 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use crate::search::schema;
 
 use super::parquet::{
-    write_entities_parquet, write_edges_parquet, write_facts_parquet, write_search_metadata_parquet,
-    ParquetWriteError,
+    write_edges_parquet, write_entities_parquet, write_facts_parquet,
+    write_search_metadata_parquet, ParquetWriteError,
 };
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
@@ -23,7 +23,7 @@ use super::{
     ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
 };
 
-const SERVING_BUNDLE_FORMAT_VERSION: u32 = 3;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 3;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -167,6 +167,7 @@ impl ServingBundleBuilder {
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
             edge_parquet_key: Some(edge_key.to_string()),
+            semantic_embedding_parquet_key: None,
             schema_key: schema_key.to_string(),
             trust_policy_key: trust_policy_key.to_string(),
             tantivy_index_prefix: tantivy_prefix,
@@ -180,7 +181,7 @@ impl ServingBundleBuilder {
     }
 }
 
-fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema {
+pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema {
     ServingBundleSchema {
         format_version,
         storage_format: "parquet+tantivy".to_string(),
@@ -240,6 +241,18 @@ fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSchema 
                     optional_column("scoring_direction", "utf8"),
                     optional_column("scoring_weight", "float32"),
                     required_column("scoring_thresholds", "list<float64>"),
+                ],
+            },
+            ServingTableSchema {
+                name: "semantic_embeddings".to_string(),
+                path: "semantic_embeddings/part-00000.parquet".to_string(),
+                columns: vec![
+                    required_column("entity_id", "utf8"),
+                    required_column("entity_type", "utf8"),
+                    required_column("model_id", "utf8"),
+                    required_column("dimensions", "uint32"),
+                    required_column("document_text_hash", "utf8"),
+                    required_column("embedding", "list<float32>"),
                 ],
             },
         ],
@@ -409,10 +422,7 @@ fn serving_search_metadata_records(
         .iter()
         .map(|annotation| {
             (
-                (
-                    annotation.entity_id.as_str(),
-                    annotation.fact_key.as_str(),
-                ),
+                (annotation.entity_id.as_str(), annotation.fact_key.as_str()),
                 annotation,
             )
         })
@@ -464,16 +474,9 @@ fn serving_search_metadata_records(
 }
 
 #[derive(Debug, serde::Serialize)]
-struct BootstrapCoverage {
-    legacy_seed_fact_count: u32,
-    legacy_seed_entity_count: u32,
-}
-
-#[derive(Debug, serde::Serialize)]
 struct PreferenceCoverageReport {
     generated_at: String,
     society_count: usize,
-    bootstrap: BootstrapCoverage,
     preference_labels: Vec<PreferenceLabelCoverage>,
     registry_gaps: Vec<RegistryGap>,
 }
@@ -511,7 +514,8 @@ fn write_preference_coverage_report(
 
     let mut label_hits = BTreeMap::<String, std::collections::HashSet<String>>::new();
     for fact in facts {
-        if let Some(metadata) = metadata_by_entity_fact.get(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
+        if let Some(metadata) =
+            metadata_by_entity_fact.get(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
         {
             for label in &metadata.answers_preferences {
                 label_hits
@@ -536,7 +540,8 @@ fn write_preference_coverage_report(
 
     let mut registry_gaps = BTreeMap::<String, u32>::new();
     for fact in facts {
-        if !metadata_by_entity_fact.contains_key(&(fact.entity_id.as_str(), fact.fact_key.as_str())) {
+        if !metadata_by_entity_fact.contains_key(&(fact.entity_id.as_str(), fact.fact_key.as_str()))
+        {
             *registry_gaps.entry(fact.fact_key.clone()).or_default() += 1;
         }
     }
@@ -548,26 +553,9 @@ fn write_preference_coverage_report(
         })
         .collect::<Vec<_>>();
 
-    let legacy_seed_facts = facts
-        .iter()
-        .filter(|fact| {
-            fact.source_type.eq_ignore_ascii_case("LegacySeed")
-                || fact.source_type.eq_ignore_ascii_case("legacy_seed")
-        })
-        .collect::<Vec<_>>();
-    let legacy_seed_entity_count = legacy_seed_facts
-        .iter()
-        .map(|fact| fact.entity_id.as_str())
-        .collect::<std::collections::BTreeSet<_>>()
-        .len() as u32;
-
     let report = PreferenceCoverageReport {
         generated_at: Utc::now().to_rfc3339(),
         society_count,
-        bootstrap: BootstrapCoverage {
-            legacy_seed_fact_count: legacy_seed_facts.len() as u32,
-            legacy_seed_entity_count,
-        },
         preference_labels,
         registry_gaps,
     };

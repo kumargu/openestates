@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use backend::assets::{
-    openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
-    AssetId, AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
+    openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest, AssetId,
+    AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
     SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
@@ -59,6 +59,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     } else if let Some(version) = cli.version.clone() {
         options = options.with_version(version);
     }
+    if !cli.force_asset_ids.is_empty() {
+        options = options.with_forced_assets(cli.force_asset_ids.clone());
+    }
     let mut resume_lease_id = None;
     if cli.dry_run && cli.source_command.is_some() {
         eprintln!("Skipping source collector command during dry-run.");
@@ -66,7 +69,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut collection_plan = if let Some(manifest) = &resume_manifest {
             AssetSourceInputs::resume_collection_plan(manifest)
         } else {
-            let plan = executor.plan(&options.partition, planned_at).await?;
+            let plan = executor
+                .plan_with_forced_assets(&options.partition, planned_at, &cli.force_asset_ids)
+                .await?;
             AssetSourceInputs::collection_plan(&plan)
         };
         if resume_manifest.is_none() && !cli.source_entity_ids.is_empty() {
@@ -116,9 +121,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
         if let Some(source_inputs) = loaded {
+            let mut force_assets = collection_plan.force_assets;
+            force_assets.extend(cli.force_asset_ids.clone());
+            force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+            force_assets.dedup();
             options = options
                 .with_source_inputs(source_inputs)
-                .with_forced_assets(collection_plan.force_assets);
+                .with_forced_assets(force_assets);
         }
     }
 
@@ -173,11 +182,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) {
     let rera = AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA asset ID");
+    let google_places =
+        AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).expect("valid static Google asset ID");
+    let google_nearby = AssetId::new(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID)
+        .expect("valid static Google nearby asset ID");
     collection_plan.requested_assets.extend([
-        AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA asset ID"),
-        AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).expect("valid static Google asset ID"),
-        AssetId::new(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID)
-            .expect("valid static Google nearby asset ID"),
+        rera.clone(),
+        google_places.clone(),
+        google_nearby.clone(),
         AssetId::new(METRO_STATIONS_MONTHLY_ASSET_ID).expect("valid static metro asset ID"),
         AssetId::new(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID).expect("valid static Prestige asset ID"),
         AssetId::new(EXTERNAL_LISTINGS_WEEKLY_ASSET_ID)
@@ -187,7 +199,9 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
         AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID).expect("valid static Reddit thread asset ID"),
         AssetId::new(REDDIT_RESIDENT_FACTS_ASSET_ID).expect("valid static Reddit fact asset ID"),
     ]);
-    collection_plan.force_assets.push(rera);
+    collection_plan
+        .force_assets
+        .extend([rera, google_places, google_nearby]);
     collection_plan
         .requested_assets
         .sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -332,6 +346,7 @@ struct CliOptions {
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
     source_entity_ids: Vec<String>,
+    force_asset_ids: Vec<AssetId>,
     resume_run_id: Option<MaterializationId>,
     dry_run: bool,
 }
@@ -408,6 +423,16 @@ impl CliOptions {
                         return Err("--source-entity requires an entity id".to_string());
                     }
                     options.source_entity_ids.push(value.to_string());
+                }
+                "--force-asset" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--force-asset requires an asset id".to_string())?;
+                    options
+                        .force_asset_ids
+                        .push(AssetId::new(value.trim()).map_err(|_| {
+                            format!("--force-asset requires a valid asset id, got: {value}")
+                        })?);
                 }
                 "--resume-run" => {
                     let value = args
@@ -527,6 +552,7 @@ fn print_help() {
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
     println!("  --source-entity Limit source collection to one entity, alias, or project key");
+    println!("  --force-asset   Force one asset id to run even when freshness says skip");
     println!("  --resume-run Resume one failed or interrupted run by UUID");
     println!(
         "  {env_name:<18} Lake URL: file:///absolute/path or s3://bucket/optional/prefix",
@@ -571,7 +597,11 @@ mod tests {
         );
         assert_eq!(
             plan.force_assets,
-            vec![AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()]
+            vec![
+                AssetId::new("google_nearby_places_weekly").unwrap(),
+                AssetId::new("google_places_weekly").unwrap(),
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()
+            ]
         );
     }
 

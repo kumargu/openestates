@@ -32,7 +32,9 @@ fn google_rating_metadata_creates_summary_without_fake_themes() {
     assert_eq!(input.source, "community");
     assert!(input.facts.iter().any(|fact| {
         fact.fact_key == "community_review_summary"
-            && fact.value_json.contains("written review themes are still limited")
+            && fact
+                .value_json
+                .contains("written review themes are still limited")
     }));
     assert!(!input
         .facts

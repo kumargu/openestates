@@ -13,17 +13,19 @@ use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    intent, schema, KnowledgeContext, SearchIndex, SearchResponse, SearchResultCard, SourcedClaim,
-    TextSearch,
+    intent, schema, KnowledgeContext, SearchEngine, SearchResponse, SearchResultCard, SourcedClaim,
 };
-use crate::serving::LoadedServingBundle;
 use crate::state::AppState;
 
 use super::enrichment::society_node_id;
 
+const MAX_GAP_ENTITIES_PER_SEARCH: usize = 5;
+const MAX_LEARNING_GAPS_PER_SEARCH: usize = 20;
+
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
+    pub debug: Option<String>,
 }
 
 /// GET /api/search?q=... — local intent-based search over the knowledge graph.
@@ -32,6 +34,10 @@ pub async fn search_properties(
     Query(params): Query<SearchQuery>,
 ) -> Json<SearchResponse> {
     let query = params.q.unwrap_or_default();
+    let include_diagnostics = params
+        .debug
+        .as_deref()
+        .is_some_and(|value| matches!(value, "1" | "true" | "yes"));
 
     if query.trim().is_empty() {
         return Json(SearchResponse {
@@ -53,13 +59,12 @@ pub async fn search_properties(
             area_context: None,
             total_results: 0,
             knowledge_context: None,
+            search_diagnostics: None,
+            relaxations: Vec::new(),
             discovery_status: None,
             discovery_count: None,
         });
     }
-
-    // Parse structured intent from the natural-language query.
-    let parsed_intent = intent::parse_intent(&query);
 
     // Build society name lookup map.
     let society_names: HashMap<String, String> = state
@@ -67,6 +72,33 @@ pub async fn search_properties(
         .iter()
         .map(|s| (s.id.clone(), s.name.clone()))
         .collect();
+
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+    let engine_output = {
+        let graph = state.knowledge.read().await;
+        let properties = state.properties.read().await;
+        let search_index = state.search_index.read().await;
+        let semantic_index = state.semantic_index.read().await;
+        let sellers = state.sellers.read().await;
+
+        SearchEngine {
+            properties: &properties,
+            search_index: &search_index,
+            serving_bundle: serving_bundle.as_deref(),
+            semantic_index: &semantic_index,
+            semantic_embedder: state.semantic_embedder.as_ref(),
+            society_names: &society_names,
+            societies: &state.societies,
+            graph: Some(&graph),
+            sellers: &sellers,
+        }
+        .search(&query)
+    };
+    let parsed_intent = engine_output.intent;
+    let search_diagnostics = engine_output.diagnostics;
+    let results = engine_output.results;
+    let relaxations = engine_output.relaxations;
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -77,65 +109,39 @@ pub async fn search_properties(
             .cloned()
     });
 
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
-    let results = {
-        let graph = state.knowledge.read().await;
-        let properties = state.properties.read().await;
-        let search_index = state.search_index.read().await;
-        let semantic_index = state.semantic_index.read().await;
-        let sellers = state.sellers.read().await;
-        let serving_candidate_ids =
-            serving_candidate_ids(serving_bundle.as_deref(), &query, &search_index);
-        let semantic_hits = semantic_index.search(&query, state.semantic_embedder.as_ref(), 128);
-        let semantic_scores = search_index.property_scores_for_semantic_hits(&semantic_hits);
-        let semantic_candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
-        let extra_candidate_ids =
-            merge_candidate_ids(serving_candidate_ids, semantic_candidate_ids);
-        let semantic_scores = (!semantic_scores.is_empty()).then_some(&semantic_scores);
-        let ranking_graph = if serving_facts.is_some() {
-            None
-        } else {
-            Some(&*graph)
-        };
-        TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-            &properties,
-            Some(&*search_index),
-            extra_candidate_ids.as_deref(),
-            semantic_scores,
-            serving_facts,
-            &society_names,
-            &state.societies,
-            &query,
-            &parsed_intent,
-            ranking_graph,
-            &sellers,
-        )
-    };
-
     let total_results = results.len();
     let evidence_claims = result_evidence_claims(&results);
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
-    let (knowledge_context, graph_nodes_hit, enrichment_gaps) = {
-        let matched_society_ids: Vec<String> = results
-            .iter()
-            .filter_map(|r| {
-                properties
-                    .iter()
-                    .find(|p| p.id == r.card.id)
-                    .map(|p| p.society_id.clone())
-            })
-            .collect();
+    let (knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
+        let mut matched_society_ids: Vec<String> = Vec::new();
+        for result in &results {
+            if let Some(society_id) = properties
+                .iter()
+                .find(|p| p.id == result.card.id)
+                .map(|p| p.society_id.clone())
+            {
+                push_unique_string(&mut matched_society_ids, society_id);
+                if matched_society_ids.len() >= MAX_GAP_ENTITIES_PER_SEARCH {
+                    break;
+                }
+            }
+        }
 
-        build_knowledge_context(
+        let (knowledge_context, graph_nodes_hit, enrichment_gaps) = build_knowledge_context(
             &graph,
             serving_facts,
             &matched_society_ids,
             &parsed_intent,
             evidence_claims,
+        );
+        (
+            knowledge_context,
+            graph_nodes_hit,
+            enrichment_gaps,
+            matched_society_ids,
         )
     };
     drop(properties);
@@ -145,7 +151,13 @@ pub async fn search_properties(
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps.clone();
-    persist_enrichment_gaps(&enrichment_gaps);
+    persist_enrichment_gaps(
+        &enrichment_gaps,
+        &query,
+        &parsed_intent,
+        total_results,
+        &gap_candidate_society_ids,
+    );
 
     {
         let mut graph = state.knowledge.write().await;
@@ -159,39 +171,16 @@ pub async fn search_properties(
         area_context,
         total_results,
         knowledge_context: Some(knowledge_context),
+        search_diagnostics: include_diagnostics.then_some(search_diagnostics),
+        relaxations,
         discovery_status: None,
         discovery_count: None,
     })
 }
 
-fn merge_candidate_ids(mut left: Option<Vec<String>>, right: Vec<String>) -> Option<Vec<String>> {
-    let ids = left.get_or_insert_with(Vec::new);
-    for id in right {
-        if !ids.iter().any(|existing| existing == &id) {
-            ids.push(id);
-        }
-    }
-    left.filter(|ids| !ids.is_empty())
-}
-
-fn serving_candidate_ids(
-    serving_bundle: Option<&LoadedServingBundle>,
-    query: &str,
-    search_index: &SearchIndex,
-) -> Option<Vec<String>> {
-    let serving_bundle = serving_bundle?;
-    let hits = match serving_bundle.recall_index.search(query, 128) {
-        Ok(hits) => hits,
-        Err(err) => {
-            eprintln!("WARN: Serving bundle recall failed; using local recall only: {err}");
-            return None;
-        }
-    };
-    let ids = search_index.property_ids_for_entity_hits(&hits);
-    if ids.is_empty() {
-        None
-    } else {
-        Some(ids)
+fn push_unique_string(values: &mut Vec<String>, value: String) {
+    if !values.iter().any(|existing| existing == &value) {
+        values.push(value);
     }
 }
 
@@ -214,10 +203,20 @@ fn build_knowledge_context(
     let mut enrichment_gaps = Vec::new();
 
     for society_id in society_ids {
+        if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+            break;
+        }
         let node_id = society_node_id(society_id);
-
-        if let Some(node) = graph.get_node(&node_id) {
+        let node = graph.get_node(&node_id);
+        if node.is_some()
+            || serving_facts
+                .and_then(|facts| facts.entity(&node_id))
+                .is_some()
+        {
             nodes_consulted += 1;
+        }
+
+        if node.is_some() {
             graph_nodes_hit.push(node_id.clone());
 
             // Record related nodes consulted while evaluating query evidence gaps.
@@ -229,45 +228,28 @@ fn build_knowledge_context(
                     graph_nodes_hit.push(edge.to.clone());
                 }
             }
+        }
 
-            // --- Detect learning gaps ---
-            // Structured intent already knows which fact keys answer a preference.
-            // Use that before falling back to the legacy preference->fact map.
-            for pref in gap_preferences(intent) {
-                if serving_facts
-                    .is_some_and(|facts| serving_has_gap_evidence(facts, &node_id, &pref))
-                    || node_has_gap_evidence(node, &pref)
-                    || related_node_has_gap_evidence(graph, &node_id, Relation::BuiltBy, &pref)
-                    || related_node_has_gap_evidence(
-                        graph,
-                        &node_id,
-                        Relation::SocietyInArea,
-                        &pref,
-                    )
-                {
-                    continue;
-                }
+        let entity_name = node
+            .map(|node| node.name.as_str())
+            .unwrap_or_else(|| fallback_entity_name(&node_id));
 
-                if let Some(needed_fact) = pref.candidate_fact_keys.first() {
-                    learning_gaps.push(format!("{}: missing {} data", node.name, needed_fact));
-                    enrichment_gaps.push(EnrichmentGap {
-                        entity_id: node_id.clone(),
-                        missing_fact: needed_fact.clone(),
-                        reason: pref.reason,
-                    });
-                } else {
-                    let missing_fact =
-                        format!("unknown:{}", pref.label.to_lowercase().replace(' ', "_"));
-                    learning_gaps.push(format!(
-                        "{}: no knowledge about '{}'",
-                        node.name, pref.label
-                    ));
-                    enrichment_gaps.push(EnrichmentGap {
-                        entity_id: node_id.clone(),
-                        missing_fact,
-                        reason: format!("Unknown preference: {}", pref.label),
-                    });
+        for pref in gap_preferences(intent) {
+            for needed_fact in missing_gap_fact_keys(graph, serving_facts, &node_id, node, &pref) {
+                push_learning_gap(
+                    &mut learning_gaps,
+                    &mut enrichment_gaps,
+                    entity_name,
+                    &node_id,
+                    &needed_fact,
+                    &pref.reason,
+                );
+                if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+                    break;
                 }
+            }
+            if learning_gaps.len() >= MAX_LEARNING_GAPS_PER_SEARCH {
+                break;
             }
         }
     }
@@ -330,6 +312,7 @@ struct GapPreference {
     label: String,
     match_labels: Vec<String>,
     candidate_fact_keys: Vec<String>,
+    gap_fact_keys: Vec<String>,
     reason: String,
 }
 
@@ -344,6 +327,7 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
                 label: constraint.raw_text.clone(),
                 match_labels,
                 candidate_fact_keys: schema.fact_keys.iter().map(|key| key.to_string()).collect(),
+                gap_fact_keys: Vec::new(),
                 reason: format!("Hard constraint: {}", constraint.raw_text),
             });
         }
@@ -354,6 +338,7 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
             label: pref.raw_text.clone(),
             match_labels: vec![pref.raw_text.clone()],
             candidate_fact_keys: pref.expanded_keys.clone(),
+            gap_fact_keys: pref.gap_keys.clone(),
             reason: format!("User preference: {}", pref.raw_text),
         });
     }
@@ -363,6 +348,7 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
             label: format!("avoid {}", pref.raw_text),
             match_labels: vec![pref.raw_text.clone(), format!("avoid {}", pref.raw_text)],
             candidate_fact_keys: pref.expanded_keys.clone(),
+            gap_fact_keys: pref.gap_keys.clone(),
             reason: format!("Avoid preference: {}", pref.raw_text),
         });
     }
@@ -380,12 +366,124 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
                 label: pref.clone(),
                 match_labels: vec![pref.clone(), normalized.clone()],
                 candidate_fact_keys,
+                gap_fact_keys: Vec::new(),
                 reason: format!("User preference: {}", pref),
             });
         }
     }
 
     prefs
+}
+
+fn missing_gap_fact_keys(
+    graph: &KnowledgeGraph,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    node_id: &str,
+    node: Option<&crate::knowledge::node::Node>,
+    pref: &GapPreference,
+) -> Vec<String> {
+    if !pref.gap_fact_keys.is_empty() {
+        return pref
+            .gap_fact_keys
+            .iter()
+            .filter(|fact_key| {
+                !has_exact_gap_evidence(graph, serving_facts, node_id, node, fact_key)
+            })
+            .cloned()
+            .collect();
+    }
+
+    if serving_facts.is_some_and(|facts| serving_has_gap_evidence(facts, node_id, pref))
+        || node.is_some_and(|node| node_has_gap_evidence(node, pref))
+        || related_node_has_gap_evidence(graph, node_id, Relation::BuiltBy, pref)
+        || related_node_has_gap_evidence(graph, node_id, Relation::SocietyInArea, pref)
+    {
+        return Vec::new();
+    }
+
+    if let Some(needed_fact) = pref.candidate_fact_keys.first() {
+        return vec![needed_fact.clone()];
+    }
+
+    vec![format!(
+        "unknown:{}",
+        pref.label.to_lowercase().replace(' ', "_")
+    )]
+}
+
+fn has_exact_gap_evidence(
+    graph: &KnowledgeGraph,
+    serving_facts: Option<&crate::serving::ServingFactIndex>,
+    node_id: &str,
+    node: Option<&crate::knowledge::node::Node>,
+    fact_key: &str,
+) -> bool {
+    serving_facts.is_some_and(|facts| serving_has_exact_fact(facts, node_id, fact_key))
+        || node.is_some_and(|node| node_has_exact_fact(node, fact_key))
+        || related_node_has_exact_fact(graph, node_id, Relation::BuiltBy, fact_key)
+        || related_node_has_exact_fact(graph, node_id, Relation::SocietyInArea, fact_key)
+}
+
+fn serving_has_exact_fact(
+    serving_facts: &crate::serving::ServingFactIndex,
+    entity_id: &str,
+    fact_key: &str,
+) -> bool {
+    serving_facts.entity(entity_id).is_some_and(|rows| {
+        rows.facts.iter().any(|fact| {
+            fact.fact_key.eq_ignore_ascii_case(fact_key)
+                && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+                && serving_fact_value_is_usable(&fact.value)
+        })
+    })
+}
+
+fn node_has_exact_fact(node: &crate::knowledge::node::Node, fact_key: &str) -> bool {
+    node.facts.iter().any(|fact| {
+        fact.key.eq_ignore_ascii_case(fact_key)
+            && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+            && sourced_fact_value_is_usable(&fact.value)
+    })
+}
+
+fn related_node_has_exact_fact(
+    graph: &KnowledgeGraph,
+    node_id: &str,
+    relation: Relation,
+    fact_key: &str,
+) -> bool {
+    graph.edges_from(node_id).iter().any(|edge| {
+        edge.relation == relation
+            && graph
+                .get_node(&edge.to)
+                .is_some_and(|related| node_has_exact_fact(related, fact_key))
+    })
+}
+
+fn push_learning_gap(
+    learning_gaps: &mut Vec<String>,
+    enrichment_gaps: &mut Vec<EnrichmentGap>,
+    entity_name: &str,
+    entity_id: &str,
+    missing_fact: &str,
+    reason: &str,
+) {
+    if enrichment_gaps.iter().any(|gap| {
+        gap.entity_id == entity_id && gap.missing_fact.eq_ignore_ascii_case(missing_fact)
+    }) {
+        return;
+    }
+
+    learning_gaps.push(format!("{entity_name}: missing {missing_fact} data"));
+    enrichment_gaps.push(EnrichmentGap {
+        entity_id: entity_id.to_string(),
+        missing_fact: missing_fact.to_string(),
+        reason: reason.to_string(),
+    });
+}
+
+fn fallback_entity_name(node_id: &str) -> &str {
+    node_id.strip_prefix("society:").unwrap_or(node_id)
 }
 
 fn node_has_gap_evidence(node: &crate::knowledge::node::Node, pref: &GapPreference) -> bool {
@@ -405,11 +503,13 @@ fn serving_has_gap_evidence(
 
     rows.facts.iter().any(|fact| {
         serving_fact_value_is_usable(&fact.value)
+            && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
             && (pref
                 .candidate_fact_keys
                 .iter()
                 .any(|key| fact.fact_key.eq_ignore_ascii_case(key))
-                || rows.search_metadata_for_fact_key(&fact.fact_key)
+                || rows
+                    .search_metadata_for_fact_key(&fact.fact_key)
                     .any(|metadata| {
                         metadata.answers_preferences.iter().any(|answer| {
                             pref.match_labels
@@ -432,6 +532,10 @@ fn serving_fact_value_is_usable(value: &crate::knowledge::FactValue) -> bool {
     }
 }
 
+fn sourced_fact_value_is_usable(value: &crate::knowledge::FactValue) -> bool {
+    serving_fact_value_is_usable(value)
+}
+
 fn related_node_has_gap_evidence(
     graph: &KnowledgeGraph,
     node_id: &str,
@@ -447,14 +551,17 @@ fn related_node_has_gap_evidence(
 }
 
 fn fact_matches_gap_preference(fact: &crate::knowledge::SourcedFact, pref: &GapPreference) -> bool {
-    pref.candidate_fact_keys
-        .iter()
-        .any(|key| fact.key.eq_ignore_ascii_case(key))
-        || fact.answers_preferences.iter().any(|answer| {
-            pref.match_labels
-                .iter()
-                .any(|label| fuzzy_preference_match(answer, label))
-        })
+    fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+        && sourced_fact_value_is_usable(&fact.value)
+        && (pref
+            .candidate_fact_keys
+            .iter()
+            .any(|key| fact.key.eq_ignore_ascii_case(key))
+            || fact.answers_preferences.iter().any(|answer| {
+                pref.match_labels
+                    .iter()
+                    .any(|label| fuzzy_preference_match(answer, label))
+            }))
 }
 
 fn fuzzy_preference_match(left: &str, right: &str) -> bool {
@@ -964,6 +1071,38 @@ mod tests {
     }
 
     #[test]
+    fn serving_only_runtime_emits_configured_gap_keys() {
+        let graph = crate::knowledge::KnowledgeGraph::new();
+        let serving_facts = crate::serving::ServingFactIndex::from_records(Vec::new(), Vec::new());
+        let intent = crate::search::intent::parse_intent(
+            "Need 3BHK Whitefield under 2.4Cr. no tanker dependency or daily water stress",
+        );
+
+        let (_, _, enrichment_gaps) = build_knowledge_context(
+            &graph,
+            Some(&serving_facts),
+            &["soc-test-society".to_string()],
+            &intent,
+            Vec::new(),
+        );
+
+        assert!(
+            enrichment_gaps
+                .iter()
+                .any(|gap| gap.missing_fact == "operating.tanker_dependence"),
+            "Expected tanker gap, got {:?}",
+            enrichment_gaps
+        );
+        assert!(
+            enrichment_gaps
+                .iter()
+                .any(|gap| gap.missing_fact == "water_supply_risk"),
+            "Expected water supply gap, got {:?}",
+            enrichment_gaps
+        );
+    }
+
+    #[test]
     fn serving_gap_evidence_requires_a_usable_value() {
         use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
         use chrono::Utc;
@@ -972,6 +1111,7 @@ mod tests {
             label: "greenery".to_string(),
             match_labels: vec!["greenery".to_string()],
             candidate_fact_keys: vec!["resident_greenery_signal".to_string()],
+            gap_fact_keys: Vec::new(),
             reason: "User preference: greenery".to_string(),
         };
         let metadata = ServingSearchMetadataRecord {
@@ -1003,6 +1143,19 @@ mod tests {
         );
         assert!(!serving_has_gap_evidence(
             &empty,
+            "society:test-society",
+            &pref
+        ));
+
+        let weak = ServingFactIndex::from_records(
+            vec![ServingFactRecord {
+                confidence: 0.4,
+                ..fact(FactValue::Text("mature trees".to_string()))
+            }],
+            vec![metadata.clone()],
+        );
+        assert!(!serving_has_gap_evidence(
+            &weak,
             "society:test-society",
             &pref
         ));
@@ -1503,7 +1656,13 @@ mod tests {
     }
 }
 
-fn persist_enrichment_gaps(gaps: &[EnrichmentGap]) {
+fn persist_enrichment_gaps(
+    gaps: &[EnrichmentGap],
+    query: &str,
+    intent: &intent::SearchIntent,
+    results_returned: usize,
+    top_candidate_society_ids: &[String],
+) {
     if gaps.is_empty() {
         return;
     }
@@ -1519,11 +1678,19 @@ fn persist_enrichment_gaps(gaps: &[EnrichmentGap]) {
     };
 
     let recorded_at = Utc::now().to_rfc3339();
+    let query_categories = query_gap_categories(intent);
     for gap in gaps {
         entries.push(serde_json::json!({
             "entity_id": gap.entity_id,
             "missing_fact": gap.missing_fact,
             "reason": gap.reason,
+            "query": query,
+            "query_categories": &query_categories,
+            "top_candidate_society_ids": top_candidate_society_ids,
+            "results_returned": results_returned,
+            "intent_area": intent.area.as_deref(),
+            "intent_bhk": intent.bhk,
+            "intent_budget_max": intent.budget_max,
             "recorded_at": recorded_at,
         }));
     }
@@ -1539,6 +1706,37 @@ fn persist_enrichment_gaps(gaps: &[EnrichmentGap]) {
     if let Ok(payload) = serde_json::to_string_pretty(&entries) {
         let _ = std::fs::write(path, payload);
     }
+}
+
+fn query_gap_categories(intent: &intent::SearchIntent) -> Vec<String> {
+    let mut categories = Vec::new();
+
+    for constraint in &intent.hard_constraints {
+        push_unique_string(
+            &mut categories,
+            format!("hard_constraint:{}", constraint.field),
+        );
+    }
+    for preference in &intent.positive_preferences {
+        push_unique_string(&mut categories, format!("positive:{}", preference.raw_text));
+    }
+    for preference in &intent.negative_preferences {
+        push_unique_string(&mut categories, format!("negative:{}", preference.raw_text));
+    }
+    for inventory_type in &intent.unsupported_inventory_types {
+        push_unique_string(
+            &mut categories,
+            format!("unsupported_inventory:{inventory_type}"),
+        );
+    }
+    if let Some(archetype) = &intent.buyer_archetype {
+        push_unique_string(&mut categories, format!("buyer_archetype:{archetype:?}"));
+    }
+
+    if categories.is_empty() {
+        categories.push("general".to_string());
+    }
+    categories
 }
 
 fn enrichment_gaps_output_path() -> PathBuf {

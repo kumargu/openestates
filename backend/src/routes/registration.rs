@@ -7,8 +7,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AreaProfile, Property, RegistrationDraft, Seller};
 use crate::dag_config::area_alias_entries;
+use crate::models::{AreaProfile, Property, RegistrationDraft, Seller};
 use crate::state::AppState;
 
 /// Max registration creations per rate-limit window (60 seconds).

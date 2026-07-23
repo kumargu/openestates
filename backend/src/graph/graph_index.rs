@@ -123,14 +123,14 @@ mod tests {
                 edge_type: "served_by_road".to_string(),
                 to_entity_id: "road:ecc-road".to_string(),
                 confidence: 0.9,
-                source_type: "LegacySeed".to_string(),
+                source_type: "Computed".to_string(),
             },
             ServingEdgeRecord {
                 from_entity_id: "society:prestige-waterford".to_string(),
                 edge_type: "in_area".to_string(),
                 to_entity_id: "area:whitefield".to_string(),
                 confidence: 0.8,
-                source_type: "LegacySeed".to_string(),
+                source_type: "Computed".to_string(),
             },
         ];
         let index = GraphIndex::from_serving_edges(&edges);

@@ -8,8 +8,9 @@
 //! files. JSON is reserved for small control-plane files such as manifests,
 //! schema descriptors, trust policy, and current pointers.
 
-pub mod community;
+pub mod approach_road_graph;
 pub mod canonical_nodes;
+pub mod community;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
@@ -29,6 +30,12 @@ pub mod source_inputs;
 pub mod source_provider;
 pub mod types;
 
+pub use approach_road_graph::{
+    approach_road_graph_facts_input, read_canonical_road_rows, road_graph_rows_from_visuals,
+    ApproachRoadGraphError, CanonicalRoadNodesMaterializer, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    CANONICAL_ROAD_NODES_ASSET_ID,
+};
+pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
 pub use community::{
     community_review_summary_facts_from_records,
     community_review_summary_facts_from_records_with_summarizer,
@@ -88,21 +95,15 @@ pub use reddit::{
     RedditThreadSnapshotRecord, REDDIT_THREADS_DAILY_ASSET_ID,
 };
 pub use registry::{
-    default_openestates_registry, openestates_registry, AssetDefinition, AssetPartitionPolicy, AssetRegistry, CostTier,
-    DependencyFanInPolicy, DependencyFanInRule, PartitionCoordinate, PartitionResolutionError,
-    RefreshCadence, RegistryError, TrustTier,
+    default_openestates_registry, openestates_registry, AssetDefinition, AssetPartitionPolicy,
+    AssetRegistry, CostTier, DependencyFanInPolicy, DependencyFanInRule, PartitionCoordinate,
+    PartitionResolutionError, RefreshCadence, RegistryError, TrustTier,
 };
 pub use rera::{
     read_canonical_society_rows, read_rera_project_rows, rera_legal_facts_input,
     CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-};
-pub use canonical_nodes::{
-    read_canonical_node_rows, area_rows_from_seed, property_rows_from_seed,
-    CanonicalAreaNodesMaterializer, CanonicalNodeRows, CanonicalNodesError,
-    CanonicalPropertyNodesMaterializer, CANONICAL_AREA_NODES_ASSET_ID,
-    CANONICAL_PROPERTY_NODES_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagResumeLease, AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep,
@@ -112,8 +113,8 @@ pub use run_manifest::{
 pub use skill_facts::{
     read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactArtifactRows,
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactRecord, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    LEGACY_SEED_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    SkillFactRecord, GENERATED_CONTEXT_SUMMARIES_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
 pub use source_inputs::{
     AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,

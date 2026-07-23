@@ -68,6 +68,7 @@ pub async fn get_seller(
         .property_ids
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
+        .filter(|property| property.is_listable())
         .map(|p| enrich_property_card(p, &state.societies, &graph))
         .collect();
 
@@ -164,6 +165,7 @@ pub async fn get_seller_dashboard(
         .property_ids
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
+        .filter(|property| property.is_listable())
         .map(|p| enrich_property_card(p, &state.societies, &graph))
         .collect();
 

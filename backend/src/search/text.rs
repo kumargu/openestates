@@ -1,6 +1,7 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use crate::dag_config::search_resolution_config;
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{KgEntityRefs, Property, Seller, Society};
@@ -13,8 +14,10 @@ use crate::serving::{
     SocietyFactProjection,
 };
 
+use super::geo;
 use super::index::{price_satisfies_budget, SearchIndex};
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
+use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
 use super::{
     ConfidenceComponent, ConfidenceScore, MatchExplanation, MatchReason, PreferenceCoverage,
@@ -151,6 +154,7 @@ impl TextSearch {
             search_index,
             extra_candidate_ids,
             None,
+            None,
             serving_facts,
             society_names,
             societies,
@@ -171,6 +175,7 @@ impl TextSearch {
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
         semantic_scores: Option<&HashMap<String, f64>>,
+        geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&ServingFactIndex>,
         society_names: &std::collections::HashMap<String, String>,
         societies: &[Society],
@@ -184,18 +189,24 @@ impl TextSearch {
         }
 
         let query_lower = query.to_lowercase();
-        let terms: Vec<&str> = query_lower.split_whitespace().collect();
+        let terms = scoring_query_terms(&query_lower);
         let structured_terms = structured_intent_terms(intent);
+        let geo_place_terms = geo_query
+            .map(|query| query.resolved_place_terms())
+            .unwrap_or_default();
         let scoring_terms = terms
             .iter()
-            .copied()
+            .map(String::as_str)
             .filter(|term| !structured_terms.iter().any(|structured| structured == term))
+            .filter(|term| !geo_place_terms.iter().any(|place_term| place_term == term))
             .collect::<Vec<_>>();
         let positive_preferences = positive_preference_labels(intent);
         let negative_preferences = negative_preference_labels(intent);
+        let has_geo_query = geo_query.is_some_and(|query| !query.is_empty());
         let has_explainable_signals = !positive_preferences.is_empty()
             || !negative_preferences.is_empty()
-            || !intent.hard_constraints.is_empty();
+            || !intent.hard_constraints.is_empty()
+            || has_geo_query;
         let candidate_ids = merged_candidate_ids(
             search_index.map(|index| index.recall_ids(query, intent)),
             extra_candidate_ids,
@@ -209,6 +220,10 @@ impl TextSearch {
                     if !ids.iter().any(|id| id == &p.id) {
                         return None;
                     }
+                }
+
+                if !p.is_listable() {
+                    return None;
                 }
 
                 if intent
@@ -263,6 +278,8 @@ impl TextSearch {
                     .get(&p.society_id)
                     .map(|s| s.as_str())
                     .unwrap_or("");
+                let named_society_match =
+                    query_mentions_resolvable_society(&query_lower, society_name);
 
                 // Base text score
                 let (mut score, mut reasons) = if terms.is_empty() {
@@ -298,6 +315,36 @@ impl TextSearch {
                         preference: evidence.preference,
                         status: "matched".into(),
                         fact_key: Some(evidence.fact_key),
+                    });
+                }
+
+                if let Some(evidence) =
+                    geo_query.and_then(|query| query.evidence_for_society(&p.society_id))
+                {
+                    total_facts_consulted += 1;
+                    graph_count += 1;
+                    score += evidence.score_delta;
+                    positive_evidence_score += evidence.score_delta.max(0.0);
+                    let preference = format!("near {}", evidence.place_name);
+                    reasons.push(evidence.display.clone());
+                    match_reasons.push(MatchReason {
+                        preference: preference.clone(),
+                        fact_key: geo::DISTANCE_TO_PLACE_FACT_KEY.to_string(),
+                        display: evidence.display,
+                        score: evidence.normalized_score,
+                        confidence: evidence.confidence,
+                        source_type: "Computed".to_string(),
+                        scoring_method: geo::HAVERSINE_SCORING_METHOD.to_string(),
+                    });
+                    pref_coverage.push(PreferenceCoverage {
+                        preference,
+                        status: if evidence.normalized_score > 0.5 {
+                            "matched"
+                        } else {
+                            "partial"
+                        }
+                        .to_string(),
+                        fact_key: Some(geo::DISTANCE_TO_PLACE_FACT_KEY.to_string()),
                     });
                 }
 
@@ -610,7 +657,10 @@ impl TextSearch {
                     }
                 }
                 let evidence_strength = evidence_strength(match_explanation.as_ref());
-                let display_score = (normalized * 100.0).round() / 100.0;
+                let mut display_score = (normalized * 100.0).round() / 100.0;
+                if normalized > 0.0 && display_score == 0.0 {
+                    display_score = 0.01;
+                }
                 let match_label = match_label_from_score_and_coverage(
                     normalized,
                     match_explanation.as_ref(),
@@ -626,8 +676,9 @@ impl TextSearch {
                 let confidence_score = compute_confidence(graph, &p.society_id, gdp);
 
                 Some(RankedSearchResult {
-                    ranking_score: display_score,
+                    ranking_score: normalized,
                     evidence_strength,
+                    named_society_match,
                     ordinal,
                     result: SearchResultCard {
                         card,
@@ -646,6 +697,7 @@ impl TextSearch {
             b.ranking_score
                 .partial_cmp(&a.ranking_score)
                 .unwrap_or(Ordering::Equal)
+                .then_with(|| b.named_society_match.cmp(&a.named_society_match))
                 .then_with(|| {
                     b.evidence_strength
                         .partial_cmp(&a.evidence_strength)
@@ -668,6 +720,7 @@ struct RankedSearchResult {
     result: SearchResultCard,
     ranking_score: f64,
     evidence_strength: f64,
+    named_society_match: bool,
     ordinal: usize,
 }
 
@@ -809,21 +862,50 @@ fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
 fn structured_intent_terms(intent: &SearchIntent) -> Vec<String> {
     let mut terms = Vec::new();
     if let Some(area) = intent.area.as_deref() {
-        for term in area.to_ascii_lowercase().split_whitespace() {
-            push_unique_string(&mut terms, term);
-        }
+        push_intent_text_terms(&mut terms, area);
     }
     if let Some(bhk) = intent.bhk {
         push_unique_string(&mut terms, &format!("{bhk}bhk"));
         push_unique_string(&mut terms, &bhk.to_string());
     }
+    for pref in intent
+        .positive_preferences
+        .iter()
+        .chain(intent.negative_preferences.iter())
+    {
+        push_intent_text_terms(&mut terms, &pref.raw_text);
+        for key in &pref.expanded_keys {
+            push_intent_text_terms(&mut terms, key);
+        }
+    }
+    for tradeoff in &intent.accepted_tradeoffs {
+        push_intent_text_terms(&mut terms, tradeoff);
+    }
+    for constraint in &intent.hard_constraints {
+        push_intent_text_terms(&mut terms, &constraint.raw_text);
+    }
     terms
+}
+
+fn push_intent_text_terms(values: &mut Vec<String>, text: &str) {
+    let normalized = text.to_ascii_lowercase();
+    for term in normalized.split(|ch: char| !ch.is_ascii_alphanumeric()) {
+        push_unique_string(values, term);
+    }
 }
 
 fn push_unique_string(values: &mut Vec<String>, value: &str) {
     if !value.is_empty() && !values.iter().any(|existing| existing == value) {
         values.push(value.to_string());
     }
+}
+
+fn scoring_query_terms(query_lower: &str) -> Vec<String> {
+    query_lower
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter(|term| !term.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn match_hard_constraints(
@@ -1124,6 +1206,9 @@ fn serving_preference_evidence(
                 .iter()
                 .any(|key| key.eq_ignore_ascii_case(&fact.fact_key))
         {
+            continue;
+        }
+        if geo::is_geo_distance_fact_key(&fact.fact_key) {
             continue;
         }
         if !schema::fact_answers_text_schema(&fact.fact_key, &[], schema) {
@@ -1502,6 +1587,14 @@ fn serving_fact_score(
         .to_lowercase();
     let thresholds = metadata.scoring_thresholds.as_slice();
 
+    if geo::is_geo_distance_fact_key(&fact.fact_key) {
+        let score = geo::score_serving_geo_distance(fact, metadata)?;
+        return Some((
+            score.score_delta,
+            geo::GEO_DISTANCE_SCORING_METHOD.to_string(),
+        ));
+    }
+
     if direction == "higherisbetter" || direction == "higher_is_better" {
         let value = fact_value_numeric(&fact.value)?;
         if !value.is_finite() {
@@ -1549,41 +1642,7 @@ fn serving_fact_score(
     if !meaningful_fact_value(&fact.value) {
         return None;
     }
-    let proximity_boost = nearby_proximity_boost(&fact.fact_key, &fact.value);
-    Some((
-        (weight + proximity_boost).min(2.0),
-        "serving-fact".to_string(),
-    ))
-}
-
-fn nearby_proximity_boost(fact_key: &str, value: &FactValue) -> f64 {
-    if !fact_key.starts_with("nearby_") {
-        return 0.0;
-    }
-    let Some(distance_km) = fact_value_text(value).and_then(|text| extract_first_km(&text)) else {
-        return 0.0;
-    };
-    ((2.0 - distance_km).max(0.0) / 2.0).min(1.0) * 0.8
-}
-
-fn fact_value_text(value: &FactValue) -> Option<String> {
-    match value {
-        FactValue::Text(value) => Some(value.clone()),
-        FactValue::Tags(values) => Some(values.join(" ")),
-        FactValue::Numeric(value) => Some(value.to_string()),
-        FactValue::Bool(value) => Some(value.to_string()),
-        FactValue::Score { explanation, .. } => Some(explanation.clone()),
-    }
-}
-
-fn extract_first_km(text: &str) -> Option<f64> {
-    let marker = " km";
-    let marker_index = text.find(marker)?;
-    let before_marker = &text[..marker_index];
-    let number_start = before_marker
-        .rfind(|ch: char| !(ch.is_ascii_digit() || ch == '.'))
-        .map_or(0, |index| index + 1);
-    before_marker[number_start..].parse::<f64>().ok()
+    Some((weight, "serving-fact".to_string()))
 }
 
 fn fact_value_numeric(value: &FactValue) -> Option<f64> {
@@ -2101,6 +2160,12 @@ fn score_property(property: &Property, society_name: &str, terms: &[&str]) -> (f
     (total_score, reasons)
 }
 
+fn query_mentions_resolvable_society(query_lower: &str, society_name: &str) -> bool {
+    let resolution_config = search_resolution_config();
+    is_resolvable_entity_name(society_name, resolution_config)
+        && query_contains_lower_text(query_lower, society_name)
+}
+
 fn is_scoring_stopword(token: &str) -> bool {
     schema::scoring_stopwords()
         .iter()
@@ -2116,8 +2181,11 @@ fn is_scoring_stopword(token: &str) -> bool {
 fn area_is_nearby(property_area: &str, canonical_area: &str) -> bool {
     use crate::dag_config::area_alias_entries;
 
-    let prop_lower = property_area.to_lowercase();
-    let canon_lower = canonical_area.to_lowercase();
+    let prop_lower = property_area.trim().to_lowercase();
+    let canon_lower = canonical_area.trim().to_lowercase();
+    if prop_lower.is_empty() || canon_lower.is_empty() {
+        return false;
+    }
 
     // 1. Property area is a known alias of the canonical area
     for entry in area_alias_entries() {
@@ -2387,8 +2455,24 @@ mod tests {
     use crate::knowledge::graph::KnowledgeGraph;
     use crate::knowledge::node::{Node, NodeType, RootSource};
     use crate::search::schema::SQM_PER_ACRE;
-    use crate::serving::{ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord};
+    use crate::serving::{
+        ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
+    };
     use chrono::Utc;
+
+    #[test]
+    fn structured_preference_terms_are_removed_from_free_text_scoring() {
+        let intent =
+            crate::search::intent::parse_intent("avoid water issues, no tanker dependency");
+        let structured_terms = structured_intent_terms(&intent);
+
+        for term in ["water", "issues", "tanker", "dependency"] {
+            assert!(
+                structured_terms.iter().any(|structured| structured == term),
+                "expected structured intent terms to include {term}: {structured_terms:?}"
+            );
+        }
+    }
 
     /// Helper: build a minimal KnowledgeGraph with a society node, an area node,
     /// and a SocietyInArea edge between them.
@@ -2898,6 +2982,45 @@ mod tests {
             scoring_direction: Some(scoring_direction.to_string()),
             scoring_weight: Some(scoring_weight),
             scoring_thresholds,
+        }
+    }
+
+    fn serving_entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {
+        ServingEntityRecord {
+            entity_id: entity_id.to_string(),
+            entity_type: entity_type.to_string(),
+            name: name.to_string(),
+            root_source: None,
+            searchable_text: name.to_string(),
+        }
+    }
+
+    fn serving_entity_fact(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        source_type: &str,
+        confidence: f32,
+    ) -> ServingFactRecord {
+        let value_type = match value {
+            FactValue::Numeric(_) => "numeric",
+            FactValue::Text(_) => "text",
+            FactValue::Bool(_) => "bool",
+            FactValue::Tags(_) => "tags",
+            FactValue::Score { .. } => "score",
+        };
+        ServingFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: value_type.to_string(),
+            value_text: None,
+            value,
+            confidence,
+            source_type: source_type.to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("unit-test".to_string()),
+            learned_at: Utc::now(),
         }
     }
 
@@ -3506,7 +3629,8 @@ mod tests {
         assert!(
             top_reasons
                 .iter()
-                .any(|reason| reason.fact_key == "nearby_metro_stations"),
+                .any(|reason| reason.fact_key == "nearby_metro_stations"
+                    && reason.scoring_method == geo::GEO_DISTANCE_SCORING_METHOD),
             "top result should be backed by metro evidence: {:?}",
             top_reasons
         );
@@ -3525,6 +3649,411 @@ mod tests {
                 .any(|reason| reason.fact_key == "nearby_schools"),
             "school evidence should not prove a metro query: {:?}",
             wrong_reasons
+        );
+    }
+
+    #[test]
+    fn nearby_distance_scoring_orders_closer_place_evidence() {
+        let properties = vec![
+            local_property(
+                "close-metro",
+                "Whitefield",
+                "close-metro",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "farther-metro",
+                "Whitefield",
+                "farther-metro",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "close-metro",
+                    "nearby_metro_stations",
+                    FactValue::Text(
+                        "Nearby metro: Kadugodi Tree Park (0.6 km, 4.5 rating, 1509 reviews)"
+                            .to_string(),
+                    ),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "farther-metro",
+                    "nearby_metro_stations",
+                    FactValue::Text(
+                        "Nearby metro: Kadugodi Tree Park (2.8 km, 4.5 rating, 1509 reviews)"
+                            .to_string(),
+                    ),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "close-metro",
+                    "nearby_metro_stations",
+                    vec!["near metro", "metro access", "social infrastructure"],
+                    "TextMatch",
+                    1.2,
+                    Vec::new(),
+                ),
+                serving_metadata(
+                    "farther-metro",
+                    "nearby_metro_stations",
+                    vec!["near metro", "metro access", "social infrastructure"],
+                    "TextMatch",
+                    1.2,
+                    Vec::new(),
+                ),
+            ],
+        );
+        let intent = crate::search::intent::parse_intent("near metro whitefield");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "near metro whitefield",
+                &intent,
+                None,
+                &[],
+            );
+
+        assert_eq!(results[0].card.id, "close-metro");
+        assert!(
+            results[0].match_score > results[1].match_score,
+            "closer distance should produce stronger score: {:?}",
+            results
+                .iter()
+                .map(|result| (&result.card.id, result.match_score))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn named_place_haversine_search_orders_societies_by_computed_distance() {
+        let properties = vec![
+            local_property(
+                "close-to-kadugodi",
+                "Whitefield",
+                "close-to-kadugodi",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "farther-from-kadugodi",
+                "Whitefield",
+                "farther-from-kadugodi",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let entities = vec![serving_entity(
+            "place:google:kadugodi-tree-park",
+            "place",
+            "Kadugodi Tree Park Metro Station",
+        )];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_entity_fact(
+                    "society:close-to-kadugodi",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9857),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:close-to-kadugodi",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7468),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:farther-from-kadugodi",
+                    "geo.latitude",
+                    FactValue::Numeric(13.0050),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:farther-from-kadugodi",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7700),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "place.name",
+                    FactValue::Text("Kadugodi Tree Park Metro Station".to_string()),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.985711),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.746842),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("3bhk near Kadugodi Tree Park")
+            .expect("query should resolve the named place");
+        let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
+        let intent = crate::search::intent::parse_intent("3bhk near Kadugodi Tree Park");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                Some(&geo_candidate_ids),
+                None,
+                Some(&geo_query),
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "3bhk near Kadugodi Tree Park",
+                &intent,
+                None,
+                &[],
+            );
+
+        assert_eq!(results[0].card.id, "close-to-kadugodi");
+        assert!(
+            results[0].match_score > results[1].match_score,
+            "closer society should score higher: {:?}",
+            results
+                .iter()
+                .map(|result| (&result.card.id, result.match_score))
+                .collect::<Vec<_>>()
+        );
+        let reasons = &results[0]
+            .match_explanation
+            .as_ref()
+            .expect("named-place query should produce computed evidence")
+            .reasons;
+        assert!(
+            reasons.iter().any(|reason| {
+                reason.fact_key == geo::DISTANCE_TO_PLACE_FACT_KEY
+                    && reason.scoring_method == geo::HAVERSINE_SCORING_METHOD
+                    && reason.display.contains("Kadugodi Tree Park")
+            }),
+            "top result should include Haversine distance evidence: {:?}",
+            reasons
+        );
+    }
+
+    #[test]
+    fn named_place_terms_do_not_keyword_boost_society_names() {
+        let properties = vec![
+            local_property(
+                "close-home",
+                "Whitefield",
+                "soc-close-home",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "far-kadugodi-tree-park-view",
+                "Whitefield",
+                "soc-kadugodi-tree-park-view",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let entities = vec![serving_entity(
+            "place:google:kadugodi-tree-park",
+            "place",
+            "Kadugodi Tree Park",
+        )];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_entity_fact(
+                    "society:close-home",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9857),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:close-home",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7468),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:kadugodi-tree-park-view",
+                    "geo.latitude",
+                    FactValue::Numeric(13.0050),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "society:kadugodi-tree-park-view",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7700),
+                    "Rera",
+                    1.0,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "place.name",
+                    FactValue::Text("Kadugodi Tree Park".to_string()),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.985711),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:kadugodi-tree-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.746842),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        for query in [
+            "3bhk near Kadugodi Tree Park",
+            "3bhk near Kadugodi, Tree-Park",
+        ] {
+            let geo_query = geo_index
+                .query(query)
+                .expect("query should resolve the named place");
+            let geo_candidate_ids = geo_query.candidate_property_ids(&properties);
+            let intent = crate::search::intent::parse_intent(query);
+
+            let results =
+                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                    &properties,
+                    None,
+                    Some(&geo_candidate_ids),
+                    None,
+                    Some(&geo_query),
+                    Some(&serving_facts),
+                    &society_names,
+                    &[],
+                    query,
+                    &intent,
+                    None,
+                    &[],
+                );
+
+            assert_eq!(results[0].card.id, "close-home", "query: {query}");
+            assert!(
+                results[0]
+                    .match_explanation
+                    .as_ref()
+                    .expect("close result should explain geo evidence")
+                    .reasons
+                    .iter()
+                    .any(|reason| reason.scoring_method == geo::HAVERSINE_SCORING_METHOD),
+                "close result should include Haversine evidence for {query}: {:?}",
+                results[0].match_explanation
+            );
+        }
+    }
+
+    #[test]
+    fn nearby_place_fact_without_distance_does_not_prove_proximity() {
+        let properties = vec![local_property(
+            "undistanced-metro",
+            "Whitefield",
+            "undistanced-metro",
+            3,
+            18_000_000,
+            0,
+            0.2,
+        )];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "undistanced-metro",
+                "nearby_metro_stations",
+                FactValue::Text("Nearby metro: Kadugodi Tree Park station".to_string()),
+                "Google",
+                0.9,
+            )],
+            vec![serving_metadata(
+                "undistanced-metro",
+                "nearby_metro_stations",
+                vec!["near metro", "metro access", "social infrastructure"],
+                "TextMatch",
+                1.2,
+                Vec::new(),
+            )],
+        );
+        let intent = crate::search::intent::parse_intent("near metro whitefield");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+                &properties,
+                None,
+                None,
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "near metro whitefield",
+                &intent,
+                None,
+                &[],
+            );
+
+        let reasons = results[0]
+            .match_explanation
+            .as_ref()
+            .map(|explanation| explanation.reasons.as_slice())
+            .unwrap_or(&[]);
+        assert!(
+            !reasons
+                .iter()
+                .any(|reason| reason.fact_key == "nearby_metro_stations"),
+            "undistanced nearby facts should not prove proximity: {:?}",
+            reasons
         );
     }
 
@@ -3951,6 +4480,13 @@ mod tests {
     }
 
     #[test]
+    fn blank_property_area_is_not_treated_as_nearby() {
+        assert!(!area_is_nearby("", "Whitefield"));
+        assert!(!area_is_nearby("   ", "Whitefield"));
+        assert!(!area_is_nearby("Varthur", ""));
+    }
+
+    #[test]
     fn graph_verified_area_result_is_not_labeled_as_nearby() {
         let property = local_property(
             "graph-area",
@@ -4265,6 +4801,7 @@ mod tests {
             Some(&extra_candidate_ids),
             Some(&semantic_scores),
             None,
+            None,
             &society_names,
             &[],
             "good reviews from actual residents",
@@ -4318,6 +4855,7 @@ mod tests {
             None,
             Some(&extra_candidate_ids),
             Some(&semantic_scores),
+            None,
             None,
             &society_names,
             &[],
@@ -4409,6 +4947,7 @@ mod tests {
             None,
             Some(&extra_candidate_ids),
             Some(&semantic_scores),
+            None,
             None,
             &society_names,
             &[],
@@ -4504,5 +5043,21 @@ mod tests {
             .reasons
             .iter()
             .any(|r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"));
+    }
+
+    #[test]
+    fn named_society_match_is_boundary_aware() {
+        assert!(query_mentions_resolvable_society(
+            "prestige waterford 3bhk",
+            "Prestige Waterford"
+        ));
+        assert!(!query_mentions_resolvable_society(
+            "prestige waterforded 3bhk",
+            "Prestige Waterford"
+        ));
+        assert!(!query_mentions_resolvable_society(
+            "3bhk in whitefield",
+            "in"
+        ));
     }
 }

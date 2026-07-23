@@ -3,9 +3,10 @@ use backend::assets::{
     read_google_nearby_place_rows, read_google_place_rows, AssetPartition,
     CanonicalSocietyMaterializer, GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput,
     GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
-    MaterializationId, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
+    KgViewRecords, MaterializationId, ReraProjectSnapshotRecord, ReraRegistryMaterializer,
     ReraRegistryMonthlyInput,
 };
+use backend::knowledge::KnowledgeGraph;
 use backend::lake::LakeStore;
 use chrono::{TimeZone, Utc};
 use tempfile::tempdir;
@@ -126,6 +127,8 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 place_id: Some("school-1".to_string()),
                 place_url: "https://www.google.com/maps/place/greenwood".to_string(),
                 distance_km: Some(1.2),
+                latitude: Some(12.9720),
+                longitude: Some(77.5960),
                 rating: Some(4.3),
                 review_count: Some(420),
                 primary_type: Some("school".to_string()),
@@ -143,6 +146,8 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 place_id: Some("metro-1".to_string()),
                 place_url: "https://www.google.com/maps/place/kadugodi-metro".to_string(),
                 distance_km: Some(2.1),
+                latitude: Some(12.9850),
+                longitude: Some(77.7420),
                 rating: Some(4.2),
                 review_count: Some(800),
                 primary_type: Some("subway_station".to_string()),
@@ -160,6 +165,8 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 place_id: Some("metro-bus-stop".to_string()),
                 place_url: "https://www.google.com/maps/place/varthuru-bus-stop".to_string(),
                 distance_km: Some(1.0),
+                latitude: Some(12.9400),
+                longitude: Some(77.7460),
                 rating: Some(4.5),
                 review_count: Some(29),
                 primary_type: Some("bus_stop".to_string()),
@@ -181,6 +188,8 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 place_id: Some("hospital-1".to_string()),
                 place_url: "https://www.google.com/maps/place/manipal".to_string(),
                 distance_km: Some(3.4),
+                latitude: Some(12.9860),
+                longitude: Some(77.7280),
                 rating: Some(4.1),
                 review_count: Some(1_200),
                 primary_type: Some("hospital".to_string()),
@@ -198,44 +207,12 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 place_id: Some("fitness-1".to_string()),
                 place_url: "https://www.google.com/maps/place/cult-whitefield".to_string(),
                 distance_km: Some(1.4),
+                latitude: Some(12.9700),
+                longitude: Some(77.7300),
                 rating: Some(4.4),
                 review_count: Some(980),
                 primary_type: Some("gym".to_string()),
                 place_types: vec!["gym".to_string()],
-                confidence: 0.82,
-                fetched_at,
-                fetch_source: "google_places_text_search_nearby".to_string(),
-            },
-            GoogleNearbyPlaceRecord {
-                entity_id: "society:green-acre-whitefield".to_string(),
-                project_key: None,
-                query: "restaurant cafe near Green Acre Whitefield Bengaluru".to_string(),
-                category: "eatery".to_string(),
-                place_name: "Example Cafe".to_string(),
-                place_id: Some("eatery-1".to_string()),
-                place_url: "https://www.google.com/maps/place/example-cafe".to_string(),
-                distance_km: Some(0.9),
-                rating: Some(4.0),
-                review_count: Some(300),
-                primary_type: Some("cafe".to_string()),
-                place_types: vec!["cafe".to_string(), "restaurant".to_string()],
-                confidence: 0.82,
-                fetched_at,
-                fetch_source: "google_places_text_search_nearby".to_string(),
-            },
-            GoogleNearbyPlaceRecord {
-                entity_id: "society:green-acre-whitefield".to_string(),
-                project_key: None,
-                query: "restaurant cafe near Green Acre Whitefield Bengaluru".to_string(),
-                category: "eatery".to_string(),
-                place_name: "Far Cafe".to_string(),
-                place_id: Some("eatery-far".to_string()),
-                place_url: "https://www.google.com/maps/place/far-cafe".to_string(),
-                distance_km: Some(9.0),
-                rating: Some(4.8),
-                review_count: Some(10_000),
-                primary_type: Some("cafe".to_string()),
-                place_types: vec!["cafe".to_string()],
                 confidence: 0.82,
                 fetched_at,
                 fetch_source: "google_places_text_search_nearby".to_string(),
@@ -291,14 +268,37 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
             && fact.source_url.as_deref()
                 == Some("https://www.google.com/maps/place/cult-whitefield")
     }));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.fact_key == "nearby_eateries"
-            && fact.source_url.as_deref() == Some("https://www.google.com/maps/place/example-cafe")
-    }));
     assert!(!facts
         .facts
         .iter()
-        .any(|fact| fact.value_json.contains("Far Cafe")));
+        .any(|fact| fact.fact_key == "nearby_eateries"));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "place:google:school-1"
+            && fact.fact_key == "place.name"
+            && fact.value_json.contains("Greenwood High")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "place:google:metro-1"
+            && fact.fact_key == "geo.latitude"
+            && fact.value_json.contains("12.985")
+    }));
+
+    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+        &KnowledgeGraph::new(),
+        &facts.facts,
+        &facts.fact_annotations,
+    )
+    .unwrap();
+    let place = kg_records
+        .entities
+        .iter()
+        .find(|entity| entity.entity_id == "place:google:metro-1")
+        .expect("coordinate-bearing Google nearby place should become a KG place entity");
+    assert_eq!(place.entity_type, "place");
+    assert_eq!(place.name, "Kadugodi Tree Park Metro Station");
+    assert!(kg_records.facts.iter().any(|fact| {
+        fact.entity_id == "place:google:metro-1" && fact.fact_key == "geo.longitude"
+    }));
 }
 
 #[tokio::test]

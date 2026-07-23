@@ -79,19 +79,19 @@ PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 METRO_STATIONS_MONTHLY = "metro_stations_monthly"
-LEGACY_SEED_FACTS = "legacy_seed_facts"
+GENERATED_CONTEXT_SUMMARIES = "generated_context_summaries"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
         REDDIT_THREADS_DAILY,
         REDDIT_RESIDENT_FACTS,
-        LEGACY_SEED_FACTS,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
         PRESTIGE_INVENTORY_WEEKLY,
         EXTERNAL_LISTINGS_WEEKLY,
         EXTERNAL_IMAGES_WEEKLY,
         METRO_STATIONS_MONTHLY,
+        GENERATED_CONTEXT_SUMMARIES,
     )
 )
 
@@ -108,6 +108,9 @@ def collect_asset_sources(
 
     output = {}  # type: Dict[str, Any]
     source_failures = {}  # type: Dict[str, str]
+    planned_at = normalized_planned_at(request)
+    partition = partition_values(request)
+    snapshot_date = partition.get("dt") or planned_at[:10]
     if RERA_REGISTRY_MONTHLY in requested:
         try:
             output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
@@ -210,16 +213,18 @@ def collect_asset_sources(
             output[METRO_STATIONS_MONTHLY] = collect_metro_stations(request)
         except Exception as error:
             record_source_failure(source_failures, [METRO_STATIONS_MONTHLY], error)
-    if LEGACY_SEED_FACTS in requested:
+    if GENERATED_CONTEXT_SUMMARIES in requested:
         try:
-            from pipeline.skills.legacy_seed_import import collect_legacy_seed_facts
+            from pipeline.skills.generated_context_summary import (
+                collect_generated_context_summaries,
+            )
 
-            planned_at = normalized_planned_at(request)
-            partition = partition_values(request)
-            snapshot_date = partition.get("dt") or planned_at[:10]
-            output[LEGACY_SEED_FACTS] = collect_legacy_seed_facts(snapshot_date)
+            output[GENERATED_CONTEXT_SUMMARIES] = collect_generated_context_summaries(
+                snapshot_date,
+                source_entities=request.get("source_entities", []),
+            )
         except Exception as error:
-            record_source_failure(source_failures, [LEGACY_SEED_FACTS], error)
+            record_source_failure(source_failures, [GENERATED_CONTEXT_SUMMARIES], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -260,11 +265,14 @@ def skip_reddit_collection() -> bool:
 
 
 def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    from pipeline.skills.reddit_poc_import import collect_reddit_poc_fact_rows
+
     planned_at = normalized_planned_at(request)
     partition = partition_values(request)
     snapshot_date = partition.get("dt") or planned_at[:10]
     subreddit = partition.get("subreddit") or "BangaloreRealEstates"
     watermark = {"source": "reddit_skipped", "high_watermark": planned_at}
+    poc_facts, poc_annotations = collect_reddit_poc_fact_rows(snapshot_date)
     return (
         {
             "snapshot_date": snapshot_date,
@@ -275,8 +283,8 @@ def empty_reddit_assets(request: Dict[str, Any]) -> Tuple[Dict[str, Any], Dict[s
         {
             "source": "reddit",
             "snapshot_date": snapshot_date,
-            "facts": [],
-            "fact_annotations": [],
+            "facts": poc_facts,
+            "fact_annotations": poc_annotations,
             "source_watermarks": [watermark],
         },
     )
@@ -407,7 +415,7 @@ def collect_google_nearby_places(
     inputs = society_inputs or {}
     fetch = nearby_fetch or fetch_google_places_nearby_text
     records = []  # type: List[Dict[str, Any]]
-    categories = ("school", "metro", "hospital", "fitness", "eatery", "tech_park")
+    categories = ("school", "metro", "hospital", "fitness", "tech_park")
 
     for slug, input_data in sorted(inputs.items()):
         for category in categories:
@@ -432,6 +440,8 @@ def collect_google_nearby_places(
                         "place_id": optional_string(place.get("place_id")),
                         "place_url": url,
                         "distance_km": optional_float(place.get("distance_km")),
+                        "latitude": optional_float(place.get("latitude")),
+                        "longitude": optional_float(place.get("longitude")),
                         "rating": optional_float(place.get("rating")),
                         "review_count": optional_int(place.get("review_count")),
                         "primary_type": optional_string(place.get("primary_type")),
@@ -481,7 +491,6 @@ def nearby_category_label(category: str) -> str:
         "metro": "metro station",
         "hospital": "hospital",
         "fitness": "gym fitness",
-        "eatery": "restaurant cafe",
         "tech_park": "tech park office",
     }
     return labels.get(normalized, normalized.replace("_", " "))
@@ -669,6 +678,8 @@ def collect_rera_project_details(
             "project_key": optional_string(seed.get("project_key")),
             "area": optional_string(seed.get("area")),
             "city": optional_string(seed.get("city")) or "Bengaluru",
+            "latitude": optional_float(seed.get("latitude")),
+            "longitude": optional_float(seed.get("longitude")),
             "triggered_by": "asset_dag",
         }
         profile_facts, profile_annotations = source_entity_profile_rows(
@@ -749,6 +760,29 @@ def source_entity_profile_rows(
     ):
         if value:
             rows.append((key, "text", value, template, preferences, 0.95))
+    latitude = optional_float(input_data.get("latitude"))
+    longitude = optional_float(input_data.get("longitude"))
+    if latitude is not None and longitude is not None:
+        rows.extend(
+            (
+                (
+                    "geo.latitude",
+                    "numeric",
+                    latitude,
+                    "Latitude: {value}",
+                    ["coordinates", "location", "latitude"],
+                    0.9,
+                ),
+                (
+                    "geo.longitude",
+                    "numeric",
+                    longitude,
+                    "Longitude: {value}",
+                    ["coordinates", "location", "longitude"],
+                    0.9,
+                ),
+            )
+        )
     rows.append(
         (
             "source_scan_selected",
@@ -766,6 +800,10 @@ def source_entity_profile_rows(
     for key, value_type, value, template, preferences, confidence in rows:
         if value_type == "bool":
             value_json = json.dumps({"type": "Bool", "data": bool(value)}, separators=(",", ":"))
+        elif value_type == "numeric":
+            value_json = json.dumps(
+                {"type": "Numeric", "data": float(value)}, separators=(",", ":")
+            )
         else:
             value_json = json.dumps({"type": "Text", "data": str(value)}, separators=(",", ":"))
         facts.append(

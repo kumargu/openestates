@@ -1,0 +1,1288 @@
+[
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "premium",
+    "query": "Looking for a 3BHK around Whitefield or Kadugodi, budget ideally under 2.5Cr.\nNeed something sensible for parents, close enough to metro, schools and hospitals.\nI care more about daily convenience than brochure luxury.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:family friendly",
+      "negative:premium",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Avoid preference: premium",
+    "recorded_at": "2026-07-22T17:19:19.709435896+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-brigade-lakefront-crimson",
+      "soc-sapthagiri-nirvana",
+      "soc-adarsh-park-heights-phase-2"
+    ]
+  },
+  {
+    "entity_id": "society:folium-by-sumadhura-phase-i",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "premium",
+    "query": "Looking for a 3BHK around Whitefield or Kadugodi, budget ideally under 2.5Cr.\nNeed something sensible for parents, close enough to metro, schools and hospitals.\nI care more about daily convenience than brochure luxury.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:family friendly",
+      "negative:premium",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Avoid preference: premium",
+    "recorded_at": "2026-07-22T17:19:19.709435896+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-brigade-lakefront-crimson",
+      "soc-sapthagiri-nirvana",
+      "soc-adarsh-park-heights-phase-2"
+    ]
+  },
+  {
+    "entity_id": "society:brigade-lakefront-crimson",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "premium",
+    "query": "Looking for a 3BHK around Whitefield or Kadugodi, budget ideally under 2.5Cr.\nNeed something sensible for parents, close enough to metro, schools and hospitals.\nI care more about daily convenience than brochure luxury.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:family friendly",
+      "negative:premium",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Avoid preference: premium",
+    "recorded_at": "2026-07-22T17:19:19.709435896+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-brigade-lakefront-crimson",
+      "soc-sapthagiri-nirvana",
+      "soc-adarsh-park-heights-phase-2"
+    ]
+  },
+  {
+    "entity_id": "society:sapthagiri-nirvana",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "premium",
+    "query": "Looking for a 3BHK around Whitefield or Kadugodi, budget ideally under 2.5Cr.\nNeed something sensible for parents, close enough to metro, schools and hospitals.\nI care more about daily convenience than brochure luxury.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:family friendly",
+      "negative:premium",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Avoid preference: premium",
+    "recorded_at": "2026-07-22T17:19:19.709435896+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-brigade-lakefront-crimson",
+      "soc-sapthagiri-nirvana",
+      "soc-adarsh-park-heights-phase-2"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "premium",
+    "query": "Looking for a 3BHK around Whitefield or Kadugodi, budget ideally under 2.5Cr.\nNeed something sensible for parents, close enough to metro, schools and hospitals.\nI care more about daily convenience than brochure luxury.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:family friendly",
+      "negative:premium",
+      "buyer_archetype:Family"
+    ],
+    "reason": "Avoid preference: premium",
+    "recorded_at": "2026-07-22T17:19:19.709435896+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-brigade-lakefront-crimson",
+      "soc-sapthagiri-nirvana",
+      "soc-adarsh-park-heights-phase-2"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 2,
+    "intent_budget_max": 15000000,
+    "missing_fact": "nearby_metro_stations",
+    "query": "2BHK for a young couple, mostly office commute to ORR or Whitefield.\nNeed not be fancy, but metro or tech park access should be practical.\nBudget below 1.5Cr.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:commute",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-22T17:19:19.885421246+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-sapthagiri-nirvana",
+      "soc-candeur-landmark",
+      "soc-candeur-signature"
+    ]
+  },
+  {
+    "entity_id": "society:sapthagiri-nirvana",
+    "intent_area": "Whitefield",
+    "intent_bhk": 2,
+    "intent_budget_max": 15000000,
+    "missing_fact": "nearby_metro_stations",
+    "query": "2BHK for a young couple, mostly office commute to ORR or Whitefield.\nNeed not be fancy, but metro or tech park access should be practical.\nBudget below 1.5Cr.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:commute",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-22T17:19:19.885421246+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-sapthagiri-nirvana",
+      "soc-candeur-landmark",
+      "soc-candeur-signature"
+    ]
+  },
+  {
+    "entity_id": "society:candeur-landmark",
+    "intent_area": "Whitefield",
+    "intent_bhk": 2,
+    "intent_budget_max": 15000000,
+    "missing_fact": "nearby_metro_stations",
+    "query": "2BHK for a young couple, mostly office commute to ORR or Whitefield.\nNeed not be fancy, but metro or tech park access should be practical.\nBudget below 1.5Cr.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:commute",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-22T17:19:19.885421246+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-sapthagiri-nirvana",
+      "soc-candeur-landmark",
+      "soc-candeur-signature"
+    ]
+  },
+  {
+    "entity_id": "society:candeur-signature",
+    "intent_area": "Whitefield",
+    "intent_bhk": 2,
+    "intent_budget_max": 15000000,
+    "missing_fact": "nearby_metro_stations",
+    "query": "2BHK for a young couple, mostly office commute to ORR or Whitefield.\nNeed not be fancy, but metro or tech park access should be practical.\nBudget below 1.5Cr.",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:value for money",
+      "positive:commute",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-22T17:19:19.885421246+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-sapthagiri-nirvana",
+      "soc-candeur-landmark",
+      "soc-candeur-signature"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Moving with parents and a small kid.\nNeed nearby schools and hospitals, and the society should feel easy for daily life.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure",
+      "positive:family friendly",
+      "buyer_archetype:Family"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.051158697+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-abhee-celestial-city",
+      "soc-brigade-lakefront-crimson",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Moving with parents and a small kid.\nNeed nearby schools and hospitals, and the society should feel easy for daily life.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure",
+      "positive:family friendly",
+      "buyer_archetype:Family"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.051158697+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-abhee-celestial-city",
+      "soc-brigade-lakefront-crimson",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:abhee-celestial-city",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Moving with parents and a small kid.\nNeed nearby schools and hospitals, and the society should feel easy for daily life.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure",
+      "positive:family friendly",
+      "buyer_archetype:Family"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.051158697+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-abhee-celestial-city",
+      "soc-brigade-lakefront-crimson",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:brigade-lakefront-crimson",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Moving with parents and a small kid.\nNeed nearby schools and hospitals, and the society should feel easy for daily life.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure",
+      "positive:family friendly",
+      "buyer_archetype:Family"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.051158697+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-abhee-celestial-city",
+      "soc-brigade-lakefront-crimson",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq-building-3-tower-6",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Moving with parents and a small kid.\nNeed nearby schools and hospitals, and the society should feel easy for daily life.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure",
+      "positive:family friendly",
+      "buyer_archetype:Family"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.051158697+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-abhee-celestial-city",
+      "soc-brigade-lakefront-crimson",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "listing_4bhk",
+    "query": "Best value 3BHK under 2.4Cr with listing price proof.\nDo not show random cheap projects unless the market listing data is visible.",
+    "query_categories": [
+      "positive:value for money",
+      "positive:premium",
+      "positive:listing evidence",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: premium",
+    "recorded_at": "2026-07-22T17:19:20.114323180+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-godrej-splendour",
+      "soc-dsr-green-waters",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:godrej-splendour",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "listing_4bhk",
+    "query": "Best value 3BHK under 2.4Cr with listing price proof.\nDo not show random cheap projects unless the market listing data is visible.",
+    "query_categories": [
+      "positive:value for money",
+      "positive:premium",
+      "positive:listing evidence",
+      "buyer_archetype:ValueBuyer"
+    ],
+    "reason": "User preference: premium",
+    "recorded_at": "2026-07-22T17:19:20.114323180+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-godrej-splendour",
+      "soc-dsr-green-waters",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-waterford",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Daily life should be convenient: cafes, gyms, hospitals and nearby basics matter.\nI am okay with a smaller flat if the locality works.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.578754358+00:00",
+    "results_returned": 44,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford",
+      "soc-sumadhura-capitol-residences",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-sbr-one-residence",
+      "soc-prestige-elm-park"
+    ]
+  },
+  {
+    "entity_id": "society:sumadhura-capitol-residences",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Daily life should be convenient: cafes, gyms, hospitals and nearby basics matter.\nI am okay with a smaller flat if the locality works.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.578754358+00:00",
+    "results_returned": 44,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford",
+      "soc-sumadhura-capitol-residences",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-sbr-one-residence",
+      "soc-prestige-elm-park"
+    ]
+  },
+  {
+    "entity_id": "society:folium-by-sumadhura-phase-i",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Daily life should be convenient: cafes, gyms, hospitals and nearby basics matter.\nI am okay with a smaller flat if the locality works.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.578754358+00:00",
+    "results_returned": 44,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford",
+      "soc-sumadhura-capitol-residences",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-sbr-one-residence",
+      "soc-prestige-elm-park"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Daily life should be convenient: cafes, gyms, hospitals and nearby basics matter.\nI am okay with a smaller flat if the locality works.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.578754358+00:00",
+    "results_returned": 44,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford",
+      "soc-sumadhura-capitol-residences",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-sbr-one-residence",
+      "soc-prestige-elm-park"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-elm-park",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_signal",
+    "query": "Daily life should be convenient: cafes, gyms, hospitals and nearby basics matter.\nI am okay with a smaller flat if the locality works.",
+    "query_categories": [
+      "positive:liveability",
+      "positive:social infrastructure"
+    ],
+    "reason": "User preference: liveability",
+    "recorded_at": "2026-07-22T17:19:20.578754358+00:00",
+    "results_returned": 44,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford",
+      "soc-sumadhura-capitol-residences",
+      "soc-folium-by-sumadhura-phase-i",
+      "soc-sbr-one-residence",
+      "soc-prestige-elm-park"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "nearby_metro_stations",
+    "query": "witefield 3bhk undr 2.5cr, gud reviews, near metro, legal papers clear",
+    "query_categories": [
+      "positive:metro access",
+      "positive:social infrastructure",
+      "positive:review quality",
+      "positive:legal safety"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-22T17:19:20.636616308+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-sbr-one-residence",
+      "soc-brigade-lakefront-crimson",
+      "soc-folium-by-sumadhura-phase-i"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "operating.tanker_dependence",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "water_supply_risk",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq-building-3-tower-6",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "operating.tanker_dependence",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq-building-3-tower-6",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "water_supply_risk",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:godrej-splendour",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "operating.tanker_dependence",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:godrej-splendour",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "water_supply_risk",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:abhee-celestial-city",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "operating.tanker_dependence",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:abhee-celestial-city",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "water_supply_risk",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "operating.tanker_dependence",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "water_supply_risk",
+    "query": "Need 3BHK Whitefield under 2.4Cr.\nPlease avoid societies with tanker dependency, borewell drama or daily water stress.\nIf we do not have source proof, say that instead of guessing.",
+    "query_categories": [
+      "negative:water issues"
+    ],
+    "reason": "Avoid preference: water issues",
+    "recorded_at": "2026-07-22T17:19:20.980973371+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-godrej-splendour",
+      "soc-abhee-celestial-city",
+      "soc-assetz-marq"
+    ]
+  },
+  {
+    "entity_id": "society:sumadhura-capitol-residences",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "maintenance_sentiment",
+    "query": "Only show societies where residents specifically mention good maintenance and no association headaches.\nIf resident proof is missing, treat it as a data gap.",
+    "query_categories": [
+      "positive:maintenance",
+      "positive:review quality"
+    ],
+    "reason": "User preference: maintenance",
+    "recorded_at": "2026-07-22T17:19:21.026216416+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sumadhura-capitol-residences",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "positive.maintenance_quality",
+    "query": "Only show societies where residents specifically mention good maintenance and no association headaches.\nIf resident proof is missing, treat it as a data gap.",
+    "query_categories": [
+      "positive:maintenance",
+      "positive:review quality"
+    ],
+    "reason": "User preference: maintenance",
+    "recorded_at": "2026-07-22T17:19:21.026216416+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "maintenance_sentiment",
+    "query": "Only show societies where residents specifically mention good maintenance and no association headaches.\nIf resident proof is missing, treat it as a data gap.",
+    "query_categories": [
+      "positive:maintenance",
+      "positive:review quality"
+    ],
+    "reason": "User preference: maintenance",
+    "recorded_at": "2026-07-22T17:19:21.026216416+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "positive.maintenance_quality",
+    "query": "Only show societies where residents specifically mention good maintenance and no association headaches.\nIf resident proof is missing, treat it as a data gap.",
+    "query_categories": [
+      "positive:maintenance",
+      "positive:review quality"
+    ],
+    "reason": "User preference: maintenance",
+    "recorded_at": "2026-07-22T17:19:21.026216416+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-capitol-residences",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sumadhura-eden-garden",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "waterlogging_risk_score",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: waterlogging risk",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:sumadhura-eden-garden",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "risk.approach_road_waterlogging",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: approach road",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-lakeside-habitat",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "waterlogging_risk_score",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: waterlogging risk",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-lakeside-habitat",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "risk.approach_road_waterlogging",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: approach road",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:vaswani-starlight",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "waterlogging_risk_score",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: waterlogging risk",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:vaswani-starlight",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "risk.approach_road_waterlogging",
+    "query": "Concerned about monsoon flooding, bad drainage and stagnant rainwater near approach roads.\nPrefer dry access even if the society is slightly older.",
+    "query_categories": [
+      "negative:waterlogging risk",
+      "negative:approach road"
+    ],
+    "reason": "Avoid preference: approach road",
+    "recorded_at": "2026-07-22T17:19:21.206768913+00:00",
+    "results_returned": 6,
+    "top_candidate_society_ids": [
+      "soc-sumadhura-eden-garden",
+      "soc-prestige-lakeside-habitat",
+      "soc-vaswani-starlight"
+    ]
+  },
+  {
+    "entity_id": "society:abhee-celestial-city",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "bbmp_approval_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:abhee-celestial-city",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_certificate_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-1",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "bbmp_approval_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-1",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_certificate_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "bbmp_approval_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_certificate_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "bbmp_approval_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_certificate_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq-building-3-tower-6",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "bbmp_approval_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq-building-3-tower-6",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "occupancy_certificate_status",
+    "query": "BBMP approval issues are a hard no.\nNeed approval documents, OC-like confidence and clean RERA mapping before anything else.",
+    "query_categories": [
+      "positive:legal safety"
+    ],
+    "reason": "User preference: legal safety",
+    "recorded_at": "2026-07-22T17:19:21.277042827+00:00",
+    "results_returned": 16,
+    "top_candidate_society_ids": [
+      "soc-abhee-celestial-city",
+      "soc-adarsh-park-heights-phase-1",
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "lifecycle.builder_reputation_negative",
+    "query": "I do not want shady builder history, repeated resident complaints or bad handover stories.\nShow only if we have negative-history proof or say we lack it.",
+    "query_categories": [
+      "negative:builder trust"
+    ],
+    "reason": "Avoid preference: builder trust",
+    "recorded_at": "2026-07-22T17:19:21.320233434+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-rrl-palm-altezze"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "maintenance_sentiment",
+    "query": "I do not want shady builder history, repeated resident complaints or bad handover stories.\nShow only if we have negative-history proof or say we lack it.",
+    "query_categories": [
+      "negative:builder trust"
+    ],
+    "reason": "Avoid preference: builder trust",
+    "recorded_at": "2026-07-22T17:19:21.320233434+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-rrl-palm-altezze"
+    ]
+  },
+  {
+    "entity_id": "society:rrl-palm-altezze",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "lifecycle.builder_reputation_negative",
+    "query": "I do not want shady builder history, repeated resident complaints or bad handover stories.\nShow only if we have negative-history proof or say we lack it.",
+    "query_categories": [
+      "negative:builder trust"
+    ],
+    "reason": "Avoid preference: builder trust",
+    "recorded_at": "2026-07-22T17:19:21.320233434+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-rrl-palm-altezze"
+    ]
+  },
+  {
+    "entity_id": "society:rrl-palm-altezze",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "maintenance_sentiment",
+    "query": "I do not want shady builder history, repeated resident complaints or bad handover stories.\nShow only if we have negative-history proof or say we lack it.",
+    "query_categories": [
+      "negative:builder trust"
+    ],
+    "reason": "Avoid preference: builder trust",
+    "recorded_at": "2026-07-22T17:19:21.320233434+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-sbr-one-residence",
+      "soc-rrl-palm-altezze"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "listing_4bhk",
+    "query": "Need 3BHK Whitefield under 2.4Cr with listing price proof",
+    "query_categories": [
+      "positive:premium",
+      "positive:listing evidence"
+    ],
+    "reason": "User preference: premium",
+    "recorded_at": "2026-07-22T17:25:04.426416141+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-dsr-green-waters",
+      "soc-folium-by-sumadhura-phase-i"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "listing_4bhk",
+    "query": "Need 3BHK Whitefield under 2.4Cr with listing price proof",
+    "query_categories": [
+      "positive:premium",
+      "positive:listing evidence"
+    ],
+    "reason": "User preference: premium",
+    "recorded_at": "2026-07-22T17:30:38.079390775+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-dsr-green-waters",
+      "soc-folium-by-sumadhura-phase-i"
+    ]
+  },
+  {
+    "entity_id": "society:adarsh-park-heights-phase-2",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": 24000000,
+    "missing_fact": "listing_4bhk",
+    "query": "Need 3BHK Whitefield under 2.4Cr with listing price proof",
+    "query_categories": [
+      "positive:premium",
+      "positive:listing evidence"
+    ],
+    "reason": "User preference: premium",
+    "recorded_at": "2026-07-22T17:44:06.863242977+00:00",
+    "results_returned": 15,
+    "top_candidate_society_ids": [
+      "soc-adarsh-park-heights-phase-2",
+      "soc-assetz-marq",
+      "soc-assetz-marq-building-3-tower-6",
+      "soc-dsr-green-waters",
+      "soc-folium-by-sumadhura-phase-i"
+    ]
+  }
+]

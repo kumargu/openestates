@@ -1,10 +1,12 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+#[cfg(feature = "fastembed")]
+use std::sync::Mutex;
 
 use serde::Serialize;
 
 use crate::models::Property;
-use crate::serving::ServingEntityRecord;
+use crate::serving::{ServingEmbeddingRecord, ServingEntityRecord};
 
 use super::schema;
 
@@ -17,6 +19,9 @@ pub trait SemanticEmbedder: Send + Sync {
     fn model_id(&self) -> &'static str;
     fn dimensions(&self) -> usize;
     fn embed(&self, text: &str) -> Vec<f32>;
+    fn embed_batch(&self, texts: &[String]) -> Vec<Vec<f32>> {
+        texts.iter().map(|text| self.embed(text)).collect()
+    }
 }
 
 /// Deterministic domain-aware fallback embedder.
@@ -63,6 +68,90 @@ impl SemanticEmbedder for HashSemanticEmbedder {
     }
 }
 
+#[cfg(feature = "fastembed")]
+pub struct FastEmbedSemanticEmbedder {
+    model: Mutex<fastembed::TextEmbedding>,
+    dimensions: usize,
+}
+
+#[cfg(feature = "fastembed")]
+impl FastEmbedSemanticEmbedder {
+    pub fn try_new_all_minilm_l6_v2() -> Result<Self, String> {
+        let ort_dylib = std::env::var("OPENESTATES_ONNXRUNTIME_DYLIB").map_err(|_| {
+            "OPENESTATES_ONNXRUNTIME_DYLIB must point at a local libonnxruntime.so when using fastembed"
+                .to_string()
+        })?;
+        ort::init_from(&ort_dylib)
+            .map_err(|err| format!("failed to load ONNX Runtime from {ort_dylib}: {err}"))?
+            .commit();
+
+        let model_name = fastembed::EmbeddingModel::AllMiniLML6V2;
+        let dimensions = fastembed::TextEmbedding::get_model_info(&model_name)
+            .map_err(|err| err.to_string())?
+            .dim;
+        let mut options =
+            fastembed::TextInitOptions::new(model_name).with_show_download_progress(false);
+        if let Some(intra_threads) = positive_env_usize("OPENESTATES_FASTEMBED_INTRA_THREADS") {
+            options = options.with_intra_threads(intra_threads);
+        } else {
+            options = options.with_intra_threads(4);
+        }
+        let model = fastembed::TextEmbedding::try_new(options).map_err(|err| err.to_string())?;
+
+        Ok(Self {
+            model: Mutex::new(model),
+            dimensions,
+        })
+    }
+}
+
+#[cfg(feature = "fastembed")]
+impl SemanticEmbedder for FastEmbedSemanticEmbedder {
+    fn model_id(&self) -> &'static str {
+        "fastembed-all-minilm-l6-v2"
+    }
+
+    fn dimensions(&self) -> usize {
+        self.dimensions
+    }
+
+    fn embed(&self, text: &str) -> Vec<f32> {
+        self.embed_batch(&[text.to_string()])
+            .pop()
+            .unwrap_or_else(|| vec![0.0; self.dimensions])
+    }
+
+    fn embed_batch(&self, texts: &[String]) -> Vec<Vec<f32>> {
+        let Ok(mut model) = self.model.lock() else {
+            return vec![vec![0.0; self.dimensions]; texts.len()];
+        };
+        let batch_size = positive_env_usize("OPENESTATES_FASTEMBED_BATCH_SIZE").unwrap_or(64);
+        let chunk_size = positive_env_usize("OPENESTATES_FASTEMBED_CHUNK_SIZE").unwrap_or(512);
+        let mut embeddings = Vec::with_capacity(texts.len());
+        for chunk in texts.chunks(chunk_size) {
+            let chunk_embeddings = match model.embed(chunk, Some(batch_size)) {
+                Ok(embeddings) => embeddings,
+                Err(err) => {
+                    eprintln!("WARN: fastembed failed to embed text: {err}");
+                    return vec![vec![0.0; self.dimensions]; texts.len()];
+                }
+            };
+            for mut vector in chunk_embeddings {
+                normalize(&mut vector);
+                embeddings.push(vector);
+            }
+        }
+        embeddings
+    }
+}
+
+fn positive_env_usize(key: &str) -> Option<usize> {
+    std::env::var(key)
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct SemanticRecallHit {
     pub entity_id: String,
@@ -84,25 +173,38 @@ struct SemanticIndexedDocument {
     vector: Vec<f32>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SemanticEmbeddingDocument {
+    pub entity_id: String,
+    pub entity_type: String,
+    pub text: String,
+}
+
 impl SemanticSearchIndex {
     pub fn from_serving_entities(
         entities: &[ServingEntityRecord],
         embedder: &dyn SemanticEmbedder,
     ) -> Self {
-        let documents = entities
+        let documents = semantic_embedding_documents_from_serving_entities(entities);
+        let document_keys = documents
             .iter()
-            .filter(|entity| {
-                matches!(entity.entity_type.as_str(), "property" | "society")
-                    && !entity.searchable_text.trim().is_empty()
-            })
-            .map(|entity| {
-                let text = format!("{} {}", entity.name, entity.searchable_text);
-                SemanticIndexedDocument {
-                    entity_id: entity.entity_id.clone(),
-                    entity_type: entity.entity_type.clone(),
-                    vector: embedder.embed(&text),
-                }
-            })
+            .map(|document| (document.entity_id.clone(), document.entity_type.clone()))
+            .collect::<Vec<_>>();
+        let texts = documents
+            .iter()
+            .map(|document| document.text.clone())
+            .collect::<Vec<_>>();
+        let vectors = embedder.embed_batch(&texts);
+        let documents = document_keys
+            .into_iter()
+            .zip(vectors)
+            .map(
+                |((entity_id, entity_type), vector)| SemanticIndexedDocument {
+                    entity_id,
+                    entity_type,
+                    vector,
+                },
+            )
             .collect();
 
         Self {
@@ -113,10 +215,14 @@ impl SemanticSearchIndex {
     }
 
     pub fn from_properties(properties: &[Property], embedder: &dyn SemanticEmbedder) -> Self {
-        let documents = properties
+        let document_keys = properties
+            .iter()
+            .map(|property| (format!("property:{}", property.id), "property".to_string()))
+            .collect::<Vec<_>>();
+        let texts = properties
             .iter()
             .map(|property| {
-                let text = format!(
+                bounded_semantic_text(format!(
                     "{} {} {} {} {} {} {} {}",
                     property.title,
                     property.area,
@@ -126,12 +232,45 @@ impl SemanticSearchIndex {
                     property.property_type,
                     property.possession_status,
                     property.description_summary
-                );
-                SemanticIndexedDocument {
-                    entity_id: format!("property:{}", property.id),
-                    entity_type: "property".to_string(),
-                    vector: embedder.embed(&text),
-                }
+                ))
+            })
+            .collect::<Vec<_>>();
+        let vectors = embedder.embed_batch(&texts);
+        let documents = document_keys
+            .into_iter()
+            .zip(vectors)
+            .map(
+                |((entity_id, entity_type), vector)| SemanticIndexedDocument {
+                    entity_id,
+                    entity_type,
+                    vector,
+                },
+            )
+            .collect();
+
+        Self {
+            model_id: embedder.model_id().to_string(),
+            dimensions: embedder.dimensions(),
+            documents,
+        }
+    }
+
+    pub fn from_embedding_records(
+        records: &[ServingEmbeddingRecord],
+        embedder: &dyn SemanticEmbedder,
+    ) -> Self {
+        let documents = records
+            .iter()
+            .filter(|record| {
+                record.model_id == embedder.model_id()
+                    && record.dimensions as usize == embedder.dimensions()
+                    && matches!(record.entity_type.as_str(), "property" | "society")
+                    && record.embedding.len() == embedder.dimensions()
+            })
+            .map(|record| SemanticIndexedDocument {
+                entity_id: record.entity_id.clone(),
+                entity_type: record.entity_type.clone(),
+                vector: record.embedding.clone(),
             })
             .collect();
 
@@ -196,6 +335,23 @@ impl SemanticSearchIndex {
     }
 }
 
+pub fn semantic_embedding_documents_from_serving_entities(
+    entities: &[ServingEntityRecord],
+) -> Vec<SemanticEmbeddingDocument> {
+    entities
+        .iter()
+        .filter(|entity| {
+            matches!(entity.entity_type.as_str(), "property" | "society")
+                && !entity.searchable_text.trim().is_empty()
+        })
+        .map(|entity| SemanticEmbeddingDocument {
+            entity_id: entity.entity_id.clone(),
+            entity_type: entity.entity_type.clone(),
+            text: bounded_semantic_text(format!("{} {}", entity.name, entity.searchable_text)),
+        })
+        .collect()
+}
+
 fn semantic_tokens(text: &str) -> Vec<String> {
     let base_tokens = raw_tokens(text);
     let mut tokens = Vec::new();
@@ -213,6 +369,14 @@ fn semantic_tokens(text: &str) -> Vec<String> {
         push_token(&mut tokens, &phrase.replace(' ', "_"));
     }
     tokens
+}
+
+fn bounded_semantic_text(text: String) -> String {
+    let max_chars = positive_env_usize("OPENESTATES_SEMANTIC_DOCUMENT_MAX_CHARS").unwrap_or(2048);
+    if text.len() <= max_chars {
+        return text;
+    }
+    text.chars().take(max_chars).collect()
 }
 
 fn raw_tokens(text: &str) -> Vec<String> {

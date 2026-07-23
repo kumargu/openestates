@@ -41,6 +41,7 @@
         "canonical": "Whitefield",
         "aliases": [
           "whitefield",
+          "witefield",
           "wf",
           "kadugodi",
           "varthur",
@@ -101,6 +102,42 @@
       {
         "canonical": "Bannerghatta Road",
         "aliases": ["bannerghatta", "bannerghatta road", "btm"]
+      }
+    ]
+  },
+  "resolution": {
+    "min_resolvable_entity_name_chars": 3,
+    "ignored_entity_names": ["a", "an", "the", "in", "near", "for", "with"],
+    "place_families": [
+      {
+        "id": "metro",
+        "label": "metro",
+        "aliases": ["metro", "metro station", "station", "purple line"]
+      },
+      {
+        "id": "school",
+        "label": "school",
+        "aliases": ["school", "schools", "kid school", "children school"]
+      },
+      {
+        "id": "hospital",
+        "label": "hospital",
+        "aliases": ["hospital", "hospitals", "clinic", "medical"]
+      },
+      {
+        "id": "tech_park",
+        "label": "tech park",
+        "aliases": ["tech park", "tech parks", "office", "offices"]
+      },
+      {
+        "id": "mall",
+        "label": "mall",
+        "aliases": ["mall", "shopping mall", "forum", "galleria"]
+      },
+      {
+        "id": "landmark",
+        "label": "landmark",
+        "aliases": ["landmark", "nearby", "near by", "close to"]
       }
     ]
   },

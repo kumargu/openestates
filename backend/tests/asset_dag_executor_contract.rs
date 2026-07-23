@@ -17,18 +17,18 @@ use backend::assets::{
     PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
     RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, TrustTier,     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    SourceWatermark, TrustTier, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_ROAD_NODES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, LEGACY_SEED_FACTS_ASSET_ID,
-    CANONICAL_AREA_NODES_ASSET_ID, CANONICAL_PROPERTY_NODES_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
     METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
     PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
     REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
-use backend::discovery::DiscoveryConfig;
+use backend::entity_context::compose_entity_context;
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
@@ -87,9 +87,8 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
-        LEGACY_SEED_FACTS_ASSET_ID,
-        CANONICAL_PROPERTY_NODES_ASSET_ID,
-        CANONICAL_AREA_NODES_ASSET_ID,
+        CANONICAL_ROAD_NODES_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -268,9 +267,8 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-        LEGACY_SEED_FACTS_ASSET_ID,
-        CANONICAL_PROPERTY_NODES_ASSET_ID,
-        CANONICAL_AREA_NODES_ASSET_ID,
+        CANONICAL_ROAD_NODES_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -484,7 +482,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.parent_materializations.len(), 16);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        92
+        122
     );
 
     let serving_record = current_record(
@@ -493,7 +491,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 92);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 123);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -529,6 +527,11 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let reddit_facts = source_inputs.reddit_resident_facts.as_mut().unwrap();
     reddit_facts.facts[0].entity_id = "society:rera-meadows".to_string();
     reddit_facts.fact_annotations[0].entity_id = "society:rera-meadows".to_string();
+    source_inputs.generated_context_summaries = Some(generated_context_summary_input(
+        "society:rera-meadows",
+        "If you are looking at RERA Meadows, the generated context should survive the DAG and serving bundle.",
+        now,
+    ));
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
         .with_source_inputs(source_inputs);
@@ -557,14 +560,14 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         HOME_STATE_SIGNALS_ASSET_ID,
         REDDIT_THREADS_DAILY_ASSET_ID,
         REDDIT_RESIDENT_FACTS_ASSET_ID,
+        GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-        LEGACY_SEED_FACTS_ASSET_ID,
-        CANONICAL_PROPERTY_NODES_ASSET_ID,
-        CANONICAL_AREA_NODES_ASSET_ID,
+        CANONICAL_ROAD_NODES_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -664,6 +667,15 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .facts
         .iter()
         .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
+    let context = compose_entity_context("society:rera-meadows", &loaded)
+        .expect("generated context summary should be served from loaded bundle");
+    assert_eq!(
+        context.summary_paragraph,
+        "If you are looking at RERA Meadows, the generated context should survive the DAG and serving bundle."
+    );
+    assert_eq!(context.anchor_entity_id, "society:rera-meadows");
+    assert!(context.clauses.is_empty());
+    assert!(context.category_groups.is_empty());
 
     let query = "3bhk with greenery in whitefield above 10 acres";
     let properties = vec![
@@ -691,7 +703,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         areas: Vec::new(),
         societies,
         sellers: RwLock::new(Vec::new()),
-        discovery_config: DiscoveryConfig::default(),
+        discovery_config: backend::discovery::load_discovery_config(),
         knowledge: Arc::new(RwLock::new(mock_graph())),
         project_root: root.path().to_path_buf(),
         interest_counter: AtomicU64::new(0),
@@ -704,6 +716,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         State(state),
         Query(SearchQuery {
             q: Some(query.to_string()),
+            debug: None,
         }),
     )
     .await
@@ -770,7 +783,8 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
     seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
 
     let run_partition = source_run_partition();
-    let options = AssetDagExecutionOptions::new(run_partition.clone(), now);
+    let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
+        .with_source_inputs(generated_only_source_inputs(now));
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -1239,7 +1253,8 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     let run_partition = source_run_partition();
     seed_current_upstreams_for_partition(&lake, &store, now, &run_partition).await;
 
-    let options = AssetDagExecutionOptions::new(run_partition, now);
+    let options = AssetDagExecutionOptions::new(run_partition, now)
+        .with_source_inputs(generated_only_source_inputs(now));
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
         .await
@@ -1248,8 +1263,9 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     assert_eq!(
         report.executed_assets,
         vec![
-            asset_id(CANONICAL_AREA_NODES_ASSET_ID),
-            asset_id(CANONICAL_PROPERTY_NODES_ASSET_ID),
+            asset_id(GENERATED_CONTEXT_SUMMARIES_ASSET_ID),
+            asset_id(CANONICAL_ROAD_NODES_ASSET_ID),
+            asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
@@ -1731,6 +1747,17 @@ fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
         .unwrap_or_else(|| panic!("missing executed asset {id}"))
 }
 
+fn generated_only_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
+    AssetSourceInputs {
+        generated_context_summaries: Some(generated_context_summary_input(
+            "society:green-acre-whitefield",
+            "If you are looking at Green Acre Whitefield, the generated context should travel through the DAG like any other sourced fact.",
+            now + Duration::minutes(2),
+        )),
+        ..Default::default()
+    }
+}
+
 fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
         source_failures: Default::default(),
@@ -1875,27 +1902,6 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
-        legacy_seed_facts: Some(SkillFactsInput {
-            source: "legacy_seed".to_string(),
-            snapshot_date: "2026-07-13".to_string(),
-            facts: vec![SkillFactRecord {
-                entity_id: "property:discovered-green-acre-whitefield-3bhk".to_string(),
-                fact_key: "listing.title".to_string(),
-                value_type: "text".to_string(),
-                value_json: r#"{"type":"Text","data":"3 BHK in Green Acre Whitefield"}"#.to_string(),
-                confidence: 0.25,
-                source_type: "LegacySeed".to_string(),
-                source_url: None,
-                model: None,
-                skill_id: Some("legacy_seed_import".to_string()),
-                triggered_by: Some("bootstrap_import".to_string()),
-                learned_at: now,
-                run_id: "collector-legacy_seed_import-2026-07-13".to_string(),
-                input_hash: "sha256:legacy-seed-fixture".to_string(),
-            }],
-            fact_annotations: vec![],
-            source_watermarks: Vec::new(),
-        }),
         google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),
             records: vec![GooglePlaceSnapshotRecord {
@@ -1926,6 +1932,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 place_id: Some("greenwood-high".to_string()),
                 place_url: "https://maps.google.com/?cid=greenwood-high".to_string(),
                 distance_km: Some(1.2),
+                latitude: Some(12.9720),
+                longitude: Some(77.5960),
                 rating: Some(4.3),
                 review_count: Some(420),
                 primary_type: Some("school".to_string()),
@@ -1936,6 +1944,60 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
+        generated_context_summaries: Some(generated_context_summary_input(
+            "society:green-acre-whitefield",
+            "If you are looking at Green Acre Whitefield, the generated context should travel through the DAG like any other sourced fact.",
+            now + Duration::minutes(2),
+        )),
+    }
+}
+
+fn generated_context_summary_input(
+    entity_id: &str,
+    summary: &str,
+    learned_at: chrono::DateTime<Utc>,
+) -> SkillFactsInput {
+    let metadata = r#"{"provider":"openai-compatible","quality_status":"passed"}"#.to_string();
+    SkillFactsInput {
+        source: "local_summary".to_string(),
+        snapshot_date: "2026-07-13".to_string(),
+        facts: vec![
+            SkillFactRecord {
+                entity_id: entity_id.to_string(),
+                fact_key: "generated_context_summary".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(summary.to_string())).unwrap(),
+                confidence: 0.72,
+                source_type: "Computed".to_string(),
+                source_url: None,
+                model: Some("fixture-local-summary".to_string()),
+                skill_id: Some("generated_context_summary_local".to_string()),
+                triggered_by: Some("asset_dag".to_string()),
+                learned_at,
+                run_id: "generated-summary-fixture".to_string(),
+                input_hash: "sha256:generated-summary-fixture".to_string(),
+            },
+            SkillFactRecord {
+                entity_id: entity_id.to_string(),
+                fact_key: "generated_context_summary_metadata".to_string(),
+                value_type: "text".to_string(),
+                value_json: serde_json::to_string(&FactValue::Text(metadata)).unwrap(),
+                confidence: 0.72,
+                source_type: "Computed".to_string(),
+                source_url: None,
+                model: Some("fixture-local-summary".to_string()),
+                skill_id: Some("generated_context_summary_local".to_string()),
+                triggered_by: Some("asset_dag".to_string()),
+                learned_at,
+                run_id: "generated-summary-fixture".to_string(),
+                input_hash: "sha256:generated-summary-fixture".to_string(),
+            },
+        ],
+        fact_annotations: vec![],
+        source_watermarks: vec![SourceWatermark {
+            source: "generated_context_summaries".to_string(),
+            high_watermark: learned_at.to_rfc3339(),
+        }],
     }
 }
 

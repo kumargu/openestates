@@ -1,4 +1,5 @@
 import { formatCurrency } from "./model.ts";
+import type { PlanScenarioId } from "./PlanGraph.tsx";
 
 type VerdictBlockProps = {
   view: "netWorth" | "monthly";
@@ -15,6 +16,8 @@ type VerdictBlockProps = {
   monthlyRent: number;
   buyNetWorth: number;
   rentNetWorth: number;
+  selectedScenario: PlanScenarioId;
+  onSelectScenario: (scenario: PlanScenarioId) => void;
 };
 
 export function VerdictBlock({
@@ -32,6 +35,8 @@ export function VerdictBlock({
   monthlyRent,
   buyNetWorth,
   rentNetWorth,
+  selectedScenario,
+  onSelectScenario,
 }: VerdictBlockProps) {
   const isMonthly = view === "monthly";
 
@@ -67,35 +72,55 @@ export function VerdictBlock({
       <p className="home-plan-verdict__detail">{detailLine}</p>
       {!isMonthly && <p className="home-plan-verdict__cashflow">{monthlyGapSummary}.</p>}
       {changeNote && <p className="home-plan-verdict__change">{changeNote}</p>}
-      <dl className="home-plan-verdict__breakdown" aria-label={`Year ${activeYear} breakdown`}>
+      <div className="home-plan-verdict__breakdown" role="group" aria-label={`Year ${activeYear} paths`}>
         {isMonthly ? (
           <>
-            <div className="home-plan-verdict__tile home-plan-verdict__tile--buy">
-              <dt>Buy · EMI</dt>
-              <dd>{formatCurrency(monthlyEmi)}/mo</dd>
+            <button
+              type="button"
+              className={`home-plan-verdict__tile home-plan-verdict__tile--buy ${selectedScenario === "buy" ? "is-selected" : ""}`}
+              onClick={() => onSelectScenario("buy")}
+              aria-pressed={selectedScenario === "buy"}
+            >
+              <span className="home-plan-verdict__tile-label"><i />Buy · EMI</span>
+              <strong>{formatCurrency(monthlyEmi)}/mo</strong>
               <small>Fixed until loan ends</small>
-            </div>
-            <div className="home-plan-verdict__tile home-plan-verdict__tile--rent">
-              <dt>Rent</dt>
-              <dd>{formatCurrency(monthlyRent)}/mo</dd>
+            </button>
+            <button
+              type="button"
+              className={`home-plan-verdict__tile home-plan-verdict__tile--rent ${selectedScenario === "rent" ? "is-selected" : ""}`}
+              onClick={() => onSelectScenario("rent")}
+              aria-pressed={selectedScenario === "rent"}
+            >
+              <span className="home-plan-verdict__tile-label"><i />Rent</span>
+              <strong>{formatCurrency(monthlyRent)}/mo</strong>
               <small>Rises with inflation</small>
-            </div>
+            </button>
           </>
         ) : (
           <>
-            <div className="home-plan-verdict__tile home-plan-verdict__tile--buy">
-              <dt>Buy path</dt>
-              <dd>{formatCurrency(buyNetWorth, true)}</dd>
+            <button
+              type="button"
+              className={`home-plan-verdict__tile home-plan-verdict__tile--buy ${selectedScenario === "buy" ? "is-selected" : ""}`}
+              onClick={() => onSelectScenario("buy")}
+              aria-pressed={selectedScenario === "buy"}
+            >
+              <span className="home-plan-verdict__tile-label"><i />Buy path</span>
+              <strong>{formatCurrency(buyNetWorth, true)}</strong>
               <small>EMI {formatCurrency(monthlyEmi)}/mo</small>
-            </div>
-            <div className="home-plan-verdict__tile home-plan-verdict__tile--rent">
-              <dt>Rent + SIP</dt>
-              <dd>{formatCurrency(rentNetWorth, true)}</dd>
+            </button>
+            <button
+              type="button"
+              className={`home-plan-verdict__tile home-plan-verdict__tile--rent ${selectedScenario === "rent" ? "is-selected" : ""}`}
+              onClick={() => onSelectScenario("rent")}
+              aria-pressed={selectedScenario === "rent"}
+            >
+              <span className="home-plan-verdict__tile-label"><i />Rent + SIP</span>
+              <strong>{formatCurrency(rentNetWorth, true)}</strong>
               <small>Rent {formatCurrency(monthlyRent)}/mo</small>
-            </div>
+            </button>
           </>
         )}
-      </dl>
+      </div>
     </header>
   );
 }

@@ -64,6 +64,13 @@ pub struct Property {
     pub seller_id: Option<String>,
 }
 
+impl Property {
+    /// Buyer-facing surfaces should only show homes with a real asking price.
+    pub fn is_listable(&self) -> bool {
+        self.price > 0
+    }
+}
+
 /// UI-ready property card for the results page.
 #[derive(Debug, Clone, Serialize)]
 pub struct PropertyCard {
