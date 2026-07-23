@@ -21,10 +21,6 @@ from pipeline.skills.fetch_google_review_links import (
     FetchGoogleReviewLinksSkill,
     fetch_google_places_nearby_text,
 )
-from pipeline.skills.generated_context_summary import (
-    detect_openai_compatible_provider,
-    select_summary_model,
-)
 from pipeline.skills.search_reddit import (
     RedditSourceBlocked,
     RedditSourceInvalidResponse,
@@ -33,38 +29,6 @@ from pipeline.skills.search_reddit import (
     fetch_reddit_threads_with_retry,
     threads_to_skill_result,
 )
-
-
-class SummaryProviderFixture:
-    def __init__(self, provider="openai-compatible"):
-        self.name = provider
-        self.model = "summary-test-model"
-
-    def generate(self, prompt, max_tokens, temperature):
-        if "Property: " in prompt:
-            property_name = prompt.split("Property: ", 1)[1].splitlines()[0]
-        else:
-            property_name = "Example Home"
-        area = "Bengaluru"
-        evidence = prompt.split("Evidence:", 1)[-1]
-        if "area " in evidence:
-            area = evidence.split("area ", 1)[1].split(";", 1)[0].split(",", 1)[0]
-        summary = (
-            f"If you are looking at {property_name}, treat it as a practical option in {area} "
-            "where the useful evidence is about road context, approach visibility, and daily routine "
-            "fit. The Street View frames give you a grounded way to inspect the access around the "
-            "gate before visiting. That helps when you are checking whether the basic project facts "
-            "match your weekday routine and weekend errands. Access still has tradeoffs, so verify "
-            "the exact road condition, available route, and unit before shortlisting. The summary "
-            "stays with the supplied evidence and avoids unsupported claims."
-        )
-        return SimpleNamespace(
-            provider=self.name,
-            model=self.model,
-            summary=summary,
-            load_ms=0,
-            generation_ms=1,
-        )
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
@@ -345,142 +309,16 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertNotIn("source_failures", output)
 
-    def test_generated_context_summaries_are_generated_by_configured_provider(self):
+    def test_generated_context_summaries_are_no_longer_collected_by_dag(self):
         request = {
             "partition": {"parts": [["dt", "2026-07-20"]]},
             "planned_at": "2026-07-20T00:00:00Z",
             "requested_assets": ["generated_context_summaries"],
         }
-        with patch(
-            "pipeline.skills.generated_context_summary.build_provider_from_env",
-            return_value=SummaryProviderFixture(),
-        ):
+        with self.assertRaises(ValueError) as error:
             output = collect_asset_sources(request)
 
-        summaries = output["generated_context_summaries"]
-        self.assertEqual(summaries["source"], "local_summary")
-        self.assertEqual(summaries["snapshot_date"], "2026-07-20")
-        self.assertEqual(len(summaries["facts"]), 14)
-        metadata = [
-            json.loads(json.loads(fact["value_json"])["data"])
-            for fact in summaries["facts"]
-            if fact["fact_key"] == "generated_context_summary_metadata"
-        ]
-        self.assertEqual(len(metadata), 7)
-        self.assertTrue(all(row["provider"] == "openai-compatible" for row in metadata))
-        self.assertTrue(all(row["quality_status"] == "passed" for row in metadata))
-        self.assertNotIn("source_failures", output)
-
-    def test_generated_context_summaries_are_scoped_to_requested_entities(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-20"]]},
-            "planned_at": "2026-07-20T00:00:00Z",
-            "requested_assets": ["generated_context_summaries"],
-            "source_entities": [
-                {
-                    "entity_id": "society:prestige-waterford",
-                    "name": "Prestige Waterford",
-                    "area": "Pattandur Agrahara",
-                    "city": "Bengaluru",
-                },
-                {
-                    "entity_id": "society:brigade-woods",
-                    "name": "Brigade Woods",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                },
-            ],
-        }
-        with patch(
-            "pipeline.skills.generated_context_summary.build_provider_from_env",
-            return_value=SummaryProviderFixture(),
-        ):
-            output = collect_asset_sources(request)
-
-        summaries = output["generated_context_summaries"]
-        self.assertEqual(len(summaries["facts"]), 4)
-        self.assertEqual(
-            {
-                fact["entity_id"]
-                for fact in summaries["facts"]
-                if fact["fact_key"] == "generated_context_summary"
-            },
-            {
-                "society:prestige-waterford",
-                "society:brigade-woods",
-            },
-        )
-        self.assertNotIn("source_failures", output)
-
-    def test_generated_context_summaries_reject_mock_provider(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-20"]]},
-            "planned_at": "2026-07-20T00:00:00Z",
-            "requested_assets": ["generated_context_summaries"],
-        }
-        with patch(
-            "pipeline.skills.generated_context_summary.build_provider_from_env",
-            return_value=SummaryProviderFixture(provider="mock"),
-        ):
-            output = collect_asset_sources(request)
-
-        self.assertIn("source_failures", output)
-        self.assertIn("generated_context_summaries", output["source_failures"])
-
-    def test_generated_context_summaries_require_configured_provider(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-20"]]},
-            "planned_at": "2026-07-20T00:00:00Z",
-            "requested_assets": ["generated_context_summaries"],
-        }
-        with patch.dict(
-            "os.environ",
-            {"OPENESTATES_SUMMARY_AUTODETECT": "0"},
-            clear=True,
-        ):
-            output = collect_asset_sources(request)
-
-        self.assertIn("source_failures", output)
-        self.assertIn("generated_context_summaries", output["source_failures"])
-        self.assertNotIn("generated_context_summaries", output)
-
-    def test_summary_provider_model_selection_uses_configured_preference(self):
-        self.assertEqual(
-            select_summary_model(
-                ["tiny-embed", "qwen2.5:1.5b-instruct", "llama3.2:3b"],
-                ["llama3.2:3b", "qwen2.5:1.5b-instruct"],
-                None,
-            ),
-            "llama3.2:3b",
-        )
-        self.assertEqual(
-            select_summary_model(["tiny-embed", "gemma3:1b"], [], None),
-            "gemma3:1b",
-        )
-
-    def test_summary_provider_autodetects_configured_local_endpoint(self):
-        config = {
-            "auto_detect": True,
-            "probe_timeout_seconds": 0.1,
-            "preferred_model_order": ["llama3.2:3b"],
-            "openai_compatible_endpoints": [
-                {
-                    "id": "ollama",
-                    "base_url": "http://127.0.0.1:11434/v1",
-                    "model_list_url": "http://127.0.0.1:11434/api/tags",
-                    "model_list_shape": "ollama_tags",
-                }
-            ],
-        }
-        with patch(
-            "pipeline.skills.generated_context_summary.fetch_json",
-            return_value={"models": [{"name": "llama3.2:3b"}]},
-        ):
-            provider = detect_openai_compatible_provider(config, None, None)
-
-        self.assertIsNotNone(provider)
-        self.assertEqual(provider.name, "openai-compatible")
-        self.assertEqual(provider.model, "llama3.2:3b")
+        self.assertIn("unsupported source assets: generated_context_summaries", str(error.exception))
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")

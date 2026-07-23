@@ -1,7 +1,5 @@
 """Load manual RedditTheme POC facts for issue #2 societies (skip-crawl path)."""
 
-from __future__ import annotations
-
 import hashlib
 import json
 from datetime import datetime, timezone

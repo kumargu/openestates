@@ -198,37 +198,11 @@ if [[ -n "$FIRST_ID" ]]; then
     '.evidence.property_id == .property.id and (.evidence.sections | type == "array" and length > 0)' \
     "expected property detail to expose evidence.sections for one-call UI rendering"
 
-  CONTEXT_CODE=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "${BASE}/api/properties/${FIRST_ID}/context" 2>/dev/null || echo "000")
-  if [[ "$CONTEXT_CODE" == "200" ]]; then
-    PASS=$((PASS + 1))
-    printf "  %s GET /api/properties/:id/context returns graph summary\n" "$(green "✓")"
-    check "Property context has summary + clauses" \
-      "${BASE}/api/properties/${FIRST_ID}/context" \
-      '.anchor_entity_id != null and (.summary_paragraph | type == "string") and (.clauses | type == "array") and (.category_groups | type == "array")' \
-      "expected anchor_entity_id, summary_paragraph, clauses array, and category_groups array"
-    check "Property context suppresses raw fact keys" \
-      "${BASE}/api/properties/${FIRST_ID}/context" \
-      '(.summary_paragraph | test("risk\\.|nearby_|approach-road|nearby-schools") | not)' \
-      "expected graph summary to hide raw fact keys and bootstrap slugs"
-  elif [[ "$CONTEXT_CODE" == "404" ]]; then
-    PASS=$((PASS + 1))
-    printf "  %s GET /api/properties/:id/context returns 404 (no graph clauses yet)\n" "$(green "✓")"
-  else
-    FAIL=$((FAIL + 1))
-    printf "  %s GET /api/properties/:id/context — expected 200 or 404, got %s\n" "$(red "✗")" "$CONTEXT_CODE"
-  fi
-
-  WATERFORD_CONTEXT_CODE=$(curl -s -o /tmp/oe_waterford_context.json -w "%{http_code}" "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" 2>/dev/null || echo "000")
-  if [[ "$WATERFORD_CONTEXT_CODE" == "200" ]]; then
-    check "Waterford context has high-quality graph categories" \
-      "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" \
-      '([.category_groups[].id] | index("location") and (index("transit") or index("work") or index("education"))) and (.summary_paragraph | test("ECC Road|Deens|Metro|Bagmane|Manipal|Shantiniketan"))' \
-      "expected Waterford summary to include recognizable road/nearby graph context"
-    check "Waterford context stays concise and clean" \
-      "${BASE}/api/properties/discovered-prestige-waterford-3bhk/context" \
-      '(.summary_paragraph | split(" ") | length) <= 120 and (.summary_paragraph | test("risk\\.|nearby_|approach-road|nearby-schools") | not)' \
-      "expected Waterford summary under word cap with no raw keys"
-  fi
+  check_post "POST /api/properties/:id/summary-jobs creates summary job" \
+    "${BASE}/api/properties/${FIRST_ID}/summary-jobs" \
+    '{}' \
+    '.jobId != null and .propertyId != null and (.status == "pending" or .status == "ready" or .status == "error") and .bundleVersion != null and .model != null and (.evidenceRefs | type == "array")' \
+    "expected jobId, status, bundleVersion, model, and evidenceRefs"
 
   check "Property evidence sections have render fields" \
     "${BASE}/api/properties/${FIRST_ID}/evidence" \

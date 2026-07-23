@@ -105,6 +105,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
+        property_summary_jobs: RwLock::new(Default::default()),
         areas,
         societies,
         sellers: RwLock::new(sellers),

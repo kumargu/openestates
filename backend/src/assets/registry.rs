@@ -773,19 +773,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
-            "generated_context_summaries",
-            AssetStage::Silver,
-            "Offline local-model buyer summaries generated from graph context envelopes and validated before serving.",
-            &[],
-            RefreshCadence::OnChange,
-            CostTier::Moderate,
-            TrustTier::Derived,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &["dt"],
-            &[("source", "local_summary")],
-        )),
-        asset(
             "canonical_road_nodes",
             AssetStage::Gold,
             "Road segment and place entities with served_by_road edges from approach road visuals.",
@@ -822,7 +809,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "builder_rera_aggregates",
                 "home_state_signals",
                 "approach_road_graph_facts",
-                "generated_context_summaries",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -855,10 +841,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_dependency_fan_in_policy("image_media_facts", DependencyFanInPolicy::AllCurrentPartitions)
         .with_dependency_fan_in_policy(
             "metro_proximity_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_dependency_fan_in_policy(
-            "generated_context_summaries",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_optional_dependency("reddit_resident_facts")
@@ -972,15 +954,6 @@ mod tests {
                 )
                 .unwrap(),
             AssetPartition::new([("source", "community")])
-        );
-        assert_eq!(
-            registry
-                .partition_for(
-                    &AssetId::new("generated_context_summaries").unwrap(),
-                    &run_partition
-                )
-                .unwrap(),
-            AssetPartition::new([("dt", "2026-07-13"), ("source", "local_summary")])
         );
         assert_eq!(
             registry

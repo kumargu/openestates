@@ -538,16 +538,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &approach_road_graph_facts).await;
-    let generated_context_summaries = materialization_in_partition(
-        "generated_context_summaries",
-        AssetStage::Silver,
-        "2026-07-13",
-        Vec::new(),
-        now,
-        AssetPartition::new([("dt", "2026-07-13"), ("source", "local_summary")]),
-    );
-    write_current(&materializations, &generated_context_summaries).await;
-
     let stale_kg = materialization_in_partition(
         "kg_society_view",
         AssetStage::Gold,
@@ -567,7 +557,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             builder_facts.materialization_id.clone(),
             home_state_facts.materialization_id.clone(),
             approach_road_graph_facts.materialization_id.clone(),
-            generated_context_summaries.materialization_id.clone(),
         ],
         now - Duration::hours(1),
         AssetPartition::global(),
@@ -630,7 +619,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             builder_facts.materialization_id.clone(),
             home_state_facts.materialization_id.clone(),
             approach_road_graph_facts.materialization_id.clone(),
-            generated_context_summaries.materialization_id.clone(),
         ],
         now,
         AssetPartition::global(),

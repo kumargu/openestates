@@ -5843,63 +5843,7 @@
         "direction": "text_match",
         "weight": 0.9
       }
-    },
-    {
-      "fact_key": "generated_context_summary",
-      "bucket": "context_summary",
-      "label": "buyer context summary",
-      "lens": "livability",
-      "polarity": "neutral",
-      "scopes": [
-        "society",
-        "property",
-        "area"
-      ],
-      "enrichment_terms": [
-        "before shortlist",
-        "livability summary",
-        "buyer context",
-        "daily life summary"
-      ],
-      "answers_preferences": [
-        "before you shortlist",
-        "livability summary",
-        "buyer context",
-        "daily life"
-      ],
-      "never_default": true,
-      "source_types": [
-        "Computed"
-      ],
-      "display_template": "{value}",
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.4
-      }
-    },
-    {
-      "fact_key": "generated_context_summary_metadata",
-      "bucket": "context_summary",
-      "label": "buyer context summary metadata",
-      "lens": "proof",
-      "polarity": "neutral",
-      "scopes": [
-        "society",
-        "property",
-        "area"
-      ],
-      "enrichment_terms": [],
-      "answers_preferences": [],
-      "never_default": true,
-      "source_types": [
-        "Computed"
-      ],
-      "display_template": null,
-      "scoring_hint": {
-        "direction": "text_match",
-        "weight": 0.0
-      }
     }
   ],
-  "fact_count": 82
+  "fact_count": 80
 }

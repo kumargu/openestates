@@ -113,8 +113,8 @@ pub use run_manifest::{
 pub use skill_facts::{
     read_skill_fact_artifact_rows, SkillFactAnnotationRecord, SkillFactArtifactRows,
     SkillFactManifest, SkillFactMaterialization, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactRecord, GENERATED_CONTEXT_SUMMARIES_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
+    SkillFactRecord, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID,
 };
 pub use source_inputs::{
     AssetSourceInputs, RedditThreadsDailyInput, SkillFactsInput, SourceInputCollectionPlan,

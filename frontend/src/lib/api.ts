@@ -3,7 +3,7 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
-  EntityContextResponse,
+  PropertySummaryJobResponse,
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
@@ -65,6 +65,9 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
     body: JSON.stringify(body),
   });
   if (!res.ok) {
+    const fixture = getDevFixture<T>(path);
+    if (fixture !== null) return fixture;
+
     const text = await res.text().catch(() => "");
     throw new Error(`API ${res.status}: ${text || res.statusText}`);
   }
@@ -87,25 +90,19 @@ export function getPropertyEvidence(id: string): Promise<PropertyEvidenceRespons
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
 }
 
-export async function getPropertyContext(
+export function createPropertySummaryJob(id: string): Promise<PropertySummaryJobResponse> {
+  return postJson(`/api/properties/${encodeURIComponent(id)}/summary-jobs`, {});
+}
+
+export function getPropertySummaryJob(
   id: string,
+  jobId: string,
   options: ApiFetchOptions = {},
-): Promise<EntityContextResponse | null> {
-  const path = `/api/properties/${encodeURIComponent(id)}/context`;
-  try {
-    const res = await fetch(`${API_BASE}${path}`, { signal: options.signal });
-    if (res.status === 404) return null;
-    if (!res.ok) {
-      const fixture = getDevFixture<EntityContextResponse>(path);
-      if (fixture !== null) return fixture;
-      throw new Error(`API ${res.status}: ${await res.text().catch(() => res.statusText)}`);
-    }
-    return res.json();
-  } catch (error) {
-    const fixture = getDevFixture<EntityContextResponse>(path);
-    if (fixture !== null) return fixture;
-    throw error;
-  }
+): Promise<PropertySummaryJobResponse> {
+  return fetchJson(
+    `/api/properties/${encodeURIComponent(id)}/summary-jobs/${encodeURIComponent(jobId)}`,
+    options,
+  );
 }
 
 export function getPropertyEvidenceBatch(

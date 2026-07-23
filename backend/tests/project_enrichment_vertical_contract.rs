@@ -7,9 +7,8 @@ use backend::assets::{
     RedditThreadsDailyInput, ReraProjectSnapshotRecord, ReraRegistryMonthlyInput,
     SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
     BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
@@ -47,7 +46,6 @@ async fn three_societies_reach_serving_with_market_metro_and_builder_evidence() 
         METRO_STATIONS_MONTHLY_ASSET_ID,
         METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
-        GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
         "kg_society_view",
         "search_serving_bundle",
     ] {
@@ -383,11 +381,6 @@ fn source_inputs(
             observed_at,
             &watermark,
         )),
-        generated_context_summaries: Some(generated_context_summary_input(
-            "society:prestige-raintree-park",
-            "Prestige Raintree Park has a generated context fixture.",
-            observed_at,
-        )),
         google_places_weekly: Some(GooglePlacesWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),
             records: vec![GooglePlaceSnapshotRecord {
@@ -446,55 +439,6 @@ fn source_inputs(
             source_watermarks: watermark,
         }),
         ..AssetSourceInputs::default()
-    }
-}
-
-fn generated_context_summary_input(
-    entity_id: &str,
-    summary: &str,
-    learned_at: chrono::DateTime<Utc>,
-) -> SkillFactsInput {
-    let metadata = r#"{"provider":"local-llama","quality_status":"passed"}"#.to_string();
-    SkillFactsInput {
-        source: "generated_context_summaries".to_string(),
-        snapshot_date: learned_at.date_naive().to_string(),
-        facts: vec![
-            SkillFactRecord {
-                entity_id: entity_id.to_string(),
-                fact_key: "generated_context_summary".to_string(),
-                value_type: "text".to_string(),
-                value_json: serde_json::to_string(&FactValue::Text(summary.to_string())).unwrap(),
-                confidence: 0.72,
-                source_type: "Computed".to_string(),
-                source_url: None,
-                model: Some("fixture-local-summary".to_string()),
-                skill_id: Some("generated_context_summary_local".to_string()),
-                triggered_by: Some("asset_dag".to_string()),
-                learned_at,
-                run_id: "generated-summary-fixture".to_string(),
-                input_hash: "sha256:generated-summary-fixture".to_string(),
-            },
-            SkillFactRecord {
-                entity_id: entity_id.to_string(),
-                fact_key: "generated_context_summary_metadata".to_string(),
-                value_type: "text".to_string(),
-                value_json: serde_json::to_string(&FactValue::Text(metadata)).unwrap(),
-                confidence: 0.72,
-                source_type: "Computed".to_string(),
-                source_url: None,
-                model: Some("fixture-local-summary".to_string()),
-                skill_id: Some("generated_context_summary_local".to_string()),
-                triggered_by: Some("asset_dag".to_string()),
-                learned_at,
-                run_id: "generated-summary-fixture".to_string(),
-                input_hash: "sha256:generated-summary-fixture".to_string(),
-            },
-        ],
-        fact_annotations: Vec::new(),
-        source_watermarks: vec![SourceWatermark {
-            source: "generated_context_summaries".to_string(),
-            high_watermark: learned_at.to_rfc3339(),
-        }],
     }
 }
 

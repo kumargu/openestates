@@ -27,13 +27,13 @@ use super::{
     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_ROAD_NODES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GENERATED_CONTEXT_SUMMARIES_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID,
-    METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
+    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1151,10 +1151,6 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ApproachRoadGraphFacts,
         );
         executors.insert(
-            static_asset_id(GENERATED_CONTEXT_SUMMARIES_ASSET_ID),
-            BuiltInAssetExecutor::GeneratedContextSummaries,
-        );
-        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1194,7 +1190,6 @@ enum BuiltInAssetExecutor {
     BuilderReraAggregates,
     HomeStateSignals,
     ApproachRoadGraphFacts,
-    GeneratedContextSummaries,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1807,20 +1802,6 @@ impl BuiltInAssetExecutor {
                     context.options.planned_at,
                 )?;
                 let materialization = execute_skill_fact_asset(context, &input).await?;
-                Ok(ExecutedAsset::SkillFacts(materialization))
-            }
-            Self::GeneratedContextSummaries => {
-                let input = if let Some(input) = context
-                    .options
-                    .source_inputs
-                    .generated_context_summaries
-                    .as_ref()
-                {
-                    input
-                } else {
-                    return Err(source_input_error(&context));
-                };
-                let materialization = execute_skill_fact_asset(context, input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
             Self::KgSocietyView => {
@@ -2531,7 +2512,6 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_listings_weekly.is_none()
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.metro_stations_monthly.is_none()
-        && source_inputs.generated_context_summaries.is_none()
 }
 
 #[cfg(test)]

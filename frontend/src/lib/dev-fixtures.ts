@@ -382,47 +382,40 @@ export function getFixtureResponse(path: string): unknown | null {
     return card ? makeDetail(card) : null;
   }
 
-  const contextMatch = pathname.match(/^\/api\/properties\/([^/]+)\/context$/);
-  if (contextMatch) {
-    const id = decodeURIComponent(contextMatch[1]);
+  const summaryJobMatch = pathname.match(/^\/api\/properties\/([^/]+)\/summary-jobs(?:\/([^/]+))?$/);
+  if (summaryJobMatch) {
+    const id = decodeURIComponent(summaryJobMatch[1]);
     const card = fixtureProperties.find((property) => property.id === id);
     if (!card) return null;
     return {
-      anchor_entity_id: "society:prestige-lakeside-habitat",
-      summary_paragraph:
-        "Approach road visuals are available. Monsoon waterlogging is reported on the approach road.",
-      clauses: [
+      jobId: summaryJobMatch[2] ? decodeURIComponent(summaryJobMatch[2]) : "fixture-summary-job",
+      propertyId: id,
+      status: "ready",
+      summaryStyle: "buyer_brief",
+      summaryParagraph:
+        `${card.title} is backed by fixture RERA and review evidence. Nearby and market facts are limited in fixture mode, so treat this as a concise proof read rather than a full area judgment.`,
+      evidenceRefs: [
         {
-          text: "approach road visuals are available",
-          traversal: ["served_by_road"],
-          target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
-          fact_key: "media.approach_road_frames",
-          category_id: "location",
+          entityId: "society:prestige-lakeside-habitat",
+          label: "RERA rooted",
+          sourceType: "Rera",
+          sourceUrl: null,
+          learnedAt: now,
+          confidence: 0.9,
         },
         {
-          text: "monsoon waterlogging reported on the approach road",
-          traversal: ["served_by_road"],
-          target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
-          fact_key: "risk.approach_road_waterlogging",
-          category_id: "cautions",
-        },
-      ],
-      category_groups: [
-        {
-          id: "cautions",
-          label: "Cautions",
-          items: [
-            {
-              text: "monsoon waterlogging reported on the approach road",
-              traversal: ["served_by_road"],
-              target_entity_id: "road_segment:prestige-lakeside-habitat-approach",
-              fact_key: "risk.approach_road_waterlogging",
-              polarity: "concern",
-              category_id: "cautions",
-            },
-          ],
+          entityId: "society:prestige-lakeside-habitat",
+          label: "Google rating 4.2",
+          sourceType: "Google",
+          sourceUrl: null,
+          learnedAt: now,
+          confidence: 0.72,
         },
       ],
+      model: "fixture-summary-model",
+      bundleVersion: "fixture-bundle",
+      generatedAt: now,
+      errorMessage: null,
     };
   }
 

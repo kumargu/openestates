@@ -134,17 +134,10 @@ export function HomePlanPage() {
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
     setInputs((current) => current ? { ...current, [key]: value } : current);
-    setPreset("Custom");
-  };
-
-  const choosePreset = (nextPreset: Exclude<PlanPreset, "Custom">) => {
-    setPreset(nextPreset);
-    setInputs(applyPreset(baseline, nextPreset));
   };
 
   const resetPlan = () => {
     setInputs(baseline);
-    setPreset("Base scenario");
     setExtraEmisPerYear(2);
   };
 

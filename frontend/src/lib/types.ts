@@ -374,31 +374,28 @@ export type LivabilityBrief = {
   source_urls: string[];
 };
 
-export type EntityContextClause = {
-  text: string;
-  traversal: string[];
-  target_entity_id: string;
-  fact_key?: string | null;
-  polarity?: "positive" | "concern" | string | null;
-  category_id?: string | null;
-  source_type?: string | null;
-  confidence?: number | null;
-};
+export type PropertySummaryJobStatus = "pending" | "ready" | "error";
 
-export type EntityContextCategoryGroup = {
-  id: string;
+export type PropertySummaryEvidenceRef = {
+  entityId: string;
   label: string;
-  items: EntityContextClause[];
+  sourceType: string;
+  sourceUrl?: string | null;
+  learnedAt: string;
+  confidence: number;
 };
 
-export type EntityContextResponse = {
-  anchor_entity_id: string;
-  summary_paragraph: string;
-  clauses: EntityContextClause[];
-  category_groups?: EntityContextCategoryGroup[];
-  source_type?: string | null;
-  confidence?: number | null;
-  learned_at?: string | null;
+export type PropertySummaryJobResponse = {
+  jobId: string;
+  propertyId: string;
+  status: PropertySummaryJobStatus;
+  summaryStyle: string;
+  summaryParagraph?: string | null;
+  evidenceRefs: PropertySummaryEvidenceRef[];
+  model: string;
+  bundleVersion: string;
+  generatedAt?: string | null;
+  errorMessage?: string | null;
 };
 
 export type CommunityPulseQuote = {

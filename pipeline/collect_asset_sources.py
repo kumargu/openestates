@@ -79,7 +79,6 @@ PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 METRO_STATIONS_MONTHLY = "metro_stations_monthly"
-GENERATED_CONTEXT_SUMMARIES = "generated_context_summaries"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
@@ -91,7 +90,6 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_LISTINGS_WEEKLY,
         EXTERNAL_IMAGES_WEEKLY,
         METRO_STATIONS_MONTHLY,
-        GENERATED_CONTEXT_SUMMARIES,
     )
 )
 
@@ -213,18 +211,6 @@ def collect_asset_sources(
             output[METRO_STATIONS_MONTHLY] = collect_metro_stations(request)
         except Exception as error:
             record_source_failure(source_failures, [METRO_STATIONS_MONTHLY], error)
-    if GENERATED_CONTEXT_SUMMARIES in requested:
-        try:
-            from pipeline.skills.generated_context_summary import (
-                collect_generated_context_summaries,
-            )
-
-            output[GENERATED_CONTEXT_SUMMARIES] = collect_generated_context_summaries(
-                snapshot_date,
-                source_entities=request.get("source_entities", []),
-            )
-        except Exception as error:
-            record_source_failure(source_failures, [GENERATED_CONTEXT_SUMMARIES], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output

@@ -55,12 +55,12 @@ async fn main() {
             post(routes::properties::get_property_evidence_batch),
         )
         .route(
-            "/api/properties/{id}/context",
-            get(routes::entity_context::property_context),
+            "/api/properties/{id}/summary-jobs",
+            post(routes::property_summary::create_summary_job),
         )
         .route(
-            "/api/entities/{entity_id}/context",
-            get(routes::entity_context::entity_context),
+            "/api/properties/{id}/summary-jobs/{job_id}",
+            get(routes::property_summary::get_summary_job),
         )
         .route("/api/areas", get(routes::areas::list_areas))
         .route("/api/areas/tracker", get(routes::areas::area_tracker))

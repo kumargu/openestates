@@ -30,7 +30,6 @@ use super::{
 pub const REDDIT_RESIDENT_FACTS_ASSET_ID: &str = "reddit_resident_facts";
 pub const GOOGLE_REVIEW_FACTS_ASSET_ID: &str = "google_review_facts";
 pub const GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID: &str = "google_nearby_place_facts";
-pub const GENERATED_CONTEXT_SUMMARIES_ASSET_ID: &str = "generated_context_summaries";
 const SKILL_FACT_FORMAT_VERSION: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
