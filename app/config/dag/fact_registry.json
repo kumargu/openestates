@@ -21,10 +21,6 @@
       "nearby_tech_parks"
     ],
     "query_stopwords": [
-      "and",
-      "the",
-      "for",
-      "with",
       "near",
       "under",
       "below",
@@ -33,78 +29,28 @@
       "bhk",
       "cr",
       "crore",
-      "lakhs",
       "lakh",
-      "avoid",
-      "less",
-      "low",
-      "not",
-      "no"
+      "avoid"
     ],
     "scoring_stopwords": [
-      "a",
-      "an",
-      "and",
-      "are",
-      "at",
       "above",
       "below",
-      "by",
-      "for",
-      "from",
-      "in",
-      "is",
       "near",
-      "no",
-      "not",
-      "of",
-      "or",
-      "over",
-      "the",
-      "to",
       "under",
-      "with",
       "without",
       "acre",
-      "acres",
       "bhk",
       "cr",
       "crore",
       "flat",
-      "flats",
       "home",
-      "homes",
       "house",
-      "houses",
       "lakh",
-      "lakhs",
-      "property",
-      "properties"
+      "property"
     ],
     "semantic_stopwords": [
-      "a",
-      "an",
-      "and",
-      "are",
-      "as",
-      "at",
-      "be",
-      "but",
-      "for",
-      "from",
-      "i",
-      "if",
-      "in",
-      "is",
-      "it",
       "near",
-      "not",
-      "of",
-      "or",
-      "the",
-      "to",
-      "want",
-      "with"
+      "want"
     ],
     "accepted_tradeoffs": [
       {
@@ -1349,18 +1295,12 @@
         "area details"
       ],
       "fact_keys": [
-        "listing_3bhk",
-        "listing_4bhk",
-        "listing_price_3bhk",
-        "listing_price_4bhk",
-        "listing_price_range_3bhk",
-        "listing_price_range_4bhk",
-        "listing_price_per_sqft_range_3bhk",
-        "listing_price_per_sqft_range_4bhk",
-        "listing_area_sqft_3bhk",
-        "listing_area_sqft_4bhk",
-        "listing_source_url_3bhk",
-        "listing_source_url_4bhk"
+        "listing",
+        "listing_price",
+        "listing_price_range",
+        "listing_price_per_sqft_range",
+        "listing_area_sqft",
+        "listing_source_url"
       ],
       "source_priority": [
         "magicbricks",
@@ -1407,15 +1347,13 @@
           "tree cover",
           "green cover",
           "open space",
-          "open spaces",
           "breathing room",
           "less crowded",
           "garden",
           "landscaped",
           "park view",
           "park facing",
-          "internal park",
-          "internal parks"
+          "internal park"
         ],
         "label": "greenery",
         "expanded_keys": [
@@ -1624,25 +1562,14 @@
         "rank": 11,
         "patterns": [
           "good reviews",
-          "positive reviews",
-          "reviewed well",
-          "good google reviews",
           "google reviews",
           "google rating",
           "highly rated",
-          "well reviewed",
-          "real review receipts",
           "review receipts",
           "review strength",
           "resident snippets",
           "community proof",
-          "review evidence",
-          "resident proof",
-          "positive resident themes",
-          "positive community themes",
-          "resident community themes",
           "resident themes",
-          "community themes",
           "gud reviews"
         ],
         "label": "review quality",
@@ -1827,17 +1754,11 @@
           "dependable builder",
           "safe builder",
           "builder reputation",
-          "builder reputation matters",
           "experienced builder",
-          "visible rera track record",
           "rera track record",
           "builder project count",
-          "builder looks safe",
-          "safe on records",
-          "builder records",
-          "builder revocations should be checked",
-          "builder revocations should be checked from rera",
-          "builder revocation records"
+          "builder revocations",
+          "builder records"
         ],
         "label": "reliable builder",
         "expanded_keys": [
@@ -1910,10 +1831,10 @@
         ],
         "label": "value for money",
         "expanded_keys": [
-          "listing_3bhk",
-          "listing_price_3bhk",
-          "listing_price_range_3bhk",
-          "listing_price_per_sqft_range_3bhk",
+          "listing",
+          "listing_price",
+          "listing_price_range",
+          "listing_price_per_sqft_range",
           "price_per_sqft",
           "value_for_money",
           "maintenance_cost"
@@ -1932,12 +1853,12 @@
         ],
         "label": "premium",
         "expanded_keys": [
-          "listing_4bhk",
-          "listing_price_4bhk",
-          "listing_price_range_4bhk",
-          "listing_price_per_sqft_range_4bhk",
-          "listing_area_sqft_4bhk",
-          "listing_source_url_4bhk",
+          "listing",
+          "listing_price",
+          "listing_price_range",
+          "listing_price_per_sqft_range",
+          "listing_area_sqft",
+          "listing_source_url",
           "price_per_sqft",
           "amenity_quality",
           "finish_quality",
@@ -2103,31 +2024,22 @@
       {
         "rank": 37,
         "patterns": [
-          "safe legal paperwork",
           "legal paperwork",
-          "safe paperwork",
           "clean legal receipts",
           "legal receipts",
           "legal papers",
-          "legal papers clear",
+          "clear title",
           "legal and listing receipts",
           "legal and listing proof",
-          "possession proof",
           "rera clarity",
           "rera record",
           "rera track record",
           "rera mapping",
-          "legal risk",
-          "litigation",
           "checked from rera",
           "rera receipts",
           "paperwork",
-          "approval documents",
-          "bbmp approval",
           "legal status",
-          "safe legal",
-          "legal safety",
-          "no risk"
+          "legal safety"
         ],
         "label": "legal safety",
         "expanded_keys": [
@@ -2157,18 +2069,12 @@
         ],
         "label": "listing evidence",
         "expanded_keys": [
-          "listing_3bhk",
-          "listing_4bhk",
-          "listing_price_3bhk",
-          "listing_price_4bhk",
-          "listing_price_range_3bhk",
-          "listing_price_range_4bhk",
-          "listing_price_per_sqft_range_3bhk",
-          "listing_price_per_sqft_range_4bhk",
-          "listing_area_sqft_3bhk",
-          "listing_area_sqft_4bhk",
-          "listing_source_url_3bhk",
-          "listing_source_url_4bhk"
+          "listing",
+          "listing_price",
+          "listing_price_range",
+          "listing_price_per_sqft_range",
+          "listing_area_sqft",
+          "listing_source_url"
         ],
         "weight": 1.2
       }
@@ -2177,12 +2083,8 @@
       {
         "rank": 1,
         "patterns": [
-          "avoid waterlogging",
-          "no waterlogging",
-          "low waterlogging",
-          "not flood prone",
-          "avoid flooding",
-          "no flooding",
+          "waterlogging",
+          "flood prone",
           "monsoon flooding",
           "bad drainage",
           "stagnant rainwater",
@@ -2205,11 +2107,6 @@
       {
         "rank": 2,
         "patterns": [
-          "avoid traffic",
-          "less traffic",
-          "low traffic",
-          "no traffic",
-          "traffic free",
           "traffic"
         ],
         "label": "traffic",
@@ -2224,10 +2121,7 @@
       {
         "rank": 3,
         "patterns": [
-          "avoid noise",
-          "less noise",
-          "low noise",
-          "no noise",
+          "noise",
           "highway noise"
         ],
         "label": "noise",
@@ -2241,11 +2135,8 @@
       {
         "rank": 4,
         "patterns": [
-          "avoid legal",
-          "no legal issue",
-          "no litigation",
-          "low litigation",
-          "clear title"
+          "legal issue",
+          "litigation"
         ],
         "label": "legal risk",
         "expanded_keys": [
@@ -2259,10 +2150,7 @@
       {
         "rank": 5,
         "patterns": [
-          "avoid delayed",
-          "not delayed",
-          "no possession delay",
-          "avoid possession delay"
+          "possession delay"
         ],
         "label": "delay risk",
         "expanded_keys": [
@@ -2277,8 +2165,8 @@
       {
         "rank": 6,
         "patterns": [
-          "avoid bad road",
-          "avoid narrow road",
+          "bad road",
+          "narrow road",
           "bad approach road",
           "narrow approach road",
           "poor access road",
@@ -2303,9 +2191,7 @@
       {
         "rank": 7,
         "patterns": [
-          "avoid airport noise",
-          "far from airport noise",
-          "low airport noise"
+          "airport noise"
         ],
         "label": "environment sensitivity",
         "expanded_keys": [
@@ -2320,10 +2206,8 @@
       {
         "rank": 8,
         "patterns": [
-          "avoid lake flooding",
-          "avoid lake waterlogging",
-          "not near lake",
-          "away from lake"
+          "lake flooding",
+          "lake waterlogging"
         ],
         "label": "lake proximity",
         "expanded_keys": [
@@ -2338,7 +2222,7 @@
       {
         "rank": 9,
         "patterns": [
-          "avoid stp",
+          "stp",
           "sewage treatment plant",
           "sewage smell",
           "stp smell"
@@ -2354,7 +2238,6 @@
       {
         "rank": 10,
         "patterns": [
-          "avoid high tension wires",
           "high tension wires",
           "power lines",
           "ht line"
@@ -2370,12 +2253,9 @@
       {
         "rank": 11,
         "patterns": [
-          "avoid water issues",
-          "avoid water issue",
           "water issues",
           "water issue",
           "water problem",
-          "no tanker dependency",
           "tanker dependency",
           "tanker dependence"
         ],
@@ -2397,9 +2277,8 @@
       {
         "rank": 12,
         "patterns": [
-          "maintenance headaches",
           "maintenance headache",
-          "maintenance issues",
+          "maintenance issue",
           "poor maintenance",
           "bad maintenance"
         ],
@@ -2444,10 +2323,8 @@
         "rank": 14,
         "patterns": [
           "too dense",
-          "not too dense",
           "too packed",
-          "not too packed",
-          "avoid crowding"
+          "crowding"
         ],
         "label": "density risk",
         "expanded_keys": [
@@ -2464,8 +2341,6 @@
         "patterns": [
           "fake luxury",
           "brochure luxury",
-          "not fake luxury",
-          "avoid fake luxury",
           "overpriced premium",
           "premium pricing"
         ],
@@ -2482,7 +2357,6 @@
         "rank": 16,
         "patterns": [
           "construction dust",
-          "avoid construction dust",
           "dust",
           "construction noise"
         ],
@@ -2532,13 +2406,11 @@
         "tree cover",
         "green cover",
         "open space",
-        "open spaces",
         "garden",
         "landscaped",
         "park view",
         "park facing",
-        "internal park",
-        "internal parks"
+        "internal park"
       ],
       "fact_keys": [
         "greenery_score",
@@ -2551,18 +2423,15 @@
       ],
       "positive_terms": [
         "greenery",
-        "green spaces",
         "green space",
         "green cover",
-        "green covers",
-        "open spaces",
         "open space",
         "open-to-sky",
         "landscaped",
         "landscaping",
         "park view",
         "park facing",
-        "internal parks",
+        "internal park",
         "forest trail",
         "lush green",
         "trees",
@@ -3273,6 +3142,25 @@
       ],
       "display_label": "Premium price signal",
       "score_delta": 2.0
+    },
+    {
+      "dimension": "builder_trust",
+      "label": "builder trust",
+      "aliases": [
+        "builder trust",
+        "builder reputation",
+        "builder risk"
+      ],
+      "fact_keys": [
+        "rera_builder_revocations"
+      ],
+      "direction": "LowerIsBetter",
+      "thresholds": [
+        0,
+        1
+      ],
+      "display_label": "builder revocation risk",
+      "score_delta": 1.2
     },
     {
       "dimension": "waterlogging_risk",

@@ -1,0 +1,8 @@
+{
+  "benchmark": "whitefield_oracle_search_quality",
+  "version": 1,
+  "description": "Oracle-backed Whitefield/access-belt query set generated from the promoted serving bundle facts. Expected answers are derived from Parquet facts, not external knowledge.",
+  "case_files": [
+    "query_bank/whitefield_oracle_v1.json"
+  ]
+}

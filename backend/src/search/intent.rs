@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::schema;
+use super::{analyzer, schema};
 
 /// Parsed intent from a natural-language search query.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -90,9 +90,9 @@ pub fn parse_intent(query: &str) -> SearchIntent {
     let bhk = detect_bhk(&q);
     let budget_max = detect_budget(&q);
     let hard_constraints = detect_hard_constraints(&q);
-    let positive_preferences = detect_positive_preferences(&q);
+    let positive_preferences = detect_positive_preferences(&q, bhk);
     let accepted_tradeoffs = detect_accepted_tradeoffs(&q);
-    let negative_preferences: Vec<PreferenceSignal> = detect_negative_preferences(&q)
+    let negative_preferences: Vec<PreferenceSignal> = detect_negative_preferences(&q, bhk)
         .into_iter()
         .filter(|pref| {
             !accepted_tradeoffs
@@ -300,29 +300,71 @@ fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
     schema::detect_hard_constraints(q)
 }
 
-fn detect_positive_preferences(q: &str) -> Vec<PreferenceSignal> {
+fn detect_positive_preferences(q: &str, bhk: Option<u32>) -> Vec<PreferenceSignal> {
     let mut prefs: Vec<PreferenceSignal> = Vec::new();
     for pattern in schema::positive_preference_patterns() {
         if !pattern
             .patterns
             .iter()
-            .any(|term| query_contains_pattern(q, term))
+            .any(|term| query_contains_unnegated_pattern(q, term))
         {
             continue;
         }
 
-        if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
-            merge_expanded_keys(existing, &pattern.expanded_keys);
-            merge_gap_keys(existing, &pattern.gap_keys);
-            apply_preference_key_overrides(q, existing);
-            existing.weight = existing.weight.max(pattern.weight);
-        } else {
-            let mut signal = schema::schema_preference_signal(pattern, Polarity::Positive);
-            apply_preference_key_overrides(q, &mut signal);
-            prefs.push(signal);
+        let mut signal = schema::schema_preference_signal(pattern, Polarity::Positive);
+        apply_preference_key_overrides(q, &mut signal);
+        apply_bhk_fact_key_derivations(bhk, &mut signal);
+        merge_or_push_preference(&mut prefs, signal);
+    }
+
+    for override_rule in schema::preference_key_overrides() {
+        if !query_contains_any_pattern(q, &override_rule.patterns)
+            || prefs.iter().any(|pref| {
+                pref.raw_text
+                    .eq_ignore_ascii_case(&override_rule.preference)
+            })
+        {
+            continue;
+        }
+        let Some(pattern) = schema::positive_preference_patterns()
+            .iter()
+            .find(|pattern| {
+                pattern
+                    .label
+                    .eq_ignore_ascii_case(&override_rule.preference)
+            })
+        else {
+            continue;
+        };
+
+        let mut signal = schema::schema_preference_signal(pattern, Polarity::Positive);
+        apply_preference_key_overrides(q, &mut signal);
+        apply_bhk_fact_key_derivations(bhk, &mut signal);
+        merge_or_push_preference(&mut prefs, signal);
+    }
+
+    prefs
+}
+
+fn apply_bhk_fact_key_derivations(bhk: Option<u32>, signal: &mut PreferenceSignal) {
+    let Some(bhk) = bhk.filter(|value| (1..=5).contains(value)) else {
+        return;
+    };
+
+    let generic_keys = [
+        "listing",
+        "listing_price",
+        "listing_price_range",
+        "listing_price_per_sqft_range",
+        "listing_area_sqft",
+        "listing_source_url",
+    ];
+    let keys = signal.expanded_keys.clone();
+    for key in keys {
+        if generic_keys.iter().any(|generic| key == *generic) {
+            merge_expanded_keys(signal, &[format!("{key}_{bhk}bhk")]);
         }
     }
-    prefs
 }
 
 fn apply_preference_key_overrides(q: &str, signal: &mut PreferenceSignal) {
@@ -357,7 +399,7 @@ fn merge_gap_keys(signal: &mut PreferenceSignal, keys: &[String]) {
     }
 }
 
-fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
+fn detect_negative_preferences(q: &str, bhk: Option<u32>) -> Vec<PreferenceSignal> {
     let mut prefs: Vec<PreferenceSignal> = Vec::new();
     for pattern in schema::negative_preference_patterns() {
         if !pattern
@@ -368,18 +410,64 @@ fn detect_negative_preferences(q: &str) -> Vec<PreferenceSignal> {
             continue;
         }
 
-        if let Some(existing) = prefs.iter_mut().find(|p| p.raw_text == pattern.label) {
-            merge_expanded_keys(existing, &pattern.expanded_keys);
-            merge_gap_keys(existing, &pattern.gap_keys);
-            existing.weight = existing.weight.max(pattern.weight);
-        } else {
-            prefs.push(schema::schema_preference_signal(
-                pattern,
-                Polarity::Negative,
-            ));
+        let mut signal = schema::schema_preference_signal(pattern, Polarity::Negative);
+        apply_bhk_fact_key_derivations(bhk, &mut signal);
+        merge_or_push_preference(&mut prefs, signal);
+    }
+
+    for pattern in schema::positive_preference_patterns() {
+        let negated = pattern
+            .patterns
+            .iter()
+            .any(|term| query_contains_negated_pattern(q, term));
+        if !negated {
+            continue;
         }
+
+        let mut signal = negated_positive_preference_signal(pattern);
+        apply_bhk_fact_key_derivations(bhk, &mut signal);
+        merge_or_push_preference(&mut prefs, signal);
     }
     prefs
+}
+
+fn merge_or_push_preference(prefs: &mut Vec<PreferenceSignal>, signal: PreferenceSignal) {
+    if let Some(existing) = prefs
+        .iter_mut()
+        .find(|pref| pref.raw_text.eq_ignore_ascii_case(&signal.raw_text))
+    {
+        merge_expanded_keys(existing, &signal.expanded_keys);
+        merge_gap_keys(existing, &signal.gap_keys);
+        existing.weight = existing.weight.max(signal.weight);
+    } else {
+        prefs.push(signal);
+    }
+}
+
+fn negated_positive_preference_signal(pattern: &schema::PreferencePatternSpec) -> PreferenceSignal {
+    if let Some(negative_pattern) = matching_negative_pattern_for_positive(pattern) {
+        schema::schema_preference_signal(negative_pattern, Polarity::Negative)
+    } else {
+        schema::schema_preference_signal(pattern, Polarity::Negative)
+    }
+}
+
+fn matching_negative_pattern_for_positive(
+    pattern: &schema::PreferencePatternSpec,
+) -> Option<&'static schema::PreferencePatternSpec> {
+    let positive_signal = schema::schema_preference_signal(pattern, Polarity::Positive);
+    schema::negative_preference_patterns()
+        .iter()
+        .find(|negative| negative.label.eq_ignore_ascii_case(&pattern.label))
+        .or_else(|| {
+            schema::negative_preference_patterns()
+                .iter()
+                .find(|negative| {
+                    let negative_signal =
+                        schema::schema_preference_signal(negative, Polarity::Negative);
+                    preferences_conflict(&positive_signal, &negative_signal)
+                })
+        })
 }
 
 fn remove_positive_preferences_conflicting_with_negatives(
@@ -419,6 +507,9 @@ fn is_specific_conflict_key(key: &str) -> bool {
         key,
         "price_per_sqft"
             | "pricing_insight"
+            | "legal.litigation"
+            | "legal_risk"
+            | "litigation_risk"
             | "resident_sentiment"
             | "google_review_snippets"
             | "sentiment_summary"
@@ -463,7 +554,7 @@ fn display_preferences(
 fn detect_buyer_archetype(q: &str) -> Option<BuyerArchetype> {
     schema::buyer_archetype_patterns()
         .iter()
-        .find(|pattern| query_contains_any_pattern(q, &pattern.patterns))
+        .find(|pattern| query_contains_any_unnegated_pattern(q, &pattern.patterns))
         .map(|pattern| pattern.archetype.clone())
 }
 
@@ -473,6 +564,12 @@ fn query_contains_any_pattern(q: &str, patterns: &[String]) -> bool {
         .any(|pattern| query_contains_pattern(q, pattern))
 }
 
+fn query_contains_any_unnegated_pattern(q: &str, patterns: &[String]) -> bool {
+    patterns
+        .iter()
+        .any(|pattern| query_contains_unnegated_pattern(q, pattern))
+}
+
 fn push_unique(values: &mut Vec<String>, value: &str) {
     if !values.iter().any(|existing| existing == value) {
         values.push(value.to_string());
@@ -480,15 +577,51 @@ fn push_unique(values: &mut Vec<String>, value: &str) {
 }
 
 fn query_contains_pattern(q: &str, pattern: &str) -> bool {
+    !query_pattern_match_ranges(q, pattern).is_empty()
+}
+
+fn query_contains_unnegated_pattern(q: &str, pattern: &str) -> bool {
+    query_pattern_match_ranges(q, pattern)
+        .into_iter()
+        .any(|(start, _)| !match_has_negated_prefix(q, start))
+}
+
+fn query_contains_negated_pattern(q: &str, pattern: &str) -> bool {
+    query_pattern_match_ranges(q, pattern)
+        .into_iter()
+        .any(|(start, _)| match_has_negated_prefix(q, start))
+}
+
+fn query_pattern_match_ranges(q: &str, pattern: &str) -> Vec<(usize, usize)> {
+    let mut ranges = exact_pattern_match_ranges(q, pattern);
+    if analyzer::stemmed_tokens(pattern).len() >= 2 {
+        for range in analyzer::stemmed_phrase_match_ranges(q, pattern) {
+            if !ranges.contains(&range) {
+                ranges.push(range);
+            }
+        }
+    }
+    ranges.sort_unstable();
+    ranges
+}
+
+fn exact_pattern_match_ranges(q: &str, pattern: &str) -> Vec<(usize, usize)> {
     let pattern = pattern.trim();
+    let pattern_len = pattern.len();
+    let mut search_start = 0;
+    let mut ranges = Vec::new();
     if pattern.is_empty() {
-        return false;
+        return ranges;
     }
 
-    let mut search_start = 0;
-    while let Some(relative_pos) = q[search_start..].find(pattern) {
+    while search_start < q.len() {
+        let Some(relative_pos) = q[search_start..].find(pattern) else {
+            break;
+        };
         let start = search_start + relative_pos;
-        let end = start + pattern.len();
+        let end = start + pattern_len;
+        search_start = end;
+
         let before_ok = q[..start]
             .chars()
             .next_back()
@@ -499,16 +632,44 @@ fn query_contains_pattern(q: &str, pattern: &str) -> bool {
             .is_none_or(|ch| !ch.is_ascii_alphanumeric());
 
         if before_ok && after_ok {
-            return true;
-        }
-
-        search_start = end;
-        if search_start >= q.len() {
-            return false;
+            ranges.push((start, end));
         }
     }
 
-    false
+    ranges
+}
+
+fn match_has_negated_prefix(q: &str, start: usize) -> bool {
+    const NEGATED_PREFIXES: &[&str] = &[
+        "not interested in",
+        "not looking for",
+        "do not want",
+        "don't want",
+        "dont want",
+        "no need for",
+        "without",
+        "avoid",
+        "not an",
+        "not a",
+        "not",
+        "no",
+    ];
+
+    let prefix = q[..start].trim_end_matches(|ch: char| ch.is_ascii_whitespace() || ch == ',');
+    NEGATED_PREFIXES
+        .iter()
+        .any(|phrase| prefix_ends_with_phrase(prefix, phrase))
+}
+
+fn prefix_ends_with_phrase(prefix: &str, phrase: &str) -> bool {
+    let Some(before_phrase) = prefix.strip_suffix(phrase) else {
+        return false;
+    };
+
+    before_phrase
+        .chars()
+        .next_back()
+        .is_none_or(|ch| !ch.is_ascii_alphanumeric())
 }
 
 #[cfg(test)]
@@ -971,6 +1132,25 @@ mod tests {
     }
 
     #[test]
+    fn negated_luxury_language_is_not_positive_premium_or_luxury_buyer() {
+        let intent = parse_intent("not luxury, just practical family home with receipts");
+
+        assert!(has_negative_label(&intent, "premium"));
+        assert!(!has_positive_label(&intent, "premium"));
+        assert_ne!(intent.buyer_archetype, Some(BuyerArchetype::LuxuryBuyer));
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::Family));
+    }
+
+    #[test]
+    fn affirmative_premium_language_still_maps_to_premium_luxury_buyer() {
+        let intent = parse_intent("premium high end apartment with listing receipts");
+
+        assert!(has_positive_label(&intent, "premium"));
+        assert!(!has_negative_label(&intent, "premium"));
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::LuxuryBuyer));
+    }
+
+    #[test]
     fn data_gap_language_carries_configured_gap_keys() {
         let water = parse_intent("avoid water issues, no tanker dependency");
         let water_pref = water
@@ -1061,6 +1241,17 @@ mod tests {
         assert!(has_positive_label(&intent, "quiet neighborhood"));
         assert!(has_expanded_positive_key(&intent, "open_space_score"));
         assert!(!has_negative_label(&intent, "density risk"));
+    }
+
+    #[test]
+    fn stemmed_phrase_matching_keeps_config_from_needing_plural_duplicates() {
+        let open_space = parse_intent("need greener open spaces for parents");
+        assert!(has_positive_label(&open_space, "greenery"));
+        assert!(!has_negative_label(&open_space, "greenery"));
+
+        let water = parse_intent("avoid water issues and maintenance issues");
+        assert!(has_negative_label(&water, "water issues"));
+        assert!(has_negative_label(&water, "maintenance"));
     }
 
     #[test]

@@ -8,6 +8,7 @@ use serde::Serialize;
 use crate::models::Property;
 use crate::serving::{ServingEmbeddingRecord, ServingEntityRecord};
 
+use super::analyzer;
 use super::schema;
 
 /// Local query/document embedding boundary for semantic recall.
@@ -353,7 +354,7 @@ pub fn semantic_embedding_documents_from_serving_entities(
 }
 
 fn semantic_tokens(text: &str) -> Vec<String> {
-    let base_tokens = raw_tokens(text);
+    let base_tokens = analyzer::surface_tokens(text, schema::semantic_stopwords());
     let mut tokens = Vec::new();
     for token in &base_tokens {
         push_token(&mut tokens, token);
@@ -379,24 +380,15 @@ fn bounded_semantic_text(text: String) -> String {
     text.chars().take(max_chars).collect()
 }
 
-fn raw_tokens(text: &str) -> Vec<String> {
-    text.split(|ch: char| !ch.is_ascii_alphanumeric())
-        .filter_map(|token| {
-            let token = token.trim().to_lowercase();
-            if token.len() >= 2 && !schema::semantic_stopwords().contains(&token) {
-                Some(token)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
 fn push_token(tokens: &mut Vec<String>, token: &str) {
-    if token.trim().is_empty() {
+    if token.contains('_') {
+        let token = token.trim().to_ascii_lowercase();
+        if !token.is_empty() {
+            tokens.push(token);
+        }
         return;
     }
-    tokens.push(token.to_string());
+    tokens.extend(analyzer::stemmed_tokens(token));
 }
 
 fn token_weight(token: &str) -> f32 {

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::knowledge::fact::SourceType;
 use crate::knowledge::FactValue;
 
+use super::analyzer;
 use super::intent::{
     BuyerArchetype, ConstraintOperator, HardConstraint, Polarity, PreferenceSignal,
 };
@@ -708,11 +709,10 @@ pub fn text_support_snippet(value: &FactValue, schema: &TextEvidenceSchema) -> O
 }
 
 fn snippet_if_supported(text: &str, schema: &TextEvidenceSchema) -> Option<String> {
-    let lower = text.to_lowercase();
     if schema
         .negative_terms
         .iter()
-        .any(|term| lower.contains(term))
+        .any(|term| analyzer::contains_stemmed_phrase(text, term))
     {
         return None;
     }
@@ -720,7 +720,7 @@ fn snippet_if_supported(text: &str, schema: &TextEvidenceSchema) -> Option<Strin
     if !schema
         .positive_terms
         .iter()
-        .any(|term| lower.contains(term))
+        .any(|term| analyzer::contains_stemmed_phrase(text, term))
     {
         return None;
     }
@@ -924,6 +924,11 @@ mod tests {
         assert!(labels.contains(&"waterlogging risk"));
         assert!(labels.contains(&"traffic"));
         assert!(numeric_evidence_schema("waterlogging risk").is_some());
+        let builder_trust = numeric_evidence_schema("builder trust")
+            .expect("builder trust should have RERA numeric risk evidence");
+        assert!(builder_trust
+            .fact_keys
+            .contains(&"rera_builder_revocations".to_string()));
         assert!(text_evidence_schema("traffic").is_some());
     }
 

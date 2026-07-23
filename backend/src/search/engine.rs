@@ -189,10 +189,26 @@ impl<'a> SearchEngine<'a> {
                 .and_then(|bundle| bundle.geo_index.query(query))
         });
         let geo_candidate_ids = timer.measure("geo_recall", || {
-            geo_query
+            let coordinate_candidates = geo_query
                 .as_ref()
                 .map(|query| query.candidate_property_ids(self.properties))
-                .unwrap_or_default()
+                .unwrap_or_default();
+            let serving_fact_candidates = geo_query
+                .as_ref()
+                .and_then(|query| {
+                    self.serving_bundle.map(|bundle| {
+                        query.serving_fact_candidate_property_ids(
+                            self.properties,
+                            &bundle.fact_index,
+                        )
+                    })
+                })
+                .unwrap_or_default();
+            merge_candidate_ids(
+                optional_non_empty(coordinate_candidates),
+                serving_fact_candidates,
+            )
+            .unwrap_or_default()
         });
 
         let semantic_skipped = should_skip_semantic_recall(&intent, &structured_candidate_ids);
@@ -209,16 +225,29 @@ impl<'a> SearchEngine<'a> {
         });
         let (semantic_candidate_ids, semantic_scores) = semantic_value.value;
 
-        let extra_candidate_ids = merge_candidate_ids(
-            optional_non_empty(tantivy_recall.property_ids.clone()),
-            semantic_candidate_ids.clone(),
-        );
-        let extra_candidate_ids =
-            merge_candidate_ids(extra_candidate_ids, geo_candidate_ids.clone());
-        let ranking_candidate_ids = merge_candidate_ids(
-            optional_non_empty(structured_candidate_ids.clone()),
-            extra_candidate_ids.clone().unwrap_or_default(),
-        );
+        let explicit_geo_distance_limit = geo_query
+            .as_ref()
+            .is_some_and(|query| query.max_distance_km().is_some());
+        let extra_candidate_ids = if explicit_geo_distance_limit {
+            optional_non_empty(geo_candidate_ids.clone())
+        } else {
+            let extra_candidate_ids = merge_candidate_ids(
+                optional_non_empty(tantivy_recall.property_ids.clone()),
+                semantic_candidate_ids.clone(),
+            );
+            merge_candidate_ids(extra_candidate_ids, geo_candidate_ids.clone())
+        };
+        let ranking_candidate_ids = if explicit_geo_distance_limit {
+            Some(intersect_candidate_ids(
+                optional_non_empty(structured_candidate_ids.clone()),
+                &geo_candidate_ids,
+            ))
+        } else {
+            merge_candidate_ids(
+                optional_non_empty(structured_candidate_ids.clone()),
+                extra_candidate_ids.clone().unwrap_or_default(),
+            )
+        };
         let recall_set = RecallSet {
             structured_candidate_ids,
             structured_total_count,
@@ -237,23 +266,32 @@ impl<'a> SearchEngine<'a> {
         };
 
         let mut results = timer.measure("ranking", || {
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-                self.properties,
-                None,
-                recall_set.ranking_candidate_ids.as_deref(),
-                semantic_scores_ref,
-                geo_query.as_ref(),
-                serving_facts,
-                self.society_names,
-                self.societies,
-                query,
-                &intent,
-                ranking_graph,
-                self.sellers,
-            )
+            if explicit_geo_distance_limit
+                && recall_set
+                    .ranking_candidate_ids
+                    .as_ref()
+                    .is_some_and(Vec::is_empty)
+            {
+                Vec::new()
+            } else {
+                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                    self.properties,
+                    None,
+                    recall_set.ranking_candidate_ids.as_deref(),
+                    semantic_scores_ref,
+                    geo_query.as_ref(),
+                    serving_facts,
+                    self.society_names,
+                    self.societies,
+                    query,
+                    &intent,
+                    ranking_graph,
+                    self.sellers,
+                )
+            }
         });
         let mut relaxations = Vec::new();
-        if results.is_empty() {
+        if results.is_empty() && !explicit_geo_distance_limit {
             let relaxation_value = timer.measure_value("constraint_relaxation", || {
                 self.relaxed_results(
                     query,
@@ -747,6 +785,15 @@ fn merge_candidate_ids(mut left: Option<Vec<String>>, right: Vec<String>) -> Opt
         }
     }
     left.filter(|ids| !ids.is_empty())
+}
+
+fn intersect_candidate_ids(left: Option<Vec<String>>, right: &[String]) -> Vec<String> {
+    let Some(left) = left else {
+        return right.to_vec();
+    };
+    left.into_iter()
+        .filter(|id| right.iter().any(|candidate| candidate == id))
+        .collect()
 }
 
 fn optional_non_empty(ids: Vec<String>) -> Option<Vec<String>> {

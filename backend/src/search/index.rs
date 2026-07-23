@@ -4,8 +4,8 @@ use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
 use crate::serving::TantivyRecallHit;
 
+use super::analyzer;
 use super::intent::SearchIntent;
-use super::schema;
 use super::semantic::SemanticRecallHit;
 use crate::dag_config::area_alias_entries;
 
@@ -65,7 +65,7 @@ impl SearchIndex {
             property.description_summary,
             property.transparency_tags.join(" ")
         );
-        for token in tokenize(&text) {
+        for token in analyzer::search_tokens(&text, super::schema::query_stopwords()) {
             push_unique(self.by_token.entry(token).or_default(), &property.id);
         }
     }
@@ -188,10 +188,7 @@ impl SearchIndex {
     fn token_candidates_ranked(&self, query: &str) -> Vec<String> {
         let mut scores = HashMap::<String, u32>::new();
         let mut ids = HashSet::new();
-        for token in tokenize(query) {
-            if is_query_stopword(&token) {
-                continue;
-            }
+        for token in analyzer::search_tokens(query, super::schema::query_stopwords()) {
             if let Some(token_ids) = self.by_token.get(&token) {
                 for id in token_ids {
                     ids.insert(id.clone());
@@ -248,11 +245,12 @@ pub fn text_field_matches_term(field_lower: &str, term: &str) -> bool {
     if field_lower.contains(term) {
         return true;
     }
-    if term.len() < 4 {
+    let terms = analyzer::stemmed_tokens(term);
+    if terms.iter().all(|term| term.len() < 4) {
         return false;
     }
-    for word in field_lower.split(|c: char| !c.is_ascii_alphanumeric()) {
-        if token_matches_query(term, word) {
+    for word in analyzer::stemmed_tokens(field_lower) {
+        if terms.iter().any(|term| token_matches_query(term, &word)) {
             return true;
         }
     }
@@ -321,26 +319,6 @@ fn normalize(value: &str) -> String {
 
 pub(crate) fn price_satisfies_budget(price: u64, budget_max: u64) -> bool {
     price > 0 && price <= budget_max
-}
-
-fn tokenize(value: &str) -> Vec<String> {
-    value
-        .split(|ch: char| !ch.is_ascii_alphanumeric())
-        .filter_map(|token| {
-            let token = token.trim().to_lowercase();
-            if token.len() >= 2 {
-                Some(token)
-            } else {
-                None
-            }
-        })
-        .collect()
-}
-
-fn is_query_stopword(token: &str) -> bool {
-    schema::query_stopwords()
-        .iter()
-        .any(|stopword| stopword.eq_ignore_ascii_case(token))
 }
 
 #[cfg(test)]

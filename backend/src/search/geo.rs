@@ -6,11 +6,13 @@ use crate::serving::{
     ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
 };
 
+use super::analyzer;
 use super::resolver::query_contains_lower_text;
 use super::schema;
 
 pub(crate) const GEO_DISTANCE_SCORING_METHOD: &str = "serving-geo-distance";
 pub(crate) const HAVERSINE_SCORING_METHOD: &str = "serving-haversine";
+pub(crate) const NAMED_PLACE_FACT_SCORING_METHOD: &str = "serving-named-place";
 pub(crate) const DISTANCE_TO_PLACE_FACT_KEY: &str = "geo.distance_to_place";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -91,6 +93,7 @@ pub struct GeoSearchIndex {
 pub struct GeoSearchQuery<'a> {
     index: &'a GeoSearchIndex,
     places: Vec<ResolvedGeoPlace>,
+    max_distance_km: Option<f64>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -180,9 +183,11 @@ impl GeoSearchIndex {
 
     pub(crate) fn query(&self, query: &str) -> Option<GeoSearchQuery<'_>> {
         let places = self.resolve_query_places(query);
+        let max_distance_km = query_distance_limit_km(query);
         (!places.is_empty()).then_some(GeoSearchQuery {
             index: self,
             places,
+            max_distance_km,
         })
     }
 
@@ -261,7 +266,9 @@ impl<'a> GeoSearchQuery<'a> {
 
     pub(crate) fn candidate_property_ids(&self, properties: &[Property]) -> Vec<String> {
         let mut ids = Vec::new();
-        let max_distance = schema::ranking_policy().named_place_zero_score_km;
+        let max_distance = self
+            .max_distance_km
+            .unwrap_or_else(|| schema::ranking_policy().named_place_zero_score_km);
         for property in properties {
             if !property.is_listable() {
                 continue;
@@ -283,6 +290,52 @@ impl<'a> GeoSearchQuery<'a> {
         ids
     }
 
+    pub(crate) fn serving_fact_candidate_property_ids(
+        &self,
+        properties: &[Property],
+        fact_index: &ServingFactIndex,
+    ) -> Vec<String> {
+        let mut ids = Vec::new();
+        for property in properties {
+            if !property.is_listable()
+                || ids.iter().any(|existing| existing == &property.id)
+                || !self.society_has_matching_nearby_fact(&property.society_id, fact_index)
+            {
+                continue;
+            }
+            ids.push(property.id.clone());
+        }
+        ids
+    }
+
+    fn society_has_matching_nearby_fact(
+        &self,
+        society_id: &str,
+        fact_index: &ServingFactIndex,
+    ) -> bool {
+        let Some(rows) = society_entity_id_candidates(society_id)
+            .into_iter()
+            .find_map(|entity_id| fact_index.entity(&entity_id))
+        else {
+            return false;
+        };
+
+        rows.facts.iter().any(|fact| {
+            is_geo_distance_fact_key(&fact.fact_key)
+                && fact.confidence >= schema::ranking_policy().min_support_evidence_confidence
+                && serving_fact_text_snippets(fact).iter().any(|snippet| {
+                    self.places.iter().any(|place| {
+                        nearby_fact_mentions_place(snippet, &place.name)
+                            && extract_first_distance_km(snippet).is_some_and(|distance_km| {
+                                self.max_distance_km.unwrap_or_else(|| {
+                                    schema::ranking_policy().named_place_zero_score_km
+                                }) >= distance_km
+                            })
+                    })
+                })
+        })
+    }
+
     pub(crate) fn evidence_for_society(&self, society_id: &str) -> Option<HaversineEvidence> {
         let coordinates = self.index.society_coordinates(society_id)?;
         self.places
@@ -294,6 +347,12 @@ impl<'a> GeoSearchQuery<'a> {
                     place.latitude,
                     place.longitude,
                 );
+                if self
+                    .max_distance_km
+                    .is_some_and(|max_distance| distance_km > max_distance)
+                {
+                    return None;
+                }
                 named_place_distance_evidence(place, coordinates, distance_km)
             })
             .max_by(|left, right| {
@@ -311,6 +370,10 @@ impl<'a> GeoSearchQuery<'a> {
 
     pub(crate) fn resolved_places(&self) -> &[ResolvedGeoPlace] {
         &self.places
+    }
+
+    pub(crate) fn max_distance_km(&self) -> Option<f64> {
+        self.max_distance_km
     }
 
     pub(crate) fn resolved_place_terms(&self) -> Vec<String> {
@@ -455,11 +518,7 @@ fn significant_query_tokens(text: &str) -> Vec<String> {
 }
 
 fn tokenize(text: &str) -> Vec<String> {
-    text.to_ascii_lowercase()
-        .split(|ch: char| !ch.is_ascii_alphanumeric())
-        .filter(|token| !token.is_empty())
-        .map(str::to_string)
-        .collect()
+    analyzer::stemmed_tokens(text)
 }
 
 fn is_place_match_stopword(token: &str) -> bool {
@@ -503,6 +562,110 @@ fn token_matches(query_token: &str, place_token: &str) -> bool {
         || (query_token.len() >= 4
             && place_token.len() >= 4
             && (query_token.starts_with(place_token) || place_token.starts_with(query_token)))
+}
+
+fn query_distance_limit_km(query: &str) -> Option<f64> {
+    let tokens = query.split_whitespace().collect::<Vec<_>>();
+    for (index, token) in tokens.iter().enumerate() {
+        if let Some(distance) = compact_distance_token_km(token) {
+            if distance_limit_context(&tokens, index) {
+                return Some(distance);
+            }
+        }
+
+        let unit = clean_unit_token(token);
+        if unit.is_empty() || index == 0 || !distance_limit_context(&tokens, index) {
+            continue;
+        }
+        let Some(value) = parse_number_token(tokens[index - 1]) else {
+            continue;
+        };
+        if is_km_unit(&unit) {
+            return Some(value);
+        }
+        if is_meter_unit(&unit) {
+            return Some(value / 1000.0);
+        }
+    }
+    None
+}
+
+fn distance_limit_context(tokens: &[&str], distance_or_unit_index: usize) -> bool {
+    let start = distance_or_unit_index.saturating_sub(4);
+    tokens[start..distance_or_unit_index]
+        .iter()
+        .map(|token| clean_context_token(token))
+        .any(|token| is_distance_limit_term(&token))
+}
+
+fn clean_context_token(token: &str) -> String {
+    token
+        .trim_matches(|ch: char| !ch.is_ascii_alphanumeric())
+        .to_ascii_lowercase()
+}
+
+fn is_distance_limit_term(token: &str) -> bool {
+    matches!(
+        token,
+        "within" | "under" | "below" | "max" | "upto" | "less" | "inside" | "limit"
+    )
+}
+
+pub(crate) fn serving_fact_text_snippets(fact: &ServingFactRecord) -> Vec<String> {
+    let mut snippets = Vec::new();
+    match &fact.value {
+        FactValue::Text(value) => snippets.push(value.clone()),
+        FactValue::Tags(values) => snippets.extend(values.iter().cloned()),
+        FactValue::Score { explanation, .. } => snippets.push(explanation.clone()),
+        FactValue::Numeric(_) | FactValue::Bool(_) => {}
+    }
+    if let Some(value_text) = fact.value_text.as_deref() {
+        if !snippets.iter().any(|snippet| snippet == value_text) {
+            snippets.push(value_text.to_string());
+        }
+    }
+    snippets
+}
+
+pub(crate) fn nearby_fact_mentions_place(snippet: &str, place_name: &str) -> bool {
+    let snippet_lower = snippet.to_ascii_lowercase();
+    if query_contains_lower_text(&snippet_lower, place_name) {
+        return true;
+    }
+
+    let place_tokens = named_place_identity_tokens(place_name);
+    if place_tokens.is_empty() {
+        return false;
+    }
+    let snippet_tokens = analyzer::stemmed_tokens(snippet);
+    place_tokens
+        .iter()
+        .all(|token| snippet_tokens.iter().any(|candidate| candidate == token))
+}
+
+fn named_place_identity_tokens(place_name: &str) -> Vec<String> {
+    analyzer::stemmed_tokens(place_name)
+        .into_iter()
+        .filter(|token| !is_nearby_place_generic_token(token))
+        .collect()
+}
+
+fn is_nearby_place_generic_token(token: &str) -> bool {
+    matches!(
+        token,
+        "the"
+            | "and"
+            | "school"
+            | "academi"
+            | "hospital"
+            | "metro"
+            | "station"
+            | "park"
+            | "road"
+            | "bengaluru"
+            | "bangalor"
+            | "whitefield"
+    )
 }
 
 pub(crate) fn haversine_km(
@@ -624,6 +787,19 @@ mod tests {
         let text = "Nearby school: Example Public School (850m, 4.2 rating)";
 
         assert_eq!(extract_first_distance_km(text), Some(0.85));
+    }
+
+    #[test]
+    fn extracts_query_distance_limits() {
+        assert_eq!(
+            query_distance_limit_km("homes within 500m of Deens Academy"),
+            Some(0.5)
+        );
+        assert_eq!(
+            query_distance_limit_km("3bhk under 1 km from Gopalan National School"),
+            Some(1.0)
+        );
+        assert_eq!(query_distance_limit_km("3bhk near metro"), None);
     }
 
     #[test]
