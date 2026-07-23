@@ -10,7 +10,6 @@ pub mod livability_brief;
 pub mod local_env;
 pub mod models;
 pub(crate) mod parquet_data;
-pub mod property_summary;
 pub mod recommendations;
 pub mod routes;
 pub mod scoring;

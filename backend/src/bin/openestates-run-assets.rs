@@ -11,8 +11,7 @@ use backend::assets::{
     SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-    REDDIT_RESIDENT_FACTS_ASSET_ID, REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
@@ -190,14 +189,10 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
         rera.clone(),
         google_places.clone(),
         google_nearby.clone(),
-        AssetId::new(METRO_STATIONS_MONTHLY_ASSET_ID).expect("valid static metro asset ID"),
-        AssetId::new(PRESTIGE_INVENTORY_WEEKLY_ASSET_ID).expect("valid static Prestige asset ID"),
         AssetId::new(EXTERNAL_LISTINGS_WEEKLY_ASSET_ID)
             .expect("valid static external listings asset ID"),
         AssetId::new(EXTERNAL_IMAGES_WEEKLY_ASSET_ID)
             .expect("valid static external images asset ID"),
-        AssetId::new(REDDIT_THREADS_DAILY_ASSET_ID).expect("valid static Reddit thread asset ID"),
-        AssetId::new(REDDIT_RESIDENT_FACTS_ASSET_ID).expect("valid static Reddit fact asset ID"),
     ]);
     collection_plan
         .force_assets
@@ -573,7 +568,7 @@ mod tests {
     #[test]
     fn scoped_collection_refreshes_rera_listing_with_selected_details() {
         let mut plan = SourceInputCollectionPlan {
-            requested_assets: vec![AssetId::new("metro_stations_monthly").unwrap()],
+            requested_assets: Vec::new(),
             force_assets: Vec::new(),
             force_refresh_assets: Vec::new(),
         };
@@ -588,10 +583,6 @@ mod tests {
                 AssetId::new("external_listings_weekly").unwrap(),
                 AssetId::new("google_nearby_places_weekly").unwrap(),
                 AssetId::new("google_places_weekly").unwrap(),
-                AssetId::new("metro_stations_monthly").unwrap(),
-                AssetId::new("prestige_inventory_weekly").unwrap(),
-                AssetId::new("reddit_resident_facts").unwrap(),
-                AssetId::new("reddit_threads_daily").unwrap(),
                 AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
             ]
         );

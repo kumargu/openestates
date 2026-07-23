@@ -554,29 +554,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Root,
         ),
         asset(
-            "reddit_threads_daily",
-            AssetStage::Raw,
-            "Daily Reddit posts and comments for hot Bengaluru real-estate themes.",
-            &["canonical_society_nodes"],
-            RefreshCadence::Daily,
-            CostTier::Free,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["dt", "subreddit"])),
-        asset(
-            "reddit_resident_facts",
-            AssetStage::Silver,
-            "Resident-support facts extracted from Reddit evidence.",
-            &["reddit_threads_daily", "canonical_society_nodes"],
-            RefreshCadence::OnChange,
-            CostTier::Cheap,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &["dt"],
-            &[("source", "reddit")],
-        )),
-        asset(
             "google_places_weekly",
             AssetStage::Raw,
             "Weekly Google Maps place and review metadata with navigable source links.",
@@ -627,54 +604,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
             &[],
             &[("source", "google")],
-        )),
-        asset(
-            "community_review_summary_facts",
-            AssetStage::Silver,
-            "Source-neutral community review summaries and dynamic themes from Google and Reddit evidence.",
-            &["google_review_facts", "reddit_resident_facts"],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Derived,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "community")],
-        ))
-        .with_dependency_fan_in_policy(
-            "google_review_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_dependency_fan_in_policy(
-            "reddit_resident_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_optional_dependency("reddit_resident_facts"),
-        asset(
-            "prestige_inventory_weekly",
-            AssetStage::Raw,
-            "Weekly source-native project inventory observations from Prestige.",
-            &["canonical_society_nodes"],
-            RefreshCadence::Weekly,
-            CostTier::Free,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "prestige")],
-        )),
-        asset(
-            "market_project_facts",
-            AssetStage::Silver,
-            "Typed current market observations with source URLs and observation time.",
-            &["prestige_inventory_weekly", "canonical_society_nodes"],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "prestige")],
         )),
         asset(
             "external_listings_weekly",
@@ -729,32 +658,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
             &[("source", "external_image")],
         )),
         asset(
-            "metro_stations_monthly",
-            AssetStage::Raw,
-            "Monthly geospatial snapshot of operational Namma Metro stations.",
-            &[],
-            RefreshCadence::Monthly,
-            CostTier::Free,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "openstreetmap")],
-        )),
-        asset(
-            "metro_proximity_facts",
-            AssetStage::Silver,
-            "Nearest operational metro computed from RERA project and station coordinates.",
-            &["metro_stations_monthly", "rera_legal_facts"],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Derived,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &[],
-            &[("source", "openstreetmap")],
-        )),
-        asset(
             "builder_rera_aggregates",
             AssetStage::Silver,
             "Builder portfolio aggregates computed from the current RERA registry.",
@@ -766,26 +669,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         asset(
             "home_state_signals",
             AssetStage::Silver,
-            "Buyer-facing home state and age from RERA now, with Google and Reddit support later.",
+            "Buyer-facing home state and age derived from durable society facts.",
             &["rera_legal_facts"],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Derived,
-        ),
-        asset(
-            "canonical_road_nodes",
-            AssetStage::Gold,
-            "Road segment and place entities with served_by_road edges from approach road visuals.",
-            &["canonical_society_nodes"],
-            RefreshCadence::OnChange,
-            CostTier::Free,
-            TrustTier::Derived,
-        ),
-        asset(
-            "approach_road_graph_facts",
-            AssetStage::Silver,
-            "Approach road media and shared-node concern facts for road_segment and place entities.",
-            &["canonical_road_nodes"],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
@@ -796,34 +681,20 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "Versioned society KG view merged by source precedence and fact policy.",
             &[
                 "canonical_society_nodes",
-                "canonical_road_nodes",
                 "rera_legal_facts",
-                "reddit_resident_facts",
                 "google_review_facts",
-                "community_review_summary_facts",
                 "google_nearby_place_facts",
-                "market_project_facts",
                 "external_listing_facts",
                 "image_media_facts",
-                "metro_proximity_facts",
                 "builder_rera_aggregates",
                 "home_state_signals",
-                "approach_road_graph_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
             TrustTier::Derived,
         )
         .with_dependency_fan_in_policy(
-            "reddit_resident_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_dependency_fan_in_policy(
             "google_review_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_dependency_fan_in_policy(
-            "community_review_summary_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy(
@@ -831,26 +702,14 @@ pub fn default_openestates_registry() -> AssetRegistry {
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy(
-            "market_project_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_dependency_fan_in_policy(
             "external_listing_facts",
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy("image_media_facts", DependencyFanInPolicy::AllCurrentPartitions)
-        .with_dependency_fan_in_policy(
-            "metro_proximity_facts",
-            DependencyFanInPolicy::AllCurrentPartitions,
-        )
-        .with_optional_dependency("reddit_resident_facts")
         .with_optional_dependency("google_review_facts")
-        .with_optional_dependency("community_review_summary_facts")
         .with_optional_dependency("google_nearby_place_facts")
-        .with_optional_dependency("market_project_facts")
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
-        .with_optional_dependency("metro_proximity_facts")
         .with_optional_dependency("home_state_signals"),
         asset(
             "search_serving_bundle",
@@ -907,8 +766,7 @@ mod tests {
     #[test]
     fn default_registry_resolves_mixed_asset_partitions() {
         let registry = default_openestates_registry();
-        let run_partition =
-            AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")]);
+        let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
 
         assert_eq!(
             registry
@@ -922,38 +780,11 @@ mod tests {
         assert_eq!(
             registry
                 .partition_for(
-                    &AssetId::new("reddit_threads_daily").unwrap(),
-                    &run_partition
-                )
-                .unwrap(),
-            AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
-        );
-        assert_eq!(
-            registry
-                .partition_for(
-                    &AssetId::new("reddit_resident_facts").unwrap(),
-                    &run_partition
-                )
-                .unwrap(),
-            AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")])
-        );
-        assert_eq!(
-            registry
-                .partition_for(
                     &AssetId::new("google_review_facts").unwrap(),
                     &run_partition
                 )
                 .unwrap(),
             AssetPartition::new([("source", "google")])
-        );
-        assert_eq!(
-            registry
-                .partition_for(
-                    &AssetId::new("community_review_summary_facts").unwrap(),
-                    &run_partition
-                )
-                .unwrap(),
-            AssetPartition::new([("source", "community")])
         );
         assert_eq!(
             registry
@@ -974,15 +805,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("reddit_resident_facts").unwrap()),
-            DependencyFanInPolicy::AllCurrentPartitions
-        );
-        assert_eq!(
             kg.dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
-            DependencyFanInPolicy::AllCurrentPartitions
-        );
-        assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("community_review_summary_facts").unwrap()),
             DependencyFanInPolicy::AllCurrentPartitions
         );
         assert_eq!(
@@ -994,37 +817,44 @@ mod tests {
     #[test]
     fn partition_policy_matches_materialized_partition_shape() {
         let policy =
-            AssetPartitionPolicy::from_run_keys_with_static(&["dt"], &[("source", "reddit")]);
+            AssetPartitionPolicy::from_run_keys_with_static(&["dt"], &[("source", "google")]);
 
         assert!(policy.matches_materialized_partition(&AssetPartition::new([
             ("dt", "2026-07-13"),
-            ("source", "reddit"),
+            ("source", "google"),
         ])));
         assert!(!policy.matches_materialized_partition(&AssetPartition::global()));
         assert!(
             !policy.matches_materialized_partition(&AssetPartition::new([
                 ("dt", "2026-07-13"),
-                ("source", "google"),
+                ("source", "external_listing"),
             ]))
         );
         assert!(
             !policy.matches_materialized_partition(&AssetPartition::new([
                 ("city", "bengaluru"),
                 ("dt", "2026-07-13"),
-                ("source", "reddit"),
+                ("source", "google"),
             ]))
         );
     }
 
     #[test]
     fn partition_policy_missing_run_key_is_error() {
-        let registry = default_openestates_registry();
+        let registry = AssetRegistry::new(vec![asset(
+            "daily_source",
+            AssetStage::Raw,
+            "daily source",
+            &[],
+            RefreshCadence::Daily,
+            CostTier::Free,
+            TrustTier::Support,
+        )
+        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["dt", "source"]))])
+        .unwrap();
         let run_partition = AssetPartition::new([("dt", "2026-07-13")]);
         let err = registry
-            .partition_for(
-                &AssetId::new("reddit_threads_daily").unwrap(),
-                &run_partition,
-            )
+            .partition_for(&AssetId::new("daily_source").unwrap(), &run_partition)
             .unwrap_err();
 
         assert!(matches!(
@@ -1033,8 +863,8 @@ mod tests {
                 ref asset_id,
                 ref key,
                 ..
-            } if asset_id == &AssetId::new("reddit_threads_daily").unwrap()
-                && key == "subreddit"
+            } if asset_id == &AssetId::new("daily_source").unwrap()
+                && key == "source"
         ));
     }
 

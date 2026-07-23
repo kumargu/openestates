@@ -52,7 +52,6 @@ PREFERENCE_ALIASES: Dict[str, set[str]] = {
     "maintenance_quality": {"good_maintenance"},
     "maintenance_sentiment": {"good_maintenance"},
     "metro_access": {"commute"},
-    "metro_distance_km": {"commute"},
     "metro_distance_mins": {"commute"},
     "nearby_hospitals": {"family_friendly", "social_infrastructure"},
     "nearby_metro_stations": {"commute"},

@@ -118,13 +118,6 @@
       { "key": "listing_area_type_3bhk", "label": "3BHK area basis", "scope": "society", "relationship": "project market trail" },
       { "key": "listing_source_url_3bhk", "label": "3BHK listing source", "scope": "society", "relationship": "project market trail" },
       { "key": "listing_source_name_3bhk", "label": "3BHK source name", "scope": "society", "relationship": "project market trail" },
-      { "key": "market_project_status", "label": "Builder inventory status", "scope": "society", "relationship": "project market trail" },
-      { "key": "market_starting_price_inr", "label": "Builder starting price", "scope": "society", "relationship": "project market trail" },
-      { "key": "market_bhk_options", "label": "Configurations", "scope": "society", "relationship": "project market trail" },
-      { "key": "market_total_units", "label": "Homes", "scope": "society", "relationship": "project market trail" },
-      { "key": "builder_reported_land_area_acres", "label": "Builder project area", "scope": "society", "relationship": "project market trail" },
-      { "key": "official_project_url", "label": "Official project page", "scope": "society", "relationship": "project market trail" },
-      { "key": "project_maps_url", "label": "Project map", "scope": "society", "relationship": "project market trail" },
       { "key": "pricing_3bhk", "label": "3BHK pricing", "scope": "society", "relationship": "project market trail" },
       { "key": "price_per_sqft", "label": "Market rate", "scope": "society", "relationship": "project market trail" },
       { "key": "price_appreciation", "label": "Price movement", "scope": "society", "relationship": "project market trail" },
@@ -267,8 +260,8 @@
     },
     "facts": [
       {
-        "key": "community_review_summary",
-        "label": "Review summary",
+        "key": "google_review_snippets",
+        "label": "Review snippets",
         "scope": "society",
         "relationship": "resident and review context"
       }

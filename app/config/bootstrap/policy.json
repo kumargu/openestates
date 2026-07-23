@@ -1,11 +1,11 @@
 {
-  "_comment": "BOOTSTRAP POLICY — writes entity and edge instances to data/lake only. No society or road names here.",
+  "_comment": "BOOTSTRAP POLICY — writes entity and edge instances to data/lake only. No society names here.",
   "version": 1,
   "description": "Bootstrap policy. Writes entity instances and edges to canonical lake assets only — never back into app/config/.",
   "never_write_instances_to_config": true,
   "output": {
     "lake_assets": [
-      "canonical_road_nodes"
+      "canonical_society_nodes"
     ],
     "formats": ["parquet"]
   },
@@ -22,7 +22,6 @@
     "inferred_edge": 0.6
   },
   "notes": [
-    "Gate coordinates from visuals are geometry hints, not verified road identity.",
     "Edges are emitted only when inference confidence meets edge_inference.min_confidence.",
     "Re-bootstrap and re-enrichment are safe: facts are versioned in the lake."
   ]

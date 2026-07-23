@@ -280,19 +280,15 @@ fn semantic_quality_cases() -> Vec<SemanticQualityCase> {
             name: "metro commute",
             query: "easy office commute by metro",
             target_id: "target-metro",
-            target_fact_key: "nearest_operational_metro_station",
+            target_fact_key: "metro_access",
             target_fact: fact(
                 "target-metro",
-                "nearest_operational_metro_station",
-                FactValueSpec::Text("Kadugodi Tree Park metro (0.6 km, operational)"),
+                "metro_access",
+                FactValueSpec::Text("Kadugodi Tree Park metro is nearby"),
                 "metro access",
             ),
             target_document: "transit commute connectivity for office workers",
-            expected_signals: vec![expected(
-                "metro access",
-                Polarity::Positive,
-                "nearest_operational_metro_station",
-            )],
+            expected_signals: vec![expected("metro access", Polarity::Positive, "metro_access")],
             distractor_documents: &[
                 (
                     "distractor-road",

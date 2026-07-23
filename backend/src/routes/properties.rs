@@ -829,16 +829,13 @@ fn collect_community_evidence_records(
     area_name: Option<&str>,
     projection: Option<&SocietyFactProjection<'_>>,
 ) -> Vec<crate::community::CommunityEvidenceRecord> {
-    // Primary source-neutral community keys. These are the current contract.
+    // Source-backed community keys. UI summaries are composed at request time
+    // from these facts instead of reading precomputed lake text.
     const PRIMARY_FACT_KEYS: &[&str] = &[
         "google_rating",
         "google_review_count",
         "google_review_snippets",
         "google_reviews_url",
-        "community_positive_themes",
-        "community_concern_themes",
-        "community_review_highlights",
-        "community_evidence_links",
         "resident_discussion",
     ];
     // Legacy pre-DAG keys, only consulted when no primary facts exist, so stale
@@ -1100,11 +1097,8 @@ fn collect_community_records_for_keys(
     records
 }
 
-fn source_item_aliases(key: &str) -> &'static [&'static str] {
-    match key {
-        "market_project_status" => &["market_status"],
-        _ => &[],
-    }
+fn source_item_aliases(_key: &str) -> &'static [&'static str] {
+    &[]
 }
 
 fn entity_scope(entity_id: &str) -> &'static str {
@@ -2707,29 +2701,6 @@ mod serving_state_tests {
     }
 
     #[test]
-    fn source_panels_project_legacy_market_status_as_canonical_inventory_status() {
-        let graph = legacy_graph();
-        let property = property();
-        let serving = ServingFactIndex::from_records(
-            vec![serving_fact(
-                "market_status",
-                FactValue::Text("under_construction".to_string()),
-                10,
-            )],
-            Vec::<ServingSearchMetadataRecord>::new(),
-        );
-
-        let panels = build_source_panels(&graph, &property, Some(&serving), None);
-        let item = panels
-            .iter()
-            .flat_map(|panel| panel.items.iter())
-            .find(|item| item.key == "market_project_status")
-            .expect("legacy market_status should fill canonical market_project_status detail");
-
-        assert_eq!(item.value, "under_construction");
-    }
-
-    #[test]
     fn source_panels_include_dynamic_nearby_items_when_backed_by_facts() {
         let graph = legacy_graph();
         let property = property();
@@ -2789,19 +2760,6 @@ mod serving_state_tests {
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
-                serving_fact(
-                    "community_positive_themes",
-                    FactValue::Tags(vec!["greenery".to_string(), "amenities".to_string()]),
-                    10,
-                ),
-                serving_fact(
-                    "community_review_highlights",
-                    FactValue::Tags(vec![
-                        "Amenities and greenery are repeatedly praised.".to_string(),
-                        "Traffic is still called out as a concern.".to_string(),
-                    ]),
-                    10,
-                ),
                 serving_fact("google_rating", FactValue::Numeric(3.9), 10),
                 serving_fact("google_review_count", FactValue::Numeric(392.0), 10),
                 serving_fact(
@@ -2996,38 +2954,28 @@ mod serving_state_tests {
     fn evidence_summaries_do_not_repeat_self_labeled_values() {
         let item = SourceItem {
             entity_id: "society:sample".to_string(),
-            key: "market_project_status".to_string(),
-            label: "Builder inventory status".to_string(),
-            value: "Builder inventory status: Sold Out".to_string(),
+            key: "listing_source_name_3bhk".to_string(),
+            label: "3BHK source name".to_string(),
+            value: "3BHK source name: MagicBricks".to_string(),
             scope: "society".to_string(),
             relationship: None,
             values: Vec::new(),
-            source_type: "BuilderOfficial".to_string(),
+            source_type: "ExternalListing".to_string(),
             source_url: None,
             attributions: Vec::new(),
             confidence_pct: 90,
             learned_at: "2026-07-15T00:00:00Z".to_string(),
         };
 
-        assert_eq!(
-            source_item_summary(&item),
-            "Builder inventory status: Sold Out"
-        );
+        assert_eq!(source_item_summary(&item), "3BHK source name: MagicBricks");
     }
 
     #[test]
-    fn market_trail_uses_configured_builder_and_external_listing_facts() {
+    fn market_trail_uses_configured_external_listing_facts() {
         let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
             vec![
-                typed_serving_fact(
-                    "market_project_status",
-                    FactValue::Text("Ready to Move".to_string()),
-                    "BuilderOfficial",
-                    Some("https://builder.example/project"),
-                    10,
-                ),
                 typed_serving_fact(
                     "listing_source_name_3bhk",
                     FactValue::Text("MagicBricks".to_string()),
@@ -3055,19 +3003,13 @@ mod serving_state_tests {
             &kg_entity_refs_for_property(&property, &graph),
         );
 
-        assert_eq!(
-            market.source_types,
-            vec!["BuilderOfficial".to_string(), "ExternalListing".to_string()]
-        );
+        assert_eq!(market.source_types, vec!["ExternalListing".to_string()]);
         assert!(market.items.iter().any(|item| {
             item.key == "listing_source_name_3bhk"
                 && item.label == "3BHK source name"
                 && item.value == "MagicBricks"
                 && item.source_type == "ExternalListing"
         }));
-        assert!(market.items.iter().any(
-            |item| item.key == "market_project_status" && item.source_type == "BuilderOfficial"
-        ));
     }
 
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {

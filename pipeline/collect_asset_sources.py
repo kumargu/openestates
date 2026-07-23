@@ -71,25 +71,17 @@ def annotation_from_registry(fact_key, skill_scoring=None):
     }
 
 RERA_REGISTRY_MONTHLY = "rera_registry_monthly"
-REDDIT_THREADS_DAILY = "reddit_threads_daily"
-REDDIT_RESIDENT_FACTS = "reddit_resident_facts"
 GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
-PRESTIGE_INVENTORY_WEEKLY = "prestige_inventory_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
-METRO_STATIONS_MONTHLY = "metro_stations_monthly"
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
-        REDDIT_THREADS_DAILY,
-        REDDIT_RESIDENT_FACTS,
         GOOGLE_PLACES_WEEKLY,
         GOOGLE_NEARBY_PLACES_WEEKLY,
-        PRESTIGE_INVENTORY_WEEKLY,
         EXTERNAL_LISTINGS_WEEKLY,
         EXTERNAL_IMAGES_WEEKLY,
-        METRO_STATIONS_MONTHLY,
     )
 )
 
@@ -97,7 +89,6 @@ SUPPORTED_ASSETS = frozenset(
 def collect_asset_sources(
     request: Dict[str, Any],
     rera_fetch: Callable[[], Any] = None,
-    reddit_collect: Callable[..., Tuple[Dict[str, Any], Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     requested = [asset_id for asset_id in request.get("requested_assets", []) if asset_id]
     unsupported = sorted(set(requested) - SUPPORTED_ASSETS)
@@ -114,34 +105,6 @@ def collect_asset_sources(
             output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
         except Exception as error:
             record_source_failure(source_failures, [RERA_REGISTRY_MONTHLY], error)
-    if REDDIT_THREADS_DAILY in requested or REDDIT_RESIDENT_FACTS in requested:
-        reddit_assets = [
-            asset_id
-            for asset_id in (REDDIT_THREADS_DAILY, REDDIT_RESIDENT_FACTS)
-            if asset_id in requested
-        ]
-        try:
-            reddit_inputs = reddit_society_inputs(
-                request, output.get(RERA_REGISTRY_MONTHLY)
-            )
-            if not reddit_inputs:
-                raise ValueError(
-                    "Reddit collection requires scoped source_entities or RERA projects"
-                )
-            if skip_reddit_collection():
-                reddit_threads, reddit_facts = empty_reddit_assets(request)
-            else:
-                collect_reddit = reddit_collect or collect_reddit_assets
-                reddit_threads, reddit_facts = collect_reddit(
-                    request,
-                    society_inputs=reddit_inputs,
-                )
-            if REDDIT_THREADS_DAILY in requested:
-                output[REDDIT_THREADS_DAILY] = reddit_threads
-            if REDDIT_RESIDENT_FACTS in requested:
-                output[REDDIT_RESIDENT_FACTS] = reddit_facts
-        except Exception as error:
-            record_source_failure(source_failures, reddit_assets, error)
     if GOOGLE_PLACES_WEEKLY in requested:
         try:
             google_inputs = google_society_inputs(
@@ -172,24 +135,6 @@ def collect_asset_sources(
             )
         except Exception as error:
             record_source_failure(source_failures, [GOOGLE_NEARBY_PLACES_WEEKLY], error)
-    if PRESTIGE_INVENTORY_WEEKLY in requested:
-        try:
-            from pipeline.sources.project_enrichment import collect_prestige_inventory
-
-            prestige_inputs = source_society_inputs(
-                request, output.get(RERA_REGISTRY_MONTHLY)
-            )
-            if not prestige_inputs:
-                raise ValueError(
-                    "Prestige collection requires scoped source_entities or RERA projects"
-                )
-            output[PRESTIGE_INVENTORY_WEEKLY] = collect_prestige_inventory(
-                request, prestige_inputs
-            )
-        except Exception as error:
-            record_source_failure(
-                source_failures, [PRESTIGE_INVENTORY_WEEKLY], error
-            )
     if EXTERNAL_LISTINGS_WEEKLY in requested:
         try:
             from pipeline.sources.external_listings import collect_external_listings
@@ -204,13 +149,6 @@ def collect_asset_sources(
             output[EXTERNAL_IMAGES_WEEKLY] = collect_external_images(request)
         except Exception as error:
             record_source_failure(source_failures, [EXTERNAL_IMAGES_WEEKLY], error)
-    if METRO_STATIONS_MONTHLY in requested:
-        try:
-            from pipeline.sources.project_enrichment import collect_metro_stations
-
-            output[METRO_STATIONS_MONTHLY] = collect_metro_stations(request)
-        except Exception as error:
-            record_source_failure(source_failures, [METRO_STATIONS_MONTHLY], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -242,7 +180,7 @@ def skip_reddit_collection() -> bool:
             "yes",
         )
 
-    policy = load_crawl_policy(REDDIT_THREADS_DAILY)
+    policy = load_crawl_policy("reddit_threads_daily")
     if policy is not None:
         return not bool(policy.get("enabled", True))
 
@@ -585,6 +523,7 @@ def collect_rera_registry(
 ) -> Dict[str, Any]:
     entries, observed_at = (rera_fetch or fetch_rera_listing_snapshot)()
     entries = list(entries)
+    selected_keys, selected_names = rera_project_selectors(request)
     projects = []  # type: List[Dict[str, Any]]
     skipped = 0
     for entry in entries:
@@ -592,10 +531,22 @@ def collect_rera_registry(
         if not project_name:
             skipped += 1
             continue
+        ack_number = optional_text(entry, "ack_number")
+        registration_number = optional_text(entry, "registration_number")
+        if selected_keys or selected_names:
+            identifiers = [
+                normalize_selector(ack_number),
+                normalize_selector(registration_number),
+                normalize_selector(project_name),
+            ]
+            if not any(identifier in selected_keys for identifier in identifiers) and (
+                normalize_selector(project_name) not in selected_names
+            ):
+                continue
         projects.append(
             {
-                "ack_number": optional_text(entry, "ack_number"),
-                "registration_number": optional_text(entry, "registration_number"),
+                "ack_number": ack_number,
+                "registration_number": registration_number,
                 "project_name": project_name,
                 "promoter_name": optional_text(entry, "promoter_name"),
                 "status": None,
@@ -613,7 +564,10 @@ def collect_rera_registry(
 
     if skipped:
         logger.warning("Skipped %d RERA rows without a project name", skipped)
-    logger.info("Collected %d valid RERA listing rows", len(projects))
+    if selected_keys or selected_names:
+        logger.info("Collected %d scoped RERA listing rows", len(projects))
+    else:
+        logger.info("Collected %d valid RERA listing rows", len(projects))
     detail_facts, detail_annotations, detail_watermark = collect_rera_project_details(
         request, detail_skill
     )
@@ -634,6 +588,29 @@ def collect_rera_registry(
         "detail_fact_annotations": detail_annotations,
         "source_watermarks": source_watermarks,
     }
+
+
+def rera_project_selectors(request: Dict[str, Any]) -> Tuple[set, set]:
+    source_entities = request.get("source_entities", [])
+    keys = set()
+    names = set()
+    for seed in source_entities:
+        for key in ("project_key", "registration_number", "ack_number"):
+            value = normalize_selector(seed.get(key))
+            if value:
+                keys.add(value)
+        name = normalize_selector(seed.get("name") or seed.get("project_name"))
+        if name:
+            names.add(name)
+            keys.add(name)
+    return keys, names
+
+
+def normalize_selector(value: Any) -> str:
+    text = optional_string(value)
+    if not text:
+        return ""
+    return " ".join(text.lower().split())
 
 
 def collect_rera_project_details(

@@ -7,7 +7,6 @@ use tokio::sync::RwLock;
 use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{AreaProfile, Property, Seller, Society};
-use crate::property_summary::PropertySummaryJobStore;
 use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use crate::serving::LoadedServingBundle;
 
@@ -23,8 +22,6 @@ pub struct AppState {
     pub semantic_embedder: Arc<dyn SemanticEmbedder>,
     /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
     pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
-    /// Short-lived, in-memory property summary jobs. Summaries are regenerated after restart.
-    pub property_summary_jobs: RwLock<PropertySummaryJobStore>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,

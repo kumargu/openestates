@@ -1,14 +1,12 @@
 use std::fs;
 
 use backend::assets::{
-    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest,
-    AssetDefinition, AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy,
-    AssetRegistry, AssetRunStepStatus, AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer,
-    CommandSourceInputProvider, CostTier, GooglePlaceSnapshotMaterializer,
-    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
-    RedditThreadSnapshotMaterializer, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceInputProvider,
+    default_openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDefinition,
+    AssetId, AssetMaterializationStore, AssetPartition, AssetPartitionPolicy, AssetRegistry,
+    AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CommandSourceInputProvider,
+    CostTier, GooglePlaceSnapshotMaterializer, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    MaterializationId, MaterializationRecord, RefreshCadence, ReraProjectSnapshotRecord,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SourceInputProvider,
     SourceInputProviderError, SourceInputRequest, SourceWatermark, TrustTier,
 };
 use backend::knowledge::KnowledgeGraph;
@@ -239,7 +237,7 @@ async fn requested_assets_follow_the_dag_plan_and_skip_fresh_rera() {
         .any(|asset_id| asset_id.as_str() == "rera_registry_monthly"));
     assert!(requested
         .iter()
-        .any(|asset_id| asset_id.as_str() == "reddit_threads_daily"));
+        .any(|asset_id| asset_id.as_str() == "google_places_weekly"));
 }
 
 #[tokio::test]
@@ -286,112 +284,6 @@ async fn stale_source_assets_are_marked_for_collector_cache_bypass() {
     let collection = AssetSourceInputs::collection_plan(&plan);
     assert_eq!(collection.requested_assets, vec![raw_id.clone()]);
     assert_eq!(collection.force_refresh_assets, vec![raw_id]);
-}
-
-#[tokio::test]
-async fn resume_collection_replays_only_the_raw_companion_needed_for_exact_lineage() {
-    let temp = tempdir().unwrap();
-    let lake = LakeStore::local(temp.path()).unwrap();
-    let partition =
-        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
-    let plan = AssetDagExecutor::new(default_openestates_registry(), lake)
-        .plan(
-            &partition,
-            Utc.with_ymd_and_hms(2026, 7, 14, 9, 30, 0).unwrap(),
-        )
-        .await
-        .unwrap();
-    let mut manifest = AssetDagRunManifest::from_plan(&plan);
-    for step in &mut manifest.steps {
-        step.status = AssetRunStepStatus::Succeeded;
-    }
-    manifest
-        .steps
-        .iter_mut()
-        .find(|step| step.asset_id.as_str() == "reddit_resident_facts")
-        .unwrap()
-        .status = AssetRunStepStatus::Failed;
-
-    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
-
-    assert_eq!(
-        collection.requested_assets,
-        vec![
-            AssetId::new("reddit_resident_facts").unwrap(),
-            AssetId::new("reddit_threads_daily").unwrap(),
-        ]
-    );
-    assert_eq!(
-        collection.force_assets,
-        vec![AssetId::new("reddit_threads_daily").unwrap()]
-    );
-    assert!(collection.force_refresh_assets.is_empty());
-    assert!(!collection
-        .requested_assets
-        .iter()
-        .any(|asset_id| asset_id.as_str().starts_with("google_")));
-}
-
-#[tokio::test]
-async fn resume_collection_replays_a_materialized_raw_companion_instead_of_mixing_crawls() {
-    let temp = tempdir().unwrap();
-    let lake = LakeStore::local(temp.path()).unwrap();
-    let partition =
-        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
-    let plan = AssetDagExecutor::new(default_openestates_registry(), lake)
-        .plan(
-            &partition,
-            Utc.with_ymd_and_hms(2026, 7, 14, 10, 0, 0).unwrap(),
-        )
-        .await
-        .unwrap();
-    let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-v1");
-    for step in &mut manifest.steps {
-        step.status = AssetRunStepStatus::Succeeded;
-    }
-    let raw_id = AssetId::new("reddit_threads_daily").unwrap();
-    let raw = manifest
-        .steps
-        .iter_mut()
-        .find(|step| step.asset_id == raw_id)
-        .unwrap();
-    raw.status = AssetRunStepStatus::Materialized;
-    raw.materialization_id = Some(MaterializationId::new());
-    manifest
-        .steps
-        .iter_mut()
-        .find(|step| step.asset_id.as_str() == "reddit_resident_facts")
-        .unwrap()
-        .status = AssetRunStepStatus::Failed;
-
-    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
-
-    assert_eq!(
-        collection.requested_assets,
-        vec![
-            AssetId::new("reddit_resident_facts").unwrap(),
-            raw_id.clone(),
-        ]
-    );
-    assert_eq!(collection.force_assets, vec![raw_id.clone()]);
-    manifest.replay_step(&raw_id).unwrap();
-    let replayed = manifest
-        .steps
-        .iter()
-        .find(|step| step.asset_id == raw_id)
-        .unwrap();
-    assert_eq!(replayed.status, AssetRunStepStatus::Planned);
-    assert!(replayed.materialization_id.is_none());
-
-    let raw = manifest
-        .steps
-        .iter_mut()
-        .find(|step| step.asset_id == raw_id)
-        .unwrap();
-    raw.status = AssetRunStepStatus::Running;
-    let collection = AssetSourceInputs::resume_collection_plan(&manifest);
-    assert!(collection.requested_assets.contains(&raw_id));
-    assert!(collection.force_assets.contains(&raw_id));
 }
 
 #[cfg(unix)]
@@ -458,135 +350,6 @@ printf '%s' '{"rera_registry_monthly":{"snapshot_date":"2026-07","projects":[{"a
         .unwrap()
         .iter()
         .any(|key| key.as_str().ends_with("projects/part-00000.parquet")));
-}
-
-#[tokio::test]
-async fn facts_only_retry_rematerializes_the_exact_reddit_parent() {
-    let temp = tempdir().unwrap();
-    let lake = LakeStore::local(temp.path()).unwrap();
-    let now = Utc::now();
-    let run_partition =
-        AssetPartition::new([("dt", "2026-07-14"), ("subreddit", "BangaloreRealEstates")]);
-    let old_raw = RedditThreadSnapshotMaterializer::new(lake.clone())
-        .materialize_and_promote(
-            "2026-07-14",
-            "BangaloreRealEstates",
-            "old-raw",
-            &[reddit_record("old-thread", "Old evidence", now)],
-            Vec::new(),
-        )
-        .await
-        .unwrap();
-    let raw_id = AssetId::new("reddit_threads_daily").unwrap();
-    let facts_id = AssetId::new("reddit_resident_facts").unwrap();
-    let registry = AssetRegistry::new(vec![
-        AssetDefinition::new(
-            raw_id.clone(),
-            AssetStage::Raw,
-            "Reddit raw retry fixture",
-            Vec::new(),
-            RefreshCadence::Daily,
-            CostTier::Free,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys(&["dt", "subreddit"])),
-        AssetDefinition::new(
-            facts_id.clone(),
-            AssetStage::Silver,
-            "Reddit facts retry fixture",
-            vec![raw_id.clone()],
-            RefreshCadence::OnChange,
-            CostTier::Cheap,
-            TrustTier::Support,
-        )
-        .with_partition_policy(AssetPartitionPolicy::from_run_keys_with_static(
-            &["dt"],
-            &[("source", "reddit")],
-        )),
-    ])
-    .unwrap();
-    let executor = AssetDagExecutor::new(registry, lake.clone());
-    let initial_plan = executor.plan(&run_partition, now).await.unwrap();
-    let collection_plan = AssetSourceInputs::collection_plan(&initial_plan);
-
-    assert_eq!(collection_plan.force_assets, vec![raw_id.clone()]);
-    assert!(collection_plan
-        .requested_assets
-        .iter()
-        .any(|asset_id| asset_id == &raw_id));
-    assert!(collection_plan
-        .requested_assets
-        .iter()
-        .any(|asset_id| asset_id == &facts_id));
-
-    let source_inputs = AssetSourceInputs {
-        reddit_threads_daily: Some(RedditThreadsDailyInput {
-            snapshot_date: "2026-07-14".to_string(),
-            subreddit: "BangaloreRealEstates".to_string(),
-            records: vec![reddit_record("new-thread", "New retry evidence", now)],
-            source_watermarks: Vec::new(),
-        }),
-        reddit_resident_facts: Some(SkillFactsInput {
-            source: "reddit".to_string(),
-            snapshot_date: "2026-07-14".to_string(),
-            facts: vec![SkillFactRecord {
-                entity_id: "society:retry-proof".to_string(),
-                fact_key: "reddit_thread_count".to_string(),
-                value_type: "numeric".to_string(),
-                value_json: r#"{"type":"Numeric","data":1}"#.to_string(),
-                confidence: 0.7,
-                source_type: "Reddit".to_string(),
-                source_url: Some("https://reddit.com/new-thread".to_string()),
-                model: None,
-                skill_id: Some("search_reddit".to_string()),
-                triggered_by: None,
-                learned_at: now,
-                run_id: "retry-facts".to_string(),
-                input_hash: "sha256:retry".to_string(),
-            }],
-            fact_annotations: vec![SkillFactAnnotationRecord {
-                entity_id: "society:retry-proof".to_string(),
-                fact_key: "reddit_thread_count".to_string(),
-                display_template: Some("{value} Reddit discussions found".to_string()),
-                answers_preferences_json: r#"["reddit"]"#.to_string(),
-                scoring_direction: Some("HigherIsBetter".to_string()),
-                scoring_weight: Some(1.0),
-                scoring_thresholds_json: "[]".to_string(),
-            }],
-            source_watermarks: Vec::new(),
-        }),
-        ..AssetSourceInputs::default()
-    };
-    executor
-        .execute(
-            &KnowledgeGraph::new(),
-            AssetDagExecutionOptions::new(run_partition.clone(), now)
-                .with_source_inputs(source_inputs)
-                .with_forced_assets(collection_plan.force_assets),
-        )
-        .await
-        .unwrap();
-
-    let materializations = AssetMaterializationStore::new(lake);
-    let new_raw = materializations
-        .current_record(&raw_id, &run_partition)
-        .await
-        .unwrap();
-    let facts = materializations
-        .current_record(
-            &facts_id,
-            &AssetPartition::new([("dt", "2026-07-14"), ("source", "reddit")]),
-        )
-        .await
-        .unwrap();
-    assert_ne!(
-        new_raw.materialization_id,
-        old_raw.record.materialization_id
-    );
-    assert_eq!(
-        facts.parent_materializations,
-        vec![new_raw.materialization_id]
-    );
 }
 
 #[tokio::test]
@@ -752,26 +515,6 @@ async fn facts_only_retry_rematerializes_the_exact_google_parent() {
         facts.parent_materializations,
         vec![new_raw.materialization_id, canonical.materialization_id]
     );
-}
-
-fn reddit_record(
-    thread_id: &str,
-    title: &str,
-    fetched_at: chrono::DateTime<Utc>,
-) -> RedditThreadSnapshotRecord {
-    RedditThreadSnapshotRecord {
-        thread_id: thread_id.to_string(),
-        subreddit: "BangaloreRealEstates".to_string(),
-        query: "retry proof".to_string(),
-        title: title.to_string(),
-        url: Some(format!("https://reddit.com/{thread_id}")),
-        score: 1,
-        num_comments: 1,
-        created_utc: Some(fetched_at.timestamp()),
-        selftext: Some(title.to_string()),
-        fetched_at,
-        fetch_source: "mock_reddit".to_string(),
-    }
 }
 
 fn google_record(

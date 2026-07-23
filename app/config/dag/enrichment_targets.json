@@ -47,11 +47,9 @@
         "google_nearby_place_facts",
         "google_review_facts",
         "image_media_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "monthly",
-      "reddit_enabled": true
+      "refresh": "monthly"
     },
     {
       "target_id": "water_utilities",
@@ -101,11 +99,9 @@
       ],
       "assets": [
         "google_review_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": true
+      "refresh": "on_change"
     },
     {
       "target_id": "flooding_drainage",
@@ -148,11 +144,9 @@
       ],
       "assets": [
         "google_review_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": true
+      "refresh": "on_change"
     },
     {
       "target_id": "litigation_legal",
@@ -200,11 +194,9 @@
         }
       ],
       "assets": [
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": false
+      "refresh": "on_change"
     },
     {
       "target_id": "home_state",
@@ -245,11 +237,9 @@
         }
       ],
       "assets": [
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": false
+      "refresh": "on_change"
     },
     {
       "target_id": "builder_trust",
@@ -283,11 +273,9 @@
       ],
       "assets": [
         "google_review_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": true
+      "refresh": "on_change"
     },
     {
       "target_id": "metro_commute",
@@ -329,11 +317,9 @@
       ],
       "assets": [
         "google_review_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": true
+      "refresh": "on_change"
     },
     {
       "target_id": "livability_positive",
@@ -381,11 +367,9 @@
       ],
       "assets": [
         "google_review_facts",
-        "reddit_resident_facts",
         "rera_legal_facts"
       ],
-      "refresh": "on_change",
-      "reddit_enabled": true
+      "refresh": "on_change"
     },
     {
       "target_id": "risk.approach_road_waterlogging",
@@ -412,7 +396,6 @@
         }
       ],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -435,7 +418,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -458,7 +440,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -480,7 +461,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -503,7 +483,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -526,7 +505,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -547,7 +525,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -569,7 +546,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -590,7 +566,6 @@
       ],
       "traverse": [],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",
@@ -624,7 +599,6 @@
         }
       ],
       "assets": [
-        "reddit_resident_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",

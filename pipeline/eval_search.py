@@ -182,7 +182,6 @@ PREFERENCE_ALIASES: dict[str, set[str]] = {
     "noise_level": {"quiet"},
     "metro_access": {"commute"},
     "metro_distance": {"commute"},
-    "metro_distance_km": {"commute"},
     "metro_distance_mins": {"commute"},
     "nearby_metro_stations": {"commute"},
     "traffic": {"commute"},

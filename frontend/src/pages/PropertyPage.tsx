@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse, PropertySummaryJobResponse } from "../lib/types.ts";
-import { createPropertySummaryJob, getProperty, getPropertySummaryJob } from "../lib/api.ts";
+import type { BuilderPortfolio, PropertyDetailResponse } from "../lib/types.ts";
+import { getProperty } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
@@ -11,7 +11,6 @@ import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
-import { PropertySummaryCard } from "../components/evidence/PropertySummaryCard.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
@@ -75,15 +74,11 @@ export function PropertyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
-  const [summaryJob, setSummaryJob] = useState<PropertySummaryJobResponse | null>(null);
-  const [summaryStatus, setSummaryStatus] = useState<"idle" | "loading" | "ready" | "error">("idle");
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
 
   useEffect(() => {
     if (!id) return;
     setData(null);
-    setSummaryJob(null);
-    setSummaryStatus("idle");
     setStatus("loading");
 
     getProperty(id)
@@ -95,37 +90,6 @@ export function PropertyPage() {
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
   }, [id]);
-
-  useEffect(() => {
-    if (!id || summaryStatus !== "loading" || !summaryJob) return;
-    if (summaryJob.status === "ready") {
-      setSummaryStatus("ready");
-      return;
-    }
-    if (summaryJob.status === "error") {
-      setSummaryStatus("error");
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeout = window.setTimeout(() => {
-      getPropertySummaryJob(id, summaryJob.jobId, { signal: controller.signal })
-        .then((job) => {
-          setSummaryJob(job);
-          if (job.status === "ready") setSummaryStatus("ready");
-          if (job.status === "error") setSummaryStatus("error");
-        })
-        .catch((error: unknown) => {
-          if (error instanceof DOMException && error.name === "AbortError") return;
-          setSummaryStatus("error");
-        });
-    }, 900);
-
-    return () => {
-      window.clearTimeout(timeout);
-      controller.abort();
-    };
-  }, [id, summaryJob, summaryStatus]);
 
   if (status === "loading") return (
     <div className="page-container-wide">
@@ -202,19 +166,6 @@ export function PropertyPage() {
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
-
-  const handleSummarize = () => {
-    if (!id) return;
-    setSummaryStatus("loading");
-    setSummaryJob(null);
-    createPropertySummaryJob(id)
-      .then((job) => {
-        setSummaryJob(job);
-        if (job.status === "ready") setSummaryStatus("ready");
-        if (job.status === "error") setSummaryStatus("error");
-      })
-      .catch(() => setSummaryStatus("error"));
-  };
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -315,12 +266,6 @@ export function PropertyPage() {
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
           )}
-
-          <PropertySummaryCard
-            summaryJob={summaryJob}
-            status={summaryStatus}
-            onSummarize={handleSummarize}
-          />
 
           {showLivabilityBrief && data.livability_brief && (
             <LivabilityBriefCard brief={data.livability_brief} />

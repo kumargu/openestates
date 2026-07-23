@@ -198,12 +198,6 @@ if [[ -n "$FIRST_ID" ]]; then
     '.evidence.property_id == .property.id and (.evidence.sections | type == "array" and length > 0)' \
     "expected property detail to expose evidence.sections for one-call UI rendering"
 
-  check_post "POST /api/properties/:id/summary-jobs creates summary job" \
-    "${BASE}/api/properties/${FIRST_ID}/summary-jobs" \
-    '{}' \
-    '.jobId != null and .propertyId != null and (.status == "pending" or .status == "ready" or .status == "error") and .bundleVersion != null and .model != null and (.evidenceRefs | type == "array")' \
-    "expected jobId, status, bundleVersion, model, and evidenceRefs"
-
   check "Property evidence sections have render fields" \
     "${BASE}/api/properties/${FIRST_ID}/evidence" \
     '.sections | all(has("kind", "title", "summary", "priority", "confidence_pct", "source_types", "entity_ids", "items", "missing"))' \

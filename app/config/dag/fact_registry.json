@@ -3,9 +3,7 @@
   "_comment": "LEAF SEARCH SEMANTICS \u2014 answers_preferences, scoring_hint, display_template per fact_key. Merged from concern_taxonomy + fact_schema_registry.",
   "description": "Canonical leaf registry: search semantics + enrichment metadata per fact_key.",
   "merged_from": [
-    "app/config/dag/concern_taxonomy.json",
-    "data/search/fact_schema_registry.json",
-    "data/product/livability_theme_registry.json"
+    "app/config/dag/concern_taxonomy.json"
   ],
   "defaults": {
     "source_types": [
@@ -867,11 +865,8 @@
         "10 minute drive"
       ],
       "fact_keys": [
-        "metro_distance_km",
-        "nearest_operational_metro_station",
         "metro_distance_mins",
         "metro_distance",
-        "metro_status",
         "metro_details",
         "metro_access"
       ],
@@ -1024,8 +1019,7 @@
       "fact_keys": [
         "area_development_signal",
         "infrastructure_status",
-        "nearby_development",
-        "metro_status"
+        "nearby_development"
       ],
       "source_priority": [
         "area_plan",
@@ -1425,8 +1419,6 @@
         ],
         "label": "greenery",
         "expanded_keys": [
-          "community_positive_themes",
-          "community_review_summary",
           "google_review_snippets",
           "greenery_score",
           "open_space_score",
@@ -1446,11 +1438,8 @@
         ],
         "label": "metro access",
         "expanded_keys": [
-          "metro_distance_km",
-          "nearest_operational_metro_station",
           "metro_distance_mins",
           "metro_distance",
-          "metro_status",
           "metro_details",
           "nearby_metro_stations",
           "metro_access"
@@ -1469,8 +1458,6 @@
         ],
         "label": "amenity quality",
         "expanded_keys": [
-          "community_positive_themes",
-          "community_review_summary",
           "google_review_snippets",
           "amenity_quality",
           "clubhouse_quality",
@@ -1538,8 +1525,7 @@
         "expanded_keys": [
           "area_development_signal",
           "infrastructure_status",
-          "nearby_development",
-          "metro_status"
+          "nearby_development"
         ],
         "weight": 0.7
       },
@@ -1661,9 +1647,6 @@
         ],
         "label": "review quality",
         "expanded_keys": [
-          "community_positive_themes",
-          "community_review_summary",
-          "community_review_highlights",
           "google_review_snippets",
           "google_rating",
           "google_review_count",
@@ -1709,8 +1692,7 @@
           "home_state",
           "home_age_bucket",
           "possession_status",
-          "project_status",
-          "market_project_status"
+          "project_status"
         ],
         "weight": 1.2
       },
@@ -1763,8 +1745,7 @@
         "expanded_keys": [
           "home_state",
           "home_timeline_state",
-          "project_status",
-          "market_project_status"
+          "project_status"
         ],
         "weight": 1.0
       },
@@ -1973,8 +1954,6 @@
         ],
         "label": "good society",
         "expanded_keys": [
-          "community_positive_themes",
-          "community_review_summary",
           "google_review_snippets",
           "society_quality_score",
           "maintenance_quality",
@@ -2051,8 +2030,7 @@
           "home_state",
           "home_age_bucket",
           "possession_status",
-          "project_status",
-          "market_project_status"
+          "project_status"
         ],
         "weight": 1.2
       },
@@ -2693,11 +2671,8 @@
         "metro"
       ],
       "fact_keys": [
-        "metro_distance_km",
-        "nearest_operational_metro_station",
         "metro_distance_mins",
         "metro_distance",
-        "metro_status",
         "metro_details",
         "nearby_metro_stations",
         "metro_access"
@@ -2769,7 +2744,6 @@
         "area_development_signal",
         "infrastructure_status",
         "nearby_development",
-        "metro_status",
         "sentiment_summary",
         "reddit_threads"
       ],
@@ -2803,8 +2777,7 @@
       "fact_keys": [
         "home_state",
         "possession_status",
-        "project_status",
-        "market_project_status"
+        "project_status"
       ],
       "positive_terms": [
         "delivered",
@@ -2884,8 +2857,7 @@
       ],
       "fact_keys": [
         "home_state",
-        "project_status",
-        "market_project_status"
+        "project_status"
       ],
       "positive_terms": [
         "under_construction",
@@ -3292,8 +3264,7 @@
       ],
       "fact_keys": [
         "price_per_sqft",
-        "rera_cost_per_unit",
-        "market_starting_price_inr"
+        "rera_cost_per_unit"
       ],
       "direction": "HigherIsBetter",
       "thresholds": [

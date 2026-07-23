@@ -8,9 +8,7 @@
 //! files. JSON is reserved for small control-plane files such as manifests,
 //! schema descriptors, trust policy, and current pointers.
 
-pub mod approach_road_graph;
 pub mod canonical_nodes;
-pub mod community;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
@@ -30,18 +28,7 @@ pub mod source_inputs;
 pub mod source_provider;
 pub mod types;
 
-pub use approach_road_graph::{
-    approach_road_graph_facts_input, read_canonical_road_rows, road_graph_rows_from_visuals,
-    ApproachRoadGraphError, CanonicalRoadNodesMaterializer, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-    CANONICAL_ROAD_NODES_ASSET_ID,
-};
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
-pub use community::{
-    community_review_summary_facts_from_records,
-    community_review_summary_facts_from_records_with_summarizer,
-    community_review_summary_facts_input, CommunitySummaryAssetError,
-    COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
-};
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
     AssetRetryPolicy,
@@ -81,13 +68,9 @@ pub use planner::{
 };
 pub use project_enrichment::{
     builder_rera_aggregate_facts_input, external_listing_facts_input_with_aliases,
-    market_project_facts_input_with_aliases, metro_proximity_facts_input,
-    ExternalListingObservationRecord, ExternalListingsWeeklyInput, MetroStationObservationRecord,
-    MetroStationsMonthlyInput, ObservationSnapshotManifest, PrestigeInventoryObservationRecord,
-    PrestigeInventoryWeeklyInput, ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID,
-    METRO_STATIONS_MONTHLY_ASSET_ID, PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, ObservationSnapshotManifest,
+    ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,

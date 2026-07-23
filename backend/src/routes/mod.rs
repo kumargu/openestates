@@ -5,7 +5,6 @@ pub mod discovery;
 pub mod enrichment;
 pub mod interests;
 pub mod properties;
-pub mod property_summary;
 pub mod registration;
 pub mod search;
 pub mod sellers;

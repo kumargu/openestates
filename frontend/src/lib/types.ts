@@ -374,30 +374,6 @@ export type LivabilityBrief = {
   source_urls: string[];
 };
 
-export type PropertySummaryJobStatus = "pending" | "ready" | "error";
-
-export type PropertySummaryEvidenceRef = {
-  entityId: string;
-  label: string;
-  sourceType: string;
-  sourceUrl?: string | null;
-  learnedAt: string;
-  confidence: number;
-};
-
-export type PropertySummaryJobResponse = {
-  jobId: string;
-  propertyId: string;
-  status: PropertySummaryJobStatus;
-  summaryStyle: string;
-  summaryParagraph?: string | null;
-  evidenceRefs: PropertySummaryEvidenceRef[];
-  model: string;
-  bundleVersion: string;
-  generatedAt?: string | null;
-  errorMessage?: string | null;
-};
-
 export type CommunityPulseQuote = {
   text: string;
   source_type: string;

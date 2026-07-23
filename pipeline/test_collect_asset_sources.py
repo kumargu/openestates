@@ -56,6 +56,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
             project_name="Prestige Raintree Park",
             promoter_name="Prestige Group",
         )
+        other_listing = SimpleNamespace(
+            ack_number="ACK-2",
+            registration_number="PRM-OTHER",
+            project_name="Other Project",
+            promoter_name="Other Builder",
+        )
         result = SkillResult(
             facts=[
                 SourcedFact(
@@ -78,11 +84,13 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         output = collect_rera_registry(
             request,
-            rera_fetch=lambda: ([listing], "2026-07-10T08:00:00Z"),
+            rera_fetch=lambda: ([listing, other_listing], "2026-07-10T08:00:00Z"),
             detail_skill=skill,
         )
 
         skill.run.assert_called_once()
+        self.assertEqual(len(output["projects"]), 1)
+        self.assertEqual(output["projects"][0]["registration_number"], "PRM-RAINTREE")
         detail_facts = output["detail_facts"]
         rera_facts = [
             fact for fact in detail_facts if fact["source_type"] == "Rera"
@@ -198,7 +206,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
             with self.assertRaisesRegex(RedditSourceBlocked, "HTTP 403"):
                 fetch_reddit_threads("Prestige Raintree Park", "bangalore")
 
-    def test_reddit_collection_rejects_missing_entity_scope(self):
+    def test_reddit_collection_is_not_supported_by_active_collector(self):
         request = {
             "partition": {
                 "parts": [
@@ -210,115 +218,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "requested_assets": ["reddit_threads_daily"],
         }
 
-        output = collect_asset_sources(request)
-
-        self.assertNotIn("reddit_threads_daily", output)
-        self.assertIn(
-            "requires scoped source_entities",
-            output["source_failures"]["reddit_threads_daily"],
-        )
-
-    def test_blocked_reddit_does_not_abort_independent_sources(self):
-        request = {
-            "partition": {
-                "parts": [
-                    ["dt", "2026-07-14"],
-                    ["subreddit", "BangaloreRealEstates"],
-                ]
-            },
-            "planned_at": "2026-07-14T09:30:00Z",
-            "requested_assets": [
-                "rera_registry_monthly",
-                "reddit_threads_daily",
-                "reddit_resident_facts",
-                "google_places_weekly",
-            ],
-            "source_entities": [
-                {
-                    "entity_id": "society:prestige-raintree-park",
-                    "name": "Prestige Raintree Park",
-                    "area": "Whitefield",
-                    "city": "Bengaluru",
-                }
-            ],
-        }
-
-        def blocked_reddit(_request, society_inputs):
-            self.assertEqual(len(society_inputs), 1)
-            raise RedditSourceBlocked("HTTP 403")
-
-        rera_entry = SimpleNamespace(
-            ack_number="ACK-1",
-            registration_number="PRM-1",
-            project_name="Prestige Raintree Park",
-            promoter_name="Prestige Group",
-        )
-        google_input = {
-            "snapshot_date": "2026-07-14",
-            "records": [],
-            "source_watermarks": [],
-        }
-        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "0"}):
-            with patch(
-                "pipeline.collect_asset_sources.collect_google_places",
-                return_value=google_input,
-            ):
-                output = collect_asset_sources(
-                    request,
-                    rera_fetch=lambda: ([rera_entry], "2026-07-14T09:30:00Z"),
-                    reddit_collect=blocked_reddit,
-                )
-
-        self.assertIn("rera_registry_monthly", output)
-        self.assertEqual(output["google_places_weekly"], google_input)
-        self.assertNotIn("reddit_threads_daily", output)
-        self.assertNotIn("reddit_resident_facts", output)
-        self.assertIn("HTTP 403", output["source_failures"]["reddit_threads_daily"])
-        self.assertIn("HTTP 403", output["source_failures"]["reddit_resident_facts"])
-
-    def test_reddit_skip_mode_emits_empty_source_inputs(self):
-        request = {
-            "partition": {
-                "parts": [
-                    ["dt", "2026-07-15"],
-                    ["subreddit", "BangaloreRealEstates"],
-                ]
-            },
-            "planned_at": "2026-07-15T09:30:00Z",
-            "requested_assets": ["reddit_threads_daily", "reddit_resident_facts"],
-            "source_entities": [
-                {
-                    "entity_id": "society:prestige-park-grove",
-                    "name": "Prestige Park Grove",
-                    "city": "Bengaluru",
-                }
-            ],
-        }
-
-        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "1"}):
-            output = collect_asset_sources(request)
-
-        self.assertEqual(output["reddit_threads_daily"]["records"], [])
-        self.assertEqual(output["reddit_threads_daily"]["subreddit"], "BangaloreRealEstates")
-        poc_facts = output["reddit_resident_facts"]["facts"]
-        self.assertGreaterEqual(len(poc_facts), 10)
-        self.assertEqual(poc_facts[0]["source_type"], "RedditTheme")
-        self.assertEqual(
-            json.loads(poc_facts[0]["value_json"])["data"],
-            "mentioned",
-        )
-        self.assertNotIn("source_failures", output)
-
-    def test_generated_context_summaries_are_no_longer_collected_by_dag(self):
-        request = {
-            "partition": {"parts": [["dt", "2026-07-20"]]},
-            "planned_at": "2026-07-20T00:00:00Z",
-            "requested_assets": ["generated_context_summaries"],
-        }
-        with self.assertRaises(ValueError) as error:
-            output = collect_asset_sources(request)
-
-        self.assertIn("unsupported source assets: generated_context_summaries", str(error.exception))
+        with self.assertRaisesRegex(ValueError, "unsupported source assets"):
+            collect_asset_sources(request)
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -997,14 +898,11 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "partition": {
                 "parts": [
                     ["dt", "2026-07-14"],
-                    ["subreddit", "BangaloreRealEstates"],
                 ]
             },
             "planned_at": "2026-07-14T09:30:00Z",
             "requested_assets": [
                 "rera_registry_monthly",
-                "reddit_threads_daily",
-                "reddit_resident_facts",
             ],
         }
         rera_rows = [
@@ -1021,37 +919,10 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 promoter_name="Incomplete Builder",
             ),
         ]
-        reddit_threads = [
-            {
-                "id": "abc123",
-                "subreddit": "BangaloreRealEstates",
-                "title": "Example Green resident review",
-                "url": "https://www.reddit.com/r/BangaloreRealEstates/comments/abc123/example/",
-                "score": 12,
-                "num_comments": 4,
-                "created_utc": 1784021000,
-                "selftext": "Quiet and green.",
-            }
-        ]
-        reddit_collect = lambda reddit_request, society_inputs=None: collect_reddit_assets(
-            reddit_request,
-            society_inputs=society_inputs
-            or {
-                "example-green": {
-                    "query": "Example Green Whitefield",
-                    "subreddit": "BangaloreRealEstates",
-                }
-            },
-            thread_fetch=lambda _query, _subreddit: reddit_threads,
-            result_builder=threads_to_skill_result,
+        output = collect_asset_sources(
+            request,
+            rera_fetch=lambda: (rera_rows, "2026-07-10T08:00:00Z"),
         )
-
-        with patch.dict("os.environ", {"OPENESTATES_SKIP_REDDIT": "0"}):
-            output = collect_asset_sources(
-                request,
-                rera_fetch=lambda: (rera_rows, "2026-07-10T08:00:00Z"),
-                reddit_collect=reddit_collect,
-            )
 
         project = output["rera_registry_monthly"]["projects"][0]
         self.assertEqual(len(output["rera_registry_monthly"]["projects"]), 1)
@@ -1059,17 +930,6 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertIsNone(project["total_land_area_sqm"])
         self.assertEqual(project["fetched_at"], "2026-07-10T08:00:00Z")
         self.assertEqual(output["rera_registry_monthly"]["snapshot_date"], "2026-07")
-
-        reddit = output["reddit_threads_daily"]
-        self.assertEqual(reddit["snapshot_date"], "2026-07-14")
-        self.assertEqual(reddit["subreddit"], "BangaloreRealEstates")
-        self.assertEqual(reddit["records"][0]["thread_id"], "abc123")
-        self.assertEqual(reddit["records"][0]["fetch_source"], "reddit_public_json_search")
-        self.assertEqual(output["reddit_resident_facts"]["source"], "reddit")
-        self.assertEqual(
-            output["reddit_resident_facts"]["facts"][0]["source_url"],
-            reddit["records"][0]["url"],
-        )
 
     def test_rejects_unknown_assets(self):
         request = {

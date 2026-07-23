@@ -54,14 +54,6 @@ async fn main() {
             "/api/properties/evidence/batch",
             post(routes::properties::get_property_evidence_batch),
         )
-        .route(
-            "/api/properties/{id}/summary-jobs",
-            post(routes::property_summary::create_summary_job),
-        )
-        .route(
-            "/api/properties/{id}/summary-jobs/{job_id}",
-            get(routes::property_summary::get_summary_job),
-        )
         .route("/api/areas", get(routes::areas::list_areas))
         .route("/api/areas/tracker", get(routes::areas::area_tracker))
         .route("/api/areas/{id}", get(routes::areas::get_area))

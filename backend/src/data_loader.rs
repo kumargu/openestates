@@ -105,7 +105,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
-        property_summary_jobs: RwLock::new(Default::default()),
         areas,
         societies,
         sellers: RwLock::new(sellers),
@@ -286,8 +285,9 @@ fn log_serving_load_error(err: ServingBundleLoadError) {
 }
 
 pub fn properties_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Property> {
-    properties_from_serving_records(
+    properties_from_serving_records_with_edges(
         &bundle.entities,
+        &bundle.edges,
         &bundle.fact_index,
         &bundle.manifest.bundle_version,
     )
@@ -298,14 +298,27 @@ pub fn properties_from_serving_records(
     fact_index: &ServingFactIndex,
     bundle_version: &str,
 ) -> Vec<Property> {
+    properties_from_serving_records_with_edges(entities, &[], fact_index, bundle_version)
+}
+
+fn properties_from_serving_records_with_edges(
+    entities: &[ServingEntityRecord],
+    edges: &[crate::serving::ServingEdgeRecord],
+    fact_index: &ServingFactIndex,
+    bundle_version: &str,
+) -> Vec<Property> {
+    let area_lookup = ServingAreaLookup::new(entities, edges);
     let mut properties = entities
         .iter()
         .filter(|entity| entity.entity_type == "property")
-        .map(|entity| property_from_serving_entity(entity, fact_index, bundle_version))
+        .map(|entity| {
+            property_from_serving_entity(entity, fact_index, &area_lookup, bundle_version)
+        })
         .collect::<Vec<_>>();
     properties.extend(representative_properties_from_serving_societies(
         entities,
         fact_index,
+        &area_lookup,
         bundle_version,
     ));
     properties.retain(|property| property.is_listable());
@@ -317,6 +330,7 @@ pub fn properties_from_serving_records(
 fn representative_properties_from_serving_societies(
     entities: &[ServingEntityRecord],
     fact_index: &ServingFactIndex,
+    area_lookup: &ServingAreaLookup,
     bundle_version: &str,
 ) -> Vec<Property> {
     let entities_by_id = entities
@@ -338,6 +352,7 @@ fn representative_properties_from_serving_societies(
                         entity_id,
                         entity,
                         rows,
+                        area_lookup,
                         bhk,
                         bundle_version,
                     )
@@ -349,8 +364,6 @@ fn representative_properties_from_serving_societies(
 
 fn has_representative_property_signal(rows: &ServingEntityFactRows) -> bool {
     latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
-        || latest_numeric(Some(rows), "market_starting_price_inr")
-            .is_some_and(|price| price.is_finite() && price > 0.0)
         || rows
             .facts
             .iter()
@@ -361,6 +374,7 @@ fn representative_property_from_serving_society(
     entity_id: &str,
     entity: Option<&ServingEntityRecord>,
     rows: &ServingEntityFactRows,
+    area_lookup: &ServingAreaLookup,
     bhk: u32,
     bundle_version: &str,
 ) -> Property {
@@ -371,18 +385,12 @@ fn representative_property_from_serving_society(
     let society_id = society_runtime_id_from_parts(entity_id, &society_name);
     let society_slug = society_id.strip_prefix("soc-").unwrap_or(&society_id);
     let id = format!("discovered-{society_slug}-{bhk}bhk");
-    let area = latest_text(Some(rows), "area").unwrap_or_default();
+    let area = resolve_serving_society_area(Some(rows), area_lookup, entity_id);
     let area_slug = slug(&area);
     let pricing = serving_market_pricing(rows, bhk);
-    let mut price = pricing
+    let price = pricing
         .map(|pricing| pricing.representative_price())
         .unwrap_or(0);
-    if price == 0 {
-        price = latest_numeric(Some(rows), "market_starting_price_inr")
-            .unwrap_or(0.0)
-            .round()
-            .max(0.0) as u64;
-    }
     let carpet_area_sqft = pricing
         .map(|pricing| pricing.representative_sqft())
         .unwrap_or(0);
@@ -427,8 +435,7 @@ fn representative_property_from_serving_society(
         floor: 0,
         total_floors: 0,
         facing: "Not specified".to_string(),
-        possession_status: latest_text(Some(rows), "market_project_status")
-            .or_else(|| latest_text(Some(rows), "rera_status"))
+        possession_status: latest_text(Some(rows), "rera_status")
             .unwrap_or_else(|| "unknown".to_string()),
         metro_distance_mins: latest_numeric(Some(rows), "metro_distance_mins")
             .unwrap_or(0.0)
@@ -510,18 +517,22 @@ fn resolve_serving_property_bhk(
 fn resolve_serving_property_area(
     rows: Option<&ServingEntityFactRows>,
     fact_index: &ServingFactIndex,
+    area_lookup: &ServingAreaLookup,
     society_id: &str,
 ) -> String {
     let area = latest_text(rows, "area").unwrap_or_default();
     if !area.trim().is_empty() {
         return area;
     }
-    serving_society_text(fact_index, society_id, "area").unwrap_or_default()
+    let society_entity_id = society_entity_id(society_id);
+    let society_rows = fact_index.entity(&society_entity_id);
+    resolve_serving_society_area(society_rows, area_lookup, &society_entity_id)
 }
 
 fn property_from_serving_entity(
     entity: &ServingEntityRecord,
     fact_index: &ServingFactIndex,
+    area_lookup: &ServingAreaLookup,
     bundle_version: &str,
 ) -> Property {
     let rows = fact_index.entity(&entity.entity_id);
@@ -530,7 +541,7 @@ fn property_from_serving_entity(
     let title = latest_text(rows, "title")
         .filter(|value| !value.trim().is_empty())
         .unwrap_or_else(|| entity.name.clone());
-    let area = resolve_serving_property_area(rows, fact_index, &society_id);
+    let area = resolve_serving_property_area(rows, fact_index, area_lookup, &society_id);
     let area_slug = slug(&area);
     let bhk = resolve_serving_property_bhk(&id, rows, &title);
     let mut price = latest_numeric(rows, "price")
@@ -587,7 +598,7 @@ fn property_from_serving_entity(
         transparency_tags.push("Lake indexed".to_string());
     }
     let possession_status = latest_text(rows, "possession_status")
-        .or_else(|| serving_society_text(fact_index, &society_id, "market_project_status"))
+        .or_else(|| serving_society_text(fact_index, &society_id, "rera_status"))
         .unwrap_or_else(|| "unknown".to_string());
 
     Property {
@@ -660,7 +671,7 @@ pub fn societies_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Societ
         .entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
-        .map(|entity| society_from_serving_entity(entity, &bundle.fact_index))
+        .map(|entity| society_from_serving_entity(entity, &bundle.fact_index, &bundle.edges))
         .collect::<Vec<_>>();
     societies.sort_by(|left, right| left.id.cmp(&right.id));
     societies.dedup_by(|left, right| left.id == right.id);
@@ -670,14 +681,16 @@ pub fn societies_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Societ
 fn society_from_serving_entity(
     entity: &ServingEntityRecord,
     fact_index: &ServingFactIndex,
+    edges: &[crate::serving::ServingEdgeRecord],
 ) -> Society {
     let rows = fact_index.entity(&entity.entity_id);
     let id = society_runtime_id(entity);
     let google_place_id = latest_text(rows, "google_place_id");
+    let area_lookup = ServingAreaLookup::new(std::slice::from_ref(entity), edges);
     Society {
         id,
         name: entity.name.clone(),
-        area: latest_text(rows, "area").unwrap_or_default(),
+        area: resolve_serving_society_area(rows, &area_lookup, &entity.entity_id),
         city: latest_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
         builder_name: latest_text(rows, "builder_name")
             .or_else(|| latest_text(rows, "rera_promoter_name"))
@@ -692,24 +705,14 @@ fn society_from_serving_entity(
             .unwrap_or(0.0)
             .round()
             .max(0.0) as u32,
-        summary: latest_text(rows, "summary")
-            .or_else(|| latest_text(rows, "community_review_summary"))
-            .unwrap_or_default(),
+        summary: latest_text(rows, "summary").unwrap_or_default(),
         maintenance_sentiment: latest_text(rows, "maintenance_sentiment")
-            .or_else(|| latest_text(rows, "community_review_summary"))
             .or_else(|| latest_text(rows, "google_sentiment"))
             .unwrap_or_default(),
-        livability_sentiment: latest_text(rows, "livability_sentiment")
-            .or_else(|| latest_text(rows, "community_review_summary"))
-            .unwrap_or_default(),
-        common_positives: latest_tags(rows, "community_positive_themes")
-            .or_else(|| latest_tags(rows, "google_top_positives"))
-            .unwrap_or_default(),
-        common_complaints: latest_tags(rows, "community_concern_themes")
-            .or_else(|| latest_tags(rows, "google_top_negatives"))
-            .unwrap_or_default(),
-        review_summary: latest_text(rows, "community_review_summary")
-            .or_else(|| latest_text(rows, "google_sentiment"))
+        livability_sentiment: latest_text(rows, "livability_sentiment").unwrap_or_default(),
+        common_positives: latest_tags(rows, "google_top_positives").unwrap_or_default(),
+        common_complaints: latest_tags(rows, "google_top_negatives").unwrap_or_default(),
+        review_summary: latest_text(rows, "google_sentiment")
             .or_else(|| latest_text(rows, "google_common_themes"))
             .unwrap_or_default(),
         google_reviews_url: latest_text(rows, "google_reviews_url"),
@@ -717,6 +720,56 @@ fn society_from_serving_entity(
         future_google_place_id: google_place_id,
         future_review_enrichment_status: "serving_bundle".to_string(),
     }
+}
+
+#[derive(Debug, Clone, Default)]
+struct ServingAreaLookup {
+    area_name_by_id: BTreeMap<String, String>,
+    area_id_by_society: BTreeMap<String, String>,
+}
+
+impl ServingAreaLookup {
+    fn new(entities: &[ServingEntityRecord], edges: &[crate::serving::ServingEdgeRecord]) -> Self {
+        let area_name_by_id = entities
+            .iter()
+            .filter(|entity| entity.entity_type == "area")
+            .map(|entity| (entity.entity_id.clone(), entity.name.clone()))
+            .collect::<BTreeMap<_, _>>();
+        let area_id_by_society = edges
+            .iter()
+            .filter(|edge| edge.edge_type == "in_area")
+            .filter(|edge| {
+                edge.from_entity_id.starts_with("society:")
+                    && edge.to_entity_id.starts_with("area:")
+            })
+            .map(|edge| (edge.from_entity_id.clone(), edge.to_entity_id.clone()))
+            .collect::<BTreeMap<_, _>>();
+        Self {
+            area_name_by_id,
+            area_id_by_society,
+        }
+    }
+
+    fn society_area(&self, society_entity_id: &str) -> Option<String> {
+        let area_id = self.area_id_by_society.get(society_entity_id)?;
+        self.area_name_by_id.get(area_id).cloned().or_else(|| {
+            area_id
+                .strip_prefix("area:")
+                .map(title_case_slug)
+                .filter(|value| !value.trim().is_empty())
+        })
+    }
+}
+
+fn resolve_serving_society_area(
+    rows: Option<&ServingEntityFactRows>,
+    area_lookup: &ServingAreaLookup,
+    society_entity_id: &str,
+) -> String {
+    latest_text(rows, "area")
+        .or_else(|| latest_text(rows, "listing_locality"))
+        .or_else(|| area_lookup.society_area(society_entity_id))
+        .unwrap_or_default()
 }
 
 fn areas_from_serving_properties(properties: &[Property]) -> Vec<AreaProfile> {
@@ -818,11 +871,6 @@ fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
         if let Some(bhk) = bhk_from_serving_fact_key(&fact.fact_key) {
             bhks.insert(bhk);
         }
-        if fact.fact_key == "market_bhk_options" {
-            for bhk in bhks_from_text(&fact_to_text(&fact.value)) {
-                bhks.insert(bhk);
-            }
-        }
     }
     if bhks.is_empty() {
         bhks.insert(3);
@@ -839,14 +887,6 @@ fn bhk_from_serving_fact_key(fact_key: &str) -> Option<u32> {
         .parse::<u32>()
         .ok()
         .filter(|value| (1..=6).contains(value))
-}
-
-fn bhks_from_text(value: &str) -> Vec<u32> {
-    value
-        .split(|character: char| !character.is_ascii_digit())
-        .filter_map(|part| part.parse::<u32>().ok())
-        .filter(|value| (1..=6).contains(value))
-        .collect()
 }
 
 fn fact_to_text(value: &FactValue) -> String {
@@ -1117,7 +1157,6 @@ fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
                 trend_summary: fact_text(node, "trend_summary").into(),
                 metro_access_summary: fact_text(node, "metro_details")
                     .or_fact_text(node, "metro_access")
-                    .or_fact_text(node, "metro_status")
                     .into(),
                 airport_noise_summary: fact_text(node, "airport_noise_summary").into(),
                 traffic_summary: fact_text(node, "traffic")
@@ -1692,13 +1731,13 @@ mod tests {
                 ),
                 serving_fact(
                     "society:prestige-lavender-fields",
-                    "market_project_status",
-                    FactValue::Text("Sold Out".to_string()),
+                    "rera_status",
+                    FactValue::Text("Completed".to_string()),
                     0.95,
                 ),
                 serving_fact(
                     "society:rera-a19f2cf2456fc549",
-                    "community_review_summary",
+                    "google_sentiment",
                     FactValue::Text("Google signal is mixed-positive.".to_string()),
                     0.85,
                 ),
@@ -1714,12 +1753,63 @@ mod tests {
         assert_eq!(property.area, "Varthur");
         assert_eq!(property.price, 30_000_000);
         assert_eq!(property.carpet_area_sqft, 2_000);
-        assert_eq!(property.possession_status, "Sold Out");
+        assert_eq!(property.possession_status, "Completed");
         assert_eq!(property.source_reference, "search_serving_bundle:bundle-v1");
 
-        let society = society_from_serving_entity(&entities[1], &fact_index);
+        let society = society_from_serving_entity(&entities[1], &fact_index, &[]);
         assert_eq!(society.id, "soc-prestige-lavender-fields");
         assert_eq!(society.review_summary, "Google signal is mixed-positive.");
+    }
+
+    #[test]
+    fn representative_property_uses_serving_area_edge_when_area_fact_is_missing() {
+        let entities = vec![
+            ServingEntityRecord {
+                entity_id: "society:godrej-splendour".to_string(),
+                entity_type: "society".to_string(),
+                name: "Godrej Splendour".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+            ServingEntityRecord {
+                entity_id: "area:whitefield".to_string(),
+                entity_type: "area".to_string(),
+                name: "Whitefield".to_string(),
+                root_source: Some("rera".to_string()),
+                searchable_text: String::new(),
+            },
+        ];
+        let edges = vec![crate::serving::ServingEdgeRecord {
+            from_entity_id: "society:godrej-splendour".to_string(),
+            edge_type: "in_area".to_string(),
+            to_entity_id: "area:whitefield".to_string(),
+            confidence: 1.0,
+            source_type: "Rera".to_string(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:godrej-splendour",
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(16_200_000.0, 1_261.0)),
+                    0.8,
+                ),
+                serving_fact(
+                    "society:godrej-splendour",
+                    "rera_registered",
+                    FactValue::Bool(true),
+                    1.0,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties =
+            properties_from_serving_records_with_edges(&entities, &edges, &fact_index, "bundle-v1");
+
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].area, "Whitefield");
+        assert_eq!(properties[0].area_id, "area-whitefield");
     }
 
     #[test]
@@ -1763,7 +1853,40 @@ mod tests {
     }
 
     #[test]
-    fn serving_society_market_price_creates_representative_property_without_source_scan() {
+    fn representative_property_uses_listing_locality_when_area_edge_is_missing() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:godrej-splendour".to_string(),
+            entity_type: "society".to_string(),
+            name: "Godrej Splendour".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:godrej-splendour",
+                    "listing_3bhk",
+                    FactValue::Text("3 BHK listing: INR 1.62 Cr for 1261 sq ft".to_string()),
+                    0.8,
+                ),
+                serving_fact(
+                    "society:godrej-splendour",
+                    "listing_locality",
+                    FactValue::Text("Whitefield".to_string()),
+                    0.8,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-locality");
+
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].area, "Whitefield");
+    }
+
+    #[test]
+    fn serving_society_listing_creates_representative_property_without_source_scan() {
         let entities = vec![ServingEntityRecord {
             entity_id: "society:prestige-elm-park".to_string(),
             entity_type: "society".to_string(),
@@ -1781,13 +1904,13 @@ mod tests {
                 ),
                 serving_fact(
                     "society:prestige-elm-park",
-                    "market_starting_price_inr",
-                    FactValue::Numeric(12_500_000.0),
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
                     0.95,
                 ),
                 serving_fact(
                     "society:prestige-elm-park",
-                    "market_project_status",
+                    "rera_status",
                     FactValue::Text("New Launch".to_string()),
                     0.95,
                 ),
@@ -1835,8 +1958,8 @@ mod tests {
                 ),
                 serving_fact(
                     "society:prestige-elm-park",
-                    "market_starting_price_inr",
-                    FactValue::Numeric(12_500_000.0),
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
                     0.95,
                 ),
             ],
@@ -1876,14 +1999,14 @@ mod tests {
             vec![
                 serving_fact(
                     "society:prestige-elm-park",
-                    "market_starting_price_inr",
-                    FactValue::Numeric(12_500_000.0),
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
                     0.95,
                 ),
                 serving_fact(
                     "society:rera-elm-park-alias",
-                    "market_starting_price_inr",
-                    FactValue::Numeric(12_500_000.0),
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
                     0.95,
                 ),
             ],
@@ -1945,7 +2068,7 @@ mod tests {
         let mut node = Node::new(&id, NodeType::Area, name);
         node.add_facts(vec![
             SourcedFact::manual("city", FactValue::Text("Bengaluru".into())),
-            SourcedFact::manual("metro_status", FactValue::Text("operational".into())),
+            SourcedFact::manual("metro_access", FactValue::Text("operational".into())),
             SourcedFact::manual("area_vibe", FactValue::Text("Tech hub".into())),
         ]);
         node
@@ -1985,7 +2108,7 @@ mod tests {
         assert_eq!(a.id, "whitefield");
         assert_eq!(a.name, "Whitefield");
         assert_eq!(a.city, "Bengaluru");
-        // metro_access_summary falls back to metro_status
+        // metro_access_summary falls back to metro_access
         assert_eq!(a.metro_access_summary, "operational");
         // livability_summary falls back to area_vibe
         assert_eq!(a.livability_summary, "Tech hub");
@@ -2233,6 +2356,18 @@ mod tests {
             .or_fact_text(&node, "google_sentiment")
             .into();
         assert_eq!(result, "positive");
+    }
+
+    fn listing_payload(price: f64, sqft: f64) -> String {
+        serde_json::json!({
+            "price": price,
+            "price_min": price,
+            "price_max": price,
+            "area_sqft": sqft,
+            "area_sqft_min": sqft,
+            "area_sqft_max": sqft
+        })
+        .to_string()
     }
 
     fn serving_fact(

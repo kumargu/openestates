@@ -382,43 +382,6 @@ export function getFixtureResponse(path: string): unknown | null {
     return card ? makeDetail(card) : null;
   }
 
-  const summaryJobMatch = pathname.match(/^\/api\/properties\/([^/]+)\/summary-jobs(?:\/([^/]+))?$/);
-  if (summaryJobMatch) {
-    const id = decodeURIComponent(summaryJobMatch[1]);
-    const card = fixtureProperties.find((property) => property.id === id);
-    if (!card) return null;
-    return {
-      jobId: summaryJobMatch[2] ? decodeURIComponent(summaryJobMatch[2]) : "fixture-summary-job",
-      propertyId: id,
-      status: "ready",
-      summaryStyle: "buyer_brief",
-      summaryParagraph:
-        `${card.title} is backed by fixture RERA and review evidence. Nearby and market facts are limited in fixture mode, so treat this as a concise proof read rather than a full area judgment.`,
-      evidenceRefs: [
-        {
-          entityId: "society:prestige-lakeside-habitat",
-          label: "RERA rooted",
-          sourceType: "Rera",
-          sourceUrl: null,
-          learnedAt: now,
-          confidence: 0.9,
-        },
-        {
-          entityId: "society:prestige-lakeside-habitat",
-          label: "Google rating 4.2",
-          sourceType: "Google",
-          sourceUrl: null,
-          learnedAt: now,
-          confidence: 0.72,
-        },
-      ],
-      model: "fixture-summary-model",
-      bundleVersion: "fixture-bundle",
-      generatedAt: now,
-      errorMessage: null,
-    };
-  }
-
   return null;
 }
 

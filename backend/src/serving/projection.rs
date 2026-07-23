@@ -169,24 +169,9 @@ impl<'a> SocietyFactProjection<'a> {
         fallback_status: Option<String>,
         fallback_display: Option<String>,
     ) -> ProjectStatusEvidence {
-        let inventory = self
-            .latest_text("market_project_status")
-            .and_then(|fact| inventory_status_label(&fact.value));
-
-        let display = match (inventory, fallback_display) {
-            (Some(inventory), Some(existing))
-                if !existing.to_lowercase().contains(&inventory.to_lowercase()) =>
-            {
-                Some(format!("{inventory} · {existing}"))
-            }
-            (Some(_), Some(existing)) => Some(existing),
-            (Some(inventory), None) => Some(inventory),
-            (None, existing) => existing,
-        };
-
         ProjectStatusEvidence {
             status: fallback_status,
-            display,
+            display: fallback_display,
         }
     }
 
@@ -262,21 +247,6 @@ fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
 
 fn is_http_url(value: &str) -> bool {
     value.starts_with("https://") || value.starts_with("http://")
-}
-
-fn inventory_status_label(value: &str) -> Option<String> {
-    let normalized = value.trim();
-    if normalized.is_empty() {
-        return None;
-    }
-    let lower = normalized.to_lowercase();
-    if lower.contains("sold out") || lower.contains("sold-out") {
-        Some("Sold Out".to_string())
-    } else if lower.contains("available") {
-        Some("Available".to_string())
-    } else {
-        Some(normalized.to_string())
-    }
 }
 
 fn home_state_display(
@@ -434,28 +404,6 @@ mod tests {
 
         assert_eq!(projected.rating, Some(3.6));
         assert_eq!(projected.review_count, Some(791));
-    }
-
-    #[test]
-    fn builder_inventory_status_enriches_display_without_replacing_construction_status() {
-        let index = index(vec![fact(
-            "society:prestige-park-grove",
-            "market_project_status",
-            FactValue::Text("Sold Out".to_string()),
-            3,
-        )]);
-
-        let projected = SocietyFactProjection::from_index(&index, "prestige-park-grove")
-            .project_status(
-                Some("under_construction".to_string()),
-                Some("Under Construction".to_string()),
-            );
-
-        assert_eq!(projected.status.as_deref(), Some("under_construction"));
-        assert_eq!(
-            projected.display.as_deref(),
-            Some("Sold Out · Under Construction")
-        );
     }
 
     #[test]

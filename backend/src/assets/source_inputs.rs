@@ -5,15 +5,12 @@ use serde::{Deserialize, Serialize};
 use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
-    MetroStationsMonthlyInput, PlanReason, PrestigeInventoryWeeklyInput,
-    RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    PlanReason, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
     SkillFactRecord, SourceWatermark, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -35,13 +32,9 @@ pub struct AssetSourceInputs {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub google_nearby_places_weekly: Option<GoogleNearbyPlacesWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub prestige_inventory_weekly: Option<PrestigeInventoryWeeklyInput>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_listings_weekly: Option<ExternalListingsWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_images_weekly: Option<ExternalImagesWeeklyInput>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub metro_stations_monthly: Option<MetroStationsMonthlyInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -55,14 +48,10 @@ impl AssetSourceInputs {
     pub fn supported_asset_ids() -> Vec<AssetId> {
         [
             RERA_REGISTRY_MONTHLY_ASSET_ID,
-            REDDIT_THREADS_DAILY_ASSET_ID,
-            REDDIT_RESIDENT_FACTS_ASSET_ID,
             GOOGLE_PLACES_WEEKLY_ASSET_ID,
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-            METRO_STATIONS_MONTHLY_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -73,14 +62,10 @@ impl AssetSourceInputs {
         matches!(
             asset_id.as_str(),
             RERA_REGISTRY_MONTHLY_ASSET_ID
-                | REDDIT_THREADS_DAILY_ASSET_ID
-                | REDDIT_RESIDENT_FACTS_ASSET_ID
                 | GOOGLE_PLACES_WEEKLY_ASSET_ID
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
-                | PRESTIGE_INVENTORY_WEEKLY_ASSET_ID
                 | EXTERNAL_LISTINGS_WEEKLY_ASSET_ID
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
-                | METRO_STATIONS_MONTHLY_ASSET_ID
         )
     }
 
@@ -100,16 +85,6 @@ impl AssetSourceInputs {
             .filter(|entry| Self::supports_asset(&entry.asset_id))
             .map(|entry| entry.asset_id.clone())
             .collect();
-        let resident_facts_requested = requested_assets
-            .iter()
-            .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
-        add_raw_companion(
-            &mut requested_assets,
-            &mut force_assets,
-            resident_facts_requested,
-            REDDIT_THREADS_DAILY_ASSET_ID,
-            false,
-        );
         let google_facts_requested = plan
             .run_entries()
             .any(|entry| entry.asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
@@ -134,14 +109,6 @@ impl AssetSourceInputs {
             plan,
             &mut requested_assets,
             &mut force_assets,
-            MARKET_PROJECT_FACTS_ASSET_ID,
-            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-            false,
-        );
-        add_derived_companion(
-            plan,
-            &mut requested_assets,
-            &mut force_assets,
             EXTERNAL_LISTING_FACTS_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
             false,
@@ -152,14 +119,6 @@ impl AssetSourceInputs {
             &mut force_assets,
             IMAGE_MEDIA_FACTS_ASSET_ID,
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-            false,
-        );
-        add_derived_companion(
-            plan,
-            &mut requested_assets,
-            &mut force_assets,
-            METRO_PROXIMITY_FACTS_ASSET_ID,
-            METRO_STATIONS_MONTHLY_ASSET_ID,
             false,
         );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -182,16 +141,6 @@ impl AssetSourceInputs {
             .map(|step| step.asset_id.clone())
             .collect();
         let mut force_assets = Vec::new();
-        let reddit_facts_requested = requested_assets
-            .iter()
-            .any(|asset_id| asset_id.as_str() == REDDIT_RESIDENT_FACTS_ASSET_ID);
-        add_raw_companion(
-            &mut requested_assets,
-            &mut force_assets,
-            reddit_facts_requested,
-            REDDIT_THREADS_DAILY_ASSET_ID,
-            true,
-        );
         let google_facts_requested = requested_assets
             .iter()
             .any(|asset_id| asset_id.as_str() == GOOGLE_REVIEW_FACTS_ASSET_ID);
@@ -216,15 +165,6 @@ impl AssetSourceInputs {
             &mut requested_assets,
             &mut force_assets,
             manifest.steps.iter().any(|step| {
-                step.asset_id.as_str() == MARKET_PROJECT_FACTS_ASSET_ID && step_needs_replay(step)
-            }),
-            PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-            true,
-        );
-        add_raw_companion(
-            &mut requested_assets,
-            &mut force_assets,
-            manifest.steps.iter().any(|step| {
                 step.asset_id.as_str() == EXTERNAL_LISTING_FACTS_ASSET_ID && step_needs_replay(step)
             }),
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -237,15 +177,6 @@ impl AssetSourceInputs {
                 step.asset_id.as_str() == IMAGE_MEDIA_FACTS_ASSET_ID && step_needs_replay(step)
             }),
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-            true,
-        );
-        add_raw_companion(
-            &mut requested_assets,
-            &mut force_assets,
-            manifest.steps.iter().any(|step| {
-                step.asset_id.as_str() == METRO_PROXIMITY_FACTS_ASSET_ID && step_needs_replay(step)
-            }),
-            METRO_STATIONS_MONTHLY_ASSET_ID,
             true,
         );
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));

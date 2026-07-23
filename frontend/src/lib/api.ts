@@ -3,7 +3,6 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
-  PropertySummaryJobResponse,
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
@@ -88,21 +87,6 @@ export function getProperty(id: string): Promise<PropertyDetailResponse> {
 
 export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
-}
-
-export function createPropertySummaryJob(id: string): Promise<PropertySummaryJobResponse> {
-  return postJson(`/api/properties/${encodeURIComponent(id)}/summary-jobs`, {});
-}
-
-export function getPropertySummaryJob(
-  id: string,
-  jobId: string,
-  options: ApiFetchOptions = {},
-): Promise<PropertySummaryJobResponse> {
-  return fetchJson(
-    `/api/properties/${encodeURIComponent(id)}/summary-jobs/${encodeURIComponent(jobId)}`,
-    options,
-  );
 }
 
 export function getPropertyEvidenceBatch(

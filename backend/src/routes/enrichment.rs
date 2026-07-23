@@ -732,7 +732,7 @@ pub fn enrich_area(area: &mut AreaProfile, graph: &KnowledgeGraph) {
         if let Some(wl) = kg_text(graph, &node_id, "waterlogging_risk") {
             tags.push(format!("Waterlogging: {}", wl));
         }
-        if let Some(m) = kg_text(graph, &node_id, "metro_status") {
+        if let Some(m) = kg_text(graph, &node_id, "metro_access") {
             tags.push(format!("Metro: {}", m));
         }
         if let Some(p) = kg_text(graph, &node_id, "price_trend") {

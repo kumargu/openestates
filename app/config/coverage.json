@@ -107,12 +107,6 @@
   ],
   "belongs_in_lake_not_config": [
     {
-      "current_path": "data/validation/approach_road_visuals.json",
-      "role": "Bootstrap coords for approach road DAG assets — not a runtime API read",
-      "target": "data/lake/silver/approach_road_graph_facts + gold/canonical_road_nodes",
-      "reason": "Instance data materialized into lake; properties API reads serving bundle facts"
-    },
-    {
       "role": "Entity instances (society:*, road:*, property:*)",
       "target": "data/lake/gold/kg_society_view/.../entities.parquet"
     },
@@ -130,26 +124,6 @@
     }
   ],
   "legacy_migrate_to_app_config": [
-    {
-      "path": "data/search/fact_schema_registry.json",
-      "status": "deleted",
-      "into": "app/config/dag/fact_registry.json (search_dimensions, preference_patterns retained)"
-    },
-    {
-      "path": "data/product/livability_theme_registry.json",
-      "status": "deleted",
-      "into": "app/config/dag/concern_taxonomy.json"
-    },
-    {
-      "path": "data/product/discovery_home.json",
-      "status": "deleted",
-      "into": "app/config/product/discovery_home.json"
-    },
-    {
-      "path": "data/product/buyer_context_sections.json",
-      "status": "deleted",
-      "into": "app/config/product/evidence_sections.json"
-    },
     {
       "path": "data/search/theme_inventory_report.json",
       "status": "generated",
@@ -209,7 +183,7 @@
       "Config-driven evidence sections (Phase 5)",
       "Reddit concern pipeline scaffold (Phase 6)",
       "Gate A surface truth — single discovery config, receipt copy, brief drill-down",
-      "Gate B — canonical_road_nodes + approach_road_graph_facts in DAG; bundle-backed approach road media",
+      "Gate B — retired seed-backed approach road DAG assets; keep future road facts source-backed",
       "Gate C — EntityContext composer + GET /api/properties/{id}/context + EntityContextCard"
     ],
     "build_order": "Gate A (surface truth) → Gate B (road/place lake) → Gate C (EntityContext API). See docs/phase_final_handoff.md"

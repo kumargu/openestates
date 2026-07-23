@@ -13,19 +13,14 @@ use backend::assets::{
     ExternalImageObservationRecord, ExternalImagesWeeklyInput, ExternalListingObservationRecord,
     ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput,
     GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
-    MetroStationObservationRecord, MetroStationsMonthlyInput, PrestigeInventoryObservationRecord,
-    PrestigeInventoryWeeklyInput, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
-    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
-    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
-    SourceWatermark, TrustTier, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_ROAD_NODES_ASSET_ID,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
+    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
+    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
+    SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
     HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    MARKET_PROJECT_FACTS_ASSET_ID, METRO_PROXIMITY_FACTS_ASSET_ID, METRO_STATIONS_MONTHLY_ASSET_ID,
-    PRESTIGE_INVENTORY_WEEKLY_ASSET_ID, REDDIT_RESIDENT_FACTS_ASSET_ID,
-    REDDIT_THREADS_DAILY_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -67,26 +62,19 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 17);
-    assert_eq!(report.manifest.succeeded_count, 17);
+    assert_eq!(report.manifest.planned_count, 10);
+    assert_eq!(report.manifest.succeeded_count, 10);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 17);
+    assert_eq!(report.executed_assets.len(), 10);
     for id in [
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-        MARKET_PROJECT_FACTS_ASSET_ID,
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
         IMAGE_MEDIA_FACTS_ASSET_ID,
-        METRO_STATIONS_MONTHLY_ASSET_ID,
-        METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
-        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
-        CANONICAL_ROAD_NODES_ASSET_ID,
-        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -101,7 +89,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 14);
+    assert_eq!(kg_record.parent_materializations.len(), 8);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -152,17 +140,6 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     assert!(kg_record
         .parent_materializations
         .contains(&image_facts_record.materialization_id));
-    let community_facts_record = store
-        .current_record(
-            &asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
-            &AssetPartition::new([("source", "community")]),
-        )
-        .await
-        .unwrap();
-    assert!(kg_record
-        .parent_materializations
-        .contains(&community_facts_record.materialization_id));
-
     let serving_record = store
         .current_record(
             &asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
@@ -186,7 +163,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        7
+        5
     );
 }
 
@@ -200,23 +177,6 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     let upstreams =
         seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
-    let older_reddit_facts = seed_skill_fact_current(
-        &lake,
-        &store,
-        REDDIT_RESIDENT_FACTS_ASSET_ID,
-        "reddit",
-        "2026-07-12",
-        &AssetPartition::new([("dt", "2026-07-12"), ("source", "reddit")]),
-        vec![upstreams["canonical_society_nodes"]
-            .materialization_id
-            .clone()],
-        now - Duration::days(1),
-        "resident_clubhouse_signal",
-        "Residents mention a maintained clubhouse",
-        "Reddit",
-        "legacy-reddit-clubhouse",
-    )
-    .await;
     let older_google_facts = seed_skill_fact_current(
         &lake,
         &store,
@@ -245,53 +205,28 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.partition, run_partition);
-    assert_eq!(report.manifest.planned_count, 22);
-    assert_eq!(report.executed_assets.len(), 22);
-    for id in [
-        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-        MARKET_PROJECT_FACTS_ASSET_ID,
+    let expected_assets = [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
         IMAGE_MEDIA_FACTS_ASSET_ID,
-        METRO_STATIONS_MONTHLY_ASSET_ID,
-        METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
-        REDDIT_THREADS_DAILY_ASSET_ID,
-        REDDIT_RESIDENT_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
-        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-        CANONICAL_ROAD_NODES_ASSET_ID,
-        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
-    ] {
+    ];
+    assert_eq!(report.manifest.planned_count, expected_assets.len());
+    assert_eq!(report.executed_assets.len(), expected_assets.len());
+    for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
     }
     assert!(
-        executed_position(&report.executed_assets, REDDIT_THREADS_DAILY_ASSET_ID)
-            < executed_position(&report.executed_assets, REDDIT_RESIDENT_FACTS_ASSET_ID)
-    );
-    assert!(
-        executed_position(&report.executed_assets, REDDIT_RESIDENT_FACTS_ASSET_ID)
-            < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
-    );
-    assert!(
         executed_position(&report.executed_assets, GOOGLE_REVIEW_FACTS_ASSET_ID)
-            < executed_position(
-                &report.executed_assets,
-                COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID
-            )
-    );
-    assert!(
-        executed_position(
-            &report.executed_assets,
-            COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID
-        ) < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
+            < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
     );
     assert!(
         executed_position(&report.executed_assets, EXTERNAL_IMAGES_WEEKLY_ASSET_ID)
@@ -308,47 +243,6 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(
         executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
             < executed_position(&report.executed_assets, SEARCH_SERVING_BUNDLE_ASSET_ID)
-    );
-
-    let reddit_threads = current_record(
-        &store,
-        REDDIT_THREADS_DAILY_ASSET_ID,
-        &reddit_thread_partition(),
-    )
-    .await;
-    assert_eq!(reddit_threads.partition, reddit_thread_partition());
-    assert_eq!(reddit_threads.run_id, report.manifest.run_id);
-    assert_eq!(
-        reddit_threads.parent_materializations,
-        vec![upstreams["canonical_society_nodes"]
-            .materialization_id
-            .clone()]
-    );
-    assert_eq!(
-        parquet_rows_for_artifact(&lake, &reddit_threads, "threads/part-00000.parquet").await,
-        1
-    );
-
-    let reddit_facts = current_record(
-        &store,
-        REDDIT_RESIDENT_FACTS_ASSET_ID,
-        &reddit_fact_partition(),
-    )
-    .await;
-    assert_eq!(reddit_facts.partition, reddit_fact_partition());
-    assert_eq!(reddit_facts.run_id, report.manifest.run_id);
-    assert_eq!(
-        reddit_facts.parent_materializations,
-        vec![
-            reddit_threads.materialization_id.clone(),
-            upstreams["canonical_society_nodes"]
-                .materialization_id
-                .clone()
-        ]
-    );
-    assert_eq!(
-        parquet_rows_for_artifact(&lake, &reddit_facts, "facts/part-00000.parquet").await,
-        1
     );
 
     let google_places = current_record(
@@ -430,22 +324,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.partition, AssetPartition::global());
     assert!(kg_record
         .parent_materializations
-        .contains(&reddit_facts.materialization_id));
-    assert!(kg_record
-        .parent_materializations
-        .contains(&older_reddit_facts.materialization_id));
-    assert!(kg_record
-        .parent_materializations
         .contains(&google_facts.materialization_id));
-    let community_facts = current_record(
-        &store,
-        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
-        &AssetPartition::new([("source", "community")]),
-    )
-    .await;
-    assert!(kg_record
-        .parent_materializations
-        .contains(&community_facts.materialization_id));
     let nearby_facts = current_record(
         &store,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
@@ -477,10 +356,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&home_state_record.materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 16);
+    assert_eq!(kg_record.parent_materializations.len(), 8);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        122
+        80
     );
 
     let serving_record = current_record(
@@ -489,20 +368,11 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 123);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 80);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
     assert_eq!(current_run.run_id, report.manifest.run_id);
-    assert_eq!(
-        current_run
-            .steps
-            .iter()
-            .find(|step| step.asset_id == asset_id(REDDIT_THREADS_DAILY_ASSET_ID))
-            .unwrap()
-            .partition,
-        reddit_thread_partition()
-    );
     assert_eq!(
         current_run
             .steps
@@ -521,13 +391,9 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let store = AssetMaterializationStore::new(lake.clone());
     let now = Utc.with_ymd_and_hms(2026, 7, 13, 6, 0, 0).unwrap();
     let run_partition = source_run_partition();
-    let mut source_inputs = mock_source_inputs(now);
-    let reddit_facts = source_inputs.reddit_resident_facts.as_mut().unwrap();
-    reddit_facts.facts[0].entity_id = "society:rera-meadows".to_string();
-    reddit_facts.fact_annotations[0].entity_id = "society:rera-meadows".to_string();
     let options = AssetDagExecutionOptions::new(run_partition.clone(), now)
         .with_version("2026-07-13T06:00Z")
-        .with_source_inputs(source_inputs);
+        .with_source_inputs(mock_source_inputs(now));
 
     let report = AssetDagExecutor::new(default_openestates_registry(), lake.clone())
         .execute(&mock_graph(), options)
@@ -535,31 +401,22 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 24);
-    assert_eq!(report.executed_assets.len(), 24);
+    assert_eq!(report.manifest.planned_count, 15);
+    assert_eq!(report.executed_assets.len(), 15);
     for id in [
-        PRESTIGE_INVENTORY_WEEKLY_ASSET_ID,
-        MARKET_PROJECT_FACTS_ASSET_ID,
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
         IMAGE_MEDIA_FACTS_ASSET_ID,
-        METRO_STATIONS_MONTHLY_ASSET_ID,
-        METRO_PROXIMITY_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         RERA_REGISTRY_MONTHLY_ASSET_ID,
         CANONICAL_SOCIETY_NODES_ASSET_ID,
         RERA_LEGAL_FACTS_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
-        REDDIT_THREADS_DAILY_ASSET_ID,
-        REDDIT_RESIDENT_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
-        COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-        CANONICAL_ROAD_NODES_ASSET_ID,
-        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -682,7 +539,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
         serving_bundle: RwLock::new(Some(Arc::new(loaded))),
-        property_summary_jobs: RwLock::new(Default::default()),
         areas: Vec::new(),
         societies,
         sellers: RwLock::new(Vec::new()),
@@ -712,16 +568,12 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .knowledge_context
         .as_ref()
         .expect("search endpoint should return knowledge context");
-    assert!(knowledge_context.learning_gaps.is_empty());
-    assert_eq!(knowledge_context.claims.len(), 2);
+    assert!(!knowledge_context.learning_gaps.is_empty());
+    assert_eq!(knowledge_context.claims.len(), 1);
     assert!(knowledge_context
         .claims
         .iter()
         .any(|claim| claim.source_type == "Rera" && claim.claim.contains("RERA land area")));
-    assert!(knowledge_context
-        .claims
-        .iter()
-        .any(|claim| claim.source_type == "Reddit" && claim.claim.contains("trees")));
     let results = response.results;
 
     assert_eq!(
@@ -742,12 +594,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
             && reason.fact_key == "rera_total_land_area_sqm"
             && reason.scoring_method == "rera-proof"
             && reason.source_type == "Rera"
-    }));
-    assert!(explanation.reasons.iter().any(|reason| {
-        reason.preference == "greenery"
-            && reason.fact_key == "resident_greenery_signal"
-            && reason.scoring_method == "serving-fact"
-            && reason.source_type == "Reddit"
     }));
     assert_eq!(
         result.card.google_reviews_url.as_deref(),
@@ -779,11 +625,7 @@ async fn executor_requires_source_inputs_without_promoting_current_source_pointe
         run_step(&report.manifest, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
         AssetRunStepStatus::Succeeded
     );
-    for (id, partition) in [
-        (REDDIT_THREADS_DAILY_ASSET_ID, reddit_thread_partition()),
-        (REDDIT_RESIDENT_FACTS_ASSET_ID, reddit_fact_partition()),
-        (GOOGLE_PLACES_WEEKLY_ASSET_ID, google_fact_partition()),
-    ] {
+    for (id, partition) in [(GOOGLE_PLACES_WEEKLY_ASSET_ID, google_fact_partition())] {
         assert!(store
             .current_record(&asset_id(id), &partition)
             .await
@@ -801,10 +643,10 @@ async fn executor_reports_optional_failure_as_warning_and_can_resume_same_run() 
     seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
     let run_partition = source_run_partition();
     let mut partial_inputs = mock_source_inputs(now);
-    partial_inputs.reddit_threads_daily = None;
+    partial_inputs.google_nearby_places_weekly = None;
     partial_inputs.source_failures.insert(
-        REDDIT_THREADS_DAILY_ASSET_ID.to_string(),
-        "RedditSourceBlocked: HTTP 403".to_string(),
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID.to_string(),
+        "GoogleSourceBlocked: HTTP 403".to_string(),
     );
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
 
@@ -825,30 +667,32 @@ async fn executor_reports_optional_failure_as_warning_and_can_resume_same_run() 
     assert_eq!(failed.failed_count, 1);
     assert_eq!(failed.blocked_count, 1);
     assert_eq!(
-        run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID).status,
+        run_step(
+            &failed,
+            backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+        )
+        .status,
         AssetRunStepStatus::Failed
     );
-    assert!(run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
-        .error
-        .as_deref()
-        .is_some_and(|error| error.contains("HTTP 403")));
+    assert!(run_step(
+        &failed,
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+    )
+    .error
+    .as_deref()
+    .is_some_and(|error| error.contains("HTTP 403")));
     assert_eq!(
-        run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
-            .attempts
-            .len(),
+        run_step(
+            &failed,
+            backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+        )
+        .attempts
+        .len(),
         1
     );
     assert_eq!(
-        run_step(&failed, REDDIT_RESIDENT_FACTS_ASSET_ID).status,
+        run_step(&failed, backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID).status,
         AssetRunStepStatus::Blocked
-    );
-    assert_eq!(
-        run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID).status,
-        AssetRunStepStatus::Succeeded
-    );
-    assert_eq!(
-        run_step(&failed, GOOGLE_REVIEW_FACTS_ASSET_ID).status,
-        AssetRunStepStatus::Succeeded
     );
     assert_eq!(
         run_step(&failed, KG_SOCIETY_VIEW_ASSET_ID).status,
@@ -858,22 +702,21 @@ async fn executor_reports_optional_failure_as_warning_and_can_resume_same_run() 
         run_step(&failed, SEARCH_SERVING_BUNDLE_ASSET_ID).status,
         AssetRunStepStatus::Succeeded
     );
-    let google_materialization = run_step(&failed, GOOGLE_PLACES_WEEKLY_ASSET_ID)
-        .materialization_id
-        .clone()
-        .unwrap();
-    let original_canonical_id = run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
-        .dependency_snapshot
-        .iter()
-        .find_map(|materialization_id| {
-            (materialization_id
-                == &run_step(&failed, CANONICAL_SOCIETY_NODES_ASSET_ID)
-                    .current_materialization_id
-                    .clone()
-                    .unwrap())
-                .then_some(materialization_id.clone())
-        })
-        .unwrap();
+    let original_canonical_id = run_step(
+        &failed,
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    )
+    .dependency_snapshot
+    .iter()
+    .find_map(|materialization_id| {
+        (materialization_id
+            == &run_step(&failed, CANONICAL_SOCIETY_NODES_ASSET_ID)
+                .current_materialization_id
+                .clone()
+                .unwrap())
+            .then_some(materialization_id.clone())
+    })
+    .unwrap();
     let mut advanced_canonical = store
         .record(
             &asset_id(CANONICAL_SOCIETY_NODES_ASSET_ID),
@@ -907,44 +750,43 @@ async fn executor_reports_optional_failure_as_warning_and_can_resume_same_run() 
 
     assert_eq!(resumed.manifest.run_id, failed.run_id);
     assert_eq!(resumed.manifest.status, DagRunStatus::Succeeded);
-    assert!(resumed
-        .executed_assets
-        .contains(&asset_id(REDDIT_THREADS_DAILY_ASSET_ID)));
-    assert!(resumed
-        .executed_assets
-        .contains(&asset_id(REDDIT_RESIDENT_FACTS_ASSET_ID)));
+    assert!(resumed.executed_assets.contains(&asset_id(
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+    )));
+    assert!(resumed.executed_assets.contains(&asset_id(
+        backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID
+    )));
     assert!(!resumed
         .executed_assets
         .contains(&asset_id(KG_SOCIETY_VIEW_ASSET_ID)));
     assert!(!resumed
         .executed_assets
         .contains(&asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID)));
-    assert!(!resumed
-        .executed_assets
-        .contains(&asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID)));
     assert_eq!(
-        run_step(&resumed.manifest, GOOGLE_PLACES_WEEKLY_ASSET_ID).materialization_id,
-        Some(google_materialization)
-    );
-    assert_eq!(
-        run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID)
-            .attempts
-            .len(),
+        run_step(
+            &resumed.manifest,
+            backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+        )
+        .attempts
+        .len(),
         2
     );
-    let reddit_record = store
+    let google_record = store
         .record(
-            &asset_id(REDDIT_THREADS_DAILY_ASSET_ID),
-            &reddit_thread_partition(),
-            run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID)
-                .materialization_id
-                .as_ref()
-                .unwrap(),
+            &asset_id(backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID),
+            &google_fact_partition(),
+            run_step(
+                &resumed.manifest,
+                backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+            )
+            .materialization_id
+            .as_ref()
+            .unwrap(),
         )
         .await
         .unwrap();
     assert_eq!(
-        reddit_record.parent_materializations,
+        google_record.parent_materializations,
         vec![original_canonical_id]
     );
     assert_eq!(
@@ -973,7 +815,7 @@ async fn executor_rejects_tampered_artifacts_before_resuming_successful_steps() 
     seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
     let run_partition = source_run_partition();
     let mut partial_inputs = mock_source_inputs(now);
-    partial_inputs.reddit_threads_daily = None;
+    partial_inputs.google_nearby_places_weekly = None;
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
     executor
         .execute(
@@ -1030,7 +872,7 @@ async fn facts_only_resume_replays_raw_companion_and_records_exact_lineage() {
     seed_authoritative_upstreams(&lake, &store, now, &AssetPartition::global()).await;
     let run_partition = source_run_partition();
     let mut partial_inputs = mock_source_inputs(now);
-    partial_inputs.reddit_resident_facts = None;
+    partial_inputs.google_nearby_places_weekly = None;
     let executor = AssetDagExecutor::new(default_openestates_registry(), lake.clone());
     executor
         .execute(
@@ -1045,10 +887,14 @@ async fn facts_only_resume_replays_raw_companion_and_records_exact_lineage() {
         .current_manifest(&run_partition)
         .await
         .unwrap();
-    let old_raw_id = run_step(&failed, REDDIT_THREADS_DAILY_ASSET_ID)
-        .materialization_id
-        .clone()
-        .unwrap();
+    assert_eq!(
+        run_step(
+            &failed,
+            backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
+        )
+        .status,
+        AssetRunStepStatus::Failed
+    );
     let collection = AssetSourceInputs::resume_collection_plan(&failed);
 
     let resumed = executor
@@ -1062,12 +908,18 @@ async fn facts_only_resume_replays_raw_companion_and_records_exact_lineage() {
         .await
         .unwrap();
 
-    let raw_step = run_step(&resumed.manifest, REDDIT_THREADS_DAILY_ASSET_ID);
+    let raw_step = run_step(
+        &resumed.manifest,
+        backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    );
     let new_raw_id = raw_step.materialization_id.clone().unwrap();
-    assert_ne!(new_raw_id, old_raw_id);
     assert_eq!(raw_step.attempts.len(), 2);
     assert_eq!(
-        run_step(&resumed.manifest, REDDIT_RESIDENT_FACTS_ASSET_ID).parent_materializations[0],
+        run_step(
+            &resumed.manifest,
+            backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID
+        )
+        .parent_materializations[0],
         new_raw_id
     );
     assert_eq!(
@@ -1246,10 +1098,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
     assert_eq!(
         report.executed_assets,
         vec![
-            asset_id(CANONICAL_ROAD_NODES_ASSET_ID),
-            asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
-            asset_id(COMMUNITY_REVIEW_SUMMARY_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
@@ -1688,15 +1537,7 @@ fn run_step<'a>(
 }
 
 fn source_run_partition() -> AssetPartition {
-    AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
-}
-
-fn reddit_thread_partition() -> AssetPartition {
-    AssetPartition::new([("dt", "2026-07-13"), ("subreddit", "BangaloreRealEstates")])
-}
-
-fn reddit_fact_partition() -> AssetPartition {
-    AssetPartition::new([("dt", "2026-07-13"), ("source", "reddit")])
+    AssetPartition::new([("dt", "2026-07-13")])
 }
 
 fn google_fact_partition() -> AssetPartition {
@@ -1733,29 +1574,6 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
         source_failures: Default::default(),
         rera_registry_monthly: Some(mock_rera_input(now)),
-        prestige_inventory_weekly: Some(PrestigeInventoryWeeklyInput {
-            snapshot_date: "2026-07-13".to_string(),
-            records: vec![PrestigeInventoryObservationRecord {
-                entity_id: "society:green-acre-whitefield".to_string(),
-                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
-                source_project_id: "prestige-green-acre".to_string(),
-                source_project_name: "Green Acre Whitefield".to_string(),
-                source_project_slug: "green-acre-whitefield".to_string(),
-                source_url: "https://www.prestigeconstructions.com/residential-projects/bangalore/green-acre-whitefield".to_string(),
-                status: Some("Under Construction".to_string()),
-                land_area_acres: Some(10.0),
-                starting_price_inr: Some(25_000_000.0),
-                price_display: Some("INR 2.5 Cr onwards".to_string()),
-                bhk_options: vec!["3 BHK".to_string()],
-                total_units: Some(600),
-                latitude: Some(12.9698),
-                longitude: Some(77.7500),
-                maps_url: Some("https://maps.google.com/?q=12.9698,77.7500".to_string()),
-                address: Some("Whitefield, Bengaluru".to_string()),
-                observed_at: now + Duration::minutes(2),
-            }],
-            source_watermarks: Vec::new(),
-        }),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {
             snapshot_date: "2026-07-13".to_string(),
             records: vec![ExternalListingObservationRecord {
@@ -1802,21 +1620,6 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 alt_text: Some("Green Acre Whitefield elevation".to_string()),
                 storage_policy: Some("link_only".to_string()),
                 content_sha256: None,
-                observed_at: now + Duration::minutes(2),
-            }],
-            source_watermarks: Vec::new(),
-        }),
-        metro_stations_monthly: Some(MetroStationsMonthlyInput {
-            snapshot_date: "2026-07".to_string(),
-            records: vec![MetroStationObservationRecord {
-                station_id: "osm:station:hopefarm".to_string(),
-                name: "Hopefarm Channasandra".to_string(),
-                network: Some("Namma Metro".to_string()),
-                operator: Some("BMRCL".to_string()),
-                status: "operational".to_string(),
-                latitude: 12.9876,
-                longitude: 77.7521,
-                source_url: "https://www.openstreetmap.org/node/hopefarm".to_string(),
                 observed_at: now + Duration::minutes(2),
             }],
             source_watermarks: Vec::new(),

@@ -7,7 +7,7 @@ Usage:
 Checks:
   1. All entities exist on disk
   2. Minimum fact counts per entity type
-  3. Required facts present per type (e.g., areas must have metro_status)
+  3. Required facts present per type (e.g., areas must have metro_access)
   4. No empty/null fact values
   5. Embeddings present and correct dimensionality
   6. Source provenance is valid
@@ -41,7 +41,7 @@ REQUIRED_FACTS = {
         # Bootstrap facts
         "city", "median_price_per_sqft",
         # Area intelligence facts
-        "metro_status", "traffic_reality", "waterlogging_risk",
+        "metro_access", "traffic_reality", "waterlogging_risk",
         "price_trend", "livability_summary",
     ],
     "society": [

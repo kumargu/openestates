@@ -426,7 +426,7 @@ fn compose_positive_block(
         fact_keys: vec![
             "nearby_schools".to_string(),
             "nearby_metro_stations".to_string(),
-            "community_positive_themes".to_string(),
+            "google_review_snippets".to_string(),
         ],
     })
 }
