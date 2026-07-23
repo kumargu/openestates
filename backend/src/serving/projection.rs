@@ -6,6 +6,8 @@ use super::{
     ServingEntityFactRows, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
 };
 
+const GOOGLE_NEARBY_PLACES_SKILL_ID: &str = "fetch_google_nearby_places";
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct GoogleReviewEvidence {
     pub rating: Option<f64>,
@@ -117,7 +119,7 @@ impl<'a> SocietyFactProjection<'a> {
 
     pub fn project_google_reviews(&self, fallback: GoogleReviewEvidence) -> GoogleReviewEvidence {
         let reviews_url = self
-            .latest_valid("google_reviews_url", |value| match value {
+            .latest_valid_google_review_fact("google_reviews_url", |value| match value {
                 FactValue::Text(value) if is_http_url(value.trim()) => {
                     Some(value.trim().to_string())
                 }
@@ -126,7 +128,7 @@ impl<'a> SocietyFactProjection<'a> {
             .map(|fact| fact.value)
             .or(fallback.reviews_url);
         let rating = self
-            .latest_valid("google_rating", |value| match value {
+            .latest_valid_google_review_fact("google_rating", |value| match value {
                 FactValue::Numeric(value) if value.is_finite() && (0.0..=5.0).contains(value) => {
                     Some(*value)
                 }
@@ -135,7 +137,7 @@ impl<'a> SocietyFactProjection<'a> {
             .map(|fact| fact.value)
             .or(fallback.rating);
         let review_count = self
-            .latest_valid("google_review_count", |value| match value {
+            .latest_valid_google_review_fact("google_review_count", |value| match value {
                 FactValue::Numeric(value)
                     if value.is_finite() && *value >= 0.0 && *value <= u32::MAX as f64 =>
                 {
@@ -152,6 +154,14 @@ impl<'a> SocietyFactProjection<'a> {
             review_count,
             reviews_url,
         }
+    }
+
+    fn latest_valid_google_review_fact<T>(
+        &self,
+        fact_key: &str,
+        parse: impl Fn(&FactValue) -> Option<T>,
+    ) -> Option<ProjectedFact<T>> {
+        self.latest_valid_where(fact_key, parse, |fact| !is_nearby_place_google_fact(fact))
     }
 
     pub fn project_status(
@@ -201,14 +211,28 @@ impl<'a> SocietyFactProjection<'a> {
         fact_key: &str,
         parse: impl Fn(&FactValue) -> Option<T>,
     ) -> Option<ProjectedFact<T>> {
+        self.latest_valid_where(fact_key, parse, |_| true)
+    }
+
+    fn latest_valid_where<T>(
+        &self,
+        fact_key: &str,
+        parse: impl Fn(&FactValue) -> Option<T>,
+        include: impl Fn(&ServingFactRecord) -> bool,
+    ) -> Option<ProjectedFact<T>> {
         self.rows
             .iter()
             .flat_map(|rows| rows.facts.iter())
             .filter(|fact| fact.fact_key == fact_key)
+            .filter(|fact| include(fact))
             .filter_map(|fact| parse(&fact.value).map(|value| (fact, value)))
             .max_by_key(|(fact, _)| fact.learned_at)
             .map(|(fact, value)| projected_fact(fact, value))
     }
+}
+
+fn is_nearby_place_google_fact(fact: &ServingFactRecord) -> bool {
+    fact.skill_id.as_deref() == Some(GOOGLE_NEARBY_PLACES_SKILL_ID)
 }
 
 fn projected_fact<T>(fact: &ServingFactRecord, value: T) -> ProjectedFact<T> {
@@ -373,6 +397,46 @@ mod tests {
     }
 
     #[test]
+    fn nearby_place_google_metrics_do_not_project_as_society_reviews() {
+        let index = index(vec![
+            fact_with_skill(
+                "society:godrej-splendour",
+                "google_rating",
+                FactValue::Numeric(3.6),
+                2,
+                Some("fetch_google_review_links"),
+            ),
+            fact_with_skill(
+                "society:godrej-splendour",
+                "google_review_count",
+                FactValue::Numeric(791.0),
+                2,
+                Some("fetch_google_review_links"),
+            ),
+            fact_with_skill(
+                "society:godrej-splendour",
+                "google_rating",
+                FactValue::Numeric(4.9),
+                3,
+                Some(GOOGLE_NEARBY_PLACES_SKILL_ID),
+            ),
+            fact_with_skill(
+                "society:godrej-splendour",
+                "google_review_count",
+                FactValue::Numeric(493.0),
+                3,
+                Some(GOOGLE_NEARBY_PLACES_SKILL_ID),
+            ),
+        ]);
+
+        let projected = SocietyFactProjection::from_index(&index, "godrej-splendour")
+            .project_google_reviews(GoogleReviewEvidence::default());
+
+        assert_eq!(projected.rating, Some(3.6));
+        assert_eq!(projected.review_count, Some(791));
+    }
+
+    #[test]
     fn builder_inventory_status_enriches_display_without_replacing_construction_status() {
         let index = index(vec![fact(
             "society:prestige-park-grove",
@@ -453,6 +517,16 @@ mod tests {
         value: FactValue,
         learned_at_seconds: i64,
     ) -> ServingFactRecord {
+        fact_with_skill(entity_id, fact_key, value, learned_at_seconds, None)
+    }
+
+    fn fact_with_skill(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        learned_at_seconds: i64,
+        skill_id: Option<&str>,
+    ) -> ServingFactRecord {
         ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
@@ -463,7 +537,7 @@ mod tests {
             source_type: "Google".to_string(),
             source_url: None,
             model: None,
-            skill_id: None,
+            skill_id: skill_id.map(str::to_string),
             learned_at: Utc.timestamp_opt(learned_at_seconds, 0).unwrap(),
         }
     }

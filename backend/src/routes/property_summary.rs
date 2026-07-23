@@ -43,7 +43,8 @@ pub async fn create_summary_job(
         tokio::spawn(async move {
             let properties = state.properties.read().await.clone();
             let model = default_summary_model();
-            let result = build_property_summary(&property_id, &properties, &bundle, model.as_ref());
+            let result =
+                build_property_summary(&property_id, &properties, &bundle, model.as_ref()).await;
             let mut jobs = state.property_summary_jobs.write().await;
             match result {
                 Ok((paragraph, evidence_refs, model_id)) => {

@@ -15,6 +15,9 @@ path = "src/lib.rs"
 default = []
 s3 = ["object_store/aws"]
 fastembed = ["dep:fastembed", "dep:ort"]
+# Placeholder for future summary generation work. It intentionally pulls no
+# model/runtime dependencies until we pick a simpler local summarizer.
+summary-lm = []
 
 [dependencies]
 axum = "0.8"

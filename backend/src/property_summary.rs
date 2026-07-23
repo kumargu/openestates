@@ -1,7 +1,8 @@
 use std::collections::HashMap;
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 use std::time::{Duration, Instant};
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -9,12 +10,14 @@ use uuid::Uuid;
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::routes::enrichment::society_node_id;
+use crate::search::{HashSemanticEmbedder, SemanticEmbedder};
 use crate::serving::{LoadedServingBundle, ServingFactRecord};
 
 const SUMMARY_JOB_TTL: Duration = Duration::from_secs(15 * 60);
 const DEFAULT_SUMMARY_STYLE: &str = "buyer_brief";
-const DEFAULT_MODEL_ID: &str = "openestates-evidence-summary-v1";
+const DEFAULT_MODEL_ID: &str = "openestates-local-summary-lm";
 const MAX_EVIDENCE_REFS: usize = 12;
+const GOOGLE_NEARBY_PLACES_SKILL_ID: &str = "fetch_google_nearby_places";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -135,6 +138,9 @@ impl PropertySummaryJobStore {
         model: String,
     ) {
         if let Some(record) = self.jobs_by_id.get_mut(job_id) {
+            if !matches!(record.response.status, PropertySummaryJobStatus::Pending) {
+                return;
+            }
             record.response.status = PropertySummaryJobStatus::Ready;
             record.response.summary_paragraph = Some(summary_paragraph);
             record.response.evidence_refs = evidence_refs;
@@ -147,6 +153,9 @@ impl PropertySummaryJobStore {
 
     pub fn complete_error(&mut self, job_id: &str, message: impl Into<String>) {
         if let Some(record) = self.jobs_by_id.get_mut(job_id) {
+            if !matches!(record.response.status, PropertySummaryJobStatus::Pending) {
+                return;
+            }
             record.response.status = PropertySummaryJobStatus::Error;
             record.response.error_message = Some(message.into());
             record.response.generated_at = Some(Utc::now());
@@ -173,86 +182,45 @@ impl PropertySummaryJobStore {
     }
 }
 
+#[async_trait]
 pub trait SummaryModel: Send + Sync {
     fn model_id(&self) -> &'static str;
-    fn summarize(&self, context: &SummaryContext) -> Result<String, String>;
+    async fn summarize(&self, context: &SummaryContext) -> Result<String, String>;
 }
 
 #[derive(Debug, Default)]
-pub struct EvidenceBoundSummaryModel;
+pub struct SummaryLmUnavailableModel;
 
-impl SummaryModel for EvidenceBoundSummaryModel {
+#[async_trait]
+impl SummaryModel for SummaryLmUnavailableModel {
     fn model_id(&self) -> &'static str {
         DEFAULT_MODEL_ID
     }
 
-    fn summarize(&self, context: &SummaryContext) -> Result<String, String> {
-        if context.evidence.is_empty() {
-            return Err("No serving facts were available for this property.".to_string());
-        }
-
-        let mut sentences = Vec::new();
-        let name = context
-            .property_title
-            .as_deref()
-            .unwrap_or(context.property_id.as_str());
-        let core = context
-            .evidence
-            .iter()
-            .filter(|evidence| matches!(evidence.category, SummaryEvidenceCategory::Core))
-            .map(|evidence| evidence.label.as_str())
-            .collect::<Vec<_>>();
-        if core.is_empty() {
-            sentences.push(format!(
-                "{name} has a limited fact trail in the current bundle, so this summary only uses the evidence we can verify."
-            ));
-        } else {
-            sentences.push(format!(
-                "{name} is backed by {}.",
-                join_sentence_parts(&core)
-            ));
-        }
-
-        let nearby = context
-            .evidence
-            .iter()
-            .filter(|evidence| matches!(evidence.category, SummaryEvidenceCategory::Nearby))
-            .take(4)
-            .map(|evidence| evidence.label.as_str())
-            .collect::<Vec<_>>();
-        if !nearby.is_empty() {
-            sentences.push(format!(
-                "Nearby evidence includes {}.",
-                join_sentence_parts(&nearby)
-            ));
-        }
-
-        let market = context
-            .evidence
-            .iter()
-            .filter(|evidence| matches!(evidence.category, SummaryEvidenceCategory::Market))
-            .take(3)
-            .map(|evidence| evidence.label.as_str())
-            .collect::<Vec<_>>();
-        if !market.is_empty() {
-            sentences.push(format!(
-                "Market evidence currently shows {}.",
-                join_sentence_parts(&market)
-            ));
-        }
-
-        Ok(sentences.join(" "))
+    async fn summarize(&self, _context: &SummaryContext) -> Result<String, String> {
+        Err(
+            "property summary generation is disabled until a local summary model is selected"
+                .to_string(),
+        )
     }
 }
 
+pub fn default_summary_model() -> Arc<dyn SummaryModel> {
+    static MODEL: OnceLock<Arc<dyn SummaryModel>> = OnceLock::new();
+    MODEL
+        .get_or_init(|| Arc::new(SummaryLmUnavailableModel))
+        .clone()
+}
+
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SummaryContext {
     property_id: String,
     property_title: Option<String>,
     evidence: Vec<RankedSummaryEvidence>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SummaryEvidenceCategory {
     Core,
     Nearby,
@@ -272,14 +240,20 @@ struct RankedSummaryEvidence {
     rank: u32,
 }
 
-pub fn build_property_summary(
+pub async fn build_property_summary(
     property_id: &str,
     properties: &[Property],
     bundle: &LoadedServingBundle,
     model: &dyn SummaryModel,
 ) -> Result<(String, Vec<SummaryEvidenceRef>, String), String> {
-    let context = build_summary_context(property_id, properties, bundle)?;
-    let paragraph = model.summarize(&context)?;
+    let embedder = summary_embedder().await?;
+    eprintln!("Loaded summary embedder {}", embedder.model_id());
+    let context = build_summary_context(property_id, properties, bundle, embedder.as_ref())?;
+    eprintln!(
+        "Built summary context for {property_id} with {} evidence items",
+        context.evidence.len()
+    );
+    let paragraph = model.summarize(&context).await?;
     let receipts = context
         .evidence
         .iter()
@@ -287,6 +261,19 @@ pub fn build_property_summary(
         .map(summary_evidence_ref)
         .collect::<Vec<_>>();
     Ok((paragraph, receipts, model.model_id().to_string()))
+}
+
+async fn summary_embedder() -> Result<Arc<dyn SemanticEmbedder>, String> {
+    tokio::task::spawn_blocking(default_summary_embedder)
+        .await
+        .map_err(|err| format!("summary embedder task failed: {err}"))?
+}
+
+fn default_summary_embedder() -> Result<Arc<dyn SemanticEmbedder>, String> {
+    static EMBEDDER: OnceLock<Result<Arc<dyn SemanticEmbedder>, String>> = OnceLock::new();
+    EMBEDDER
+        .get_or_init(|| Ok(Arc::new(HashSemanticEmbedder::default()) as Arc<dyn SemanticEmbedder>))
+        .clone()
 }
 
 pub fn property_summary_anchor(
@@ -312,6 +299,7 @@ fn build_summary_context(
     property_id: &str,
     properties: &[Property],
     bundle: &LoadedServingBundle,
+    embedder: &dyn SemanticEmbedder,
 ) -> Result<SummaryContext, String> {
     let property_title = properties
         .iter()
@@ -331,13 +319,7 @@ fn build_summary_context(
         }
     }
 
-    evidence.sort_by(|left, right| {
-        left.rank
-            .cmp(&right.rank)
-            .then_with(|| right.confidence.total_cmp(&left.confidence))
-            .then_with(|| right.learned_at.cmp(&left.learned_at))
-    });
-    evidence.truncate(MAX_EVIDENCE_REFS);
+    evidence = select_summary_evidence(evidence, embedder, property_title.as_deref());
 
     if evidence.is_empty() {
         return Err("No summary-ready facts found in the serving bundle.".to_string());
@@ -400,6 +382,9 @@ fn entity_exists_or_has_facts(bundle: &LoadedServingBundle, entity_id: &str) -> 
 }
 
 fn summarize_fact(fact: &ServingFactRecord) -> Option<RankedSummaryEvidence> {
+    if is_google_review_metric(&fact.fact_key) && is_nearby_place_google_fact(fact) {
+        return None;
+    }
     let (category, rank) = summary_category_and_rank(&fact.fact_key)?;
     let value = fact_value_text(&fact.value)?;
     let label = fact_label(&fact.fact_key, &value)?;
@@ -413,6 +398,234 @@ fn summarize_fact(fact: &ServingFactRecord) -> Option<RankedSummaryEvidence> {
         confidence: fact.confidence,
         rank,
     })
+}
+
+fn is_google_review_metric(fact_key: &str) -> bool {
+    matches!(fact_key, "google_rating" | "google_review_count")
+}
+
+fn is_nearby_place_google_fact(fact: &ServingFactRecord) -> bool {
+    fact.skill_id.as_deref() == Some(GOOGLE_NEARBY_PLACES_SKILL_ID)
+}
+
+fn select_summary_evidence(
+    mut evidence: Vec<RankedSummaryEvidence>,
+    embedder: &dyn SemanticEmbedder,
+    property_title: Option<&str>,
+) -> Vec<RankedSummaryEvidence> {
+    rerank_summary_evidence(&mut evidence, embedder, property_title);
+    evidence.sort_by(compare_summary_evidence);
+    let mut selected = Vec::new();
+
+    push_category_evidence(&mut selected, &evidence, SummaryEvidenceCategory::Core, 4);
+    push_nearby_evidence(&mut selected, &evidence, 5);
+    push_category_evidence(&mut selected, &evidence, SummaryEvidenceCategory::Market, 3);
+    push_category_evidence(
+        &mut selected,
+        &evidence,
+        SummaryEvidenceCategory::Community,
+        2,
+    );
+
+    for item in evidence {
+        if selected.len() >= MAX_EVIDENCE_REFS {
+            break;
+        }
+        push_ranked_evidence(&mut selected, item);
+    }
+    selected.truncate(MAX_EVIDENCE_REFS);
+    selected
+}
+
+fn rerank_summary_evidence(
+    evidence: &mut [RankedSummaryEvidence],
+    embedder: &dyn SemanticEmbedder,
+    property_title: Option<&str>,
+) {
+    if evidence.is_empty() {
+        return;
+    }
+    let query = format!(
+        "buyer property summary for {} covering location, nearby schools, metro, hospitals, pricing, resident review evidence, and cautions",
+        property_title.unwrap_or("this home")
+    );
+    let mut texts = Vec::with_capacity(evidence.len() + 1);
+    texts.push(query);
+    texts.extend(evidence.iter().map(summary_embedding_text));
+    let vectors = embedder.embed_batch(&texts);
+    if vectors.len() != evidence.len() + 1 {
+        return;
+    }
+    let query_vector = &vectors[0];
+    for (item, vector) in evidence.iter_mut().zip(vectors.iter().skip(1)) {
+        let similarity = cosine_similarity(query_vector, vector).max(0.0);
+        let boost = (similarity * 10.0).round() as u32;
+        item.rank = item.rank.saturating_sub(boost.min(item.rank));
+    }
+}
+
+fn summary_embedding_text(evidence: &RankedSummaryEvidence) -> String {
+    format!(
+        "{} {:?} {} confidence {:.2}",
+        evidence.label, evidence.category, evidence.source_type, evidence.confidence
+    )
+}
+
+fn cosine_similarity(left: &[f32], right: &[f32]) -> f64 {
+    let mut dot = 0.0f64;
+    let mut left_norm = 0.0f64;
+    let mut right_norm = 0.0f64;
+    for (left, right) in left.iter().zip(right.iter()) {
+        let left = f64::from(*left);
+        let right = f64::from(*right);
+        dot += left * right;
+        left_norm += left * left;
+        right_norm += right * right;
+    }
+    if left_norm <= f64::EPSILON || right_norm <= f64::EPSILON {
+        return 0.0;
+    }
+    dot / (left_norm.sqrt() * right_norm.sqrt())
+}
+
+fn push_category_evidence(
+    selected: &mut Vec<RankedSummaryEvidence>,
+    evidence: &[RankedSummaryEvidence],
+    category: SummaryEvidenceCategory,
+    limit: usize,
+) {
+    let mut added = 0usize;
+    for item in evidence
+        .iter()
+        .filter(|item| item.category == category)
+        .cloned()
+    {
+        if added >= limit || selected.len() >= MAX_EVIDENCE_REFS {
+            break;
+        }
+        let before = selected.len();
+        push_ranked_evidence(selected, item);
+        if selected.len() > before {
+            added += 1;
+        }
+    }
+}
+
+fn push_nearby_evidence(
+    selected: &mut Vec<RankedSummaryEvidence>,
+    evidence: &[RankedSummaryEvidence],
+    limit: usize,
+) {
+    let nearby = evidence
+        .iter()
+        .filter(|item| item.category == SummaryEvidenceCategory::Nearby)
+        .cloned()
+        .collect::<Vec<_>>();
+    for group in [
+        NearbyEvidenceGroup::School,
+        NearbyEvidenceGroup::Metro,
+        NearbyEvidenceGroup::Hospital,
+        NearbyEvidenceGroup::TechPark,
+        NearbyEvidenceGroup::Other,
+    ] {
+        if selected
+            .iter()
+            .filter(|item| item.category == SummaryEvidenceCategory::Nearby)
+            .count()
+            >= limit
+            || selected.len() >= MAX_EVIDENCE_REFS
+        {
+            break;
+        }
+        if let Some(item) = nearby
+            .iter()
+            .filter(|item| nearby_group(&item.label) == group)
+            .min_by(|left, right| compare_nearby_evidence(left, right))
+            .cloned()
+        {
+            push_ranked_evidence(selected, item);
+        }
+    }
+}
+
+fn compare_summary_evidence(
+    left: &RankedSummaryEvidence,
+    right: &RankedSummaryEvidence,
+) -> std::cmp::Ordering {
+    left.rank
+        .cmp(&right.rank)
+        .then_with(|| {
+            nearby_group(&left.label)
+                .rank()
+                .cmp(&nearby_group(&right.label).rank())
+        })
+        .then_with(|| compare_optional_f64(distance_km(&left.label), distance_km(&right.label)))
+        .then_with(|| right.confidence.total_cmp(&left.confidence))
+        .then_with(|| right.learned_at.cmp(&left.learned_at))
+}
+
+fn compare_nearby_evidence(
+    left: &RankedSummaryEvidence,
+    right: &RankedSummaryEvidence,
+) -> std::cmp::Ordering {
+    compare_optional_f64(distance_km(&left.label), distance_km(&right.label))
+        .then_with(|| right.confidence.total_cmp(&left.confidence))
+        .then_with(|| right.learned_at.cmp(&left.learned_at))
+}
+
+fn compare_optional_f64(left: Option<f64>, right: Option<f64>) -> std::cmp::Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.total_cmp(&right),
+        (Some(_), None) => std::cmp::Ordering::Less,
+        (None, Some(_)) => std::cmp::Ordering::Greater,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum NearbyEvidenceGroup {
+    School,
+    Metro,
+    Hospital,
+    TechPark,
+    Other,
+}
+
+impl NearbyEvidenceGroup {
+    fn rank(self) -> u8 {
+        match self {
+            Self::School => 0,
+            Self::Metro => 1,
+            Self::Hospital => 2,
+            Self::TechPark => 3,
+            Self::Other => 4,
+        }
+    }
+}
+
+fn nearby_group(label: &str) -> NearbyEvidenceGroup {
+    let lower = label.to_ascii_lowercase();
+    if lower.starts_with("schools nearby") {
+        NearbyEvidenceGroup::School
+    } else if lower.starts_with("metro nearby") {
+        NearbyEvidenceGroup::Metro
+    } else if lower.starts_with("hospitals nearby") {
+        NearbyEvidenceGroup::Hospital
+    } else if lower.starts_with("tech parks nearby") {
+        NearbyEvidenceGroup::TechPark
+    } else {
+        NearbyEvidenceGroup::Other
+    }
+}
+
+fn distance_km(label: &str) -> Option<f64> {
+    let marker = " km";
+    let marker_index = label.find(marker)?;
+    let before = &label[..marker_index];
+    let token = before
+        .rsplit(|ch: char| !(ch.is_ascii_digit() || ch == '.'))
+        .find(|part| !part.is_empty())?;
+    token.parse::<f64>().ok().filter(|value| value.is_finite())
 }
 
 fn summary_category_and_rank(fact_key: &str) -> Option<(SummaryEvidenceCategory, u32)> {
@@ -554,26 +767,8 @@ fn normalized_summary_style(value: Option<&str>) -> String {
         .to_ascii_lowercase()
 }
 
-fn join_sentence_parts(parts: &[&str]) -> String {
-    match parts {
-        [] => String::new(),
-        [one] => (*one).to_string(),
-        [left, right] => format!("{left} and {right}"),
-        _ => {
-            let mut joined = parts[..parts.len() - 1].join(", ");
-            joined.push_str(", and ");
-            joined.push_str(parts[parts.len() - 1]);
-            joined
-        }
-    }
-}
-
 fn looks_internal(value: &str) -> bool {
     value.contains("generated_context_summary") || value.contains("data/lake")
-}
-
-pub fn default_summary_model() -> Arc<dyn SummaryModel> {
-    Arc::new(EvidenceBoundSummaryModel)
 }
 
 #[cfg(test)]
@@ -630,5 +825,85 @@ mod tests {
         assert!(fact_label("area", "Whitefield")
             .unwrap()
             .contains("Whitefield"));
+    }
+
+    #[test]
+    fn summary_ignores_nearby_place_google_review_metrics() {
+        let nearby_rating = summary_fact(
+            "google_rating",
+            FactValue::Numeric(4.9),
+            Some(GOOGLE_NEARBY_PLACES_SKILL_ID),
+        );
+        let society_rating = summary_fact(
+            "google_rating",
+            FactValue::Numeric(3.6),
+            Some("fetch_google_review_links"),
+        );
+
+        assert!(summarize_fact(&nearby_rating).is_none());
+        assert_eq!(
+            summarize_fact(&society_rating).map(|evidence| evidence.label),
+            Some("Google rating 3.6".to_string())
+        );
+    }
+
+    #[test]
+    fn summary_evidence_balances_nearby_categories_by_distance() {
+        let embedder = crate::search::HashSemanticEmbedder::default();
+        let learned_at = Utc::now();
+        let evidence = vec![
+            nearby("hospitals nearby: Aster Hospital (2.9 km)", learned_at),
+            nearby("hospitals nearby: Manipal Hospital (3.3 km)", learned_at),
+            nearby("schools nearby: ORCHIDS (0.9 km)", learned_at),
+            nearby(
+                "metro nearby: Garudacharapalya Metro station (5.1 km)",
+                learned_at,
+            ),
+            nearby("metro nearby: Whitefield (Kadugodi) (2.2 km)", learned_at),
+            nearby("tech parks nearby: ITPB (3.2 km)", learned_at),
+        ];
+
+        let selected = select_summary_evidence(evidence, &embedder, Some("Godrej Splendour"));
+        let labels = selected
+            .iter()
+            .filter(|item| item.category == SummaryEvidenceCategory::Nearby)
+            .take(4)
+            .map(|item| item.label.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(labels.contains(&"schools nearby: ORCHIDS (0.9 km)"));
+        assert!(labels.contains(&"metro nearby: Whitefield (Kadugodi) (2.2 km)"));
+        assert!(labels.contains(&"hospitals nearby: Aster Hospital (2.9 km)"));
+        assert!(labels.contains(&"tech parks nearby: ITPB (3.2 km)"));
+        assert!(!labels.contains(&"metro nearby: Garudacharapalya Metro station (5.1 km)"));
+    }
+
+    fn nearby(label: &str, learned_at: DateTime<Utc>) -> RankedSummaryEvidence {
+        RankedSummaryEvidence {
+            category: SummaryEvidenceCategory::Nearby,
+            label: label.to_string(),
+            source_type: "Google".to_string(),
+            source_url: None,
+            entity_id: "society:godrej-splendour".to_string(),
+            learned_at,
+            confidence: 0.82,
+            rank: 20,
+        }
+    }
+
+    fn summary_fact(fact_key: &str, value: FactValue, skill_id: Option<&str>) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: "society:godrej-splendour".to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: "test".to_string(),
+            value_text: None,
+            value,
+            confidence: 0.82,
+            source_type: "Google".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: skill_id.map(str::to_string),
+            learned_at: Utc::now(),
+        }
     }
 }
