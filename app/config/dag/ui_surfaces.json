@@ -21,6 +21,26 @@
       "primary_entity": "road_segment"
     },
     {
+      "id": "water_context",
+      "title": "Water context",
+      "kicker": "Environmental proof",
+      "leaf_keys": [
+        "environment.groundwater_potential_class",
+        "environment.water_body_distance_m",
+        "resilience.rainwater_harvesting_present"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society -> in_area -> area"
+      ],
+      "components": [
+        "EvidenceStack:water_context",
+        "livability_brief:risk",
+        "search_chip:water_context"
+      ],
+      "primary_entity": "society"
+    },
+    {
       "id": "water_supply",
       "title": "Water supply",
       "kicker": "Operating proof",
@@ -152,5 +172,5 @@
       "primary_entity": "society"
     }
   ],
-  "surface_count": 6
+  "surface_count": 7
 }

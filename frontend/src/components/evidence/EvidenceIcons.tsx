@@ -146,6 +146,15 @@ export function AlertIcon({ size = 16, style }: IconProps) {
   );
 }
 
+export function DropletIcon({ size = 16, style }: IconProps) {
+  return (
+    <svg {...base(size, style)}>
+      <path d="M12 3s6 6.3 6 11a6 6 0 0 1-12 0c0-4.7 6-11 6-11z" />
+      <path d="M9.5 15.5c.7 1 1.6 1.5 2.9 1.5" />
+    </svg>
+  );
+}
+
 export function GapIcon({ size = 16, style }: IconProps) {
   return (
     <svg {...base(size, style)} strokeDasharray="2.6 2.6">
@@ -191,6 +200,9 @@ export function IconForKind({ kind, size = 16 }: { kind: string; size?: number }
       return <PinIcon size={size} />;
     case "nearby":
       return <RouteIcon size={size} />;
+    case "water_context":
+    case "waterlogging_context":
+      return <DropletIcon size={size} />;
     case "reviews":
       return <QuoteIcon size={size} />;
     case "community":
@@ -206,7 +218,8 @@ export function IconForLabel({ label, size = 15 }: { label: string; size?: numbe
   if (/(metro|train|station|rail|purple line|green line)/.test(l)) return <TrainIcon size={size} />;
   if (/(school|college|education|academ)/.test(l)) return <SchoolIcon size={size} />;
   if (/(hospital|clinic|health|medical)/.test(l)) return <HospitalIcon size={size} />;
-  if (/(park|green|tree|lake|garden)/.test(l)) return <TreeIcon size={size} />;
+  if (/(groundwater|water|lake|drain|flood|rainwater)/.test(l)) return <DropletIcon size={size} />;
+  if (/(park|green|tree|garden)/.test(l)) return <TreeIcon size={size} />;
   if (/(traffic|road|commute|route|highway|drive)/.test(l)) return <RouteIcon size={size} />;
   if (/(price|rate|cost|value|₹|budget|sqft)/.test(l)) return <RupeeIcon size={size} />;
   if (/(rera|registration|approv|legal|complaint|escrow)/.test(l)) return <SealIcon size={size} />;

@@ -1,38 +1,39 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
+use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::recommendations::{
-    build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
+    RecommendationBranch, RecommendationBranchInputs, build_recommendation_branches,
 };
-use crate::scoring::{self, compute_transparency_score, MarketActivityResponse, TransparencyScore};
-use crate::search::text::compute_confidence_for_detail;
+use crate::scoring::{self, MarketActivityResponse, TransparencyScore, compute_transparency_score};
 use crate::search::ConfidenceScore;
+use crate::search::text::compute_confidence_for_detail;
 use crate::serving::{
     GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, SocietyFactProjection,
 };
 use crate::state::AppState;
 
 use crate::community::{
-    community_evidence_from_fact_value, community_pulse_from_summary,
-    deterministic_community_summarizer, CommunityPulse,
+    CommunityPulse, community_evidence_from_fact_value, community_pulse_from_summary,
+    deterministic_community_summarizer,
 };
 use crate::knowledge::node::NodeType;
-use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
+use crate::knowledge::{FactValue, SourcedFact, google_reviews_url_from_facts};
 use crate::livability_brief::{
-    compose_livability_brief, filter_reddit_evidence, LivabilityBrief, LivabilityBriefInput,
-    LivabilityLens, StructuredFactSignal,
+    LivabilityBrief, LivabilityBriefInput, LivabilityLens, StructuredFactSignal,
+    compose_livability_brief, filter_reddit_evidence,
 };
 
 use super::enrichment::{
-    enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
+    AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo, enrich_area,
+    enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
-    society_node_id, AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
+    society_node_id,
 };
 
 /// GET /api/properties — returns UI-ready property cards.
@@ -1507,6 +1508,14 @@ fn collect_buyer_context_items(
                 .and_then(|projection| serving_source_item(projection, &fact.key, &fact.label))
                 .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label))
                 .or_else(|| {
+                    serving_related_society_source_item(
+                        property,
+                        serving_facts,
+                        &fact.key,
+                        &fact.label,
+                    )
+                })
+                .or_else(|| {
                     review_signal_source_item(
                         graph,
                         &society_id,
@@ -1525,6 +1534,77 @@ fn collect_buyer_context_items(
     }
 
     items
+}
+
+fn serving_related_society_source_item(
+    property: &crate::models::Property,
+    serving_facts: Option<&ServingFactIndex>,
+    fact_key: &str,
+    label: &str,
+) -> Option<SourceItem> {
+    if !fact_key.starts_with("environment.") {
+        return None;
+    }
+    let facts = serving_facts?;
+    let target_names = related_society_match_names(property);
+    if target_names.is_empty() {
+        return None;
+    }
+
+    facts.rows().find_map(|(entity_id, rows)| {
+        if !entity_id.starts_with("society:") {
+            return None;
+        }
+        if !rows.facts.iter().any(|fact| fact.fact_key == fact_key) {
+            return None;
+        }
+        if !serving_society_rows_match_names(rows, &target_names) {
+            return None;
+        }
+        serving_entity_source_item(facts, entity_id, fact_key, fact_key, label)
+    })
+}
+
+fn related_society_match_names(property: &crate::models::Property) -> Vec<String> {
+    let mut names = vec![project_name_for(property), property.society_id.clone()];
+    names.sort();
+    names.dedup();
+    names
+        .into_iter()
+        .filter_map(|name| normalized_project_name(&name))
+        .collect()
+}
+
+fn serving_society_rows_match_names(
+    rows: &crate::serving::ServingEntityFactRows,
+    target_names: &[String],
+) -> bool {
+    const NAME_FACT_KEYS: &[&str] = &["listing_society", "title", "rera_project_name"];
+    rows.facts.iter().any(|fact| {
+        NAME_FACT_KEYS.contains(&fact.fact_key.as_str())
+            && match &fact.value {
+                FactValue::Text(value) => normalized_project_name(value)
+                    .is_some_and(|name| target_names.iter().any(|target| target == &name)),
+                _ => false,
+            }
+    })
+}
+
+fn normalized_project_name(value: &str) -> Option<String> {
+    let normalized = value
+        .to_lowercase()
+        .replace('&', " and ")
+        .split(|character: char| !character.is_ascii_alphanumeric())
+        .filter(|token| {
+            !token.is_empty()
+                && !matches!(
+                    *token,
+                    "soc" | "society" | "rera" | "project" | "phase" | "the"
+                )
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    (!normalized.is_empty()).then_some(normalized)
 }
 
 fn serving_road_segment_source_item(
@@ -1932,6 +2012,9 @@ fn section_confidence_pct(items: &[SourceItem]) -> u8 {
 
 fn section_summary(panel: &SourcePanel) -> String {
     if let Some(item) = primary_section_item(panel) {
+        if panel.kind == "water_context" && item.key == "environment.groundwater_potential_class" {
+            return groundwater_potential_summary(item);
+        }
         return source_item_summary(item);
     }
     if let Some(media) = panel.media.first() {
@@ -1943,6 +2026,19 @@ fn section_summary(panel: &SourcePanel) -> String {
         .is_empty()
         .then(|| "Evidence will appear here once source-backed facts are promoted.".to_string())
         .unwrap_or_else(|| truncate_summary(&panel.subtitle, 96))
+}
+
+fn groundwater_potential_summary(item: &SourceItem) -> String {
+    let class = item
+        .value
+        .rsplit_once(':')
+        .map(|(_, value)| value.trim())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| item.value.trim());
+    if class.is_empty() {
+        return "Groundwater potential context is available for this society.".to_string();
+    }
+    format!("{class} groundwater potential zone near the society.")
 }
 
 fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
@@ -2920,10 +3016,12 @@ mod serving_state_tests {
             panels.iter().all(|panel| panel.kind != "reviews"),
             "Google reviews should be a source inside Community pulse, not a separate panel"
         );
-        assert!(!community
-            .missing
-            .iter()
-            .any(|item| item.contains("Review text is not ingested")));
+        assert!(
+            !community
+                .missing
+                .iter()
+                .any(|item| item.contains("Review text is not ingested"))
+        );
     }
 
     #[test]
@@ -3103,6 +3201,91 @@ mod serving_state_tests {
             "Schools: Greenwood High (1.2 km, 4.3 rating) +1 more"
         );
         assert!(nearby.missing.is_empty());
+    }
+
+    #[test]
+    fn property_evidence_includes_groundwater_potential_water_context() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![typed_serving_fact(
+                "environment.groundwater_potential_class",
+                FactValue::Text("Moderate".to_string()),
+                "OpenCity",
+                Some("https://data.opencity.in/example-groundwater.kml"),
+                10,
+            )],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let response = build_property_evidence_response_from_panels(
+            property.id.clone(),
+            kg_entity_refs_for_property(&property, &graph),
+            None,
+            build_source_panels(&graph, &property, Some(&serving), None),
+        );
+        let section = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "water_context")
+            .expect("groundwater fact should produce the water context section");
+
+        assert_eq!(section.title, "Water context");
+        assert_eq!(section.priority, 34);
+        assert_eq!(
+            section.summary,
+            "Moderate groundwater potential zone near the society."
+        );
+        assert_eq!(section.source_types, vec!["OpenCity".to_string()]);
+        assert_eq!(
+            section.items[0].key,
+            "environment.groundwater_potential_class"
+        );
+        assert_eq!(
+            section.items[0].relationship.as_deref(),
+            Some("surrounding water quality")
+        );
+    }
+
+    #[test]
+    fn property_evidence_finds_groundwater_on_matching_rera_society_entity() {
+        let graph = legacy_graph();
+        let property = property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact_for_entity(
+                    "society:rera-sample",
+                    "environment.groundwater_potential_class",
+                    FactValue::Text("Moderate".to_string()),
+                    10,
+                ),
+                serving_fact_for_entity(
+                    "society:rera-sample",
+                    "listing_society",
+                    FactValue::Text("Sample Society".to_string()),
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let response = build_property_evidence_response_from_panels(
+            property.id.clone(),
+            kg_entity_refs_for_property(&property, &graph),
+            None,
+            build_source_panels(&graph, &property, Some(&serving), None),
+        );
+        let section = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "water_context")
+            .expect("matching RERA society groundwater fact should produce water context");
+
+        assert_eq!(
+            section.summary,
+            "Moderate groundwater potential zone near the society."
+        );
+        assert_eq!(section.items[0].entity_id, "society:rera-sample");
     }
 
     #[test]

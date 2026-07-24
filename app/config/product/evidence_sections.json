@@ -146,6 +146,29 @@
     ]
   },
   {
+    "kind": "water_context",
+    "priority": 34,
+    "constellation": "risk",
+    "surfaces": ["buyer_context"],
+    "title": "Water context",
+    "subtitle": "Groundwater potential around the society, joined offline from public environmental data.",
+    "scope": "society",
+    "relationship": "surrounding water quality",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 3
+    },
+    "facts": [
+      {
+        "key": "environment.groundwater_potential_class",
+        "label": "Groundwater potential",
+        "scope": "society",
+        "relationship": "surrounding water quality"
+      }
+    ]
+  },
+  {
     "kind": "waterlogging_context",
     "priority": 35,
     "constellation": "risk",

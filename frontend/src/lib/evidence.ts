@@ -62,6 +62,7 @@ const SECTION_BAND: Record<string, EvidenceBand> = {
   rera: "records",
   approach_road: "area",
   nearby: "area",
+  water_context: "area",
   waterlogging_context: "area",
   surroundings: "area",
   community: "area",
