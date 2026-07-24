@@ -2846,7 +2846,6 @@ body {
 .property-evidence-grid,
 .property-source-section,
 .property-context-panel,
-.property-mini-card,
 .property-similar-section {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -3033,8 +3032,7 @@ body {
 
 .property-decision-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
-  gap: 1.25rem;
+  grid-template-columns: minmax(0, 1fr);
   align-items: start;
 }
 
@@ -3042,19 +3040,6 @@ body {
   display: grid;
   gap: 1rem;
   min-width: 0;
-}
-
-.property-action-rail {
-  position: sticky;
-  top: 1rem;
-  display: grid;
-  gap: 0.85rem;
-}
-
-.property-plan-entry-card {
-  padding: 1.05rem;
-  border-color: rgba(201, 107, 79, 0.15);
-  background: linear-gradient(145deg, rgba(255, 250, 247, 0.98), rgba(247, 244, 239, 0.94));
 }
 
 .property-rail-brief-hook > span {
@@ -3072,47 +3057,42 @@ body {
   line-height: 1.55;
 }
 
-.property-plan-entry-card > span {
-  color: var(--color-accent);
-  font-size: 0.66rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.property-plan-entry-card h3 {
-  margin: 0.45rem 0 0;
-  color: var(--color-text);
-  font-size: 1rem;
-  letter-spacing: -0.025em;
-  line-height: 1.25;
-}
-
-.property-plan-entry-card p {
-  margin: 0.55rem 0 0;
-  color: var(--color-text-secondary);
-  font-size: 0.76rem;
-  line-height: 1.5;
-}
-
-.property-plan-entry-link {
+.property-market-strip {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  margin-top: 0.85rem;
-  padding: 0.7rem 0.8rem;
-  border-radius: 10px;
-  color: #fff;
-  background: var(--color-action);
-  font-size: 0.78rem;
-  font-weight: 750;
-  text-decoration: none;
-  transition: transform 0.2s ease, background 0.2s ease;
+  gap: 0.85rem;
+  min-width: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.72);
 }
 
-.property-plan-entry-link:hover {
-  background: var(--color-action-hover);
-  transform: translateY(-1px);
+.property-market-strip > strong {
+  flex: 0 0 auto;
+  color: var(--color-text);
+  font-size: 0.78rem;
+}
+
+.property-market-strip > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.property-market-strip span {
+  padding: 0.34rem 0.58rem;
+  border-radius: 999px;
+  background: rgba(249, 245, 242, 0.78);
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+}
+
+@media (max-width: 640px) {
+  .property-market-strip {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 .property-decision-card,
@@ -3222,7 +3202,6 @@ body {
 
 .property-evidence-card h3,
 .property-context-grid h3,
-.property-mini-card h3,
 .property-compact-list h4 {
   margin: 0 0 0.55rem;
   color: var(--color-text);
@@ -3841,24 +3820,6 @@ body {
   padding-top: 0.2rem;
 }
 
-.property-mini-card {
-  padding: 0.95rem;
-}
-
-.property-mini-card {
-  display: grid;
-  gap: 0.65rem;
-}
-
-.property-rail-intel {
-  gap: 1rem;
-}
-
-.property-rail-intel > div + div {
-  padding-top: 0.9rem;
-  border-top: 1px solid var(--color-border);
-}
-
 .property-risk-stack {
   display: grid;
   gap: 0.65rem;
@@ -3916,21 +3877,6 @@ body {
 
 .property-risk-fill--risk {
   background: var(--color-negative);
-}
-
-.property-market-list {
-  display: grid;
-  gap: 0.45rem;
-}
-
-.property-market-list span {
-  padding: 0.48rem 0.62rem;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: rgba(249, 245, 242, 0.72);
-  color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  line-height: 1.35;
 }
 
 .property-similar-grid {
@@ -3997,11 +3943,6 @@ body {
   .property-brief-hero,
   .property-decision-layout {
     grid-template-columns: 1fr;
-  }
-
-  .property-action-rail {
-    position: static;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -4088,10 +4029,6 @@ body {
   }
 
   .property-context-lists {
-    grid-template-columns: 1fr;
-  }
-
-  .property-action-rail {
     grid-template-columns: 1fr;
   }
 
@@ -4250,8 +4187,7 @@ body {
   .property-brief-hero,
   .property-brief-copy,
   .property-decision-layout,
-  .property-decision-main,
-  .property-action-rail {
+  .property-decision-main {
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -4259,8 +4195,7 @@ body {
 
   .property-brief-hero > *,
   .property-decision-layout > *,
-  .property-decision-main > *,
-  .property-action-rail > * {
+  .property-decision-main > * {
     width: 100%;
     max-width: calc(100dvw - 3rem);
     min-width: 0;
@@ -4307,8 +4242,7 @@ body {
   .property-brief-hero,
   .property-brief-copy,
   .property-decision-layout,
-  .property-decision-main,
-  .property-action-rail {
+  .property-decision-main {
     width: 100%;
     max-width: 100%;
     min-width: 0;

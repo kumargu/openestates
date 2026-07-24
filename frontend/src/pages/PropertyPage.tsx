@@ -11,11 +11,14 @@ import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
+import {
+  AroundThisHomePlate,
+  hasAroundThisHomePlate,
+} from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
-import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 import {
-  detailEvidenceExcludeKinds,
+  detailEvidenceExcludeKindsForPlate,
   isRedundantHomeState,
 } from "../lib/property-signals.ts";
 
@@ -163,7 +166,11 @@ export function PropertyPage() {
   ].filter((row): row is string => row !== null);
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
-  const evidenceExcludeKinds = detailEvidenceExcludeKinds();
+  const showNearbyPlate = hasAroundThisHomePlate(data.map_context);
+  const evidenceExcludeKinds = detailEvidenceExcludeKindsForPlate({
+    showNearbyPlate,
+    hasWaterOnPlate: Boolean(showNearbyPlate && data.map_context?.water),
+  });
   const showHomeStateChip = Boolean(
     data.home_state_display
     && !isRedundantHomeState(
@@ -273,6 +280,21 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
+          {showNearbyPlate && data.map_context && (
+            <AroundThisHomePlate context={data.map_context} />
+          )}
+
+          {marketRows.length > 0 && (
+            <section className="property-market-strip" aria-label="Market pulse">
+              <strong>Market pulse</strong>
+              <div>
+                {marketRows.map((row) => (
+                  <span key={row}>{row}</span>
+                ))}
+              </div>
+            </section>
+          )}
+
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
           )}
@@ -331,30 +353,6 @@ export function PropertyPage() {
           ) : null}
 
         </main>
-
-        <aside className="property-action-rail">
-          <div className="property-mini-card property-plan-entry-card">
-            <span>{BUY_VS_RENT.kicker}</span>
-            <h3>Would buying beat renting for you?</h3>
-            <p>Compare EMI, rent, and investing the difference — with a repayment timeline.</p>
-            <Link to={`/property/${p.id}/plan`} className="property-plan-entry-link">
-              {BUY_VS_RENT.cta}
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M5 12h14M13 6l6 6-6 6" />
-              </svg>
-            </Link>
-          </div>
-          <div className="property-mini-card property-rail-intel">
-            <div>
-              <h3>Market pulse</h3>
-              <div className="property-market-list">
-                {marketRows.map((row) => (
-                  <span key={row}>{row}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-        </aside>
       </div>
     </div>
   );

@@ -210,6 +210,51 @@ export type PropertyDetailResponse = {
     google_reviews_url?: string;
   };
   livability_brief?: LivabilityBrief;
+  /** Schematic neighborhood plate projected from nearby + water facts. */
+  map_context?: PropertyMapContext;
+};
+
+export type MapNearbyLayer =
+  | "metro"
+  | "schools"
+  | "hospitals"
+  | "fitness"
+  | "tech";
+
+export type MapHomeAnchor = {
+  entity_id: string;
+  name: string;
+  area?: string;
+  latitude?: number;
+  longitude?: number;
+};
+
+export type MapPlacePin = {
+  place_entity_id?: string;
+  layer: MapNearbyLayer | string;
+  name: string;
+  latitude?: number;
+  longitude?: number;
+  distance_km?: number;
+  rating?: number;
+  review_count?: number;
+  note?: string;
+  source_url?: string;
+  source_type: string;
+};
+
+export type MapWaterContext = {
+  groundwater_class: string;
+  summary: string;
+  source_type: string;
+  source_url?: string;
+  illustrative_zone: boolean;
+};
+
+export type PropertyMapContext = {
+  home: MapHomeAnchor;
+  places: MapPlacePin[];
+  water?: MapWaterContext;
 };
 
 /**

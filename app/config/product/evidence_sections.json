@@ -133,7 +133,7 @@
     "scope": "society",
     "relationship": "nearby map context",
     "presentation": {
-      "variant": "fact_grid",
+      "variant": "schematic_map",
       "density": "compact",
       "max_preview_items": 6
     },

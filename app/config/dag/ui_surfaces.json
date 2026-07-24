@@ -3,6 +3,28 @@
   "description": "Buyer-facing surfaces map to leaf sets. One signal, one primary surface.",
   "surfaces": [
     {
+      "id": "around_this_home",
+      "title": "Around this home",
+      "kicker": "Neighborhood plate",
+      "leaf_keys": [
+        "nearby_schools",
+        "nearby_metro_stations",
+        "nearby_hospitals",
+        "nearby_fitness",
+        "nearby_tech_parks",
+        "environment.groundwater_potential_class"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society nearby_* attributions -> place:google:*"
+      ],
+      "components": [
+        "AroundThisHomePlate",
+        "search_chip:nearby"
+      ],
+      "primary_entity": "society"
+    },
+    {
       "id": "approach_road",
       "title": "Approach road",
       "kicker": "Access proof",
@@ -34,6 +56,7 @@
         "society -> in_area -> area"
       ],
       "components": [
+        "AroundThisHomePlate",
         "EvidenceStack:water_context",
         "livability_brief:risk",
         "search_chip:water_context"

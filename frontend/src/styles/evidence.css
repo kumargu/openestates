@@ -706,6 +706,443 @@
 }
 
 /* ===================================================================
+   Around this home — schematic neighborhood plate
+   =================================================================== */
+
+.nearby-plate {
+  margin-bottom: 1rem;
+  padding: 1.15rem 1.15rem 1rem;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.06));
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.nearby-plate__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.85rem 1.25rem;
+}
+
+.nearby-plate__kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #888);
+}
+
+.nearby-plate__title {
+  margin: 0.35rem 0 0;
+  font-size: clamp(1.15rem, 0.95rem + 0.6vw, 1.4rem);
+  font-weight: 650;
+  letter-spacing: -0.03em;
+  color: var(--color-cool-deep, #3f5c8a);
+}
+
+.nearby-plate__sub {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: var(--color-text-secondary, #777);
+}
+
+.nearby-plate__scale {
+  display: inline-flex;
+  padding: 0.2rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: rgba(246, 248, 251, 0.9);
+}
+
+.nearby-plate__scale-btn {
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary, #666);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nearby-plate__scale-btn.is-active {
+  background: #fff;
+  color: var(--color-cool-deep, #3f5c8a);
+  font-weight: 650;
+}
+
+.nearby-plate__layers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.95rem;
+}
+
+.nearby-plate__chip {
+  margin: 0;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text-secondary, #666);
+  font: inherit;
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.nearby-plate__chip.is-active {
+  border-color: rgba(63, 92, 138, 0.35);
+  background: rgba(63, 92, 138, 0.08);
+  color: var(--color-cool-deep, #3f5c8a);
+  font-weight: 620;
+}
+
+.nearby-plate__chip--water.is-active {
+  border-color: rgba(72, 148, 148, 0.4);
+  background: rgba(72, 148, 148, 0.1);
+  color: #2f6f6f;
+}
+
+.nearby-plate__body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(230px, 270px);
+  gap: 1.15rem;
+  margin-top: 1rem;
+  align-items: stretch;
+}
+
+.nearby-plate__canvas {
+  min-width: 0;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(246, 248, 251, 0.9);
+}
+
+.nearby-map {
+  position: relative;
+  isolation: isolate;
+}
+
+.nearby-map__canvas {
+  position: relative;
+  width: 100%;
+  height: min(52vw, 420px);
+  min-height: 280px;
+}
+
+.nearby-map--water-tint .nearby-map__canvas::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(72, 148, 148, 0.08);
+  z-index: 1;
+}
+
+.nearby-map__chrome {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.7rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  max-width: calc(100% - 5rem);
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 0.62rem;
+  color: var(--color-text-muted, #888);
+  pointer-events: none;
+}
+
+.nearby-map-marker {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: var(--color-cool-deep, #3f5c8a);
+  color: #fff;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.nearby-map-marker--home {
+  width: auto;
+  height: auto;
+  padding: 0.2rem 0.45rem 0.2rem 0.25rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  color: var(--color-text, #1a1a1a);
+  border-color: rgba(63, 92, 138, 0.35);
+  gap: 0.3rem;
+  grid-auto-flow: column;
+  font-size: 0.68rem;
+  font-weight: 650;
+}
+
+.nearby-map-marker__home-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--color-cool-deep, #3f5c8a);
+}
+
+.nearby-map-marker--place {
+  background: #2a2a2a;
+}
+
+.nearby-map-marker--metro {
+  background: var(--color-cool-deep, #3f5c8a);
+}
+
+.nearby-map-marker--schools {
+  background: #3a4a3a;
+}
+
+.nearby-map-marker--hospitals {
+  background: #4a3a3a;
+}
+
+.nearby-map-marker--fitness,
+.nearby-map-marker--tech {
+  background: #3a3a4a;
+}
+
+.nearby-map-marker--place.is-selected {
+  width: 34px;
+  height: 34px;
+  background: #c45c26;
+  font-size: 0.8rem;
+}
+
+.nearby-map-marker--cluster {
+  width: 34px;
+  height: 34px;
+  background: rgba(42, 42, 42, 0.92);
+  font-size: 0.7rem;
+}
+
+.nearby-plate__empty-map {
+  display: grid;
+  place-content: center;
+  gap: 0.35rem;
+  min-height: 280px;
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--color-text-secondary, #777);
+  font-size: 0.84rem;
+}
+
+.nearby-plate__empty-map p {
+  margin: 0;
+}
+
+.nearby-plate__nearest {
+  list-style: none;
+  margin: 0;
+  padding: 0.45rem 0.65rem 0.6rem;
+  display: grid;
+  gap: 0.3rem;
+  border-top: 1px solid rgba(0, 0, 0, 0.05);
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.nearby-plate__nearest-row {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.nearby-plate__nearest-row.is-selected {
+  border-color: rgba(196, 92, 38, 0.28);
+  background: rgba(196, 92, 38, 0.06);
+}
+
+.nearby-plate__nearest-num {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #2a2a2a;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.nearby-plate__nearest-row.is-selected .nearby-plate__nearest-num {
+  background: #c45c26;
+}
+
+.nearby-plate__nearest-copy {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.nearby-plate__nearest-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-text, #1a1a1a);
+}
+
+.nearby-plate__nearest-meta {
+  font-size: 0.68rem;
+  color: var(--color-text-muted, #888);
+}
+
+.nearby-plate__receipt {
+  padding: 0.9rem 0.95rem;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 12px;
+  background: rgba(250, 250, 248, 0.9);
+}
+
+.nearby-plate__receipt-kicker {
+  margin: 0;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #888);
+}
+
+.nearby-plate__receipt h3 {
+  margin: 0.4rem 0 0;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.nearby-plate__receipt-meta {
+  margin: 0.35rem 0 0;
+  font-size: 0.78rem;
+  color: var(--color-text-secondary, #777);
+  line-height: 1.4;
+}
+
+.nearby-plate__receipt-facts {
+  display: grid;
+  gap: 0.7rem;
+  margin: 0.95rem 0 0;
+}
+
+.nearby-plate__receipt-facts div {
+  margin: 0;
+}
+
+.nearby-plate__receipt-facts dt {
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-text-muted, #888);
+}
+
+.nearby-plate__receipt-facts dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.nearby-plate__receipt-link {
+  display: inline-block;
+  margin-top: 1rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--color-cool-deep, #3f5c8a);
+  text-decoration: none;
+}
+
+.nearby-plate__receipt-note {
+  margin: 0.9rem 0 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--color-text-secondary, #777);
+}
+
+.nearby-plate__water-card {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 9px;
+  background: rgba(72, 148, 148, 0.08);
+  font-size: 0.74rem;
+  color: #4d7777;
+  line-height: 1.4;
+}
+
+.nearby-plate__water-card strong {
+  color: #2f6f6f;
+  font-weight: 650;
+}
+
+.nearby-map .maplibregl-ctrl-group {
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.nearby-map .maplibregl-ctrl-attrib {
+  font-size: 0.58rem;
+  background: rgba(255, 255, 255, 0.85);
+}
+
+@media (max-width: 860px) {
+  .nearby-plate__body {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .nearby-plate {
+    padding: 0.9rem;
+  }
+
+  .nearby-map__canvas {
+    min-height: 240px;
+    height: 260px;
+  }
+
+  .nearby-map__chrome {
+    position: static;
+    margin: 0.55rem 0.65rem 0;
+    max-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nearby-plate__chip,
+  .nearby-map-marker {
+    transition: none;
+  }
+}
+
+/* ===================================================================
    Evidence Stack — layered folds (RERA-first), dynamic + self-adjusting
    =================================================================== */
 

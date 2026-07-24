@@ -26,3 +26,15 @@ export function isRedundantHomeState(
 export function detailEvidenceExcludeKinds(): string[] {
   return ["approach_road", "home_state"];
 }
+
+/** Kinds to hide from the evidence stack when the nearby plate is on detail. */
+export function detailEvidenceExcludeKindsForPlate(options: {
+  showNearbyPlate: boolean;
+  hasWaterOnPlate: boolean;
+}): string[] {
+  return [
+    ...detailEvidenceExcludeKinds(),
+    ...(options.showNearbyPlate ? ["nearby"] : []),
+    ...(options.showNearbyPlate && options.hasWaterOnPlate ? ["water_context"] : []),
+  ];
+}

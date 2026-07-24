@@ -126,6 +126,9 @@ pub struct PropertyDetail {
     /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub livability_brief: Option<LivabilityBrief>,
+    /// Schematic neighborhood plate: home pin, nearby POIs, optional water context.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub map_context: Option<crate::routes::property_map::PropertyMapContext>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1573,11 +1576,41 @@ fn serving_society_rows_match_names(
     rows.facts.iter().any(|fact| {
         NAME_FACT_KEYS.contains(&fact.fact_key.as_str())
             && match &fact.value {
-                FactValue::Text(value) => normalized_project_name(value)
-                    .is_some_and(|name| target_names.iter().any(|target| target == &name)),
+                FactValue::Text(value) => normalized_project_name(value).is_some_and(|name| {
+                    target_names
+                        .iter()
+                        .any(|target| project_names_compatible(target, &name))
+                }),
                 _ => false,
             }
     })
+}
+
+fn project_names_compatible(left: &str, right: &str) -> bool {
+    if left == right {
+        return true;
+    }
+    let left_tokens = left.split_whitespace().collect::<Vec<_>>();
+    let right_tokens = right.split_whitespace().collect::<Vec<_>>();
+    if left_tokens.is_empty() || right_tokens.is_empty() {
+        return false;
+    }
+    let (smaller, larger) = if left_tokens.len() <= right_tokens.len() {
+        (&left_tokens, &right_tokens)
+    } else {
+        (&right_tokens, &left_tokens)
+    };
+    let mut start = 0usize;
+    for token in smaller {
+        match larger[start..]
+            .iter()
+            .position(|candidate| candidate == token)
+        {
+            Some(index) => start += index + 1,
+            None => return false,
+        }
+    }
+    true
 }
 
 fn normalized_project_name(value: &str) -> Option<String> {
@@ -2510,6 +2543,11 @@ pub async fn get_property(
 
     // Compute confidence score for detail page (uses fact-quality instead of match_quality)
     let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
+    let map_context = crate::routes::property_map::build_property_map_context(
+        &property,
+        society.as_ref().map(|society| society.name.as_str()),
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
 
     Ok(Json(PropertyDetail {
         entity_refs,
@@ -2538,6 +2576,7 @@ pub async fn get_property(
         confidence_score,
         external_reviews,
         livability_brief,
+        map_context,
     }))
 }
 
