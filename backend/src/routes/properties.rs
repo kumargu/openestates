@@ -2547,6 +2547,7 @@ pub async fn get_property(
         &property,
         society.as_ref().map(|society| society.name.as_str()),
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+        Some(state.map_overlays.as_ref()),
     );
 
     Ok(Json(PropertyDetail {

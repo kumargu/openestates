@@ -21,7 +21,15 @@ const AroundThisHomeMap = lazy(async () => {
 });
 
 export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boolean {
-  return Boolean(context && (context.places.length > 0 || context.water));
+  return Boolean(
+    context && (
+      context.places.length > 0
+      || context.water
+      || (context.metro_lines?.length ?? 0) > 0
+      || (context.green_patches?.length ?? 0) > 0
+      || (context.lakes?.length ?? 0) > 0
+    ),
+  );
 }
 
 type AroundThisHomePlateProps = {
@@ -34,6 +42,9 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
   const [scale, setScale] = useState<PlateScaleMode>("nearby");
   const [story, setStory] = useState<PlateStory>({ kind: "essentials" });
   const [waterOn, setWaterOn] = useState(Boolean(context.water));
+  const [greenOn, setGreenOn] = useState(
+    Boolean((context.green_patches?.length ?? 0) > 0 || (context.lakes?.length ?? 0) > 0),
+  );
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openedClusterId, setOpenedClusterId] = useState<string | null>(null);
 
@@ -72,6 +83,9 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     setStory(next);
     setSelectedId(null);
     setOpenedClusterId(null);
+    if (next.kind === "layer" && next.layer === "metro") {
+      setScale("area");
+    }
   }
 
   function selectPlace(id: string) {
@@ -85,6 +99,17 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
   }
 
   const showWater = Boolean(context.water && waterOn);
+  const showMetroLines = Boolean(
+    (context.metro_lines?.length ?? 0) > 0
+    && (
+      story.kind === "essentials"
+      || (story.kind === "layer" && story.layer === "metro")
+    ),
+  );
+  const showGreen = Boolean(
+    greenOn
+    && ((context.green_patches?.length ?? 0) > 0 || (context.lakes?.length ?? 0) > 0),
+  );
   const canRenderMap = Boolean(home);
 
   return (
@@ -147,6 +172,16 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
             </button>
           );
         })}
+        {((context.green_patches?.length ?? 0) > 0 || (context.lakes?.length ?? 0) > 0) && (
+          <button
+            type="button"
+            className={`nearby-plate__chip nearby-plate__chip--green${greenOn ? " is-active" : ""}`}
+            aria-pressed={greenOn}
+            onClick={() => setGreenOn((value) => !value)}
+          >
+            Green
+          </button>
+        )}
         {context.water && (
           <button
             type="button"
@@ -181,6 +216,11 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                 clusters={clusters}
                 selectedId={selected?.id ?? null}
                 viewport={viewport}
+                metroLines={context.metro_lines ?? []}
+                greenPatches={context.green_patches ?? []}
+                lakes={context.lakes ?? []}
+                showMetroLines={showMetroLines}
+                showGreen={showGreen}
                 water={context.water}
                 waterTint={showWater}
                 onSelectPlace={selectPlace}
@@ -270,6 +310,22 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
             <p className="nearby-plate__receipt-note">
               Pick Essentials or a layer to read nearby places around this home.
             </p>
+          )}
+
+          {showGreen && (
+            <div className="nearby-plate__green-card">
+              <strong>Green nearby</strong>
+              <span>
+                {(context.green_patches?.length ?? 0) > 0
+                  ? `${context.green_patches?.length} park${(context.green_patches?.length ?? 0) === 1 ? "" : "s"}`
+                  : "No parks"}
+                {" · "}
+                {(context.lakes?.length ?? 0) > 0
+                  ? `${context.lakes?.length} lake${(context.lakes?.length ?? 0) === 1 ? "" : "s"}`
+                  : "No lakes"}
+                {" · OpenStreetMap within 4 km"}
+              </span>
+            </div>
           )}
 
           {showWater && context.water && (

@@ -12,7 +12,6 @@ export const NEARBY_LAYERS: MapNearbyLayer[] = [
   "metro",
   "schools",
   "hospitals",
-  "fitness",
   "tech",
 ];
 
@@ -264,8 +263,6 @@ export function layerLabel(layer: string): string {
       return "Schools";
     case "hospitals":
       return "Hospitals";
-    case "fitness":
-      return "Gyms";
     case "tech":
       return "Tech parks";
     default:

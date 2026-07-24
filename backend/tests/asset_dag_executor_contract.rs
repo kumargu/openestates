@@ -583,6 +583,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         societies,
         sellers: RwLock::new(Vec::new()),
         discovery_config: backend::discovery::load_discovery_config(),
+        map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
         knowledge: Arc::new(RwLock::new(mock_graph())),
         project_root: root.path().to_path_buf(),
         interest_counter: AtomicU64::new(0),

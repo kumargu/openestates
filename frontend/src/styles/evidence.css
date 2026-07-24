@@ -808,6 +808,12 @@
   color: #2f6f6f;
 }
 
+.nearby-plate__chip--green.is-active {
+  border-color: rgba(79, 122, 79, 0.4);
+  background: rgba(111, 155, 111, 0.14);
+  color: #3f6b3f;
+}
+
 .nearby-plate__body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(230px, 270px);
@@ -1097,6 +1103,23 @@
 
 .nearby-plate__water-card strong {
   color: #2f6f6f;
+  font-weight: 650;
+}
+
+.nearby-plate__green-card {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 1rem;
+  padding: 0.7rem 0.75rem;
+  border-radius: 9px;
+  background: rgba(111, 155, 111, 0.12);
+  font-size: 0.74rem;
+  color: #4d6f4d;
+  line-height: 1.4;
+}
+
+.nearby-plate__green-card strong {
+  color: #3f6b3f;
   font-weight: 650;
 }
 

@@ -98,6 +98,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
 
     println!("Request-time AI disabled: search uses only local serving bundle data");
     let discovery_config = load_discovery_config();
+    let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
 
     AppState {
         properties: RwLock::new(properties),
@@ -109,6 +110,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         societies,
         sellers: RwLock::new(sellers),
         discovery_config,
+        map_overlays,
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
         interest_counter: AtomicU64::new(0),

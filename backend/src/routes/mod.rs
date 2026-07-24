@@ -5,6 +5,7 @@ pub mod discovery;
 pub mod enrichment;
 pub mod interests;
 pub mod properties;
+pub mod map_overlays;
 pub mod property_map;
 pub mod registration;
 pub mod search;

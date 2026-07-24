@@ -19,7 +19,6 @@ const NEARBY_LAYERS: &[(&str, &str, usize)] = &[
     ("nearby_metro_stations", "metro", 2),
     ("nearby_schools", "schools", 3),
     ("nearby_hospitals", "hospitals", 2),
-    ("nearby_fitness", "fitness", 2),
     ("nearby_tech_parks", "tech", 2),
 ];
 
@@ -30,6 +29,12 @@ pub struct PropertyMapContext {
     pub places: Vec<MapPlacePin>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub water: Option<MapWaterContext>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub metro_lines: Vec<crate::routes::map_overlays::MapOverlayLine>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub green_patches: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lakes: Vec<crate::routes::map_overlays::MapOverlayPolygon>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -92,6 +97,7 @@ pub fn build_property_map_context(
     property: &Property,
     society_name: Option<&str>,
     serving_facts: Option<&ServingFactIndex>,
+    map_overlays: Option<&crate::routes::map_overlays::CityMapOverlays>,
 ) -> Option<PropertyMapContext> {
     let facts = serving_facts?;
     let projection = SocietyFactProjection::from_index(facts, &property.society_id);
@@ -120,7 +126,24 @@ pub fn build_property_map_context(
     }
 
     let water = map_water_context(property, facts, &projection);
-    if places.is_empty() && water.is_none() && home_coords.is_none() {
+    let overlay_home = home_coords.or_else(|| approximate_home_from_places(&places));
+    let (metro_lines, green_patches, lakes) = match (map_overlays, overlay_home) {
+        (Some(overlays), Some(home)) => {
+            let metro_lines = crate::routes::map_overlays::clip_metro_lines(overlays, home);
+            let (green_patches, lakes) =
+                crate::routes::map_overlays::clip_green_patches(overlays, home);
+            (metro_lines, green_patches, lakes)
+        }
+        _ => (Vec::new(), Vec::new(), Vec::new()),
+    };
+
+    if places.is_empty()
+        && water.is_none()
+        && home_coords.is_none()
+        && metro_lines.is_empty()
+        && green_patches.is_empty()
+        && lakes.is_empty()
+    {
         return None;
     }
 
@@ -132,12 +155,37 @@ pub fn build_property_map_context(
                 .unwrap_or(property.title.as_str())
                 .to_string(),
             area: (!property.area.trim().is_empty()).then(|| property.area.clone()),
-            latitude: home_coords.map(|coords| coords.0),
-            longitude: home_coords.map(|coords| coords.1),
+            latitude: overlay_home.map(|coords| coords.0),
+            longitude: overlay_home.map(|coords| coords.1),
         },
         places,
         water,
+        metro_lines,
+        green_patches,
+        lakes,
     })
+}
+
+fn approximate_home_from_places(places: &[MapPlacePin]) -> Option<(f64, f64)> {
+    let mut ranked = places
+        .iter()
+        .filter_map(|place| match (place.latitude, place.longitude) {
+            (Some(lat), Some(lng)) => Some((place.distance_km.unwrap_or(f64::INFINITY), lat, lng)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    if ranked.is_empty() {
+        return None;
+    }
+    ranked.sort_by(|left, right| {
+        left.0
+            .partial_cmp(&right.0)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+    let near = &ranked[..ranked.len().min(3)];
+    let lat = near.iter().map(|item| item.1).sum::<f64>() / near.len() as f64;
+    let lng = near.iter().map(|item| item.2).sum::<f64>() / near.len() as f64;
+    Some((lat, lng))
 }
 
 fn map_place_pin(
@@ -661,7 +709,7 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving))
+        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
             .expect("map context should build");
         assert_eq!(context.home.latitude, Some(12.98));
         assert_eq!(context.places.len(), 2);
@@ -698,7 +746,7 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving))
+        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
             .expect("water-backed context should build");
         let water = context.water.expect("groundwater should resolve by name");
         assert_eq!(water.groundwater_class, "Moderate");
@@ -743,9 +791,9 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving))
+        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
             .expect("places without home coords should still build");
-        assert_eq!(context.home.latitude, None);
+        assert_eq!(context.home.latitude, Some(12.981));
         assert_eq!(context.places.len(), 1);
         assert_eq!(context.places[0].distance_km, Some(0.2));
     }

@@ -218,7 +218,6 @@ export type MapNearbyLayer =
   | "metro"
   | "schools"
   | "hospitals"
-  | "fitness"
   | "tech";
 
 export type MapHomeAnchor = {
@@ -251,10 +250,30 @@ export type MapWaterContext = {
   illustrative_zone: boolean;
 };
 
+export type MapOverlayLine = {
+  id: string;
+  name: string;
+  kind: string;
+  coordinates: [number, number][];
+  source_type: string;
+};
+
+export type MapOverlayPolygon = {
+  id: string;
+  name: string;
+  kind: string;
+  coordinates: [number, number][];
+  distance_km?: number;
+  source_type: string;
+};
+
 export type PropertyMapContext = {
   home: MapHomeAnchor;
   places: MapPlacePin[];
   water?: MapWaterContext;
+  metro_lines?: MapOverlayLine[];
+  green_patches?: MapOverlayPolygon[];
+  lakes?: MapOverlayPolygon[];
 };
 
 /**
