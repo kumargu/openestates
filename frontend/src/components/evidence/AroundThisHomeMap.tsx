@@ -1,11 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import type {
-  MapOverlayLine,
-  MapOverlayPolygon,
-  MapWaterContext,
-} from "../../lib/types.ts";
+import type { MapOverlayLine, MapWaterContext } from "../../lib/types.ts";
 import {
   NEARBY_MAP_STYLE,
   type NumberedPlace,
@@ -21,10 +17,7 @@ type AroundThisHomeMapProps = {
   selectedId: string | null;
   viewport: PlateViewport;
   metroLines: MapOverlayLine[];
-  greenPatches: MapOverlayPolygon[];
-  lakes: MapOverlayPolygon[];
   showMetroLines: boolean;
-  showGreen: boolean;
   water?: MapWaterContext | null;
   waterTint: boolean;
   onSelectPlace: (id: string) => void;
@@ -61,9 +54,14 @@ function markerEl(
     return button;
   }
 
+  // Quiet numbered dots — names live in the list/receipt, not on the map.
   button.textContent = String(options.number ?? "");
   button.setAttribute("aria-label", `Place ${options.number}`);
   return button;
+}
+
+function emptyCollection() {
+  return { type: "FeatureCollection" as const, features: [] as Array<Record<string, unknown>> };
 }
 
 function linesToFeatureCollection(lines: MapOverlayLine[]) {
@@ -80,29 +78,90 @@ function linesToFeatureCollection(lines: MapOverlayLine[]) {
   };
 }
 
-function polygonsToFeatureCollection(polygons: MapOverlayPolygon[]) {
-  return {
-    type: "FeatureCollection" as const,
-    features: polygons.map((polygon) => ({
+function ringFeatureCollection(
+  home: { latitude: number; longitude: number },
+  radiiKm: number[],
+) {
+  const features = radiiKm.map((radiusKm) => {
+    const points: [number, number][] = [];
+    for (let step = 0; step <= 64; step += 1) {
+      const angle = (step / 64) * Math.PI * 2;
+      const dLat = (radiusKm / 110.57) * Math.cos(angle);
+      const dLng = (radiusKm / (111.32 * Math.cos((home.latitude * Math.PI) / 180)))
+        * Math.sin(angle);
+      points.push([home.longitude + dLng, home.latitude + dLat]);
+    }
+    return {
       type: "Feature" as const,
-      properties: {
-        id: polygon.id,
-        name: polygon.name,
-        kind: polygon.kind,
-      },
+      properties: { radiusKm },
       geometry: {
-        type: "Polygon" as const,
-        coordinates: [polygon.coordinates],
+        type: "LineString" as const,
+        coordinates: points,
       },
-    })),
-  };
+    };
+  });
+  return { type: "FeatureCollection" as const, features };
+}
+
+function ringRadiiForViewport(radiusKm: number): number[] {
+  if (radiusKm <= 0.6) return [0.25, 0.5];
+  if (radiusKm <= 1.2) return [0.5, 1];
+  if (radiusKm <= 2) return [0.5, 1, 2];
+  if (radiusKm <= 3) return [1, 2];
+  return [2, 5];
+}
+
+/** Strip basemap POI/label noise so the plate reads like a focused activity map. */
+function quietBasemap(map: MapLibreMap) {
+  const style = map.getStyle();
+  if (!style?.layers) return;
+  for (const layer of style.layers) {
+    const id = layer.id.toLowerCase();
+    const isLabel = layer.type === "symbol";
+    const isPoiNoise = /poi|place-|housenumber|transit|rail|airport|golf|pitch/.test(id);
+    if (isLabel || isPoiNoise) {
+      try {
+        map.setLayoutProperty(layer.id, "visibility", "none");
+      } catch {
+        // Some style layers are immutable; ignore.
+      }
+    }
+  }
 }
 
 function ensureOverlayLayers(map: MapLibreMap) {
+  if (!map.getSource("oe-rings")) {
+    map.addSource("oe-rings", { type: "geojson", data: emptyCollection() });
+    map.addLayer({
+      id: "oe-rings",
+      type: "line",
+      source: "oe-rings",
+      paint: {
+        "line-color": "rgba(0, 0, 0, 0.14)",
+        "line-width": 1,
+        "line-opacity": 0.65,
+      },
+    });
+  }
+
   if (!map.getSource("oe-metro-lines")) {
     map.addSource("oe-metro-lines", {
       type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
+      data: emptyCollection(),
+    });
+    map.addLayer({
+      id: "oe-metro-lines-casing",
+      type: "line",
+      source: "oe-metro-lines",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": "rgba(255, 255, 255, 0.9)",
+        "line-width": 6.5,
+        "line-opacity": 0.95,
+      },
     });
     map.addLayer({
       id: "oe-metro-lines",
@@ -114,61 +173,9 @@ function ensureOverlayLayers(map: MapLibreMap) {
       },
       paint: {
         "line-color": "#3f5c8a",
-        "line-width": 3.2,
-        "line-dasharray": [1.2, 1.6],
-        "line-opacity": 0.9,
-      },
-    });
-  }
-
-  if (!map.getSource("oe-green-patches")) {
-    map.addSource("oe-green-patches", {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-    map.addLayer({
-      id: "oe-green-patches-fill",
-      type: "fill",
-      source: "oe-green-patches",
-      paint: {
-        "fill-color": "#6f9b6f",
-        "fill-opacity": 0.28,
-      },
-    });
-    map.addLayer({
-      id: "oe-green-patches-outline",
-      type: "line",
-      source: "oe-green-patches",
-      paint: {
-        "line-color": "#4f7a4f",
-        "line-width": 1.2,
-        "line-opacity": 0.7,
-      },
-    });
-  }
-
-  if (!map.getSource("oe-lakes")) {
-    map.addSource("oe-lakes", {
-      type: "geojson",
-      data: { type: "FeatureCollection", features: [] },
-    });
-    map.addLayer({
-      id: "oe-lakes-fill",
-      type: "fill",
-      source: "oe-lakes",
-      paint: {
-        "fill-color": "#6f9fba",
-        "fill-opacity": 0.32,
-      },
-    });
-    map.addLayer({
-      id: "oe-lakes-outline",
-      type: "line",
-      source: "oe-lakes",
-      paint: {
-        "line-color": "#4d7777",
-        "line-width": 1.1,
-        "line-opacity": 0.75,
+        "line-width": 3.4,
+        "line-dasharray": [1.6, 1.4],
+        "line-opacity": 0.95,
       },
     });
   }
@@ -194,10 +201,7 @@ export function AroundThisHomeMap({
   selectedId,
   viewport,
   metroLines,
-  greenPatches,
-  lakes,
   showMetroLines,
-  showGreen,
   water,
   waterTint,
   onSelectPlace,
@@ -207,8 +211,13 @@ export function AroundThisHomeMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const styleReadyRef = useRef(false);
+  const homeRef = useRef(home);
   const onSelectPlaceRef = useRef(onSelectPlace);
   const onSelectClusterRef = useRef(onSelectCluster);
+
+  useEffect(() => {
+    homeRef.current = home;
+  }, [home]);
 
   useEffect(() => {
     onSelectPlaceRef.current = onSelectPlace;
@@ -216,7 +225,7 @@ export function AroundThisHomeMap({
   }, [onSelectPlace, onSelectCluster]);
 
   const selectedPlace = useMemo(
-    () => places.find((place) => place.id === selectedId) ?? null,
+    () => places.find((place) => place.id === selectedId) ?? places[0] ?? null,
     [places, selectedId],
   );
 
@@ -229,14 +238,30 @@ export function AroundThisHomeMap({
       center: [home.longitude, home.latitude],
       zoom: viewport.zoom,
       attributionControl: { compact: true },
-      interactive: true,
+      dragPan: false,
       dragRotate: false,
       pitchWithRotate: false,
+      touchPitch: false,
+      keyboard: false,
     });
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }),
+      "top-right",
+    );
     map.on("load", () => {
+      quietBasemap(map);
       ensureOverlayLayers(map);
       styleReadyRef.current = true;
+    });
+    map.on("zoomend", () => {
+      const anchor = homeRef.current;
+      const center = map.getCenter();
+      if (
+        Math.abs(center.lng - anchor.longitude) > 0.00001
+        || Math.abs(center.lat - anchor.latitude) > 0.00001
+      ) {
+        map.setCenter([anchor.longitude, anchor.latitude]);
+      }
     });
     mapRef.current = map;
 
@@ -247,17 +272,15 @@ export function AroundThisHomeMap({
       mapRef.current = null;
       styleReadyRef.current = false;
     };
-    // Mount once for this home anchor; pan/zoom updates live below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    map.easeTo({
+    map.jumpTo({
       center: [home.longitude, home.latitude],
       zoom: viewport.zoom,
-      duration: 450,
     });
   }, [home.latitude, home.longitude, viewport.zoom, viewport.radiusKm]);
 
@@ -266,21 +289,17 @@ export function AroundThisHomeMap({
     if (!map) return;
 
     const syncOverlays = () => {
+      quietBasemap(map);
       ensureOverlayLayers(map);
+      setSourceData(
+        map,
+        "oe-rings",
+        ringFeatureCollection(home, ringRadiiForViewport(viewport.radiusKm)),
+      );
       setSourceData(
         map,
         "oe-metro-lines",
         linesToFeatureCollection(showMetroLines ? metroLines : []),
-      );
-      setSourceData(
-        map,
-        "oe-green-patches",
-        polygonsToFeatureCollection(showGreen ? greenPatches : []),
-      );
-      setSourceData(
-        map,
-        "oe-lakes",
-        polygonsToFeatureCollection(showGreen ? lakes : []),
       );
     };
 
@@ -289,7 +308,7 @@ export function AroundThisHomeMap({
       return;
     }
     map.once("load", syncOverlays);
-  }, [greenPatches, lakes, metroLines, showGreen, showMetroLines]);
+  }, [home, metroLines, showMetroLines, viewport.radiusKm]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -322,7 +341,7 @@ export function AroundThisHomeMap({
       if (clusters.some((cluster) => cluster.placeIds.includes(place.id))) continue;
       const element = markerEl("place", {
         number: place.number,
-        selected: place.id === selectedId,
+        selected: place.id === selectedId || place.id === selectedPlace?.id,
         layer: place.layer,
       });
       element.addEventListener("click", (event) => {
@@ -334,36 +353,19 @@ export function AroundThisHomeMap({
         .addTo(map);
       markersRef.current.push(marker);
     }
-  }, [clusters, home.latitude, home.longitude, places, selectedId]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !selectedPlace) return;
-    map.easeTo({
-      center: [
-        (home.longitude + selectedPlace.longitude) / 2,
-        (home.latitude + selectedPlace.latitude) / 2,
-      ],
-      duration: 350,
-    });
-  }, [home.latitude, home.longitude, selectedPlace]);
+  }, [clusters, home.latitude, home.longitude, places, selectedId, selectedPlace?.id]);
 
   return (
     <div className={`nearby-map${waterTint && water ? " nearby-map--water-tint" : ""}`}>
       <div ref={containerRef} className="nearby-map__canvas" role="presentation" />
       <div className="nearby-map__chrome" aria-hidden="true">
+        <span>Home centered</span>
         <span>{viewport.radiusKm < 1
-          ? `${Math.round(viewport.radiusKm * 1000)} m scale`
-          : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km scale`}
+          ? `${Math.round(viewport.radiusKm * 1000)} m`
+          : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km`}
         </span>
-        {homeApproximated && <span>Home pin estimated from nearby places</span>}
-        {showMetroLines && metroLines.length > 0 && <span>Metro stretch ≤ 15 km</span>}
-        {showGreen && (greenPatches.length > 0 || lakes.length > 0) && (
-          <span>Green + lakes ≤ 4 km</span>
-        )}
-        {waterTint && water && (
-          <span>{water.groundwater_class} groundwater context</span>
-        )}
+        {homeApproximated && <span>Home estimated</span>}
+        {showMetroLines && metroLines.length > 0 && <span>Metro corridor</span>}
       </div>
     </div>
   );

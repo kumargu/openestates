@@ -872,15 +872,15 @@
 .nearby-map-marker {
   display: grid;
   place-items: center;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   border: 2px solid #fff;
   border-radius: 50%;
   background: var(--color-cool-deep, #3f5c8a);
   color: #fff;
   font: inherit;
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 700;
   cursor: pointer;
   box-shadow: none;
@@ -929,10 +929,10 @@
 }
 
 .nearby-map-marker--place.is-selected {
-  width: 34px;
-  height: 34px;
+  width: 28px;
+  height: 28px;
   background: #c45c26;
-  font-size: 0.8rem;
+  font-size: 0.72rem;
 }
 
 .nearby-map-marker--cluster {

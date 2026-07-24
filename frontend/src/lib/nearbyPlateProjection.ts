@@ -18,10 +18,12 @@ export const NEARBY_LAYERS: MapNearbyLayer[] = [
 /** Muted OSM basemap — no API key. */
 export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
-const NEARBY_RADIUS_STEPS_KM = [0.25, 0.5, 1, 2] as const;
-const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10] as const;
+const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
+const AREA_RADIUS_STEPS_KM = [3, 5, 8] as const;
 const CLUSTER_GAP_KM_NEARBY = 0.08;
 const CLUSTER_GAP_KM_AREA = 0.35;
+/** Keep markers inside the canvas, not glued to the ring edge. */
+const VIEWPORT_PADDING = 1.45;
 
 export type NumberedPlace = MapPlacePin & {
   id: string;
@@ -143,7 +145,8 @@ export function filterPlacesByScale(
   places: MapPlacePin[],
   scale: PlateScaleMode,
 ): MapPlacePin[] {
-  const maxKm = scale === "nearby" ? 2.5 : 12;
+  // Nearby stays tight like a Strava activity frame — not city-wide.
+  const maxKm = scale === "nearby" ? 1.5 : 10;
   return places.filter((place) => (place.distance_km ?? 0) <= maxKm
     || typeof place.distance_km !== "number");
 }
@@ -151,24 +154,48 @@ export function filterPlacesByScale(
 export function chooseRadiusKm(
   places: MapPlacePin[],
   scale: PlateScaleMode,
+  home?: { latitude: number; longitude: number },
 ): number {
-  const distances = places
+  const factDistances = places
     .map((place) => place.distance_km)
     .filter((value): value is number => typeof value === "number" && Number.isFinite(value));
-  const farthest = distances.length > 0 ? Math.max(...distances) : (scale === "nearby" ? 0.8 : 5);
+  const factFar = factDistances.length > 0
+    ? Math.max(...factDistances)
+    : (scale === "nearby" ? 0.5 : 5);
+
+  // When home is estimated, fact distances can disagree with map geometry.
+  // Always size the frame from true map distance so dots stay on-screen.
+  let mapFar = 0;
+  if (home) {
+    for (const place of places) {
+      if (typeof place.latitude !== "number" || typeof place.longitude !== "number") continue;
+      mapFar = Math.max(
+        mapFar,
+        distanceKm(home.latitude, home.longitude, place.latitude, place.longitude),
+      );
+    }
+  }
+
+  const needed = Math.max(factFar, mapFar) * VIEWPORT_PADDING;
+  const floor = scale === "nearby" ? 0.35 : 2;
+  const cap = scale === "nearby" ? 2.5 : 10;
+  const target = clamp(needed, floor, cap);
   const steps = scale === "nearby" ? NEARBY_RADIUS_STEPS_KM : AREA_RADIUS_STEPS_KM;
-  return steps.find((step) => step >= farthest * 1.15) ?? steps[steps.length - 1];
+  return steps.find((step) => step >= target) ?? steps[steps.length - 1];
 }
 
 export function zoomForRadiusKm(radiusKm: number): number {
-  // Approximate MapLibre zoom so the radius fills most of the canvas.
-  if (radiusKm <= 0.3) return 15.4;
-  if (radiusKm <= 0.6) return 14.6;
-  if (radiusKm <= 1.2) return 13.8;
+  // Keep the frame tight around home, but always wide enough for plotted dots.
+  if (radiusKm <= 0.4) return 15.6;
+  if (radiusKm <= 0.6) return 15;
+  if (radiusKm <= 0.9) return 14.5;
+  if (radiusKm <= 1.3) return 14;
+  if (radiusKm <= 1.8) return 13.5;
   if (radiusKm <= 2.5) return 13;
-  if (radiusKm <= 5) return 12;
+  if (radiusKm <= 4) return 12.4;
+  if (radiusKm <= 6) return 11.8;
   if (radiusKm <= 8) return 11.3;
-  return 10.8;
+  return 10.9;
 }
 
 export function buildNumberedPlaces(
@@ -241,7 +268,7 @@ export function buildPlateViewport(
   places: NumberedPlace[],
   scale: PlateScaleMode,
 ): PlateViewport {
-  const radiusKm = chooseRadiusKm(places, scale);
+  const radiusKm = chooseRadiusKm(places, scale, home);
   return {
     center: home,
     radiusKm,
