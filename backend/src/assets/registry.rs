@@ -689,6 +689,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
+            "society_groundwater_potential_facts",
+            AssetStage::Silver,
+            "Groundwater potential facts joined offline from society coordinates to OpenCity groundwater zones.",
+            &["canonical_society_nodes", "rera_legal_facts"],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
@@ -702,6 +711,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "builder_rera_aggregates",
                 "home_state_signals",
                 "approach_road_graph_facts",
+                "society_groundwater_potential_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -725,7 +735,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
-        .with_optional_dependency("approach_road_graph_facts"),
+        .with_optional_dependency("approach_road_graph_facts")
+        .with_optional_dependency("society_groundwater_potential_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

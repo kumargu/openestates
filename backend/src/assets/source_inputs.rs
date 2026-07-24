@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use super::environment::EnvironmentGroundwaterPotentialInput;
 use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
@@ -10,7 +11,7 @@ use super::{
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -35,6 +36,8 @@ pub struct AssetSourceInputs {
     pub external_listings_weekly: Option<ExternalListingsWeeklyInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub external_images_weekly: Option<ExternalImagesWeeklyInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub environment_groundwater_potential: Option<EnvironmentGroundwaterPotentialInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -52,6 +55,7 @@ impl AssetSourceInputs {
             GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
             EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+            SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -66,6 +70,7 @@ impl AssetSourceInputs {
                 | GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID
                 | EXTERNAL_LISTINGS_WEEKLY_ASSET_ID
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
+                | SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID
         )
     }
 

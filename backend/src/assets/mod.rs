@@ -10,6 +10,7 @@
 
 pub mod approach_road;
 pub mod canonical_nodes;
+pub mod environment;
 pub mod executor;
 pub mod fan_in;
 pub mod google;
@@ -34,6 +35,11 @@ pub use approach_road::{
     ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
 };
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
+pub use environment::{
+    society_groundwater_potential_facts_input, EnvironmentGroundwaterPotentialInput,
+    EnvironmentGroundwaterPotentialZone, EnvironmentRingPoint, EnvironmentalAssetError,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+};
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,
     AssetRetryPolicy,

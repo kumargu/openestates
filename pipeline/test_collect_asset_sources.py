@@ -9,8 +9,10 @@ from urllib.error import HTTPError
 
 from pipeline.collect_asset_sources import (
     collect_asset_sources,
+    collect_environment_groundwater_potential,
     collect_google_nearby_places,
     collect_google_places,
+    groundwater_zones_from_kml,
     collect_reddit_assets,
     collect_rera_registry,
     google_society_inputs,
@@ -220,6 +222,63 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "unsupported source assets"):
             collect_asset_sources(request)
+
+    def test_groundwater_kml_collection_emits_normalized_zones(self):
+        kml = b"""<?xml version="1.0" encoding="UTF-8"?>
+        <kml xmlns="http://www.opengis.net/kml/2.2">
+          <Document>
+            <Placemark>
+              <ExtendedData>
+                <Data name="GWATER_ID"><value>zone-1</value></Data>
+                <Data name="GW_PROS"><value>Moderate</value></Data>
+              </ExtendedData>
+              <Polygon>
+                <outerBoundaryIs>
+                  <LinearRing>
+                    <coordinates>
+                      77.0,12.0,0 78.0,12.0,0 78.0,13.0,0 77.0,13.0,0 77.0,12.0,0
+                    </coordinates>
+                  </LinearRing>
+                </outerBoundaryIs>
+              </Polygon>
+            </Placemark>
+          </Document>
+        </kml>"""
+
+        zones = groundwater_zones_from_kml(kml)
+
+        self.assertEqual(len(zones), 1)
+        self.assertEqual(zones[0]["zone_id"], "zone-1")
+        self.assertEqual(zones[0]["groundwater_potential_class"], "Moderate")
+        self.assertEqual(zones[0]["rings"][0][0], {"latitude": 12.0, "longitude": 77.0})
+
+    def test_collect_asset_sources_supports_groundwater_payload(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-24"]]},
+            "planned_at": "2026-07-24T09:30:00Z",
+            "requested_assets": ["society_groundwater_potential_facts"],
+        }
+        kml = b"""<kml xmlns="http://www.opengis.net/kml/2.2"><Document><Placemark>
+          <ExtendedData><Data name="GWATER_ID"><value>zone-1</value></Data><Data name="GW_PROS"><value>Good</value></Data></ExtendedData>
+          <Polygon><outerBoundaryIs><LinearRing><coordinates>77.0,12.0,0 78.0,12.0,0 78.0,13.0,0 77.0,13.0,0 77.0,12.0,0</coordinates></LinearRing></outerBoundaryIs></Polygon>
+        </Placemark></Document></kml>"""
+
+        with patch("pipeline.collect_asset_sources.fetch_url_bytes", return_value=kml):
+            output = collect_asset_sources(request)
+        direct = collect_environment_groundwater_potential(
+            request, fetch=lambda _url: kml
+        )
+
+        self.assertNotIn("source_failures", output)
+        self.assertIn("environment_groundwater_potential", output)
+        self.assertEqual(
+            output["environment_groundwater_potential"]["zones"][0][
+                "groundwater_potential_class"
+            ],
+            "Good",
+        )
+        self.assertEqual(direct["snapshot_date"], "2026-07-24")
+        self.assertEqual(direct["zones"][0]["groundwater_potential_class"], "Good")
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")

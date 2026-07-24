@@ -31,6 +31,9 @@
       "license": "Public Domain",
       "raw_asset_proposed": "raw_environment_groundwater_potential",
       "normalized_asset_proposed": "normalized_groundwater_potential_zones",
+      "collector": "pipeline.collect_asset_sources",
+      "source_input": "environment_groundwater_potential",
+      "derived_asset": "society_groundwater_potential_facts",
       "derived_asset_proposed": "society_groundwater_potential_facts",
       "join_methods": [
         "point_in_polygon",

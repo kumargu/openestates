@@ -10,10 +10,12 @@ import json
 import logging
 import os
 import sys
+import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
+from urllib.request import urlopen
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
 
@@ -75,6 +77,12 @@ GOOGLE_PLACES_WEEKLY = "google_places_weekly"
 GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
+SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
+GROUNDWATER_KML_URL = (
+    "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
+    "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
+    "1dda919d-ff28-4aa9-90ce-bd18e708927b.kml"
+)
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
@@ -82,6 +90,7 @@ SUPPORTED_ASSETS = frozenset(
         GOOGLE_NEARBY_PLACES_WEEKLY,
         EXTERNAL_LISTINGS_WEEKLY,
         EXTERNAL_IMAGES_WEEKLY,
+        SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
     )
 )
 
@@ -149,9 +158,129 @@ def collect_asset_sources(
             output[EXTERNAL_IMAGES_WEEKLY] = collect_external_images(request)
         except Exception as error:
             record_source_failure(source_failures, [EXTERNAL_IMAGES_WEEKLY], error)
+    if SOCIETY_GROUNDWATER_POTENTIAL_FACTS in requested:
+        try:
+            output["environment_groundwater_potential"] = (
+                collect_environment_groundwater_potential(request)
+            )
+        except Exception as error:
+            record_source_failure(
+                source_failures, [SOCIETY_GROUNDWATER_POTENTIAL_FACTS], error
+            )
     if source_failures:
         output["source_failures"] = source_failures
     return output
+
+
+def collect_environment_groundwater_potential(
+    request: Dict[str, Any],
+    fetch: Callable[[str], bytes] = None,
+) -> Dict[str, Any]:
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    source_url = os.environ.get("OPENESTATES_GROUNDWATER_KML_URL") or GROUNDWATER_KML_URL
+    kml_bytes = (fetch or fetch_url_bytes)(source_url)
+    zones = groundwater_zones_from_kml(kml_bytes)
+    if not zones:
+        raise ValueError("groundwater KML produced zero usable polygon zones")
+    return {
+        "snapshot_date": snapshot_date,
+        "source_url": source_url,
+        "zones": zones,
+        "source_watermarks": [
+            {
+                "source": "opencity_groundwater_potential_kml",
+                "high_watermark": "{}#sha256={}".format(
+                    source_url, hashlib.sha256(kml_bytes).hexdigest()
+                ),
+            },
+            {
+                "source": "opencity_groundwater_potential_zone_count",
+                "high_watermark": str(len(zones)),
+            },
+        ],
+    }
+
+
+def fetch_url_bytes(url: str) -> bytes:
+    with urlopen(url, timeout=30) as response:
+        return response.read()
+
+
+def groundwater_zones_from_kml(kml_bytes: bytes) -> List[Dict[str, Any]]:
+    root = ET.fromstring(kml_bytes)
+    zones = []  # type: List[Dict[str, Any]]
+    for index, placemark in enumerate(
+        element for element in root.iter() if local_name(element.tag) == "Placemark"
+    ):
+        fields = placemark_fields(placemark)
+        potential = optional_string(fields.get("GW_PROS"))
+        if not potential:
+            continue
+        rings = [
+            ring
+            for ring in (
+                coordinates_from_text(element.text or "")
+                for element in placemark.iter()
+                if local_name(element.tag) == "coordinates"
+            )
+            if len(ring) >= 3
+        ]
+        if not rings:
+            continue
+        zone_id = (
+            optional_string(fields.get("GWATER_ID"))
+            or optional_string(fields.get("OBJECTID"))
+            or str(index)
+        )
+        zones.append(
+            {
+                "zone_id": zone_id,
+                "groundwater_potential_class": potential,
+                "rings": rings,
+                "source_fields": fields,
+            }
+        )
+    return zones
+
+
+def placemark_fields(placemark: ET.Element) -> Dict[str, str]:
+    fields = {}  # type: Dict[str, str]
+    for data in placemark.iter():
+        if local_name(data.tag) != "Data":
+            continue
+        key = data.attrib.get("name")
+        if not key:
+            continue
+        for child in data:
+            if local_name(child.tag) == "value" and child.text:
+                fields[str(key)] = child.text.strip()
+    for simple in placemark.iter():
+        if local_name(simple.tag) != "SimpleData":
+            continue
+        key = simple.attrib.get("name")
+        if key and simple.text:
+            fields[str(key)] = simple.text.strip()
+    return fields
+
+
+def coordinates_from_text(text: str) -> List[Dict[str, float]]:
+    coordinates = []  # type: List[Dict[str, float]]
+    for part in text.split():
+        pieces = part.split(",")
+        if len(pieces) < 2:
+            continue
+        try:
+            longitude = float(pieces[0])
+            latitude = float(pieces[1])
+        except ValueError:
+            continue
+        coordinates.append({"latitude": latitude, "longitude": longitude})
+    return coordinates
+
+
+def local_name(tag: str) -> str:
+    return tag.rsplit("}", 1)[-1]
 
 
 def record_source_failure(

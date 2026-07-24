@@ -17,10 +17,10 @@ use super::{
     ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
     AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
     AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
-    GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
-    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
-    MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
-    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    EnvironmentalAssetError, GooglePlaceAssetError, GooglePlaceSnapshotMaterializer,
+    KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
+    KgViewManifest, KgViewRecords, MaterializationId, MaterializationRecord, MediaAssetError,
+    MediaAssetMaterializer, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
     APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
@@ -29,7 +29,7 @@ use super::{
     GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
     IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1115,6 +1115,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ApproachRoadGraphFacts,
         );
         executors.insert(
+            static_asset_id(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::SocietyGroundwaterPotentialFacts,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1146,6 +1150,7 @@ enum BuiltInAssetExecutor {
     BuilderReraAggregates,
     HomeStateSignals,
     ApproachRoadGraphFacts,
+    SocietyGroundwaterPotentialFacts,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1578,6 +1583,34 @@ impl BuiltInAssetExecutor {
                     .await?;
                 Ok(ExecutedAsset::Record(materialization.record))
             }
+            Self::SocietyGroundwaterPotentialFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .environment_groundwater_potential
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let input = super::society_groundwater_potential_facts_input(
+                    &context.dag.lake,
+                    input,
+                    &parent_records,
+                    context.run_id,
+                    context.options.planned_at,
+                )
+                .await?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1839,6 +1872,7 @@ pub enum AssetDagExecutorError {
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
     ApproachRoadGraph(ApproachRoadGraphError),
+    Environmental(EnvironmentalAssetError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
@@ -1922,6 +1956,7 @@ impl fmt::Display for AssetDagExecutorError {
             Self::ApproachRoadGraph(err) => {
                 write!(f, "approach-road graph asset execution failed: {err}")
             }
+            Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2100,6 +2135,12 @@ impl From<ApproachRoadGraphError> for AssetDagExecutorError {
     }
 }
 
+impl From<EnvironmentalAssetError> for AssetDagExecutorError {
+    fn from(err: EnvironmentalAssetError) -> Self {
+        Self::Environmental(err)
+    }
+}
+
 impl From<GooglePlaceAssetError> for AssetDagExecutorError {
     fn from(err: GooglePlaceAssetError) -> Self {
         Self::GooglePlace(err)
@@ -2237,6 +2278,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.google_nearby_places_weekly.is_none()
         && source_inputs.external_listings_weekly.is_none()
         && source_inputs.external_images_weekly.is_none()
+        && source_inputs.environment_groundwater_potential.is_none()
 }
 
 #[cfg(test)]
