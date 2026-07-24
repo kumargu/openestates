@@ -392,15 +392,16 @@ struct SocietyRoadEvidence {
     address: Option<FactSignal>,
     latitude: Option<FactSignal>,
     longitude: Option<FactSignal>,
+    frontage_road: Option<FactSignal>,
     google_place_id: Option<FactSignal>,
-    google_reviews_url: Option<FactSignal>,
 }
 
 impl SocietyRoadEvidence {
     fn accept_fact(&mut self, fact: &SkillFactRecord) -> Result<(), ApproachRoadGraphError> {
         match fact.fact_key.as_str() {
-            "rera_project_address" => {
+            "rera_project_address" | "google_place_address" => {
                 if let Some(value) = text_fact_value(fact)? {
+                    self.accept_frontage_road(fact, &value)?;
                     self.address = Some(FactSignal::from_text_fact(fact, value));
                 }
             }
@@ -419,12 +420,20 @@ impl SocietyRoadEvidence {
                     self.google_place_id = Some(FactSignal::from_text_fact(fact, value));
                 }
             }
-            "google_reviews_url" => {
-                if let Some(value) = text_fact_value(fact)? {
-                    self.google_reviews_url = Some(FactSignal::from_text_fact(fact, value));
-                }
-            }
             _ => {}
+        }
+        Ok(())
+    }
+
+    fn accept_frontage_road(
+        &mut self,
+        fact: &SkillFactRecord,
+        text: &str,
+    ) -> Result<(), ApproachRoadGraphError> {
+        if self.frontage_road.is_none() {
+            if let Some(road_name) = extract_frontage_road_name(text) {
+                self.frontage_road = Some(FactSignal::from_text_fact(fact, road_name));
+            }
         }
         Ok(())
     }
@@ -432,8 +441,8 @@ impl SocietyRoadEvidence {
     fn has_location_signal(&self) -> bool {
         self.address.is_some()
             || (self.latitude.is_some() && self.longitude.is_some())
+            || self.frontage_road.is_some()
             || self.google_place_id.is_some()
-            || self.google_reviews_url.is_some()
     }
 
     fn access_road_quality(&self) -> DerivedRoadQuality {
@@ -441,8 +450,8 @@ impl SocietyRoadEvidence {
         let primary = if let (Some(latitude), Some(longitude)) = (&self.latitude, &self.longitude) {
             evidence_keys.insert("geo.latitude".to_string());
             evidence_keys.insert("geo.longitude".to_string());
-            if self.address.is_some() {
-                evidence_keys.insert("rera_project_address".to_string());
+            if let Some(address) = &self.address {
+                evidence_keys.insert(address.fact_key.clone());
             }
             DerivedRoadQuality {
                 value: "Approach road inferred from RERA project coordinates; visual road-width verification is pending.".to_string(),
@@ -453,7 +462,7 @@ impl SocietyRoadEvidence {
                 input_hash: String::new(),
             }
         } else if let Some(address) = &self.address {
-            evidence_keys.insert("rera_project_address".to_string());
+            evidence_keys.insert(address.fact_key.clone());
             DerivedRoadQuality {
                 value: "Approach road inferred from RERA project address; visual road-width verification is pending.".to_string(),
                 confidence: 0.66,
@@ -473,19 +482,7 @@ impl SocietyRoadEvidence {
                 input_hash: String::new(),
             }
         } else {
-            let reviews = self
-                .google_reviews_url
-                .as_ref()
-                .expect("has_location_signal guarantees one signal");
-            evidence_keys.insert("google_reviews_url".to_string());
-            DerivedRoadQuality {
-                value: "Approach road inferred from Google Maps review context; visual road-width verification is pending.".to_string(),
-                confidence: 0.62,
-                source_type: reviews.source_type.clone(),
-                source_url: reviews.source_url.clone(),
-                evidence_keys: Vec::new(),
-                input_hash: String::new(),
-            }
+            unreachable!("has_location_signal guarantees one non-review location signal")
         };
         let evidence_keys = evidence_keys.into_iter().collect::<Vec<_>>();
         DerivedRoadQuality {
@@ -496,6 +493,15 @@ impl SocietyRoadEvidence {
     }
 
     fn approach_road_media(&self) -> Option<DerivedRoadMedia> {
+        if let Some(location_query) = self.street_view_frontage_query() {
+            let source_signal = self
+                .frontage_road
+                .as_ref()
+                .or(self.address.as_ref())
+                .or(self.google_place_id.as_ref())?;
+            return Some(self.query_backed_media(&location_query, source_signal, 0.72));
+        }
+
         if let (Some(latitude), Some(longitude)) = (&self.latitude, &self.longitude) {
             if let (Some(latitude_value), Some(longitude_value)) =
                 (latitude.numeric, longitude.numeric)
@@ -538,11 +544,16 @@ impl SocietyRoadEvidence {
         };
 
         let location_query = self.street_view_location_query()?;
-        let source_signal = self
-            .google_place_id
-            .as_ref()
-            .or(self.google_reviews_url.as_ref())
-            .or(self.address.as_ref())?;
+        let source_signal = self.google_place_id.as_ref().or(self.address.as_ref())?;
+        Some(self.query_backed_media(&location_query, source_signal, 0.64))
+    }
+
+    fn query_backed_media(
+        &self,
+        location_query: &str,
+        source_signal: &FactSignal,
+        confidence: f32,
+    ) -> DerivedRoadMedia {
         let frames = approach_road_frame_headings()
             .map(|(label, heading)| ApproachRoadVisualFrameFact {
                 label: label.to_string(),
@@ -550,7 +561,7 @@ impl SocietyRoadEvidence {
                 pano_id: None,
                 latitude: None,
                 longitude: None,
-                location_query: Some(location_query.clone()),
+                location_query: Some(location_query.to_string()),
                 radius_m: Some(250),
                 heading,
                 pitch: 0.0,
@@ -559,17 +570,25 @@ impl SocietyRoadEvidence {
                 image_url: None,
             })
             .collect::<Vec<_>>();
-        Some(DerivedRoadMedia {
+        DerivedRoadMedia {
             record: ApproachRoadVisualFact {
                 provider: "Google Street View".to_string(),
                 coverage_quality: "usable".to_string(),
                 frames,
             },
-            confidence: 0.64,
+            confidence,
             source_type: source_signal.source_type.clone(),
             source_url: source_signal.source_url.clone(),
             input_hash: format!("{}:street-view:{location_query}", self.society_entity_id),
-        })
+        }
+    }
+
+    fn street_view_frontage_query(&self) -> Option<String> {
+        let road_name = self.frontage_road.as_ref()?.text.as_deref()?.trim();
+        if road_name.is_empty() {
+            return None;
+        }
+        Some(format!("{} {} Bengaluru", road_name, self.society_name))
     }
 
     fn street_view_location_query(&self) -> Option<String> {
@@ -582,7 +601,7 @@ impl SocietyRoadEvidence {
                 return Some(text.trim().to_string());
             }
         }
-        if self.google_place_id.is_some() || self.google_reviews_url.is_some() {
+        if self.google_place_id.is_some() {
             return Some(format!("{} Bengaluru", self.society_name));
         }
         None
@@ -591,6 +610,7 @@ impl SocietyRoadEvidence {
 
 #[derive(Debug, Clone)]
 struct FactSignal {
+    fact_key: String,
     source_type: String,
     source_url: Option<String>,
     numeric: Option<f64>,
@@ -600,6 +620,7 @@ struct FactSignal {
 impl FactSignal {
     fn from_numeric_fact(fact: &SkillFactRecord, numeric: f64) -> Self {
         Self {
+            fact_key: fact.fact_key.clone(),
             source_type: fact.source_type.clone(),
             source_url: fact.source_url.clone(),
             numeric: Some(numeric),
@@ -609,6 +630,7 @@ impl FactSignal {
 
     fn from_text_fact(fact: &SkillFactRecord, text: String) -> Self {
         Self {
+            fact_key: fact.fact_key.clone(),
             source_type: fact.source_type.clone(),
             source_url: fact.source_url.clone(),
             numeric: None,
@@ -701,8 +723,8 @@ fn canonical_society_evidence(
                     address: None,
                     latitude: None,
                     longitude: None,
+                    frontage_road: None,
                     google_place_id: None,
-                    google_reviews_url: None,
                 },
             )
         })
@@ -721,6 +743,118 @@ fn numeric_fact_value(fact: &SkillFactRecord) -> Result<Option<f64>, ApproachRoa
         FactValue::Numeric(value) if value.is_finite() => Ok(Some(value)),
         _ => Ok(None),
     }
+}
+
+fn extract_frontage_road_name(text: &str) -> Option<String> {
+    for segment in text
+        .split([',', ';', '\n'])
+        .map(str::trim)
+        .filter(|segment| !segment.is_empty())
+    {
+        if let Some(candidate) = extract_frontage_road_name_from_segment(segment) {
+            return Some(candidate);
+        }
+    }
+    extract_frontage_road_name_from_segment(text)
+}
+
+fn extract_frontage_road_name_from_segment(text: &str) -> Option<String> {
+    let tokens = road_tokens(text);
+    for index in 0..tokens.len() {
+        let token = tokens[index].as_str();
+        if token.eq_ignore_ascii_case("road")
+            || token.eq_ignore_ascii_case("street")
+            || token.eq_ignore_ascii_case("marg")
+        {
+            if let Some(candidate) = road_name_ending_at(&tokens, index) {
+                return Some(candidate);
+            }
+        }
+        if token.eq_ignore_ascii_case("highway") {
+            if let Some(candidate) = highway_name_at(&tokens, index) {
+                return Some(candidate);
+            }
+        }
+        if matches!(token.to_ascii_lowercase().as_str(), "sh" | "nh") {
+            if let Some(next) = tokens.get(index + 1).filter(|next| is_road_number(next)) {
+                return Some(format!("{} {}", token.to_uppercase(), next));
+            }
+        }
+    }
+    None
+}
+
+fn road_tokens(text: &str) -> Vec<String> {
+    let mut tokens = Vec::new();
+    let mut current = String::new();
+    for character in text.chars() {
+        if character.is_alphanumeric() {
+            current.push(character);
+        } else if !current.is_empty() {
+            tokens.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        tokens.push(current);
+    }
+    tokens
+}
+
+fn road_name_ending_at(tokens: &[String], suffix_index: usize) -> Option<String> {
+    let mut start = suffix_index;
+    while start > 0 && suffix_index - start < 3 {
+        let previous = &tokens[start - 1];
+        if !is_road_name_token(previous) {
+            break;
+        }
+        start -= 1;
+    }
+    if start == suffix_index {
+        return None;
+    }
+    Some(tokens[start..=suffix_index].join(" "))
+}
+
+fn highway_name_at(tokens: &[String], index: usize) -> Option<String> {
+    let mut parts = Vec::new();
+    if index > 0 && is_road_name_token(&tokens[index - 1]) {
+        parts.push(tokens[index - 1].clone());
+    }
+    parts.push(tokens[index].clone());
+    if let Some(next) = tokens.get(index + 1).filter(|next| is_road_number(next)) {
+        parts.push(next.clone());
+    }
+    (parts.len() > 1).then(|| parts.join(" "))
+}
+
+fn is_road_name_token(token: &str) -> bool {
+    if token.chars().all(|character| character.is_ascii_digit()) {
+        return false;
+    }
+    let normalized = token.to_ascii_lowercase();
+    !matches!(
+        normalized.as_str(),
+        "a" | "an"
+            | "and"
+            | "are"
+            | "at"
+            | "close"
+            | "for"
+            | "from"
+            | "in"
+            | "is"
+            | "location"
+            | "near"
+            | "of"
+            | "on"
+            | "the"
+            | "to"
+            | "with"
+    )
+}
+
+fn is_road_number(token: &str) -> bool {
+    token.chars().all(|character| character.is_ascii_digit())
 }
 
 fn road_entity_id(society_entity_id: &str) -> String {
@@ -953,9 +1087,206 @@ mod tests {
         assert_eq!(payload["frames"][0]["radius_m"], 250);
     }
 
+    #[test]
+    fn upstream_rows_emit_road_first_media_query_from_google_address() {
+        let canonical = CanonicalSocietyRows {
+            entities: vec![KgViewEntityRecord {
+                entity_id: "society:prestige-waterford".to_string(),
+                entity_type: "society".to_string(),
+                name: "PRESTIGE WATERFORD".to_string(),
+                root_source: Some("google".to_string()),
+                fact_count: 0,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }],
+            edges: Vec::new(),
+            mappings: Vec::new(),
+        };
+        let upstream = SkillFactArtifactRows {
+            facts: vec![
+                test_fact(
+                    "society:prestige-waterford",
+                    "google_place_id",
+                    FactValue::Text("ChIJq0gUpUARrjsR9L-vSCm748E".to_string()),
+                ),
+                test_fact(
+                    "society:prestige-waterford",
+                    "google_place_address",
+                    FactValue::Text(
+                        "Prestige Waterford, ECC Road, Whitefield, Bengaluru".to_string(),
+                    ),
+                ),
+            ],
+            fact_annotations: Vec::new(),
+        };
+        let rows = rows_from_upstream(&canonical, &upstream, Utc::now(), &MaterializationId::new())
+            .expect("upstream rows should materialize");
+
+        let media_fact = rows
+            .skill_facts
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.entity_id == "road_segment:prestige-waterford-approach"
+                    && fact.fact_key == "media.approach_road_frames"
+            })
+            .expect("address road context should emit frontage Street View frames");
+        let FactValue::Text(payload) =
+            serde_json::from_str::<FactValue>(&media_fact.value_json).unwrap()
+        else {
+            panic!("media frames should be carried as JSON text");
+        };
+        let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(
+            payload["frames"][0]["location_query"],
+            "ECC Road Prestige Waterford Bengaluru"
+        );
+        assert!(media_fact
+            .input_hash
+            .ends_with("street-view:ECC Road Prestige Waterford Bengaluru"));
+    }
+
+    #[test]
+    fn upstream_rows_do_not_infer_frontage_road_from_review_text() {
+        let canonical = CanonicalSocietyRows {
+            entities: vec![KgViewEntityRecord {
+                entity_id: "society:prestige-waterford".to_string(),
+                entity_type: "society".to_string(),
+                name: "PRESTIGE WATERFORD".to_string(),
+                root_source: Some("google".to_string()),
+                fact_count: 0,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }],
+            edges: Vec::new(),
+            mappings: Vec::new(),
+        };
+        let upstream = SkillFactArtifactRows {
+            facts: vec![
+                test_fact(
+                    "society:prestige-waterford",
+                    "google_place_id",
+                    FactValue::Text("ChIJq0gUpUARrjsR9L-vSCm748E".to_string()),
+                ),
+                test_fact(
+                    "society:prestige-waterford",
+                    "google_review_snippets",
+                    FactValue::Tags(vec![
+                        "The location on ECC Road is a major plus, close to Whitefield."
+                            .to_string(),
+                    ]),
+                ),
+            ],
+            fact_annotations: Vec::new(),
+        };
+        let rows = rows_from_upstream(&canonical, &upstream, Utc::now(), &MaterializationId::new())
+            .expect("upstream rows should materialize");
+
+        let media_fact = rows
+            .skill_facts
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.entity_id == "road_segment:prestige-waterford-approach"
+                    && fact.fact_key == "media.approach_road_frames"
+            })
+            .expect("Google place backed societies should still emit broad fallback frames");
+        let FactValue::Text(payload) =
+            serde_json::from_str::<FactValue>(&media_fact.value_json).unwrap()
+        else {
+            panic!("media frames should be carried as JSON text");
+        };
+        let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(
+            payload["frames"][0]["location_query"],
+            "Prestige Waterford Bengaluru"
+        );
+    }
+
+    #[test]
+    fn upstream_rows_prefer_frontage_road_over_coordinates() {
+        let canonical = CanonicalSocietyRows {
+            entities: vec![KgViewEntityRecord {
+                entity_id: "society:frontage-test".to_string(),
+                entity_type: "society".to_string(),
+                name: "FRONTAGE TEST".to_string(),
+                root_source: Some("rera".to_string()),
+                fact_count: 0,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }],
+            edges: Vec::new(),
+            mappings: Vec::new(),
+        };
+        let upstream = SkillFactArtifactRows {
+            facts: vec![
+                test_fact(
+                    "society:frontage-test",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9853),
+                ),
+                test_fact(
+                    "society:frontage-test",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7507),
+                ),
+                test_fact(
+                    "society:frontage-test",
+                    "rera_project_address",
+                    FactValue::Text("Survey 1, Varthur Main Road, Bengaluru".to_string()),
+                ),
+            ],
+            fact_annotations: Vec::new(),
+        };
+        let rows = rows_from_upstream(&canonical, &upstream, Utc::now(), &MaterializationId::new())
+            .expect("upstream rows should materialize");
+
+        let media_fact = rows
+            .skill_facts
+            .facts
+            .iter()
+            .find(|fact| {
+                fact.entity_id == "road_segment:frontage-test-approach"
+                    && fact.fact_key == "media.approach_road_frames"
+            })
+            .expect("frontage road context should emit Street View frames");
+        let FactValue::Text(payload) =
+            serde_json::from_str::<FactValue>(&media_fact.value_json).unwrap()
+        else {
+            panic!("media frames should be carried as JSON text");
+        };
+        let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
+        assert_eq!(
+            payload["frames"][0]["location_query"],
+            "Varthur Main Road Frontage Test Bengaluru"
+        );
+        assert!(payload["frames"][0]["latitude"].is_null());
+        assert!(payload["frames"][0]["longitude"].is_null());
+    }
+
+    #[test]
+    fn extracts_frontage_road_names_from_address_text() {
+        assert_eq!(
+            extract_frontage_road_name(
+                "The location on ECC Road is a major plus. It also has wide internal roads."
+            )
+            .as_deref(),
+            Some("ECC Road")
+        );
+        assert_eq!(
+            extract_frontage_road_name("Survey 10, Varthur Main Road, Bengaluru").as_deref(),
+            Some("Varthur Main Road")
+        );
+        assert_eq!(
+            extract_frontage_road_name("Project abuts State Highway 35 near the gate").as_deref(),
+            Some("State Highway 35")
+        );
+    }
+
     fn test_fact(entity_id: &str, fact_key: &str, value: FactValue) -> SkillFactRecord {
         let value_type = match &value {
             FactValue::Numeric(_) => "numeric",
+            FactValue::Tags(_) => "tags",
             _ => "text",
         };
         SkillFactRecord {

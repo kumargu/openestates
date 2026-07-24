@@ -673,6 +673,11 @@ fn append_project_facts(
             "Project type: {value}",
         ),
         (
+            "rera_project_address",
+            nonempty(project.project_address.as_deref()),
+            "Project address: {value}",
+        ),
+        (
             "rera_promoter_name",
             nonempty(project.promoter_name.as_deref()),
             "RERA Promoter: {value}",

@@ -753,6 +753,23 @@ fn append_google_review_facts(
             annotations,
         )?;
     }
+    if let Some(address) = row
+        .address
+        .as_deref()
+        .filter(|address| !address.trim().is_empty())
+    {
+        push_fact(
+            row,
+            run_id,
+            "google_place_address",
+            FactValue::Text(address.trim().to_string()),
+            "Google address: {value}",
+            &["address", "location", "approach road", "access road"],
+            Some(("TextMatch", 0.4, Vec::new())),
+            facts,
+            annotations,
+        )?;
+    }
     if let Some(rating) = row.rating {
         push_fact(
             row,
@@ -793,32 +810,6 @@ fn append_google_review_facts(
                 "community signal",
             ],
             Some(("TextMatch", 1.2, Vec::new())),
-            facts,
-            annotations,
-        )?;
-        append_review_signal_fact(
-            row,
-            run_id,
-            "approach_road_condition",
-            "Approach road review signal: {value}",
-            &["approach road", "access road", "road width", "road access"],
-            &[
-                "approach road",
-                "access road",
-                "road access",
-                "road frontage",
-                "road width",
-                "wide road",
-                "wide roads",
-                "internal roads",
-                "narrow road",
-                "bad road",
-                "road digging",
-                "single lane",
-                "100ft road",
-                "100 ft road",
-                "state highway",
-            ],
             facts,
             annotations,
         )?;

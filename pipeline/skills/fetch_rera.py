@@ -596,6 +596,25 @@ def _get_tab_text(detail_html: str, tab_id: str) -> str:
     return _clean_html(section)
 
 
+def _project_details_tab_text(detail_html: str) -> str:
+    """Return the tab text that carries RERA project-detail labels."""
+    candidates = [_get_tab_text(detail_html, tab_id) for tab_id in ("menu2", "menu1")]
+    return max(candidates, key=_project_detail_score, default="")
+
+
+def _project_detail_score(text: str) -> int:
+    labels = (
+        "Project Address",
+        "Project Type",
+        "Project Status",
+        "Project Start Date",
+        "Proposed Completion Date",
+        "Total Project Cost",
+        "Total Number of Inventories",
+    )
+    return sum(1 for label in labels if label in text)
+
+
 def _check_yes_no(text: str, label: str) -> Optional[bool]:
     """Check if a label in text is followed by Yes or No."""
     idx = text.lower().find(label.lower())
@@ -626,21 +645,21 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         numeric_id=search_result.numeric_id,
     )
 
-    # --- menu2 (Project Details) — richest tab ---
-    menu2 = _get_tab_text(detail_html, "menu2")
-    if menu2:
-        detail.project_type = _extract_text(menu2, "Project Type") or search_result.project_type
-        detail.project_sub_type = _extract_text(menu2, "Project Sub Type") or ""
+    # --- Project Details tab — RERA has used both menu1 and menu2 for this section.
+    project_details = _project_details_tab_text(detail_html)
+    if project_details:
+        detail.project_type = _extract_text(project_details, "Project Type") or search_result.project_type
+        detail.project_sub_type = _extract_text(project_details, "Project Sub Type") or ""
         # Start date: try label extraction, fall back to finding the first date
         # in the "At the time of Registration" row
-        start = _extract_text(menu2, "Registration Start Date") or _extract_text(menu2, "Project Start Date")
+        start = _extract_text(project_details, "Registration Start Date") or _extract_text(project_details, "Project Start Date")
         if start and re.match(r'\d{2}[-/]\d{2}[-/]\d{4}', start):
             detail.start_date = start
         else:
             # Try to grab first date after "At the time of Registration"
-            reg_idx = menu2.find("At the time of Registration")
+            reg_idx = project_details.find("At the time of Registration")
             if reg_idx >= 0:
-                date_match = re.search(r'(\d{2}-\d{2}-\d{4})', menu2[reg_idx:reg_idx + 100])
+                date_match = re.search(r'(\d{2}-\d{2}-\d{4})', project_details[reg_idx:reg_idx + 100])
                 if date_match:
                     detail.start_date = date_match.group(1)
 
@@ -648,35 +667,35 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         # looks like a valid date (DD-MM-YYYY or DD/MM/YYYY). The detail page
         # often has "Proposed Completion Date" as a table header without a colon,
         # so _extract_text may grab the wrong value.
-        comp = _extract_text(menu2, "Proposed Completion Date")
+        comp = _extract_text(project_details, "Proposed Completion Date")
         if comp and re.match(r'\d{2}[-/]\d{2}[-/]\d{4}', comp):
             detail.completion_date = comp
 
-        detail.project_address = _extract_text(menu2, "Project Address") or ""
-        lat = _extract_number(menu2, "Latitude")
+        detail.project_address = _extract_text(project_details, "Project Address") or ""
+        lat = _extract_number(project_details, "Latitude")
         detail.latitude = str(lat) if lat is not None else None
-        lng = _extract_number(menu2, "Longitude")
+        lng = _extract_number(project_details, "Longitude")
         detail.longitude = str(lng) if lng is not None else None
 
         detail.total_units = (
-            _extract_int(menu2, r"Total Number of Inventories")
-            or _extract_int(menu2, r"Total Number of Flats")
-            or _extract_int(menu2, r"Total.*?Inventories/Flats/Villas")
+            _extract_int(project_details, r"Total Number of Inventories")
+            or _extract_int(project_details, r"Total Number of Flats")
+            or _extract_int(project_details, r"Total.*?Inventories/Flats/Villas")
         )
-        detail.open_parking = _extract_int(menu2, r"No\.?\s*of Open Parking")
-        detail.covered_parking = _extract_int(menu2, r"No\.?\s*of Covered Parking")
+        detail.open_parking = _extract_int(project_details, r"No\.?\s*of Open Parking")
+        detail.covered_parking = _extract_int(project_details, r"No\.?\s*of Covered Parking")
 
         # Use specific patterns that match the "(Sq Mtr) (A1+A2)" variant
-        detail.total_land_area_sqm = _extract_number(menu2, r"Total Area [Oo]f Land \(Sq Mtr\)") or _extract_number(menu2, r"Total Area [Oo]f Land")
-        detail.total_carpet_area_sqm = _extract_number(menu2, r"Total Carpet Area.*?\(Sq Mtr\)") or _extract_number(menu2, r"Total Carpet Area")
-        detail.total_builtup_area_sqm = _extract_number(menu2, r"Total Built[\s-]?[Uu]p Area.*?\(Sq Mtr\)") or _extract_number(menu2, r"Total Built[\s-]?[Uu]p Area")
+        detail.total_land_area_sqm = _extract_number(project_details, r"Total Area [Oo]f Land \(Sq Mtr\)") or _extract_number(project_details, r"Total Area [Oo]f Land")
+        detail.total_carpet_area_sqm = _extract_number(project_details, r"Total Carpet Area.*?\(Sq Mtr\)") or _extract_number(project_details, r"Total Carpet Area")
+        detail.total_builtup_area_sqm = _extract_number(project_details, r"Total Built[\s-]?[Uu]p Area.*?\(Sq Mtr\)") or _extract_number(project_details, r"Total Built[\s-]?[Uu]p Area")
 
-        detail.land_cost_inr = _extract_number(menu2, r"Cost of Land")
-        detail.construction_cost_inr = _extract_number(menu2, r"Cost of Layout Development")
-        detail.total_project_cost_inr = _extract_number(menu2, r"Total Project Cost")
+        detail.land_cost_inr = _extract_number(project_details, r"Cost of Land")
+        detail.construction_cost_inr = _extract_number(project_details, r"Cost of Layout Development")
+        detail.total_project_cost_inr = _extract_number(project_details, r"Total Project Cost")
 
-        detail.far_sanctioned = _extract_number(menu2, r"FAR Sanctioned")
-        detail.num_towers = _extract_int(menu2, r"Number of Towers")
+        detail.far_sanctioned = _extract_number(project_details, r"FAR Sanctioned")
+        detail.num_towers = _extract_int(project_details, r"Number of Towers")
 
     # --- menu3 (Cost Details) ---
     menu3 = _get_tab_text(detail_html, "menu3")

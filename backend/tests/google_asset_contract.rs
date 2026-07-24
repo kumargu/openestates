@@ -78,9 +78,10 @@ async fn google_place_snapshot_materializes_raw_parquet_and_derives_linked_facts
         fact.fact_key == "google_review_snippets"
             && fact.value_json.contains("Well maintained campus")
     }));
-    assert!(facts.facts.iter().any(|fact| {
-        fact.fact_key == "approach_road_condition" && fact.value_json.contains("approach road")
-    }));
+    assert!(!facts
+        .facts
+        .iter()
+        .any(|fact| fact.fact_key == "approach_road_condition"));
     assert!(facts
         .facts
         .iter()
@@ -89,11 +90,7 @@ async fn google_place_snapshot_materializes_raw_parquet_and_derives_linked_facts
         fact.fact_key == "high_tension_wire_concern"
             && fact.value_json.contains("High tension wires")
     }));
-    for fact_key in [
-        "approach_road_condition",
-        "stp_concern",
-        "high_tension_wire_concern",
-    ] {
+    for fact_key in ["stp_concern", "high_tension_wire_concern"] {
         let annotation = facts
             .fact_annotations
             .iter()

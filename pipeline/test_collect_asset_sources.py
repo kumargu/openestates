@@ -582,6 +582,13 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     learned_at="2026-07-12T08:15:00Z",
                 ),
                 SourcedFact(
+                    key="google_place_address",
+                    value={"type": "Text", "data": "Example Green, ECC Road, Bengaluru"},
+                    confidence=0.84,
+                    source=FactSource(source_type="Google"),
+                    learned_at="2026-07-12T08:15:00Z",
+                ),
+                SourcedFact(
                     key="google_rating",
                     value={"type": "Numeric", "data": 4.4},
                     confidence=0.84,
@@ -617,6 +624,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(record["project_key"], "PRM-EXAMPLE-GREEN")
         self.assertEqual(record["query"], "Example Green Whitefield Bengaluru")
         self.assertEqual(record["place_id"], "place-123")
+        self.assertEqual(record["address"], "Example Green, ECC Road, Bengaluru")
         self.assertEqual(record["rating"], 4.4)
         self.assertEqual(record["fetched_at"], "2026-07-12T08:15:00Z")
         self.assertEqual(record["fetch_source"], "fetch_google_review_links_cache")

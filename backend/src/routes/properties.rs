@@ -1,39 +1,38 @@
 use std::collections::HashSet;
 use std::sync::{Arc, OnceLock};
 
-use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::Json;
 use serde::{Deserialize, Serialize};
 
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::recommendations::{
-    RecommendationBranch, RecommendationBranchInputs, build_recommendation_branches,
+    build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
 };
-use crate::scoring::{self, MarketActivityResponse, TransparencyScore, compute_transparency_score};
-use crate::search::ConfidenceScore;
+use crate::scoring::{self, compute_transparency_score, MarketActivityResponse, TransparencyScore};
 use crate::search::text::compute_confidence_for_detail;
+use crate::search::ConfidenceScore;
 use crate::serving::{
     GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, SocietyFactProjection,
 };
 use crate::state::AppState;
 
 use crate::community::{
-    CommunityPulse, community_evidence_from_fact_value, community_pulse_from_summary,
-    deterministic_community_summarizer,
+    community_evidence_from_fact_value, community_pulse_from_summary,
+    deterministic_community_summarizer, CommunityPulse,
 };
 use crate::knowledge::node::NodeType;
-use crate::knowledge::{FactValue, SourcedFact, google_reviews_url_from_facts};
+use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 use crate::livability_brief::{
-    LivabilityBrief, LivabilityBriefInput, LivabilityLens, StructuredFactSignal,
-    compose_livability_brief, filter_reddit_evidence,
+    compose_livability_brief, filter_reddit_evidence, LivabilityBrief, LivabilityBriefInput,
+    LivabilityLens, StructuredFactSignal,
 };
 
 use super::enrichment::{
-    AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo, enrich_area,
-    enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
+    enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
-    society_node_id,
+    society_node_id, AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
 };
 
 /// GET /api/properties — returns UI-ready property cards.
@@ -1514,15 +1513,6 @@ fn collect_buyer_context_items(
                         &fact.key,
                         &fact.label,
                     )
-                })
-                .or_else(|| {
-                    review_signal_source_item(
-                        graph,
-                        &society_id,
-                        projection,
-                        &fact.key,
-                        &fact.label,
-                    )
                 }),
         };
         if let Some(item) = scoped.map(|item| with_context_scope(item, fact)) {
@@ -1620,68 +1610,6 @@ fn serving_road_segment_source_item(
         .find_map(|entity_id| {
             serving_entity_source_item(facts, entity_id, fact_key, fact_key, label)
         })
-}
-
-fn review_signal_source_item(
-    graph: &crate::knowledge::KnowledgeGraph,
-    society_id: &str,
-    projection: Option<&SocietyFactProjection<'_>>,
-    fact_key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    let terms = review_signal_terms(fact_key)?;
-    let mut item = projection
-        .and_then(|projection| serving_source_item(projection, "google_review_snippets", label))
-        .or_else(|| source_item(graph, society_id, "google_review_snippets", label))?;
-    let matches = matching_review_signal_values(&item.values, terms);
-    if matches.is_empty() {
-        return None;
-    }
-
-    item.key = fact_key.to_string();
-    item.label = label.to_string();
-    item.value = if matches.len() == 1 {
-        "1 Google review road signal".to_string()
-    } else {
-        format!("{} Google review road signals", matches.len())
-    };
-    item.values = matches;
-    item.confidence_pct = item.confidence_pct.min(75);
-    Some(item)
-}
-
-fn review_signal_terms(fact_key: &str) -> Option<&'static [&'static str]> {
-    match fact_key {
-        "approach_road_condition" => Some(&[
-            "approach road",
-            "access road",
-            "road access",
-            "road frontage",
-            "road width",
-            "wide road",
-            "wide roads",
-            "internal roads",
-            "narrow road",
-            "bad road",
-            "road digging",
-            "single lane",
-            "100ft road",
-            "100 ft road",
-            "state highway",
-        ]),
-        _ => None,
-    }
-}
-
-fn matching_review_signal_values(values: &[String], terms: &[&str]) -> Vec<String> {
-    values
-        .iter()
-        .filter(|value| {
-            let normalized = value.to_lowercase();
-            terms.iter().any(|term| normalized.contains(term))
-        })
-        .cloned()
-        .collect()
 }
 
 fn with_context_scope(mut item: SourceItem, fact: &ContextFactDefinition) -> SourceItem {
@@ -3016,16 +2944,14 @@ mod serving_state_tests {
             panels.iter().all(|panel| panel.kind != "reviews"),
             "Google reviews should be a source inside Community pulse, not a separate panel"
         );
-        assert!(
-            !community
-                .missing
-                .iter()
-                .any(|item| item.contains("Review text is not ingested"))
-        );
+        assert!(!community
+            .missing
+            .iter()
+            .any(|item| item.contains("Review text is not ingested")));
     }
 
     #[test]
-    fn source_panels_derive_approach_road_signal_from_review_snippets() {
+    fn source_panels_do_not_derive_approach_road_signal_from_review_snippets() {
         let graph = legacy_graph();
         let property = property();
         let serving = ServingFactIndex::from_records(
@@ -3042,25 +2968,11 @@ mod serving_state_tests {
         );
 
         let panels = build_source_panels(&graph, &property, Some(&serving), None);
-        let approach = panels
+        assert!(panels
             .iter()
-            .find(|panel| panel.kind == "approach_road")
-            .expect("road review snippets should produce an approach-road panel");
-        let item = approach
-            .items
-            .iter()
-            .find(|item| item.key == "approach_road_condition")
-            .expect("matching snippets should become the configured road signal");
-
-        assert_eq!(item.value, "2 Google review road signals");
-        assert_eq!(
-            item.values,
-            vec![
-                "Approach road is wide and clean near the main gate.".to_string(),
-                "Access road has some road digging during peak hours.".to_string(),
-            ]
-        );
-        assert!(item.confidence_pct <= 75);
+            .filter(|panel| panel.kind == "approach_road")
+            .flat_map(|panel| panel.items.iter())
+            .all(|item| item.key != "approach_road_condition"));
     }
 
     #[test]

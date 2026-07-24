@@ -67,6 +67,7 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
     output_keys = [
         "google_reviews_url",
         "google_place_id",
+        "google_place_address",
         "google_rating",
         "google_review_count",
         "google_review_snippets",
@@ -398,6 +399,24 @@ def place_to_skill_result(
                 source=source,
                 display_template="Google place id: {value}",
                 answers_preferences=["google reviews", "maps"],
+            )
+        )
+
+    address = clean_text(place.get("address"))
+    if address:
+        facts.append(
+            SourcedFact(
+                key="google_place_address",
+                value={"type": "Text", "data": address},
+                confidence=confidence,
+                source=source,
+                display_template="Google address: {value}",
+                answers_preferences=["address", "location", "approach road", "access road"],
+                scoring_hint={
+                    "direction": "TextMatch",
+                    "weight": 0.4,
+                    "thresholds": [],
+                },
             )
         )
 

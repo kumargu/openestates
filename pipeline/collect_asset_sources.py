@@ -434,7 +434,8 @@ def collect_google_places(
                 "review_snippets": optional_string_list(
                     fact_data(values.get("google_review_snippets"))
                 ),
-                "address": optional_string(input_data.get("address")),
+                "address": optional_string(fact_data(values.get("google_place_address")))
+                or optional_string(input_data.get("address")),
                 "confidence": float(result.confidence),
                 "fetched_at": learned_at,
                 "fetch_source": google_fetch_source(result),

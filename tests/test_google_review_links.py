@@ -48,10 +48,12 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
                 "title": "Prestige Lakeside Habitat",
                 "place_id": "ChIJ123",
                 "link": "https://www.google.com/maps/place/prestige",
+                "address": "Varthur Road, Whitefield, Bengaluru",
                 "rating": "4.4",
                 "reviews": "1,234",
             },
             api_calls=1,
+            fetch_source="google_places_text_search",
         )
 
         by_key = {fact.key: fact for fact in result.facts}
@@ -60,6 +62,10 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
             "https://www.google.com/maps/place/prestige",
         )
         self.assertEqual(by_key["google_place_id"].value["data"], "ChIJ123")
+        self.assertEqual(
+            by_key["google_place_address"].value["data"],
+            "Varthur Road, Whitefield, Bengaluru",
+        )
         self.assertEqual(by_key["google_rating"].value["data"], 4.4)
         self.assertEqual(by_key["google_review_count"].value["data"], 1234)
         self.assertEqual(result.cost.api_calls, 1)
@@ -72,7 +78,11 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
         self.assertEqual(best_place_result(payload)["place_id"], "exact")
 
     def test_skill_does_not_call_network_without_api_key(self):
-        env = {k: v for k, v in os.environ.items() if k not in {"SERPAPI_API_KEY", "SERPAPI_KEY"}}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"GOOGLE_PLACES_API_KEY", "SERPAPI_API_KEY", "SERPAPI_KEY"}
+        }
         with patch.dict(os.environ, env, clear=True):
             result = FetchGoogleReviewLinksSkill().execute(
                 {
@@ -86,7 +96,11 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
         self.assertEqual(result.facts[0].key, "google_reviews_url")
 
     def test_existing_place_id_yields_precise_maps_link_without_api_call(self):
-        env = {k: v for k, v in os.environ.items() if k not in {"SERPAPI_API_KEY", "SERPAPI_KEY"}}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"GOOGLE_PLACES_API_KEY", "SERPAPI_API_KEY", "SERPAPI_KEY"}
+        }
         with patch.dict(os.environ, env, clear=True):
             result = FetchGoogleReviewLinksSkill().execute(
                 {
@@ -105,7 +119,11 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
     def test_cache_key_changes_when_serpapi_is_available(self):
         skill = FetchGoogleReviewLinksSkill()
         input_data = {"society_name": "Prestige Lakeside Habitat"}
-        env = {k: v for k, v in os.environ.items() if k not in {"SERPAPI_API_KEY", "SERPAPI_KEY"}}
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"GOOGLE_PLACES_API_KEY", "SERPAPI_API_KEY", "SERPAPI_KEY"}
+        }
         with patch.dict(os.environ, env, clear=True):
             fallback_key = skill._cache_key(input_data)
         with patch.dict(os.environ, {"SERPAPI_API_KEY": "test-key"}, clear=True):
