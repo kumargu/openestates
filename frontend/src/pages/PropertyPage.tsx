@@ -35,6 +35,15 @@ function isKnownText(value: string | null | undefined): value is string {
   return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
 
+function compactLifecycleLabel(value: string): string {
+  const normalized = value
+    .replace(/^home state:\s*/i, "")
+    .replace(/_/g, " ")
+    .trim();
+  if (!normalized) return value;
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
+
 function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
   const sizeDescription = hasKnownNumber(p.carpet_area_sqft)
     ? `${p.carpet_area_sqft} sqft`
@@ -154,7 +163,7 @@ export function PropertyPage() {
   ].filter((row): row is string => row !== null);
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
-  const evidenceExcludeKinds = detailEvidenceExcludeKinds(showApproachTrail);
+  const evidenceExcludeKinds = detailEvidenceExcludeKinds();
   const showHomeStateChip = Boolean(
     data.home_state_display
     && !isRedundantHomeState(
@@ -163,6 +172,9 @@ export function PropertyPage() {
       p.possession_status,
     ),
   );
+  const lifecycleTag = showHomeStateChip && data.home_state_display
+    ? compactLifecycleLabel(data.home_state_display)
+    : null;
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
@@ -225,9 +237,6 @@ export function PropertyPage() {
           </div>
 
           <div className="property-proof-strip">
-            {showHomeStateChip && (
-              <span className="property-proof-strip__chip">{data.home_state_display}</span>
-            )}
             <TrustBadge rootSource={data.root_source} compact />
             {data.builder_trust?.delivery_display && (
               <BuilderTrustBadge
@@ -248,6 +257,7 @@ export function PropertyPage() {
             {hasKnownNumber(p.carpet_area_sqft) && (
               <span>{p.carpet_area_sqft.toLocaleString("en-IN")} sqft carpet</span>
             )}
+            {lifecycleTag && <span>{lifecycleTag}</span>}
             {isKnownText(p.facing) && <span>{p.facing} facing</span>}
             {hasKnownNumber(p.floor) && hasKnownNumber(p.total_floors) && (
               <span>Floor {p.floor}/{p.total_floors}</span>

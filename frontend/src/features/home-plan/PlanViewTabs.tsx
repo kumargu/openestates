@@ -1,9 +1,18 @@
-export type PlanView = "netWorth" | "monthly" | "payoff";
+export type PlanView = "netWorth" | "payoff";
 
 const TABS: Array<{ id: PlanView; label: string; shortLabel: string; subtitle: string }> = [
-  { id: "netWorth", label: "Net worth", shortLabel: "Net worth", subtitle: "Which path builds more wealth over the years." },
-  { id: "monthly", label: "Monthly", shortLabel: "Monthly", subtitle: "What each path costs you every month." },
-  { id: "payoff", label: "Pay off loan", shortLabel: "Payoff", subtitle: "How extra payments clear the loan sooner." },
+  {
+    id: "netWorth",
+    label: "Wealth over time",
+    shortLabel: "Wealth",
+    subtitle: "Which path builds more wealth over the years.",
+  },
+  {
+    id: "payoff",
+    label: "Pay off loan",
+    shortLabel: "Payoff",
+    subtitle: "How extra payments clear the loan sooner.",
+  },
 ];
 
 type PlanViewTabsProps = {

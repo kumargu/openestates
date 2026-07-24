@@ -13,21 +13,23 @@ use crate::serving::{
 };
 
 use super::{
-    read_skill_fact_artifact_rows, sort_materialization_records, AssetDagPlan, AssetDagRunManifest,
-    AssetDefinition, AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition,
-    AssetPlanner, AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
+    read_skill_fact_artifact_rows, sort_materialization_records, ApproachRoadGraphError,
+    ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
+    AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
+    AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
     MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
     PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -742,8 +744,19 @@ impl AssetDagExecutor {
         let support_rows = read_skill_fact_artifact_rows(&self.lake, &support_records).await?;
         let canonical_record =
             dependency_record(&asset_id, &parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
-        let canonical_rows =
+        let mut canonical_rows =
             super::read_canonical_society_rows(&self.lake, canonical_record).await?;
+        if let Some(approach_record) = parent_records
+            .iter()
+            .find(|record| record.asset_id.as_str() == APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
+        {
+            let approach_rows =
+                super::read_approach_road_graph_rows(&self.lake, approach_record).await?;
+            canonical_rows
+                .entities
+                .extend(approach_rows.canonical.entities);
+            canonical_rows.edges.extend(approach_rows.canonical.edges);
+        }
         let records = KgViewRecords::from_graph_with_asset_rows(
             graph,
             &canonical_rows.entities,
@@ -1098,6 +1111,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::HomeStateSignals,
         );
         executors.insert(
+            static_asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::ApproachRoadGraphFacts,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1128,6 +1145,7 @@ enum BuiltInAssetExecutor {
     ImageMediaFacts,
     BuilderReraAggregates,
     HomeStateSignals,
+    ApproachRoadGraphFacts,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1539,6 +1557,27 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::ApproachRoadGraphFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let materialization = ApproachRoadGraphMaterializer::new(context.dag.lake.clone())
+                    .materialize_for_run(
+                        context.options.planned_at,
+                        &parent_records,
+                        context.run_id.clone(),
+                        context.asset_partition.clone(),
+                    )
+                    .await?;
+                Ok(ExecutedAsset::Record(materialization.record))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1563,8 +1602,20 @@ impl BuiltInAssetExecutor {
                     &parent_records,
                     CANONICAL_SOCIETY_NODES_ASSET_ID,
                 )?;
-                let canonical_rows =
+                let mut canonical_rows =
                     super::read_canonical_society_rows(&context.dag.lake, canonical_record).await?;
+                if let Some(approach_record) = parent_records
+                    .iter()
+                    .find(|record| record.asset_id.as_str() == APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
+                {
+                    let approach_rows =
+                        super::read_approach_road_graph_rows(&context.dag.lake, approach_record)
+                            .await?;
+                    canonical_rows
+                        .entities
+                        .extend(approach_rows.canonical.entities);
+                    canonical_rows.edges.extend(approach_rows.canonical.edges);
+                }
                 let parent_materializations = parent_records
                     .iter()
                     .map(|record| record.materialization_id.clone())
@@ -1787,6 +1838,7 @@ pub enum AssetDagExecutorError {
     Media(MediaAssetError),
     SearchServingBundle(SearchServingBundleMaterializeError),
     SkillFact(SkillFactMaterializeError),
+    ApproachRoadGraph(ApproachRoadGraphError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
@@ -1867,6 +1919,9 @@ impl fmt::Display for AssetDagExecutorError {
             Self::FanIn(err) => write!(f, "asset DAG fan-in failed: {err}"),
             Self::Partition(err) => write!(f, "asset partition resolution failed: {err}"),
             Self::KgSocietyView(err) => write!(f, "KG society view execution failed: {err}"),
+            Self::ApproachRoadGraph(err) => {
+                write!(f, "approach-road graph asset execution failed: {err}")
+            }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -1996,6 +2051,7 @@ impl AssetDagExecutorError {
             | Self::ProjectEnrichment(ProjectEnrichmentAssetError::Lake(err))
             | Self::Media(MediaAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
+            | Self::ApproachRoadGraph(ApproachRoadGraphError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
             | Self::CanonicalNodes(super::CanonicalNodesError::Lake(err))
             | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
@@ -2035,6 +2091,12 @@ impl From<AssetFanInError> for AssetDagExecutorError {
 impl From<KgSocietyViewMaterializeError> for AssetDagExecutorError {
     fn from(err: KgSocietyViewMaterializeError) -> Self {
         Self::KgSocietyView(err)
+    }
+}
+
+impl From<ApproachRoadGraphError> for AssetDagExecutorError {
+    fn from(err: ApproachRoadGraphError) -> Self {
+        Self::ApproachRoadGraph(err)
     }
 }
 

@@ -111,12 +111,6 @@ export function HomePlanPage() {
   const baseline = buildBaselinePlanInputs(property.price);
   const activeYear = previewYear ?? horizon;
   const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
-  const pinnedPoint = projection.points[Math.min(horizon, projection.points.length - 1)];
-  const pinnedDifference = pinnedPoint.buyNetWorth - pinnedPoint.rentNetWorth;
-  const pinnedScale = Math.max(Math.abs(pinnedPoint.buyNetWorth), Math.abs(pinnedPoint.rentNetWorth), 1);
-  const decisionTheme = Math.abs(pinnedDifference) / pinnedScale <= 0.02
-    ? "balanced"
-    : pinnedDifference > 0 ? "buy" : "rent";
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
   const monthlyRent = activePoint.annualRent / 12;
@@ -161,12 +155,10 @@ export function HomePlanPage() {
     setMilestoneHint(null);
   };
 
-  const metric = view === "monthly" ? "monthlyOutflow" : "netWorth";
-
   const viewChapterClass = view === "netWorth" ? "net-worth" : view;
 
   return (
-    <div className={`home-plan-shell home-plan-shell--${decisionTheme} home-plan-shell--view-${viewChapterClass}`}>
+    <div className={`home-plan-shell home-plan-shell--view-${viewChapterClass}`}>
       <Helmet>
         <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
@@ -178,11 +170,13 @@ export function HomePlanPage() {
       </header>
 
       <div className="home-plan-body">
-        <PlanAssumptionRail
-          inputs={inputs}
-          onInputChange={updateInput}
-          onReset={resetPlan}
-        />
+        {view === "netWorth" && (
+          <PlanAssumptionRail
+            inputs={inputs}
+            onInputChange={updateInput}
+            onReset={resetPlan}
+          />
+        )}
 
         <div className="home-plan-main">
           <div className="home-plan-canvas">
@@ -214,14 +208,12 @@ export function HomePlanPage() {
             ) : (
               <>
                 <VerdictBlock
-                  view={view}
                   activeYear={activeYear}
                   buyWins={buyWins}
                   advantage={advantage}
                   isPreview={previewYear !== null}
                   breakEvenYear={projection.breakEvenYear}
                   homeEquity={homeEquity}
-                  monthlyGap={monthlyGap}
                   monthlyGapSummary={monthlyGapSummary}
                   changeNote={changeNote}
                   monthlyEmi={projection.monthlyEmi}
@@ -238,7 +230,6 @@ export function HomePlanPage() {
                   <PlanGraph
                     projection={projection}
                     horizon={horizon}
-                    metric={metric}
                     selected={selectedScenario}
                     milestones={milestones}
                     hintedMilestoneYear={milestoneHint?.year ?? null}

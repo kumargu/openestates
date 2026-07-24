@@ -33,7 +33,7 @@ export function usePropertySceneImages(input: Input) {
       if (seeds.length > 0) {
         const loaded = await probeImageUrls(seeds);
         if (!cancelled) {
-          setImages(loaded.length > 0 ? loaded : seeds);
+          setImages(loaded);
           setLoading(false);
         }
         return;

@@ -8,6 +8,7 @@
 //! files. JSON is reserved for small control-plane files such as manifests,
 //! schema descriptors, trust policy, and current pointers.
 
+pub mod approach_road;
 pub mod canonical_nodes;
 pub mod executor;
 pub mod fan_in;
@@ -28,6 +29,10 @@ pub mod source_inputs;
 pub mod source_provider;
 pub mod types;
 
+pub use approach_road::{
+    read_approach_road_graph_rows, ApproachRoadGraphError, ApproachRoadGraphMaterialization,
+    ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+};
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
 pub use executor::{
     AssetDagExecutionOptions, AssetDagExecutionReport, AssetDagExecutor, AssetDagExecutorError,

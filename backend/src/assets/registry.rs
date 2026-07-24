@@ -676,6 +676,19 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Derived,
         ),
         asset(
+            "approach_road_graph_facts",
+            AssetStage::Silver,
+            "Approach-road graph edges and road-segment facts derived from upstream RERA and Google location facts.",
+            &[
+                "canonical_society_nodes",
+                "rera_legal_facts",
+                "google_review_facts",
+            ],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
@@ -688,6 +701,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "image_media_facts",
                 "builder_rera_aggregates",
                 "home_state_signals",
+                "approach_road_graph_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -710,7 +724,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("google_nearby_place_facts")
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
-        .with_optional_dependency("home_state_signals"),
+        .with_optional_dependency("home_state_signals")
+        .with_optional_dependency("approach_road_graph_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

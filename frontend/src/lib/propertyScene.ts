@@ -24,24 +24,16 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-/** Merge explicit property images with society-folder fallbacks. */
+/** Return only explicit image URLs already present on the property payload. */
 export function initialPropertySceneUrls(input: {
   heroImage?: string | null;
   images?: string[];
   societyId?: string;
 }): string[] {
-  const fromProperty = unique([
+  return unique([
     ...(input.images ?? []),
     ...(input.heroImage ? [input.heroImage] : []),
   ]);
-
-  if (fromProperty.length > 0) return fromProperty;
-
-  const slug = societySlugFromId(input.societyId);
-  if (!slug) return [];
-
-  // Optimistic first pass: numbered files from fetch_images convention.
-  return societyPhotoCandidates(slug, 5).filter((path) => path.endsWith(".jpg"));
 }
 
 /** Probe which image URLs actually load in the browser. */

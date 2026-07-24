@@ -5,7 +5,7 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { bandMeta, constellationMeta, displaySourceType, groupSectionsByBand, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
+import { constellationMeta, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
 import {
   LinkIcon,
   IconForKind,
@@ -279,7 +279,6 @@ export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
       .filter(hasRenderableContent);
   }, [evidence?.sections, excludeKinds]);
 
-  const bands = useMemo(() => groupSectionsByBand(folds), [folds]);
   const [openKey, setOpenKey] = useState<string | null>(() => defaultOpenKey(folds));
   const openSection = folds.find((section) => sectionKey(section) === openKey) ?? null;
 
@@ -292,26 +291,19 @@ export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
         <h2>Property context</h2>
       </div>
 
-      <div className="evidence-stack__bands">
-        {bands.map((band) => (
-          <div key={band.id} className="evidence-stack__band">
-            <h3 className="evidence-stack__band-label">{bandMeta(band.id).label}</h3>
-            <div className="evidence-stack__tiles" role="tablist" aria-label={bandMeta(band.id).label}>
-              {band.sections.map((section) => {
-                const key = sectionKey(section);
-                const active = openKey === key;
-                return (
-                  <EvidenceTile
-                    key={key}
-                    section={section}
-                    active={active}
-                    onSelect={() => setOpenKey(active ? null : key)}
-                  />
-                );
-              })}
-            </div>
-          </div>
-        ))}
+      <div className="evidence-stack__tiles" role="tablist" aria-label="Property context sources">
+        {folds.map((section) => {
+          const key = sectionKey(section);
+          const active = openKey === key;
+          return (
+            <EvidenceTile
+              key={key}
+              section={section}
+              active={active}
+              onSelect={() => setOpenKey(active ? null : key)}
+            />
+          );
+        })}
       </div>
 
       {openSection && (

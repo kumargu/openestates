@@ -46,21 +46,20 @@ export function ApproachRoadTrail({ sections }: Props) {
   const hero = frames[0];
 
   return (
-    <section className="area-trail area-trail--visual-only" aria-labelledby="area-trail-title">
+    <section className="area-trail area-trail--with-media" aria-labelledby="area-trail-title">
       <div className="area-trail__head">
         <div>
           <span>Approach road</span>
           <h2 id="area-trail-title">Gate-side approach</h2>
         </div>
-        <div className="area-trail__meta">
-          <span>{frames.length} Street View frames</span>
-        </div>
       </div>
 
-      <a className="area-trail__hero" href={hero.source_url} target="_blank" rel="noreferrer">
-        <img src={hero.image_url} alt={`Approach road: ${hero.label}`} loading="eager" />
-        <span>{hero.label}</span>
-      </a>
+      {hero && (
+        <a className="area-trail__hero" href={hero.source_url} target="_blank" rel="noreferrer">
+          <img src={hero.image_url} alt={`Approach road: ${hero.label}`} loading="eager" />
+          <span>{hero.label}</span>
+        </a>
+      )}
 
       {frames.length > 1 && (
         <div className="area-trail__strip" aria-label="Additional approach road views">

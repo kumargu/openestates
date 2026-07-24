@@ -23,6 +23,6 @@ export function isRedundantHomeState(
 }
 
 /** Evidence kinds promoted to a dedicated primary surface on property detail. */
-export function detailEvidenceExcludeKinds(showApproachTrail: boolean): string[] {
-  return showApproachTrail ? ["approach_road"] : [];
+export function detailEvidenceExcludeKinds(): string[] {
+  return ["approach_road", "home_state"];
 }

@@ -16,11 +16,12 @@ use backend::assets::{
     RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
     ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
     SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -62,10 +63,10 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 10);
-    assert_eq!(report.manifest.succeeded_count, 10);
+    assert_eq!(report.manifest.planned_count, 11);
+    assert_eq!(report.manifest.succeeded_count, 11);
     assert_eq!(report.manifest.failed_count, 0);
-    assert_eq!(report.executed_assets.len(), 10);
+    assert_eq!(report.executed_assets.len(), 11);
     for id in [
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
@@ -75,6 +76,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         IMAGE_MEDIA_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -89,7 +91,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 8);
+    assert_eq!(kg_record.parent_materializations.len(), 9);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
@@ -140,6 +142,16 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
     assert!(kg_record
         .parent_materializations
         .contains(&image_facts_record.materialization_id));
+    let approach_road_record = store
+        .current_record(
+            &asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
+            &AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    assert!(kg_record
+        .parent_materializations
+        .contains(&approach_road_record.materialization_id));
     let serving_record = store
         .current_record(
             &asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
@@ -216,6 +228,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
@@ -238,6 +251,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert!(
         executed_position(&report.executed_assets, HOME_STATE_SIGNALS_ASSET_ID)
+            < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
+    );
+    assert!(
+        executed_position(&report.executed_assets, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
             < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
     );
     assert!(
@@ -356,10 +373,19 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert!(kg_record
         .parent_materializations
         .contains(&home_state_record.materialization_id));
-    assert_eq!(kg_record.parent_materializations.len(), 8);
+    let approach_road_record = current_record(
+        &store,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+        &AssetPartition::global(),
+    )
+    .await;
+    assert!(kg_record
+        .parent_materializations
+        .contains(&approach_road_record.materialization_id));
+    assert_eq!(kg_record.parent_materializations.len(), 9);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        80
+        82
     );
 
     let serving_record = current_record(
@@ -368,7 +394,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 80);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 82);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -401,8 +427,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 15);
-    assert_eq!(report.executed_assets.len(), 15);
+    assert_eq!(report.manifest.planned_count, 16);
+    assert_eq!(report.executed_assets.len(), 16);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -417,6 +443,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+        APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ] {
@@ -516,6 +543,19 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .facts
         .iter()
         .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
+    assert!(loaded.edges.iter().any(|edge| {
+        edge.from_entity_id == "society:rera-meadows"
+            && edge.edge_type == "served_by_road"
+            && edge.to_entity_id == "road_segment:rera-meadows-approach"
+    }));
+    let rera_meadows_road = loaded
+        .fact_index
+        .entity("road_segment:rera-meadows-approach")
+        .expect("RERA Meadows road segment should carry approach-road facts");
+    assert!(rera_meadows_road
+        .facts
+        .iter()
+        .any(|fact| fact.fact_key == "access_road_quality"));
     let query = "3bhk with greenery in whitefield above 10 acres";
     let properties = vec![
         search_property("rera-meadows-listing", "rera-meadows", "RERA Meadows"),
@@ -1099,6 +1139,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
         report.executed_assets,
         vec![
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
+            asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),

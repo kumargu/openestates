@@ -3,12 +3,10 @@ import type { PlanMilestone } from "./planFields.ts";
 import { formatCurrency, type PlanProjection } from "./model.ts";
 
 export type PlanScenarioId = "buy" | "rent";
-export type PlanGraphMetric = "netWorth" | "monthlyOutflow";
 
 type PlanGraphProps = {
   projection: PlanProjection;
   horizon: number;
-  metric: PlanGraphMetric;
   selected: PlanScenarioId;
   milestones: PlanMilestone[];
   hintedMilestoneYear: number | null;
@@ -23,40 +21,68 @@ type GraphSeries = {
   values: number[];
 };
 
+type GapRegion = {
+  id: string;
+  winner: PlanScenarioId;
+  path: string;
+};
+
 const GRAPH_WIDTH = 1080;
 const GRAPH_HEIGHT = 420;
 const GRAPH_INSET = { left: 72, right: 28, top: 36, bottom: 44 };
 
-function graphSeries(projection: PlanProjection, metric: PlanGraphMetric): GraphSeries[] {
-  if (metric === "monthlyOutflow") {
-    return [
-      { id: "buy", label: "Buy", values: projection.points.map((point) => point.annualEmi / 12) },
-      { id: "rent", label: "Rent", values: projection.points.map((point) => point.annualRent / 12) },
-    ];
-  }
-
+function graphSeries(projection: PlanProjection): GraphSeries[] {
   return [
     { id: "buy", label: "Buy this home", values: projection.points.map((point) => point.buyNetWorth) },
     { id: "rent", label: "Rent + mutual funds", values: projection.points.map((point) => point.rentNetWorth) },
   ];
 }
 
-function gapPath(
+function gapRegions(
   buyValues: number[],
   rentValues: number[],
   endYear: number,
   x: (year: number) => number,
   y: (value: number) => number,
-): string {
-  const segments: string[] = [];
-  for (let year = 0; year <= endYear; year += 1) {
-    const buyY = y(buyValues[year] ?? 0);
-    segments.push(`${year === 0 ? "M" : "L"}${x(year).toFixed(1)},${buyY.toFixed(1)}`);
+): GapRegion[] {
+  const regions: GapRegion[] = [];
+  const point = (year: number, value: number) => `${x(year).toFixed(1)},${y(value).toFixed(1)}`;
+
+  for (let year = 0; year < endYear; year += 1) {
+    const buyStart = buyValues[year] ?? 0;
+    const buyEnd = buyValues[year + 1] ?? buyStart;
+    const rentStart = rentValues[year] ?? 0;
+    const rentEnd = rentValues[year + 1] ?? rentStart;
+    const startGap = buyStart - rentStart;
+    const endGap = buyEnd - rentEnd;
+
+    if (startGap * endGap < 0) {
+      const crossingRatio = startGap / (startGap - endGap);
+      const crossingYear = year + crossingRatio;
+      const crossingValue = buyStart + (buyEnd - buyStart) * crossingRatio;
+      const crossing = point(crossingYear, crossingValue);
+      regions.push({
+        id: `${year}-before-crossing`,
+        winner: startGap > 0 ? "buy" : "rent",
+        path: `M${point(year, buyStart)} L${crossing} L${point(year, rentStart)} Z`,
+      });
+      regions.push({
+        id: `${year}-after-crossing`,
+        winner: endGap > 0 ? "buy" : "rent",
+        path: `M${crossing} L${point(year + 1, buyEnd)} L${point(year + 1, rentEnd)} Z`,
+      });
+      continue;
+    }
+
+    if (startGap === 0 && endGap === 0) continue;
+    regions.push({
+      id: `${year}-gap`,
+      winner: (startGap || endGap) > 0 ? "buy" : "rent",
+      path: `M${point(year, buyStart)} L${point(year + 1, buyEnd)} L${point(year + 1, rentEnd)} L${point(year, rentStart)} Z`,
+    });
   }
-  for (let year = endYear; year >= 0; year -= 1) {
-    segments.push(`L${x(year).toFixed(1)},${y(rentValues[year] ?? 0).toFixed(1)}`);
-  }
-  return `${segments.join(" ")} Z`;
+
+  return regions;
 }
 
 function milestoneShortLabel(label: string): string {
@@ -69,7 +95,6 @@ function milestoneShortLabel(label: string): string {
 export function PlanGraph({
   projection,
   horizon,
-  metric,
   selected,
   milestones,
   hintedMilestoneYear,
@@ -78,7 +103,7 @@ export function PlanGraph({
   onMilestonePress,
 }: PlanGraphProps) {
   const [hoverYear, setHoverYear] = useState<number | null>(null);
-  const series = graphSeries(projection, metric);
+  const series = graphSeries(projection);
   const maxYear = projection.points.length - 1;
   const activeYear = Math.min(hoverYear ?? horizon, maxYear);
   const plotWidth = GRAPH_WIDTH - GRAPH_INSET.left - GRAPH_INSET.right;
@@ -89,7 +114,6 @@ export function PlanGraph({
   const line = (values: number[]) => values
     .map((value, year) => `${year === 0 ? "M" : "L"}${x(year).toFixed(1)},${y(value).toFixed(1)}`)
     .join(" ");
-  const area = (values: number[]) => `${line(values)} L${x(maxYear).toFixed(1)},${GRAPH_INSET.top + plotHeight} L${x(0).toFixed(1)},${GRAPH_INSET.top + plotHeight} Z`;
   const selectedSeries = series.find((item) => item.id === selected) ?? series[0];
   const buyValues = series[0].values;
   const rentValues = series[1].values;
@@ -97,16 +121,12 @@ export function PlanGraph({
   const rentValue = rentValues[activeYear] ?? 0;
   const cursorX = x(activeYear);
   const buyWins = buyValue >= rentValue;
-  const gapFillId = buyWins ? "home-plan-gap-buy" : "home-plan-gap-rent";
+  const visibleGapRegions = gapRegions(buyValues, rentValues, activeYear, x, y);
   const tooltipX = cursorX > GRAPH_WIDTH - 240 ? cursorX - 220 : cursorX + 18;
   const tooltipY = Math.max(56, Math.min(GRAPH_HEIGHT - 124, y(selectedSeries.values[activeYear] ?? 0) - 50));
   const leadValue = Math.abs(buyValue - rentValue);
-  const leadLabel = metric === "netWorth"
-    ? (buyWins ? "Buy ahead" : "Rent + SIP ahead")
-    : (buyValue <= rentValue ? "Buy is lower" : "Rent is lower");
-  const graphMilestones = metric === "netWorth"
-    ? milestones.filter((milestone) => milestone.year <= maxYear)
-    : milestones.filter((milestone) => milestone.year <= maxYear && milestone.label.startsWith("Buy"));
+  const leadLabel = buyWins ? "Buy ahead" : "Rent + SIP ahead";
+  const graphMilestones = milestones.filter((milestone) => milestone.year <= maxYear);
 
   const updateHoverYear = (event: PointerEvent<SVGSVGElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -128,28 +148,12 @@ export function PlanGraph({
         className="home-plan-graph-svg"
         viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
         role="img"
-        aria-label={`${metric === "netWorth" ? "Projected net worth" : "Projected monthly outflow"} over ${maxYear} years`}
+        aria-label={`Projected wealth over ${maxYear} years`}
         onPointerMove={updateHoverYear}
         onPointerLeave={clearHoverYear}
         onClick={() => onHorizonChange(activeYear)}
       >
         <defs>
-          <linearGradient id="home-plan-buy-area" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#e07858" stopOpacity=".22" />
-            <stop offset="100%" stopColor="#e07858" stopOpacity=".02" />
-          </linearGradient>
-          <linearGradient id="home-plan-rent-area" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#7da8d4" stopOpacity=".26" />
-            <stop offset="100%" stopColor="#7da8d4" stopOpacity=".03" />
-          </linearGradient>
-          <linearGradient id="home-plan-gap-buy" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#d87355" stopOpacity=".18" />
-            <stop offset="100%" stopColor="#d87355" stopOpacity=".04" />
-          </linearGradient>
-          <linearGradient id="home-plan-gap-rent" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#5b7fb0" stopOpacity=".2" />
-            <stop offset="100%" stopColor="#5b7fb0" stopOpacity=".04" />
-          </linearGradient>
           <filter id="home-plan-tooltip-shadow" x="-30%" y="-30%" width="160%" height="180%">
             <feDropShadow dx="0" dy="10" stdDeviation="12" floodColor="#1a1410" floodOpacity=".12" />
           </filter>
@@ -178,15 +182,14 @@ export function PlanGraph({
           </text>
         ))}
 
-        {metric === "netWorth" && (
+        {visibleGapRegions.map((region) => (
           <path
-            d={gapPath(buyValues, rentValues, activeYear, x, y)}
-            className="home-plan-graph-gap"
-            fill={`url(#${gapFillId})`}
+            key={region.id}
+            d={region.path}
+            className={`home-plan-graph-gap home-plan-graph-gap--${region.winner}`}
           />
-        )}
+        ))}
 
-        <path d={area(selectedSeries.values)} className={`home-plan-graph-area home-plan-graph-area--${selected}`} />
         {series.map((item) => (
           <path
             key={item.id}
