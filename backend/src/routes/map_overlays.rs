@@ -12,9 +12,11 @@ use serde_json::Value;
 
 use crate::search::geo::haversine_km;
 
-const METRO_RADIUS_KM: f64 = 15.0;
+const METRO_CORRIDOR_RADIUS_KM: f64 = 6.0;
+const METRO_STATION_MATCH_KM: f64 = 2.5;
+const METRO_SEGMENT_JOIN_KM: f64 = 0.15;
 const GREEN_RADIUS_KM: f64 = 4.0;
-const MAX_METRO_LINES: usize = 8;
+const MAX_METRO_SEGMENTS: usize = 24;
 const MAX_PARKS: usize = 12;
 const MAX_LAKES: usize = 8;
 
@@ -104,49 +106,100 @@ pub fn load_city_map_overlays(project_root: &Path) -> Arc<CityMapOverlays> {
     })
 }
 
-pub fn clip_metro_lines(
+pub fn nearest_metro_corridor(
     overlays: &CityMapOverlays,
     home: (f64, f64),
+    metro_stations: &[(f64, f64)],
 ) -> Vec<MapOverlayLine> {
-    let (lat, lng) = home;
-    let mut scored = overlays
+    let anchor = metro_stations
+        .iter()
+        .min_by(|left, right| {
+            haversine_km(home.0, home.1, left.0, left.1)
+                .total_cmp(&haversine_km(home.0, home.1, right.0, right.1))
+        })
+        .copied()
+        .unwrap_or(home);
+
+    let Some((seed_index, seed_distance)) = overlays
         .metro_lines
         .iter()
-        .filter_map(|line| {
-            let nearest = line
-                .coordinates
-                .iter()
-                .map(|[x, y]| haversine_km(lat, lng, *y, *x))
-                .fold(f64::INFINITY, f64::min);
-            if nearest > METRO_RADIUS_KM {
-                return None;
+        .enumerate()
+        .map(|(index, line)| (index, nearest_line_distance_km(line, anchor)))
+        .min_by(|left, right| left.1.total_cmp(&right.1))
+    else {
+        return Vec::new();
+    };
+    if seed_distance > METRO_STATION_MATCH_KM {
+        return Vec::new();
+    }
+
+    let mut selected = vec![false; overlays.metro_lines.len()];
+    selected[seed_index] = true;
+    let mut frontier = vec![seed_index];
+    while let Some(current_index) = frontier.pop() {
+        let current = &overlays.metro_lines[current_index];
+        for (candidate_index, candidate) in overlays.metro_lines.iter().enumerate() {
+            if selected[candidate_index] || !lines_connect(current, candidate) {
+                continue;
             }
-            let clipped = clip_line_near(&line.coordinates, lat, lng, METRO_RADIUS_KM);
-            if clipped.len() < 2 {
-                return None;
-            }
-            Some((
-                nearest,
-                MapOverlayLine {
-                    id: line.id.clone(),
-                    name: line.name.clone(),
-                    kind: "metro_line".to_string(),
-                    coordinates: clipped,
-                    source_type: "OpenStreetMap".to_string(),
-                },
-            ))
+            selected[candidate_index] = true;
+            frontier.push(candidate_index);
+        }
+    }
+
+    let corridor_name = overlays.metro_lines[seed_index].name.clone();
+    let mut corridor = overlays
+        .metro_lines
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| selected[*index])
+        .filter_map(|(_, line)| {
+            let coordinates = clip_line_near(
+                &line.coordinates,
+                anchor.0,
+                anchor.1,
+                METRO_CORRIDOR_RADIUS_KM,
+            );
+            (coordinates.len() >= 2).then(|| MapOverlayLine {
+                id: line.id.clone(),
+                name: corridor_name.clone(),
+                kind: "metro_line".to_string(),
+                coordinates,
+                source_type: "OpenStreetMap".to_string(),
+            })
         })
         .collect::<Vec<_>>();
-    scored.sort_by(|left, right| {
-        left.0
-            .partial_cmp(&right.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    scored
-        .into_iter()
-        .take(MAX_METRO_LINES)
-        .map(|(_, line)| line)
-        .collect()
+    corridor.sort_by(|left, right| left.id.cmp(&right.id));
+    corridor.truncate(MAX_METRO_SEGMENTS);
+    corridor
+}
+
+fn nearest_line_distance_km(line: &SeedLine, anchor: (f64, f64)) -> f64 {
+    line.coordinates
+        .iter()
+        .map(|[lng, lat]| haversine_km(anchor.0, anchor.1, *lat, *lng))
+        .fold(f64::INFINITY, f64::min)
+}
+
+fn lines_connect(left: &SeedLine, right: &SeedLine) -> bool {
+    let Some(left_start) = left.coordinates.first() else {
+        return false;
+    };
+    let Some(left_end) = left.coordinates.last() else {
+        return false;
+    };
+    let Some(right_start) = right.coordinates.first() else {
+        return false;
+    };
+    let Some(right_end) = right.coordinates.last() else {
+        return false;
+    };
+    [left_start, left_end].iter().any(|left_point| {
+        [right_start, right_end].iter().any(|right_point| {
+            haversine_km(left_point[1], left_point[0], right_point[1], right_point[0])
+                <= METRO_SEGMENT_JOIN_KM
+        })
+    })
 }
 
 pub fn clip_green_patches(
@@ -265,10 +318,7 @@ fn load_lines(path: &PathBuf) -> Vec<SeedLine> {
                 } else {
                     format!("{id}-{part_index}")
                 },
-                name: props
-                    .name
-                    .clone()
-                    .unwrap_or_else(|| "Metro".to_string()),
+                name: props.name.clone().unwrap_or_else(|| "Metro".to_string()),
                 coordinates: coords,
             });
         }
@@ -408,18 +458,45 @@ mod tests {
             metro_lines: vec![SeedLine {
                 id: "line-1".to_string(),
                 name: "Purple".to_string(),
-                coordinates: vec![
-                    [77.75, 12.98],
-                    [77.76, 12.99],
-                    [77.90, 13.10],
-                ],
+                coordinates: vec![[77.75, 12.98], [77.76, 12.99], [77.90, 13.10]],
             }],
             parks: Vec::new(),
             lakes: Vec::new(),
         };
-        let clipped = clip_metro_lines(&overlays, (12.985, 77.755));
+        let clipped = nearest_metro_corridor(&overlays, (12.985, 77.755), &[(12.985, 77.755)]);
         assert_eq!(clipped.len(), 1);
         assert!(clipped[0].coordinates.len() >= 2);
+    }
+
+    #[test]
+    fn follows_connected_segments_for_one_station_corridor() {
+        let overlays = CityMapOverlays {
+            metro_lines: vec![
+                SeedLine {
+                    id: "line-a".to_string(),
+                    name: "Purple".to_string(),
+                    coordinates: vec![[77.75, 12.98], [77.76, 12.99]],
+                },
+                SeedLine {
+                    id: "line-b".to_string(),
+                    name: "Purple east".to_string(),
+                    coordinates: vec![[77.76, 12.99], [77.77, 13.0]],
+                },
+                SeedLine {
+                    id: "other".to_string(),
+                    name: "Green".to_string(),
+                    coordinates: vec![[77.60, 12.90], [77.61, 12.91]],
+                },
+            ],
+            parks: Vec::new(),
+            lakes: Vec::new(),
+        };
+
+        let corridor = nearest_metro_corridor(&overlays, (12.98, 77.75), &[(12.981, 77.751)]);
+
+        assert_eq!(corridor.len(), 2);
+        assert!(corridor.iter().all(|line| line.name == "Purple"));
+        assert!(corridor.iter().all(|line| line.id != "other"));
     }
 
     #[test]

@@ -1,4 +1,9 @@
-import type { MapNearbyLayer, MapPlacePin, PropertyMapContext } from "./types.ts";
+import type {
+  MapNearbyLayer,
+  MapOverlayLine,
+  MapPlacePin,
+  PropertyMapContext,
+} from "./types.ts";
 
 export type PlateScaleMode = "nearby" | "area";
 export type PlateStory =
@@ -19,7 +24,7 @@ export const NEARBY_LAYERS: MapNearbyLayer[] = [
 export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
-const AREA_RADIUS_STEPS_KM = [3, 5, 8] as const;
+const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10] as const;
 const CLUSTER_GAP_KM_NEARBY = 0.08;
 const CLUSTER_GAP_KM_AREA = 0.35;
 /** Keep markers inside the canvas, not glued to the ring edge. */
@@ -155,6 +160,7 @@ export function chooseRadiusKm(
   places: MapPlacePin[],
   scale: PlateScaleMode,
   home?: { latitude: number; longitude: number },
+  overlayCoordinates: [number, number][] = [],
 ): number {
   const factDistances = places
     .map((place) => place.distance_km)
@@ -172,6 +178,12 @@ export function chooseRadiusKm(
       mapFar = Math.max(
         mapFar,
         distanceKm(home.latitude, home.longitude, place.latitude, place.longitude),
+      );
+    }
+    for (const [longitude, latitude] of overlayCoordinates) {
+      mapFar = Math.max(
+        mapFar,
+        distanceKm(home.latitude, home.longitude, latitude, longitude),
       );
     }
   }
@@ -267,8 +279,10 @@ export function buildPlateViewport(
   home: { latitude: number; longitude: number },
   places: NumberedPlace[],
   scale: PlateScaleMode,
+  metroLines: MapOverlayLine[] = [],
 ): PlateViewport {
-  const radiusKm = chooseRadiusKm(places, scale, home);
+  const overlayCoordinates = metroLines.flatMap((line) => line.coordinates);
+  const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates);
   return {
     center: home,
     radiusKm,

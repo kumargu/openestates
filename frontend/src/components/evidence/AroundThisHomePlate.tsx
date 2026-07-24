@@ -57,6 +57,13 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     return clusterClosePlaces(numbered, scale);
   }, [numbered, openedClusterId, scale]);
 
+  // One station-linked corridor appears only in the Metro story.
+  const showMetroLines = Boolean(
+    (context.metro_lines?.length ?? 0) > 0
+    && story.kind === "layer"
+    && story.layer === "metro",
+  );
+
   const viewport = useMemo(() => {
     if (!home) {
       return {
@@ -66,8 +73,13 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
         paddingFactor: 0.2,
       };
     }
-    return buildPlateViewport(home, numbered, scale);
-  }, [home, numbered, scale]);
+    return buildPlateViewport(
+      home,
+      numbered,
+      scale,
+      showMetroLines ? context.metro_lines : [],
+    );
+  }, [context.metro_lines, home, numbered, scale, showMetroLines]);
 
   const selected =
     numbered.find((place) => place.id === selectedId)
@@ -97,12 +109,6 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
   }
 
   const showWater = Boolean(context.water && waterOn);
-  // Metro line only when Metro is the active story — keeps Essentials quiet.
-  const showMetroLines = Boolean(
-    (context.metro_lines?.length ?? 0) > 0
-    && story.kind === "layer"
-    && story.layer === "metro",
-  );
   const canRenderMap = Boolean(home);
 
   return (

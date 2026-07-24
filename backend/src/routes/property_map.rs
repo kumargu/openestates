@@ -11,7 +11,9 @@ use serde::Serialize;
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
-use crate::serving::{ServingEntityFactRows, ServingFactIndex, ServingFactRecord, SocietyFactProjection};
+use crate::serving::{
+    ServingEntityFactRows, ServingFactIndex, ServingFactRecord, SocietyFactProjection,
+};
 
 use super::enrichment::society_node_id;
 
@@ -118,9 +120,8 @@ pub fn build_property_map_context(
                 .unwrap_or(std::cmp::Ordering::Equal)
                 .then_with(|| left.name.cmp(&right.name))
         });
-        layer_pins.dedup_by(|left, right| {
-            left.name == right.name && left.source_url == right.source_url
-        });
+        layer_pins
+            .dedup_by(|left, right| left.name == right.name && left.source_url == right.source_url);
         layer_pins.truncate(cap);
         places.extend(layer_pins);
     }
@@ -129,7 +130,19 @@ pub fn build_property_map_context(
     let overlay_home = home_coords.or_else(|| approximate_home_from_places(&places));
     let (metro_lines, green_patches, lakes) = match (map_overlays, overlay_home) {
         (Some(overlays), Some(home)) => {
-            let metro_lines = crate::routes::map_overlays::clip_metro_lines(overlays, home);
+            let metro_stations = places
+                .iter()
+                .filter(|place| place.layer == "metro")
+                .filter_map(|place| match (place.latitude, place.longitude) {
+                    (Some(latitude), Some(longitude)) => Some((latitude, longitude)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>();
+            let metro_lines = crate::routes::map_overlays::nearest_metro_corridor(
+                overlays,
+                home,
+                &metro_stations,
+            );
             let (green_patches, lakes) =
                 crate::routes::map_overlays::clip_green_patches(overlays, home);
             (metro_lines, green_patches, lakes)
@@ -206,12 +219,14 @@ fn map_place_pin(
 
     let latitude = place.and_then(|item| item.latitude);
     let longitude = place.and_then(|item| item.longitude);
-    let distance_km = parsed.distance_km.or_else(|| match (home_coords, latitude, longitude) {
-        (Some((home_lat, home_lng)), Some(lat), Some(lng)) => {
-            Some((haversine_km(*home_lat, *home_lng, lat, lng) * 10.0).round() / 10.0)
-        }
-        _ => None,
-    });
+    let distance_km = parsed
+        .distance_km
+        .or_else(|| match (home_coords, latitude, longitude) {
+            (Some((home_lat, home_lng)), Some(lat), Some(lng)) => {
+                Some((haversine_km(*home_lat, *home_lng, lat, lng) * 10.0).round() / 10.0)
+            }
+            _ => None,
+        });
     let rating = place.and_then(|item| item.rating).or(parsed.rating);
     let review_count = place
         .and_then(|item| item.review_count)
@@ -246,13 +261,11 @@ fn map_water_context(
     projection: &SocietyFactProjection<'_>,
 ) -> Option<MapWaterContext> {
     const KEY: &str = "environment.groundwater_potential_class";
-    let fact = projection.latest_record(KEY).or_else(|| {
-        related_society_groundwater_fact(property, facts, KEY)
-    })?;
+    let fact = projection
+        .latest_record(KEY)
+        .or_else(|| related_society_groundwater_fact(property, facts, KEY))?;
     let class = match &fact.value {
-        FactValue::Text(value) if !value.trim().is_empty() => {
-            strip_groundwater_label(value.trim())
-        }
+        FactValue::Text(value) if !value.trim().is_empty() => strip_groundwater_label(value.trim()),
         _ => return None,
     };
     if class.is_empty() {
@@ -311,16 +324,16 @@ fn related_society_match_names(property: &Property) -> Vec<String> {
         .collect()
 }
 
-fn serving_society_rows_match_names(
-    rows: &ServingEntityFactRows,
-    target_names: &[String],
-) -> bool {
+fn serving_society_rows_match_names(rows: &ServingEntityFactRows, target_names: &[String]) -> bool {
     const NAME_FACT_KEYS: &[&str] = &["listing_society", "title", "rera_project_name"];
     rows.facts.iter().any(|fact| {
         NAME_FACT_KEYS.contains(&fact.fact_key.as_str())
             && match &fact.value {
-                FactValue::Text(value) => normalized_project_name(value)
-                    .is_some_and(|name| target_names.iter().any(|target| names_compatible(target, &name))),
+                FactValue::Text(value) => normalized_project_name(value).is_some_and(|name| {
+                    target_names
+                        .iter()
+                        .any(|target| names_compatible(target, &name))
+                }),
                 _ => false,
             }
     })
@@ -344,7 +357,10 @@ fn names_compatible(left: &str, right: &str) -> bool {
     // "assetz marq" matches "assetz marq phase 3a".
     let mut start = 0usize;
     for token in smaller {
-        match larger[start..].iter().position(|candidate| candidate == token) {
+        match larger[start..]
+            .iter()
+            .position(|candidate| candidate == token)
+        {
             Some(index) => start += index + 1,
             None => return false,
         }
@@ -389,7 +405,9 @@ fn place_lookup_by_google_url(facts: &ServingFactIndex) -> HashMap<String, Place
             .iter()
             .filter(|fact| fact.fact_key == "google_place_url")
             .filter_map(|fact| match &fact.value {
-                FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+                FactValue::Text(value) if !value.trim().is_empty() => {
+                    Some(value.trim().to_string())
+                }
                 _ => None,
             })
             .max_by_key(|value| value.len());
@@ -422,10 +440,7 @@ fn place_lookup_by_google_url(facts: &ServingFactIndex) -> HashMap<String, Place
     by_url
 }
 
-fn coordinates_for_candidates(
-    facts: &ServingFactIndex,
-    society_id: &str,
-) -> Option<(f64, f64)> {
+fn coordinates_for_candidates(facts: &ServingFactIndex, society_id: &str) -> Option<(f64, f64)> {
     for candidate in society_entity_id_candidates(society_id) {
         if let Some(rows) = facts.entity(&candidate) {
             let latitude = numeric_fact(rows, "geo.latitude")
@@ -501,9 +516,11 @@ fn parse_nearby_display(value: &str) -> ParsedNearbyDisplay {
         for part in meta.split(',') {
             let part = part.trim();
             if let Some(raw) = part.strip_suffix(" rating") {
-                rating = raw.trim().parse::<f64>().ok().filter(|value| {
-                    value.is_finite() && (0.0..=5.0).contains(value)
-                });
+                rating = raw
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .filter(|value| value.is_finite() && (0.0..=5.0).contains(value));
             } else if let Some(raw) = part.strip_suffix(" reviews") {
                 review_count = raw.trim().parse::<u32>().ok();
             }
@@ -709,8 +726,9 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
-            .expect("map context should build");
+        let context =
+            build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
+                .expect("map context should build");
         assert_eq!(context.home.latitude, Some(12.98));
         assert_eq!(context.places.len(), 2);
         let school = context
@@ -718,7 +736,10 @@ mod tests {
             .iter()
             .find(|place| place.layer == "schools")
             .expect("school pin");
-        assert_eq!(school.place_entity_id.as_deref(), Some("place:google:greenwood"));
+        assert_eq!(
+            school.place_entity_id.as_deref(),
+            Some("place:google:greenwood")
+        );
         assert_eq!(school.latitude, Some(12.985));
         assert_eq!(school.distance_km, Some(1.2));
     }
@@ -746,8 +767,9 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
-            .expect("water-backed context should build");
+        let context =
+            build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
+                .expect("water-backed context should build");
         let water = context.water.expect("groundwater should resolve by name");
         assert_eq!(water.groundwater_class, "Moderate");
         assert!(water.illustrative_zone);
@@ -791,8 +813,9 @@ mod tests {
             Vec::new(),
         );
 
-        let context = build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
-            .expect("places without home coords should still build");
+        let context =
+            build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
+                .expect("places without home coords should still build");
         assert_eq!(context.home.latitude, Some(12.981));
         assert_eq!(context.places.len(), 1);
         assert_eq!(context.places[0].distance_km, Some(0.2));
@@ -800,7 +823,8 @@ mod tests {
 
     #[test]
     fn parse_nearby_display_extracts_name_distance_and_rating() {
-        let parsed = parse_nearby_display("Hopefarm Channasandra (0.6 km, 4.4 rating, 521 reviews)");
+        let parsed =
+            parse_nearby_display("Hopefarm Channasandra (0.6 km, 4.4 rating, 521 reviews)");
         assert_eq!(parsed.name, "Hopefarm Channasandra");
         assert_eq!(parsed.distance_km, Some(0.6));
         assert_eq!(parsed.rating, Some(4.4));
