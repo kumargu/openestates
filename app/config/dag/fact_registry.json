@@ -3262,6 +3262,7 @@
       "never_default": true,
       "source_types": [
         "Google",
+        "OpenStreetMap",
         "Manual"
       ],
       "display_template": "Place name: {value}",
@@ -3288,6 +3289,7 @@
       "never_default": true,
       "source_types": [
         "Google",
+        "OpenStreetMap",
         "Manual"
       ],
       "display_template": "Place category: {value}",
@@ -3314,6 +3316,7 @@
       "never_default": true,
       "source_types": [
         "Google",
+        "OpenStreetMap",
         "Manual"
       ],
       "display_template": "Place types: {value}",
@@ -3343,6 +3346,7 @@
       "source_types": [
         "Manual",
         "Google",
+        "OpenStreetMap",
         "Rera",
         "Computed"
       ],
@@ -3373,6 +3377,7 @@
       "source_types": [
         "Manual",
         "Google",
+        "OpenStreetMap",
         "Rera",
         "Computed"
       ],
@@ -3380,6 +3385,126 @@
       "scoring_hint": {
         "direction": "numeric",
         "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "transit.lines",
+      "bucket": "geo",
+      "label": "transit lines",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "metro line",
+        "transit line",
+        "purple line",
+        "green line"
+      ],
+      "answers_preferences": [
+        "metro line",
+        "metro access",
+        "near metro"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap",
+        "Manual",
+        "Computed"
+      ],
+      "display_template": "Transit lines: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.3
+      }
+    },
+    {
+      "fact_key": "transit.network",
+      "bucket": "geo",
+      "label": "transit network",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "namma metro",
+        "metro network"
+      ],
+      "answers_preferences": [
+        "namma metro",
+        "metro network"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap",
+        "Manual",
+        "Computed"
+      ],
+      "display_template": "Transit network: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.1
+      }
+    },
+    {
+      "fact_key": "transit.operator",
+      "bucket": "geo",
+      "label": "transit operator",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "bmrcl",
+        "metro operator"
+      ],
+      "answers_preferences": [
+        "bmrcl",
+        "metro operator"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap",
+        "Manual",
+        "Computed"
+      ],
+      "display_template": "Transit operator: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "transit.operational_status",
+      "bucket": "geo",
+      "label": "transit operational status",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [
+        "operational metro",
+        "future metro",
+        "under construction metro"
+      ],
+      "answers_preferences": [
+        "operational metro",
+        "future metro"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap",
+        "Manual",
+        "Computed"
+      ],
+      "display_template": "Transit status: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.2
       }
     },
     {

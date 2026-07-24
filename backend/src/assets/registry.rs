@@ -698,6 +698,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
+            "bengaluru_metro_station_facts",
+            AssetStage::Silver,
+            "Static Bengaluru metro station coordinates and line metadata collected from public map data for offline radius and connectivity views.",
+            &[],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "kg_society_view",
             AssetStage::Gold,
             "Versioned society KG view merged by source precedence and fact policy.",
@@ -712,6 +721,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "home_state_signals",
                 "approach_road_graph_facts",
                 "society_groundwater_potential_facts",
+                "bengaluru_metro_station_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -736,7 +746,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
         .with_optional_dependency("approach_road_graph_facts")
-        .with_optional_dependency("society_groundwater_potential_facts"),
+        .with_optional_dependency("society_groundwater_potential_facts")
+        .with_optional_dependency("bengaluru_metro_station_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,

@@ -365,7 +365,9 @@ export function AroundThisHomeMap({
           : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km`}
         </span>
         {homeApproximated && <span>Home estimated</span>}
-        {showMetroLines && metroLines.length > 0 && <span>Metro corridor</span>}
+        {showMetroLines && metroLines.length > 0 && (
+          <span>{metroLines[0].name || "Metro corridor"}</span>
+        )}
       </div>
     </div>
   );

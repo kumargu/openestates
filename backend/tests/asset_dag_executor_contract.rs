@@ -1761,6 +1761,7 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             source_watermarks: Vec::new(),
         }),
         environment_groundwater_potential: None,
+        bengaluru_metro_stations: None,
     }
 }
 

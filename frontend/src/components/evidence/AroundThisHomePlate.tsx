@@ -272,6 +272,12 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                   <dt>Layer</dt>
                   <dd>{layerLabel(selected.layer)}</dd>
                 </div>
+                {selected.lines && selected.lines.length > 0 && (
+                  <div>
+                    <dt>Line</dt>
+                    <dd>{selected.lines.join(" · ")}</dd>
+                  </div>
+                )}
                 <div>
                   <dt>Source</dt>
                   <dd>{selected.source_type || "Google"}</dd>

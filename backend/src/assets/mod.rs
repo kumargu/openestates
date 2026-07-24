@@ -28,6 +28,7 @@ pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
 pub mod source_provider;
+pub mod transit;
 pub mod types;
 
 pub use approach_road::{
@@ -116,6 +117,10 @@ pub use source_inputs::{
 pub use source_provider::{
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     SourceEntitySeed, SourceInputProvider, SourceInputProviderError, SourceInputRequest,
+};
+pub use transit::{
+    bengaluru_metro_station_facts_input, BengaluruMetroStationInput, BengaluruMetroStationsInput,
+    TransitAssetError, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
 };
 pub use types::{
     ArtifactRef, AssetId, AssetPartition, AssetStage, CurrentAssetPointer, MaterializationId,

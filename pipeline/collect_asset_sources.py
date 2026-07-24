@@ -15,7 +15,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from urllib.request import urlopen
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
 
@@ -78,11 +79,18 @@ GOOGLE_NEARBY_PLACES_WEEKLY = "google_nearby_places_weekly"
 EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
+BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
     "1dda919d-ff28-4aa9-90ce-bd18e708927b.kml"
 )
+OVERPASS_API_URL = "https://overpass-api.de/api/interpreter"
+BENGALURU_METRO_OVERPASS_QUERY = """
+[out:json][timeout:25];
+node["railway"="station"]["network"="Namma Metro"](12.75,77.35,13.20,77.95);
+out body;
+""".strip()
 SUPPORTED_ASSETS = frozenset(
     (
         RERA_REGISTRY_MONTHLY,
@@ -91,6 +99,7 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_LISTINGS_WEEKLY,
         EXTERNAL_IMAGES_WEEKLY,
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
+        BENGALURU_METRO_STATION_FACTS,
     )
 )
 
@@ -167,6 +176,15 @@ def collect_asset_sources(
             record_source_failure(
                 source_failures, [SOCIETY_GROUNDWATER_POTENTIAL_FACTS], error
             )
+    if BENGALURU_METRO_STATION_FACTS in requested:
+        try:
+            output["bengaluru_metro_stations"] = collect_bengaluru_metro_stations(
+                request
+            )
+        except Exception as error:
+            record_source_failure(
+                source_failures, [BENGALURU_METRO_STATION_FACTS], error
+            )
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -205,6 +223,237 @@ def collect_environment_groundwater_potential(
 def fetch_url_bytes(url: str) -> bytes:
     with urlopen(url, timeout=30) as response:
         return response.read()
+
+
+def collect_bengaluru_metro_stations(
+    request: Dict[str, Any],
+    fetch: Callable[[str, str], Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    source_url = os.environ.get("OPENESTATES_OVERPASS_API_URL") or OVERPASS_API_URL
+    query = (
+        os.environ.get("OPENESTATES_BENGALURU_METRO_OVERPASS_QUERY")
+        or BENGALURU_METRO_OVERPASS_QUERY
+    )
+    payload = (fetch or fetch_overpass_json)(source_url, query)
+    stations = bengaluru_metro_stations_from_overpass(payload)
+    if not stations:
+        raise ValueError("Overpass payload produced zero usable Bengaluru metro stations")
+    return {
+        "snapshot_date": snapshot_date,
+        "source_url": source_url,
+        "stations": stations,
+        "source_watermarks": [
+            {
+                "source": "openstreetmap_overpass_query",
+                "high_watermark": "sha256:{}".format(
+                    hashlib.sha256(query.encode("utf-8")).hexdigest()
+                ),
+            },
+            {
+                "source": "openstreetmap_bengaluru_metro_station_count",
+                "high_watermark": str(len(stations)),
+            },
+        ],
+    }
+
+
+def fetch_overpass_json(url: str, query: str) -> Dict[str, Any]:
+    request = Request(
+        url,
+        data=urlencode({"data": query}).encode("utf-8"),
+        headers={
+            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+            "User-Agent": "OpenEstates DAG source collector",
+        },
+        method="POST",
+    )
+    with urlopen(request, timeout=45) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def bengaluru_metro_stations_from_overpass(
+    payload: Dict[str, Any]
+) -> List[Dict[str, Any]]:
+    elements = payload.get("elements") if isinstance(payload, dict) else None
+    if not isinstance(elements, list):
+        raise ValueError("Overpass response must contain an elements list")
+
+    stations_by_key = {}  # type: Dict[Tuple[str, str], Dict[str, Any]]
+    for element in elements:
+        if not isinstance(element, dict):
+            continue
+        tags = {
+            str(key): str(value)
+            for key, value in (element.get("tags") or {}).items()
+            if optional_string(value)
+        }
+        name = optional_string(tags.get("name:en")) or optional_string(tags.get("name"))
+        latitude, longitude = element_coordinates(element)
+        if not name or latitude is None or longitude is None:
+            continue
+        station = {
+            "station_id": "{}/{}".format(element.get("type") or "element", element.get("id")),
+            "name": name,
+            "latitude": latitude,
+            "longitude": longitude,
+            "lines": station_lines(tags),
+            "network": optional_string(tags.get("network")) or "Namma Metro",
+            "operator": optional_string(tags.get("operator")),
+            "operational_status": station_operational_status(tags),
+            "source_url": osm_element_url(element),
+            "source_tags": tags,
+        }
+        key = (
+            normalize_selector(name),
+            "{:.5f},{:.5f}".format(latitude, longitude),
+        )
+        existing = stations_by_key.get(key)
+        if existing is None or len(station["source_tags"]) > len(existing["source_tags"]):
+            stations_by_key[key] = station
+
+    return sorted(stations_by_key.values(), key=lambda station: station["name"].lower())
+
+
+def element_coordinates(element: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
+    latitude = optional_float(element.get("lat"))
+    longitude = optional_float(element.get("lon"))
+    center = element.get("center")
+    if (latitude is None or longitude is None) and isinstance(center, dict):
+        latitude = optional_float(center.get("lat"))
+        longitude = optional_float(center.get("lon"))
+    if latitude is None or longitude is None:
+        return None, None
+    if not (-90 <= latitude <= 90 and -180 <= longitude <= 180):
+        return None, None
+    return latitude, longitude
+
+
+# Namma Metro colour → buyer-facing trunk line. OSM stations often carry
+# colour/ref instead of a clean `line=Purple Line` tag.
+METRO_LINE_COLOR_HEX = {
+    "e542de": "Purple Line",
+    "800080": "Purple Line",
+    "9b59b6": "Purple Line",
+    "6b2d5c": "Purple Line",
+    "2ecc71": "Green Line",
+    "008000": "Green Line",
+    "00a651": "Green Line",
+    "39b54a": "Green Line",
+    "f1c40f": "Yellow Line",
+    "ffd100": "Yellow Line",
+    "ffcc00": "Yellow Line",
+    "ffeb3b": "Yellow Line",
+    "e91e63": "Pink Line",
+    "ff69b4": "Pink Line",
+    "ec407a": "Pink Line",
+    "3498db": "Blue Line",
+    "0077c8": "Blue Line",
+}
+
+
+def station_lines(tags: Dict[str, str]) -> List[str]:
+    """Normalize OSM station tags into clean trunk-line labels.
+
+    Prefer explicit `line`/`lines`. Accept colour hex or colour names. Ignore
+    short station refs such as `BYPH` that are not line identities.
+    """
+    values = []  # type: List[str]
+
+    def push(raw):
+        normalized = normalize_metro_line_label(raw)
+        if normalized and normalized not in values:
+            values.append(normalized)
+
+    for key in ("line", "lines", "route_ref"):
+        value = optional_string(tags.get(key))
+        if not value:
+            continue
+        for part in split_tag_list(value):
+            push(part)
+
+    # `ref` is often a station code; only keep it when it already looks like a line.
+    ref = optional_string(tags.get("ref"))
+    if ref:
+        for part in split_tag_list(ref):
+            if looks_like_metro_line_name(part):
+                push(part)
+
+    for key in ("colour", "color", "colour:en", "color:en"):
+        value = optional_string(tags.get(key))
+        if value:
+            push(value)
+
+    return values
+
+
+def normalize_metro_line_label(value: str) -> Optional[str]:
+    text = optional_string(value)
+    if not text:
+        return None
+    lower = text.lower().strip()
+    hex_key = lower.lstrip("#")
+    if hex_key in METRO_LINE_COLOR_HEX:
+        return METRO_LINE_COLOR_HEX[hex_key]
+    for color in ("purple", "green", "yellow", "pink", "blue", "orange", "red"):
+        if color in lower and "line" in lower:
+            return "{} Line".format(color.capitalize())
+        if lower == color:
+            return "{} Line".format(color.capitalize())
+    if looks_like_metro_line_name(text):
+        # Preserve already-clean labels such as "Purple Line".
+        if lower.endswith(" line"):
+            color = lower[: -len(" line")].strip()
+            if color:
+                return "{} Line".format(color.capitalize())
+        return text
+    return None
+
+
+def looks_like_metro_line_name(value: str) -> bool:
+    text = optional_string(value)
+    if not text:
+        return False
+    lower = text.lower()
+    if any(color in lower for color in ("purple", "green", "yellow", "pink", "blue")):
+        return True
+    if "line" in lower and len(text) >= 8:
+        return True
+    return False
+
+
+def split_tag_list(value: str) -> List[str]:
+    parts = [value]
+    for separator in (";", ",", "|", "/"):
+        next_parts = []  # type: List[str]
+        for part in parts:
+            next_parts.extend(part.split(separator))
+        parts = next_parts
+    return [part.strip() for part in parts if part.strip()]
+
+
+def station_operational_status(tags: Dict[str, str]) -> str:
+    if truthy_tag(tags.get("construction")) or tags.get("railway") == "construction":
+        return "under_construction"
+    if truthy_tag(tags.get("proposed")) or tags.get("railway") == "proposed":
+        return "proposed"
+    if truthy_tag(tags.get("disused")) or tags.get("railway") == "disused":
+        return "disused"
+    return "operational"
+
+
+def truthy_tag(value: Any) -> bool:
+    text = optional_string(value)
+    return text is not None and text.lower() not in ("0", "false", "no")
+
+
+def osm_element_url(element: Dict[str, Any]) -> Optional[str]:
+    element_type = optional_string(element.get("type"))
+    element_id = optional_string(element.get("id"))
+    if not element_type or not element_id:
+        return None
+    return "https://www.openstreetmap.org/{}/{}".format(element_type, element_id)
 
 
 def groundwater_zones_from_kml(kml_bytes: bytes) -> List[Dict[str, Any]]:

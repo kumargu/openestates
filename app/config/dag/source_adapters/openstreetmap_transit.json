@@ -1,0 +1,64 @@
+{
+  "_comment": "OpenStreetMap transit adapter contract. Overpass downloads and geospatial parsing happen during DAG source collection only; request paths consume materialized place facts.",
+  "version": 1,
+  "source_id": "openstreetmap_transit",
+  "source_type": "OpenStreetMap",
+  "trust_tier": "support",
+  "max_confidence": 0.82,
+  "request_path_policy": {
+    "allow_runtime_downloads": false,
+    "allow_runtime_gis_parsing": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "default_provenance_fields": [
+    "osm_element_id",
+    "osm_element_type",
+    "source_url",
+    "fetched_at",
+    "license",
+    "scope",
+    "confidence"
+  ],
+  "datasets": [
+    {
+      "dataset_id": "bengaluru_metro_stations",
+      "theme": "metro_connectivity",
+      "source_organization": "OpenStreetMap contributors via Overpass API",
+      "source_format": "Overpass JSON",
+      "expected_cadence": "monthly",
+      "license": "ODbL",
+      "collector": "pipeline.collect_asset_sources",
+      "source_input": "bengaluru_metro_stations",
+      "derived_asset": "bengaluru_metro_station_facts",
+      "join_methods": [
+        "distance_radius",
+        "nearest_feature",
+        "line_chain"
+      ],
+      "emits_fact_keys": [
+        "place.name",
+        "place.category",
+        "place.types",
+        "geo.latitude",
+        "geo.longitude",
+        "transit.lines",
+        "transit.network",
+        "transit.operator",
+        "transit.operational_status"
+      ],
+      "source_field_map": {
+        "name": "place.name",
+        "network": "transit.network",
+        "operator": "transit.operator",
+        "line": "transit.lines",
+        "lines": "transit.lines",
+        "colour": "transit.lines",
+        "color": "transit.lines"
+      },
+      "notes": [
+        "Normalize colour hex and colour names into buyer-facing trunk labels such as Purple Line.",
+        "Ignore short station refs (BYPH, BSNK) — they are not line identities."
+      ]
+    }
+  ]
+}

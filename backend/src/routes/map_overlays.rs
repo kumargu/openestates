@@ -3,6 +3,7 @@
 //! Geometry is loaded offline from `data/seed/map/*.geojson` at startup — never
 //! fetched on the request path. Clipping keeps payloads small for the plate UI.
 
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -106,20 +107,43 @@ pub fn load_city_map_overlays(project_root: &Path) -> Arc<CityMapOverlays> {
     })
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct MetroCorridorAnchor {
+    pub latitude: f64,
+    pub longitude: f64,
+    /// Buyer-facing trunk labels from DAG `transit.lines`, e.g. `Purple Line`.
+    pub preferred_lines: Vec<String>,
+}
+
 pub fn nearest_metro_corridor(
     overlays: &CityMapOverlays,
     home: (f64, f64),
-    metro_stations: &[(f64, f64)],
+    metro_stations: &[MetroCorridorAnchor],
 ) -> Vec<MapOverlayLine> {
-    let anchor = metro_stations
-        .iter()
-        .min_by(|left, right| {
-            haversine_km(home.0, home.1, left.0, left.1)
-                .total_cmp(&haversine_km(home.0, home.1, right.0, right.1))
-        })
-        .copied()
+    let nearest = metro_stations.iter().min_by(|left, right| {
+        haversine_km(home.0, home.1, left.latitude, left.longitude).total_cmp(&haversine_km(
+            home.0,
+            home.1,
+            right.latitude,
+            right.longitude,
+        ))
+    });
+    let anchor = nearest
+        .map(|station| (station.latitude, station.longitude))
         .unwrap_or(home);
+    let preferred_lines = nearest
+        .map(|station| station.preferred_lines.as_slice())
+        .unwrap_or(&[]);
 
+    // Prefer a clean, fully named trunk line (Purple / Green / Yellow / Pink)
+    // when the OSM route relations are present. One continuous line, correctly
+    // labeled — no fragment stitching, no duplicate directions.
+    if let Some(corridor) = trunk_line_corridor(overlays, anchor, preferred_lines) {
+        return corridor;
+    }
+
+    // Fallback: stitch connected fragments for legacy fragment-only seed data
+    // that has no named trunk line near the anchor.
     let Some((seed_index, seed_distance)) = overlays
         .metro_lines
         .iter()
@@ -172,6 +196,137 @@ pub fn nearest_metro_corridor(
     corridor.sort_by(|left, right| left.id.cmp(&right.id));
     corridor.truncate(MAX_METRO_SEGMENTS);
     corridor
+}
+
+/// Known Namma Metro trunk-line colors. The clean OSM route relations are named
+/// like `Purple Line (Whitefield (Kadugodi) → Challaghatta)`; we surface just
+/// the color line (`Purple Line`) to buyers.
+const METRO_TRUNK_LINE_COLORS: &[&str] = &[
+    "purple", "green", "yellow", "pink", "blue", "orange", "red", "grey", "gray",
+];
+
+/// Map a raw OSM line name / colour / dirty DAG tag into a clean buyer-facing
+/// trunk-line label. Returns `None` for depots, station refs, and generic noise.
+pub fn trunk_line_display_name(name: &str) -> Option<String> {
+    let text = name.trim();
+    if text.is_empty() {
+        return None;
+    }
+    let lower = text.to_lowercase();
+    let hex = lower.trim_start_matches('#');
+    const COLOR_HEX: &[(&str, &str)] = &[
+        ("e542de", "Purple Line"),
+        ("800080", "Purple Line"),
+        ("9b59b6", "Purple Line"),
+        ("6b2d5c", "Purple Line"),
+        ("2ecc71", "Green Line"),
+        ("008000", "Green Line"),
+        ("00a651", "Green Line"),
+        ("39b54a", "Green Line"),
+        ("f1c40f", "Yellow Line"),
+        ("ffd100", "Yellow Line"),
+        ("ffcc00", "Yellow Line"),
+        ("ffeb3b", "Yellow Line"),
+        ("e91e63", "Pink Line"),
+        ("ff69b4", "Pink Line"),
+        ("ec407a", "Pink Line"),
+        ("3498db", "Blue Line"),
+        ("0077c8", "Blue Line"),
+    ];
+    for (code, label) in COLOR_HEX {
+        if hex == *code {
+            return Some((*label).to_string());
+        }
+    }
+    for color in METRO_TRUNK_LINE_COLORS {
+        if lower == *color || (lower.contains(color) && lower.contains("line")) {
+            let mut chars = color.chars();
+            let capitalized = chars
+                .next()
+                .map(|first| first.to_uppercase().collect::<String>() + chars.as_str())
+                .unwrap_or_default();
+            return Some(format!("{capitalized} Line"));
+        }
+    }
+    None
+}
+
+/// Pick the single named trunk line whose geometry passes closest to the anchor
+/// and clip it to the corridor radius. Groups by exact source name so the two
+/// directional relations stay separate and only the nearest direction is drawn.
+/// When DAG `preferred_lines` are present, restrict to those trunk colors first.
+fn trunk_line_corridor(
+    overlays: &CityMapOverlays,
+    anchor: (f64, f64),
+    preferred_lines: &[String],
+) -> Option<Vec<MapOverlayLine>> {
+    let preferred: Vec<String> = preferred_lines
+        .iter()
+        .filter_map(|line| trunk_line_display_name(line))
+        .collect();
+
+    let mut groups: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+    for (index, line) in overlays.metro_lines.iter().enumerate() {
+        let Some(display) = trunk_line_display_name(&line.name) else {
+            continue;
+        };
+        if !preferred.is_empty() && !preferred.iter().any(|line| line == &display) {
+            continue;
+        }
+        groups.entry(line.name.as_str()).or_default().push(index);
+    }
+
+    // If preferred lines filtered everything out (stale label), fall back to all trunks.
+    if groups.is_empty() && !preferred.is_empty() {
+        for (index, line) in overlays.metro_lines.iter().enumerate() {
+            if trunk_line_display_name(&line.name).is_some() {
+                groups.entry(line.name.as_str()).or_default().push(index);
+            }
+        }
+    }
+
+    let (best_name, best_distance) = groups
+        .iter()
+        .map(|(name, indices)| {
+            let distance = indices
+                .iter()
+                .map(|&index| nearest_line_distance_km(&overlays.metro_lines[index], anchor))
+                .fold(f64::INFINITY, f64::min);
+            (*name, distance)
+        })
+        .min_by(|left, right| left.1.total_cmp(&right.1))?;
+
+    if best_distance > METRO_STATION_MATCH_KM {
+        return None;
+    }
+
+    let display_name = trunk_line_display_name(best_name)?;
+    let mut corridor = groups[best_name]
+        .iter()
+        .filter_map(|&index| {
+            let line = &overlays.metro_lines[index];
+            let coordinates = clip_line_near(
+                &line.coordinates,
+                anchor.0,
+                anchor.1,
+                METRO_CORRIDOR_RADIUS_KM,
+            );
+            (coordinates.len() >= 2).then(|| MapOverlayLine {
+                id: line.id.clone(),
+                name: display_name.clone(),
+                kind: "metro_line".to_string(),
+                coordinates,
+                source_type: "OpenStreetMap".to_string(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    if corridor.is_empty() {
+        return None;
+    }
+    corridor.sort_by(|left, right| left.id.cmp(&right.id));
+    corridor.truncate(MAX_METRO_SEGMENTS);
+    Some(corridor)
 }
 
 fn nearest_line_distance_km(line: &SeedLine, anchor: (f64, f64)) -> f64 {
@@ -452,6 +607,14 @@ fn ring_centroid(ring: &[[f64; 2]]) -> (f64, f64) {
 mod tests {
     use super::*;
 
+    fn anchor(lat: f64, lng: f64, lines: &[&str]) -> MetroCorridorAnchor {
+        MetroCorridorAnchor {
+            latitude: lat,
+            longitude: lng,
+            preferred_lines: lines.iter().map(|line| (*line).to_string()).collect(),
+        }
+    }
+
     #[test]
     fn clips_metro_line_within_radius() {
         let overlays = CityMapOverlays {
@@ -463,8 +626,10 @@ mod tests {
             parks: Vec::new(),
             lakes: Vec::new(),
         };
-        let clipped = nearest_metro_corridor(&overlays, (12.985, 77.755), &[(12.985, 77.755)]);
+        let clipped =
+            nearest_metro_corridor(&overlays, (12.985, 77.755), &[anchor(12.985, 77.755, &[])]);
         assert_eq!(clipped.len(), 1);
+        assert_eq!(clipped[0].name, "Purple Line");
         assert!(clipped[0].coordinates.len() >= 2);
     }
 
@@ -474,17 +639,17 @@ mod tests {
             metro_lines: vec![
                 SeedLine {
                     id: "line-a".to_string(),
-                    name: "Purple".to_string(),
+                    name: "Namma Metro - Reach 1A".to_string(),
                     coordinates: vec![[77.75, 12.98], [77.76, 12.99]],
                 },
                 SeedLine {
                     id: "line-b".to_string(),
-                    name: "Purple east".to_string(),
+                    name: "Namma Metro - Reach 1A east".to_string(),
                     coordinates: vec![[77.76, 12.99], [77.77, 13.0]],
                 },
                 SeedLine {
                     id: "other".to_string(),
-                    name: "Green".to_string(),
+                    name: "Namma Metro - Reach 3".to_string(),
                     coordinates: vec![[77.60, 12.90], [77.61, 12.91]],
                 },
             ],
@@ -492,11 +657,86 @@ mod tests {
             lakes: Vec::new(),
         };
 
-        let corridor = nearest_metro_corridor(&overlays, (12.98, 77.75), &[(12.981, 77.751)]);
+        let corridor =
+            nearest_metro_corridor(&overlays, (12.98, 77.75), &[anchor(12.981, 77.751, &[])]);
 
         assert_eq!(corridor.len(), 2);
-        assert!(corridor.iter().all(|line| line.name == "Purple"));
+        assert!(corridor
+            .iter()
+            .all(|line| line.name == "Namma Metro - Reach 1A"));
         assert!(corridor.iter().all(|line| line.id != "other"));
+    }
+
+    #[test]
+    fn prefers_named_trunk_line_over_fragments() {
+        let overlays = CityMapOverlays {
+            metro_lines: vec![
+                SeedLine {
+                    id: "way/reach-1a".to_string(),
+                    name: "Namma Metro - Reach 1A".to_string(),
+                    coordinates: vec![[77.755, 12.985], [77.76, 12.99]],
+                },
+                SeedLine {
+                    id: "relation/purple".to_string(),
+                    name: "Purple Line (Whitefield (Kadugodi) → Challaghatta)".to_string(),
+                    coordinates: vec![[77.754, 12.984], [77.762, 12.992], [77.9, 13.1]],
+                },
+                SeedLine {
+                    id: "relation/purple-reverse".to_string(),
+                    name: "Purple Line (Challaghatta → Whitefield (Kadugodi))".to_string(),
+                    coordinates: vec![[77.9, 13.1], [77.762, 12.992], [77.754, 12.984]],
+                },
+            ],
+            parks: Vec::new(),
+            lakes: Vec::new(),
+        };
+
+        let corridor = nearest_metro_corridor(
+            &overlays,
+            (12.985, 77.755),
+            &[anchor(12.985, 77.755, &["#e542de"])],
+        );
+
+        assert!(!corridor.is_empty());
+        assert!(corridor.iter().all(|line| line.name == "Purple Line"));
+        assert!(corridor
+            .iter()
+            .all(|line| line.id.starts_with("relation/purple")));
+        let directions = corridor
+            .iter()
+            .map(|line| line.id.as_str())
+            .collect::<std::collections::BTreeSet<_>>();
+        assert_eq!(directions.len(), 1);
+    }
+
+    #[test]
+    fn dag_preferred_line_beats_nearer_other_trunk() {
+        let overlays = CityMapOverlays {
+            metro_lines: vec![
+                SeedLine {
+                    id: "relation/green".to_string(),
+                    name: "Green Line (Silk Institute -> Madavara)".to_string(),
+                    coordinates: vec![[77.754, 12.984], [77.755, 12.985]],
+                },
+                SeedLine {
+                    id: "relation/purple".to_string(),
+                    name: "Purple Line (Whitefield (Kadugodi) → Challaghatta)".to_string(),
+                    coordinates: vec![[77.76, 12.99], [77.77, 13.0]],
+                },
+            ],
+            parks: Vec::new(),
+            lakes: Vec::new(),
+        };
+
+        let corridor = nearest_metro_corridor(
+            &overlays,
+            (12.985, 77.755),
+            &[anchor(12.985, 77.755, &["Purple Line"])],
+        );
+
+        assert_eq!(corridor.len(), 1);
+        assert_eq!(corridor[0].name, "Purple Line");
+        assert_eq!(corridor[0].id, "relation/purple");
     }
 
     #[test]

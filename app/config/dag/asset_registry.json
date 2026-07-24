@@ -276,6 +276,18 @@
       }
     },
     {
+      "id": "bengaluru_metro_station_facts",
+      "stage": "silver",
+      "description": "Static Bengaluru metro station coordinates and line metadata collected from public map data for offline radius and connectivity views.",
+      "dependencies": [],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "kg_society_view",
       "stage": "gold",
       "description": "Versioned society KG view merged by source precedence and fact policy.",
@@ -289,7 +301,8 @@
         "builder_rera_aggregates",
         "home_state_signals",
         "approach_road_graph_facts",
-        "society_groundwater_potential_facts"
+        "society_groundwater_potential_facts",
+        "bengaluru_metro_station_facts"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -322,7 +335,8 @@
         "image_media_facts",
         "home_state_signals",
         "approach_road_graph_facts",
-        "society_groundwater_potential_facts"
+        "society_groundwater_potential_facts",
+        "bengaluru_metro_station_facts"
       ]
     },
     {

@@ -8,7 +8,9 @@ from unittest.mock import MagicMock, patch
 from urllib.error import HTTPError
 
 from pipeline.collect_asset_sources import (
+    bengaluru_metro_stations_from_overpass,
     collect_asset_sources,
+    collect_bengaluru_metro_stations,
     collect_environment_groundwater_potential,
     collect_google_nearby_places,
     collect_google_places,
@@ -279,6 +281,96 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertEqual(direct["snapshot_date"], "2026-07-24")
         self.assertEqual(direct["zones"][0]["groundwater_potential_class"], "Good")
+
+    def test_overpass_metro_collection_emits_station_coordinates(self):
+        payload = {
+            "elements": [
+                {
+                    "type": "node",
+                    "id": 101,
+                    "lat": 12.995,
+                    "lon": 77.759,
+                    "tags": {
+                        "name": "Kadugodi Tree Park",
+                        "line": "Purple Line",
+                        "network": "Namma Metro",
+                        "operator": "BMRCL",
+                    },
+                },
+                {
+                    "type": "way",
+                    "id": 102,
+                    "center": {"lat": 12.976, "lon": 77.572},
+                    "tags": {
+                        "name:en": "Majestic",
+                        "ref": "Purple Line;Green Line",
+                        "construction": "yes",
+                    },
+                },
+            ]
+        }
+
+        stations = bengaluru_metro_stations_from_overpass(payload)
+
+        self.assertEqual(len(stations), 2)
+        self.assertEqual(stations[0]["name"], "Kadugodi Tree Park")
+        self.assertEqual(stations[0]["station_id"], "node/101")
+        self.assertEqual(stations[0]["latitude"], 12.995)
+        self.assertEqual(stations[0]["longitude"], 77.759)
+        self.assertEqual(stations[0]["lines"], ["Purple Line"])
+        self.assertEqual(stations[1]["lines"], ["Purple Line", "Green Line"])
+        self.assertEqual(stations[1]["operational_status"], "under_construction")
+
+    def test_station_lines_normalize_colour_and_ignore_station_refs(self):
+        from pipeline.collect_asset_sources import station_lines
+
+        self.assertEqual(
+            station_lines({"colour": "#e542de", "ref": "BYPH"}),
+            ["Purple Line"],
+        )
+        self.assertEqual(
+            station_lines({"line": "Green Line", "colour": "#00a651"}),
+            ["Green Line"],
+        )
+        self.assertEqual(station_lines({"ref": "BSNK"}), [])
+
+    def test_collect_asset_sources_supports_bengaluru_metro_payload(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-24"]]},
+            "planned_at": "2026-07-24T09:30:00Z",
+            "requested_assets": ["bengaluru_metro_station_facts"],
+        }
+        payload = {
+            "elements": [
+                {
+                    "type": "node",
+                    "id": 101,
+                    "lat": 12.995,
+                    "lon": 77.759,
+                    "tags": {
+                        "name": "Kadugodi Tree Park",
+                        "line": "Purple Line",
+                    },
+                }
+            ]
+        }
+
+        with patch(
+            "pipeline.collect_asset_sources.fetch_overpass_json",
+            return_value=payload,
+        ):
+            output = collect_asset_sources(request)
+        direct = collect_bengaluru_metro_stations(
+            request, fetch=lambda _url, _query: payload
+        )
+
+        self.assertNotIn("source_failures", output)
+        self.assertIn("bengaluru_metro_stations", output)
+        self.assertEqual(
+            output["bengaluru_metro_stations"]["stations"][0]["name"],
+            "Kadugodi Tree Park",
+        )
+        self.assertEqual(direct["snapshot_date"], "2026-07-24")
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")

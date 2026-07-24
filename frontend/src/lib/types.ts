@@ -238,6 +238,7 @@ export type MapPlacePin = {
   rating?: number;
   review_count?: number;
   note?: string;
+  lines?: string[];
   source_url?: string;
   source_type: string;
 };

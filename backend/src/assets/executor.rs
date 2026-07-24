@@ -23,13 +23,14 @@ use super::{
     MediaAssetMaterializer, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1119,6 +1120,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::SocietyGroundwaterPotentialFacts,
         );
         executors.insert(
+            static_asset_id(BENGALURU_METRO_STATION_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::BengaluruMetroStationFacts,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1151,6 +1156,7 @@ enum BuiltInAssetExecutor {
     HomeStateSignals,
     ApproachRoadGraphFacts,
     SocietyGroundwaterPotentialFacts,
+    BengaluruMetroStationFacts,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1611,6 +1617,23 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::BengaluruMetroStationFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .bengaluru_metro_stations
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let run_id = context.run_id.to_string();
+                let input = super::bengaluru_metro_station_facts_input(
+                    input,
+                    &run_id,
+                    context.options.planned_at,
+                )?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1873,6 +1896,7 @@ pub enum AssetDagExecutorError {
     SkillFact(SkillFactMaterializeError),
     ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
+    Transit(TransitAssetError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
@@ -1957,6 +1981,7 @@ impl fmt::Display for AssetDagExecutorError {
                 write!(f, "approach-road graph asset execution failed: {err}")
             }
             Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
+            Self::Transit(err) => write!(f, "transit asset execution failed: {err}"),
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2141,6 +2166,12 @@ impl From<EnvironmentalAssetError> for AssetDagExecutorError {
     }
 }
 
+impl From<TransitAssetError> for AssetDagExecutorError {
+    fn from(err: TransitAssetError) -> Self {
+        Self::Transit(err)
+    }
+}
+
 impl From<GooglePlaceAssetError> for AssetDagExecutorError {
     fn from(err: GooglePlaceAssetError) -> Self {
         Self::GooglePlace(err)
@@ -2279,6 +2310,7 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_listings_weekly.is_none()
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.environment_groundwater_potential.is_none()
+        && source_inputs.bengaluru_metro_stations.is_none()
 }
 
 #[cfg(test)]

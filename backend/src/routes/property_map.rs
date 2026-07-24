@@ -69,6 +69,8 @@ pub struct MapPlacePin {
     pub review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub lines: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub source_type: String,
@@ -95,6 +97,17 @@ struct PlaceLookup {
     review_count: Option<u32>,
 }
 
+#[derive(Clone, Debug)]
+struct DagMetroStation {
+    entity_id: String,
+    name: String,
+    latitude: f64,
+    longitude: f64,
+    lines: Vec<String>,
+}
+
+const DAG_METRO_MATCH_KM: f64 = 0.45;
+
 pub fn build_property_map_context(
     property: &Property,
     society_name: Option<&str>,
@@ -106,6 +119,7 @@ pub fn build_property_map_context(
     let home_entity_id = society_node_id(&property.society_id);
     let home_coords = coordinates_for_candidates(facts, &property.society_id);
     let place_by_url = place_lookup_by_google_url(facts);
+    let dag_metro_stations = dag_metro_stations(facts);
 
     let mut places = Vec::new();
     for &(fact_key, layer, cap) in NEARBY_LAYERS {
@@ -123,6 +137,9 @@ pub fn build_property_map_context(
         layer_pins
             .dedup_by(|left, right| left.name == right.name && left.source_url == right.source_url);
         layer_pins.truncate(cap);
+        if layer == "metro" {
+            enrich_metro_pins_from_dag(&mut layer_pins, &dag_metro_stations);
+        }
         places.extend(layer_pins);
     }
 
@@ -130,14 +147,7 @@ pub fn build_property_map_context(
     let overlay_home = home_coords.or_else(|| approximate_home_from_places(&places));
     let (metro_lines, green_patches, lakes) = match (map_overlays, overlay_home) {
         (Some(overlays), Some(home)) => {
-            let metro_stations = places
-                .iter()
-                .filter(|place| place.layer == "metro")
-                .filter_map(|place| match (place.latitude, place.longitude) {
-                    (Some(latitude), Some(longitude)) => Some((latitude, longitude)),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
+            let metro_stations = metro_corridor_anchors(&places, &dag_metro_stations, home);
             let metro_lines = crate::routes::map_overlays::nearest_metro_corridor(
                 overlays,
                 home,
@@ -201,6 +211,165 @@ fn approximate_home_from_places(places: &[MapPlacePin]) -> Option<(f64, f64)> {
     Some((lat, lng))
 }
 
+fn dag_metro_stations(facts: &ServingFactIndex) -> Vec<DagMetroStation> {
+    let mut stations = Vec::new();
+    for (entity_id, rows) in facts.rows() {
+        if !entity_id.starts_with("place:metro:") {
+            continue;
+        }
+        let Some(latitude) = numeric_fact(rows, "geo.latitude") else {
+            continue;
+        };
+        let Some(longitude) = numeric_fact(rows, "geo.longitude") else {
+            continue;
+        };
+        if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
+            continue;
+        }
+        let name = text_fact(rows, "place.name").unwrap_or_else(|| entity_id.to_string());
+        let lines = tags_fact(rows, "transit.lines")
+            .into_iter()
+            .filter_map(|value| crate::routes::map_overlays::trunk_line_display_name(&value))
+            .collect::<Vec<_>>();
+        stations.push(DagMetroStation {
+            entity_id: entity_id.to_string(),
+            name,
+            latitude,
+            longitude,
+            lines,
+        });
+    }
+    stations
+}
+
+fn enrich_metro_pins_from_dag(pins: &mut [MapPlacePin], stations: &[DagMetroStation]) {
+    for pin in pins.iter_mut() {
+        let Some(matched) = match_dag_metro_station(pin, stations) else {
+            continue;
+        };
+        if pin.place_entity_id.is_none() {
+            pin.place_entity_id = Some(matched.entity_id.clone());
+        }
+        if pin.lines.is_empty() {
+            pin.lines = matched.lines.clone();
+        }
+        if pin.note.is_none() && !matched.lines.is_empty() {
+            pin.note = Some(matched.lines.join(" · "));
+        }
+        // Prefer DAG station coordinates when available — they align with seed
+        // corridor geometry better than Google Places estimates.
+        pin.latitude = Some(matched.latitude);
+        pin.longitude = Some(matched.longitude);
+    }
+}
+
+fn match_dag_metro_station<'a>(
+    pin: &MapPlacePin,
+    stations: &'a [DagMetroStation],
+) -> Option<&'a DagMetroStation> {
+    let (lat, lng) = match (pin.latitude, pin.longitude) {
+        (Some(lat), Some(lng)) => (lat, lng),
+        _ => return None,
+    };
+    let pin_name = compact_place_name(&pin.name);
+    let mut ranked = stations
+        .iter()
+        .map(|station| {
+            let distance = haversine_km(lat, lng, station.latitude, station.longitude);
+            let station_name = compact_place_name(&station.name);
+            let name_match = !pin_name.is_empty()
+                && !station_name.is_empty()
+                && (pin_name == station_name
+                    || names_compatible(&pin_name, &station_name)
+                    || pin_name.contains(&station_name)
+                    || station_name.contains(&pin_name));
+            let max_km = if name_match {
+                DAG_METRO_MATCH_KM * 2.0
+            } else {
+                DAG_METRO_MATCH_KM
+            };
+            let name_bonus = if name_match { 0.0 } else { 0.15 };
+            (distance + name_bonus, distance, max_km, station)
+        })
+        .filter(|(_, distance, max_km, _)| *distance <= *max_km)
+        .collect::<Vec<_>>();
+    ranked.sort_by(|left, right| left.0.total_cmp(&right.0));
+    ranked.first().map(|item| item.3)
+}
+
+fn compact_place_name(value: &str) -> String {
+    normalized_project_name(value)
+        .unwrap_or_default()
+        .replace(' ', "")
+}
+
+fn metro_corridor_anchors(
+    places: &[MapPlacePin],
+    stations: &[DagMetroStation],
+    home: (f64, f64),
+) -> Vec<crate::routes::map_overlays::MetroCorridorAnchor> {
+    let mut anchors = places
+        .iter()
+        .filter(|place| place.layer == "metro")
+        .filter_map(|place| {
+            let (latitude, longitude) = match (place.latitude, place.longitude) {
+                (Some(latitude), Some(longitude)) => (latitude, longitude),
+                _ => return None,
+            };
+            Some(crate::routes::map_overlays::MetroCorridorAnchor {
+                latitude,
+                longitude,
+                preferred_lines: place.lines.clone(),
+            })
+        })
+        .collect::<Vec<_>>();
+
+    // Only fall back when we already have a nearby Google metro pin that lacked
+    // usable line tags. Do not invent a corridor from home alone.
+    if !anchors.is_empty() && anchors.iter().all(|anchor| anchor.preferred_lines.is_empty()) {
+        if let Some(station) = stations.iter().min_by(|left, right| {
+            haversine_km(home.0, home.1, left.latitude, left.longitude)
+                .total_cmp(&haversine_km(home.0, home.1, right.latitude, right.longitude))
+        }) {
+            if haversine_km(home.0, home.1, station.latitude, station.longitude) <= 8.0 {
+                anchors.push(crate::routes::map_overlays::MetroCorridorAnchor {
+                    latitude: station.latitude,
+                    longitude: station.longitude,
+                    preferred_lines: station.lines.clone(),
+                });
+            }
+        }
+    }
+    anchors
+}
+
+fn tags_fact(rows: &ServingEntityFactRows, key: &str) -> Vec<String> {
+    rows.facts
+        .iter()
+        .filter(|fact| fact.fact_key == key)
+        .find_map(|fact| match &fact.value {
+            FactValue::Tags(values) => Some(
+                values
+                    .iter()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty())
+                    .collect::<Vec<_>>(),
+            ),
+            FactValue::Text(value) if !value.trim().is_empty() => Some(
+                value
+                    .split(|character: char| {
+                        character == ';' || character == ',' || character == '|'
+                    })
+                    .map(str::trim)
+                    .filter(|part| !part.is_empty())
+                    .map(str::to_string)
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .unwrap_or_default()
+}
+
 fn map_place_pin(
     fact: &ServingFactRecord,
     layer: &str,
@@ -246,6 +415,7 @@ fn map_place_pin(
         rating,
         review_count,
         note,
+        lines: Vec::new(),
         source_url: fact.source_url.clone(),
         source_type: if fact.source_type.trim().is_empty() {
             "Google".to_string()
