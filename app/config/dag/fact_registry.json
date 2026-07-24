@@ -3383,6 +3383,110 @@
       }
     },
     {
+      "fact_key": "environment.groundwater_potential_class",
+      "bucket": "environment_context",
+      "label": "groundwater potential",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "groundwater potential",
+        "groundwater zone",
+        "aquifer potential"
+      ],
+      "answers_preferences": [
+        "groundwater potential",
+        "water context"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Computed",
+        "Manual"
+      ],
+      "display_template": "groundwater potential: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.8
+      }
+    },
+    {
+      "fact_key": "environment.water_body_distance_m",
+      "bucket": "environment_context",
+      "label": "water body proximity",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "lake nearby",
+        "wetland nearby",
+        "water body distance"
+      ],
+      "answers_preferences": [
+        "lake proximity",
+        "wetland proximity",
+        "water body nearby"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Computed",
+        "Manual"
+      ],
+      "display_template": "nearest water body: {value}m",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "LowerIsBetter",
+        "weight": 0.6,
+        "thresholds": [
+          250.0,
+          500.0,
+          1000.0
+        ]
+      }
+    },
+    {
+      "fact_key": "resilience.rainwater_harvesting_present",
+      "bucket": "resilience",
+      "label": "rainwater harvesting",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society",
+        "area"
+      ],
+      "enrichment_terms": [
+        "rainwater harvesting",
+        "rain water harvesting",
+        "recharge pit",
+        "groundwater recharge"
+      ],
+      "answers_preferences": [
+        "rainwater harvesting",
+        "water resilience",
+        "groundwater recharge"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Google",
+        "RedditTheme",
+        "Computed",
+        "Manual"
+      ],
+      "display_template": "rainwater harvesting: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
       "fact_key": "operating.bwssb_unknown",
       "bucket": "water_utilities",
       "label": "piped water status unknown",
@@ -5704,5 +5808,5 @@
       }
     }
   ],
-  "fact_count": 80
+  "fact_count": 86
 }

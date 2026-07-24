@@ -1,5 +1,5 @@
 {
-  "_comment": "LEAF DEFINITIONS — 78 fact_keys in 10 buckets. Each leaf = what CAN be said (fact_key, scopes, enrichment terms). Values live in lake facts Parquet.",
+  "_comment": "LEAF DEFINITIONS — 81 fact_keys in 12 buckets. Each leaf = what CAN be said (fact_key, scopes, enrichment terms). Values live in lake facts Parquet.",
   "version": 1,
   "source": "Merged from livability_theme_registry + GitHub issue #2",
   "defaults": {
@@ -17,8 +17,8 @@
     "approach_road_waterlogging": "risk.approach_road_waterlogging",
     "approach_road_traffic": "risk.approach_road_traffic"
   },
-  "bucket_count": 10,
-  "leaf_count": 78,
+  "bucket_count": 12,
+  "leaf_count": 81,
   "buckets": [
     {
       "id": "water_utilities",
@@ -285,6 +285,76 @@
           "preferences": [
             "rajakaluve",
             "stormwater"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "environment_context",
+      "leaves": [
+        {
+          "fact_key": "environment.groundwater_potential_class",
+          "label": "groundwater potential",
+          "lens": "proof",
+          "polarity": "neutral",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "groundwater potential",
+            "groundwater zone",
+            "aquifer potential"
+          ],
+          "preferences": [
+            "groundwater potential",
+            "water context"
+          ]
+        },
+        {
+          "fact_key": "environment.water_body_distance_m",
+          "label": "water body proximity",
+          "lens": "proof",
+          "polarity": "neutral",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "lake nearby",
+            "wetland nearby",
+            "water body distance"
+          ],
+          "preferences": [
+            "lake proximity",
+            "wetland proximity",
+            "water body nearby"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "resilience",
+      "leaves": [
+        {
+          "fact_key": "resilience.rainwater_harvesting_present",
+          "label": "rainwater harvesting",
+          "lens": "positive",
+          "polarity": "positive",
+          "scopes": [
+            "society",
+            "area"
+          ],
+          "terms": [
+            "rainwater harvesting",
+            "rain water harvesting",
+            "recharge pit",
+            "groundwater recharge"
+          ],
+          "preferences": [
+            "rainwater harvesting",
+            "water resilience",
+            "groundwater recharge"
           ]
         }
       ]

@@ -104,6 +104,9 @@ class ResourceProbe:
     size: int | None
     license_id: str | None
     source: str | None
+    usable_for_dag: bool
+    dag_role: str
+    usage_notes: str
     access: UrlProbe | None
 
 
@@ -238,6 +241,9 @@ def search_open_city(
                     size=resource.get("size"),
                     license_id=resource.get("license_id") or package.get("license_id"),
                     source=resource.get("source") or package.get("url"),
+                    usable_for_dag=is_dag_usable_resource(resource),
+                    dag_role=dag_role_for_resource(resource),
+                    usage_notes=usage_notes_for_resource(resource),
                     access=access,
                 )
             )
@@ -256,6 +262,36 @@ def search_open_city(
             )
         )
     return datasets
+
+
+def is_dag_usable_resource(resource: dict[str, Any]) -> bool:
+    return dag_role_for_resource(resource) in {
+        "spatial_feature_snapshot",
+        "tabular_feature_snapshot",
+    }
+
+
+def dag_role_for_resource(resource: dict[str, Any]) -> str:
+    fmt = str(resource.get("format") or "").strip().lower()
+    content_type = str(resource.get("mimetype") or "").strip().lower()
+    if fmt in {"kml", "kmz", "geojson", "shp"}:
+        return "spatial_feature_snapshot"
+    if fmt in {"csv", "xlsx", "xls", "json"}:
+        return "tabular_feature_snapshot"
+    if fmt == "pdf" or "pdf" in content_type:
+        return "supporting_report"
+    return "manual_review"
+
+
+def usage_notes_for_resource(resource: dict[str, Any]) -> str:
+    role = dag_role_for_resource(resource)
+    if role == "spatial_feature_snapshot":
+        return "Parse into normalized feature Parquet, then join to entities offline."
+    if role == "tabular_feature_snapshot":
+        return "Normalize into typed Parquet before deriving facts."
+    if role == "supporting_report":
+        return "Use for provenance or manual review; not a direct spatial join input."
+    return "Inspect schema and license before adding to the DAG."
 
 
 def is_relevant_package(theme: str, package: dict[str, Any]) -> bool:
@@ -336,12 +372,15 @@ def summarize(
     theme_counts = {}
     reachable_resources = 0
     blocked_resources = 0
+    dag_usable_resources = 0
     direct_formats = {}
     for dataset in datasets:
         theme_counts[dataset.theme] = theme_counts.get(dataset.theme, 0) + 1
         for resource in dataset.resources:
             fmt = (resource.format or "unknown").upper()
             direct_formats[fmt] = direct_formats.get(fmt, 0) + 1
+            if resource.usable_for_dag:
+                dag_usable_resources += 1
             if resource.access and resource.access.ok:
                 reachable_resources += 1
             else:
@@ -351,6 +390,7 @@ def summarize(
         "theme_counts": theme_counts,
         "reachable_resources": reachable_resources,
         "blocked_resources": blocked_resources,
+        "dag_usable_resources": dag_usable_resources,
         "resource_formats": direct_formats,
         "landing_pages_ok": {
             name: probe.get("ok") for name, probe in landing_pages.items()
@@ -364,6 +404,7 @@ def print_human_report(report: dict[str, Any]) -> None:
     print("Environment data access probe")
     print("Datasets discovered: {}".format(summary["dataset_count"]))
     print("Reachable resources: {}".format(summary["reachable_resources"]))
+    print("DAG-usable resources: {}".format(summary["dag_usable_resources"]))
     print("Blocked resources: {}".format(summary["blocked_resources"]))
     print("Formats: {}".format(json.dumps(summary["resource_formats"], sort_keys=True)))
     print("")
@@ -391,9 +432,10 @@ def print_human_report(report: dict[str, Any]) -> None:
             for resource in dataset["resources"][:2]:
                 access = resource.get("access") or {}
                 print(
-                    "  - {} ({}) -> {} {}".format(
+                    "  - {} ({}, {}) -> {} {}".format(
                         resource.get("name"),
                         resource.get("format") or "unknown",
+                        resource.get("dag_role") or "unknown role",
                         access.get("status"),
                         "ok" if access.get("ok") else access.get("error"),
                     )

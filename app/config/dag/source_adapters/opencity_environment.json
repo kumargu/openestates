@@ -1,0 +1,102 @@
+{
+  "_comment": "OpenCity environmental datasets adapter contract. Raw source files stay in raw/source=opencity/; normalized spatial features and derived facts must be materialized offline before serving.",
+  "version": 1,
+  "source_id": "opencity_environment",
+  "source_type": "OpenCity",
+  "trust_tier": "support",
+  "max_confidence": 0.85,
+  "request_path_policy": {
+    "allow_runtime_downloads": false,
+    "allow_runtime_gis_parsing": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "default_provenance_fields": [
+    "dataset_id",
+    "source_organization",
+    "source_url",
+    "source_date",
+    "fetched_at",
+    "license",
+    "scope",
+    "match_method",
+    "confidence"
+  ],
+  "datasets": [
+    {
+      "dataset_id": "bengaluru_groundwater_potential",
+      "theme": "groundwater_potential",
+      "source_organization": "KSRSAC via OpenCity",
+      "source_format": "KML",
+      "expected_cadence": "monthly",
+      "license": "Public Domain",
+      "raw_asset_proposed": "raw_environment_groundwater_potential",
+      "normalized_asset_proposed": "normalized_groundwater_potential_zones",
+      "derived_asset_proposed": "society_groundwater_potential_facts",
+      "join_methods": [
+        "point_in_polygon",
+        "polygon_overlay"
+      ],
+      "emits_fact_keys": [
+        "environment.groundwater_potential_class"
+      ],
+      "source_field_map": {
+        "GW_PROS": "environment.groundwater_potential_class"
+      }
+    },
+    {
+      "dataset_id": "bengaluru_stormwater_drains",
+      "theme": "stormwater_drains",
+      "source_organization": "BBMP / KSRSAC via OpenCity",
+      "source_format": "KML",
+      "expected_cadence": "monthly",
+      "license": "Public Domain",
+      "raw_asset_proposed": "raw_environment_stormwater_drains",
+      "normalized_asset_proposed": "normalized_stormwater_drain_segments",
+      "derived_asset_proposed": "society_drainage_proximity_facts",
+      "join_methods": [
+        "nearest_feature",
+        "buffer_intersection"
+      ],
+      "emits_fact_keys": [
+        "risk.rajakaluve_proximity",
+        "risk.open_drain_nearby"
+      ]
+    },
+    {
+      "dataset_id": "bengaluru_flood_waterlogging_locations",
+      "theme": "flood_waterlogging",
+      "source_organization": "Government or civic datasets via OpenCity",
+      "source_format": "KML",
+      "expected_cadence": "weekly_or_event_driven",
+      "license": "varies_by_resource",
+      "raw_asset_proposed": "raw_environment_flood_locations",
+      "normalized_asset_proposed": "normalized_flood_locations",
+      "derived_asset_proposed": "society_flood_history_facts",
+      "join_methods": [
+        "nearest_feature",
+        "buffer_intersection"
+      ],
+      "emits_fact_keys": [
+        "risk.approach_road_waterlogging"
+      ]
+    },
+    {
+      "dataset_id": "bengaluru_lakes_wetlands",
+      "theme": "lakes_wetlands",
+      "source_organization": "Government or research datasets via OpenCity",
+      "source_format": "KML",
+      "expected_cadence": "monthly",
+      "license": "varies_by_resource",
+      "raw_asset_proposed": "raw_environment_lakes_wetlands",
+      "normalized_asset_proposed": "normalized_lake_wetland_boundaries",
+      "derived_asset_proposed": "society_water_body_proximity_facts",
+      "join_methods": [
+        "nearest_feature",
+        "buffer_intersection"
+      ],
+      "emits_fact_keys": [
+        "environment.water_body_distance_m"
+      ]
+    }
+  ]
+}
