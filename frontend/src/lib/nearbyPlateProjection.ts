@@ -290,37 +290,6 @@ export function zoomForRadiusKm(radiusKm: number): number {
   return 10.9;
 }
 
-function collisionZoomBoost(
-  home: { latitude: number; longitude: number },
-  places: NumberedPlace[],
-  zoom: number,
-): number {
-  if (places.length === 0) return 0;
-  const points = [home, ...places];
-  let nearestKm = Number.POSITIVE_INFINITY;
-  for (let left = 0; left < points.length; left += 1) {
-    for (let right = left + 1; right < points.length; right += 1) {
-      nearestKm = Math.min(
-        nearestKm,
-        distanceKm(
-          points[left].latitude,
-          points[left].longitude,
-          points[right].latitude,
-          points[right].longitude,
-        ),
-      );
-    }
-  }
-  if (!Number.isFinite(nearestKm) || nearestKm <= 0) return 1.4;
-
-  const metersPerPixel = (156543.03 * Math.cos((home.latitude * Math.PI) / 180))
-    / (2 ** zoom);
-  const separationPixels = (nearestKm * 1000) / metersPerPixel;
-  const markerGuardPixels = 34;
-  if (separationPixels >= markerGuardPixels) return 0;
-  return clamp(Math.log2(markerGuardPixels / separationPixels), 0, 1.4);
-}
-
 export function buildNumberedPlaces(
   places: MapPlacePin[],
   limit = PLATE_LIST_LIMIT,
@@ -404,11 +373,10 @@ export function buildPlateViewport(
     ];
   }
   const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates);
-  const baseZoom = zoomForRadiusKm(radiusKm);
   return {
     center: home,
     radiusKm,
-    zoom: baseZoom + collisionZoomBoost(home, places, baseZoom),
+    zoom: zoomForRadiusKm(radiusKm),
     paddingFactor: clamp(0.18 + radiusKm * 0.02, 0.18, 0.28),
   };
 }

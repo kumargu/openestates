@@ -82,7 +82,7 @@ function metroBadgeEl(name: string): HTMLDivElement {
   const element = document.createElement("div");
   const tone = name.toLowerCase().match(/purple|green|yellow|pink|blue|orange/)?.[0] ?? "default";
   element.className = `nearby-map-metro-badge nearby-map-metro-badge--${tone}`;
-  element.innerHTML = `${markerGlyph("metro")}<span>${name}</span>`;
+  element.innerHTML = markerGlyph("metro");
   element.setAttribute("aria-label", `${name} metro corridor`);
   return element;
 }
