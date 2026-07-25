@@ -3,6 +3,7 @@ import type {
   PropertyCard,
 } from "../../lib/types.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
+import { SaveHeartButton } from "../SaveHeartButton.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
 function formatPrice(price: number): string {
@@ -62,8 +63,9 @@ export function LivingEvidenceTile({
             className="catalog-card__image"
             loading="lazy"
           />
-          {onQuickView && (
-            <div className="catalog-card__actions" aria-label="Property actions">
+          <div className="catalog-card__actions" aria-label="Property actions">
+            <SaveHeartButton propertyId={property.id} className="catalog-card__action catalog-card__save" />
+            {onQuickView && (
               <button
                 type="button"
                 onClick={handleQuickView}
@@ -76,8 +78,8 @@ export function LivingEvidenceTile({
                   <line x1="12" y1="8" x2="12.01" y2="8" />
                 </svg>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
 
         <div className="catalog-card__caption">

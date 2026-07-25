@@ -65,20 +65,20 @@
 
 .catalog-card__actions {
   position: absolute;
+  top: 0.65rem;
   right: 0.65rem;
-  bottom: 0.65rem;
+  bottom: auto;
   z-index: 2;
   display: flex;
   gap: 0.35rem;
-  opacity: 0;
-  transform: translateY(4px);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  opacity: 1;
+  transform: none;
 }
 
 .catalog-card:hover .catalog-card__actions,
 .catalog-card:focus-within .catalog-card__actions {
   opacity: 1;
-  transform: translateY(0);
+  transform: none;
 }
 
 .catalog-card__action {
@@ -92,17 +92,22 @@
   color: #1a1a1a;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .catalog-card__action:hover {
-  background: #1a1a1a;
-  color: #fff;
+  background: #fff;
+  color: #1a1a1a;
+  transform: scale(1.04);
 }
 
-.catalog-card__action--saved {
-  background: #1a1a1a;
-  color: #fff;
+.catalog-card__action--saved,
+.save-heart.is-saved {
+  color: #c45b4a;
+}
+
+.save-heart.is-saved:hover {
+  color: #a84638;
 }
 
 .catalog-card__caption {

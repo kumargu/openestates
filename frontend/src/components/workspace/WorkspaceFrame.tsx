@@ -3,7 +3,13 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { getProperties } from "../../lib/api.ts";
 import {
   defaultComparedHomes,
+  FOCUS_STORAGE_KEY,
+  MAX_SHORTLIST_HOMES,
   normalizeComparedSocieties,
+  parseShortlistIds,
+  readShortlistIds,
+  SHORTLIST_CHANGED_EVENT,
+  writeShortlistIds,
 } from "../../lib/compare.ts";
 import type { PropertyCard } from "../../lib/types.ts";
 import {
@@ -12,26 +18,13 @@ import {
 } from "./WorkspaceSidebar.tsx";
 import "../../styles/workspace.css";
 
-const MAX_WORKSPACE_HOMES = 10;
 const DEFAULT_WORKSPACE_HOMES = 3;
 const MIN_WORKSPACE_SOCIETIES = 2;
 const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
-const HOMES_STORAGE_KEY = "openestates:workspace-home-ids";
-const FOCUS_STORAGE_KEY = "openestates:workspace-focused-home";
 
 type WorkspaceFrameProps = {
   children: ReactNode;
 };
-
-function parseIds(value: string | null): string[] {
-  if (!value) return [];
-  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
-    .slice(0, MAX_WORKSPACE_HOMES);
-}
-
-function storedIds(): string[] {
-  return parseIds(window.localStorage.getItem(HOMES_STORAGE_KEY));
-}
 
 function routePropertyId(pathname: string): string | null {
   const match = pathname.match(/^\/property\/([^/]+)/);
@@ -42,7 +35,7 @@ function activeWorkspaceView(pathname: string): WorkspaceView {
   if (pathname === "/compare") return "compare";
   if (/^\/property\/[^/]+\/plan$/.test(pathname)) return "plan";
   if (/^\/property\/[^/]+$/.test(pathname)) return "home";
-  return "discover";
+  return "browse";
 }
 
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
@@ -50,10 +43,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const navigate = useNavigate();
   const isLanding = location.pathname === "/";
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
-  const queryIds = useMemo(() => parseIds(query.get("ids")), [query]);
+  const queryIds = useMemo(() => parseShortlistIds(query.get("ids")), [query]);
   const queryFocus = query.get("focus");
   const propertyId = routePropertyId(location.pathname);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
+  const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [collapsed, setCollapsed] = useState(() =>
     window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"
   );
@@ -70,17 +64,32 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     return () => controller.abort();
   }, [isLanding]);
 
+  useEffect(() => {
+    function refresh() {
+      setShortlistIds(readShortlistIds());
+    }
+    window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);
+    window.addEventListener("storage", refresh);
+    return () => {
+      window.removeEventListener(SHORTLIST_CHANGED_EVENT, refresh);
+      window.removeEventListener("storage", refresh);
+    };
+  }, []);
+
   const homeIds = useMemo(() => {
     if (properties.length === 0 || isLanding) return [];
     const availableIds = new Set(properties.map((property) => property.id));
     const hasExplicitSelection = queryIds.length > 0;
-    const requested = hasExplicitSelection ? queryIds : storedIds();
-    let next = requested.filter((id) => availableIds.has(id));
+    const stored = shortlistIds.filter((id) => availableIds.has(id));
+    const requested = hasExplicitSelection
+      ? queryIds.filter((id) => availableIds.has(id))
+      : stored;
+    let next = requested;
 
-    if (next.length < MIN_WORKSPACE_SOCIETIES && !hasExplicitSelection) {
+    if (next.length === 0 && !hasExplicitSelection) {
       next = defaultComparedHomes(properties, DEFAULT_WORKSPACE_HOMES)
         .map((property) => property.id);
-    } else if (next.length >= MIN_WORKSPACE_SOCIETIES) {
+    } else {
       const byId = new Map(properties.map((property) => [property.id, property]));
       const selectedHomes = next
         .map((id) => byId.get(id))
@@ -89,7 +98,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         selectedHomes,
         properties,
         MIN_WORKSPACE_SOCIETIES,
-        MAX_WORKSPACE_HOMES,
+        MAX_SHORTLIST_HOMES,
       ).map((property) => property.id);
     }
 
@@ -99,17 +108,18 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       && !next.includes(propertyId)
       && !hasExplicitSelection
     ) {
-      next = [propertyId, ...next].slice(0, MAX_WORKSPACE_HOMES);
+      next = [propertyId, ...next].slice(0, MAX_SHORTLIST_HOMES);
     }
 
     return next;
-  }, [isLanding, properties, propertyId, queryIds]);
+  }, [isLanding, properties, propertyId, queryIds, shortlistIds]);
 
   useEffect(() => {
-    if (homeIds.length > 0) {
-      window.localStorage.setItem(HOMES_STORAGE_KEY, homeIds.join(","));
+    if (homeIds.length > 0 && queryIds.length === 0) {
+      const stored = shortlistIds.join(",");
+      if (stored !== homeIds.join(",")) writeShortlistIds(homeIds);
     }
-  }, [homeIds]);
+  }, [homeIds, queryIds.length, shortlistIds]);
 
   const homes = useMemo(() => {
     const byId = new Map(properties.map((property) => [property.id, property]));
@@ -140,7 +150,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const activeView = activeWorkspaceView(location.pathname);
 
   function writeSelection(nextIds: string[], nextFocus?: string) {
-    window.localStorage.setItem(HOMES_STORAGE_KEY, nextIds.join(","));
+    writeShortlistIds(nextIds);
     const focus = nextFocus
       ?? (nextIds.includes(focusedId) ? focusedId : nextIds[0] ?? "");
     if (focus) window.localStorage.setItem(FOCUS_STORAGE_KEY, focus);
@@ -185,11 +195,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     navigate(`/property/${nextId}`);
   }
 
-  function removeHome(propertyId: string) {
+  function removeHome(propertyIdToRemove: string) {
     if (homes.length <= MIN_WORKSPACE_SOCIETIES) return;
     const nextIds = homes
       .map((home) => home.id)
-      .filter((id) => id !== propertyId);
+      .filter((id) => id !== propertyIdToRemove);
     writeSelection(nextIds);
   }
 

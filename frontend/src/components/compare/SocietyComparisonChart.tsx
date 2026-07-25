@@ -286,6 +286,16 @@ function ComparableCell({
   listings: PropertyCard[];
 }) {
   const observed = definition.value(listings);
+  if (!observed && definition.id === "land") {
+    return (
+      <div className="compare-fact-cell compare-fact-cell--soon" title="Society acres coming from RERA">
+        <span className="compare-fact-soon" aria-label="Acres coming soon">
+          <i aria-hidden="true">◇</i>
+          Soon
+        </span>
+      </div>
+    );
+  }
   return (
     <div className={`compare-fact-cell${observed ? "" : " is-empty"}`}>
       <strong title={observed?.primary}>{observed?.primary ?? "—"}</strong>

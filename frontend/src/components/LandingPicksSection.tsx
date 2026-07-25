@@ -22,7 +22,7 @@ export function LandingPicksSection({
     <section className="home-picks-section" aria-label="Top-rated homes by area">
       <div className="home-picks-section__inner">
         <div className="home-picks-section__head">
-          <span className="home-picks-section__kicker">Area Tracker picks</span>
+          <span className="home-picks-section__kicker">From the market map</span>
           <h2 className="home-picks-section__title">Top-rated in each area</h2>
         </div>
         <div className="results-grid home-picks-section__grid">

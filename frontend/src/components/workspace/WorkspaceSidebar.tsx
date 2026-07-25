@@ -2,14 +2,13 @@ import { Link } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
 
 type WorkspaceIconName =
-  | "discover"
+  | "browse"
   | "home"
   | "compare"
   | "plan"
-  | "area"
   | "chevron";
 
-export type WorkspaceView = "discover" | "home" | "compare" | "plan" | "area";
+export type WorkspaceView = "browse" | "home" | "compare" | "plan";
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
@@ -35,8 +34,8 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
     "aria-hidden": true,
   };
 
-  if (name === "discover") {
-    return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4M8.5 11h5M11 8.5v5" /></svg>;
+  if (name === "browse") {
+    return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>;
   }
   if (name === "home") {
     return <svg {...common}><path d="m4 10 8-6 8 6v9H4z" /><path d="M9 19v-6h6v6" /></svg>;
@@ -47,9 +46,6 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
   if (name === "plan") {
     return <svg {...common}><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" /></svg>;
   }
-  if (name === "area") {
-    return <svg {...common}><path d="M12 21s6-5.2 6-11a6 6 0 1 0-12 0c0 5.8 6 11 6 11Z" /><circle cx="12" cy="10" r="2" /></svg>;
-  }
   return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
 }
 
@@ -58,14 +54,13 @@ function workspaceNavItems(
   compareHref: string,
   activeView: WorkspaceView,
 ) {
-  const detailHref = focusedId ? `/property/${focusedId}` : "/results";
-  const planHref = focusedId ? `/property/${focusedId}/plan` : "/results";
+  const detailHref = focusedId ? `/property/${focusedId}` : "/";
+  const planHref = focusedId ? `/property/${focusedId}/plan` : "/";
   return [
-    { view: "discover" as const, label: "Discover", icon: "discover" as const, to: "/results" },
-    { view: "home" as const, label: "Home detail", icon: "home" as const, to: detailHref },
+    { view: "browse" as const, label: "Home", icon: "browse" as const, to: "/" },
+    { view: "home" as const, label: "Detail", icon: "home" as const, to: detailHref },
     { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref },
     { view: "plan" as const, label: "Plan", icon: "plan" as const, to: planHref },
-    { view: "area" as const, label: "Area Tracker", icon: "area" as const, to: "/#area-tracker" },
   ].map((item) => ({
     ...item,
     active: item.view === activeView,
@@ -121,7 +116,7 @@ export function WorkspaceSidebar({
         </button>
       </div>
 
-      <nav className="workspace-sidebar__nav" aria-label="Decision workspace">
+      <nav className="workspace-sidebar__nav" aria-label="Workspace">
         {navItems.map((item) => (
           <Link
             key={item.label}
@@ -140,12 +135,9 @@ export function WorkspaceSidebar({
       {!collapsed && (
         <section className="workspace-sidebar__shortlist" aria-labelledby="workspace-shortlist-title">
           <div className="workspace-sidebar__shortlist-head">
-            <h2 id="workspace-shortlist-title">In play</h2>
+            <h2 id="workspace-shortlist-title">Active selection</h2>
             <span>{homes.length}</span>
           </div>
-          <p className="workspace-sidebar__shortlist-hint">
-            Your active set. Open one, or drop it from the decision.
-          </p>
           <div className="workspace-sidebar__shortlist-list">
             {homes.map((home) => {
               const name = societyLabel(home);
@@ -187,7 +179,7 @@ export function WorkspaceSidebar({
 
       <div className="workspace-sidebar__footer">
         <span>OE</span>
-        {!collapsed && <p>Decision workspace</p>}
+        {!collapsed && <p>Workspace</p>}
       </div>
     </aside>
   );

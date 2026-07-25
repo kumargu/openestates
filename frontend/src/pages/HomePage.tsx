@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
 import { getAreaTracker, getAreas, getProperties, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
@@ -92,7 +92,6 @@ function deriveMarketSnapshot(props: PropertyCard[]): MarketSnapshot {
 }
 
 export function HomePage() {
-  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
@@ -129,9 +128,9 @@ export function HomePage() {
 
   useEffect(() => {
     if (searchParams.get("view") === "saved") {
-      navigate("/results", { replace: true });
+      setSearchParams({}, { replace: true });
     }
-  }, [navigate, searchParams]);
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     if (hasActiveSearch) return;

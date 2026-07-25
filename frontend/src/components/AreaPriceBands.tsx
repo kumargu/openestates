@@ -324,8 +324,8 @@ export function AreaPriceBands({
   preferredAreas,
   marketContexts,
   onSelectArea,
-  heading = "Area Tracker",
-  subheading = "Compare what homes cost, then hear what living there actually feels like.",
+  heading = "Market map",
+  subheading = "Where asks sit across Bengaluru — tap an area to search it.",
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
   if (bands.length < 2) return null;
@@ -348,7 +348,7 @@ export function AreaPriceBands({
     <div className="price-bands">
       <div className="price-bands__head">
         <div>
-          <p className="price-bands__kicker">Bengaluru market view</p>
+          <p className="price-bands__kicker">Bengaluru</p>
           <h2 className="price-bands__title">{heading}</h2>
           <p className="price-bands__sub">{subheading}</p>
         </div>

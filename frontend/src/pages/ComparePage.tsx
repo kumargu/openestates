@@ -55,7 +55,7 @@ function CompareUnavailable({ variant }: { variant: "error" | "empty" }) {
           ? "Property data could not be loaded. Try again or return to discovery."
           : "Choose two or more homes before opening the shared decision view."}
       </p>
-      <Link to="/results">Browse properties</Link>
+      <Link to="/">Browse homes</Link>
     </div>
   );
 }
@@ -182,7 +182,6 @@ export function ComparePage() {
               {societyCount} societ{societyCount === 1 ? "y" : "ies"} on one shared price scale
             </p>
           </div>
-          <Link to="/results">Edit homes</Link>
         </header>
 
         <SocietyComparisonChart
