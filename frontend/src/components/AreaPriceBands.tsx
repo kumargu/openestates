@@ -328,7 +328,7 @@ export function AreaPriceBands({
   subheading = "Where asks sit across Bengaluru — tap an area to search it.",
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
-  if (bands.length < 2) return null;
+  if (bands.length < 1) return null;
 
   const scaleMin = Math.min(...bands.map((band) => band.p10));
   const scaleMax = Math.max(...bands.map((band) => band.p90));
@@ -403,7 +403,7 @@ export function AreaPriceBands({
       </div>
 
       <p className="price-bands__caption">
-        {bands.length} markets · {totalN} priced homes
+        {bands.length} market{bands.length === 1 ? "" : "s"} · {totalN} priced homes
         {missingPreferred.length > 0
           ? ` · ${missingPreferred.length} tracker area${missingPreferred.length === 1 ? "" : "s"} still need priced listings`
           : ""}

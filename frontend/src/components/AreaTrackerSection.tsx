@@ -64,7 +64,7 @@ export function AreaTrackerSection({
     ? deriveMarketContextsFromTracker(areaTracker)
     : deriveMarketContexts(properties);
   const markets = maxMarkets ? allMarkets.slice(0, maxMarkets) : allMarkets;
-  if (markets.length < 2) return null;
+  if (markets.length < 1) return null;
 
   return (
     <section id={id} className="home-micro-section area-tracker-section">

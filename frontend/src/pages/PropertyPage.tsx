@@ -15,6 +15,7 @@ import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
 import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
+import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import {
   AroundThisHomePlate,
   hasAroundThisHomePlate,
@@ -25,11 +26,6 @@ import {
   detailEvidenceExcludeKindsForPlate,
   isRedundantHomeState,
 } from "../lib/property-signals.ts";
-import {
-  SoftHomeStateIcon,
-  SoftLandIcon,
-  SoftSpaceIcon,
-} from "../components/ui/SoftIcons.tsx";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -89,207 +85,6 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
     jsonLd.image = p.hero_image;
   }
   return jsonLd;
-}
-
-type ProjectFact = {
-  id: string;
-  label: string;
-  value: string;
-  tone?: "calm" | "positive" | "watch";
-  icon: "land" | "density" | "open" | "home";
-};
-
-function formatDecimal(value: number, fractionDigits = 1): string {
-  return value
-    .toFixed(fractionDigits)
-    .replace(/\.0$/, "");
-}
-
-function formatProjectDate(value: string | null | undefined): string | null {
-  if (!isKnownText(value)) return null;
-  const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toLocaleDateString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
-function lifecycleForProjectFacts(detail: PropertyDetailResponse): string | null {
-  const raw = detail.home_state_display || detail.project_status_display || detail.rera?.status;
-  if (!isKnownText(raw)) return null;
-  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
-  if (normalized.includes("delivered") || normalized.includes("ready")) return "Delivered";
-  if (normalized.includes("delay")) return "Delayed";
-  if (normalized.includes("construction")) return "Under construction";
-  return compactLifecycleLabel(raw);
-}
-
-function ProjectFactIcon({ icon }: { icon: ProjectFact["icon"] }) {
-  if (icon === "home") return <SoftHomeStateIcon size={28} />;
-  if (icon === "density" || icon === "open") return <SoftSpaceIcon size={28} />;
-  return <SoftLandIcon size={28} />;
-}
-
-function buildProjectFacts(detail: PropertyDetailResponse): {
-  highlights: ProjectFact[];
-  details: ProjectFact[];
-} {
-  const rera = detail.rera;
-  if (!rera) return { highlights: [], details: [] };
-
-  const highlights: ProjectFact[] = [];
-  if (hasKnownNumber(rera.total_land_area_acres)) {
-    highlights.push({
-      id: "land",
-      label: "Land",
-      value: `${formatDecimal(rera.total_land_area_acres)} acres`,
-      icon: "land",
-      tone: "positive",
-    });
-  }
-  if (hasKnownNumber(rera.units_per_acre)) {
-    highlights.push({
-      id: "density",
-      label: "Density",
-      value: `${Math.round(rera.units_per_acre)} homes/acre`,
-      icon: "density",
-    });
-  }
-  if (hasKnownNumber(rera.open_area_pct)) {
-    highlights.push({
-      id: "open",
-      label: "Open area",
-      value: `${formatDecimal(rera.open_area_pct)}% open area`,
-      icon: "open",
-      tone: "positive",
-    });
-  }
-
-  const details: ProjectFact[] = [];
-  if (hasKnownNumber(rera.total_units)) {
-    details.push({
-      id: "homes",
-      label: "Homes",
-      value: rera.total_units.toLocaleString("en-IN"),
-      icon: "home",
-    });
-  }
-  const lifecycle = lifecycleForProjectFacts(detail);
-  if (lifecycle) {
-    details.push({
-      id: "lifecycle",
-      label: "Status",
-      value: lifecycle,
-      icon: "home",
-      tone: lifecycle === "Delivered" ? "positive" : lifecycle === "Delayed" ? "watch" : "calm",
-    });
-  }
-  const startDate = formatProjectDate(rera.start_date);
-  if (startDate) {
-    details.push({
-      id: "start",
-      label: "Started",
-      value: startDate,
-      icon: "home",
-    });
-  }
-  const originalCompletion = formatProjectDate(rera.original_completion_date);
-  if (originalCompletion) {
-    details.push({
-      id: "original-completion",
-      label: "Original target",
-      value: originalCompletion,
-      icon: "home",
-    });
-  }
-  const completion = formatProjectDate(rera.completion_date);
-  if (completion) {
-    details.push({
-      id: "completion",
-      label: "Completion",
-      value: completion,
-      icon: "home",
-      tone: "positive",
-    });
-  }
-  if (hasKnownNumber(rera.delay_months)) {
-    details.push({
-      id: "delay",
-      label: "Delay",
-      value: `${Math.round(rera.delay_months)} months`,
-      icon: "home",
-      tone: "watch",
-    });
-  }
-  if (isKnownText(rera.registration_number)) {
-    details.push({
-      id: "registration",
-      label: "RERA",
-      value: rera.registration_number,
-      icon: "home",
-    });
-  }
-
-  return { highlights, details };
-}
-
-function ProjectFactsCard({ detail }: { detail: PropertyDetailResponse }) {
-  const { highlights, details } = buildProjectFacts(detail);
-  if (highlights.length === 0 && details.length === 0) return null;
-  const detailOnlyFacts = details.filter(
-    (fact) => !highlights.some((highlight) => highlight.id === fact.id),
-  );
-
-  return (
-    <section className="project-facts-card" aria-labelledby="project-facts-title">
-      <header className="project-facts-card__header">
-        <div>
-          <span>Project facts</span>
-          <h2 id="project-facts-title">Scale and timeline</h2>
-        </div>
-      </header>
-
-      {highlights.length > 0 && (
-        <div className="project-facts-card__highlights">
-          {highlights.map((fact) => (
-            <article
-              key={fact.id}
-              className={`project-fact-tile project-fact-tile--${fact.tone ?? "calm"}`}
-            >
-              <ProjectFactIcon icon={fact.icon} />
-              <div>
-                <span>{fact.label}</span>
-                <strong>{fact.value}</strong>
-              </div>
-            </article>
-          ))}
-        </div>
-      )}
-
-      {detailOnlyFacts.length > 0 && (
-        <details className="project-facts-card__details">
-          <summary>More facts</summary>
-          <div className="project-facts-card__grid">
-            {detailOnlyFacts.map((fact) => (
-              <div
-                key={fact.id}
-                className={`project-facts-card__row project-facts-card__row--${fact.tone ?? "calm"}`}
-              >
-                <ProjectFactIcon icon={fact.icon} />
-                <div>
-                  <span>{fact.label}</span>
-                  <strong>{fact.value}</strong>
-                </div>
-              </div>
-            ))}
-          </div>
-        </details>
-      )}
-    </section>
-  );
 }
 
 export function PropertyPage() {
@@ -395,11 +190,15 @@ export function PropertyPage() {
   ].filter(Boolean).join(". ");
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
+  const showMarketTrend = hasMarketTrend(detailEvidenceSections);
   const showNearbyPlate = hasAroundThisHomePlate(data.map_context);
-  const evidenceExcludeKinds = detailEvidenceExcludeKindsForPlate({
-    showNearbyPlate,
-    hasWaterOnPlate: Boolean(showNearbyPlate && data.map_context?.water),
-  });
+  const evidenceExcludeKinds = [
+    ...detailEvidenceExcludeKindsForPlate({
+      showNearbyPlate,
+      hasWaterOnPlate: Boolean(showNearbyPlate && data.map_context?.water),
+    }),
+    ...(showMarketTrend ? ["market"] : []),
+  ];
   const showHomeStateChip = Boolean(
     data.home_state_display
     && !isRedundantHomeState(
@@ -555,7 +354,9 @@ export function PropertyPage() {
             <LivabilityBriefCard brief={data.livability_brief} />
           )}
 
-          <ProjectFactsCard detail={data} />
+          {showMarketTrend && (
+            <MarketTrendTile sections={detailEvidenceSections} />
+          )}
 
           <EvidenceStack
             key={id}

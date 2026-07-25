@@ -357,17 +357,6 @@ At the start of each day of work:
 
 Do not start fresh each day and ignore what was built. That leads to conflicting and duplicated code.
 
-### Restart after code changes
-
-After completing a coherent set of code changes, restart both local product servers before handing the result back to the user:
-
-- Rust API on port `4000`
-- Vite frontend on port `5173`
-
-Do not rely on an older backend process or frontend hot reload when presenting completed work. Confirm `/api/health` and the frontend root both return successfully after the restart. A documentation-only change does not require a restart.
-
----
-
 ## 10. Cleanup Policy
 
 You are explicitly allowed to clean up and remove dead code. When removing something meaningful, explain why it no longer fits and what replaces it.
