@@ -177,9 +177,9 @@ export function ComparePage() {
         <header className="compare-workspace__intro">
           <div>
             <span>Decision view</span>
-            <h1>Compare societies first. Open a configuration when it matters.</h1>
+            <h1>Same budget. Different tradeoffs.</h1>
             <p>
-              {societyCount} societ{societyCount === 1 ? "y" : "ies"} · {selectedHomes.length} shortlisted homes · shared scales
+              {societyCount} societ{societyCount === 1 ? "y" : "ies"} on one shared price scale
             </p>
           </div>
           <Link to="/results">Edit homes</Link>

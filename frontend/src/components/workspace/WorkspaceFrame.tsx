@@ -73,13 +73,14 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const homeIds = useMemo(() => {
     if (properties.length === 0 || isLanding) return [];
     const availableIds = new Set(properties.map((property) => property.id));
-    const requested = queryIds.length >= 2 ? queryIds : storedIds();
+    const hasExplicitSelection = queryIds.length > 0;
+    const requested = hasExplicitSelection ? queryIds : storedIds();
     let next = requested.filter((id) => availableIds.has(id));
 
-    if (next.length < 2) {
+    if (next.length < MIN_WORKSPACE_SOCIETIES && !hasExplicitSelection) {
       next = defaultComparedHomes(properties, DEFAULT_WORKSPACE_HOMES)
         .map((property) => property.id);
-    } else {
+    } else if (next.length >= MIN_WORKSPACE_SOCIETIES) {
       const byId = new Map(properties.map((property) => [property.id, property]));
       const selectedHomes = next
         .map((id) => byId.get(id))
@@ -91,7 +92,13 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         MAX_WORKSPACE_HOMES,
       ).map((property) => property.id);
     }
-    if (propertyId && availableIds.has(propertyId) && !next.includes(propertyId)) {
+
+    if (
+      propertyId
+      && availableIds.has(propertyId)
+      && !next.includes(propertyId)
+      && !hasExplicitSelection
+    ) {
       next = [propertyId, ...next].slice(0, MAX_WORKSPACE_HOMES);
     }
 
@@ -132,6 +139,29 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     : "/compare";
   const activeView = activeWorkspaceView(location.pathname);
 
+  function writeSelection(nextIds: string[], nextFocus?: string) {
+    window.localStorage.setItem(HOMES_STORAGE_KEY, nextIds.join(","));
+    const focus = nextFocus
+      ?? (nextIds.includes(focusedId) ? focusedId : nextIds[0] ?? "");
+    if (focus) window.localStorage.setItem(FOCUS_STORAGE_KEY, focus);
+
+    if (activeView === "compare") {
+      const next = new URLSearchParams(location.search);
+      next.set("ids", nextIds.join(","));
+      if (focus) next.set("focus", focus);
+      navigate(`/compare?${next.toString()}`, { replace: true });
+      return;
+    }
+
+    if (activeView === "home" && focus) {
+      navigate(`/property/${focus}`);
+      return;
+    }
+    if (activeView === "plan" && focus) {
+      navigate(`/property/${focus}/plan`);
+    }
+  }
+
   function toggleSidebar() {
     setCollapsed((current) => {
       const next = !current;
@@ -155,6 +185,14 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     navigate(`/property/${nextId}`);
   }
 
+  function removeHome(propertyId: string) {
+    if (homes.length <= MIN_WORKSPACE_SOCIETIES) return;
+    const nextIds = homes
+      .map((home) => home.id)
+      .filter((id) => id !== propertyId);
+    writeSelection(nextIds);
+  }
+
   return (
     <div className={`workspace-shell${collapsed ? " workspace-shell--collapsed" : ""}`}>
       <WorkspaceSidebar
@@ -165,6 +203,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         collapsed={collapsed}
         onToggle={toggleSidebar}
         onFocus={focusHome}
+        onRemove={removeHome}
       />
       <div className="workspace-view">{children}</div>
     </div>

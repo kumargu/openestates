@@ -19,6 +19,7 @@ type WorkspaceSidebarProps = {
   collapsed: boolean;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
+  onRemove: (propertyId: string) => void;
 };
 
 function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: number }) {
@@ -71,6 +72,22 @@ function workspaceNavItems(
   }));
 }
 
+function societyLabel(home: PropertyCard): string {
+  return home.society_name?.trim() || home.title;
+}
+
+function formatCompactPrice(price: number): string {
+  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(2)} Cr`;
+  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
+  return `₹${price.toLocaleString("en-IN")}`;
+}
+
+function homeStateHint(home: PropertyCard): string | null {
+  return home.home_state_display
+    || home.project_status_display
+    || null;
+}
+
 export function WorkspaceSidebar({
   homes,
   focusedId,
@@ -79,8 +96,10 @@ export function WorkspaceSidebar({
   collapsed,
   onToggle,
   onFocus,
+  onRemove,
 }: WorkspaceSidebarProps) {
   const navItems = workspaceNavItems(focusedId, compareHref, activeView);
+  const canRemove = homes.length > 2;
 
   return (
     <aside className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}`}>
@@ -120,19 +139,48 @@ export function WorkspaceSidebar({
 
       {!collapsed && (
         <section className="workspace-sidebar__shortlist" aria-labelledby="workspace-shortlist-title">
-          <h2 id="workspace-shortlist-title">Compared homes</h2>
-          <div>
-            {homes.map((home) => (
-              <button
-                key={home.id}
-                type="button"
-                className={home.id === focusedId ? "is-active" : ""}
-                onClick={() => onFocus(home.id)}
-              >
-                <strong>{home.title}</strong>
-                <span>{home.area} · {formatCompactPrice(home.price)}</span>
-              </button>
-            ))}
+          <div className="workspace-sidebar__shortlist-head">
+            <h2 id="workspace-shortlist-title">In play</h2>
+            <span>{homes.length}</span>
+          </div>
+          <p className="workspace-sidebar__shortlist-hint">
+            Your active set. Open one, or drop it from the decision.
+          </p>
+          <div className="workspace-sidebar__shortlist-list">
+            {homes.map((home) => {
+              const name = societyLabel(home);
+              const state = homeStateHint(home);
+              return (
+                <div
+                  key={home.id}
+                  className={`workspace-sidebar__home${home.id === focusedId ? " is-active" : ""}`}
+                >
+                  <button
+                    type="button"
+                    className="workspace-sidebar__home-open"
+                    title={name}
+                    onClick={() => onFocus(home.id)}
+                  >
+                    <strong>{name}</strong>
+                    <span>
+                      {home.area} · {home.bhk}BHK · {formatCompactPrice(home.price)}
+                    </span>
+                    {state && <em>{state}</em>}
+                  </button>
+                  {canRemove && (
+                    <button
+                      type="button"
+                      className="workspace-sidebar__home-remove"
+                      aria-label={`Remove ${name} from shortlist`}
+                      title="Remove"
+                      onClick={() => onRemove(home.id)}
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
@@ -143,10 +191,4 @@ export function WorkspaceSidebar({
       </div>
     </aside>
   );
-}
-
-function formatCompactPrice(price: number): string {
-  if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(2)} Cr`;
-  if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
-  return `₹${price.toLocaleString("en-IN")}`;
 }

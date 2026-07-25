@@ -7,7 +7,6 @@ type ComparableId =
   | "land"
   | "openSpace"
   | "homeState"
-  | "priceDensity"
   | "builder";
 
 type SocietyGroup = {
@@ -29,7 +28,6 @@ type PriceBand = {
 
 type ComparableValue = {
   primary: string;
-  secondary?: string;
 };
 
 type ComparableDefinition = {
@@ -48,10 +46,6 @@ function formatPrice(price: number): string {
     return `₹${(price / 100_000).toFixed(1).replace(/\.0$/, "")} L`;
   }
   return `₹${Math.round(price).toLocaleString("en-IN")}`;
-}
-
-function formatPriceDensity(value: number): string {
-  return `₹${Math.round(value).toLocaleString("en-IN")}/sqft`;
 }
 
 function usableSqft(property: PropertyCard): number {
@@ -76,7 +70,6 @@ function numericRange(
   const max = Math.max(...values);
   return {
     primary: min === max ? format(min) : `${format(min)}–${format(max)}`,
-    secondary: `${values.length} sourced value${values.length === 1 ? "" : "s"}`,
   };
 }
 
@@ -99,7 +92,7 @@ const COMPARABLES: ComparableDefinition[] = [
   },
   {
     id: "land",
-    label: "Society land",
+    label: "Acres",
     value: (listings) => numericRange(
       listings,
       (listing) => listing.society_land_acres ?? null,
@@ -127,24 +120,15 @@ const COMPARABLES: ComparableDefinition[] = [
         )
         .filter(Boolean);
       const primary = mostCommonLabel(labels);
-      return primary ? { primary, secondary: "current project state" } : null;
+      return primary ? { primary } : null;
     },
   },
   {
-    id: "priceDensity",
-    label: "Price density",
-    value: (listings) => numericRange(
-      listings,
-      (listing) => listing.price_per_sqft > 0 ? listing.price_per_sqft : null,
-      formatPriceDensity,
-    ),
-  },
-  {
     id: "builder",
-    label: "Builder category",
+    label: "Builder",
     value: (listings) => {
       const category = listings.find((listing) => listing.builder_category)?.builder_category;
-      return category ? { primary: `Category ${category}`, secondary: "delivery record" } : null;
+      return category ? { primary: `Cat ${category}` } : null;
     },
   },
 ];
@@ -205,20 +189,14 @@ function chartRange(bands: PriceBand[]): { min: number; max: number } {
   const max = Math.max(...bands.map((band) => band.high));
   const spread = Math.max(max - min, max * 0.08, 1);
   return {
-    min: Math.max(0, min - spread * 0.18),
-    max: max + spread * 0.18,
+    min: Math.max(0, min - spread * 0.12),
+    max: max + spread * 0.12,
   };
 }
 
 function scalePosition(value: number, min: number, max: number): number {
   if (max <= min) return 50;
   return Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
-}
-
-function axisTicks(min: number, max: number): string[] {
-  return Array.from({ length: 5 }, (_, index) =>
-    formatPrice(min + ((max - min) * index) / 4)
-  );
 }
 
 function PriceRange({
@@ -285,10 +263,16 @@ function PriceRange({
           y2="32"
         />
       </svg>
-      <div className="compare-price-range__labels">
-        <span>{hasRange ? formatPrice(band.low) : "Single ask"}</span>
-        <strong>{formatPrice(band.median)}</strong>
-        <span>{hasRange ? formatPrice(band.high) : `${band.samples.length} listing`}</span>
+      <div className={`compare-price-range__labels${hasRange ? "" : " is-single"}`}>
+        {hasRange ? (
+          <>
+            <span>{formatPrice(band.low)}</span>
+            <strong>{formatPrice(band.median)}</strong>
+            <span>{formatPrice(band.high)}</span>
+          </>
+        ) : (
+          <strong>{formatPrice(band.median)}</strong>
+        )}
       </div>
     </div>
   );
@@ -302,11 +286,9 @@ function ComparableCell({
   listings: PropertyCard[];
 }) {
   const observed = definition.value(listings);
-  if (!observed) return <div className="compare-fact-cell" aria-hidden="true" />;
   return (
-    <div className="compare-fact-cell">
-      <strong>{observed.primary}</strong>
-      {observed.secondary && <span>{observed.secondary}</span>}
+    <div className={`compare-fact-cell${observed ? "" : " is-empty"}`}>
+      <strong title={observed?.primary}>{observed?.primary ?? "—"}</strong>
     </div>
   );
 }
@@ -342,15 +324,17 @@ export function SocietyComparisonChart({
       listings: group.listings.filter((listing) => listing.bhk === activeBhk),
     }))
     .filter((row) => row.listings.length > 0);
-  const availableComparables = COMPARABLES.filter((definition) =>
-    visibleRows.some((row) => definition.value(row.listings) !== null)
+  const dataBackedComparables = COMPARABLES.filter((definition) =>
+    definition.id === "land"
+    || visibleRows.some((row) => definition.value(row.listings) !== null)
   );
+  const availableComparables = dataBackedComparables;
   const requestedComparableIds = (searchParams.get("facts") ?? "")
     .split(",")
     .filter((id): id is ComparableId =>
       availableComparables.some((definition) => definition.id === id)
     );
-  const defaultComparableIds: ComparableId[] = ["space", "homeState"];
+  const defaultComparableIds: ComparableId[] = ["space", "land"];
   const activeComparableIds = [
     ...new Set([
       ...requestedComparableIds,
@@ -370,7 +354,6 @@ export function SocietyComparisonChart({
   if (rowsWithBands.length === 0) return null;
 
   const range = chartRange(rowsWithBands.map((row) => row.band));
-  const ticks = axisTicks(range.min, range.max);
 
   function updateParam(key: string, value: string) {
     const next = new URLSearchParams(searchParams);
@@ -395,7 +378,7 @@ export function SocietyComparisonChart({
       <header className="compare-range-chart__controls">
         <div>
           <span>Configuration</span>
-          <h2 id="compare-range-chart-title">{activeBhk} BHK society comparison</h2>
+          <h2 id="compare-range-chart-title">{activeBhk} BHK</h2>
           <div className="compare-filter-group" role="group" aria-label="Filter by BHK">
             {availableBhks.map((bhk) => (
               <button
@@ -412,7 +395,7 @@ export function SocietyComparisonChart({
         </div>
 
         <div className="compare-visible-facts">
-          <span>Show beside price · up to two</span>
+          <span>Beside price</span>
           <div role="group" aria-label="Visible comparison facts">
             {availableComparables.map((definition) => (
               <button
@@ -432,10 +415,7 @@ export function SocietyComparisonChart({
       <div className={`compare-society-table compare-society-table--facts-${activeComparables.length}`}>
         <div className="compare-society-table__head" aria-hidden="true">
           <span>Society</span>
-          <div>
-            <strong>Listing price range</strong>
-            <div>{ticks.map((tick, index) => <span key={`${tick}:${index}`}>{tick}</span>)}</div>
-          </div>
+          <span>Price</span>
           {activeComparables.map((definition) => (
             <span key={definition.id}>{definition.label}</span>
           ))}
@@ -447,13 +427,11 @@ export function SocietyComparisonChart({
               key={row.group.key}
               className={`compare-society-table__row compare-society-table__row--tone-${index % 6}`}
             >
-              <div className="compare-society-table__identity">
+              <div className="compare-society-table__identity" title={row.group.name}>
                 <span aria-hidden="true">{row.group.name.charAt(0)}</span>
                 <div>
-                  <strong>{row.group.name}</strong>
-                  <small>
-                    {row.group.area} · {activeBhk} BHK · {row.listings.length} listing{row.listings.length === 1 ? "" : "s"}
-                  </small>
+                  <strong title={row.group.name}>{row.group.name}</strong>
+                  <small>{row.group.area}</small>
                 </div>
               </div>
               <PriceRange band={row.band} min={range.min} max={range.max} />
@@ -468,10 +446,6 @@ export function SocietyComparisonChart({
           ))}
         </div>
       </div>
-
-      <p className="compare-range-chart__caption">
-        Box = typical half · line = wider listing range · dots = individual asks
-      </p>
     </section>
   );
 }
