@@ -7,11 +7,13 @@ import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-do
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
+import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const ResultsPageA = lazy(() => import("./pages/ResultsPageA.tsx").then(m => ({ default: m.ResultsPageA })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
+const ComparePage = lazy(() => import("./pages/ComparePage.tsx").then(m => ({ default: m.ComparePage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -74,7 +76,6 @@ export function Nav() {
   const location = useLocation();
   const isHome = location.pathname === "/";
   const path = location.pathname;
-  const isHomePlan = /^\/property\/[^/]+\/plan$/.test(path);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const hamburgerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -96,7 +97,7 @@ export function Nav() {
     return () => { document.body.style.overflow = ""; };
   }, [drawerOpen]);
 
-  if (isHomePlan) return null;
+  if (!isHome) return null;
 
   return (
     <>
@@ -187,22 +188,6 @@ export function Nav() {
   );
 }
 
-export function SiteFooter() {
-  const location = useLocation();
-  if (location.pathname === "/" || /^\/property\/[^/]+\/plan$/.test(location.pathname)) return null;
-
-  return (
-    <footer className="site-footer">
-      <div className="site-footer-links">
-        <Link to="/results">Properties</Link>
-        <Link to="/#area-tracker">Area Tracker</Link>
-      </div>
-      <div className="site-footer-wordmark">OpenEstates</div>
-      <p className="site-footer-tagline">Transparent property discovery</p>
-    </footer>
-  );
-}
-
 export function App() {
   return (
     <HelmetProvider>
@@ -218,32 +203,34 @@ export function App() {
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <FocusOnNavigate />
         <Nav />
-        <main id="main-content" tabIndex={-1}>
-          <ErrorBoundary>
-            <Suspense fallback={
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
-                <div style={{
-                  width: "32px",
-                  height: "32px",
-                  border: "3px solid rgba(201,107,79,0.15)",
-                  borderTopColor: "#c96b4f",
-                  borderRadius: "50%",
-                  animation: "spin 0.7s linear infinite",
-                }} />
-                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-              </div>
-            }>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/results" element={<ResultsPageA />} />
-                <Route path="/property/:id" element={<PropertyPage />} />
-                <Route path="/property/:id/plan" element={<HomePlanPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
-            </Suspense>
-          </ErrorBoundary>
-        </main>
-        <SiteFooter />
+        <WorkspaceFrame>
+          <main id="main-content" tabIndex={-1}>
+            <ErrorBoundary>
+              <Suspense fallback={
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+                  <div style={{
+                    width: "32px",
+                    height: "32px",
+                    border: "3px solid rgba(201,107,79,0.15)",
+                    borderTopColor: "#c96b4f",
+                    borderRadius: "50%",
+                    animation: "spin 0.7s linear infinite",
+                  }} />
+                  <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+                </div>
+              }>
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/results" element={<ResultsPageA />} />
+                  <Route path="/property/:id" element={<PropertyPage />} />
+                  <Route path="/property/:id/plan" element={<HomePlanPage />} />
+                  <Route path="/compare" element={<ComparePage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </Suspense>
+            </ErrorBoundary>
+          </main>
+        </WorkspaceFrame>
         <OfflineToast />
       </BrowserRouter>
     </HelmetProvider>

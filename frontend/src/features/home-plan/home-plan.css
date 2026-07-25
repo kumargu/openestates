@@ -6,9 +6,9 @@
   --plan-faint: #9a8d82;
   --plan-line: rgba(50, 38, 30, 0.1);
   --plan-line-strong: rgba(50, 38, 30, 0.18);
-  --plan-surface: rgba(255, 251, 247, 0.88);
-  --plan-surface-solid: #fdf9f7;
-  --plan-soft: rgba(243, 232, 218, 0.65);
+  --plan-surface: rgba(255, 255, 255, 0.9);
+  --plan-surface-solid: #fdfcfb;
+  --plan-soft: rgba(245, 242, 238, 0.82);
   /* Warm clay (buy) + cool blue (rent) — matches site landing theme */
   --plan-buy: #c96b4f;
   --plan-buy-deep: #b85a3c;
@@ -25,9 +25,9 @@
   --plan-brand: #c46345;
   /* Rotating epigraph — warm terracotta, present but lighter than the verdict clay. */
   --plan-whisper: #a86f52;
-  --plan-glass: rgba(255, 252, 247, 0.72);
-  /* Flat editorial ivory sampled from the Levels.fyi chart treatment. */
-  --plan-base: #f5f2eb;
+  --plan-glass: rgba(255, 255, 255, 0.78);
+  /* Shared decision-workspace ivory. */
+  --plan-base: #fdfcfb;
   position: relative;
   isolation: isolate;
   min-height: 100vh;
@@ -244,6 +244,28 @@
   gap: 0.75rem 1.25rem;
 }
 
+.home-plan-hero__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.home-plan-assumptions-trigger {
+  padding: 0.36rem 0.65rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 0.55rem;
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--plan-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.home-plan-assumptions-trigger:hover {
+  border-color: var(--plan-line-strong);
+  color: var(--plan-ink);
+}
+
 .home-plan-hero__stage {
   display: grid;
   justify-items: center;
@@ -307,6 +329,109 @@
   .home-plan-whisper--fading {
     opacity: 1;
     transform: none;
+  }
+}
+
+/* Plan inputs live on demand so the shared workspace sidebar remains primary. */
+.home-plan-assumptions-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 220;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(28, 25, 22, 0.28);
+  backdrop-filter: blur(4px);
+}
+
+.home-plan-assumptions-drawer {
+  width: min(22rem, 92vw);
+  height: 100%;
+  padding: 1rem;
+  overflow-y: auto;
+  border-left: 1px solid var(--plan-line);
+  background: #f8f6f3;
+}
+
+.home-plan-assumptions-drawer > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.25rem 0.25rem 0.9rem;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-assumptions-drawer > header span {
+  color: var(--plan-faint);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.home-plan-assumptions-drawer > header h2 {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.home-plan-assumptions-drawer > header button {
+  display: grid;
+  width: 2rem;
+  height: 2rem;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--plan-line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--plan-muted);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.home-plan-assumptions-drawer .home-plan-assumption-rail {
+  position: static;
+  width: 100%;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  padding: 1rem 0.25rem;
+  overflow: visible;
+}
+
+.home-plan-assumptions-drawer .home-plan-assumption-rail__dials {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.home-plan-assumptions-drawer .home-plan-dial {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--plan-line);
+}
+
+.home-plan-assumptions-drawer .home-plan-assumption-rail__reset {
+  align-self: flex-start;
+  margin-top: 0.65rem;
+}
+
+@media (max-width: 640px) {
+  .home-plan-hero__actions {
+    justify-content: space-between;
+  }
+
+  .home-plan-assumptions-backdrop {
+    align-items: flex-end;
+  }
+
+  .home-plan-assumptions-drawer {
+    width: 100%;
+    height: min(82vh, 42rem);
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+    border-radius: 1rem 1rem 0 0;
   }
 }
 
@@ -1641,15 +1766,8 @@
 
 .home-plan-loading {
   min-height: 100vh;
-  padding: 0 4vw 4rem;
-  background: #f7f0e6;
-}
-
-.home-plan-loading-header {
-  height: 60px;
-  margin: 0 -4vw 2.5rem;
-  background: rgba(255, 251, 245, 0.7);
-  border-bottom: 1px solid var(--plan-line);
+  padding: 2.5rem 4vw 4rem;
+  background: #fdfcfb;
 }
 
 .home-plan-loading-pane {
@@ -1662,7 +1780,7 @@
 .home-plan-loading-pane > div {
   height: 72px;
   border-radius: 14px;
-  background: linear-gradient(90deg, #ebe2d6 25%, #f5efe6 50%, #ebe2d6 75%);
+  background: linear-gradient(90deg, #efedea 25%, #f7f5f2 50%, #efedea 75%);
   background-size: 200% 100%;
   animation: home-plan-shimmer 1.4s infinite linear;
 }

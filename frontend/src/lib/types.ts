@@ -38,6 +38,12 @@ export type PropertyCard = {
   google_rating?: number;
   google_review_count?: number;
   google_reviews_url?: string;
+  /** RERA-backed project land extent; compare UI hides this dimension when absent. */
+  society_land_acres?: number;
+  /** Source-backed open or green-space share; compare UI hides this dimension when absent. */
+  open_space_pct?: number;
+  /** Delivery-record category supplied by a future DAG-backed buyer-surface view. */
+  builder_category?: "A" | "B" | "C";
   seller_id?: string;
   seller_completeness_pct?: number;
   documents_provided?: string[];

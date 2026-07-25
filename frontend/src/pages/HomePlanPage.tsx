@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link, useParams } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
@@ -28,15 +28,9 @@ import {
 import "../features/home-plan/home-plan.css";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 
-function BackIcon() {
-  const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
-  return <svg {...common}><path d="m15 18-6-6 6-6" /></svg>;
-}
-
 function LoadingPlan() {
   return (
     <div className="home-plan-loading" aria-label={BUY_VS_RENT.loading}>
-      <div className="home-plan-loading-header" />
       <div className="home-plan-loading-pane">
         <div />
         <div />
@@ -59,6 +53,7 @@ export function HomePlanPage() {
   const [loanYear, setLoanYear] = useState(5);
   const [changeNote, setChangeNote] = useState<string | null>(null);
   const [milestoneHint, setMilestoneHint] = useState<PlanMilestone | null>(null);
+  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
   const prevProjectionRef = useRef<PlanProjection | null>(null);
   const changeNoteTimer = useRef<number | null>(null);
 
@@ -83,6 +78,20 @@ export function HomePlanPage() {
   useEffect(() => () => {
     if (changeNoteTimer.current !== null) window.clearTimeout(changeNoteTimer.current);
   }, []);
+
+  useEffect(() => {
+    if (!assumptionsOpen) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setAssumptionsOpen(false);
+    };
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [assumptionsOpen]);
 
   const projection = useMemo(() => inputs ? calculateProjection(inputs) : null, [inputs]);
   const loanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, extraEmisPerYear) : null, [inputs, extraEmisPerYear]);
@@ -164,20 +173,7 @@ export function HomePlanPage() {
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
       </Helmet>
 
-      <header className="home-plan-header">
-        <Link to="/" className="home-plan-brand" aria-label="OpenEstates home">OpenEstates</Link>
-        <Link to={`/property/${id}`} className="home-plan-back-link"><BackIcon /> Property</Link>
-      </header>
-
       <div className="home-plan-body">
-        {view === "netWorth" && (
-          <PlanAssumptionRail
-            inputs={inputs}
-            onInputChange={updateInput}
-            onReset={resetPlan}
-          />
-        )}
-
         <div className="home-plan-main">
           <div className="home-plan-canvas">
             <section className="home-plan-hero" aria-label="Buy vs rent overview">
@@ -188,7 +184,19 @@ export function HomePlanPage() {
                   area={property.area}
                   price={property.price}
                 />
-                <PlanViewTabs view={view} onChange={changeView} compact />
+                <div className="home-plan-hero__actions">
+                  {view === "netWorth" && (
+                    <button
+                      type="button"
+                      className="home-plan-assumptions-trigger"
+                      aria-expanded={assumptionsOpen}
+                      onClick={() => setAssumptionsOpen(true)}
+                    >
+                      Assumptions
+                    </button>
+                  )}
+                  <PlanViewTabs view={view} onChange={changeView} compact />
+                </div>
               </div>
 
               <div className="home-plan-hero__stage">
@@ -243,6 +251,42 @@ export function HomePlanPage() {
           </div>
         </div>
       </div>
+
+      {assumptionsOpen && (
+        <div
+          className="home-plan-assumptions-backdrop"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setAssumptionsOpen(false);
+          }}
+        >
+          <aside
+            className="home-plan-assumptions-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="home-plan-assumptions-title"
+          >
+            <header>
+              <div>
+                <span>Your inputs</span>
+                <h2 id="home-plan-assumptions-title">Plan assumptions</h2>
+              </div>
+              <button
+                type="button"
+                aria-label="Close plan assumptions"
+                onClick={() => setAssumptionsOpen(false)}
+              >
+                ×
+              </button>
+            </header>
+            <PlanAssumptionRail
+              inputs={inputs}
+              onInputChange={updateInput}
+              onReset={resetPlan}
+            />
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
