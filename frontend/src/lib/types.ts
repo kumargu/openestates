@@ -779,6 +779,7 @@ export type ReraInfo = {
   registered: boolean;
   registration_number?: string;
   status?: string;
+  start_date?: string;
   completion_date?: string;
   original_completion_date?: string;
   delay_months?: number;

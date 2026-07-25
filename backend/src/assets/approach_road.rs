@@ -506,10 +506,10 @@ impl SocietyRoadEvidence {
             if let (Some(latitude_value), Some(longitude_value)) =
                 (latitude.numeric, longitude.numeric)
             {
-                let frames = approach_road_frame_headings()
-                    .map(|(label, heading)| ApproachRoadVisualFrameFact {
+                let frames = approach_road_frame_specs()
+                    .map(|(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
                         label: label.to_string(),
-                        distance_from_gate_m: 0,
+                        distance_from_gate_m,
                         pano_id: None,
                         latitude: Some(latitude_value),
                         longitude: Some(longitude_value),
@@ -554,10 +554,10 @@ impl SocietyRoadEvidence {
         source_signal: &FactSignal,
         confidence: f32,
     ) -> DerivedRoadMedia {
-        let frames = approach_road_frame_headings()
-            .map(|(label, heading)| ApproachRoadVisualFrameFact {
+        let frames = approach_road_frame_specs()
+            .map(|(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
                 label: label.to_string(),
-                distance_from_gate_m: 0,
+                distance_from_gate_m,
                 pano_id: None,
                 latitude: None,
                 longitude: None,
@@ -687,12 +687,14 @@ struct ApproachRoadVisualFrameFact {
     image_url: Option<String>,
 }
 
-fn approach_road_frame_headings() -> impl Iterator<Item = (&'static str, f64)> {
+fn approach_road_frame_specs() -> impl Iterator<Item = (&'static str, u32, f64)> {
     [
-        ("Gate approach", 0.0),
-        ("Road axis", 90.0),
-        ("Opposite approach", 180.0),
-        ("Cross approach", 270.0),
+        ("Gate approach", 0, 0.0),
+        ("Road axis", 0, 90.0),
+        ("Opposite approach", 0, 180.0),
+        ("Cross approach", 0, 270.0),
+        ("Approach road ahead", 80, 0.0),
+        ("Next stretch", 160, 0.0),
     ]
     .into_iter()
 }
@@ -1032,9 +1034,11 @@ mod tests {
         let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(payload["provider"], "Google Street View");
         assert_eq!(payload["coverage_quality"], "usable");
-        assert_eq!(payload["frames"].as_array().unwrap().len(), 4);
+        assert_eq!(payload["frames"].as_array().unwrap().len(), 6);
         assert_eq!(payload["frames"][0]["latitude"], 12.9853);
         assert_eq!(payload["frames"][0]["longitude"], 77.7507);
+        assert_eq!(payload["frames"][4]["distance_from_gate_m"], 80);
+        assert_eq!(payload["frames"][5]["distance_from_gate_m"], 160);
     }
 
     #[test]
@@ -1079,12 +1083,13 @@ mod tests {
         };
         let payload: serde_json::Value = serde_json::from_str(&payload).unwrap();
         assert_eq!(payload["provider"], "Google Street View");
-        assert_eq!(payload["frames"].as_array().unwrap().len(), 4);
+        assert_eq!(payload["frames"].as_array().unwrap().len(), 6);
         assert_eq!(
             payload["frames"][0]["location_query"],
             "Candeur Signature Bengaluru"
         );
         assert_eq!(payload["frames"][0]["radius_m"], 250);
+        assert_eq!(payload["frames"][4]["distance_from_gate_m"], 80);
     }
 
     #[test]

@@ -33,6 +33,7 @@ from pipeline.skills.search_reddit import (
     fetch_reddit_threads_with_retry,
     threads_to_skill_result,
 )
+from pipeline.sources.external_listings import magicbricks_source_pages
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
@@ -543,6 +544,26 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["locality"], "Hoodi, Whitefield")
         self.assertEqual(listing["observed_at"], "2026-07-16T09:30:00Z")
         self.assertNotIn("confidence", listing)
+
+    def test_magicbricks_queries_are_seeded_by_rera_configurations(self):
+        pages = magicbricks_source_pages(
+            {
+                "city": "Bengaluru",
+                "available_configurations": ["2BHK", "3BHK", "4BHK"],
+            },
+            "Example Green",
+        )
+
+        urls = [page["source_url"] for page in pages]
+        self.assertIn(
+            "https://www.magicbricks.com/2-bhk-flats-for-sale-in-example-green-bangalore-pppfs",
+            urls,
+        )
+        self.assertIn(
+            "https://www.magicbricks.com/3-bhk-flats-for-rent-in-example-green-bangalore-pppfr",
+            urls,
+        )
+        self.assertFalse(any("4-bhk-flats-for-rent" in url for url in urls))
 
     def test_external_image_collection_extracts_magicbricks_images(self):
         output = collect_asset_sources(

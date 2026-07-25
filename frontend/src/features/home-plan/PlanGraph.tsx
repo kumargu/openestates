@@ -34,7 +34,7 @@ const GRAPH_INSET = { left: 72, right: 28, top: 36, bottom: 44 };
 function graphSeries(projection: PlanProjection): GraphSeries[] {
   return [
     { id: "buy", label: "Buy this home", values: projection.points.map((point) => point.buyNetWorth) },
-    { id: "rent", label: "Rent + mutual funds", values: projection.points.map((point) => point.rentNetWorth) },
+    { id: "rent", label: "Rent + invest", values: projection.points.map((point) => point.rentNetWorth) },
   ];
 }
 
@@ -125,7 +125,7 @@ export function PlanGraph({
   const tooltipX = cursorX > GRAPH_WIDTH - 240 ? cursorX - 220 : cursorX + 18;
   const tooltipY = Math.max(56, Math.min(GRAPH_HEIGHT - 124, y(selectedSeries.values[activeYear] ?? 0) - 50));
   const leadValue = Math.abs(buyValue - rentValue);
-  const leadLabel = buyWins ? "Buy ahead" : "Rent + SIP ahead";
+  const leadLabel = buyWins ? "Higher estimate: buy" : "Higher estimate: rent + invest";
   const graphMilestones = milestones.filter((milestone) => milestone.year <= maxYear);
 
   const updateHoverYear = (event: PointerEvent<SVGSVGElement>) => {

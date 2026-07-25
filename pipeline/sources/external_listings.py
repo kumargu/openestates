@@ -137,6 +137,35 @@ def magicbricks_source_pages(
     project_slug = slug(society_name)
     if not project_slug or not city:
         return []
+    bhk_values = rera_configuration_bhks(input_data)
+    if bhk_values:
+        pages = []
+        for bhk in bhk_values:
+            bhk_slug = format_bhk(bhk).replace(".", "-")
+            pages.append(
+                {
+                    "source_name": "MagicBricks",
+                    "source_url": "https://www.magicbricks.com/{}-bhk-flats-for-sale-in-{}-{}-pppfs".format(
+                        bhk_slug, project_slug, city
+                    ),
+                    "query_kind": "sale",
+                    "bhk": bhk,
+                    "query_basis": "rera_configuration",
+                }
+            )
+            if bhk in (2.0, 3.0):
+                pages.append(
+                    {
+                        "source_name": "MagicBricks",
+                        "source_url": "https://www.magicbricks.com/{}-bhk-flats-for-rent-in-{}-{}-pppfr".format(
+                            bhk_slug, project_slug, city
+                        ),
+                        "query_kind": "rent",
+                        "bhk": bhk,
+                        "query_basis": "rera_configuration",
+                    }
+                )
+        return pages
     return [
         {
             "source_name": "MagicBricks",
@@ -145,6 +174,41 @@ def magicbricks_source_pages(
             ),
         }
     ]
+
+
+def rera_configuration_bhks(input_data: Dict[str, Any]) -> List[float]:
+    values = (
+        input_data.get("rera_configurations")
+        or input_data.get("available_configurations")
+        or input_data.get("configurations")
+        or []
+    )
+    if isinstance(values, str):
+        values = [part.strip() for part in values.split(",")]
+    if not isinstance(values, list):
+        return []
+    bhks = []
+    for value in values:
+        if isinstance(value, dict):
+            raw = value.get("bedroom_count") or value.get("bhk") or value.get("configuration_type")
+        else:
+            raw = value
+        parsed = configuration_bhk(raw)
+        if parsed is not None and parsed not in bhks:
+            bhks.append(parsed)
+    return sorted(bhks)
+
+
+def configuration_bhk(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return number if 0 < number <= 6 else None
+    match = re.search(r"\b([1-6](?:\.5)?)\s*(?:bhk|b h k|bed)?\b", str(value), re.IGNORECASE)
+    if not match:
+        return None
+    return optional_float(match.group(1))
 
 
 def fetch_magicbricks_page_text(source_url: str) -> Optional[str]:

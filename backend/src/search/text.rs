@@ -1168,6 +1168,11 @@ fn numeric_constraint_evidence(
                     return ConstraintEvaluation::Failed;
                 }
             }
+            ConstraintOperator::Max => {
+                if canonical_value - 0.001 > threshold {
+                    return ConstraintEvaluation::Failed;
+                }
+            }
         }
 
         let display_value = canonical_value / query_unit.to_canonical;
@@ -1231,7 +1236,11 @@ fn serving_numeric_constraint_evidence(
             ConstraintOperator::Min if canonical_value + 0.001 < threshold => {
                 return ConstraintEvaluation::Failed;
             }
+            ConstraintOperator::Max if canonical_value - 0.001 > threshold => {
+                return ConstraintEvaluation::Failed;
+            }
             ConstraintOperator::Min => {}
+            ConstraintOperator::Max => {}
         }
         let display_value = canonical_value / query_unit.to_canonical;
         return ConstraintEvaluation::Matched(EvidenceMatch {

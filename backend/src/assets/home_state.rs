@@ -15,6 +15,7 @@ pub const HOME_STATE_SIGNALS_ASSET_ID: &str = "home_state_signals";
 
 #[derive(Debug, Clone, Default)]
 struct HomeStateSourceFacts {
+    start_date: Option<SourceTextFact>,
     completion_date: Option<SourceTextFact>,
     original_completion_date: Option<SourceTextFact>,
     delay_months: Option<SourceNumericFact>,
@@ -47,8 +48,11 @@ pub async fn home_state_signals_input(
     for fact in rows.facts {
         let entry = by_entity.entry(fact.entity_id.clone()).or_default();
         match fact.fact_key.as_str() {
-            "rera_completion_date" => update_text(&mut entry.completion_date, &fact)?,
-            "rera_original_completion_date" => {
+            "rera_start_date" | "project_start_date" => update_text(&mut entry.start_date, &fact)?,
+            "rera_completion_date" | "project_revised_completion_date" => {
+                update_text(&mut entry.completion_date, &fact)?
+            }
+            "rera_original_completion_date" | "project_original_completion_date" => {
                 update_text(&mut entry.original_completion_date, &fact)?
             }
             "rera_delay_months" => update_numeric(&mut entry.delay_months, &fact)?,
@@ -134,6 +138,19 @@ fn append_home_state_signals(
             facts,
             annotations,
         )?;
+        append_fact(
+            entity_id,
+            "project_delivery_state",
+            FactValue::Text(project_delivery_state(state, source.delay_months.as_ref())),
+            0.9,
+            latest_fact.source_url.clone(),
+            latest_fact.learned_at.max(as_of),
+            run_id,
+            "Delivery state: {value}",
+            &["new property", "old society", "upcoming", "under construction", "delivered"],
+            facts,
+            annotations,
+        )?;
 
         if completion <= as_of.date_naive() {
             let years = completed_years(completion, as_of.date_naive());
@@ -158,6 +175,22 @@ fn append_home_state_signals(
                 facts,
                 annotations,
             )?;
+            append_fact(
+                entity_id,
+                "project_age_years",
+                FactValue::Numeric(years as f64),
+                0.85,
+                source
+                    .completion_date
+                    .as_ref()
+                    .and_then(|fact| fact.source_url.clone()),
+                latest_fact.learned_at.max(as_of),
+                run_id,
+                "Project age: {value} years",
+                &["1 year old", "new property", "old society", "property age"],
+                facts,
+                annotations,
+            )?;
             let bucket = age_bucket(years);
             append_fact(
                 entity_id,
@@ -172,6 +205,22 @@ fn append_home_state_signals(
                 run_id,
                 "Home age: {value}",
                 &age_bucket_preferences(bucket),
+                facts,
+                annotations,
+            )?;
+            append_fact(
+                entity_id,
+                "project_age_bucket",
+                FactValue::Text(project_age_bucket(years).to_string()),
+                0.85,
+                source
+                    .completion_date
+                    .as_ref()
+                    .and_then(|fact| fact.source_url.clone()),
+                latest_fact.learned_at.max(as_of),
+                run_id,
+                "Project age: {value}",
+                &age_bucket_preferences(project_age_bucket(years)),
                 facts,
                 annotations,
             )?;
@@ -194,6 +243,19 @@ fn append_home_state_signals(
             facts,
             annotations,
         )?;
+        append_fact(
+            entity_id,
+            "project_delivery_state",
+            FactValue::Text("under_construction".to_string()),
+            0.75,
+            latest_fact.source_url.clone(),
+            latest_fact.learned_at.max(as_of),
+            run_id,
+            "Delivery state: {value}",
+            &["under construction", "upcoming"],
+            facts,
+            annotations,
+        )?;
     }
 
     if let Some(delay) = source.delay_months.as_ref().filter(|fact| fact.value > 0.0) {
@@ -206,6 +268,19 @@ fn append_home_state_signals(
             delay.learned_at.max(as_of),
             run_id,
             "Timeline state: {value}",
+            &["delayed", "avoid delayed", "possession delay"],
+            facts,
+            annotations,
+        )?;
+        append_fact(
+            entity_id,
+            "project_timeline_state",
+            FactValue::Text("delayed".to_string()),
+            0.9,
+            delay.source_url.clone(),
+            delay.learned_at.max(as_of),
+            run_id,
+            "Project timeline: {value}",
             &["delayed", "avoid delayed", "possession delay"],
             facts,
             annotations,
@@ -225,6 +300,19 @@ fn append_home_state_signals(
                 latest_fact.learned_at.max(as_of),
                 run_id,
                 "Timeline state: {value}",
+                &["on time", "not delayed", "avoid delayed"],
+                facts,
+                annotations,
+            )?;
+            append_fact(
+                entity_id,
+                "project_timeline_state",
+                FactValue::Text("on_track".to_string()),
+                0.8,
+                fact.source_url.clone(),
+                latest_fact.learned_at.max(as_of),
+                run_id,
+                "Project timeline: {value}",
                 &["on time", "not delayed", "avoid delayed"],
                 facts,
                 annotations,
@@ -279,6 +367,9 @@ fn update_numeric(
 
 fn latest_source_fact(source: &HomeStateSourceFacts) -> SourceTextFact {
     let mut candidates = Vec::new();
+    if let Some(fact) = &source.start_date {
+        candidates.push(fact.clone());
+    }
     if let Some(fact) = &source.completion_date {
         candidates.push(fact.clone());
     }
@@ -396,6 +487,15 @@ fn age_bucket(years: i32) -> &'static str {
     }
 }
 
+fn project_age_bucket(years: i32) -> &'static str {
+    match years {
+        0..=1 => "new_0_1y",
+        2..=5 => "young_1_5y",
+        6..=10 => "mature_5_10y",
+        _ => "old_10y_plus",
+    }
+}
+
 fn home_state_preferences(state: &str) -> Vec<&'static str> {
     match state {
         "delivered" => vec![
@@ -412,12 +512,32 @@ fn home_state_preferences(state: &str) -> Vec<&'static str> {
 
 fn age_bucket_preferences(bucket: &str) -> Vec<&'static str> {
     match bucket {
-        "newly delivered" => vec!["new property", "newly delivered", "new society"],
-        "1-5 yrs old" => vec!["recently delivered", "newer society", "property age"],
-        "5-10 yrs old" => vec!["established society", "old society", "property age"],
-        "10+ yrs old" => vec!["old society", "mature society", "established society"],
+        "newly delivered" | "new_0_1y" => {
+            vec!["new property", "newly delivered", "new society", "1 year old"]
+        }
+        "1-5 yrs old" | "young_1_5y" => {
+            vec!["recently delivered", "newer society", "property age"]
+        }
+        "5-10 yrs old" | "mature_5_10y" => {
+            vec!["established society", "old society", "property age"]
+        }
+        "10+ yrs old" | "old_10y_plus" => {
+            vec!["old society", "mature society", "established society"]
+        }
         _ => vec!["property age"],
     }
+}
+
+fn project_delivery_state(state: &str, delay: Option<&SourceNumericFact>) -> String {
+    let delayed = delay.is_some_and(|fact| fact.value > 0.0);
+    match (state, delayed) {
+        ("delivered", true) => "delayed_delivered",
+        ("delivered", false) => "delivered",
+        ("under_construction", true) | ("delayed", true) => "delayed_under_construction",
+        ("delayed", false) => "delayed_under_construction",
+        _ => state,
+    }
+    .to_string()
 }
 
 fn status_suggests_under_construction(value: &str) -> bool {
@@ -482,6 +602,15 @@ mod tests {
             .iter()
             .any(|fact| fact.fact_key == "home_age_bucket"
                 && fact.value_json.contains("5-10 yrs old")));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.fact_key == "project_age_years"));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.fact_key == "project_age_bucket"
+                && fact.value_json.contains("mature_5_10y")));
+        assert!(facts.iter().any(|fact| fact.fact_key == "project_delivery_state"
+            && fact.value_json.contains("delivered")));
         assert!(!facts
             .iter()
             .any(|fact| fact.fact_key == "home_delay_months"));
@@ -529,6 +658,11 @@ mod tests {
         assert!(facts
             .iter()
             .any(|fact| fact.fact_key == "home_timeline_state"));
+        assert!(facts.iter().any(|fact| fact.fact_key == "project_delivery_state"
+            && fact.value_json.contains("delayed_under_construction")));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.fact_key == "project_timeline_state"));
         assert!(!facts.iter().any(|fact| fact.fact_key == "home_age_years"));
     }
 }

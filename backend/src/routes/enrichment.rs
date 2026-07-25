@@ -19,6 +19,7 @@ pub struct ReraInfo {
     pub registered: bool,
     pub registration_number: Option<String>,
     pub status: Option<String>,
+    pub start_date: Option<String>,
     pub completion_date: Option<String>,
     pub original_completion_date: Option<String>,
     pub delay_months: Option<i32>,
@@ -141,7 +142,18 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
     let facts = &node.facts;
 
     // Only return ReraInfo if we have RERA data
-    let has_rera = facts.iter().any(|f| f.key == "rera_registered");
+    let has_rera = facts.iter().any(|fact| {
+        matches!(
+            fact.key.as_str(),
+            "rera_registered"
+                | "rera_number"
+                | "rera_registration_number"
+                | "rera_status"
+                | "rera_start_date"
+                | "rera_completion_date"
+                | "rera_original_completion_date"
+        )
+    });
     if !has_rera {
         return None;
     }
@@ -153,26 +165,13 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
     // Get last_verified from the rera_registered fact's learned_at timestamp
     let last_verified = get_fact_timestamp(facts, "rera_registered");
 
-    // Map fact keys: try both Python skill naming conventions
-    // Skills use: rera_number, rera_total_project_cost, rera_land_cost, rera_construction_cost
-    // Also try: rera_registration_number, rera_total_project_cost_inr (alt naming)
+    // Map fact keys while deliberately avoiding RERA-entered cost fields.
+    // Those costs are not reliable enough for buyer-facing price evidence.
     let registration_number = get_text_fact(facts, "rera_number")
         .or_else(|| get_text_fact(facts, "rera_registration_number"));
-    let total_cost_val = get_numeric_fact(facts, "rera_total_project_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_total_project_cost_inr"));
-    let land_cost = get_numeric_fact(facts, "rera_land_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_land_cost_inr"));
-    let construction_cost = get_numeric_fact(facts, "rera_construction_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_construction_cost_inr"));
     let builder_projects = get_numeric_fact(facts, "rera_builder_projects_count")
         .or_else(|| get_numeric_fact(facts, "rera_builder_total_projects"))
         .map(|n| n as i32);
-
-    // Recompute cost_per_unit with the correct total_cost
-    let cost_per_unit = match (total_cost_val, total_units) {
-        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
-        _ => get_numeric_fact(facts, "rera_cost_per_unit"),
-    };
 
     // builder_states might be stored as Text (comma-separated) instead of Tags
     let builder_states = {
@@ -191,6 +190,8 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         registered,
         registration_number,
         status: get_text_fact(facts, "rera_status"),
+        start_date: get_text_fact(facts, "rera_start_date")
+            .or_else(|| get_text_fact(facts, "project_start_date")),
         completion_date: get_text_fact(facts, "rera_completion_date"),
         original_completion_date: get_text_fact(facts, "rera_original_completion_date"),
         delay_months: get_numeric_fact(facts, "rera_delay_months").map(|n| n as i32),
@@ -198,10 +199,10 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         total_land_area_sqm: get_numeric_fact(facts, "rera_total_land_area_sqm"),
         total_land_area_acres: get_numeric_fact(facts, "rera_total_land_area_sqm")
             .map(|sqm| sqm / 4_046.856_422_4),
-        total_project_cost_inr: total_cost_val,
-        land_cost_inr: land_cost,
-        construction_cost_inr: construction_cost,
-        cost_per_unit_inr: cost_per_unit,
+        total_project_cost_inr: None,
+        land_cost_inr: None,
+        construction_cost_inr: None,
+        cost_per_unit_inr: None,
         complaints_count: get_numeric_fact(facts, "rera_complaints_count").map(|n| n as i32),
         complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
         builder_total_projects: builder_projects,

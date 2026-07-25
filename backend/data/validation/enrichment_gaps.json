@@ -1,51 +1,5 @@
 [
   {
-    "entity_id": "society:godrej-united",
-    "intent_area": "Whitefield",
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "quiet apartment near metro whitefield",
-    "query_categories": [
-      "positive:metro access",
-      "positive:social infrastructure",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:06:59.979786283+00:00",
-    "results_returned": 38,
-    "top_candidate_society_ids": [
-      "soc-godrej-united",
-      "soc-sbr-one-residence",
-      "soc-sumadhura-capitol-residences",
-      "soc-vaswani-starlight",
-      "soc-brigade-lakefront-crimson"
-    ]
-  },
-  {
-    "entity_id": "society:sbr-one-residence",
-    "intent_area": "Whitefield",
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "quiet apartment near metro whitefield",
-    "query_categories": [
-      "positive:metro access",
-      "positive:social infrastructure",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:06:59.979786283+00:00",
-    "results_returned": 38,
-    "top_candidate_society_ids": [
-      "soc-godrej-united",
-      "soc-sbr-one-residence",
-      "soc-sumadhura-capitol-residences",
-      "soc-vaswani-starlight",
-      "soc-brigade-lakefront-crimson"
-    ]
-  },
-  {
     "entity_id": "society:sumadhura-capitol-residences",
     "intent_area": "Whitefield",
     "intent_bhk": null,
@@ -10982,6 +10936,44 @@
       "soc-candeur-landmark",
       "soc-candeur-signature",
       "soc-eden-at-brigade-cornerstone-utopia"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-25T18:26:30.656933204+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-25T18:26:30.656933204+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
     ]
   }
 ]

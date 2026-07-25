@@ -49,7 +49,7 @@ pub fn compute_transparency_score(
             if r.complaints_count.is_some() {
                 base += 0.05;
             }
-            if r.total_project_cost_inr.is_some() {
+            if r.total_units.is_some() {
                 base += 0.05;
             }
             base.min(1.0)

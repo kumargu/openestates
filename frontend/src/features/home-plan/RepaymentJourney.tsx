@@ -57,7 +57,7 @@ export function RepaymentJourney({
             : "Add extra payments below to clear the loan sooner and cut total interest."}
         </p>
         <p className="home-plan-payoff__cost">
-          {formatCurrency(journey.annualPrepayment, true)} extra a year · monthly EMI stays {formatCurrency(journey.monthlyEmi, true)}
+          {formatCurrency(journey.annualPrepayment, true)} extra a year · EMI after possession {formatCurrency(journey.monthlyEmi, true)}
         </p>
       </header>
 

@@ -17,6 +17,8 @@ import {
   calculateLoanJourney,
   calculateProjection,
   formatCurrency,
+  maximumDownPaymentLakh,
+  type ConstructionProfile,
   type PlanInputs,
   type PlanProjection,
 } from "../features/home-plan/model.ts";
@@ -27,6 +29,44 @@ import {
 } from "../features/home-plan/planFields.ts";
 import "../features/home-plan/home-plan.css";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
+import {
+  isExplicitlyReadyStatus,
+  parsePlanDate,
+} from "../features/home-plan/financeEngine.ts";
+
+function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfile {
+  const asOfDate = new Date().toISOString().slice(0, 10);
+  const stateText = [
+    data.project_status,
+    data.property.possession_status,
+    data.rera?.status,
+    data.home_state_display,
+  ].filter(Boolean).join(" ").toLowerCase();
+  const explicitlyReady = [
+    data.project_status,
+    data.property.possession_status,
+    data.rera?.status,
+    data.home_state_display,
+  ].filter(Boolean).some((value) => (
+    isExplicitlyReadyStatus(String(value))
+  ));
+  const completionDate = data.rera?.completion_date;
+  const parsedCompletion = parsePlanDate(completionDate);
+  const completionIsFuture = parsedCompletion ? parsedCompletion.getTime() > Date.now() : false;
+  const underConstruction = !explicitlyReady && (
+    completionIsFuture
+    || ["under construction", "under_construction", "ongoing", "new launch"]
+      .some((term) => stateText.includes(term))
+  );
+
+  return {
+    state: underConstruction ? "under_construction" : "ready",
+    asOfDate,
+    startDate: data.rera?.start_date,
+    completionDate,
+    dateSource: completionDate ? "rera" : underConstruction ? "estimated" : "not_applicable",
+  };
+}
 
 function LoadingPlan() {
   return (
@@ -64,7 +104,7 @@ export function HomePlanPage() {
       .then((data) => {
         if (!active) return;
         setPropertyData(data);
-        setInputs(buildBaselinePlanInputs(data.property.price));
+        setInputs(buildBaselinePlanInputs(data.property.price, constructionProfileFor(data)));
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -117,14 +157,14 @@ export function HomePlanPage() {
   if (!propertyData || !inputs || !projection || !loanJourney || !baselineLoanJourney) return null;
 
   const property = propertyData.property;
-  const baseline = buildBaselinePlanInputs(property.price);
+  const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
   const activeYear = previewYear ?? horizon;
   const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
   const monthlyRent = activePoint.annualRent / 12;
-  const monthlyGap = projection.monthlyEmi - monthlyRent;
-  const homeEquity = activePoint.propertyValue - activePoint.loanBalance;
+  const monthlyGap = activePoint.monthlyBuyerHousingCost - monthlyRent;
+  const homeEquity = activePoint.propertyValue - activePoint.loanBalance - activePoint.builderBalance;
   const monthlyGapSummary = monthlyGap >= 0
     ? `Buying costs ${formatCurrency(monthlyGap)} more per month than renting`
     : `Buying costs ${formatCurrency(Math.abs(monthlyGap))} less per month than renting`;
@@ -136,7 +176,14 @@ export function HomePlanPage() {
   const milestones = buildMilestones(inputs.purchaseYear, projection.breakEvenYear, loanFreeYear);
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
-    setInputs((current) => current ? { ...current, [key]: value } : current);
+    setInputs((current) => {
+      if (!current) return current;
+      const next = { ...current, [key]: value };
+      if (key === "startingSavingsLakh") {
+        next.downPaymentLakh = Math.min(next.downPaymentLakh, maximumDownPaymentLakh(next));
+      }
+      return next;
+    });
   };
 
   const resetPlan = () => {
@@ -229,6 +276,11 @@ export function HomePlanPage() {
                   buyNetWorth={activePoint.buyNetWorth}
                   rentNetWorth={activePoint.rentNetWorth}
                   selectedScenario={selectedScenario}
+                  paymentSchedule={projection.paymentSchedule}
+                  possessionDate={projection.possessionDate}
+                  constructionDateSource={projection.constructionDateSource}
+                  isUnderConstruction={projection.possessionMonth > inputs.purchaseYear * 12}
+                  isBeforePossession={activeYear * 12 < projection.possessionMonth}
                   onSelectScenario={setSelectedScenario}
                 />
 

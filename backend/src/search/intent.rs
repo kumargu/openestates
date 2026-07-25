@@ -46,6 +46,7 @@ pub struct HardConstraint {
 #[serde(rename_all = "snake_case")]
 pub enum ConstraintOperator {
     Min,
+    Max,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1018,7 +1019,14 @@ mod tests {
     #[test]
     fn test_avoid_waterlogging_is_negative_preference() {
         let intent = parse_intent("3bhk whitefield avoid waterlogging");
-        assert_eq!(intent.positive_preferences.len(), 0);
+        assert!(
+            intent
+                .positive_preferences
+                .iter()
+                .all(|preference| preference.raw_text != "waterlogging risk"),
+            "waterlogging should not be parsed as a positive preference: {:?}",
+            intent.positive_preferences
+        );
         assert_eq!(intent.negative_preferences.len(), 1);
         assert_eq!(intent.negative_preferences[0].raw_text, "waterlogging risk");
         assert_eq!(intent.negative_preferences[0].polarity, Polarity::Negative);

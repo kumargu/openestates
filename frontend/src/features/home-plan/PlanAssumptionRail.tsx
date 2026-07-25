@@ -1,4 +1,9 @@
-import type { PlanInputs } from "./model.ts";
+import {
+  maximumDownPaymentLakh,
+  minimumDownPaymentLakh,
+  minimumRequiredSavingsLakh,
+  type PlanInputs,
+} from "./model.ts";
 
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
@@ -52,14 +57,24 @@ function ValueDial({
 }
 
 export function PlanAssumptionRail({ inputs, onInputChange, onReset }: PlanAssumptionRailProps) {
-  const maxDown = Math.max(20, Math.floor(inputs.propertyPriceLakh * 0.8));
+  const maxDown = maximumDownPaymentLakh(inputs);
+  const minDown = minimumDownPaymentLakh(inputs.propertyPriceLakh);
+  const minSavings = Math.ceil(minimumRequiredSavingsLakh(inputs) / 5) * 5;
 
   const dials: DialSpec[] = [
     {
+      key: "startingSavingsLakh",
+      label: "Savings",
+      min: minSavings,
+      max: Math.max(100, Math.ceil(inputs.propertyPriceLakh)),
+      step: 5,
+      format: (v) => `₹${v.toFixed(0)}L`,
+    },
+    {
       key: "downPaymentLakh",
       label: "Down",
-      min: 10,
-      max: maxDown,
+      min: minDown,
+      max: Math.max(minDown, maxDown),
       step: 5,
       format: (v) => `₹${v.toFixed(0)}L`,
     },

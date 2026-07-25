@@ -6,44 +6,42 @@ const FADE_MS = 450;
 
 function shuffled<T>(items: readonly T[]): T[] {
   const copy = [...items];
-  for (let i = copy.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [copy[i], copy[j]] = [copy[j], copy[i]];
+  for (let index = copy.length - 1; index > 0; index -= 1) {
+    const nextIndex = Math.floor(Math.random() * (index + 1));
+    [copy[index], copy[nextIndex]] = [copy[nextIndex], copy[index]];
   }
   return copy;
 }
 
 export function PlanWhisper() {
-  // Shuffle once per mount so grouped source order (rent / buy / invest) reads
-  // as a mixed, unbiased rotation instead of themed blocks.
   const whispers = useMemo(() => shuffled(PLAN_WHISPERS), []);
   const [index, setIndex] = useState(0);
   const [fading, setFading] = useState(false);
-  const [motionOk, setMotionOk] = useState(true);
+  const [motionAllowed, setMotionAllowed] = useState(true);
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const update = () => setMotionOk(!media.matches);
+    const update = () => setMotionAllowed(!media.matches);
     update();
     media.addEventListener("change", update);
     return () => media.removeEventListener("change", update);
   }, []);
 
   useEffect(() => {
-    if (!motionOk || whispers.length <= 1) return undefined;
-
+    if (!motionAllowed || whispers.length <= 1) return undefined;
+    let fadeTimeout: number | undefined;
     const interval = window.setInterval(() => {
       setFading(true);
-      window.setTimeout(() => {
+      fadeTimeout = window.setTimeout(() => {
         setIndex((current) => (current + 1) % whispers.length);
         setFading(false);
       }, FADE_MS);
     }, ROTATE_MS);
-
-    return () => window.clearInterval(interval);
-  }, [motionOk, whispers.length]);
-
-  if (whispers.length === 0) return null;
+    return () => {
+      window.clearInterval(interval);
+      if (fadeTimeout !== undefined) window.clearTimeout(fadeTimeout);
+    };
+  }, [motionAllowed, whispers.length]);
 
   return (
     <div className="home-plan-whisper-orbit">

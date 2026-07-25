@@ -1,4 +1,8 @@
-import { formatCurrency } from "./model.ts";
+import {
+  formatCurrency,
+  type BuilderPayment,
+  type ConstructionProfile,
+} from "./model.ts";
 import type { PlanScenarioId } from "./PlanGraph.tsx";
 
 type VerdictBlockProps = {
@@ -15,6 +19,11 @@ type VerdictBlockProps = {
   buyNetWorth: number;
   rentNetWorth: number;
   selectedScenario: PlanScenarioId;
+  paymentSchedule: BuilderPayment[];
+  possessionDate: string | null;
+  constructionDateSource: ConstructionProfile["dateSource"];
+  isUnderConstruction: boolean;
+  isBeforePossession: boolean;
   onSelectScenario: (scenario: PlanScenarioId) => void;
 };
 
@@ -32,12 +41,25 @@ export function VerdictBlock({
   buyNetWorth,
   rentNetWorth,
   selectedScenario,
+  paymentSchedule,
+  possessionDate,
+  constructionDateSource,
+  isUnderConstruction,
+  isBeforePossession,
   onSelectScenario,
 }: VerdictBlockProps) {
-  const leader = buyWins ? "Buying" : "Renting and investing";
-  const detailLine = breakEvenYear
-    ? `Buying catches up in year ${breakEvenYear}. You would hold ${formatCurrency(homeEquity, true)} in home equity by year ${activeYear}.`
-    : `Renting and investing stays ahead for the full 20 years. Home equity would be ${formatCurrency(homeEquity, true)} by year ${activeYear}.`;
+  const betterPath = buyWins ? "buying this home" : "renting and investing";
+  const detailLine = buyWins
+    ? `Estimated net worth: buy ${formatCurrency(buyNetWorth, true)} · rent and invest ${formatCurrency(rentNetWorth, true)}.`
+    : breakEvenYear
+      ? `Buying catches up around year ${breakEvenYear}. Home equity at year ${activeYear}: ${formatCurrency(homeEquity, true)}.`
+      : `Buying does not catch up within this plan. Home equity at year ${activeYear}: ${formatCurrency(homeEquity, true)}.`;
+  const possessionLabel = possessionDate
+    ? new Intl.DateTimeFormat("en-IN", { month: "short", year: "numeric", timeZone: "UTC" })
+      .format(new Date(`${possessionDate}T00:00:00Z`))
+    : null;
+  const dueNow = paymentSchedule[0]?.amount ?? 0;
+  const laterPayments = Math.max(0, paymentSchedule.length - 1);
 
   return (
     <header className="home-plan-verdict">
@@ -45,11 +67,19 @@ export function VerdictBlock({
         {isPreview ? `Year ${activeYear} (preview)` : `Year ${activeYear}`}
       </p>
       <h1 className="home-plan-verdict__headline">
-        <span className="home-plan-verdict__leader">{leader}</span>
-        {" "}leads by{" "}
-        <span className="home-plan-verdict__amount">{formatCurrency(advantage, true)}</span>
+        At year {activeYear}, {betterPath} leaves you{" "}
+        <span className="home-plan-verdict__amount">{formatCurrency(advantage, true)} better off</span>.
       </h1>
       <p className="home-plan-verdict__detail">{detailLine}</p>
+      {isUnderConstruction && (
+        <p className="home-plan-verdict__construction">
+          Under construction · {formatCurrency(dueNow, true)} due now
+          {laterPayments > 0 ? ` · ${laterPayments} more payments` : ""}
+          {possessionLabel ? ` · possession ${possessionLabel}` : ""}
+          . Payments are split about every 6 months
+          {constructionDateSource === "rera" ? " using RERA dates." : " using an estimated schedule."}
+        </p>
+      )}
       <p className="home-plan-verdict__cashflow">{monthlyGapSummary}.</p>
       {changeNote && <p className="home-plan-verdict__change">{changeNote}</p>}
       <div className="home-plan-verdict__breakdown" role="group" aria-label={`Year ${activeYear} paths`}>
@@ -59,9 +89,12 @@ export function VerdictBlock({
           onClick={() => onSelectScenario("buy")}
           aria-pressed={selectedScenario === "buy"}
         >
-          <span className="home-plan-verdict__tile-label"><i />Buy path</span>
+          <span className="home-plan-verdict__tile-label"><i />Buy</span>
           <strong>{formatCurrency(buyNetWorth, true)}</strong>
-          <small>EMI {formatCurrency(monthlyEmi)}/mo</small>
+          <small>
+            {isBeforePossession ? "EMI after possession " : "EMI "}
+            {formatCurrency(monthlyEmi)}/mo
+          </small>
         </button>
         <button
           type="button"
@@ -69,7 +102,7 @@ export function VerdictBlock({
           onClick={() => onSelectScenario("rent")}
           aria-pressed={selectedScenario === "rent"}
         >
-          <span className="home-plan-verdict__tile-label"><i />Rent + SIP</span>
+          <span className="home-plan-verdict__tile-label"><i />Rent + invest</span>
           <strong>{formatCurrency(rentNetWorth, true)}</strong>
           <small>Rent {formatCurrency(monthlyRent)}/mo</small>
         </button>

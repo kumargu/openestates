@@ -2796,7 +2796,14 @@ fn rera_info_for(
     };
     let projection = SocietyFactProjection::from_index(serving_facts, society_id);
     let has_serving_rera = projection.latest_bool("rera_registered").is_some()
-        || projection.latest_text("rera_number").is_some();
+        || projection.latest_text("rera_number").is_some()
+        || projection.latest_text("rera_status").is_some()
+        || projection.latest_text("rera_start_date").is_some()
+        || projection.latest_text("project_start_date").is_some()
+        || projection.latest_text("rera_completion_date").is_some()
+        || projection
+            .latest_text("rera_original_completion_date")
+            .is_some();
     if !has_serving_rera {
         return fallback;
     }
@@ -2810,6 +2817,12 @@ fn rera_info_for(
     }
     if let Some(fact) = projection.latest_text("rera_status") {
         info.status = Some(fact.value);
+    }
+    if let Some(fact) = projection
+        .latest_text("rera_start_date")
+        .or_else(|| projection.latest_text("project_start_date"))
+    {
+        info.start_date = Some(fact.value);
     }
     if let Some(fact) = projection.latest_text("rera_completion_date") {
         info.completion_date = Some(fact.value);
@@ -2827,22 +2840,10 @@ fn rera_info_for(
         info.total_land_area_sqm = Some(fact.value);
         info.total_land_area_acres = Some(fact.value / 4_046.856_422_4);
     }
-    if let Some(fact) = projection.latest_numeric("rera_total_project_cost") {
-        info.total_project_cost_inr = Some(fact.value);
-    }
-    if let Some(fact) = projection.latest_numeric("rera_land_cost") {
-        info.land_cost_inr = Some(fact.value);
-    }
-    if let Some(fact) = projection.latest_numeric("rera_construction_cost") {
-        info.construction_cost_inr = Some(fact.value);
-    }
-    info.cost_per_unit_inr = match (info.total_project_cost_inr, info.total_units) {
-        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
-        _ => projection
-            .latest_numeric("rera_cost_per_unit")
-            .map(|fact| fact.value)
-            .or(info.cost_per_unit_inr),
-    };
+    info.total_project_cost_inr = None;
+    info.land_cost_inr = None;
+    info.construction_cost_inr = None;
+    info.cost_per_unit_inr = None;
     if let Some(fact) = projection.latest_numeric("rera_complaints_count") {
         info.complaints_count = projected_i32(fact.value);
     }
