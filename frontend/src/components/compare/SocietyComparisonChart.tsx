@@ -463,7 +463,6 @@ export function SocietyComparisonChart({
                 aria-pressed={activeComparableIds.includes(definition.id)}
                 onClick={() => toggleComparable(definition.id)}
               >
-                <SoftComparableIcon id={definition.id} size={15} />
                 {definition.label}
               </button>
             ))}
