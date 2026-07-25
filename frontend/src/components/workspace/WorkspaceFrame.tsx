@@ -41,7 +41,6 @@ function activeWorkspaceView(pathname: string): WorkspaceView {
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const isLanding = location.pathname === "/";
   const query = useMemo(() => new URLSearchParams(location.search), [location.search]);
   const queryIds = useMemo(() => parseShortlistIds(query.get("ids")), [query]);
   const queryFocus = query.get("focus");
@@ -53,7 +52,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   );
 
   useEffect(() => {
-    if (isLanding) return undefined;
     const controller = new AbortController();
     getProperties({ signal: controller.signal })
       .then(setProperties)
@@ -62,7 +60,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
         setProperties([]);
       });
     return () => controller.abort();
-  }, [isLanding]);
+  }, []);
 
   useEffect(() => {
     function refresh() {
@@ -77,7 +75,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   }, []);
 
   const homeIds = useMemo(() => {
-    if (properties.length === 0 || isLanding) return [];
+    if (properties.length === 0) return [];
     const availableIds = new Set(properties.map((property) => property.id));
     const hasExplicitSelection = queryIds.length > 0;
     const stored = shortlistIds.filter((id) => availableIds.has(id));
@@ -112,7 +110,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     }
 
     return next;
-  }, [isLanding, properties, propertyId, queryIds, shortlistIds]);
+  }, [properties, propertyId, queryIds, shortlistIds]);
 
   useEffect(() => {
     if (homeIds.length > 0 && queryIds.length === 0) {
@@ -140,8 +138,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   useEffect(() => {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
   }, [focusedId]);
-
-  if (isLanding) return children;
 
   const idsValue = homes.map((home) => home.id).join(",");
   const compareHref = idsValue

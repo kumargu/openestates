@@ -3,16 +3,12 @@ import { Helmet } from "react-helmet-async";
 import { Link, useSearchParams } from "react-router-dom";
 import { SocietyComparisonChart } from "../components/compare/SocietyComparisonChart.tsx";
 import { getProperties } from "../lib/api.ts";
-import {
-  defaultComparedHomes,
-  normalizeComparedSocieties,
-} from "../lib/compare.ts";
+import { defaultComparedHomes } from "../lib/compare.ts";
 import type { PropertyCard } from "../lib/types.ts";
 import "../styles/workspace.css";
 
 const MAX_COMPARE_HOMES = 10;
 const DEFAULT_COMPARE_HOMES = 3;
-const MIN_COMPARE_SOCIETIES = 2;
 
 type LoadStatus = "loading" | "ready" | "error" | "empty";
 
@@ -44,16 +40,16 @@ function CompareLoading() {
 function CompareUnavailable({ variant }: { variant: "error" | "empty" }) {
   return (
     <div className="compare-unavailable">
-      <span>{variant === "error" ? "Comparison unavailable" : "Add another home"}</span>
+      <span>{variant === "error" ? "Comparison unavailable" : "Choose a home"}</span>
       <h1>
         {variant === "error"
           ? "We couldn't load the decision workspace."
-          : "Compare needs at least two homes."}
+          : "No homes to compare yet."}
       </h1>
       <p>
         {variant === "error"
           ? "Property data could not be loaded. Try again or return to discovery."
-          : "Choose two or more homes before opening the shared decision view."}
+          : "Choose a home to open its decision view."}
       </p>
       <Link to="/">Browse homes</Link>
     </div>
@@ -87,16 +83,11 @@ export function ComparePage() {
         const requestedHomes = requestedIds
           .map((id) => byId.get(id))
           .filter((property): property is PropertyCard => Boolean(property));
-        const selectedHomes = requestedHomes.length >= 2
-          ? normalizeComparedSocieties(
-            requestedHomes,
-            properties,
-            MIN_COMPARE_SOCIETIES,
-            MAX_COMPARE_HOMES,
-          )
+        const selectedHomes = requestedIds.length > 0
+          ? requestedHomes
           : defaultComparedHomes(properties, DEFAULT_COMPARE_HOMES);
 
-        if (selectedHomes.length < 2) {
+        if (selectedHomes.length === 0) {
           setLoadState({
             requestKey,
             status: "empty",

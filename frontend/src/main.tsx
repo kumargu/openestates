@@ -7,7 +7,6 @@ import {
   BrowserRouter,
   Routes,
   Route,
-  Link,
   Navigate,
   useLocation,
   useSearchParams,
@@ -40,41 +39,6 @@ function ResultsRedirect() {
   return <Navigate to={query ? `/?q=${encodeURIComponent(query)}` : "/"} replace />;
 }
 
-/** Brand-only landing chrome — search and market map live in the page itself. */
-export function Nav() {
-  const location = useLocation();
-  if (location.pathname !== "/") return null;
-
-  return (
-    <nav
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        display: "flex",
-        padding: "0.75rem clamp(1.5rem, 4vw, 4rem)",
-        alignItems: "center",
-        zIndex: 100,
-        backgroundColor: "transparent",
-      }}
-    >
-      <Link
-        to="/"
-        style={{
-          fontWeight: 600,
-          textDecoration: "none",
-          color: "#1a1a1a",
-          fontSize: "1.05rem",
-          letterSpacing: "-0.02em",
-        }}
-      >
-        OpenEstates
-      </Link>
-    </nav>
-  );
-}
-
 export function App() {
   return (
     <HelmetProvider>
@@ -89,7 +53,6 @@ export function App() {
       <BrowserRouter>
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <FocusOnNavigate />
-        <Nav />
         <WorkspaceFrame>
           <main id="main-content" tabIndex={-1}>
             <ErrorBoundary>
