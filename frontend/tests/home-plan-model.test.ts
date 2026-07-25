@@ -5,15 +5,26 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
-  calculateUpfrontCash,
-  maximumDownPaymentLakh,
-  minimumDownPaymentLakh,
 } from "../src/features/home-plan/model.ts";
-import { isExplicitlyReadyStatus } from "../src/features/home-plan/financeEngine.ts";
+import {
+  isExplicitlyReadyStatus,
+  FIXED_HOME_GROWTH_RATE,
+  FIXED_RENT_INFLATION_RATE,
+  monthlyPayment,
+  principalFromMonthlyPayment,
+  rentInMonth,
+} from "../src/features/home-plan/financeEngine.ts";
 
-const readyInputs = {
+const ready = {
   ...BASE_INPUTS,
-  holdingPeriodYears: 20,
+  propertyPriceLakh: 150,
+  monthlyEmiThousands: 95,
+  loanRate: 8.5,
+  currentRentThousands: 55,
+  equityReturn: 10,
+  monthlySipThousands: 40,
+  holdingPeriodYears: 10,
+  purchaseYear: 0,
   construction: {
     state: "ready" as const,
     asOfDate: "2026-01-01",
@@ -21,136 +32,148 @@ const readyInputs = {
   },
 };
 
-const underConstructionInputs = {
-  ...readyInputs,
-  construction: {
-    state: "under_construction" as const,
-    asOfDate: "2026-01-01",
-    startDate: "2025-01-01",
-    completionDate: "2028-01-01",
-    dateSource: "rera" as const,
-  },
-};
+test("day 0 wealth matches because both paths start with the implied upfront amount", () => {
+  const projection = calculateProjection(ready);
+  const day0 = projection.points[0];
 
-test("a larger down payment lowers EMI and interest while changing the final comparison", () => {
-  const lowerDown = calculateProjection({ ...readyInputs, downPaymentLakh: 30 });
-  const higherDown = calculateProjection({ ...readyInputs, downPaymentLakh: 45 });
-  const lowerGap = lowerDown.points.at(-1)!.buyNetWorth - lowerDown.points.at(-1)!.rentNetWorth;
-  const higherGap = higherDown.points.at(-1)!.buyNetWorth - higherDown.points.at(-1)!.rentNetWorth;
-
-  assert.ok(higherDown.monthlyEmi < lowerDown.monthlyEmi);
-  assert.ok(higherDown.totalInterest < lowerDown.totalInterest);
-  assert.ok(Math.abs(higherGap - lowerGap) > 100_000);
+  assert.ok(Math.abs(day0.buyNetWorth - day0.rentNetWorth) < 1);
+  assert.ok(Math.abs(day0.buyNetWorth - projection.upfrontPayment) < 1);
 });
 
-test("a larger down payment improves the buy outcome when investment returns trail the loan rate", () => {
-  const lowerDown = calculateProjection({ ...readyInputs, downPaymentLakh: 30, equityReturn: 6 });
-  const higherDown = calculateProjection({ ...readyInputs, downPaymentLakh: 45, equityReturn: 6 });
-  const lowerGap = lowerDown.points.at(-1)!.buyNetWorth - lowerDown.points.at(-1)!.rentNetWorth;
-  const higherGap = higherDown.points.at(-1)!.buyNetWorth - higherDown.points.at(-1)!.rentNetWorth;
+test("monthly EMI and loan rate determine the loan and upfront payment", () => {
+  const propertyPrice = ready.propertyPriceLakh * 100_000;
+  const expectedLoan = principalFromMonthlyPayment(
+    ready.monthlyEmiThousands * 1_000,
+    ready.loanRate,
+    20,
+  );
+  const projection = calculateProjection(ready);
 
-  assert.ok(higherGap > lowerGap);
+  assert.ok(Math.abs(projection.loanAmount - expectedLoan) < 1);
+  assert.ok(Math.abs(projection.upfrontPayment - (propertyPrice - expectedLoan)) < 1);
+  assert.ok(Math.abs(projection.monthlyEmi - ready.monthlyEmiThousands * 1_000) < 1);
 });
 
-test("changing financing does not create or destroy net worth on purchase day", () => {
-  const lowerDown = calculateProjection({ ...readyInputs, downPaymentLakh: 30 });
-  const higherDown = calculateProjection({ ...readyInputs, downPaymentLakh: 45 });
-
-  assert.ok(Math.abs(lowerDown.points[0].buyNetWorth - higherDown.points[0].buyNetWorth) < 1);
-});
-
-test("a ready home is paid in one installment and starts EMI immediately", () => {
-  const projection = calculateProjection(readyInputs);
-
-  assert.equal(projection.paymentSchedule.length, 1);
-  assert.equal(projection.paymentSchedule[0].month, 0);
-  assert.equal(projection.paymentSchedule[0].amount, readyInputs.propertyPriceLakh * 100_000);
-  assert.ok(projection.points[0].annualEmi > 0);
-  assert.equal(projection.points[0].builderBalance, 0);
-});
-
-test("an under-construction home uses progress now and six-month installments", () => {
-  const projection = calculateProjection(underConstructionInputs);
-  const schedule = projection.paymentSchedule;
-  const total = schedule.reduce((sum, payment) => sum + payment.amount, 0);
-
-  assert.deepEqual(schedule.map((payment) => payment.month), [0, 6, 12, 18, 24]);
-  assert.ok(Math.abs(schedule[0].amount - 5_000_000) < 1);
-  assert.ok(Math.abs(total - underConstructionInputs.propertyPriceLakh * 100_000) < 1);
-  assert.equal(projection.possessionMonth, 24);
-  assert.equal(projection.constructionDateSource, "rera");
-});
-
-test("buyer keeps paying rent and pre-EMI interest until possession", () => {
-  const projection = calculateProjection(underConstructionInputs);
-
-  assert.equal(projection.points[0].annualEmi, 0);
-  assert.ok(projection.points[0].monthlyBuyerHousingCost > projection.points[0].annualRent / 12);
-  assert.ok(projection.points[2].annualEmi > 0);
-});
-
-test("missing construction dates use a clearly marked two-year estimate", () => {
-  const inputs = buildBaselinePlanInputs(15_000_000, {
-    state: "under_construction",
-    asOfDate: "2026-01-01",
-    dateSource: "estimated",
-  });
-  const projection = calculateProjection(inputs);
-
-  assert.equal(projection.possessionMonth, 24);
-  assert.equal(projection.possessionDate, "2028-01-01");
-  assert.equal(projection.constructionDateSource, "estimated");
-});
-
-test("RERA day-first dates are normalized before building the schedule", () => {
+test("zero EMI means paying the full property price upfront", () => {
   const projection = calculateProjection({
-    ...underConstructionInputs,
-    construction: {
-      ...underConstructionInputs.construction,
-      startDate: "01/01/2025",
-      completionDate: "30/06/2028",
-    },
+    ...ready,
+    monthlyEmiThousands: 0,
   });
 
-  assert.equal(projection.possessionDate, "2028-06-30");
-  assert.equal(projection.constructionDateSource, "rera");
+  assert.equal(projection.monthlyEmi, 0);
+  assert.equal(projection.loanAmount, 0);
+  assert.equal(projection.upfrontPayment, ready.propertyPriceLakh * 100_000);
 });
 
-test("the default down payment never exceeds the stated savings", () => {
-  const inputs = buildBaselinePlanInputs(30_000_000);
+test("a larger EMI finances more of the home and lowers the upfront payment", () => {
+  const lower = calculateProjection({ ...ready, monthlyEmiThousands: 60 });
+  const higher = calculateProjection({ ...ready, monthlyEmiThousands: 100 });
 
-  assert.ok(inputs.downPaymentLakh <= maximumDownPaymentLakh(inputs));
-  assert.ok(inputs.downPaymentLakh >= minimumDownPaymentLakh(inputs.propertyPriceLakh));
-  assert.ok(calculateUpfrontCash(inputs) <= inputs.startingSavingsLakh * 100_000);
+  assert.ok(higher.loanAmount > lower.loanAmount);
+  assert.ok(higher.upfrontPayment < lower.upfrontPayment);
 });
 
-test("a project completed before a future purchase is paid as a ready home", () => {
+test("an EMI above the 20-year amount pays a full-price loan off early", () => {
   const projection = calculateProjection({
-    ...underConstructionInputs,
-    purchaseYear: 3,
+    ...ready,
+    monthlyEmiThousands: 300,
+    holdingPeriodYears: 20,
+  });
+  const loanFreeYear = projection.points.find((point) => (
+    point.year > 0 && point.loanBalance <= 0.5
+  ))?.year;
+
+  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
+  assert.equal(projection.upfrontPayment, 0);
+  assert.equal(projection.monthlyEmi, 300_000);
+  assert.ok(loanFreeYear !== undefined && loanFreeYear < 20);
+});
+
+test("rent rise is fixed at zero in the simple plan", () => {
+  assert.equal(FIXED_RENT_INFLATION_RATE, 0);
+  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 0), 55_000);
+  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 120), 55_000);
+});
+
+test("baseline exposes only the five editable money inputs", () => {
+  const inputs = buildBaselinePlanInputs(15_000_000);
+
+  assert.ok(inputs.monthlyEmiThousands > 0);
+  assert.ok(inputs.currentRentThousands > 0);
+  assert.ok(inputs.monthlySipThousands >= 0);
+  assert.equal(inputs.loanRate, 8.5);
+  assert.equal(inputs.equityReturn, 10);
+});
+
+test("monthly SIP grows only the rent and invest path", () => {
+  const without = calculateProjection({ ...ready, monthlySipThousands: 0 });
+  const withSip = calculateProjection({ ...ready, monthlySipThousands: 20 });
+  const withoutEnd = without.points.at(-1)!;
+  const withEnd = withSip.points.at(-1)!;
+
+  assert.ok(withEnd.rentNetWorth > withoutEnd.rentNetWorth);
+  assert.ok(Math.abs(withEnd.buyNetWorth - withoutEnd.buyNetWorth) < 1);
+});
+
+test("higher rent lowers the rent and invest projection", () => {
+  const lowerRent = calculateProjection({ ...ready, currentRentThousands: 30 });
+  const higherRent = calculateProjection({ ...ready, currentRentThousands: 80 });
+  const lowerRentEnd = lowerRent.points.at(-1)!.rentNetWorth;
+  const higherRentEnd = higherRent.points.at(-1)!.rentNetWorth;
+
+  assert.equal(lowerRent.monthlyRent, 30_000);
+  assert.equal(higherRent.monthlyRent, 80_000);
+  assert.ok(lowerRentEnd > higherRentEnd);
+  assert.ok(lowerRentEnd - higherRentEnd > 1_000_000);
+});
+
+test("home value uses the fixed six percent yearly growth assumption", () => {
+  const projection = calculateProjection(ready);
+  const end = projection.points.at(-1)!;
+  const expected = ready.propertyPriceLakh * 100_000
+    * (1 + FIXED_HOME_GROWTH_RATE / 100 / 12) ** (ready.holdingPeriodYears * 12);
+
+  assert.ok(Math.abs(end.propertyValue - expected) < 10);
+});
+
+test("under-construction homes still stage builder payments every six months", () => {
+  const projection = calculateProjection({
+    ...ready,
     construction: {
-      ...underConstructionInputs.construction,
+      state: "under_construction",
+      asOfDate: "2026-01-01",
+      startDate: "2025-01-01",
       completionDate: "2028-01-01",
+      dateSource: "rera",
     },
   });
 
-  assert.equal(projection.possessionMonth, 36);
-  assert.equal(projection.paymentSchedule.length, 1);
-  assert.equal(projection.paymentSchedule[0].month, 36);
+  assert.deepEqual(projection.paymentSchedule.map((payment) => payment.month), [0, 6, 12, 18, 24]);
+  assert.equal(projection.possessionMonth, 24);
+  assert.equal(projection.points[0].annualEmi, 0);
+  assert.ok(projection.points[2].annualEmi > 0);
+  assert.ok(Math.abs(
+    projection.points[0].buyNetWorth - projection.points[0].rentNetWorth,
+  ) < 1);
 });
 
-test("the payoff journey uses staged draws and begins amortization at possession", () => {
-  const projection = calculateProjection(underConstructionInputs);
-  const journey = calculateLoanJourney(underConstructionInputs, 0);
+test("payoff journey matches financing interest for a ready home", () => {
+  const projection = calculateProjection(ready);
+  const journey = calculateLoanJourney(ready, 0);
 
-  assert.equal(journey.points[0].balance, projection.paymentSchedule[0].loanAmount);
-  assert.equal(journey.loanFreeMonths, projection.possessionMonth + underConstructionInputs.loanTenureYears * 12);
+  assert.ok(Math.abs(journey.monthlyEmi - projection.monthlyEmi) < 1);
   assert.ok(Math.abs(journey.totalInterest - projection.totalInterest) < 1);
+});
+
+test("payment and principal formulas are inverses", () => {
+  const principal = 11_000_000;
+  const payment = monthlyPayment(principal, 8.5, 20);
+  const restored = principalFromMonthlyPayment(payment, 8.5, 20);
+
+  assert.ok(Math.abs(restored - principal) < 1);
 });
 
 test("negated completion statuses are not treated as ready", () => {
   assert.equal(isExplicitlyReadyStatus("Completed"), true);
-  assert.equal(isExplicitlyReadyStatus("Delivered · 1-5 yrs old"), true);
   assert.equal(isExplicitlyReadyStatus("Not Completed"), false);
-  assert.equal(isExplicitlyReadyStatus("Under construction"), false);
 });

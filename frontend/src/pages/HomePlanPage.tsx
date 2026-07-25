@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
-import { MilestoneHint } from "../features/home-plan/MilestoneHint.tsx";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
-import { PlanGraph, type PlanScenarioId } from "../features/home-plan/PlanGraph.tsx";
+import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { PlanViewTabs, type PlanView } from "../features/home-plan/PlanViewTabs.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { RepaymentJourney } from "../features/home-plan/RepaymentJourney.tsx";
@@ -16,17 +15,9 @@ import {
   buildBaselinePlanInputs,
   calculateLoanJourney,
   calculateProjection,
-  formatCurrency,
-  maximumDownPaymentLakh,
   type ConstructionProfile,
   type PlanInputs,
-  type PlanProjection,
 } from "../features/home-plan/model.ts";
-import {
-  buildMilestones,
-  describePlanChange,
-  type PlanMilestone,
-} from "../features/home-plan/planFields.ts";
 import "../features/home-plan/home-plan.css";
 import { BUY_VS_RENT } from "../features/home-plan/labels.ts";
 import {
@@ -88,14 +79,8 @@ export function HomePlanPage() {
   const [view, setView] = useState<PlanView>("netWorth");
   const [horizon, setHorizon] = useState(10);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
-  const [selectedScenario, setSelectedScenario] = useState<PlanScenarioId>("buy");
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(2);
   const [loanYear, setLoanYear] = useState(5);
-  const [changeNote, setChangeNote] = useState<string | null>(null);
-  const [milestoneHint, setMilestoneHint] = useState<PlanMilestone | null>(null);
-  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  const prevProjectionRef = useRef<PlanProjection | null>(null);
-  const changeNoteTimer = useRef<number | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -115,40 +100,9 @@ export function HomePlanPage() {
     return () => { active = false; };
   }, [id]);
 
-  useEffect(() => () => {
-    if (changeNoteTimer.current !== null) window.clearTimeout(changeNoteTimer.current);
-  }, []);
-
-  useEffect(() => {
-    if (!assumptionsOpen) return undefined;
-    const previousOverflow = document.body.style.overflow;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setAssumptionsOpen(false);
-    };
-    document.body.style.overflow = "hidden";
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [assumptionsOpen]);
-
   const projection = useMemo(() => inputs ? calculateProjection(inputs) : null, [inputs]);
   const loanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, extraEmisPerYear) : null, [inputs, extraEmisPerYear]);
   const baselineLoanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, 0) : null, [inputs]);
-
-  useEffect(() => {
-    if (!projection) return;
-    if (prevProjectionRef.current) {
-      const note = describePlanChange(prevProjectionRef.current, projection, horizon);
-      if (note) {
-        setChangeNote(note);
-        if (changeNoteTimer.current !== null) window.clearTimeout(changeNoteTimer.current);
-        changeNoteTimer.current = window.setTimeout(() => setChangeNote(null), 5000);
-      }
-    }
-    prevProjectionRef.current = projection;
-  }, [projection, horizon]);
 
   if (!id) return <PageState variant="not_found" context="property" message={BUY_VS_RENT.pickProperty} />;
   if (status === "loading") return <LoadingPlan />;
@@ -162,28 +116,9 @@ export function HomePlanPage() {
   const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
-  const monthlyRent = activePoint.annualRent / 12;
-  const monthlyGap = activePoint.monthlyBuyerHousingCost - monthlyRent;
-  const homeEquity = activePoint.propertyValue - activePoint.loanBalance - activePoint.builderBalance;
-  const monthlyGapSummary = monthlyGap >= 0
-    ? `Buying costs ${formatCurrency(monthlyGap)} more per month than renting`
-    : `Buying costs ${formatCurrency(Math.abs(monthlyGap))} less per month than renting`;
-  const loanFreeYear = projection.points.find((point, index, points) => (
-    point.year > inputs.purchaseYear
-    && point.loanBalance <= 0
-    && (points[index - 1]?.loanBalance ?? 0) > 0
-  ))?.year ?? null;
-  const milestones = buildMilestones(inputs.purchaseYear, projection.breakEvenYear, loanFreeYear);
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
-    setInputs((current) => {
-      if (!current) return current;
-      const next = { ...current, [key]: value };
-      if (key === "startingSavingsLakh") {
-        next.downPaymentLakh = Math.min(next.downPaymentLakh, maximumDownPaymentLakh(next));
-      }
-      return next;
-    });
+    setInputs((current) => current ? { ...current, [key]: value } : current);
   };
 
   const resetPlan = () => {
@@ -194,21 +129,11 @@ export function HomePlanPage() {
   const chooseHorizon = (year: number) => {
     setHorizon(year);
     setPreviewYear(null);
-    setMilestoneHint(null);
-  };
-
-  const handleMilestonePress = (milestone: PlanMilestone) => {
-    if (milestoneHint?.year === milestone.year) {
-      chooseHorizon(milestone.year);
-      return;
-    }
-    setMilestoneHint(milestone);
   };
 
   const changeView = (nextView: PlanView) => {
     setView(nextView);
     setPreviewYear(null);
-    setMilestoneHint(null);
   };
 
   const viewChapterClass = view === "netWorth" ? "net-worth" : view;
@@ -232,16 +157,6 @@ export function HomePlanPage() {
                   price={property.price}
                 />
                 <div className="home-plan-hero__actions">
-                  {view === "netWorth" && (
-                    <button
-                      type="button"
-                      className="home-plan-assumptions-trigger"
-                      aria-expanded={assumptionsOpen}
-                      onClick={() => setAssumptionsOpen(true)}
-                    >
-                      Tune plan
-                    </button>
-                  )}
                   <PlanViewTabs view={view} onChange={changeView} compact />
                 </div>
               </div>
@@ -264,38 +179,28 @@ export function HomePlanPage() {
               <>
                 <VerdictBlock
                   activeYear={activeYear}
+                  horizon={horizon}
                   buyWins={buyWins}
                   advantage={advantage}
-                  isPreview={previewYear !== null}
-                  breakEvenYear={projection.breakEvenYear}
-                  homeEquity={homeEquity}
-                  monthlyGapSummary={monthlyGapSummary}
-                  changeNote={changeNote}
-                  monthlyEmi={projection.monthlyEmi}
-                  monthlyRent={monthlyRent}
-                  buyNetWorth={activePoint.buyNetWorth}
-                  rentNetWorth={activePoint.rentNetWorth}
-                  selectedScenario={selectedScenario}
                   paymentSchedule={projection.paymentSchedule}
                   possessionDate={projection.possessionDate}
                   constructionDateSource={projection.constructionDateSource}
                   isUnderConstruction={projection.possessionMonth > inputs.purchaseYear * 12}
-                  isBeforePossession={activeYear * 12 < projection.possessionMonth}
-                  onSelectScenario={setSelectedScenario}
+                  onHorizonChange={chooseHorizon}
                 />
 
-                <MilestoneHint milestone={milestoneHint} />
+                <PlanAssumptionRail
+                  inputs={inputs}
+                  onInputChange={updateInput}
+                  onReset={resetPlan}
+                />
 
                 <section className="home-plan-stage" aria-label="Projection over time">
                   <PlanGraph
                     projection={projection}
                     horizon={horizon}
-                    selected={selectedScenario}
-                    milestones={milestones}
-                    hintedMilestoneYear={milestoneHint?.year ?? null}
                     onHorizonChange={chooseHorizon}
                     onPreviewYearChange={setPreviewYear}
-                    onMilestonePress={handleMilestonePress}
                   />
                 </section>
               </>
@@ -304,41 +209,6 @@ export function HomePlanPage() {
         </div>
       </div>
 
-      {assumptionsOpen && (
-        <div
-          className="home-plan-assumptions-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setAssumptionsOpen(false);
-          }}
-        >
-          <aside
-            className="home-plan-assumptions-drawer"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="home-plan-inputs-title"
-          >
-            <header>
-              <div>
-                <span>Your plan</span>
-                <h2 id="home-plan-inputs-title">Tune your plan</h2>
-              </div>
-              <button
-                type="button"
-                aria-label="Close plan controls"
-                onClick={() => setAssumptionsOpen(false)}
-              >
-                ×
-              </button>
-            </header>
-            <PlanAssumptionRail
-              inputs={inputs}
-              onInputChange={updateInput}
-              onReset={resetPlan}
-            />
-          </aside>
-        </div>
-      )}
     </div>
   );
 }

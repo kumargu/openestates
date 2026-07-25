@@ -5,13 +5,42 @@ import type {
   ProjectionPoint,
 } from "./model.ts";
 
+/**
+ * Buy vs rent algorithm (monthly)
+ *
+ * Money params the user controls:
+ * - monthly EMI
+ * - monthly rent
+ * - monthly SIP
+ * - loan rate
+ * - SIP / fund return
+ *
+ * Same starting money story:
+ * - Buy: EMI and rate imply a loan, capped at the property price
+ * - Rent: invest that same upfront amount, then add the chosen monthly SIP
+ * - Once the full price is financed, a higher EMI shortens the payoff period
+ *
+ * Monthly cash flow:
+ * - Rent invests `SIP + EMI − rent`
+ * - Buy invests any EMI left after the loan payment (especially after payoff)
+ *
+ * Wealth:
+ * - Buy = home value − loan left + reserved cash + post-payoff investments
+ * - Rent = invested upfront amount + monthly investment portfolio
+ *
+ * Under-construction homes still use a 6-month builder schedule.
+ * Until possession the buyer pays rent + pre-EMI interest instead of EMI.
+ */
+
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
 const PAYMENT_INTERVAL_MONTHS = 6;
 const DEFAULT_REMAINING_CONSTRUCTION_MONTHS = 24;
 const DEFAULT_TOTAL_CONSTRUCTION_MONTHS = 36;
 const MINIMUM_BOOKING_RATE = 0.1;
-const PURCHASE_COST_RATE = 0.07;
+export const DEFAULT_LOAN_TENURE_YEARS = 20;
+export const FIXED_HOME_GROWTH_RATE = 6;
+export const FIXED_RENT_INFLATION_RATE = 0;
 
 type ConstructionPlan = {
   startDate: Date;
@@ -76,13 +105,47 @@ function compoundMonthly(value: number, annualRate: number, months: number): num
   return value * (1 + annualRate / 100 / MONTHS_IN_YEAR) ** months;
 }
 
-function monthlyPayment(principal: number, annualRate: number, years: number): number {
+/** Rent rises once a year (Bangalore-style), not every month. */
+export function rentInMonth(startingMonthlyRent: number, rentInflation: number, month: number): number {
+  const yearsElapsed = Math.floor(Math.max(0, month) / MONTHS_IN_YEAR);
+  return Math.round(startingMonthlyRent * (1 + rentInflation / 100) ** yearsElapsed);
+}
+
+export function monthlyPayment(principal: number, annualRate: number, years: number): number {
   if (principal <= 0) return 0;
   const months = years * MONTHS_IN_YEAR;
   const monthlyRate = annualRate / 100 / MONTHS_IN_YEAR;
   if (monthlyRate === 0) return principal / months;
   const growth = (1 + monthlyRate) ** months;
   return principal * monthlyRate * growth / (growth - 1);
+}
+
+export function principalFromMonthlyPayment(
+  payment: number,
+  annualRate: number,
+  years: number,
+): number {
+  if (payment <= 0) return 0;
+  const months = years * MONTHS_IN_YEAR;
+  const monthlyRate = annualRate / 100 / MONTHS_IN_YEAR;
+  if (monthlyRate === 0) return payment * months;
+  return payment * (1 - (1 + monthlyRate) ** -months) / monthlyRate;
+}
+
+export function monthsToPayoff(
+  principal: number,
+  annualRate: number,
+  monthlyPaymentAmount: number,
+): number {
+  if (principal <= 0) return 0;
+  if (monthlyPaymentAmount <= 0) return Number.POSITIVE_INFINITY;
+  const monthlyRate = annualRate / 100 / MONTHS_IN_YEAR;
+  if (monthlyRate === 0) return Math.ceil(principal / monthlyPaymentAmount);
+  if (monthlyPaymentAmount <= principal * monthlyRate) return Number.POSITIVE_INFINITY;
+  return Math.ceil(
+    -Math.log(1 - principal * monthlyRate / monthlyPaymentAmount)
+    / Math.log(1 + monthlyRate),
+  );
 }
 
 export function constructionPlanFor(inputs: PlanInputs): ConstructionPlan {
@@ -138,10 +201,18 @@ export function buildPaymentSchedule(inputs: PlanInputs): BuilderPayment[] {
   const plan = constructionPlanFor(inputs);
   const purchasePrice = compoundMonthly(
     inputs.propertyPriceLakh * LAKH,
-    inputs.appreciation,
+    FIXED_HOME_GROWTH_RATE,
     plan.purchaseMonth,
   );
-  const requestedDownPayment = Math.min(inputs.downPaymentLakh * LAKH, purchasePrice);
+  const requestedLoan = Math.min(
+    purchasePrice,
+    principalFromMonthlyPayment(
+      inputs.monthlyEmiThousands * 1_000,
+      inputs.loanRate,
+      DEFAULT_LOAN_TENURE_YEARS,
+    ),
+  );
+  const requestedDownPayment = purchasePrice - requestedLoan;
 
   if (plan.possessionMonth === plan.purchaseMonth) {
     return [{
@@ -211,58 +282,68 @@ export function calculateFinancingInterest(inputs: PlanInputs): number {
   }
 
   const totalLoan = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
-  const emi = monthlyPayment(totalLoan, inputs.loanRate, inputs.loanTenureYears);
-  return preEmiInterest + emi * inputs.loanTenureYears * MONTHS_IN_YEAR - totalLoan;
+  const emi = inputs.monthlyEmiThousands * 1_000;
+  let balance = totalLoan;
+  let repaymentInterest = 0;
+  const payoffMonths = monthsToPayoff(totalLoan, inputs.loanRate, emi);
+
+  for (let month = 0; month < payoffMonths; month += 1) {
+    const interest = balance * monthlyRate;
+    const payment = Math.min(emi, balance + interest);
+    repaymentInterest += interest;
+    balance = Math.max(0, balance + interest - payment);
+  }
+
+  return preEmiInterest + repaymentInterest;
 }
 
 export function calculateProjectionPoints(inputs: PlanInputs): ProjectionPoint[] {
   const plan = constructionPlanFor(inputs);
   const schedule = buildPaymentSchedule(inputs);
   const purchasePrice = schedule.reduce((sum, payment) => sum + payment.amount, 0);
-  const totalLoan = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
-  const emi = monthlyPayment(totalLoan, inputs.loanRate, inputs.loanTenureYears);
+  const totalCash = schedule.reduce((sum, payment) => sum + payment.cashAmount, 0);
+  const emi = inputs.monthlyEmiThousands * 1_000;
   const loanRateMonthly = inputs.loanRate / 100 / MONTHS_IN_YEAR;
-  const purchaseCosts = purchasePrice * PURCHASE_COST_RATE;
+  const sipRateMonthly = inputs.equityReturn / 100 / MONTHS_IN_YEAR;
+  const monthlySip = inputs.monthlySipThousands * 1_000;
+  const startingRent = inputs.currentRentThousands * 1_000;
   const endMonth = inputs.holdingPeriodYears * MONTHS_IN_YEAR;
   const paymentByMonth = new Map(schedule.map((payment) => [payment.month, payment]));
   const points: ProjectionPoint[] = [];
 
-  let buyerPortfolio = inputs.startingSavingsLakh * LAKH;
-  let renterPortfolio = inputs.startingSavingsLakh * LAKH;
+  // Both paths start with the same implied upfront amount. For construction,
+  // the buyer's unpaid portion stays as reserved cash until each builder call.
+  let buyReserve = totalCash;
+  let buyInvestments = 0;
+  let rentInvestments = totalCash;
   let loanBalance = 0;
   let builderPaid = 0;
-  let repaymentMonths = 0;
-  let purchaseCostsPaid = false;
 
   for (let month = 0; month <= endMonth; month += 1) {
     const payment = paymentByMonth.get(month);
     if (payment) {
-      if (!purchaseCostsPaid) {
-        buyerPortfolio -= purchaseCosts;
-        purchaseCostsPaid = true;
-      }
-      buyerPortfolio -= payment.cashAmount;
       loanBalance += payment.loanAmount;
       builderPaid += payment.amount;
+      buyReserve = Math.max(0, buyReserve - payment.cashAmount);
     }
 
     const hasPurchased = month >= plan.purchaseMonth;
     const hasPossession = month >= plan.possessionMonth;
-    const monthlyRent = compoundMonthly(
-      inputs.currentRentThousands * 1_000,
-      inputs.rentInflation,
-      month,
-    );
+    const monthlyRent = rentInMonth(startingRent, FIXED_RENT_INFLATION_RATE, month);
     const preEmiInterest = hasPurchased && !hasPossession
       ? loanBalance * loanRateMonthly
       : 0;
-    const regularPayment = hasPossession && repaymentMonths < inputs.loanTenureYears * MONTHS_IN_YEAR
+    const regularPayment = hasPossession && loanBalance > 0
       ? Math.min(emi, loanBalance * (1 + loanRateMonthly))
       : 0;
-    const monthlyBuyerHousingCost = hasPossession ? regularPayment : monthlyRent + preEmiInterest;
+    const monthlyBuyerHousingCost = hasPossession
+      ? regularPayment
+      : hasPurchased
+        ? monthlyRent + preEmiInterest
+        : 0;
     const propertyValue = compoundMonthly(
       inputs.propertyPriceLakh * LAKH,
-      inputs.appreciation,
+      FIXED_HOME_GROWTH_RATE,
       month,
     );
     const builderBalance = hasPurchased ? Math.max(0, purchasePrice - builderPaid) : 0;
@@ -271,34 +352,28 @@ export function calculateProjectionPoints(inputs: PlanInputs): ProjectionPoint[]
       points.push({
         year: month / MONTHS_IN_YEAR,
         buyNetWorth: hasPurchased
-          ? buyerPortfolio + propertyValue - loanBalance - builderBalance
-          : buyerPortfolio,
-        rentNetWorth: renterPortfolio,
+          ? buyReserve + buyInvestments + propertyValue - loanBalance - builderBalance
+          : buyReserve + buyInvestments,
+        rentNetWorth: rentInvestments,
         propertyValue,
         loanBalance,
         builderBalance,
         annualRent: monthlyRent * MONTHS_IN_YEAR,
-        annualEmi: hasPossession ? emi * MONTHS_IN_YEAR : 0,
+        annualEmi: hasPossession && loanBalance > 0.5 ? emi * MONTHS_IN_YEAR : 0,
         monthlyBuyerHousingCost,
       });
     }
 
     if (month === endMonth) break;
 
-    buyerPortfolio *= 1 + inputs.equityReturn / 100 / MONTHS_IN_YEAR;
-    renterPortfolio *= 1 + inputs.equityReturn / 100 / MONTHS_IN_YEAR;
-
-    if (monthlyBuyerHousingCost > monthlyRent) {
-      renterPortfolio += monthlyBuyerHousingCost - monthlyRent;
-    } else {
-      buyerPortfolio += monthlyRent - monthlyBuyerHousingCost;
-    }
-    renterPortfolio += inputs.monthlyExtraInvestmentThousands * 1_000;
+    buyInvestments *= 1 + sipRateMonthly;
+    rentInvestments *= 1 + sipRateMonthly;
+    buyInvestments += Math.max(0, emi - monthlyBuyerHousingCost);
+    rentInvestments += monthlySip + emi - monthlyRent;
 
     if (hasPossession && regularPayment > 0) {
       const interest = loanBalance * loanRateMonthly;
       loanBalance = Math.max(0, loanBalance - Math.max(0, regularPayment - interest));
-      repaymentMonths += 1;
     }
   }
 

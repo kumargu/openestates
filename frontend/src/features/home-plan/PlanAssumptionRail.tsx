@@ -1,7 +1,4 @@
 import {
-  maximumDownPaymentLakh,
-  minimumDownPaymentLakh,
-  minimumRequiredSavingsLakh,
   type PlanInputs,
 } from "./model.ts";
 
@@ -11,136 +8,145 @@ type PlanAssumptionRailProps = {
   onReset: () => void;
 };
 
-type DialSpec = {
-  key: keyof PlanInputs;
+type InputSpec = {
+  key: "monthlyEmiThousands" | "currentRentThousands" | "monthlySipThousands" | "loanRate" | "equityReturn";
   label: string;
   min: number;
-  max: number;
+  max?: number;
   step: number;
-  format: (value: number) => string;
+  prefix?: string;
+  suffix: string;
+  note: string;
 };
 
-function clamp(value: number, min: number, max: number, step: number): number {
-  const snapped = Math.round(value / step) * step;
-  return Math.min(max, Math.max(min, Number(snapped.toFixed(4))));
-}
-
-function ValueDial({
+function PlanInput({
   label,
-  display,
-  atMin,
-  atMax,
-  onDecrease,
-  onIncrease,
+  value,
+  min,
+  max,
+  step,
+  prefix,
+  suffix,
+  note,
+  onChange,
 }: {
   label: string;
-  display: string;
-  atMin: boolean;
-  atMax: boolean;
-  onDecrease: () => void;
-  onIncrease: () => void;
+  value: number;
+  min: number;
+  max?: number;
+  step: number;
+  prefix?: string;
+  suffix: string;
+  note: string;
+  onChange: (value: number) => void;
 }) {
   return (
-    <div className="home-plan-dial">
-      <span className="home-plan-dial__label">{label}</span>
-      <div className="home-plan-dial__control">
-        <button type="button" className="home-plan-dial__step" onClick={onDecrease} disabled={atMin} aria-label={`Decrease ${label}`}>
-          −
-        </button>
-        <span className="home-plan-dial__value">{display}</span>
-        <button type="button" className="home-plan-dial__step" onClick={onIncrease} disabled={atMax} aria-label={`Increase ${label}`}>
-          +
-        </button>
+    <label className="home-plan-inline-input">
+      <span>{label}</span>
+      <div>
+        {prefix && <b>{prefix}</b>}
+        <input
+          type="number"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            if (Number.isFinite(next)) {
+              const bounded = Math.max(min, next);
+              onChange(max === undefined ? bounded : Math.min(max, bounded));
+            }
+          }}
+        />
+        <b>{suffix}</b>
       </div>
-    </div>
+      <small>{note}</small>
+    </label>
   );
 }
 
-export function PlanAssumptionRail({ inputs, onInputChange, onReset }: PlanAssumptionRailProps) {
-  const maxDown = maximumDownPaymentLakh(inputs);
-  const minDown = minimumDownPaymentLakh(inputs.propertyPriceLakh);
-  const minSavings = Math.ceil(minimumRequiredSavingsLakh(inputs) / 5) * 5;
-
-  const dials: DialSpec[] = [
+export function PlanAssumptionRail({
+  inputs,
+  onInputChange,
+  onReset,
+}: PlanAssumptionRailProps) {
+  const primaryInputs: InputSpec[] = [
     {
-      key: "startingSavingsLakh",
-      label: "Savings",
-      min: minSavings,
-      max: Math.max(100, Math.ceil(inputs.propertyPriceLakh)),
+      key: "monthlyEmiThousands",
+      label: "Monthly EMI",
+      min: 0,
       step: 5,
-      format: (v) => `₹${v.toFixed(0)}L`,
-    },
-    {
-      key: "downPaymentLakh",
-      label: "Down",
-      min: minDown,
-      max: Math.max(minDown, maxDown),
-      step: 5,
-      format: (v) => `₹${v.toFixed(0)}L`,
-    },
-    {
-      key: "loanRate",
-      label: "Loan",
-      min: 6.5,
-      max: 11,
-      step: 0.1,
-      format: (v) => `${v.toFixed(1)}%`,
-    },
-    {
-      key: "appreciation",
-      label: "Growth",
-      min: 2,
-      max: 10,
-      step: 0.5,
-      format: (v) => `${v.toFixed(1)}%`,
-    },
-    {
-      key: "equityReturn",
-      label: "Funds",
-      min: 6,
-      max: 14,
-      step: 0.5,
-      format: (v) => `${v.toFixed(1)}%`,
+      prefix: "₹",
+      suffix: "K / mo",
+      note: "Your buy plan",
     },
     {
       key: "currentRentThousands",
-      label: "Rent",
-      min: 15,
+      label: "Monthly rent",
+      min: 0,
       max: 150,
       step: 5,
-      format: (v) => `₹${v.toFixed(0)}K`,
+      prefix: "₹",
+      suffix: "K / mo",
+      note: "Your rent today",
     },
     {
-      key: "rentInflation",
-      label: "Rent rise",
-      min: 2,
-      max: 12,
+      key: "monthlySipThousands",
+      label: "Monthly SIP",
+      min: 0,
+      max: 250,
+      step: 5,
+      prefix: "₹",
+      suffix: "K / mo",
+      note: "Your rent-path investment",
+    },
+  ];
+
+  const rateInputs: InputSpec[] = [
+    {
+      key: "loanRate",
+      label: "Loan rate",
+      min: 0,
+      max: 15,
+      step: 0.1,
+      suffix: "%",
+      note: "Fixed for this estimate",
+    },
+    {
+      key: "equityReturn",
+      label: "SIP return",
+      min: 0,
+      max: 20,
       step: 0.5,
-      format: (v) => `${v.toFixed(1)}%/yr`,
+      suffix: "%",
+      note: "Expected yearly gain",
     },
   ];
 
   return (
-    <aside className="home-plan-assumption-rail" aria-label="Plan assumptions">
-      <div className="home-plan-assumption-rail__dials">
-        {dials.map((dial) => {
-          const value = inputs[dial.key] as number;
-          return (
-            <ValueDial
-              key={dial.key}
-              label={dial.label}
-              display={dial.format(value)}
-              atMin={value <= dial.min}
-              atMax={value >= dial.max}
-              onDecrease={() => onInputChange(dial.key, clamp(value - dial.step, dial.min, dial.max, dial.step) as PlanInputs[typeof dial.key])}
-              onIncrease={() => onInputChange(dial.key, clamp(value + dial.step, dial.min, dial.max, dial.step) as PlanInputs[typeof dial.key])}
-            />
-          );
-        })}
+    <section className="home-plan-inline-studio" aria-label="Your monthly plan">
+      <div className="home-plan-inline-studio__primary">
+        {primaryInputs.map(({ key, ...input }) => (
+          <PlanInput
+            key={key}
+            {...input}
+            value={inputs[key]}
+            onChange={(value) => onInputChange(key, value)}
+          />
+        ))}
       </div>
-      <button type="button" className="home-plan-assumption-rail__reset" onClick={onReset}>
-        Reset
-      </button>
-    </aside>
+      <div className="home-plan-inline-studio__rates">
+        {rateInputs.map(({ key, ...input }) => (
+          <PlanInput
+            key={key}
+            {...input}
+            value={inputs[key]}
+            onChange={(value) => onInputChange(key, value)}
+          />
+        ))}
+        <button type="button" onClick={onReset}>Reset</button>
+      </div>
+    </section>
   );
 }
