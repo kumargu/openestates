@@ -80,6 +80,22 @@ function mostCommonLabel(labels: string[]): string | null {
   return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
 }
 
+function explicitHomeStateLabel(label: string): string {
+  const normalized = label.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized.includes("delay")) return "Timeline delayed";
+  if (normalized.includes("under construction") || normalized.includes("construction")) {
+    return "Under construction";
+  }
+  return label;
+}
+
+function homeStateTone(label: string): "construction" | "delayed" | null {
+  const normalized = label.toLowerCase();
+  if (normalized.includes("delay")) return "delayed";
+  if (normalized.includes("construction")) return "construction";
+  return null;
+}
+
 const COMPARABLES: ComparableDefinition[] = [
   {
     id: "space",
@@ -120,7 +136,7 @@ const COMPARABLES: ComparableDefinition[] = [
         )
         .filter(Boolean);
       const primary = mostCommonLabel(labels);
-      return primary ? { primary } : null;
+      return primary ? { primary: explicitHomeStateLabel(primary) } : null;
     },
   },
   {
@@ -278,6 +294,25 @@ function PriceRange({
   );
 }
 
+function LandAreaPendingMark() {
+  return (
+    <span
+      className="compare-land-pending"
+      title="Land area is not verified yet"
+      role="img"
+      aria-label="Land area not verified"
+    >
+      <svg viewBox="0 0 42 32" aria-hidden="true">
+        <path className="compare-land-pending__backdrop" d="M8 3.5h24a6.5 6.5 0 0 1 6.5 6.5v12A6.5 6.5 0 0 1 32 28.5H8A6.5 6.5 0 0 1 1.5 22V10A6.5 6.5 0 0 1 8 3.5Z" />
+        <circle className="compare-land-pending__sun" cx="31.5" cy="10" r="2.4" />
+        <path className="compare-land-pending__plot" d="m8 22 8.5-6 17 3.5-8.5 6Z" />
+        <path className="compare-land-pending__furrow" d="m13 20.4 12.4 2.5M18 17.6l11.8 2.5" />
+        <path className="compare-land-pending__sprout" d="M18.5 17v-4.2m0 1.8c-2.8-.2-4.2-1.5-4.4-3.8 2.8-.1 4.2 1.2 4.4 3.8Zm.1-1.8c.4-2.5 1.9-3.7 4.5-3.6-.2 2.5-1.7 3.7-4.5 3.6Z" />
+      </svg>
+    </span>
+  );
+}
+
 function ComparableCell({
   definition,
   listings,
@@ -288,17 +323,22 @@ function ComparableCell({
   const observed = definition.value(listings);
   if (!observed && definition.id === "land") {
     return (
-      <div className="compare-fact-cell compare-fact-cell--soon" title="Society acres coming from RERA">
-        <span className="compare-fact-soon" aria-label="Acres coming soon">
-          <i aria-hidden="true">◇</i>
-          Soon
-        </span>
+      <div className="compare-fact-cell compare-fact-cell--pending">
+        <LandAreaPendingMark />
       </div>
     );
   }
+  const statusTone = definition.id === "homeState" && observed
+    ? homeStateTone(observed.primary)
+    : null;
   return (
     <div className={`compare-fact-cell${observed ? "" : " is-empty"}`}>
-      <strong title={observed?.primary}>{observed?.primary ?? "—"}</strong>
+      <strong
+        className={statusTone ? `compare-fact-status compare-fact-status--${statusTone}` : undefined}
+        title={observed?.primary}
+      >
+        {observed?.primary ?? "—"}
+      </strong>
     </div>
   );
 }

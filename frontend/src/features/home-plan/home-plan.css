@@ -839,6 +839,8 @@
 }
 
 .home-plan-axis-label--x {
+  fill: var(--plan-whisper);
+  font-weight: 650;
   text-anchor: middle;
 }
 
@@ -1211,29 +1213,36 @@
 
 .home-plan-payoff {
   display: grid;
-  gap: clamp(1.25rem, 2.5vw, 1.75rem);
+  gap: clamp(0.9rem, 1.8vw, 1.25rem);
   padding: 0 0.15rem;
 }
 
-.home-plan-payoff__bar {
-  height: 8px;
-  margin-top: 0.35rem;
-  border-radius: 99px;
-  background: var(--plan-soft);
-  overflow: hidden;
+.home-plan-payoff > .home-plan-verdict {
+  max-width: 46rem;
 }
 
-.home-plan-payoff__bar-fill {
-  display: block;
-  height: 100%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--plan-buy-deep), var(--plan-cool-deep));
-  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+.home-plan-payoff .home-plan-verdict__headline {
+  max-width: 22ch;
+  font-size: clamp(1.85rem, 3.5vw, 2.65rem);
+}
+
+.home-plan-payoff .home-plan-verdict__detail {
+  margin-top: 0.65rem;
+  color: var(--plan-ink);
+  font-weight: 620;
+}
+
+.home-plan-payoff__cost {
+  margin: 0.3rem 0 0;
+  color: var(--plan-muted);
+  font-size: 0.8rem;
 }
 
 .home-plan-payoff__lever {
   display: grid;
-  gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.8rem;
 }
 
 .home-plan-payoff__lever-label {
@@ -1254,7 +1263,7 @@
   flex-direction: column;
   align-items: center;
   gap: 0.05rem;
-  padding: 0.65rem 0.4rem;
+  padding: 0.52rem 0.4rem;
 }
 
 .home-plan-payoff__seg button.is-active {
@@ -1313,21 +1322,9 @@
   color: var(--plan-cool-deep);
 }
 
-.home-plan-payoff__legend-item small {
-  color: var(--plan-ink);
-  font-size: 0.78rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.home-plan-payoff__legend-gap {
-  margin-left: auto;
-  color: var(--plan-muted);
-  font-size: 0.75rem;
-}
-
 .home-plan-payoff__chart {
   width: 100%;
-  height: clamp(220px, 34vw, 280px);
+  height: clamp(205px, 28vw, 235px);
   display: block;
   cursor: crosshair;
 }
@@ -1433,16 +1430,92 @@
   font-weight: 650;
 }
 
-.home-plan-payoff__readout {
+.home-plan-payoff__year-focus {
   display: grid;
-  gap: 0.65rem;
-  padding-top: 1rem;
+  grid-template-columns: minmax(260px, 0.55fr) minmax(0, 1.45fr);
+  gap: clamp(1rem, 2.5vw, 2rem);
+  align-items: stretch;
+  padding-top: 0.75rem;
   border-top: 1px solid var(--plan-line);
 }
 
-.home-plan-payoff__readout-badge {
+.home-plan-payoff__year-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(44px, 1fr));
+  align-self: center;
+  padding: 0.25rem;
+  border: 1px solid var(--plan-line);
+  border-radius: 0.7rem;
+  background: var(--plan-soft);
+}
+
+.home-plan-payoff__year-picker button {
+  min-height: 2.35rem;
+  padding: 0.35rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--plan-muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.home-plan-payoff__year-picker button.is-active {
+  background: var(--plan-surface-solid);
+  color: var(--plan-cool-deep);
+  box-shadow: inset 0 0 0 1px rgba(63, 92, 138, 0.25);
+}
+
+.home-plan-payoff__year-readout {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.home-plan-payoff__year-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.home-plan-payoff__year-heading strong {
   color: var(--plan-cool-deep);
   font-weight: 650;
+}
+
+.home-plan-payoff__year-readout dl {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.6rem;
+  margin: 0;
+}
+
+.home-plan-payoff__year-readout dl > div {
+  min-width: 0;
+  padding-left: 0.75rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-payoff__year-readout dt {
+  overflow: hidden;
+  color: var(--plan-muted);
+  font-size: 0.7rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.home-plan-payoff__year-readout dd {
+  margin: 0.22rem 0 0;
+  color: var(--plan-ink);
+  font-size: 1rem;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
 }
 
 /* ── Controls drawer ──────────────────────────────────────────────────── */
@@ -1853,8 +1926,8 @@
     width: 100%;
   }
 
-  .home-plan-payoff__readout dl {
-    grid-template-columns: 1fr 1fr;
+  .home-plan-payoff__year-focus {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1901,17 +1974,42 @@
     display: none;
   }
 
-  .home-plan-payoff__readout dl {
-    grid-template-columns: 1fr 1fr;
-  }
-
   .home-plan-payoff__seg {
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(6, minmax(58px, 1fr));
+    overflow-x: auto;
   }
 
-  .home-plan-verdict__breakdown--3,
+  .home-plan-payoff__lever {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
   .home-plan-verdict__breakdown--4 {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .home-plan-payoff .home-plan-verdict__headline {
+    font-size: clamp(1.65rem, 8vw, 2.15rem);
+  }
+
+  .home-plan-payoff__chart {
+    height: 210px;
+  }
+
+  .home-plan-payoff__year-readout dl {
+    grid-template-columns: 1fr;
+    gap: 0.45rem;
+  }
+
+  .home-plan-payoff__year-readout dl > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+
+  .home-plan-payoff__year-readout dd {
+    margin-top: 0;
   }
 
   .home-plan-controls {
@@ -1929,10 +2027,6 @@
     transform: translateY(0);
   }
 
-  .home-plan-payoff__legend-gap {
-    margin-left: 0;
-    width: 100%;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

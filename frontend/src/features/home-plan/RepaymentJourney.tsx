@@ -26,9 +26,14 @@ export function RepaymentJourney({
   const points = journey.points;
   const selectedPoint = points.find((point) => point.year === selectedYear) ?? points[0];
   const loanFreeYear = Math.ceil(journey.loanFreeMonths / 12);
-  const originalMonths = Math.max(1, journey.loanFreeMonths + journey.monthsSaved);
-  const toLoanFreePct = Math.round((journey.loanFreeMonths / originalMonths) * 100);
   const hasPrepay = extraEmisPerYear > 0;
+  const maxYear = points.at(-1)?.year ?? 0;
+  const yearOptions = [0, 5, 10, 15, 20].filter((year) => year <= maxYear);
+  const baselinePoint = baselineJourney.points.find((point) => point.year === selectedPoint.year);
+  const balanceAhead = Math.max(0, (baselinePoint?.balance ?? selectedPoint.balance) - selectedPoint.balance);
+  const extraPaidToDate = points
+    .filter((point) => point.year <= selectedPoint.year)
+    .reduce((total, point) => total + point.extraPaid, 0);
 
   return (
     <section className="home-plan-payoff" aria-label="Loan payoff plan">
@@ -48,30 +53,12 @@ export function RepaymentJourney({
         </h1>
         <p className="home-plan-verdict__detail">
           {journey.monthsSaved > 0
-            ? `${formatDuration(journey.monthsSaved)} sooner than paying the EMI alone — same monthly outgoing, just a few extra payments a year.`
+            ? `${formatDuration(journey.monthsSaved)} sooner · ${formatCurrency(journey.interestSaved, true)} less interest`
             : "Add extra payments below to clear the loan sooner and cut total interest."}
         </p>
-        <div className="home-plan-payoff__bar" aria-hidden="true">
-          <span className="home-plan-payoff__bar-fill" style={{ width: `${toLoanFreePct}%` }} />
-        </div>
-
-        <dl className="home-plan-verdict__breakdown home-plan-verdict__breakdown--3" aria-label="Payoff impact">
-          <div className="home-plan-verdict__tile">
-            <dt>Extra each year</dt>
-            <dd>{formatCurrency(journey.annualPrepayment, true)}</dd>
-            <small>{extraEmisPerYear} {extraEmisPerYear === 1 ? "EMI" : "EMIs"}</small>
-          </div>
-          <div className="home-plan-verdict__tile home-plan-verdict__tile--highlight">
-            <dt>Time saved</dt>
-            <dd>{journey.monthsSaved > 0 ? formatDuration(journey.monthsSaved) : "—"}</dd>
-            <small>{journey.monthsSaved > 0 ? "Earlier finish" : "No change yet"}</small>
-          </div>
-          <div className="home-plan-verdict__tile home-plan-verdict__tile--highlight">
-            <dt>Interest saved</dt>
-            <dd>{formatCurrency(journey.interestSaved, true)}</dd>
-            <small>{journey.interestSaved > 0 ? "vs no prepayment" : "—"}</small>
-          </div>
-        </dl>
+        <p className="home-plan-payoff__cost">
+          {formatCurrency(journey.annualPrepayment, true)} extra a year · monthly EMI stays {formatCurrency(journey.monthlyEmi, true)}
+        </p>
       </header>
 
       <div className="home-plan-payoff__lever" role="group" aria-label="Extra EMIs each year">
@@ -100,19 +87,41 @@ export function RepaymentJourney({
         onSelectYear={onSelectYear}
       />
 
-      <div className="home-plan-payoff__readout">
-        <p className="home-plan-verdict__year">
-          {selectedPoint.year === 0 ? "At loan start" : `End of year ${selectedPoint.year}`}
-          {selectedPoint.year >= loanFreeYear && selectedPoint.balance <= 0.5 && (
-            <span className="home-plan-payoff__readout-badge"> · loan-free</span>
-          )}
-        </p>
-        <dl className="home-plan-verdict__breakdown home-plan-verdict__breakdown--4">
-          <div className="home-plan-verdict__tile"><dt>Outstanding</dt><dd>{formatCurrency(selectedPoint.balance, true)}</dd></div>
-          <div className="home-plan-verdict__tile"><dt>Principal paid</dt><dd>{formatCurrency(selectedPoint.principalPaid, true)}</dd></div>
-          <div className="home-plan-verdict__tile"><dt>Interest paid</dt><dd>{formatCurrency(selectedPoint.interestPaid, true)}</dd></div>
-          <div className="home-plan-verdict__tile"><dt>Extra prepaid</dt><dd>{formatCurrency(selectedPoint.extraPaid, true)}</dd></div>
-        </dl>
+      <div className="home-plan-payoff__year-focus">
+        <div className="home-plan-payoff__year-picker" role="group" aria-label="View payoff progress by year">
+          {yearOptions.map((year) => (
+            <button
+              key={year}
+              type="button"
+              className={selectedPoint.year === year ? "is-active" : ""}
+              aria-pressed={selectedPoint.year === year}
+              onClick={() => onSelectYear(year)}
+            >
+              {year === 0 ? "Now" : `${year}y`}
+            </button>
+          ))}
+        </div>
+
+        <div className="home-plan-payoff__year-readout" aria-live="polite">
+          <div className="home-plan-payoff__year-heading">
+            <span>{selectedPoint.year === 0 ? "Today" : `End of year ${selectedPoint.year}`}</span>
+            {selectedPoint.year >= loanFreeYear && selectedPoint.balance <= 0.5 && <strong>Loan-free</strong>}
+          </div>
+          <dl>
+            <div>
+              <dt>Balance</dt>
+              <dd>{formatCurrency(selectedPoint.balance, true)}</dd>
+            </div>
+            <div>
+              <dt>Ahead vs regular EMI</dt>
+              <dd>{formatCurrency(balanceAhead, true)}</dd>
+            </div>
+            <div>
+              <dt>Extra paid so far</dt>
+              <dd>{formatCurrency(extraPaidToDate, true)}</dd>
+            </div>
+          </dl>
+        </div>
       </div>
     </section>
   );

@@ -139,21 +139,11 @@ export function PayoffGraph({
         <span className="home-plan-payoff__legend-item home-plan-payoff__legend-item--baseline">
           <i aria-hidden="true" />
           No extra EMIs
-          <small>{formatCurrency(geometry.baselineBalances[activeYear] ?? 0, true)}</small>
         </span>
         <span className="home-plan-payoff__legend-item home-plan-payoff__legend-item--prepay">
           <i aria-hidden="true" />
           {showComparison ? `+${extraEmisPerYear} ${extraEmisPerYear === 1 ? "EMI" : "EMIs"}/yr` : "Current schedule"}
-          <small>{formatCurrency(prepayBalance, true)}</small>
         </span>
-        {showComparison && aheadBy > 0 && (
-          <span className="home-plan-payoff__legend-gap">
-            {hoverYear === null ? "Move across the chart" : `Year ${activeYear} · ${formatCurrency(aheadBy, true)} ahead`}
-          </span>
-        )}
-        {!showComparison && (
-          <span className="home-plan-payoff__legend-gap">Add extra EMIs to see how much faster you pay down</span>
-        )}
       </div>
 
       <svg
@@ -255,7 +245,7 @@ export function PayoffGraph({
           <circle cx={cursorX} cy={prepayY} r="5" className="home-plan-payoff__dot home-plan-payoff__dot--prepay" />
         </g>
 
-        {(hoverYear !== null || selectedYear === activeYear) && (
+        {hoverYear !== null && (
           <g className="home-plan-payoff__tooltip" transform={`translate(${tooltipX}, ${tooltipY})`} filter="url(#payoff-tooltip-shadow)">
             <rect width="198" height={showComparison ? 88 : 56} rx="12" />
             <text x="14" y="22" className="home-plan-payoff__tooltip-year">

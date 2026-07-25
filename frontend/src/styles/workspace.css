@@ -683,29 +683,82 @@
   font-weight: 560;
 }
 
-.compare-fact-cell--soon {
+.compare-fact-cell .compare-fact-status {
+  display: inline-flex;
+  width: fit-content;
+  padding: 0.25rem 0.48rem;
+  border: 1px solid transparent;
+  border-radius: 0.42rem;
+  line-height: 1.2;
+}
+
+.compare-fact-status--construction {
+  border-color: rgba(72, 120, 175, 0.2);
+  background: rgba(106, 155, 210, 0.12);
+  color: #365f8c;
+}
+
+.compare-fact-status--delayed {
+  border-color: rgba(175, 118, 38, 0.22);
+  background: rgba(218, 166, 80, 0.14);
+  color: #825b20;
+}
+
+.compare-fact-cell--pending {
   display: flex;
   align-items: center;
 }
 
-.compare-fact-soon {
+.compare-land-pending {
   display: inline-flex;
-  align-items: center;
-  gap: 0.28rem;
-  padding: 0.22rem 0.48rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-text-muted);
-  font-size: 0.56rem;
-  font-weight: 680;
-  letter-spacing: 0.02em;
+  width: 2.35rem;
+  height: 1.8rem;
+  transition: transform 160ms ease;
 }
 
-.compare-fact-soon > i {
-  color: var(--color-cool-deep);
-  font-style: normal;
-  font-size: 0.62rem;
+.compare-land-pending:hover {
+  transform: translateY(-1px) rotate(-1deg);
+}
+
+.compare-land-pending svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.compare-land-pending__backdrop {
+  fill: color-mix(in srgb, var(--band-fill) 72%, #fff);
+  stroke: color-mix(in srgb, var(--band-stroke) 44%, #fff);
+  stroke-width: 1;
+}
+
+.compare-land-pending__sun {
+  fill: #f2ad58;
+  stroke: #fff;
+  stroke-width: 0.9;
+}
+
+.compare-land-pending__plot {
+  fill: rgba(255, 255, 255, 0.78);
+  stroke: var(--band-stroke);
+  stroke-linejoin: round;
+  stroke-width: 1.15;
+}
+
+.compare-land-pending__furrow {
+  fill: none;
+  opacity: 0.55;
+  stroke: var(--band-stroke);
+  stroke-linecap: round;
+  stroke-width: 0.85;
+}
+
+.compare-land-pending__sprout {
+  fill: rgba(255, 255, 255, 0.9);
+  stroke: #527b65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.15;
 }
 
 .compare-society-table__row--tone-1 {

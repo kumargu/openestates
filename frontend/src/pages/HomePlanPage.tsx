@@ -192,7 +192,7 @@ export function HomePlanPage() {
                       aria-expanded={assumptionsOpen}
                       onClick={() => setAssumptionsOpen(true)}
                     >
-                      Assumptions
+                      Edit inputs
                     </button>
                   )}
                   <PlanViewTabs view={view} onChange={changeView} compact />
@@ -264,16 +264,16 @@ export function HomePlanPage() {
             className="home-plan-assumptions-drawer"
             role="dialog"
             aria-modal="true"
-            aria-labelledby="home-plan-assumptions-title"
+            aria-labelledby="home-plan-inputs-title"
           >
             <header>
               <div>
-                <span>Your inputs</span>
-                <h2 id="home-plan-assumptions-title">Plan assumptions</h2>
+                <span>Your plan</span>
+                <h2 id="home-plan-inputs-title">Edit inputs</h2>
               </div>
               <button
                 type="button"
-                aria-label="Close plan assumptions"
+                aria-label="Close plan inputs"
                 onClick={() => setAssumptionsOpen(false)}
               >
                 ×
