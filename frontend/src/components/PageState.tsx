@@ -27,7 +27,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
         { label: "Return home", path: "/" },
       ],
     },
-    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse properties", path: "/results" }] },
+    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse homes", path: "/" }] },
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {
@@ -36,7 +36,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       title: "Property details unavailable",
       subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
       actions: [
-        { label: "Back to results", path: "/results" },
+        { label: "Back to search", path: "/" },
         { label: "Browse areas", path: "/" },
       ],
     },
@@ -44,7 +44,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       title: "Property details unavailable",
       subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
       actions: [
-        { label: "Back to results", path: "/results" },
+        { label: "Back to search", path: "/" },
         { label: "Browse areas", path: "/" },
       ],
     },
@@ -53,7 +53,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       title: "Property not found",
       subtitle: "This listing may no longer be available or the link may be incorrect.",
       actions: [
-        { label: "Browse properties", path: "/results" },
+        { label: "Browse homes", path: "/" },
         { label: "Return home", path: "/" },
       ],
     },

@@ -203,7 +203,7 @@ export function PropertyPage() {
           if (window.history.length > 1) {
             navigate(-1);
           } else {
-            navigate("/results");
+            navigate("/");
           }
         }}
         className="back-link property-brief-back"

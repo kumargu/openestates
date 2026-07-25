@@ -1,16 +1,23 @@
 import "./index.css";
 import "./styles/evidence.css";
 import "./styles/property-scene.css";
-import { StrictMode, useState, useCallback, useEffect, useRef, lazy, Suspense } from "react";
+import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import {
+  BrowserRouter,
+  Routes,
+  Route,
+  Link,
+  Navigate,
+  useLocation,
+  useSearchParams,
+} from "react-router-dom";
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
 import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
-const ResultsPageA = lazy(() => import("./pages/ResultsPageA.tsx").then(m => ({ default: m.ResultsPageA })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
 const ComparePage = lazy(() => import("./pages/ComparePage.tsx").then(m => ({ default: m.ComparePage })));
@@ -27,164 +34,44 @@ export function FocusOnNavigate() {
   return null;
 }
 
-export function NavLink({ to, label, active }: { to: string; label: string; active: boolean }) {
-  return (
-    <Link
-      to={to}
-      style={{
-        textDecoration: "none",
-        color: active ? "#c96b4f" : "#555",
-        fontWeight: active ? 500 : 400,
-        fontSize: "0.88rem",
-        padding: "0.35rem 0.75rem",
-        borderRadius: "8px",
-        backgroundColor: active ? "rgba(201,107,79,0.06)" : "transparent",
-        transition: "all 0.2s ease",
-      }}
-      onMouseEnter={(e) => {
-        if (!active) {
-          e.currentTarget.style.color = "#1a1a1a";
-          e.currentTarget.style.backgroundColor = "rgba(0,0,0,0.03)";
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (!active) {
-          e.currentTarget.style.color = "#555";
-          e.currentTarget.style.backgroundColor = "transparent";
-        }
-      }}
-    >
-      {label}
-    </Link>
-  );
+function ResultsRedirect() {
+  const [params] = useSearchParams();
+  const query = params.get("q")?.trim();
+  return <Navigate to={query ? `/?q=${encodeURIComponent(query)}` : "/"} replace />;
 }
 
-const NAV_ITEMS = [
-  {
-    to: "/results",
-    label: "Properties",
-    matchFn: (path: string) => path === "/results" || path.startsWith("/property/"),
-  },
-  {
-    to: "/#area-tracker",
-    label: "Area Tracker",
-    matchFn: (path: string) => path === "/",
-  },
-];
-
+/** Brand-only landing chrome — search and market map live in the page itself. */
 export function Nav() {
   const location = useLocation();
-  const isHome = location.pathname === "/";
-  const path = location.pathname;
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const hamburgerRef = useRef<HTMLButtonElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-
-  const closeDrawer = useCallback(() => {
-    setDrawerOpen(false);
-    // Return focus to the hamburger button
-    hamburgerRef.current?.focus();
-  }, []);
-
-  // When drawer opens: focus close button + lock body scroll
-  useEffect(() => {
-    if (drawerOpen) {
-      closeButtonRef.current?.focus();
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [drawerOpen]);
-
-  if (!isHome) return null;
+  if (location.pathname !== "/") return null;
 
   return (
-    <>
-      <nav
+    <nav
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        display: "flex",
+        padding: "0.75rem clamp(1.5rem, 4vw, 4rem)",
+        alignItems: "center",
+        zIndex: 100,
+        backgroundColor: "transparent",
+      }}
+    >
+      <Link
+        to="/"
         style={{
-          position: isHome ? "fixed" : "sticky",
-          top: 0,
-          left: 0,
-          right: 0,
-          display: "flex",
-          gap: "0.25rem",
-          padding: "0.75rem clamp(1.5rem, 4vw, 4rem)",
-          alignItems: "center",
-          zIndex: 100,
-          backgroundColor: isHome ? "transparent" : "rgba(253,249,247,0.92)",
-          backdropFilter: isHome ? "none" : "blur(16px)",
-          borderBottom: isHome ? "none" : "1px solid rgba(201,107,79,0.08)",
-          transition: "background-color 0.3s ease",
+          fontWeight: 600,
+          textDecoration: "none",
+          color: "#1a1a1a",
+          fontSize: "1.05rem",
+          letterSpacing: "-0.02em",
         }}
       >
-        <Link
-          to="/"
-          style={{
-            fontWeight: 600,
-            textDecoration: "none",
-            color: "#1a1a1a",
-            fontSize: "1.05rem",
-            letterSpacing: "-0.02em",
-            marginRight: "1rem",
-          }}
-        >
-          OpenEstates
-        </Link>
-        <div style={{ flex: 1 }} />
-        {/* Desktop nav links */}
-        <div className="nav-links">
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} label={item.label} active={item.matchFn(path)} />
-          ))}
-        </div>
-        {/* Hamburger button — visible only on mobile via CSS */}
-        <button
-          ref={hamburgerRef}
-          className="nav-hamburger"
-          onClick={() => setDrawerOpen(true)}
-          aria-label="Open navigation menu"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="3" y1="6" x2="21" y2="6" />
-            <line x1="3" y1="12" x2="21" y2="12" />
-            <line x1="3" y1="18" x2="21" y2="18" />
-          </svg>
-        </button>
-      </nav>
-
-      {/* Mobile drawer backdrop */}
-      <div
-        className={`nav-drawer-backdrop ${drawerOpen ? "nav-drawer-backdrop--open" : ""}`}
-        onClick={closeDrawer}
-      />
-
-      {/* Mobile slide-in drawer */}
-      <div
-        className={`nav-drawer ${drawerOpen ? "nav-drawer--open" : ""}`}
-        role={drawerOpen ? "dialog" : undefined}
-        aria-modal={drawerOpen ? "true" : undefined}
-        aria-hidden={!drawerOpen}
-        onKeyDown={(e) => { if (e.key === "Escape") closeDrawer(); }}
-      >
-        <button ref={closeButtonRef} className="nav-drawer-close" onClick={closeDrawer} aria-label="Close menu">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <line x1="18" y1="6" x2="6" y2="18" />
-            <line x1="6" y1="6" x2="18" y2="18" />
-          </svg>
-        </button>
-        {NAV_ITEMS.map((item) => (
-          <Link
-            key={item.to}
-            to={item.to}
-            className={`nav-drawer-link ${item.matchFn(path) ? "nav-drawer-link--active" : ""}`}
-            onClick={closeDrawer}
-          >
-            {item.label}
-          </Link>
-        ))}
-      </div>
-    </>
+        OpenEstates
+      </Link>
+    </nav>
   );
 }
 
@@ -221,7 +108,7 @@ export function App() {
               }>
                 <Routes>
                   <Route path="/" element={<HomePage />} />
-                  <Route path="/results" element={<ResultsPageA />} />
+                  <Route path="/results" element={<ResultsRedirect />} />
                   <Route path="/property/:id" element={<PropertyPage />} />
                   <Route path="/property/:id/plan" element={<HomePlanPage />} />
                   <Route path="/compare" element={<ComparePage />} />

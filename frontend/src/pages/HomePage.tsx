@@ -3,7 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
 import { getAreaTracker, getAreas, getProperties, type PlatformStats } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
-import { SearchExperience as InlineSearchExperience } from "./ResultsPageA.tsx";
+import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingPicksSection } from "../components/LandingPicksSection.tsx";
 
@@ -395,7 +395,6 @@ export function HomePage() {
       {hasInlinePane && (
         <section ref={inlineResultsRef} className="home-inline-results-anchor" aria-label="Search results">
           <InlineSearchExperience
-            variant="embedded"
             onSearchCommit={handleInlineSearchCommit}
           />
         </section>

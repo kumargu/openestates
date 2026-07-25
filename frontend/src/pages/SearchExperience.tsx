@@ -4,7 +4,7 @@
  * Rust backend is unavailable so product review does not render a blank shell.
  */
 import { useEffect, useState, useMemo, type FormEvent } from "react";
-import { useSearchParams, Link } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
   PropertyCard as PropertyCardType,
@@ -222,15 +222,14 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
   );
 }
 
-/* ---------- Search Experience ---------- */
+/* ---------- Landing search experience ---------- */
 
 type SearchExperienceProps = {
-  variant?: "page" | "embedded";
   onSearchCommit?: (query: string) => void;
 };
 
-export function SearchExperience({ variant = "page", onSearchCommit }: SearchExperienceProps) {
-  const isEmbedded = variant === "embedded";
+export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
+  const isEmbedded = true;
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
@@ -593,19 +592,13 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
               </button>
             ))}
           </div>
-          {isEmbedded ? (
-            <button
-              type="button"
-              className="inline-results-clear"
-              onClick={() => setSearchParams({})}
-            >
-              Browse all properties
-            </button>
-          ) : (
-            <Link to="/results" style={{ color: "var(--color-accent)", fontSize: "0.88rem", fontWeight: 500 }}>
-              Browse all properties
-            </Link>
-          )}
+          <button
+            type="button"
+            className="inline-results-clear"
+            onClick={() => setSearchParams({})}
+          >
+            Clear search
+          </button>
         </div>
       )}
 
@@ -649,10 +642,4 @@ export function SearchExperience({ variant = "page", onSearchCommit }: SearchExp
       })()}
     </div>
   );
-}
-
-/* ---------- Results Page ---------- */
-
-export function ResultsPageA() {
-  return <SearchExperience variant="page" />;
 }
