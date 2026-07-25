@@ -56,11 +56,6 @@ function CompareUnavailable({ variant }: { variant: "error" | "empty" }) {
   );
 }
 
-function societyIdentity(property: PropertyCard): string {
-  return property.society_name?.trim().toLocaleLowerCase()
-    || property.title.trim().toLocaleLowerCase();
-}
-
 export function ComparePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const idsParam = searchParams.get("ids") ?? "";
@@ -135,8 +130,6 @@ export function ComparePage() {
     return <CompareUnavailable variant={status} />;
   }
 
-  const societyCount = new Set(selectedHomes.map(societyIdentity)).size;
-
   function copyComparisonLink() {
     void navigator.clipboard.writeText(window.location.href)
       .then(() => setCopied(true));
@@ -167,11 +160,7 @@ export function ComparePage() {
       <div className="compare-workspace__content">
         <header className="compare-workspace__intro">
           <div>
-            <span>Decision view</span>
             <h1>Same budget. Different tradeoffs.</h1>
-            <p>
-              {societyCount} societ{societyCount === 1 ? "y" : "ies"} on one shared price scale
-            </p>
           </div>
         </header>
 
