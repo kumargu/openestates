@@ -585,27 +585,68 @@
   margin-top: 0.5rem;
 }
 
-/* Area Trail — visual first-scan for gate-side approach roads. */
+/* Approach road — compact tile with an on-demand visual trail. */
 
 .area-trail {
-  margin-bottom: 1.5rem;
-  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.area-trail__tile {
+  display: grid;
+  width: 100%;
+  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 28px rgba(30, 24, 20, 0.05);
+  color: var(--color-text, #1a1a1a);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
 }
 
-.area-trail__head {
+.area-trail__tile:hover {
+  border-color: rgba(138, 109, 0, 0.28);
+  background: #fff;
+}
+
+.area-trail__tile:focus-visible,
+.area-trail__close:focus-visible {
+  outline: 2px solid var(--color-accent, #c96b4f);
+  outline-offset: 2px;
+}
+
+.area-trail__preview {
+  display: block;
+  height: 6.75rem;
+  overflow: hidden;
+  background: #e8e2dc;
+}
+
+.area-trail__preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.28s var(--ease-out, ease);
+}
+
+.area-trail__tile:hover .area-trail__preview img {
+  transform: scale(1.025);
+}
+
+.area-trail__copy {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 0.85rem;
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.2rem;
 }
 
-.area-trail__head span,
-.area-trail__kicker {
+.area-trail__kicker,
+.area-trail__dialog-head > div > span {
   display: block;
   color: var(--color-warning, #8a6d00);
   font-size: 0.66rem;
@@ -614,19 +655,91 @@
   text-transform: uppercase;
 }
 
-.area-trail__head h2 {
+.area-trail__copy strong {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.area-trail__copy > span:last-child {
+  overflow: hidden;
+  color: var(--color-text-secondary, #666);
+  font-size: 0.76rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.area-trail__open {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-right: 1rem;
+  color: var(--color-text-secondary, #666);
+  font-size: 0.74rem;
+  font-weight: 700;
+}
+
+.area-trail__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(20, 18, 16, 0.72);
+  backdrop-filter: blur(6px);
+}
+
+.area-trail__dialog {
+  width: min(58rem, 100%);
+  max-height: calc(100vh - 3rem);
+  padding: 1rem;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: var(--color-surface, #fff);
+}
+
+.area-trail__dialog-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.area-trail__dialog-head h2 {
   margin: 0.2rem 0 0;
   color: var(--color-text, #1a1a1a);
   font-size: 1.04rem;
   line-height: 1.24;
 }
 
-.area-trail--with-media .area-trail__hero {
-  min-height: 22rem;
+.area-trail__dialog-head p {
+  margin: 0.25rem 0 0;
+  color: var(--color-text-secondary, #666);
+  font-size: 0.72rem;
 }
 
-.area-trail--with-media .area-trail__strip {
-  margin-top: 0.75rem;
+.area-trail__dialog-head p a {
+  color: var(--color-accent, #c96b4f);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.area-trail__dialog-head p a:hover {
+  text-decoration: underline;
+}
+
+.area-trail__close {
+  display: grid;
+  flex: 0 0 auto;
+  width: 2.25rem;
+  height: 2.25rem;
+  place-items: center;
+  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
+  border-radius: 999px;
+  background: transparent;
+  color: var(--color-text, #1a1a1a);
+  cursor: pointer;
 }
 
 .area-trail__hero,
@@ -635,14 +748,26 @@
   display: block;
   min-width: 0;
   overflow: hidden;
+  padding: 0;
+  border: 0;
   color: #fff;
+  text-align: left;
   text-decoration: none;
   background: #e8e2dc;
 }
 
 .area-trail__hero {
-  min-height: 18rem;
+  min-height: 22rem;
   border-radius: 12px;
+}
+
+.area-trail__thumb {
+  cursor: pointer;
+}
+
+.area-trail__thumb:focus-visible {
+  outline: 2px solid var(--color-accent, #c96b4f);
+  outline-offset: 2px;
 }
 
 .area-trail__hero img,
@@ -654,7 +779,6 @@
   transition: transform 0.28s var(--ease-out, ease);
 }
 
-.area-trail__hero:hover img,
 .area-trail__thumb:hover img {
   transform: scale(1.025);
 }
@@ -676,28 +800,11 @@
   text-overflow: ellipsis;
 }
 
-.area-trail__snippets {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  margin-top: 0.85rem;
-}
-
-.area-trail__snippets span {
-  padding: 0.55rem 0.65rem;
-  border-left: 3px solid rgba(184, 139, 0, 0.42);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.72);
-  color: var(--color-text-secondary, #666);
-  font-size: 0.78rem;
-  line-height: 1.42;
-}
-
 .area-trail__strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.4rem;
-  margin-top: 0.5rem;
+  margin-top: 0.75rem;
 }
 
 .area-trail__thumb {
@@ -2083,21 +2190,29 @@
     margin-left: 1rem;
   }
 
-  .area-trail {
-    padding: 0.85rem;
+  .area-trail__tile {
+    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+    gap: 0.7rem;
   }
 
-  .area-trail__head {
-    align-items: flex-start;
-    flex-direction: column;
+  .area-trail__preview {
+    height: 5.5rem;
   }
 
-  .area-trail__meta {
-    justify-content: flex-start;
+  .area-trail__open {
+    margin-right: 0.7rem;
+    font-size: 0;
   }
 
-  .area-trail__body {
-    grid-template-columns: 1fr;
+  .area-trail__backdrop {
+    align-items: end;
+    padding: 0;
+  }
+
+  .area-trail__dialog {
+    width: 100%;
+    max-height: 92vh;
+    border-radius: 16px 16px 0 0;
   }
 
   .area-trail__hero {
