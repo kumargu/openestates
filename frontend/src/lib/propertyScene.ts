@@ -30,7 +30,10 @@ export function initialPropertySceneUrls(input: {
   images?: string[];
   societyId?: string;
 }): string[] {
+  const slug = societySlugFromId(input.societyId);
+  const localSocietyPhotos = slug ? societyPhotoCandidates(slug, 5) : [];
   return unique([
+    ...localSocietyPhotos,
     ...(input.images ?? []),
     ...(input.heroImage ? [input.heroImage] : []),
   ]);

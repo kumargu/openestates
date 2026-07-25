@@ -254,18 +254,19 @@ fn home_state_display(
     age_bucket: Option<&str>,
     timeline: Option<&str>,
 ) -> Option<String> {
-    if timeline.is_some_and(|value| value.eq_ignore_ascii_case("delayed")) {
-        return Some("Timeline delayed".to_string());
-    }
-
     match state {
         Some("delivered") => match age_bucket {
-            Some("newly delivered") => Some("Newly delivered".to_string()),
+            Some("newly delivered") => Some("Delivered".to_string()),
             Some(bucket) => Some(format!("Delivered · {bucket}")),
             None => Some("Delivered".to_string()),
         },
+        Some("under_construction")
+            if timeline.is_some_and(|value| value.eq_ignore_ascii_case("delayed")) =>
+        {
+            Some("Delayed".to_string())
+        }
         Some("under_construction") => Some("Under construction".to_string()),
-        Some("delayed") => Some("Timeline delayed".to_string()),
+        Some("delayed") => Some("Delayed".to_string()),
         _ => age_bucket.map(|bucket| format!("Est. {bucket}")),
     }
 }
@@ -452,7 +453,29 @@ mod tests {
 
         let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
 
-        assert_eq!(projected.display.as_deref(), Some("Timeline delayed"));
+        assert_eq!(projected.display.as_deref(), Some("Delayed"));
+    }
+
+    #[test]
+    fn delivered_home_state_wins_historical_delay_projection() {
+        let index = index(vec![
+            fact(
+                "society:sample",
+                "home_state",
+                FactValue::Text("delivered".to_string()),
+                2,
+            ),
+            fact(
+                "society:sample",
+                "home_timeline_state",
+                FactValue::Text("delayed".to_string()),
+                1,
+            ),
+        ]);
+
+        let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
+
+        assert_eq!(projected.display.as_deref(), Some("Delivered"));
     }
 
     fn index(facts: Vec<ServingFactRecord>) -> ServingFactIndex {

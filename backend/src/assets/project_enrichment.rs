@@ -38,6 +38,8 @@ pub struct ExternalListingObservationRecord {
     pub project_key: Option<String>,
     pub source_name: String,
     pub source_url: Option<String>,
+    #[serde(default)]
+    pub listing_type: Option<String>,
     pub price: Option<f64>,
     #[serde(default)]
     pub price_min: Option<f64>,
@@ -384,6 +386,13 @@ fn append_listing_facts(
     let area_sqft_min = row.area_sqft_min.unwrap_or(area_sqft).round();
     let area_sqft_max = row.area_sqft_max.unwrap_or(area_sqft).round();
     let source_name = row.source_name.trim();
+    let listing_type = row
+        .listing_type
+        .as_deref()
+        .map(str::trim)
+        .unwrap_or("sale")
+        .to_ascii_lowercase();
+    let is_rent = listing_type == "rent";
     let price_range_display = inr_range_display(price_min as u64, price_max as u64);
     let area_range_display = sqft_range_display(area_sqft_min as u64, area_sqft_max as u64);
     let ppsf_range_display = price_per_sqft_range_display(
@@ -414,8 +423,32 @@ fn append_listing_facts(
         "society": row.society.as_deref(),
         "locality": row.locality.as_deref(),
         "source_url": row.source_url.as_deref(),
+        "listing_type": listing_type,
         "observed_at": row.observed_at.to_rfc3339(),
     });
+    if is_rent {
+        append_rent_facts(
+            row,
+            entity_id,
+            run_id,
+            bhk,
+            &bhk_key,
+            price_inr,
+            price_min,
+            price_max,
+            area_sqft,
+            area_sqft_min,
+            area_sqft_max,
+            &price_range_display,
+            &area_range_display,
+            &ppsf_range_display,
+            &listing_payload,
+            source_name,
+            facts,
+            annotations,
+        )?;
+        return Ok(());
+    }
     append_derived_fact(
         entity_id,
         &format!("listing_{bhk_key}"),
@@ -681,6 +714,181 @@ fn append_listing_facts(
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+fn append_rent_facts(
+    row: &ExternalListingObservationRecord,
+    entity_id: &str,
+    run_id: &MaterializationId,
+    bhk: f64,
+    bhk_key: &str,
+    monthly_rent: f64,
+    rent_min: f64,
+    rent_max: f64,
+    area_sqft: f64,
+    area_sqft_min: f64,
+    area_sqft_max: f64,
+    rent_range_display: &str,
+    area_range_display: &str,
+    ppsf_range_display: &Option<String>,
+    listing_payload: &serde_json::Value,
+    source_name: &str,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), ProjectEnrichmentAssetError> {
+    let source_url = row.source_url.clone();
+    let source_type = "ExternalListing";
+    let skill_id = "external_listing_facts";
+    append_derived_fact(
+        entity_id,
+        &format!("rent_{bhk_key}"),
+        FactValue::Text(listing_payload.to_string()),
+        0.68,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!(
+            "{} rent listing: INR {} per month for {}",
+            bhk_display(bhk),
+            rent_range_display,
+            area_range_display
+        ),
+        &["rent", "monthly rent", "rental", "lease", "bhk"],
+        Some(("TextMatch", 1.5, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("rent_monthly_{bhk_key}"),
+        FactValue::Numeric(monthly_rent),
+        0.68,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} monthly rent: INR {{value}}", bhk_display(bhk)),
+        &["rent", "monthly rent", "rental budget"],
+        Some(("LowerIsBetter", 1.0, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("rent_monthly_range_{bhk_key}"),
+        FactValue::Text(rent_range_display.to_string()),
+        0.68,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} monthly rent range: {{value}}", bhk_display(bhk)),
+        &["rent", "monthly rent", "rent range"],
+        Some(("TextMatch", 1.0, Vec::new())),
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("rent_area_sqft_{bhk_key}"),
+        FactValue::Numeric(area_sqft),
+        0.68,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} rent listing area: {{value}} sq ft", bhk_display(bhk)),
+        &["rent area", "sqft", "rental"],
+        None,
+        facts,
+        annotations,
+    )?;
+    append_derived_fact(
+        entity_id,
+        &format!("rent_area_sqft_range_{bhk_key}"),
+        FactValue::Text(sqft_range_display(
+            area_sqft_min as u64,
+            area_sqft_max as u64,
+        )),
+        0.68,
+        source_type,
+        source_url.clone(),
+        skill_id,
+        row.observed_at,
+        run_id,
+        &format!("{} rent listing area range: {{value}}", bhk_display(bhk)),
+        &["rent area", "sqft", "rental"],
+        None,
+        facts,
+        annotations,
+    )?;
+    if let Some(value) = ppsf_range_display {
+        append_derived_fact(
+            entity_id,
+            &format!("rent_per_sqft_range_{bhk_key}"),
+            FactValue::Text(value.clone()),
+            0.68,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} rent rate range: {{value}}", bhk_display(bhk)),
+            &["rent per sqft", "rental rate"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if let Some(value) = row
+        .source_url
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+    {
+        append_derived_fact(
+            entity_id,
+            &format!("rent_source_url_{bhk_key}"),
+            FactValue::Text(value),
+            0.68,
+            source_type,
+            source_url.clone(),
+            skill_id,
+            row.observed_at,
+            run_id,
+            "Rent source: {value}",
+            &["rent source", "source"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    if !source_name.is_empty() {
+        append_derived_fact(
+            entity_id,
+            &format!("rent_source_name_{bhk_key}"),
+            FactValue::Text(source_name.to_string()),
+            0.68,
+            source_type,
+            source_url,
+            skill_id,
+            row.observed_at,
+            run_id,
+            &format!("{} rent source: {{value}}", bhk_display(bhk)),
+            &["rent source", "source"],
+            None,
+            facts,
+            annotations,
+        )?;
+    }
+    let _ = rent_min;
+    let _ = rent_max;
+    Ok(())
+}
+
 fn bhk_fact_suffix(bhk: f64) -> String {
     if !bhk.is_finite() || bhk <= 0.0 {
         return String::new();
@@ -865,6 +1073,7 @@ fn write_external_listing_parquet(
         Field::new("project_key", DataType::Utf8, true),
         Field::new("source_name", DataType::Utf8, false),
         Field::new("source_url", DataType::Utf8, true),
+        Field::new("listing_type", DataType::Utf8, true),
         Field::new("price", DataType::Float64, true),
         Field::new("price_min", DataType::Float64, true),
         Field::new("price_max", DataType::Float64, true),
@@ -892,6 +1101,7 @@ fn write_external_listing_parquet(
             optional_string_array(records.iter().map(|record| record.project_key.clone())),
             strings(records.iter().map(|record| record.source_name.clone())),
             optional_string_array(records.iter().map(|record| record.source_url.clone())),
+            optional_string_array(records.iter().map(|record| record.listing_type.clone())),
             optional_f64s(records.iter().map(|record| record.price)),
             optional_f64s(records.iter().map(|record| record.price_min)),
             optional_f64s(records.iter().map(|record| record.price_max)),
@@ -931,6 +1141,7 @@ async fn read_external_listing_rows(
         let project_key = string_column(&batch, "project_key")?;
         let source_name = string_column(&batch, "source_name")?;
         let source_url = string_column(&batch, "source_url")?;
+        let listing_type = optional_string_column(&batch, "listing_type")?;
         let price = f64_column(&batch, "price")?;
         let price_min = optional_f64_column(&batch, "price_min")?;
         let price_max = optional_f64_column(&batch, "price_max")?;
@@ -956,6 +1167,7 @@ async fn read_external_listing_rows(
                 project_key: optional_string(project_key, row),
                 source_name: required_string(source_name, row, "source_name")?,
                 source_url: optional_string(source_url, row),
+                listing_type: optional_column_string(listing_type, row),
                 price: optional_f64(price, row),
                 price_min: optional_column_f64(price_min, row),
                 price_max: optional_column_f64(price_max, row),

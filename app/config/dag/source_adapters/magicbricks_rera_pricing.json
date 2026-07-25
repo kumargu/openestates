@@ -1,0 +1,29 @@
+{
+  "_comment": "Focused external pricing/rent adapter contract. Listing crawls must be seeded by RERA-derived configurations rather than broad project-only queries when configuration facts exist.",
+  "version": 1,
+  "source_id": "focused_rera_pricing",
+  "source_type": "ExternalListing",
+  "trust_tier": "support",
+  "sources": ["MagicBricks", "SquareYards"],
+  "request_path_policy": {
+    "allow_runtime_downloads": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "query_seed_policy": {
+    "primary_seed_fact": "available_configurations",
+    "sale_query_configurations": ["1BHK", "2BHK", "2.5BHK", "3BHK", "4BHK"],
+    "rent_query_configurations": ["2BHK", "3BHK"],
+    "fallback_without_rera_configurations": "project_page_only_until_backfill_complete"
+  },
+  "emits_fact_keys": [
+    "listing_price",
+    "listing_price_range",
+    "listing_area_sqft",
+    "listing_price_per_sqft_range",
+    "listing_source_url",
+    "rent_monthly",
+    "rent_monthly_range",
+    "rent_area_sqft",
+    "rent_source_url"
+  ]
+}

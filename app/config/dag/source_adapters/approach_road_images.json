@@ -1,0 +1,22 @@
+{
+  "_comment": "Approach-road image adapter contract. UI should navigate frames in-panel from structured media facts, not open image links in a new tab.",
+  "version": 1,
+  "source_id": "approach_road_images",
+  "source_type": "GoogleStreetView",
+  "trust_tier": "support",
+  "request_path_policy": {
+    "allow_runtime_street_view_fetch": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "frame_policy": {
+    "target_frame_count": 6,
+    "current_gate_frames": 4,
+    "ahead_frames": 2,
+    "fact_key": "media.approach_road_frames",
+    "navigation": "in_panel"
+  },
+  "emits_fact_keys": [
+    "media.approach_road_frames",
+    "approach_road_condition"
+  ]
+}

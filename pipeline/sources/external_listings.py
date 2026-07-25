@@ -26,8 +26,9 @@ HEADERS = {
 }
 
 MAGICBRICKS_READER_PREFIX = "https://r.jina.ai/http://"
+SQUAREYARDS_READER_PREFIX = "https://r.jina.ai/http://"
 LISTING_HEADING_RE = re.compile(
-    r"^\s*##\s+(?P<bhk>\d+(?:\.\d+)?)\s+BHK\s+Flat\s+for\s+Sale\s+in\s+"
+    r"^\s*##\s+(?P<bhk>\d+(?:\.\d+)?)\s+BHK\s+Flat\s+for\s+(?P<kind>Sale|Rent)\s+in\s+"
     r"(?P<location>.+?)\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -35,7 +36,11 @@ AREA_RE = re.compile(
     r"(?P<label>Carpet Area|Super Area)\s*\n\s*\n\s*(?P<area>[\d,]+(?:\.\d+)?)\s*sq\.?ft",
     re.IGNORECASE,
 )
-PRICE_LINE_RE = re.compile(r"^₹\s*[\d,.]+\s*(?:Cr|Lac|Lakh)\s*$", re.IGNORECASE)
+PRICE_LINE_RE = re.compile(
+    r"^\*{0,2}₹\s*[\d,.]+\s*(?:Cr|L|Lac|Lakh|K)?\*{0,2}"
+    r"(?:\s*/\s*(?:month|per\s+month))?(?:\s*\+\s*charges)?\s*$",
+    re.IGNORECASE,
+)
 PPSF_LINE_RE = re.compile(r"^₹\s*[\d,]+(?:\.\d+)?\s*per\s+sqft\s*$", re.IGNORECASE)
 
 
@@ -59,14 +64,7 @@ def collect_external_listings(request: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "snapshot_date": snapshot_date,
         "records": records,
-        "source_watermarks": [
-            {
-                "source": "external_listing_magicbricks",
-                "high_watermark": max(
-                    (record["observed_at"] for record in records), default=observed_at
-                ),
-            }
-        ],
+        "source_watermarks": source_watermarks(records, "external_listing", observed_at),
     }
 
 
@@ -84,7 +82,7 @@ def records_for_entity(
 
     source_pages = explicit_source_pages(input_data)
     if not source_pages and not skip_listing_fetch(request):
-        source_pages = magicbricks_source_pages(input_data, society_name)
+        source_pages = external_listing_source_pages(input_data, society_name)
 
     observations = []  # type: List[Dict[str, Any]]
     for source_page in source_pages:
@@ -94,18 +92,22 @@ def records_for_entity(
         page_text = optional_string(source_page.get("text")) or optional_string(
             source_page.get("html")
         )
+        source_name = source_name_from_page(source_page)
+        query_kind = listing_type_from_page(source_page)
         if page_text is None:
-            page_text = fetch_magicbricks_page_text(source_url)
+            page_text = fetch_listing_page_text(source_url, source_name)
         if not page_text:
             continue
         observations.extend(
-            listing_observations_from_magicbricks_text(
+            listing_observations_from_page_text(
                 page_text,
                 entity_id=entity_id,
                 project_key=optional_string(input_data.get("project_key")),
                 society_name=society_name,
                 fallback_locality=optional_string(input_data.get("area")),
                 source_url=source_url,
+                source_name=source_name,
+                query_kind=query_kind,
                 observed_at=observed_at,
             )
         )
@@ -123,11 +125,19 @@ def explicit_source_pages(input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
     )
     if isinstance(urls, list):
         return [
-            {"source_url": url, "source_name": "MagicBricks"}
+            {"source_url": url, "source_name": "MagicBricks", "query_kind": "sale"}
             for url in urls
             if optional_string(url)
         ]
     return []
+
+
+def external_listing_source_pages(
+    input_data: Dict[str, Any], society_name: str
+) -> List[Dict[str, Any]]:
+    return magicbricks_source_pages(input_data, society_name) + squareyards_source_pages(
+        input_data, society_name
+    )
 
 
 def magicbricks_source_pages(
@@ -137,20 +147,139 @@ def magicbricks_source_pages(
     project_slug = slug(society_name)
     if not project_slug or not city:
         return []
+    bhk_values = rera_configuration_bhks(input_data)
+    if bhk_values:
+        pages = []
+        for bhk in bhk_values:
+            bhk_slug = format_bhk(bhk).replace(".", "-")
+            pages.append(
+                {
+                    "source_name": "MagicBricks",
+                    "source_url": "https://www.magicbricks.com/{}-bhk-flats-for-sale-in-{}-{}-pppfs".format(
+                        bhk_slug, project_slug, city
+                    ),
+                    "query_kind": "sale",
+                    "bhk": bhk,
+                    "query_basis": "rera_configuration",
+                }
+            )
+            if bhk in (2.0, 3.0):
+                pages.append(
+                    {
+                        "source_name": "MagicBricks",
+                        "source_url": "https://www.magicbricks.com/{}-bhk-flats-for-rent-in-{}-{}-pppfr".format(
+                            bhk_slug, project_slug, city
+                        ),
+                        "query_kind": "rent",
+                        "bhk": bhk,
+                        "query_basis": "rera_configuration",
+                    }
+                )
+        pages.extend(magicbricks_project_pages(project_slug, city, include_rent=True))
+        return dedupe_source_pages(pages)
     return [
+        *magicbricks_project_pages(project_slug, city, include_rent=True)
+    ]
+
+
+def magicbricks_project_pages(
+    project_slug: str, city: str, *, include_rent: bool
+) -> List[Dict[str, Any]]:
+    pages = [
         {
             "source_name": "MagicBricks",
             "source_url": "https://www.magicbricks.com/project-{}-for-sale-in-{}-pppfs".format(
                 project_slug, city
             ),
+            "query_kind": "sale",
+            "query_basis": "project_fallback",
         }
+    ]
+    if include_rent:
+        pages.append(
+            {
+                "source_name": "MagicBricks",
+                "source_url": "https://www.magicbricks.com/project-{}-for-rent-in-{}-pppfr".format(
+                    project_slug, city
+                ),
+                "query_kind": "rent",
+                "query_basis": "project_fallback",
+            }
+        )
+    return pages
+
+
+def squareyards_source_pages(
+    input_data: Dict[str, Any], society_name: str
+) -> List[Dict[str, Any]]:
+    city = squareyards_city_slug(optional_string(input_data.get("city")))
+    project_slug = slug(society_name)
+    if not project_slug or not city:
+        return []
+    return [
+        {
+            "source_name": "SquareYards",
+            "source_url": "https://www.squareyards.com/sale/resale-properties-in-{}-{}".format(
+                project_slug, city
+            ),
+            "query_kind": "sale",
+            "query_basis": "project_focused",
+        },
+        {
+            "source_name": "SquareYards",
+            "source_url": "https://www.squareyards.com/rent/property-for-rent-in-{}-{}".format(
+                project_slug, city
+            ),
+            "query_kind": "rent",
+            "query_basis": "project_focused",
+        },
     ]
 
 
-def fetch_magicbricks_page_text(source_url: str) -> Optional[str]:
-    reader_prefix = os.environ.get("OPENESTATES_MAGICBRICKS_READER_PREFIX")
-    if reader_prefix is None:
-        reader_prefix = MAGICBRICKS_READER_PREFIX
+def rera_configuration_bhks(input_data: Dict[str, Any]) -> List[float]:
+    values = (
+        input_data.get("rera_configurations")
+        or input_data.get("available_configurations")
+        or input_data.get("configurations")
+        or []
+    )
+    if isinstance(values, str):
+        values = [part.strip() for part in values.split(",")]
+    if not isinstance(values, list):
+        return []
+    bhks = []
+    for value in values:
+        if isinstance(value, dict):
+            raw = value.get("bedroom_count") or value.get("bhk") or value.get("configuration_type")
+        else:
+            raw = value
+        parsed = configuration_bhk(raw)
+        if parsed is not None and parsed not in bhks:
+            bhks.append(parsed)
+    return sorted(bhks)
+
+
+def configuration_bhk(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        number = float(value)
+        return number if 0 < number <= 6 else None
+    match = re.search(r"\b([1-6](?:\.5)?)\s*(?:bhk|b h k|bed)?\b", str(value), re.IGNORECASE)
+    if not match:
+        return None
+    return optional_float(match.group(1))
+
+
+def fetch_listing_page_text(source_url: str, source_name: str) -> Optional[str]:
+    if source_name.lower() == "squareyards":
+        reader_prefix = os.environ.get("OPENESTATES_SQUAREYARDS_READER_PREFIX")
+        if reader_prefix is None:
+            reader_prefix = SQUAREYARDS_READER_PREFIX
+    else:
+        reader_prefix = os.environ.get("OPENESTATES_MAGICBRICKS_READER_PREFIX")
+        if reader_prefix is None:
+            reader_prefix = MAGICBRICKS_READER_PREFIX
     fetch_url = "{}{}".format(reader_prefix, source_url) if reader_prefix else source_url
     request = urllib.request.Request(fetch_url, headers=HEADERS)
     timeout = optional_float(os.environ.get("OPENESTATES_LISTING_FETCH_TIMEOUT")) or 30.0
@@ -161,7 +290,7 @@ def fetch_magicbricks_page_text(source_url: str) -> Optional[str]:
         return None
 
 
-def listing_observations_from_magicbricks_text(
+def listing_observations_from_page_text(
     page_text: str,
     *,
     entity_id: str,
@@ -169,6 +298,8 @@ def listing_observations_from_magicbricks_text(
     society_name: str,
     fallback_locality: Optional[str],
     source_url: str,
+    source_name: str,
+    query_kind: str,
     observed_at: str,
 ) -> List[Dict[str, Any]]:
     observations = []
@@ -177,6 +308,11 @@ def listing_observations_from_magicbricks_text(
         block_start = match.end()
         block_end = matches[index + 1].start() if index + 1 < len(matches) else len(page_text)
         block = page_text[block_start:block_end]
+        if source_name.lower() == "squareyards" and not block_mentions_project(
+            squareyards_listing_project_context(page_text, block, match, index, matches),
+            society_name,
+        ):
+            continue
         area = area_from_block(block)
         price = price_from_block(block)
         if not area or not price:
@@ -188,12 +324,14 @@ def listing_observations_from_magicbricks_text(
             match.group("location"), society_name, fallback_locality
         )
         ppsf = price_per_sqft_from_block(block)
+        listing_type = listing_type_from_heading(match.group("kind"), query_kind)
         observations.append(
             {
                 "entity_id": entity_id,
                 "project_key": project_key,
-                "source_name": "MagicBricks",
+                "source_name": source_name,
                 "source_url": source_url,
+                "listing_type": listing_type,
                 "price": price[0],
                 "price_display": price[1],
                 "area_sqft": area[0],
@@ -203,7 +341,7 @@ def listing_observations_from_magicbricks_text(
                 "configuration": "{} BHK".format(format_bhk(bhk)),
                 "area_type": area[2],
                 "bhk": bhk,
-                "bathrooms": labeled_number(block, "Bathroom"),
+                "bathrooms": bathrooms_from_block(block),
                 "floor": labeled_text(block, "Floor"),
                 "society": society_name,
                 "locality": locality,
@@ -214,16 +352,20 @@ def listing_observations_from_magicbricks_text(
 
 
 def aggregate_listing_records(observations: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    grouped = {}  # type: Dict[Tuple[str, float], List[Dict[str, Any]]]
+    grouped = {}  # type: Dict[Tuple[str, float, str, str], List[Dict[str, Any]]]
     for observation in observations:
         bhk = observation.get("bhk")
         entity_id = observation.get("entity_id")
         if not entity_id or bhk is None:
             continue
-        grouped.setdefault((str(entity_id), float(bhk)), []).append(observation)
+        listing_type = listing_type_from_page(observation)
+        source_name = optional_string(observation.get("source_name")) or "ExternalListing"
+        grouped.setdefault((str(entity_id), float(bhk), listing_type, source_name), []).append(
+            observation
+        )
 
     records = []
-    for (_entity_id, bhk), group in grouped.items():
+    for (_entity_id, bhk, listing_type, _source_name), group in grouped.items():
         prices = sorted_float_values(record.get("price") for record in group)
         areas = sorted_float_values(record.get("area_sqft") for record in group)
         ppsf_values = sorted_float_values(record.get("price_per_sqft") for record in group)
@@ -238,6 +380,7 @@ def aggregate_listing_records(observations: Iterable[Dict[str, Any]]) -> List[Di
                 "project_key": first.get("project_key"),
                 "source_name": first["source_name"],
                 "source_url": first.get("source_url"),
+                "listing_type": listing_type,
                 "price": round(price),
                 "price_min": round(prices[0]),
                 "price_max": round(prices[-1]),
@@ -264,12 +407,21 @@ def aggregate_listing_records(observations: Iterable[Dict[str, Any]]) -> List[Di
 
 def area_from_block(block: str) -> Optional[Tuple[float, str, str]]:
     match = AREA_RE.search(block)
-    if not match:
-        return None
-    area = optional_float(match.group("area").replace(",", ""))
+    if match:
+        area = optional_float(match.group("area").replace(",", ""))
+        label = "carpet" if "carpet" in match.group("label").lower() else "super built-up"
+    else:
+        fallback = squareyards_area_match(block) or re.search(
+            r"(?P<area>[\d,]+(?:\.\d+)?)\s*(?:sq\.?\s*ft|sqft|sq\.?\s*feet)",
+            block,
+            re.IGNORECASE,
+        )
+        if not fallback:
+            return None
+        area = optional_float(fallback.group("area").replace(",", ""))
+        label = area_label_from_match(fallback) or "listed area"
     if area is None or area <= 0:
         return None
-    label = "carpet" if "carpet" in match.group("label").lower() else "super built-up"
     return area, "{} sqft".format(clean_number(area)), label
 
 
@@ -294,15 +446,22 @@ def price_per_sqft_from_block(block: str) -> Optional[Tuple[float, str]]:
 
 
 def parse_inr_price(text: str) -> Optional[float]:
-    normalized = text.lower().replace(",", "")
-    match = re.search(r"([\d.]+)\s*(cr|lac|lakh)", normalized)
+    normalized = text.lower().replace(",", "").replace("*", "")
+    match = re.search(r"([\d.]+)\s*(cr|l|lac|lakh|k)?", normalized)
     if not match:
         return None
     value = optional_float(match.group(1))
     if value is None:
         return None
     unit = match.group(2)
-    multiplier = 10_000_000 if unit == "cr" else 100_000
+    if unit == "cr":
+        multiplier = 10_000_000
+    elif unit in ("l", "lac", "lakh"):
+        multiplier = 100_000
+    elif unit == "k":
+        multiplier = 1_000
+    else:
+        multiplier = 1
     return value * multiplier
 
 
@@ -329,6 +488,71 @@ def labeled_number(block: str, label: str) -> Optional[float]:
     return optional_float(value) if value is not None else None
 
 
+def bathrooms_from_block(block: str) -> Optional[float]:
+    labeled = labeled_number(block, "Bathroom")
+    if labeled is not None:
+        return labeled
+    match = re.search(r"\bConfig\s+[^\n]*?\+\s*(?P<baths>\d+(?:\.\d+)?)\s*Bath\b", block, re.IGNORECASE)
+    return optional_float(match.group("baths")) if match else None
+
+
+def squareyards_area_match(block: str):
+    return re.search(
+        r"Area\s+(?P<label>Built-up Area|Carpet Area|Super Area)\s*\n+\s*"
+        r"(?P<area>[\d,]+(?:\.\d+)?)\s*\n+\s*Sq\.?Ft\.?",
+        block,
+        re.IGNORECASE,
+    )
+
+
+def area_label_from_match(match) -> Optional[str]:
+    label = match.groupdict().get("label")
+    if not label:
+        return None
+    lowered = label.lower()
+    if "built" in lowered:
+        return "built-up"
+    if "carpet" in lowered:
+        return "carpet"
+    if "super" in lowered:
+        return "super built-up"
+    return None
+
+
+def block_mentions_project(block: str, society_name: str) -> bool:
+    text = re.sub(r"[^a-z0-9]+", " ", block.lower())
+    project_tokens = [
+        token
+        for token in re.split(r"[^a-z0-9]+", society_name.lower())
+        if len(token) > 2
+    ]
+    if not project_tokens:
+        return True
+    return all(token in text for token in project_tokens)
+
+
+def squareyards_listing_project_context(
+    page_text: str, block: str, match, index: int, matches: List[Any]
+) -> str:
+    previous_boundary = matches[index - 1].end() if index > 0 else 0
+    prelude_start = max(previous_boundary, match.start() - 1200)
+    body_preview = drop_squareyards_trailing_project_label(block[:1200])
+    return "{}\n{}".format(page_text[prelude_start : match.start()], body_preview)
+
+
+def drop_squareyards_trailing_project_label(text: str) -> str:
+    lines = text.splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    if not lines:
+        return ""
+    last = lines[-1].strip().lower()
+    factual_markers = ("sq", "₹", "bath", "floor", "read more", "furnishing", "facing")
+    if len(last) <= 120 and not any(marker in last for marker in factual_markers):
+        lines.pop()
+    return "\n".join(lines)
+
+
 def labeled_text(block: str, label: str) -> Optional[str]:
     pattern = re.compile(
         r"^\s*{}\s*\n\s*\n\s*(?P<value>[^\n]+)".format(re.escape(label)),
@@ -345,6 +569,8 @@ def dedupe_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
         key = (
             record["entity_id"],
             record.get("bhk"),
+            record.get("listing_type"),
+            record.get("source_name"),
             record.get("source_url"),
             record.get("price_min"),
             record.get("price_max"),
@@ -355,6 +581,35 @@ def dedupe_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
             continue
         seen.add(key)
         deduped.append(record)
+    return deduped
+
+
+def source_watermarks(
+    records: Iterable[Dict[str, Any]], prefix: str, default_watermark: str
+) -> List[Dict[str, str]]:
+    watermarks = {}
+    for record in records:
+        source_name = slug(optional_string(record.get("source_name")) or "external")
+        key = "{}_{}".format(prefix, source_name.replace("-", "_"))
+        observed_at = optional_string(record.get("observed_at")) or default_watermark
+        watermarks[key] = max(watermarks.get(key, default_watermark), observed_at)
+    if not watermarks:
+        watermarks["{}_empty".format(prefix)] = default_watermark
+    return [
+        {"source": source, "high_watermark": watermark}
+        for source, watermark in sorted(watermarks.items())
+    ]
+
+
+def dedupe_source_pages(pages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    deduped = []
+    seen = set()
+    for page in pages:
+        url = required_page_url(page)
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        deduped.append(page)
     return deduped
 
 
@@ -457,6 +712,23 @@ def format_bhk(value: float) -> str:
     return clean_number(value)
 
 
+def source_name_from_page(source_page: Dict[str, Any]) -> str:
+    return optional_string(source_page.get("source_name")) or "MagicBricks"
+
+
+def listing_type_from_page(source_page: Dict[str, Any]) -> str:
+    value = optional_string(source_page.get("listing_type") or source_page.get("query_kind"))
+    if value and value.lower() == "rent":
+        return "rent"
+    return "sale"
+
+
+def listing_type_from_heading(heading_kind: str, fallback: str) -> str:
+    if heading_kind and heading_kind.strip().lower() == "rent":
+        return "rent"
+    return "rent" if fallback == "rent" else "sale"
+
+
 def optional_string(value: Any) -> Optional[str]:
     if value is None:
         return None
@@ -484,6 +756,13 @@ def magicbricks_city_slug(city: Optional[str]) -> str:
     if normalized in ("bengaluru", "bangalore"):
         return "bangalore"
     return slug(normalized)
+
+
+def squareyards_city_slug(city: Optional[str]) -> str:
+    normalized = slug(city or "bangalore")
+    if normalized in ("bengaluru", "bangaluru"):
+        return "bangalore"
+    return normalized or "bangalore"
 
 
 def required_page_url(source_page: Dict[str, Any]) -> Optional[str]:

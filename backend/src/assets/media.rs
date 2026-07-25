@@ -35,6 +35,7 @@ pub struct ExternalImageObservationRecord {
     pub source_name: String,
     pub source_page_url: String,
     pub image_url: String,
+    pub original_image_url: Option<String>,
     pub image_kind: Option<String>,
     pub width: Option<u64>,
     pub height: Option<u64>,
@@ -190,6 +191,7 @@ async fn read_external_image_rows(
         let source_name = string_column(&batch, "source_name")?;
         let source_page_url = string_column(&batch, "source_page_url")?;
         let image_url = string_column(&batch, "image_url")?;
+        let original_image_url = string_column(&batch, "original_image_url")?;
         let image_kind = string_column(&batch, "image_kind")?;
         let width = u64_column(&batch, "width")?;
         let height = u64_column(&batch, "height")?;
@@ -206,6 +208,7 @@ async fn read_external_image_rows(
                 source_name: required_string(source_name, row, "source_name")?,
                 source_page_url: required_string(source_page_url, row, "source_page_url")?,
                 image_url: required_string(image_url, row, "image_url")?,
+                original_image_url: optional_string(original_image_url, row),
                 image_kind: optional_string(image_kind, row),
                 width: optional_u64(width, row),
                 height: optional_u64(height, row),
@@ -230,6 +233,7 @@ fn write_external_images_parquet(
         Field::new("source_name", DataType::Utf8, false),
         Field::new("source_page_url", DataType::Utf8, false),
         Field::new("image_url", DataType::Utf8, false),
+        Field::new("original_image_url", DataType::Utf8, true),
         Field::new("image_kind", DataType::Utf8, true),
         Field::new("width", DataType::UInt64, true),
         Field::new("height", DataType::UInt64, true),
@@ -248,6 +252,11 @@ fn write_external_images_parquet(
             strings(records.iter().map(|record| record.source_name.clone())),
             strings(records.iter().map(|record| record.source_page_url.clone())),
             strings(records.iter().map(|record| record.image_url.clone())),
+            optional_strings(
+                records
+                    .iter()
+                    .map(|record| record.original_image_url.clone()),
+            ),
             optional_strings(records.iter().map(|record| record.image_kind.clone())),
             optional_u64s(records.iter().map(|record| record.width)),
             optional_u64s(records.iter().map(|record| record.height)),
@@ -362,6 +371,7 @@ fn append_image_facts(
         .map(|row| {
             serde_json::json!({
                 "image_url": row.image_url,
+                "original_image_url": row.original_image_url,
                 "source_name": row.source_name,
                 "source_page_url": row.source_page_url,
                 "image_kind": row.image_kind,

@@ -115,6 +115,15 @@ pub struct PropertyCard {
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub google_reviews_url: Option<String>,
+    /// RERA-backed project land extent. Kept on the card because compare needs it at first paint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub society_land_acres: Option<f64>,
+    /// RERA-backed open-area percentage. Omitted when the source did not expose it clearly.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_space_pct: Option<f64>,
+    /// Derived homes-per-acre project density from typed RERA units and land area.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub units_per_acre: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seller_id: Option<String>,
     /// Seller trust fields — populated from seller data when available.

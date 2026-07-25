@@ -36,7 +36,8 @@ use crate::livability_brief::{
 use super::enrichment::{
     enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
-    society_node_id, AreaIntelligence, BuilderTrust, DataFreshness, ReraInfo,
+    overlay_project_scale_facts, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
+    DataFreshness, ReraInfo,
 };
 
 /// GET /api/properties — returns UI-ready property cards.
@@ -231,6 +232,7 @@ pub struct SourceAttribution {
 // Property evidence panel layout — schema in app/config/product/evidence_sections.json.
 const BUYER_CONTEXT_SECTIONS_JSON: &str =
     include_str!("../../../app/config/product/evidence_sections.json");
+const APPROACH_ROAD_MEDIA_FRAME_LIMIT: usize = 6;
 static BUYER_CONTEXT_DEFINITIONS: OnceLock<Vec<BuyerContextDefinition>> = OnceLock::new();
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1249,7 +1251,7 @@ fn approach_road_media_for(
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Option<EvidenceMediaStrip> {
-    let api_key = crate::street_view::google_maps_api_key()?;
+    let api_key = crate::street_view::google_maps_api_key();
     let facts = serving_facts?;
     let road_entity_id = resolve_road_segment_entity_id(property, facts, graph_index)?;
     let fact = facts
@@ -1269,8 +1271,8 @@ fn approach_road_media_for(
     let frames = record
         .frames
         .into_iter()
-        .take(5)
-        .filter_map(|frame| approach_road_media_frame(frame, &api_key))
+        .take(APPROACH_ROAD_MEDIA_FRAME_LIMIT)
+        .filter_map(|frame| approach_road_media_frame(frame, api_key.as_deref()))
         .collect::<Vec<_>>();
     if frames.is_empty() {
         return None;
@@ -1344,7 +1346,7 @@ fn has_approach_road_frames(serving_facts: &ServingFactIndex, entity_id: &str) -
 
 fn approach_road_media_frame(
     frame: ApproachRoadVisualFrameRecord,
-    api_key: &str,
+    api_key: Option<&str>,
 ) -> Option<EvidenceMediaFrame> {
     let street_input = crate::street_view::StreetViewFrameInput {
         pano_id: frame.pano_id.clone(),
@@ -1364,7 +1366,11 @@ fn approach_road_media_frame(
     let image_url = frame
         .image_url
         .filter(|url| !url.trim().is_empty())
-        .or_else(|| crate::street_view::street_view_static_url(&street_input, api_key))?;
+        .or_else(|| {
+            api_key.and_then(|api_key| {
+                crate::street_view::street_view_static_url(&street_input, api_key)
+            })
+        })?;
     let source_url = crate::street_view::street_view_pano_url(&street_input)?;
 
     Some(EvidenceMediaFrame {
@@ -1755,7 +1761,7 @@ pub(crate) fn build_source_panels(
     if !rera_items.is_empty() {
         panels.push(SourcePanel {
             kind: "rera".to_string(),
-            title: "RERA file".to_string(),
+            title: "RERA".to_string(),
             subtitle: "Official project registration and delivery record.".to_string(),
             scope: "society".to_string(),
             relationship: Some("project registration".to_string()),
@@ -2782,6 +2788,7 @@ pub(crate) fn overlay_serving_google_reviews(
     card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
         .project_home_state()
         .display;
+    overlay_project_scale_facts(&mut card, serving_facts, society_id);
     card
 }
 
@@ -2811,6 +2818,12 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_text("rera_status") {
         info.status = Some(fact.value);
     }
+    if let Some(fact) = projection
+        .latest_text("rera_start_date")
+        .or_else(|| projection.latest_text("project_start_date"))
+    {
+        info.start_date = Some(fact.value);
+    }
     if let Some(fact) = projection.latest_text("rera_completion_date") {
         info.completion_date = Some(fact.value);
     }
@@ -2826,23 +2839,20 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_numeric("rera_total_land_area_sqm") {
         info.total_land_area_sqm = Some(fact.value);
         info.total_land_area_acres = Some(fact.value / 4_046.856_422_4);
+    } else if let Some(fact) = projection.latest_numeric("project_land_area_acres") {
+        info.total_land_area_acres = Some(fact.value);
     }
-    if let Some(fact) = projection.latest_numeric("rera_total_project_cost") {
-        info.total_project_cost_inr = Some(fact.value);
+    if let Some(fact) = projection
+        .latest_numeric("project_open_area_pct")
+        .or_else(|| projection.latest_numeric("rera_open_area_pct"))
+    {
+        info.open_area_pct = Some(fact.value);
     }
-    if let Some(fact) = projection.latest_numeric("rera_land_cost") {
-        info.land_cost_inr = Some(fact.value);
-    }
-    if let Some(fact) = projection.latest_numeric("rera_construction_cost") {
-        info.construction_cost_inr = Some(fact.value);
-    }
-    info.cost_per_unit_inr = match (info.total_project_cost_inr, info.total_units) {
-        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
-        _ => projection
-            .latest_numeric("rera_cost_per_unit")
-            .map(|fact| fact.value)
-            .or(info.cost_per_unit_inr),
-    };
+    info.units_per_acre = units_per_acre(info.total_units, info.total_land_area_acres);
+    info.total_project_cost_inr = None;
+    info.land_cost_inr = None;
+    info.construction_cost_inr = None;
+    info.cost_per_unit_inr = None;
     if let Some(fact) = projection.latest_numeric("rera_complaints_count") {
         info.complaints_count = projected_i32(fact.value);
     }
@@ -3216,6 +3226,67 @@ mod serving_state_tests {
     }
 
     #[test]
+    fn source_panels_expose_six_approach_road_frames() {
+        let graph = legacy_graph();
+        let property = property();
+        let frames = (0..6)
+            .map(|index| {
+                serde_json::json!({
+                    "label": format!("Frame {}", index + 1),
+                    "distance_from_gate_m": if index < 4 { 0 } else { (index - 3) * 80 },
+                    "latitude": 12.9819914,
+                    "longitude": 77.7421819,
+                    "location_query": null,
+                    "pano_id": null,
+                    "radius_m": 250,
+                    "heading": (index as f64) * 45.0,
+                    "pitch": 0.0,
+                    "fov": 80.0,
+                    "capture_date": "latest available",
+                    "image_url": format!("https://example.com/frame-{index}.jpg")
+                })
+            })
+            .collect::<Vec<_>>();
+        let payload = serde_json::json!({
+            "provider": "Google Street View",
+            "coverage_quality": "usable",
+            "frames": frames
+        })
+        .to_string();
+        let serving = ServingFactIndex::from_records(
+            vec![serving_fact_for_entity(
+                "road_segment:sample-approach",
+                "media.approach_road_frames",
+                FactValue::Text(payload),
+                10,
+            )],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+        let graph_index =
+            crate::graph::GraphIndex::from_serving_edges(&[crate::serving::ServingEdgeRecord {
+                from_entity_id: "society:sample".to_string(),
+                edge_type: "served_by_road".to_string(),
+                to_entity_id: "road_segment:sample-approach".to_string(),
+                confidence: 0.82,
+                source_type: "approach_road".to_string(),
+            }]);
+
+        let panels = build_source_panels(&graph, &property, Some(&serving), Some(&graph_index));
+        let approach = panels
+            .iter()
+            .find(|panel| panel.kind == "approach_road")
+            .expect("served media frames should produce an approach-road panel");
+        let strip = approach
+            .media
+            .first()
+            .expect("approach-road panel should include a media strip");
+
+        assert_eq!(strip.frames.len(), 6);
+        assert_eq!(strip.frames[4].distance_from_gate_m, 80);
+        assert_eq!(strip.frames[5].distance_from_gate_m, 160);
+    }
+
+    #[test]
     fn source_panels_build_review_link_from_google_review_facts_without_explicit_url() {
         let graph = legacy_graph_without_review_url();
         let property = property();
@@ -3446,6 +3517,13 @@ mod serving_state_tests {
                     Some("https://www.magicbricks.com/example-green"),
                     11,
                 ),
+                typed_serving_fact(
+                    "rent_monthly_range_3bhk",
+                    FactValue::Text("INR 90K - 1.4L".to_string()),
+                    "ExternalListing",
+                    Some("https://www.squareyards.com/example-green-rent"),
+                    11,
+                ),
             ],
             Vec::<ServingSearchMetadataRecord>::new(),
         );
@@ -3464,6 +3542,12 @@ mod serving_state_tests {
             item.key == "listing_source_name_3bhk"
                 && item.label == "3BHK source name"
                 && item.value == "MagicBricks"
+                && item.source_type == "ExternalListing"
+        }));
+        assert!(market.items.iter().any(|item| {
+            item.key == "rent_monthly_range_3bhk"
+                && item.label == "3BHK monthly rent"
+                && item.value == "INR 90K - 1.4L"
                 && item.source_type == "ExternalListing"
         }));
     }

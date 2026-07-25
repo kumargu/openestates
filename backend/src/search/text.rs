@@ -629,6 +629,9 @@ impl TextSearch {
                         google_rating: None,
                         google_review_count: None,
                         google_reviews_url: None,
+                        society_land_acres: None,
+                        open_space_pct: None,
+                        units_per_acre: None,
                         seller_id: p.seller_id.clone(),
                         seller_completeness_pct: None,
                         documents_provided: Vec::new(),
@@ -767,6 +770,7 @@ pub(crate) fn enrich_card_from_serving_facts(
     card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
         .project_home_state()
         .display;
+    crate::routes::enrichment::overlay_project_scale_facts(card, serving_facts, society_id);
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {
@@ -1168,6 +1172,11 @@ fn numeric_constraint_evidence(
                     return ConstraintEvaluation::Failed;
                 }
             }
+            ConstraintOperator::Max => {
+                if canonical_value - 0.001 > threshold {
+                    return ConstraintEvaluation::Failed;
+                }
+            }
         }
 
         let display_value = canonical_value / query_unit.to_canonical;
@@ -1231,7 +1240,11 @@ fn serving_numeric_constraint_evidence(
             ConstraintOperator::Min if canonical_value + 0.001 < threshold => {
                 return ConstraintEvaluation::Failed;
             }
+            ConstraintOperator::Max if canonical_value - 0.001 > threshold => {
+                return ConstraintEvaluation::Failed;
+            }
             ConstraintOperator::Min => {}
+            ConstraintOperator::Max => {}
         }
         let display_value = canonical_value / query_unit.to_canonical;
         return ConstraintEvaluation::Matched(EvidenceMatch {

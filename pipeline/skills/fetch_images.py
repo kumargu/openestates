@@ -31,7 +31,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from pipeline.skills.base import BaseSkill, SkillCost, SkillResult
 
@@ -228,7 +228,7 @@ def _cache_key(query: str) -> str:
     return hashlib.sha256(query.encode()).hexdigest()[:16]
 
 
-def search_serpapi(query: str, api_key: str, num: int = 20) -> list[ImageCandidate]:
+def search_serpapi(query: str, api_key: str, num: int = 20) -> List[ImageCandidate]:
     """Search Google Images via SerpAPI. Results are cached."""
     SERPAPI_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = SERPAPI_CACHE_DIR / f"{_cache_key(query)}.json"
@@ -274,7 +274,7 @@ def search_serpapi(query: str, api_key: str, num: int = 20) -> list[ImageCandida
     return candidates
 
 
-def search_duckduckgo(query: str, max_results: int = 15) -> list[ImageCandidate]:
+def search_duckduckgo(query: str, max_results: int = 15) -> List[ImageCandidate]:
     """Search DuckDuckGo images. Free, no API key. Results are cached."""
     DDG_CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = DDG_CACHE_DIR / f"{_cache_key(query)}.json"
@@ -341,7 +341,7 @@ def _detect_image_type(data: bytes) -> Optional[str]:
     return None
 
 
-def _get_jpeg_dimensions(data: bytes) -> tuple[int, int]:
+def _get_jpeg_dimensions(data: bytes) -> Tuple[int, int]:
     """Extract width/height from JPEG data without Pillow."""
     i = 2
     while i < len(data) - 1:
@@ -367,7 +367,7 @@ def _get_jpeg_dimensions(data: bytes) -> tuple[int, int]:
     return 0, 0
 
 
-def _get_png_dimensions(data: bytes) -> tuple[int, int]:
+def _get_png_dimensions(data: bytes) -> Tuple[int, int]:
     """Extract width/height from PNG data."""
     if len(data) >= 24 and data[12:16] == b"IHDR":
         w = struct.unpack(">I", data[16:20])[0]
@@ -425,7 +425,7 @@ def download_image(url: str, dest: Path, timeout: int = 15) -> Optional[dict]:
 # Core fetch logic
 # ──────────────────────────────────────────────────────────────
 
-def _build_queries(name: str, area: str, city: str) -> list[str]:
+def _build_queries(name: str, area: str, city: str) -> List[str]:
     """Build search queries for a society."""
     base = f"{name} {area} {city}"
     return [
@@ -442,6 +442,8 @@ def fetch_images_for_entity(
     area: str = "",
     city: str = "Bangalore",
     serpapi_key: Optional[str] = None,
+    project_root: Optional[Path] = None,
+    target_images: int = TARGET_IMAGES,
     force: bool = False,
     dry_run: bool = False,
 ) -> dict:
@@ -451,19 +453,28 @@ def fetch_images_for_entity(
     Returns metadata dict matching the Day 22 schema.
     """
     slug = entity_id.replace("society:", "").replace("soc-", "").replace(" ", "_")
-    dest_dir = PHOTOS_DIR / slug
+    root = project_root or PROJECT_ROOT
+    photos_dir = root / "frontend" / "public" / "societies"
+    metadata_dir = root / "data" / "cache" / "image_metadata"
+    dest_dir = photos_dir / slug
+    existing = sorted(dest_dir.glob("*.*")) if dest_dir.exists() else []
 
     # Skip if already fetched (unless force)
-    if not force and dest_dir.exists():
-        existing = list(dest_dir.glob("*.*"))
-        if len(existing) >= 3:
+    if not force and existing:
+        if len(existing) >= target_images:
             logger.info("[%s] Already has %d images — skipping", name, len(existing))
             return _build_metadata(entity_id, entity_type, slug, existing, [])
+        logger.info(
+            "[%s] Has %d/%d images — filling missing slots",
+            name,
+            len(existing),
+            target_images,
+        )
 
     queries = _build_queries(name, area, city)
 
     # Collect candidates from all queries
-    all_candidates: list[ImageCandidate] = []
+    all_candidates = []  # type: List[ImageCandidate]
     seen_urls = set()
 
     for query in queries:
@@ -502,17 +513,17 @@ def fetch_images_for_entity(
 
     # Download: aim for a good mix
     dest_dir.mkdir(parents=True, exist_ok=True)
-    downloaded = []
+    downloaded = [] if force else list(existing)
     sources = []
     types_collected = set()
 
     # First pass: try to get diverse types (exterior first, then amenities, then others)
     type_priority = ["exterior", "amenities", "unknown", "interior"]
     for target_type in type_priority:
-        if len(downloaded) >= TARGET_IMAGES:
+        if len(downloaded) >= target_images:
             break
         for c in viable:
-            if len(downloaded) >= TARGET_IMAGES:
+            if len(downloaded) >= target_images:
                 break
             if c.url in [s["original_image_url"] for s in sources]:
                 continue
@@ -542,9 +553,9 @@ def fetch_images_for_entity(
                 logger.info("[%s] Downloaded %s (%s, score=%.0f)", name, result["file"], c.classification, c.score)
 
     # Second pass: fill remaining slots regardless of type
-    if len(downloaded) < 3:
+    if len(downloaded) < target_images:
         for c in viable:
-            if len(downloaded) >= TARGET_IMAGES:
+            if len(downloaded) >= target_images:
                 break
             if c.url in [s["original_image_url"] for s in sources]:
                 continue
@@ -569,8 +580,8 @@ def fetch_images_for_entity(
     metadata = _build_metadata(entity_id, entity_type, slug, downloaded, sources)
 
     # Save metadata
-    METADATA_DIR.mkdir(parents=True, exist_ok=True)
-    meta_file = METADATA_DIR / f"{slug}.json"
+    metadata_dir.mkdir(parents=True, exist_ok=True)
+    meta_file = metadata_dir / f"{slug}.json"
     meta_file.write_text(json.dumps(metadata, indent=2))
 
     return metadata
@@ -580,8 +591,8 @@ def _build_metadata(
     entity_id: str,
     entity_type: str,
     slug: str,
-    downloaded: list[Path],
-    sources: list[dict],
+    downloaded: List[Path],
+    sources: List[dict],
 ) -> dict:
     """Build the structured metadata dict."""
     photos = [f"/societies/{slug}/{p.name}" for p in downloaded]
@@ -607,7 +618,7 @@ def _build_metadata(
 # Main: run for all societies from seed data
 # ──────────────────────────────────────────────────────────────
 
-def load_societies() -> list[dict]:
+def load_societies() -> List[dict]:
     """Load societies from seed data."""
     path = SEED_DIR / "societies.json"
     if not path.exists():

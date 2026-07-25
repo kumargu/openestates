@@ -202,13 +202,14 @@ export function SoftComparableIcon({
   id,
   size = 16,
 }: {
-  id: "space" | "land" | "openSpace" | "homeState" | "builder" | string;
+  id: "space" | "land" | "density" | "openSpace" | "homeState" | "builder" | string;
   size?: number;
 }) {
   switch (id) {
     case "space":
       return <SoftSpaceIcon size={size} />;
     case "land":
+    case "density":
     case "openSpace":
       return <SoftLandIcon size={size} />;
     case "homeState":

@@ -9,6 +9,7 @@ use serde::Serialize;
 use crate::knowledge::edge::Relation;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
 use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Seller, Society};
+use crate::serving::{ServingFactIndex, SocietyFactProjection};
 
 // ---------------------------------------------------------------------------
 // RERA and Area Intelligence response structs
@@ -19,12 +20,15 @@ pub struct ReraInfo {
     pub registered: bool,
     pub registration_number: Option<String>,
     pub status: Option<String>,
+    pub start_date: Option<String>,
     pub completion_date: Option<String>,
     pub original_completion_date: Option<String>,
     pub delay_months: Option<i32>,
     pub total_units: Option<i32>,
     pub total_land_area_sqm: Option<f64>,
     pub total_land_area_acres: Option<f64>,
+    pub open_area_pct: Option<f64>,
+    pub units_per_acre: Option<f64>,
     pub total_project_cost_inr: Option<f64>,
     pub land_cost_inr: Option<f64>,
     pub construction_cost_inr: Option<f64>,
@@ -120,6 +124,40 @@ fn get_tags_fact(facts: &[SourcedFact], key: &str) -> Vec<String> {
         .unwrap_or_default()
 }
 
+pub(crate) fn units_per_acre(total_units: Option<i32>, acres: Option<f64>) -> Option<f64> {
+    let units = f64::from(total_units?);
+    let acres = acres?;
+    (units.is_finite() && acres.is_finite() && units > 0.0 && acres > 0.0).then_some(units / acres)
+}
+
+pub(crate) fn overlay_project_scale_facts(
+    card: &mut PropertyCard,
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+) {
+    let projection = SocietyFactProjection::from_index(serving_facts, society_id);
+    if let Some(fact) = projection.latest_numeric("rera_total_land_area_sqm") {
+        card.society_land_acres = Some(fact.value / 4_046.856_422_4);
+    } else if let Some(fact) = projection.latest_numeric("project_land_area_acres") {
+        card.society_land_acres = Some(fact.value);
+    }
+    if let Some(fact) = projection
+        .latest_numeric("project_open_area_pct")
+        .or_else(|| projection.latest_numeric("rera_open_area_pct"))
+    {
+        card.open_space_pct = Some(fact.value);
+    }
+    let total_units = projection
+        .latest_numeric("rera_total_units")
+        .and_then(|fact| projected_i32(fact.value));
+    card.units_per_acre = units_per_acre(total_units, card.society_land_acres);
+}
+
+fn projected_i32(value: f64) -> Option<i32> {
+    (value.is_finite() && value >= i32::MIN as f64 && value <= i32::MAX as f64)
+        .then(|| value.round() as i32)
+}
+
 /// Get the learned_at timestamp from any fact matching the key, formatted as ISO string.
 fn get_fact_timestamp(facts: &[SourcedFact], key: &str) -> Option<String> {
     facts
@@ -153,26 +191,13 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
     // Get last_verified from the rera_registered fact's learned_at timestamp
     let last_verified = get_fact_timestamp(facts, "rera_registered");
 
-    // Map fact keys: try both Python skill naming conventions
-    // Skills use: rera_number, rera_total_project_cost, rera_land_cost, rera_construction_cost
-    // Also try: rera_registration_number, rera_total_project_cost_inr (alt naming)
+    // Map fact keys while deliberately avoiding RERA-entered cost fields.
+    // Those costs are not reliable enough for buyer-facing price evidence.
     let registration_number = get_text_fact(facts, "rera_number")
         .or_else(|| get_text_fact(facts, "rera_registration_number"));
-    let total_cost_val = get_numeric_fact(facts, "rera_total_project_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_total_project_cost_inr"));
-    let land_cost = get_numeric_fact(facts, "rera_land_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_land_cost_inr"));
-    let construction_cost = get_numeric_fact(facts, "rera_construction_cost")
-        .or_else(|| get_numeric_fact(facts, "rera_construction_cost_inr"));
     let builder_projects = get_numeric_fact(facts, "rera_builder_projects_count")
         .or_else(|| get_numeric_fact(facts, "rera_builder_total_projects"))
         .map(|n| n as i32);
-
-    // Recompute cost_per_unit with the correct total_cost
-    let cost_per_unit = match (total_cost_val, total_units) {
-        (Some(cost), Some(units)) if units > 0 => Some(cost / units as f64),
-        _ => get_numeric_fact(facts, "rera_cost_per_unit"),
-    };
 
     // builder_states might be stored as Text (comma-separated) instead of Tags
     let builder_states = {
@@ -187,21 +212,29 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         }
     };
 
+    let total_land_area_sqm = get_numeric_fact(facts, "rera_total_land_area_sqm");
+    let total_land_area_acres = total_land_area_sqm.map(|sqm| sqm / 4_046.856_422_4);
+    let units_per_acre = units_per_acre(total_units, total_land_area_acres);
+
     Some(ReraInfo {
         registered,
         registration_number,
         status: get_text_fact(facts, "rera_status"),
+        start_date: get_text_fact(facts, "rera_start_date")
+            .or_else(|| get_text_fact(facts, "project_start_date")),
         completion_date: get_text_fact(facts, "rera_completion_date"),
         original_completion_date: get_text_fact(facts, "rera_original_completion_date"),
         delay_months: get_numeric_fact(facts, "rera_delay_months").map(|n| n as i32),
         total_units,
-        total_land_area_sqm: get_numeric_fact(facts, "rera_total_land_area_sqm"),
-        total_land_area_acres: get_numeric_fact(facts, "rera_total_land_area_sqm")
-            .map(|sqm| sqm / 4_046.856_422_4),
-        total_project_cost_inr: total_cost_val,
-        land_cost_inr: land_cost,
-        construction_cost_inr: construction_cost,
-        cost_per_unit_inr: cost_per_unit,
+        total_land_area_sqm,
+        total_land_area_acres,
+        open_area_pct: get_numeric_fact(facts, "project_open_area_pct")
+            .or_else(|| get_numeric_fact(facts, "rera_open_area_pct")),
+        units_per_acre,
+        total_project_cost_inr: None,
+        land_cost_inr: None,
+        construction_cost_inr: None,
+        cost_per_unit_inr: None,
         complaints_count: get_numeric_fact(facts, "rera_complaints_count").map(|n| n as i32),
         complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
         builder_total_projects: builder_projects,
@@ -625,6 +658,9 @@ pub fn enrich_property_card_with_sellers(
         google_rating,
         google_review_count,
         google_reviews_url,
+        society_land_acres: None,
+        open_space_pct: None,
+        units_per_acre: None,
         seller_id: p.seller_id.clone(),
         seller_completeness_pct,
         documents_provided,

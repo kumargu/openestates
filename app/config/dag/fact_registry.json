@@ -627,18 +627,25 @@
         "under_construction",
         "ongoing",
         "new launch",
-        "upcoming"
+        "upcoming",
+        "pre-launch"
       ],
       "delay": [
         "delayed",
-        "delay"
+        "delay",
+        "delayed_under_construction",
+        "delayed_delivered"
       ],
       "new_age": [
+        "new_0_1y",
         "newly delivered",
         "1-5 yrs old",
         "1-5 years old"
       ],
       "established_age": [
+        "young_1_5y",
+        "mature_5_10y",
+        "old_10y_plus",
         "5-10 yrs old",
         "5-10 years old",
         "10+ yrs old",
@@ -674,7 +681,8 @@
       {
         "preferences": [
           "under construction",
-          "new launch"
+          "new launch",
+          "upcoming"
         ],
         "require_any_groups": [
           "under_construction"
@@ -865,7 +873,9 @@
       ],
       "fact_keys": [
         "rera_total_land_area_sqm",
-        "rera_land_area_sqm"
+        "rera_land_area_sqm",
+        "project_land_area_sqm",
+        "project_land_area_acres"
       ],
       "source_priority": [
         "rera"
@@ -1280,6 +1290,34 @@
     },
     {
       "rank": 22,
+      "dimension": "rera_project_configuration",
+      "label": "RERA project configurations",
+      "layer": "proof",
+      "intent_terms": [
+        "1bhk",
+        "2bhk",
+        "3bhk",
+        "4bhk",
+        "floor plan",
+        "unit configuration",
+        "unit layout"
+      ],
+      "fact_keys": [
+        "available_configurations",
+        "configuration_count",
+        "has_1bhk",
+        "has_2bhk",
+        "has_3bhk",
+        "has_4bhk",
+        "floor_plan_asset_count"
+      ],
+      "source_priority": [
+        "rera",
+        "listing"
+      ]
+    },
+    {
+      "rank": 23,
       "dimension": "listing_evidence",
       "label": "listing evidence",
       "layer": "proof",
@@ -2076,6 +2114,86 @@
           "listing_source_url"
         ],
         "weight": 1.2
+      },
+      {
+        "rank": 39,
+        "patterns": [
+          "floor plan",
+          "floor plans",
+          "unit configuration",
+          "unit configurations",
+          "configuration types",
+          "project configurations",
+          "projects with floor plans"
+        ],
+        "label": "floor plan evidence",
+        "expanded_keys": [
+          "available_configurations",
+          "configuration_count",
+          "floor_plan_asset_count",
+          "rera_plan_artifact_manifest"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 40,
+        "patterns": [
+          "1bhk",
+          "1 bhk",
+          "one bhk"
+        ],
+        "label": "1bhk configuration",
+        "expanded_keys": [
+          "has_1bhk",
+          "available_configurations",
+          "floor_plan_asset_count"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 41,
+        "patterns": [
+          "2bhk",
+          "2 bhk",
+          "two bhk"
+        ],
+        "label": "2bhk configuration",
+        "expanded_keys": [
+          "has_2bhk",
+          "available_configurations",
+          "floor_plan_asset_count"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 42,
+        "patterns": [
+          "3bhk",
+          "3 bhk",
+          "three bhk"
+        ],
+        "label": "3bhk configuration",
+        "expanded_keys": [
+          "has_3bhk",
+          "available_configurations",
+          "floor_plan_asset_count"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 43,
+        "patterns": [
+          "4bhk",
+          "4 bhk",
+          "four bhk"
+        ],
+        "label": "4bhk configuration",
+        "expanded_keys": [
+          "has_4bhk",
+          "available_configurations",
+          "floor_plan_asset_count"
+        ],
+        "weight": 1.1
       }
     ],
     "negative": [
@@ -2177,6 +2295,7 @@
           "access_road_quality",
           "road_width",
           "approach_road_condition",
+          "media.approach_road_frames",
           "risk.approach_road_waterlogging",
           "google_review_snippets",
           "traffic_reality"
@@ -2375,7 +2494,8 @@
       "label": "RERA land area",
       "fact_keys": [
         "rera_total_land_area_sqm",
-        "rera_land_area_sqm"
+        "rera_land_area_sqm",
+        "project_land_area_sqm"
       ],
       "query_units": [
         {
@@ -2388,9 +2508,103 @@
         }
       ],
       "proof_sources": [
+        "Rera",
+        "Computed"
+      ],
+      "scoring_method": "rera-proof"
+    },
+    {
+      "dimension": "open_area_pct",
+      "label": "RERA open area",
+      "fact_keys": [
+        "project_open_area_pct"
+      ],
+      "query_units": [
+        {
+          "unit": "percent",
+          "aliases": [
+            "%",
+            "percent",
+            "percentage"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
         "Rera"
       ],
       "scoring_method": "rera-proof"
+    },
+    {
+      "dimension": "unit_count",
+      "label": "RERA unit count",
+      "fact_keys": [
+        "project_unit_count",
+        "rera_total_units"
+      ],
+      "query_units": [
+        {
+          "unit": "units",
+          "aliases": [
+            "units",
+            "flats",
+            "apartments"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
+        "Rera"
+      ],
+      "scoring_method": "rera-proof"
+    },
+    {
+      "dimension": "floor_count",
+      "label": "RERA floor count",
+      "fact_keys": [
+        "project_max_floor_count"
+      ],
+      "query_units": [
+        {
+          "unit": "floors",
+          "aliases": [
+            "floors",
+            "floor",
+            "storeys",
+            "storey"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
+        "Rera"
+      ],
+      "scoring_method": "rera-proof"
+    },
+    {
+      "dimension": "home_age_years",
+      "label": "RERA-derived property age",
+      "fact_keys": [
+        "project_age_years",
+        "home_age_years"
+      ],
+      "query_units": [
+        {
+          "unit": "years",
+          "aliases": [
+            "years",
+            "year",
+            "yrs",
+            "yr"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
+        "Rera",
+        "Computed"
+      ],
+      "scoring_method": "rera-derived"
     }
   ],
   "text_evidence": [
@@ -3131,7 +3345,7 @@
       ],
       "fact_keys": [
         "price_per_sqft",
-        "rera_cost_per_unit"
+        "listing_price_per_sqft_range"
       ],
       "direction": "HigherIsBetter",
       "thresholds": [

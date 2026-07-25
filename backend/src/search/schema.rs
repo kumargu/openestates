@@ -637,6 +637,18 @@ pub fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
                 });
                 break;
             }
+            if schema.dimension.eq_ignore_ascii_case("home_age_years") {
+                if let Some((value, raw_text)) = detect_max_age_value(&tokens, unit) {
+                    constraints.push(HardConstraint {
+                        field: schema.dimension.clone(),
+                        operator: ConstraintOperator::Max,
+                        value,
+                        unit: unit.unit.clone(),
+                        raw_text,
+                    });
+                    break;
+                }
+            }
         }
     }
 
@@ -762,13 +774,53 @@ fn detect_min_unit_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, St
     None
 }
 
+fn detect_max_age_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, String)> {
+    for (i, token) in tokens.iter().enumerate() {
+        let unit_matches = unit
+            .aliases
+            .iter()
+            .any(|alias| token.eq_ignore_ascii_case(alias));
+        if unit_matches && i > 0 {
+            if let Some((value, _)) = parse_number_token(&tokens[i - 1]) {
+                let after = tokens.get(i + 1).map(String::as_str).unwrap_or("");
+                let before = if i >= 2 { tokens[i - 2].as_str() } else { "" };
+                if after.eq_ignore_ascii_case("old")
+                    || before.eq_ignore_ascii_case("under")
+                    || before.eq_ignore_ascii_case("below")
+                    || before.eq_ignore_ascii_case("within")
+                {
+                    return Some((
+                        value,
+                        format!("up to {} {}", format_number(value), unit.unit),
+                    ));
+                }
+            }
+        }
+        if let Some((value, _)) = parse_unit_compound(token, unit) {
+            let after = tokens.get(i + 1).map(String::as_str).unwrap_or("");
+            let before = if i >= 1 { tokens[i - 1].as_str() } else { "" };
+            if after.eq_ignore_ascii_case("old")
+                || before.eq_ignore_ascii_case("under")
+                || before.eq_ignore_ascii_case("below")
+                || before.eq_ignore_ascii_case("within")
+            {
+                return Some((
+                    value,
+                    format!("up to {} {}", format_number(value), unit.unit),
+                ));
+            }
+        }
+    }
+    None
+}
+
 fn constraint_tokens(q: &str) -> Vec<String> {
     q.replace(',', "")
         .split_whitespace()
         .filter_map(|token| {
             let cleaned: String = token
                 .chars()
-                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '+')
+                .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '.' || *ch == '+' || *ch == '%')
                 .collect();
             if cleaned.is_empty() {
                 None
@@ -897,6 +949,16 @@ mod tests {
     }
 
     #[test]
+    fn detects_property_age_max_constraints_from_registry() {
+        let constraints = detect_hard_constraints("give me 1 year old property");
+        assert_eq!(constraints.len(), 1);
+        assert_eq!(constraints[0].field, "home_age_years");
+        assert_eq!(constraints[0].operator, ConstraintOperator::Max);
+        assert_eq!(constraints[0].value, 1.0);
+        assert_eq!(constraints[0].unit, "years");
+    }
+
+    #[test]
     fn ignores_plain_measurement_without_min_operator() {
         let constraints = detect_hard_constraints("3bhk whitefield 10 acres");
         assert!(constraints.is_empty());
@@ -957,6 +1019,28 @@ mod tests {
             .unwrap()
             .fact_keys
             .contains(&"home_timeline_state".to_string()));
+    }
+
+    #[test]
+    fn loads_rera_configuration_preferences_from_registry() {
+        let labels: Vec<&str> = positive_preference_patterns()
+            .iter()
+            .map(|pattern| pattern.label.as_str())
+            .collect();
+        assert!(labels.contains(&"floor plan evidence"));
+        assert!(labels.contains(&"3bhk configuration"));
+
+        let config_layer = registry()
+            .theme_layers
+            .iter()
+            .find(|layer| layer.dimension == "rera_project_configuration")
+            .expect("configuration search dimension should load");
+        assert!(config_layer
+            .fact_keys
+            .contains(&"available_configurations".to_string()));
+        assert!(config_layer
+            .fact_keys
+            .contains(&"floor_plan_asset_count".to_string()));
     }
 
     #[test]
