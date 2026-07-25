@@ -1,10 +1,10 @@
-import {
-  type PlanInputs,
-} from "./model.ts";
+import { type PlanInputs } from "./model.ts";
 
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
+  extraEmisPerYear: number;
   onInputChange: <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => void;
+  onExtraEmisChange: (count: number) => void;
   onReset: () => void;
 };
 
@@ -68,19 +68,12 @@ function PlanInput({
 
 export function PlanAssumptionRail({
   inputs,
+  extraEmisPerYear,
   onInputChange,
+  onExtraEmisChange,
   onReset,
 }: PlanAssumptionRailProps) {
-  const primaryInputs: InputSpec[] = [
-    {
-      key: "monthlyEmiThousands",
-      label: "Monthly EMI",
-      min: 0,
-      step: 5,
-      prefix: "₹",
-      suffix: "K / mo",
-      note: "Your buy plan",
-    },
+  const rentPathInputs: InputSpec[] = [
     {
       key: "currentRentThousands",
       label: "Monthly rent",
@@ -89,7 +82,7 @@ export function PlanAssumptionRail({
       step: 5,
       prefix: "₹",
       suffix: "K / mo",
-      note: "Your rent today",
+      note: "Cash out while renting",
     },
     {
       key: "monthlySipThousands",
@@ -111,7 +104,7 @@ export function PlanAssumptionRail({
       max: 15,
       step: 0.1,
       suffix: "%",
-      note: "Fixed for this estimate",
+      note: "Bank rate",
     },
     {
       key: "equityReturn",
@@ -127,15 +120,49 @@ export function PlanAssumptionRail({
   return (
     <section className="home-plan-inline-studio" aria-label="Your monthly plan">
       <div className="home-plan-inline-studio__primary">
-        {primaryInputs.map(({ key, ...input }) => (
+        <div className="home-plan-inline-studio__buy">
           <PlanInput
-            key={key}
-            {...input}
-            value={inputs[key]}
-            onChange={(value) => onInputChange(key, value)}
+            label="Monthly EMI"
+            min={0}
+            step={5}
+            prefix="₹"
+            suffix="K / mo"
+            note="Your buy plan"
+            value={inputs.monthlyEmiThousands}
+            onChange={(value) => onInputChange("monthlyEmiThousands", value)}
           />
-        ))}
+          <div className="home-plan-inline-studio__extra" role="group" aria-label="Extra EMIs each year">
+            <span>Extra EMIs / year</span>
+            <div>
+              {[0, 1, 2, 3, 4, 6].map((count) => (
+                <button
+                  type="button"
+                  key={count}
+                  className={extraEmisPerYear === count ? "is-active" : ""}
+                  aria-pressed={extraEmisPerYear === count}
+                  onClick={() => onExtraEmisChange(count)}
+                >
+                  {count}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="home-plan-inline-studio__divider" aria-hidden="true" />
+
+        <div className="home-plan-inline-studio__rent">
+          {rentPathInputs.map(({ key, ...input }) => (
+            <PlanInput
+              key={key}
+              {...input}
+              value={inputs[key]}
+              onChange={(value) => onInputChange(key, value)}
+            />
+          ))}
+        </div>
       </div>
+
       <div className="home-plan-inline-studio__rates">
         {rateInputs.map(({ key, ...input }) => (
           <PlanInput
@@ -145,7 +172,9 @@ export function PlanAssumptionRail({
             onChange={(value) => onInputChange(key, value)}
           />
         ))}
-        <button type="button" onClick={onReset}>Reset</button>
+        <button type="button" className="home-plan-inline-studio__reset" onClick={onReset}>
+          Reset
+        </button>
       </div>
     </section>
   );

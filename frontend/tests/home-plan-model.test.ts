@@ -18,7 +18,7 @@ import {
 const ready = {
   ...BASE_INPUTS,
   propertyPriceLakh: 150,
-  monthlyEmiThousands: 95,
+  monthlyEmiThousands: 135,
   loanRate: 8.5,
   currentRentThousands: 55,
   equityReturn: 10,
@@ -32,29 +32,25 @@ const ready = {
   },
 };
 
-test("day 0 wealth matches because both paths start with the implied upfront amount", () => {
+test("buyer starts fully financed with no invented down payment", () => {
   const projection = calculateProjection(ready);
   const day0 = projection.points[0];
 
-  assert.ok(Math.abs(day0.buyNetWorth - day0.rentNetWorth) < 1);
-  assert.ok(Math.abs(day0.buyNetWorth - projection.upfrontPayment) < 1);
+  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
+  assert.equal(projection.upfrontPayment, 0);
+  assert.ok(Math.abs(day0.buyNetWorth) < 1);
+  assert.equal(day0.rentNetWorth, 0);
 });
 
-test("monthly EMI and loan rate determine the loan and upfront payment", () => {
-  const propertyPrice = ready.propertyPriceLakh * 100_000;
-  const expectedLoan = principalFromMonthlyPayment(
-    ready.monthlyEmiThousands * 1_000,
-    ready.loanRate,
-    20,
-  );
+test("EMI and loan rate keep the loan at the home price", () => {
   const projection = calculateProjection(ready);
 
-  assert.ok(Math.abs(projection.loanAmount - expectedLoan) < 1);
-  assert.ok(Math.abs(projection.upfrontPayment - (propertyPrice - expectedLoan)) < 1);
+  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
+  assert.equal(projection.upfrontPayment, 0);
   assert.ok(Math.abs(projection.monthlyEmi - ready.monthlyEmiThousands * 1_000) < 1);
 });
 
-test("zero EMI means paying the full property price upfront", () => {
+test("zero EMI means owning the home with no loan", () => {
   const projection = calculateProjection({
     ...ready,
     monthlyEmiThousands: 0,
@@ -62,31 +58,63 @@ test("zero EMI means paying the full property price upfront", () => {
 
   assert.equal(projection.monthlyEmi, 0);
   assert.equal(projection.loanAmount, 0);
-  assert.equal(projection.upfrontPayment, ready.propertyPriceLakh * 100_000);
+  assert.equal(projection.upfrontPayment, 0);
+  assert.ok(Math.abs(projection.points[0].buyNetWorth - ready.propertyPriceLakh * 100_000) < 1);
 });
 
-test("a larger EMI finances more of the home and lowers the upfront payment", () => {
-  const lower = calculateProjection({ ...ready, monthlyEmiThousands: 60 });
-  const higher = calculateProjection({ ...ready, monthlyEmiThousands: 100 });
-
-  assert.ok(higher.loanAmount > lower.loanAmount);
-  assert.ok(higher.upfrontPayment < lower.upfrontPayment);
-});
-
-test("an EMI above the 20-year amount pays a full-price loan off early", () => {
-  const projection = calculateProjection({
+test("higher EMI clears the loan sooner", () => {
+  const lower = calculateProjection({
     ...ready,
-    monthlyEmiThousands: 300,
+    monthlyEmiThousands: 135,
     holdingPeriodYears: 20,
   });
-  const loanFreeYear = projection.points.find((point) => (
-    point.year > 0 && point.loanBalance <= 0.5
-  ))?.year;
+  const higher = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 220,
+    holdingPeriodYears: 20,
+  });
 
-  assert.equal(projection.loanAmount, ready.propertyPriceLakh * 100_000);
-  assert.equal(projection.upfrontPayment, 0);
-  assert.equal(projection.monthlyEmi, 300_000);
-  assert.ok(loanFreeYear !== undefined && loanFreeYear < 20);
+  assert.ok(higher.loanFreeYear !== null);
+  assert.ok(lower.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear! < lower.loanFreeYear!);
+  assert.ok(higher.points[10].buyNetWorth > lower.points[10].buyNetWorth);
+});
+
+test("higher loan rate delays the loan-free year", () => {
+  const lower = calculateProjection({
+    ...ready,
+    loanRate: 6,
+    monthlyEmiThousands: 180,
+    holdingPeriodYears: 20,
+  });
+  const higher = calculateProjection({
+    ...ready,
+    loanRate: 11,
+    monthlyEmiThousands: 180,
+    holdingPeriodYears: 20,
+  });
+
+  assert.ok(lower.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear !== null);
+  assert.ok(lower.loanFreeYear! < higher.loanFreeYear!);
+  assert.ok(lower.points[10].buyNetWorth > higher.points[10].buyNetWorth);
+});
+
+test("extra EMIs pull the loan-free marker forward", () => {
+  const base = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  }, 0);
+  const prepaid = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  }, 4);
+
+  assert.ok(base.loanFreeYear !== null);
+  assert.ok(prepaid.loanFreeYear !== null);
+  assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
 });
 
 test("rent rise is fixed at zero in the simple plan", () => {
@@ -115,16 +143,32 @@ test("monthly SIP grows only the rent and invest path", () => {
   assert.ok(Math.abs(withEnd.buyNetWorth - withoutEnd.buyNetWorth) < 1);
 });
 
-test("higher rent lowers the rent and invest projection", () => {
-  const lowerRent = calculateProjection({ ...ready, currentRentThousands: 30 });
-  const higherRent = calculateProjection({ ...ready, currentRentThousands: 80 });
-  const lowerRentEnd = lowerRent.points.at(-1)!.rentNetWorth;
-  const higherRentEnd = higherRent.points.at(-1)!.rentNetWorth;
+test("rent path contains only the stated SIP", () => {
+  const inputs = {
+    ...ready,
+    currentRentThousands: 35,
+    monthlySipThousands: 40,
+    equityReturn: 10,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs);
+  const monthlyRate = inputs.equityReturn / 100 / 12;
+  const months = inputs.holdingPeriodYears * 12;
+  const expectedSipValue = inputs.monthlySipThousands * 1_000
+    * (((1 + monthlyRate) ** months - 1) / monthlyRate);
 
-  assert.equal(lowerRent.monthlyRent, 30_000);
-  assert.equal(higherRent.monthlyRent, 80_000);
-  assert.ok(lowerRentEnd > higherRentEnd);
-  assert.ok(lowerRentEnd - higherRentEnd > 1_000_000);
+  assert.ok(Math.abs(projection.points.at(-1)!.rentNetWorth - expectedSipValue) < 10);
+
+  const withDifferentRent = calculateProjection({
+    ...inputs,
+    currentRentThousands: 80,
+  });
+  assert.ok(
+    Math.abs(
+      withDifferentRent.points.at(-1)!.rentNetWorth
+      - projection.points.at(-1)!.rentNetWorth,
+    ) < 1,
+  );
 });
 
 test("home value uses the fixed six percent yearly growth assumption", () => {
@@ -152,9 +196,8 @@ test("under-construction homes still stage builder payments every six months", (
   assert.equal(projection.possessionMonth, 24);
   assert.equal(projection.points[0].annualEmi, 0);
   assert.ok(projection.points[2].annualEmi > 0);
-  assert.ok(Math.abs(
-    projection.points[0].buyNetWorth - projection.points[0].rentNetWorth,
-  ) < 1);
+  assert.equal(projection.points[0].rentNetWorth, 0);
+  assert.equal(projection.upfrontPayment, 0);
 });
 
 test("payoff journey matches financing interest for a ready home", () => {

@@ -6,26 +6,22 @@ import {
 
 type VerdictBlockProps = {
   activeYear: number;
-  horizon: number;
   buyWins: boolean;
   advantage: number;
   paymentSchedule: BuilderPayment[];
   possessionDate: string | null;
   constructionDateSource: ConstructionProfile["dateSource"];
   isUnderConstruction: boolean;
-  onHorizonChange: (year: number) => void;
 };
 
 export function VerdictBlock({
   activeYear,
-  horizon,
   buyWins,
   advantage,
   paymentSchedule,
   possessionDate,
   constructionDateSource,
   isUnderConstruction,
-  onHorizonChange,
 }: VerdictBlockProps) {
   const timeLabel = activeYear === 0
     ? "Today"
@@ -46,19 +42,6 @@ export function VerdictBlock({
           <span className="home-plan-verdict__amount">{formatCurrency(advantage, true)} more</span>
           {" "}if you {choice}.
         </h1>
-        <div className="home-plan-verdict__horizons" aria-label="Comparison year">
-          {[5, 10, 15, 20].map((year) => (
-            <button
-              key={year}
-              type="button"
-              className={horizon === year ? "is-active" : ""}
-              aria-pressed={horizon === year}
-              onClick={() => onHorizonChange(year)}
-            >
-              {year} years
-            </button>
-          ))}
-        </div>
       </div>
       {isUnderConstruction && (
         <p className="home-plan-verdict__construction">
@@ -66,7 +49,7 @@ export function VerdictBlock({
           {laterPayments > 0 ? ` · ${laterPayments} more payments` : ""}
           {possessionLabel ? ` · possession ${possessionLabel}` : ""}
           . Payments are split about every 6 months
-          {constructionDateSource === "rera" ? " using RERA dates." : " using an estimated schedule."}
+          {constructionDateSource === "estimated" ? " on an estimated schedule." : "."}
         </p>
       )}
     </header>

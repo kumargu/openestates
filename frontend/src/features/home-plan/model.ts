@@ -18,7 +18,7 @@ export type ConstructionProfile = {
 
 export type PlanInputs = {
   propertyPriceLakh: number;
-  /** EMI after possession. It determines the loan and implied upfront payment. */
+  /** EMI after possession. With the loan rate, it sets how fast the home is paid off. */
   monthlyEmiThousands: number;
   loanRate: number;
   currentRentThousands: number;
@@ -50,6 +50,8 @@ export type PlanProjection = {
   upfrontPayment: number;
   totalInterest: number;
   breakEvenYear: number | null;
+  /** First year the loan is cleared within the horizon, if ever. */
+  loanFreeYear: number | null;
   possessionMonth: number;
   possessionDate: string | null;
   constructionDateSource: ConstructionProfile["dateSource"];
@@ -91,9 +93,8 @@ export function buildBaselinePlanInputs(
   construction?: ConstructionProfile,
 ): PlanInputs {
   const propertyPriceLakh = Math.max(20, propertyPriceInr / LAKH);
-  const baselineLoan = propertyPriceInr * 0.75;
-  const monthlyEmiThousands = Math.round(
-    monthlyPayment(baselineLoan, 8.5, DEFAULT_LOAN_TENURE_YEARS) / 1_000 / 5,
+  const monthlyEmiThousands = Math.ceil(
+    monthlyPayment(propertyPriceInr, 8.5, DEFAULT_LOAN_TENURE_YEARS) / 1_000 / 5,
   ) * 5;
   const estimatedRentThousands = Math.max(
     20,
@@ -125,7 +126,10 @@ export function calculateLoanJourney(
   const principal = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
   const repaymentMonths = monthsToPayoff(principal, inputs.loanRate, monthlyEmi);
-  const baselineLoanFreeMonth = constructionPlan.possessionMonth + repaymentMonths;
+  const maxSimMonths = constructionPlan.possessionMonth + 40 * MONTHS_IN_YEAR;
+  const baselineLoanFreeMonth = Number.isFinite(repaymentMonths)
+    ? constructionPlan.possessionMonth + repaymentMonths
+    : maxSimMonths;
   const paymentsByMonth = new Map(schedule.map((payment) => [payment.month, payment]));
   const monthlyRate = inputs.loanRate / 100 / MONTHS_IN_YEAR;
   const annualPrepayment = monthlyEmi * extraEmisPerYear;
@@ -141,6 +145,7 @@ export function calculateLoanJourney(
   while (
     (month < constructionPlan.possessionMonth || balance > 0.5)
     && month < baselineLoanFreeMonth
+    && month < maxSimMonths
   ) {
     const interest = balance * monthlyRate;
     const hasPossession = month >= constructionPlan.possessionMonth;
@@ -182,7 +187,10 @@ export function calculateLoanJourney(
     }
   }
 
-  const lastPlanYear = Math.ceil(baselineLoanFreeMonth / MONTHS_IN_YEAR);
+  const lastPlanYear = Math.min(
+    40,
+    Math.ceil(baselineLoanFreeMonth / MONTHS_IN_YEAR),
+  );
   for (let year = points.at(-1)?.year ?? 0; year < lastPlanYear; year += 1) {
     points.push({ year: year + 1, balance: 0, interestPaid: 0, principalPaid: 0, extraPaid: 0 });
   }
@@ -193,22 +201,30 @@ export function calculateLoanJourney(
     monthlyEmi,
     annualPrepayment,
     loanFreeMonths: month,
-    monthsSaved: Math.max(0, baselineLoanFreeMonth - month),
+    monthsSaved: Number.isFinite(repaymentMonths)
+      ? Math.max(0, baselineLoanFreeMonth - month)
+      : 0,
     interestSaved: Math.max(0, originalInterest - totalInterest),
     totalInterest,
     points,
   };
 }
 
-export function calculateProjection(inputs: PlanInputs): PlanProjection {
+export function calculateProjection(
+  inputs: PlanInputs,
+  extraEmisPerYear = 0,
+): PlanProjection {
   const schedule = buildPaymentSchedule(inputs);
   const loanAmount = schedule.reduce((sum, payment) => sum + payment.loanAmount, 0);
   const monthlyEmi = inputs.monthlyEmiThousands * 1_000;
   const upfrontPayment = schedule.reduce((sum, payment) => sum + payment.cashAmount, 0);
   const totalInterest = calculateFinancingInterest(inputs);
-  const points = calculateProjectionPoints(inputs);
+  const points = calculateProjectionPoints(inputs, extraEmisPerYear);
   const breakEvenPoint = points.find((point) => (
     point.year > inputs.purchaseYear && point.buyNetWorth >= point.rentNetWorth
+  ));
+  const loanFreePoint = points.find((point) => (
+    point.year > 0 && point.loanBalance <= 0.5
   ));
   const constructionPlan = constructionPlanFor(inputs);
 
@@ -220,6 +236,7 @@ export function calculateProjection(inputs: PlanInputs): PlanProjection {
     upfrontPayment,
     totalInterest,
     breakEvenYear: breakEvenPoint?.year ?? null,
+    loanFreeYear: loanFreePoint?.year ?? null,
     possessionMonth: constructionPlan.possessionMonth,
     possessionDate: constructionPlan.possessionDate,
     constructionDateSource: constructionPlan.dateSource,
@@ -230,7 +247,7 @@ export function calculateProjection(inputs: PlanInputs): PlanProjection {
 
 export const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
-  monthlyEmiThousands: 95,
+  monthlyEmiThousands: 135,
   loanRate: 8.5,
   currentRentThousands: 55,
   equityReturn: 10,

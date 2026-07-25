@@ -6,14 +6,11 @@ import type { PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
-import { PlanViewTabs, type PlanView } from "../features/home-plan/PlanViewTabs.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
-import { RepaymentJourney } from "../features/home-plan/RepaymentJourney.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
 import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import {
   buildBaselinePlanInputs,
-  calculateLoanJourney,
   calculateProjection,
   type ConstructionProfile,
   type PlanInputs,
@@ -76,11 +73,9 @@ export function HomePlanPage() {
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
-  const [view, setView] = useState<PlanView>("netWorth");
-  const [horizon, setHorizon] = useState(10);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
-  const [extraEmisPerYear, setExtraEmisPerYear] = useState(2);
-  const [loanYear, setLoanYear] = useState(5);
+  const [pinnedYear, setPinnedYear] = useState<number | null>(null);
+  const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -100,19 +95,21 @@ export function HomePlanPage() {
     return () => { active = false; };
   }, [id]);
 
-  const projection = useMemo(() => inputs ? calculateProjection(inputs) : null, [inputs]);
-  const loanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, extraEmisPerYear) : null, [inputs, extraEmisPerYear]);
-  const baselineLoanJourney = useMemo(() => inputs ? calculateLoanJourney(inputs, 0) : null, [inputs]);
+  const projection = useMemo(
+    () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
+    [inputs, extraEmisPerYear],
+  );
 
   if (!id) return <PageState variant="not_found" context="property" message={BUY_VS_RENT.pickProperty} />;
   if (status === "loading") return <LoadingPlan />;
   if (status === "not_found") return <PageState variant="not_found" context="property" message={BUY_VS_RENT.unavailable} />;
   if (status === "error") return <PageState variant="error" context="property" message={BUY_VS_RENT.loadError} />;
-  if (!propertyData || !inputs || !projection || !loanJourney || !baselineLoanJourney) return null;
+  if (!propertyData || !inputs || !projection) return null;
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
-  const activeYear = previewYear ?? horizon;
+  const defaultYear = Math.min(inputs.holdingPeriodYears, projection.points.length - 1);
+  const activeYear = previewYear ?? pinnedYear ?? defaultYear;
   const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
@@ -123,23 +120,13 @@ export function HomePlanPage() {
 
   const resetPlan = () => {
     setInputs(baseline);
-    setExtraEmisPerYear(2);
-  };
-
-  const chooseHorizon = (year: number) => {
-    setHorizon(year);
+    setExtraEmisPerYear(0);
+    setPinnedYear(null);
     setPreviewYear(null);
   };
-
-  const changeView = (nextView: PlanView) => {
-    setView(nextView);
-    setPreviewYear(null);
-  };
-
-  const viewChapterClass = view === "netWorth" ? "net-worth" : view;
 
   return (
-    <div className={`home-plan-shell home-plan-shell--view-${viewChapterClass}`}>
+    <div className="home-plan-shell home-plan-shell--view-net-worth">
       <Helmet>
         <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
@@ -156,9 +143,6 @@ export function HomePlanPage() {
                   area={property.area}
                   price={property.price}
                 />
-                <div className="home-plan-hero__actions">
-                  <PlanViewTabs view={view} onChange={changeView} compact />
-                </div>
               </div>
 
               <div className="home-plan-hero__stage">
@@ -166,49 +150,35 @@ export function HomePlanPage() {
               </div>
             </section>
 
-            {view === "payoff" ? (
-              <RepaymentJourney
-                journey={loanJourney}
-                baselineJourney={baselineLoanJourney}
-                extraEmisPerYear={extraEmisPerYear}
-                selectedYear={loanYear}
-                onExtraEmisChange={setExtraEmisPerYear}
-                onSelectYear={setLoanYear}
+            <VerdictBlock
+              activeYear={activeYear}
+              buyWins={buyWins}
+              advantage={advantage}
+              paymentSchedule={projection.paymentSchedule}
+              possessionDate={projection.possessionDate}
+              constructionDateSource={projection.constructionDateSource}
+              isUnderConstruction={projection.possessionMonth > inputs.purchaseYear * 12}
+            />
+
+            <PlanAssumptionRail
+              inputs={inputs}
+              extraEmisPerYear={extraEmisPerYear}
+              onInputChange={updateInput}
+              onExtraEmisChange={setExtraEmisPerYear}
+              onReset={resetPlan}
+            />
+
+            <section className="home-plan-stage" aria-label="Projection over time">
+              <PlanGraph
+                projection={projection}
+                activeYear={activeYear}
+                onPreviewYearChange={setPreviewYear}
+                onPinYear={setPinnedYear}
               />
-            ) : (
-              <>
-                <VerdictBlock
-                  activeYear={activeYear}
-                  horizon={horizon}
-                  buyWins={buyWins}
-                  advantage={advantage}
-                  paymentSchedule={projection.paymentSchedule}
-                  possessionDate={projection.possessionDate}
-                  constructionDateSource={projection.constructionDateSource}
-                  isUnderConstruction={projection.possessionMonth > inputs.purchaseYear * 12}
-                  onHorizonChange={chooseHorizon}
-                />
-
-                <PlanAssumptionRail
-                  inputs={inputs}
-                  onInputChange={updateInput}
-                  onReset={resetPlan}
-                />
-
-                <section className="home-plan-stage" aria-label="Projection over time">
-                  <PlanGraph
-                    projection={projection}
-                    horizon={horizon}
-                    onHorizonChange={chooseHorizon}
-                    onPreviewYearChange={setPreviewYear}
-                  />
-                </section>
-              </>
-            )}
+            </section>
           </div>
         </div>
       </div>
-
     </div>
   );
 }
