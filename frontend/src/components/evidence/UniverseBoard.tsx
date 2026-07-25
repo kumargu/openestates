@@ -9,7 +9,6 @@ type Props = {
   results: SearchResultItem[];
   evidenceById: Map<string, PropertyEvidenceResponse>;
   renderResult: RenderResult;
-  learningGaps?: string[];
 };
 
 function UniverseClusterSection({
@@ -22,13 +21,7 @@ function UniverseClusterSection({
   return (
     <section className={`universe-cluster universe-cluster--${cluster.id}`}>
       <header className="universe-cluster__header">
-        <div>
-          <h2 className="universe-cluster__title">{cluster.label}</h2>
-          <p className="universe-cluster__hint">{cluster.hint}</p>
-        </div>
-        <span className="universe-cluster__count">
-          {cluster.results.length} home{cluster.results.length === 1 ? "" : "s"}
-        </span>
+        <h2 className="universe-cluster__title">{cluster.label}</h2>
       </header>
       <div className="universe-cluster__grid">
         {cluster.results.map((result) => (
@@ -41,7 +34,7 @@ function UniverseClusterSection({
   );
 }
 
-export function UniverseBoard({ results, evidenceById, renderResult, learningGaps }: Props) {
+export function UniverseBoard({ results, evidenceById, renderResult }: Props) {
   const clusters = clusterSearchResults(results, evidenceById);
 
   if (clusters.length === 0) {
@@ -56,18 +49,6 @@ export function UniverseBoard({ results, evidenceById, renderResult, learningGap
 
   return (
     <div className="universe-board">
-      <header className="universe-board__intro">
-        <h2 className="universe-board__title">Your property universe</h2>
-        <p className="universe-board__subtitle">
-          Grouped by fit, proof strength, and value angle — not a flat broker list.
-        </p>
-        {learningGaps && learningGaps.length > 0 && (
-          <p className="universe-board__gaps">
-            Still learning: {learningGaps.slice(0, 2).join(" · ")}
-          </p>
-        )}
-      </header>
-
       {clusters.map((cluster) => (
         <UniverseClusterSection
           key={cluster.id}

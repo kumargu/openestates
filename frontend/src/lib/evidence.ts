@@ -31,7 +31,6 @@ export type UniverseClusterId =
 export type UniverseCluster = {
   id: UniverseClusterId;
   label: string;
-  hint: string;
   results: SearchResultItem[];
 };
 
@@ -334,12 +333,12 @@ export function clusterSearchResults(
     buckets.explore.push(result);
   }
 
-  const defs: Array<{ id: UniverseClusterId; label: string; hint: string }> = [
-    { id: "strong_fits", label: "Strong fits", hint: "Closest to your search" },
-    { id: "worth_comparing", label: "Worth comparing", hint: "More options in this search" },
-    { id: "verify_proof", label: "Thinner context", hint: "Fewer linked sources so far" },
-    { id: "value_angle", label: "Value angle", hint: "Price-led matches" },
-    { id: "explore", label: "Explore further", hint: "Broader matches" },
+  const defs: Array<{ id: UniverseClusterId; label: string }> = [
+    { id: "strong_fits", label: "Best matches" },
+    { id: "worth_comparing", label: "More homes" },
+    { id: "verify_proof", label: "Less evidence" },
+    { id: "value_angle", label: "Lower priced" },
+    { id: "explore", label: "Broader matches" },
   ];
 
   return defs

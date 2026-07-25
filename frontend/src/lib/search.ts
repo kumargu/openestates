@@ -19,29 +19,6 @@ export interface MatchResult {
   reason: string;
 }
 
-/** Format a search summary for display from backend-parsed intent. */
-export function formatSearchSummary(intent: {
-  query: string;
-  area?: string;
-  bhk?: number;
-  budgetMax?: number;
-  hardConstraints?: { raw_text: string }[];
-  preferences: string[];
-}): string {
-  const parts: string[] = [];
-  if (intent.area) parts.push(intent.area);
-  if (intent.bhk) parts.push(`${intent.bhk} BHK`);
-  if (intent.budgetMax) {
-    const cr = intent.budgetMax / 10_000_000;
-    parts.push(cr >= 1 ? `under ${cr} Cr` : `under ${(intent.budgetMax / 100_000).toFixed(0)}L`);
-  }
-  parts.push(...(intent.hardConstraints ?? []).map((constraint) => constraint.raw_text));
-  parts.push(...intent.preferences);
-
-  if (parts.length === 0) return "Showing all properties ranked by transparency signals";
-  return `Ranking based on ${parts.join(", ")}`;
-}
-
 /** Avoid repeating parsed search filters on every result card. */
 export function isGenericFilterReason(reason: string): boolean {
   const distinctive = extractDistinctiveMatchParts(reason);

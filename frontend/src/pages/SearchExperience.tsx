@@ -3,7 +3,7 @@
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
-import { useEffect, useState, useMemo, type FormEvent } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
@@ -14,7 +14,6 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import { formatSearchSummary } from "../lib/search.ts";
 import type { MatchResult } from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
@@ -229,7 +228,6 @@ type SearchExperienceProps = {
 };
 
 export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
-  const isEmbedded = true;
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
@@ -239,7 +237,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
-  const [searchInput, setSearchInput] = useState(query);
 
   useEffect(() => {
     if (searchParams.get("view") === "saved") {
@@ -248,32 +245,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
       setSearchParams(nextParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
-
-  useEffect(() => {
-    setSearchInput(query);
-  }, [query]);
-
-  const handleSearch = (e: FormEvent) => {
-    e.preventDefault();
-    const q = searchInput.trim();
-    const nextParams = new URLSearchParams();
-    if (q) {
-      sessionStorage.setItem("oe_search_query", q);
-      onSearchCommit?.(q);
-      nextParams.set("q", q);
-      setSearchParams(nextParams);
-    } else {
-      sessionStorage.removeItem("oe_search_query");
-      if (areaFilter) nextParams.set("area", areaFilter);
-      setSearchParams(nextParams);
-    }
-  };
-
-  const clearAreaFilter = () => {
-    const nextParams = new URLSearchParams();
-    if (query) nextParams.set("q", query);
-    setSearchParams(nextParams);
-  };
 
   const setQueryPreservingView = (nextQuery: string) => {
     const nextParams = new URLSearchParams();
@@ -379,19 +350,10 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
-  const containerClass = isEmbedded ? "inline-results-shell" : "page-container";
-  const headerClass = isEmbedded ? "inline-results-header" : "page-header";
-  const showEmbeddedKicker = isEmbedded && Boolean(query);
-  const kicker = "Search results";
-  const title = "Properties";
+  const containerClass = "inline-results-shell";
 
   if (status === "loading") return (
     <div className={containerClass}>
-      <div className={headerClass}>
-        {showEmbeddedKicker && <span className="inline-results-kicker">{kicker}</span>}
-        {!showEmbeddedKicker && <h1>{title}</h1>}
-        <div className="skeleton-search-bar skeleton-bar" />
-      </div>
       <div className="results-grid">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="skeleton-card">
@@ -421,17 +383,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
 
   const hardConstraints = intent?.hard_constraints ?? [];
   const hardConstraintLabels = hardConstraints.map((constraint) => constraint.raw_text);
-  const summary = intent
-    ? formatSearchSummary({
-        query,
-        area: intent.area ?? undefined,
-        bhk: intent.bhk ?? undefined,
-        budgetMax: intent.budget_max ?? undefined,
-        hardConstraints,
-        preferences: intent.preferences,
-      })
-    : null;
-  const hasSearchChips = intent && (intent.area || intent.bhk || intent.budget_max || hardConstraints.length > 0 || intent.preferences.length > 0);
 
   const helmetTitle = query
     ? `${query} — Property Search | OpenEstates`
@@ -457,79 +408,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="OpenEstates" />
       </Helmet>
-      <div className={headerClass}>
-        {showEmbeddedKicker && <span className="inline-results-kicker">{kicker}</span>}
-        {!showEmbeddedKicker && <h1>{title}</h1>}
-
-        {/* Inline search bar for refining */}
-        <form
-          onSubmit={handleSearch}
-          className={`results-search-bar ${isEmbedded ? "results-search-bar--embedded" : ""}`}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#999" strokeWidth="2" strokeLinecap="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            className="results-search-input"
-            type="text"
-            placeholder="Refine: area, BHK, budget, preferences..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-          <button
-            className="results-search-submit"
-            type="submit"
-          >
-            Search
-          </button>
-        </form>
-
-        {!isEmbedded && query && intent && (
-          <div style={{ marginTop: "0.5rem" }}>
-            {hasSearchChips && (
-              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
-                {intent.area && <span className="tag tag-neutral">{intent.area}</span>}
-                {intent.bhk && <span className="tag tag-neutral">{intent.bhk} BHK</span>}
-                {intent.budget_max && (
-                  <span className="tag tag-neutral">
-                    under {intent.budget_max >= 10_000_000 ? `${(intent.budget_max / 10_000_000).toFixed(1)} Cr` : `${(intent.budget_max / 100_000).toFixed(0)}L`}
-                  </span>
-                )}
-                {hardConstraintLabels.map((label) => <span key={label} className="tag tag-neutral">{label}</span>)}
-                {intent.preferences.map((pref) => <span key={pref} className="tag tag-neutral">{pref}</span>)}
-              </div>
-            )}
-            {summary && (
-              <p style={{ color: "var(--color-text-muted)", fontSize: "0.8rem", margin: 0 }}>
-                {summary}. Showing {totalCount} {totalCount === 1 ? "property" : "properties"}.
-              </p>
-            )}
-          </div>
-        )}
-
-        {!query && (
-          <div>
-            {areaFilter && (
-              <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap", marginBottom: "0.5rem" }}>
-                <span
-                  className="tag tag-neutral"
-                  style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", cursor: "pointer" }}
-                  onClick={clearAreaFilter}
-                >
-                  {areaFilter}
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                    <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                  </svg>
-                </span>
-              </div>
-            )}
-            <p>
-              {`${totalCount} ${areaFilter ? `listings in ${areaFilter}` : "proof-backed listings"}`}
-            </p>
-          </div>
-        )}
-      </div>
 
       {/* Accessible live region — announces result count to screen readers */}
       <div aria-live="polite" className="sr-only">
@@ -623,7 +501,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
         <UniverseBoard
           results={universeResults}
           evidenceById={evidenceById}
-          learningGaps={searchResponse?.knowledge_context?.learning_gaps}
           renderResult={renderTile}
         />
       )}

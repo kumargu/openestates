@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
-import { getAreaTracker, getAreas, getProperties, type PlatformStats } from "../lib/api.ts";
+import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
@@ -49,17 +49,7 @@ function RotatingText() {
   );
 }
 
-/* ---------- Popular search suggestions ---------- */
-const POPULAR_SEARCHES = [
-  "3BHK Whitefield under 2Cr",
-  "Family-friendly Sarjapur",
-  "Premium 4BHK Koramangala",
-  "Near metro Bellandur",
-  "Quiet 2BHK HSR Layout",
-  "New launch Hebbal",
-];
-
-/* Rotating example queries — show users they can type in natural language. */
+/* Rotating example queries — Tab accepts the suggestion like Google/Gmail. */
 const SEARCH_EXAMPLES = [
   "Quiet 3BHK near good schools under 2.5Cr",
   "Family-friendly society in Sarjapur with metro access",
@@ -72,32 +62,12 @@ const SEARCH_EXAMPLES = [
 const GHOST_ROTATE_MS = 3400;
 const GHOST_FADE_MS = 400;
 
-type MarketSnapshot = {
-  totalProperties: number;
-  totalSocieties: number;
-  totalAreas: number;
-};
-
-function deriveMarketSnapshot(props: PropertyCard[]): MarketSnapshot {
-  const areaMap: Record<string, number> = {};
-  for (const p of props) {
-    areaMap[p.area] = (areaMap[p.area] ?? 0) + 1;
-  }
-
-  return {
-    totalProperties: props.length,
-    totalSocieties: new Set(props.map((p) => p.society_name)).size,
-    totalAreas: Object.keys(areaMap).length,
-  };
-}
-
 export function HomePage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeSearchQuery = searchParams.get("q") || "";
   const hasActiveSearch = activeSearchQuery.trim().length > 0;
   const hasInlinePane = hasActiveSearch;
   const [properties, setProperties] = useState<PropertyCard[]>([]);
-  const [platformStats, setPlatformStats] = useState<PlatformStats | null>(null);
   const [areaTracker, setAreaTracker] = useState<AreaTrackerResponse | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [query, setQuery] = useState(activeSearchQuery);
@@ -108,7 +78,7 @@ export function HomePage() {
   const inlineResultsRef = useRef<HTMLElement | null>(null);
   const shouldScrollToResultsRef = useRef(false);
 
-  const showGhost = !query && !searchFocused;
+  const showGhost = !query;
   useEffect(() => {
     if (!showGhost) {
       setGhostFading(false);
@@ -133,19 +103,13 @@ export function HomePage() {
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
-    if (hasActiveSearch) return;
     const controller = new AbortController();
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      Promise.all([getProperties({ signal: controller.signal }), getAreas({ signal: controller.signal })])
-        .then(([props, areas]) => {
+      getProperties({ signal: controller.signal })
+        .then((props) => {
           if (cancelled) return;
           setProperties(props);
-          setPlatformStats({
-            properties: props.length,
-            societies: new Set(props.map((p) => p.society_name).filter(Boolean)).size,
-            areas: areas.length,
-          });
         })
         .catch((error) => {
           if (!cancelled && !(error instanceof DOMException && error.name === "AbortError")) {
@@ -163,7 +127,7 @@ export function HomePage() {
       controller.abort();
       window.clearTimeout(timer);
     };
-  }, [hasActiveSearch]);
+  }, []);
 
   useEffect(() => {
     setQuery(activeSearchQuery);
@@ -205,34 +169,11 @@ export function HomePage() {
     commitSearch(query);
   };
 
-  const derivedSnapshot = !loadError && properties.length > 0 ? deriveMarketSnapshot(properties) : null;
-  const snapshot = derivedSnapshot && platformStats
-    ? {
-        ...derivedSnapshot,
-        totalProperties: platformStats.properties,
-        totalSocieties: platformStats.societies,
-        totalAreas: platformStats.areas,
-      }
-    : derivedSnapshot;
-
   return (
-    <div>
+    <div className="home-page">
       {/* Hero */}
       <section
         className={`home-hero ${hasInlinePane ? "home-hero--search-active" : ""}`}
-        style={{
-          minHeight: hasInlinePane ? "min(72vh, 640px)" : "96vh",
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: hasInlinePane
-            ? "7rem clamp(1.5rem, 4vw, 4rem) 5rem"
-            : "0 clamp(1.5rem, 4vw, 4rem)",
-          position: "relative",
-          overflow: "hidden",
-          transition: "min-height 0.7s var(--ease-out), padding 0.7s var(--ease-out)",
-        }}
       >
         <div className="home-hero__wash" aria-hidden="true" />
 
@@ -275,19 +216,31 @@ export function HomePage() {
             <input
               className="home-composer__input"
               type="text"
-              placeholder={searchFocused ? "Area, BHK, budget, commute, schools, vibe…" : ""}
+              placeholder={showGhost ? "" : "Area, BHK, budget, commute, schools, vibe…"}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onFocus={() => setSearchFocused(true)}
               onBlur={() => setSearchFocused(false)}
+              onKeyDown={(e) => {
+                if (e.key !== "Tab" || e.shiftKey || query.trim()) return;
+                e.preventDefault();
+                commitSearch(SEARCH_EXAMPLES[exampleIndex]);
+              }}
               aria-label="Describe the property you are looking for"
+              aria-describedby={showGhost ? "home-search-ghost-hint" : undefined}
             />
             {showGhost && (
               <span
                 className={`home-composer__ghost${ghostFading ? " home-composer__ghost--fading" : ""}`}
                 aria-hidden="true"
               >
-                {SEARCH_EXAMPLES[exampleIndex]}
+                <span className="home-composer__ghost-text">{SEARCH_EXAMPLES[exampleIndex]}</span>
+                <kbd className="home-composer__tab-hint">Tab</kbd>
+              </span>
+            )}
+            {showGhost && (
+              <span id="home-search-ghost-hint" className="sr-only">
+                Press Tab to search with the suggested query.
               </span>
             )}
             <button type="submit" className="home-composer__submit" aria-label="Search">
@@ -327,52 +280,13 @@ export function HomePage() {
           </div>
         )}
 
-        {/* Inline stats — social proof */}
-        {snapshot && (
-          <div
-            className="fade-up fade-up-delay-3 home-stats-row"
-          >
-            <span><strong>{snapshot.totalProperties}</strong> properties</span>
-            <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
-            <span><strong>{snapshot.totalSocieties}</strong> societies</span>
-            <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: "#ccc" }} />
-            <span><strong>{snapshot.totalAreas}</strong> micro-markets</span>
-          </div>
-        )}
-
-        {/* Popular searches — clickable chips */}
-        <div
-          className="fade-up fade-up-delay-3"
-          style={{
-            marginTop: "1.25rem",
-            display: "flex",
-            gap: "0.5rem",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            maxWidth: "600px",
-          }}
-        >
-          {POPULAR_SEARCHES.slice(0, 4).map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="home-popular-chip"
-              onClick={() => {
-                commitSearch(s);
-              }}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-
-        {/* Recent searches */}
         {recents.length > 0 && (
           <div className="fade-up fade-up-delay-3 recent-searches">
             <span className="recent-searches-label">Recent</span>
             {recents.map((s) => (
               <button
                 key={s}
+                type="button"
                 className="empty-state-chip"
                 onClick={() => {
                   commitSearch(s);
@@ -382,6 +296,7 @@ export function HomePage() {
               </button>
             ))}
             <button
+              type="button"
               className="recent-clear-btn"
               onClick={() => { clearRecentSearches(); setRecents([]); }}
             >
@@ -404,7 +319,7 @@ export function HomePage() {
         <LandingPicksSection properties={properties} areaTracker={areaTracker} />
       )}
 
-      {!hasInlinePane && snapshot && properties.length > 0 && (
+      {properties.length > 0 && (
         <AreaTrackerSection
           properties={properties}
           areaTracker={areaTracker}
