@@ -2,11 +2,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use chrono::{DateTime, Utc};
 use tokio::sync::RwLock;
 
 use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{AreaProfile, Property, Seller, Society};
+use crate::recommendations::RecommendationResponse;
 use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use crate::serving::LoadedServingBundle;
 
@@ -22,6 +24,8 @@ pub struct AppState {
     pub semantic_embedder: Arc<dyn SemanticEmbedder>,
     /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
     pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
+    /// In-process cache keyed by property + bundle + scoring policy + engine version.
+    pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,
@@ -33,6 +37,8 @@ pub struct AppState {
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
     pub project_root: PathBuf,
+    /// Runtime start timestamp, exposed for stale-backend detection in development.
+    pub process_started_at: DateTime<Utc>,
     /// Monotonic counter for generating collision-free interest IDs.
     pub interest_counter: AtomicU64,
     /// Global rate limiter for POST /api/interests: (window_start, count_in_window).

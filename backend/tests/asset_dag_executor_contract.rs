@@ -91,13 +91,20 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .await
         .unwrap();
     assert_eq!(kg_record.run_id, report.manifest.run_id);
-    assert_eq!(kg_record.parent_materializations.len(), 9);
+    assert_eq!(kg_record.parent_materializations.len(), 11);
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["canonical_society_nodes"].materialization_id));
     assert!(kg_record
         .parent_materializations
         .contains(&upstreams["rera_legal_facts"].materialization_id));
+    assert!(kg_record.parent_materializations.contains(
+        &upstreams[backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID]
+            .materialization_id
+    ));
+    assert!(kg_record.parent_materializations.contains(
+        &upstreams[backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID].materialization_id
+    ));
     let home_state_record = store
         .current_record(
             &asset_id(HOME_STATE_SIGNALS_ASSET_ID),
@@ -175,7 +182,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        5
+        7
     );
 }
 
@@ -232,7 +239,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
-    assert_eq!(report.manifest.planned_count, expected_assets.len());
+    assert_eq!(report.manifest.planned_count, expected_assets.len() + 2);
     assert_eq!(report.executed_assets.len(), expected_assets.len());
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
@@ -292,7 +299,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     );
     assert_eq!(
         parquet_rows_for_artifact(&lake, &google_facts, "facts/part-00000.parquet").await,
-        8,
+        10,
         "Google evidence is published for both the canonical RERA entity and its stable society alias"
     );
     let image_observations = current_record(
@@ -385,7 +392,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     assert_eq!(kg_record.parent_materializations.len(), 9);
     assert_eq!(
         parquet_rows_for_artifact(&lake, &kg_record, "facts/part-00000.parquet").await,
-        82
+        94
     );
 
     let serving_record = current_record(
@@ -394,7 +401,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         &AssetPartition::global(),
     )
     .await;
-    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 82);
+    assert_eq!(serving_fact_rows(&lake, &serving_record).await, 94);
 
     let run_store = AssetRunManifestStore::new(lake);
     let current_run = run_store.current_manifest(&run_partition).await.unwrap();
@@ -427,7 +434,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 16);
+    assert_eq!(report.manifest.planned_count, 18);
     assert_eq!(report.executed_assets.len(), 16);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -579,6 +586,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
         serving_bundle: RwLock::new(Some(Arc::new(loaded))),
+        recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: Vec::new(),
         societies,
         sellers: RwLock::new(Vec::new()),
@@ -586,6 +594,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
         knowledge: Arc::new(RwLock::new(mock_graph())),
         project_root: root.path().to_path_buf(),
+        process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
         registration_counter: AtomicU64::new(0),
@@ -1299,6 +1308,41 @@ async fn seed_current_upstreams_for_partition(
     )
     .await;
 
+    let groundwater_facts = seed_skill_fact_current(
+        lake,
+        store,
+        backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+        "opencity_groundwater_potential",
+        "2026-07",
+        &AssetPartition::global(),
+        vec![
+            canonical.materialization_id.clone(),
+            rera_facts.materialization_id.clone(),
+        ],
+        now,
+        "environment.groundwater_potential_class",
+        "moderate",
+        "Computed",
+        "seed-groundwater",
+    )
+    .await;
+
+    let metro_facts = seed_skill_fact_current(
+        lake,
+        store,
+        backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+        "openstreetmap_bengaluru_metro",
+        "2026-07-13",
+        &AssetPartition::global(),
+        Vec::new(),
+        now,
+        "nearby_metro_stations",
+        "Whitefield Metro",
+        "Computed",
+        "seed-metro",
+    )
+    .await;
+
     std::collections::HashMap::from([
         ("rera_registry_monthly", rera),
         ("canonical_society_nodes", canonical),
@@ -1307,6 +1351,14 @@ async fn seed_current_upstreams_for_partition(
         ("reddit_resident_facts", reddit_facts),
         ("google_places_weekly", google_places),
         ("google_review_facts", google_facts),
+        (
+            backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            groundwater_facts,
+        ),
+        (
+            backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+            metro_facts,
+        ),
     ])
 }
 
@@ -1731,6 +1783,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 review_count: Some(321),
                 review_snippets: Vec::new(),
                 address: Some("Whitefield, Bengaluru".to_string()),
+                latitude: None,
+                longitude: None,
                 confidence: 0.82,
                 fetched_at: now + Duration::minutes(2),
                 fetch_source: "mock_google_places".to_string(),

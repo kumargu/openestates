@@ -446,8 +446,8 @@ pub fn runtime_policy() -> &'static SearchRuntimePolicy {
     &registry().runtime
 }
 
-pub fn ranking_policy() -> &'static SearchRankingPolicy {
-    &runtime_policy().ranking
+pub fn ranking_policy() -> &'static crate::scoring::SearchRankingPolicy {
+    crate::scoring::search_ranking_policy()
 }
 
 pub fn query_stopwords() -> &'static [String] {

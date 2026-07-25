@@ -533,6 +533,8 @@ fn google_record(
         review_count: Some(100),
         review_snippets: Vec::new(),
         address: None,
+        latitude: None,
+        longitude: None,
         confidence: 0.8,
         fetched_at,
         fetch_source: "mock_google".to_string(),

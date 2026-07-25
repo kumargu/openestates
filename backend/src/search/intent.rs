@@ -1207,6 +1207,14 @@ mod tests {
     }
 
     #[test]
+    fn positive_approach_road_language_is_not_a_negative_risk() {
+        let intent = parse_intent("good approach road and access");
+
+        assert!(has_positive_label(&intent, "approach road"));
+        assert!(!has_negative_label(&intent, "approach road"));
+    }
+
+    #[test]
     fn family_and_investment_query_extracts_both_preferences() {
         let intent = parse_intent("good for family AND good investment");
 
@@ -1221,6 +1229,14 @@ mod tests {
 
         assert!(has_negative_label(&intent, "water issues"));
         assert!(!has_positive_label(&intent, "water supply"));
+    }
+
+    #[test]
+    fn stable_water_language_with_no_tanker_issue_is_positive() {
+        let intent = parse_intent("good water supply with cauvery and no tanker issue");
+
+        assert!(has_positive_label(&intent, "water supply"));
+        assert!(!has_negative_label(&intent, "water issues"));
     }
 
     #[test]

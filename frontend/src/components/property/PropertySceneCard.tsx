@@ -58,9 +58,14 @@ export function PropertySceneCard({
 
   const sceneLabel = useMemo(() => sceneLabelForIndex(safeActive), [safeActive]);
   const motionClass = KEN_BURNS[safeActive % KEN_BURNS.length];
+  // Keep mosaic slots stable so auto-rotate only moves the living hero stage.
+  const mosaicImages = sceneImages
+    .map((src, index) => ({ src, index }))
+    .filter(({ index }) => index > 0)
+    .slice(0, 4);
 
   return (
-    <div className={`property-scene ${hasImages ? "property-scene--live" : "property-scene--empty"}`}>
+    <div className={`property-scene ${hasImages ? "property-scene--live" : "property-scene--empty"}${mosaicImages.length > 0 ? " property-scene--mosaic" : ""}`}>
       <div className="property-scene__stage" aria-hidden={!hasImages}>
         {hasImages ? (
           sceneImages.map((src, index) => (
@@ -78,51 +83,57 @@ export function PropertySceneCard({
           ))
         ) : (
           <div className="property-scene__placeholder">
-            <span className="property-scene__placeholder-kicker">Gathering visuals</span>
+            <span className="property-scene__placeholder-kicker">Project photos</span>
             <strong>{societyName || title}</strong>
-            <p>{loading ? "Searching project photos…" : "No verified photos yet — enrichment queued."}</p>
+            <p>{loading ? "Loading photos…" : "Photos unavailable"}</p>
           </div>
         )}
 
         <div className="property-scene__vignette" />
         <div className="property-scene__grain" />
+        <div className="property-scene__glass">
+          <div className="property-scene__glass-top">
+            <span className="property-scene__scene-label">{hasImages ? sceneLabel : "Preview"}</span>
+            {hasImages && sceneImages.length > 1 && (
+              <span className="property-scene__scene-count">
+                {safeActive + 1} / {sceneImages.length}
+              </span>
+            )}
+          </div>
+          <div className="property-scene__chips">
+            {chips.map((chip) => (
+              <span key={chip.label} className="property-scene__chip">
+                <em>{chip.label}</em> {chip.value}
+              </span>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {hasImages && sceneImages.length > 1 && (
-        <div className="property-scene__reel" role="tablist" aria-label="Property scenes">
-          {sceneImages.map((src, index) => (
+      {mosaicImages.length > 0 && (
+        <div className="property-scene__mosaic" role="tablist" aria-label="Property scenes">
+          {mosaicImages.map(({ src, index }, position) => (
             <button
               key={src}
               type="button"
               role="tab"
               aria-selected={index === safeActive}
-              className={`property-scene__frame ${index === safeActive ? "is-active" : ""}`}
+              className={`property-scene__mosaic-frame${index === safeActive ? " is-active" : ""}`}
               onClick={() => setActive(index)}
             >
-              <img src={src} alt="" />
+              <ImageWithFallback
+                src={src}
+                alt={`${title} — ${sceneLabelForIndex(index)}`}
+                loading="lazy"
+              />
               <span>{sceneLabelForIndex(index)}</span>
+              {position === mosaicImages.length - 1 && sceneImages.length > 5 && (
+                <b>{sceneImages.length} photos</b>
+              )}
             </button>
           ))}
         </div>
       )}
-
-      <div className="property-scene__glass">
-        <div className="property-scene__glass-top">
-          <span className="property-scene__scene-label">{hasImages ? sceneLabel : "Preview"}</span>
-          {hasImages && sceneImages.length > 1 && (
-            <span className="property-scene__scene-count">
-              {safeActive + 1} / {sceneImages.length}
-            </span>
-          )}
-        </div>
-        <div className="property-scene__chips">
-          {chips.map((chip) => (
-            <span key={chip.label} className="property-scene__chip">
-              <em>{chip.label}</em> {chip.value}
-            </span>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }

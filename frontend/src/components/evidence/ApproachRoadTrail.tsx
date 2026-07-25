@@ -130,15 +130,8 @@ export function ApproachRoadTrail({ sections }: Props) {
                 <span>Approach road</span>
                 <h2 id="area-trail-dialog-title">Gate-side approach</h2>
                 <p>
-                  {viewLabel} · click a lower image to bring it forward
-                  {hero.source_url ? (
-                    <>
-                      {" · "}
-                      <a href={hero.source_url} target="_blank" rel="noreferrer">
-                        Open source
-                      </a>
-                    </>
-                  ) : null}
+                  {hero.label}
+                  {viewLabel ? ` · ${viewLabel}` : ""}
                 </p>
               </div>
               <button

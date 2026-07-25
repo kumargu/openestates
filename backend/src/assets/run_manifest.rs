@@ -399,6 +399,28 @@ impl AssetDagRunManifest {
         Ok(())
     }
 
+    pub fn mark_step_skipped(
+        &mut self,
+        asset_id: &AssetId,
+        completed_at: DateTime<Utc>,
+        reason: impl Into<String>,
+    ) -> Result<(), RunManifestError> {
+        let step = self.step_mut(asset_id)?;
+        if step.decision != PlanDecision::Run || step.status != AssetRunStepStatus::Planned {
+            return Err(RunManifestError::InvalidStepTransition {
+                asset_id: step.asset_id.clone(),
+                status: step.status,
+                decision: step.decision,
+            });
+        }
+        step.status = AssetRunStepStatus::Skipped;
+        step.completed_at = Some(completed_at);
+        step.error = Some(reason.into());
+        self.status = DagRunStatus::Running;
+        self.recount();
+        Ok(())
+    }
+
     pub fn prepare_resume(mut self, resumed_at: DateTime<Utc>) -> Result<Self, RunManifestError> {
         self.ensure_resumable()?;
 
@@ -529,7 +551,7 @@ impl AssetDagRunManifest {
             };
             return Ok(());
         }
-        if self.succeeded_count == self.planned_count {
+        if self.completed_run_step_count() == self.planned_count {
             self.completed_at = Some(completed_at);
             self.status = DagRunStatus::Succeeded;
             return Ok(());
@@ -561,6 +583,19 @@ impl AssetDagRunManifest {
             }
         }
         terminal_count > 0
+    }
+
+    fn completed_run_step_count(&self) -> usize {
+        self.steps
+            .iter()
+            .filter(|step| step.decision == PlanDecision::Run)
+            .filter(|step| {
+                matches!(
+                    step.status,
+                    AssetRunStepStatus::Succeeded | AssetRunStepStatus::Skipped
+                )
+            })
+            .count()
     }
 
     fn step_mut(&mut self, asset_id: &AssetId) -> Result<&mut AssetRunStep, RunManifestError> {

@@ -192,7 +192,7 @@ export function HomePlanPage() {
                       aria-expanded={assumptionsOpen}
                       onClick={() => setAssumptionsOpen(true)}
                     >
-                      Edit inputs
+                      Tune plan
                     </button>
                   )}
                   <PlanViewTabs view={view} onChange={changeView} compact />
@@ -269,11 +269,11 @@ export function HomePlanPage() {
             <header>
               <div>
                 <span>Your plan</span>
-                <h2 id="home-plan-inputs-title">Edit inputs</h2>
+                <h2 id="home-plan-inputs-title">Tune your plan</h2>
               </div>
               <button
                 type="button"
-                aria-label="Close plan inputs"
+                aria-label="Close plan controls"
                 onClick={() => setAssumptionsOpen(false)}
               >
                 ×

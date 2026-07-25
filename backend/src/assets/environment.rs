@@ -11,7 +11,8 @@ use crate::lake::LakeStore;
 use super::{
     read_canonical_society_rows, read_skill_fact_artifact_rows, MaterializationId,
     MaterializationRecord, SkillFactAnnotationRecord, SkillFactMaterializeError, SkillFactRecord,
-    SkillFactsInput, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    SkillFactsInput, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
 };
 
 pub const SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID: &str =
@@ -56,10 +57,18 @@ pub async fn society_groundwater_potential_facts_input(
 ) -> Result<SkillFactsInput, EnvironmentalAssetError> {
     validate_input(input)?;
     let canonical_record = dependency_record(parent_records, CANONICAL_SOCIETY_NODES_ASSET_ID)?;
-    let rera_facts_record = dependency_record(parent_records, RERA_LEGAL_FACTS_ASSET_ID)?;
     let canonical_rows = read_canonical_society_rows(lake, canonical_record).await?;
-    let fact_rows =
-        read_skill_fact_artifact_rows(lake, std::slice::from_ref(rera_facts_record)).await?;
+    let coordinate_records = parent_records
+        .iter()
+        .filter(|record| {
+            matches!(
+                record.asset_id.as_str(),
+                RERA_LEGAL_FACTS_ASSET_ID | GOOGLE_REVIEW_FACTS_ASSET_ID
+            )
+        })
+        .cloned()
+        .collect::<Vec<_>>();
+    let fact_rows = read_skill_fact_artifact_rows(lake, &coordinate_records).await?;
     let coordinates = society_coordinates(&fact_rows.facts)?;
     let society_names = canonical_rows
         .entities

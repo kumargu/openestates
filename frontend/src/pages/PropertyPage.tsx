@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import type { BuilderPortfolio, PropertyDetailResponse } from "../lib/types.ts";
-import { getProperty } from "../lib/api.ts";
+import type {
+  BuilderPortfolio,
+  PropertyDetailResponse,
+  RecommendationResponse,
+  RecommendationStatus,
+} from "../lib/types.ts";
+import { getProperty, getPropertyRecommendations } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
-import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { TrustBadge } from "../components/TrustBadge.tsx";
 import { BuilderTrustBadge } from "../components/BuilderTrustBadge.tsx";
@@ -86,11 +90,16 @@ export function PropertyPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
+  const [recommendations, setRecommendations] = useState<RecommendationResponse | null>(null);
+  const [recommendationStatus, setRecommendationStatus] =
+    useState<RecommendationStatus>("pending");
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
 
   useEffect(() => {
     if (!id) return;
     setData(null);
+    setRecommendations(null);
+    setRecommendationStatus("pending");
     setStatus("loading");
 
     getProperty(id)
@@ -102,6 +111,29 @@ export function PropertyPage() {
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
   }, [id]);
+
+  useEffect(() => {
+    const propertyId = data?.property?.id;
+    if (!propertyId || !id) return;
+    let cancelled = false;
+
+    setRecommendationStatus(data.recommendations?.status ?? "pending");
+    getPropertyRecommendations(propertyId)
+      .then((response) => {
+        if (cancelled) return;
+        setRecommendations(response);
+        setRecommendationStatus(response.status);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setRecommendations(null);
+        setRecommendationStatus("unavailable");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.property?.id, data?.recommendations?.status, id]);
 
   if (status === "loading") return (
     <div className="page-container-wide">
@@ -138,7 +170,7 @@ export function PropertyPage() {
   if (status === "error") return <PageState variant="error" context="property" />;
   if (!data) return null;
 
-  const { property: p, society, market_activity } = data;
+  const { property: p, society } = data;
 
   const pageTitle = `${p.title} — ${p.bhk} BHK in ${p.area} | OpenEstates`;
   const pricePerSqftLabel = hasKnownNumber(p.price_per_sqft)
@@ -155,15 +187,6 @@ export function PropertyPage() {
     pricePerSqftLabel,
     `${p.area}, ${p.city}`,
   ].filter(Boolean).join(". ");
-  const sourceLabel = data.root_source === "rera" ? "RERA file" : data.root_source === "seller" ? "Seller file" : "Source pending";
-  const marketRows = [
-    market_activity.interest_label,
-    market_activity.saves_last_7d != null ? `${market_activity.saves_last_7d} saves this week` : null,
-    market_activity.offers_last_7d != null && market_activity.offers_last_7d > 0
-      ? `${market_activity.offers_last_7d} offer${market_activity.offers_last_7d > 1 ? "s" : ""} this week`
-      : null,
-    `Listed ${market_activity.days_on_market}d ago`,
-  ].filter((row): row is string => row !== null);
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const showNearbyPlate = hasAroundThisHomePlate(data.map_context);
@@ -185,6 +208,12 @@ export function PropertyPage() {
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
+  const recommendationBranches = recommendations?.items ?? data.recommendation_branches ?? [];
+  const recommendationRuntimeLabel = [
+    recommendations?.engine_version ?? data.recommendations?.engine_version,
+    recommendations?.serving_bundle_version ?? data.recommendations?.serving_bundle_version,
+    recommendations?.scoring_policy_version ?? data.recommendations?.scoring_policy_version,
+  ].filter(Boolean).join(" · ");
 
   return (
     <div className="page-container-wide property-decision-page">
@@ -226,7 +255,6 @@ export function PropertyPage() {
             ...(hasKnownNumber(p.metro_distance_mins)
               ? [{ label: "Metro", value: `${p.metro_distance_mins} min` }]
               : []),
-            { label: "Source", value: sourceLabel },
           ]}
         />
 
@@ -280,19 +308,37 @@ export function PropertyPage() {
 
       <div className="property-decision-layout">
         <main className="property-decision-main">
+          <aside className="property-sticky-facts" aria-label="Property snapshot">
+            <div className="property-sticky-facts__identity">
+              <strong>{society?.name || p.title}</strong>
+              <span>{p.area}</span>
+            </div>
+            <dl>
+              <div>
+                <dt>Price</dt>
+                <dd>₹{formatPrice(p.price)}</dd>
+              </div>
+              {sizeLabel && (
+                <div>
+                  <dt>Carpet</dt>
+                  <dd>{sizeLabel}</dd>
+                </div>
+              )}
+              <div>
+                <dt>Home</dt>
+                <dd>{p.bhk} BHK</dd>
+              </div>
+              {(data.home_state_display || data.project_status_display) && (
+                <div className="property-sticky-facts__status">
+                  <dt>Status</dt>
+                  <dd>{data.home_state_display || data.project_status_display}</dd>
+                </div>
+              )}
+            </dl>
+          </aside>
+
           {showNearbyPlate && data.map_context && (
             <AroundThisHomePlate context={data.map_context} />
-          )}
-
-          {marketRows.length > 0 && (
-            <section className="property-market-strip" aria-label="Market pulse">
-              <strong>Market pulse</strong>
-              <div>
-                {marketRows.map((row) => (
-                  <span key={row}>{row}</span>
-                ))}
-              </div>
-            </section>
           )}
 
           {showApproachTrail && (
@@ -315,43 +361,28 @@ export function PropertyPage() {
             </section>
           ) : isKnownText(p.builder_name) && (
             <section className="property-evidence-section">
-              <div className="builder-norecord-card">
-                <div>
-                  <span>Builder record</span>
-                  <h3>{p.builder_name}</h3>
+              <div className="builder-record">
+                <div className="builder-record__head">
+                  <div>
+                    <span>Builder</span>
+                    <h2>{p.builder_name}</h2>
+                  </div>
+                  <p>No other tracked projects yet</p>
                 </div>
-                <p>No other ongoing projects tracked in RERA.</p>
               </div>
             </section>
           )}
 
-          {(data.recommendation_branches?.length ?? 0) > 0 ? (
-            <AlternativePaths branches={data.recommendation_branches ?? []} />
-          ) : data.similar_properties.length > 0 ? (
-            <section className="property-similar-section">
-              <div className="property-section-heading">
-                <span>Compared with</span>
-                <h2>Nearby alternatives</h2>
-              </div>
-              <div className="property-similar-grid">
-                {data.similar_properties.slice(0, 3).map((sp) => (
-                  <Link key={sp.id} to={`/property/${sp.id}`} className="property-similar-card">
-                    <ImageWithFallback
-                      src={sp.hero_image || ""}
-                      alt={sp.title}
-                      className="property-similar-image"
-                    />
-                    <div>
-                      <strong>{sp.title}</strong>
-                      <span>{sp.society_name} · {sp.area}</span>
-                      <b>{formatPrice(sp.price)}</b>
-                    </div>
-                  </Link>
-                ))}
-              </div>
-            </section>
+          {(recommendationStatus === "pending"
+            || recommendationBranches.length
+            || data.similar_properties.length) ? (
+            <AlternativePaths
+              branches={recommendationBranches}
+              nearby={data.similar_properties}
+              status={recommendationStatus}
+              runtimeLabel={recommendationRuntimeLabel || undefined}
+            />
           ) : null}
-
         </main>
       </div>
     </div>
@@ -359,80 +390,77 @@ export function PropertyPage() {
 }
 
 function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
-  const revocationText = portfolio.revocations == null
-    ? "Revocations not available"
-    : `${portfolio.revocations} revocation${portfolio.revocations === 1 ? "" : "s"}`;
+  const revocations = portfolio.revocations == null
+    ? "—"
+    : String(portfolio.revocations);
+  const projects = portfolio.projects.slice(0, 4);
 
   return (
-    <div className="builder-record-panel">
-      <div className="builder-record-header">
+    <section className="builder-record" aria-label="Builder record">
+      <div className="builder-record__head">
         <div>
-          <span>Builder record</span>
-          <h3>{portfolio.builder_name}</h3>
+          <span>Builder</span>
+          <h2>{portfolio.builder_name}</h2>
         </div>
-        <div className="builder-record-summary">
-          <strong>{portfolio.rera_registered_projects}/{portfolio.tracked_projects}</strong>
-          <span>tracked projects with RERA files</span>
-        </div>
+        <p>
+          {portfolio.rera_registered_projects}/{portfolio.tracked_projects} with RERA
+        </p>
       </div>
 
-      <div className="builder-record-stats">
-        <div>
+      <div className="builder-record__stats" role="list">
+        <div role="listitem">
           <span>Delayed</span>
           <strong>{portfolio.delayed_projects}</strong>
         </div>
-        <div>
+        <div role="listitem">
           <span>Complaints</span>
           <strong>{portfolio.complaint_projects}</strong>
         </div>
-        <div>
+        <div role="listitem">
           <span>Revocations</span>
-          <strong>{revocationText}</strong>
+          <strong>{revocations}</strong>
         </div>
       </div>
 
-      <div className="builder-project-list">
-        {portfolio.projects.map((project) => {
-          const hasDelay = project.delay_months != null && project.delay_months > 0;
-          const hasComplaints = project.complaints_count != null && project.complaints_count > 0;
+      {projects.length > 0 && (
+        <div className="builder-record__projects">
+          {projects.map((project) => {
+            const hasDelay = project.delay_months != null && project.delay_months > 0;
+            const hasComplaints = project.complaints_count != null && project.complaints_count > 0;
+            const status = project.rera_status
+              ?? project.project_status_display
+              ?? (project.rera_number ? project.rera_number : null);
 
-          return (
-            <div
-              key={`${project.property_id}-${project.project_name}`}
-              className={`builder-project-row ${project.current ? "builder-project-row--current" : ""}`}
-            >
-              <Link to={`/property/${project.property_id}`} className="builder-project-main">
-                <div>
+            return (
+              <Link
+                key={`${project.property_id}-${project.project_name}`}
+                to={`/property/${project.property_id}`}
+                className={`builder-record__project${project.current ? " is-current" : ""}`}
+              >
+                <div className="builder-record__project-copy">
                   <strong>{project.project_name}</strong>
-                  <span>{project.area}{project.current ? " · current file" : ""}</span>
+                  <span>
+                    {project.area}
+                    {project.current ? " · This home" : ""}
+                    {status ? ` · ${status}` : ""}
+                  </span>
                 </div>
-                <div>
-                  <b>{project.rera_status ?? "RERA pending"}</b>
-                  <span>{project.rera_number ?? project.project_status_display ?? "No registration linked"}</span>
-                </div>
-              </Link>
-              <div className="builder-project-actions">
-                <div className="builder-project-flags">
-                  {hasDelay && (
-                    <span>{project.delay_months} mo delay</span>
-                  )}
-                  {hasComplaints && (
-                    <span>{project.complaints_count} complaint{project.complaints_count === 1 ? "" : "s"}</span>
-                  )}
-                  {!hasDelay && !hasComplaints && (
-                    <span>No flags in file</span>
-                  )}
-                </div>
-                {project.rera_portal_url && (
-                  <a className="builder-project-source" href={project.rera_portal_url} target="_blank" rel="noreferrer">
-                    RERA source
-                  </a>
+                {(hasDelay || hasComplaints) && (
+                  <div className="builder-record__flags">
+                    {hasDelay && <em>{project.delay_months} mo delay</em>}
+                    {hasComplaints && (
+                      <em>
+                        {project.complaints_count} complaint
+                        {project.complaints_count === 1 ? "" : "s"}
+                      </em>
+                    )}
+                  </div>
                 )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </section>
   );
 }

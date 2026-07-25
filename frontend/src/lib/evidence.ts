@@ -249,13 +249,25 @@ export function summarizeEvidence(
 
 const INTERNAL_SOURCE_TYPES = new Set(["computed", "manual", "system"]);
 
+function isBuyerVisibleSource(sourceType: string | undefined): boolean {
+  if (!sourceType) return false;
+  const lowered = sourceType.trim().toLowerCase();
+  return lowered.includes("rera") || lowered.includes("google");
+}
+
 /** Hide pipeline source types from buyer-facing UI. */
 export function displaySourceType(sourceType: string | undefined): string | null {
   if (!sourceType) return null;
   const lowered = sourceType.trim().toLowerCase();
   if (INTERNAL_SOURCE_TYPES.has(lowered)) return null;
+  if (!isBuyerVisibleSource(sourceType)) return null;
   if (lowered === "rera") return "RERA";
+  if (lowered.includes("google")) return "Google";
   return sourceType;
+}
+
+export function canShowBuyerSource(sourceType: string | undefined): boolean {
+  return isBuyerVisibleSource(sourceType);
 }
 
 export function humanizeSourceTypes(types: string[]): string[] {

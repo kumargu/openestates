@@ -23,6 +23,8 @@ const NEARBY_LAYERS: &[(&str, &str, usize)] = &[
     ("nearby_hospitals", "hospitals", 2),
     ("nearby_tech_parks", "tech", 2),
 ];
+const METRO_MAP_RADIUS_KM: f64 = 10.0;
+const METRO_MAP_STATION_CAP: usize = 8;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct PropertyMapContext {
@@ -80,6 +82,7 @@ pub struct MapPlacePin {
 pub struct MapWaterContext {
     pub groundwater_class: String,
     pub summary: String,
+    pub scope_radius_km: f64,
     pub source_type: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
@@ -159,6 +162,9 @@ pub fn build_property_map_context(
         }
         _ => (Vec::new(), Vec::new(), Vec::new()),
     };
+    if let Some(home) = overlay_home {
+        add_metro_line_stations(&mut places, &dag_metro_stations, &metro_lines, home);
+    }
 
     if places.is_empty()
         && water.is_none()
@@ -187,6 +193,70 @@ pub fn build_property_map_context(
         green_patches,
         lakes,
     })
+}
+
+fn add_metro_line_stations(
+    places: &mut Vec<MapPlacePin>,
+    stations: &[DagMetroStation],
+    metro_lines: &[crate::routes::map_overlays::MapOverlayLine],
+    home: (f64, f64),
+) {
+    let visible_lines = metro_lines
+        .iter()
+        .map(|line| line.name.as_str())
+        .collect::<Vec<_>>();
+    if visible_lines.is_empty() {
+        return;
+    }
+
+    let mut candidates = stations
+        .iter()
+        .filter(|station| {
+            station
+                .lines
+                .iter()
+                .any(|line| visible_lines.iter().any(|visible| line == visible))
+        })
+        .map(|station| {
+            (
+                haversine_km(home.0, home.1, station.latitude, station.longitude),
+                station,
+            )
+        })
+        .filter(|(distance, _)| *distance <= METRO_MAP_RADIUS_KM)
+        .collect::<Vec<_>>();
+    candidates.sort_by(|left, right| left.0.total_cmp(&right.0));
+
+    for (distance, station) in candidates.into_iter().take(METRO_MAP_STATION_CAP) {
+        let already_present = places.iter().any(|place| {
+            place.place_entity_id.as_deref() == Some(station.entity_id.as_str())
+                || (place.layer == "metro"
+                    && place.latitude.is_some_and(|latitude| {
+                        place.longitude.is_some_and(|longitude| {
+                            haversine_km(latitude, longitude, station.latitude, station.longitude)
+                                <= DAG_METRO_MATCH_KM
+                        })
+                    }))
+        });
+        if already_present {
+            continue;
+        }
+
+        places.push(MapPlacePin {
+            place_entity_id: Some(station.entity_id.clone()),
+            layer: "metro".to_string(),
+            name: station.name.clone(),
+            latitude: Some(station.latitude),
+            longitude: Some(station.longitude),
+            distance_km: Some(distance),
+            rating: None,
+            review_count: None,
+            note: None,
+            lines: station.lines.clone(),
+            source_url: None,
+            source_type: "OpenStreetMap".to_string(),
+        });
+    }
 }
 
 fn approximate_home_from_places(places: &[MapPlacePin]) -> Option<(f64, f64)> {
@@ -326,11 +396,18 @@ fn metro_corridor_anchors(
 
     // Only fall back when we already have a nearby Google metro pin that lacked
     // usable line tags. Do not invent a corridor from home alone.
-    if !anchors.is_empty() && anchors.iter().all(|anchor| anchor.preferred_lines.is_empty()) {
-        if let Some(station) = stations.iter().min_by(|left, right| {
-            haversine_km(home.0, home.1, left.latitude, left.longitude)
-                .total_cmp(&haversine_km(home.0, home.1, right.latitude, right.longitude))
-        }) {
+    if !anchors.is_empty()
+        && anchors
+            .iter()
+            .all(|anchor| anchor.preferred_lines.is_empty())
+    {
+        if let Some(station) =
+            stations.iter().min_by(|left, right| {
+                haversine_km(home.0, home.1, left.latitude, left.longitude).total_cmp(
+                    &haversine_km(home.0, home.1, right.latitude, right.longitude),
+                )
+            })
+        {
             if haversine_km(home.0, home.1, station.latitude, station.longitude) <= 8.0 {
                 anchors.push(crate::routes::map_overlays::MetroCorridorAnchor {
                     latitude: station.latitude,
@@ -444,6 +521,7 @@ fn map_water_context(
     Some(MapWaterContext {
         groundwater_class: class.clone(),
         summary: format!("{class} groundwater potential zone near the society."),
+        scope_radius_km: 3.0,
         source_type: if fact.source_type.trim().is_empty() {
             "OpenCity".to_string()
         } else {
@@ -942,6 +1020,7 @@ mod tests {
                 .expect("water-backed context should build");
         let water = context.water.expect("groundwater should resolve by name");
         assert_eq!(water.groundwater_class, "Moderate");
+        assert_eq!(water.scope_radius_km, 3.0);
         assert!(water.illustrative_zone);
         assert!(water.summary.contains("Moderate"));
     }

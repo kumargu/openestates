@@ -10,7 +10,13 @@
 //! Property fields were removed in favor of source-backed facts.
 
 mod market;
+mod policy;
 mod transparency;
 
 pub use market::{compute_market_activity, MarketActivityResponse, PriceVsMedian};
+pub use policy::{
+    score_property_for_surface, scoring_policy, search_ranking_policy, signal_score,
+    CandidateScore, FactAvailability, RecommendationBranchPolicy, ScoredSignal, ScoringPolicyFile,
+    SearchRankingPolicy,
+};
 pub use transparency::{compute_transparency_score, TransparencyScore};

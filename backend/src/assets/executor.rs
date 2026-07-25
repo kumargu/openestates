@@ -417,6 +417,15 @@ impl AssetDagExecutor {
 
             let asset_id = step.asset_id;
             let asset_partition = step.partition;
+            if should_skip_missing_optional_source_input(&asset_id, &options.source_inputs) {
+                manifest.mark_step_skipped(
+                    &asset_id,
+                    Utc::now(),
+                    "optional source input missing; enrichment gap recorded",
+                )?;
+                self.persist_manifest(&mut manifest, false).await?;
+                continue;
+            }
             let mut attempt = 0;
             loop {
                 attempt += 1;
@@ -2242,6 +2251,25 @@ fn source_input_error(context: &AssetExecutionContext<'_>) -> AssetDagExecutorEr
         None => AssetDagExecutorError::SourceInputMissing {
             asset_id: context.asset_id.clone(),
         },
+    }
+}
+
+fn should_skip_missing_optional_source_input(
+    asset_id: &AssetId,
+    source_inputs: &AssetSourceInputs,
+) -> bool {
+    if source_inputs
+        .source_failures
+        .contains_key(asset_id.as_str())
+    {
+        return false;
+    }
+    match asset_id.as_str() {
+        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID => {
+            source_inputs.environment_groundwater_potential.is_none()
+        }
+        BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
+        _ => false,
     }
 }
 

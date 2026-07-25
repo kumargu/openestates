@@ -22,16 +22,6 @@ export function LivabilityBriefCard({ brief }: Props) {
       )}
 
       <p className="livability-brief__summary">{summary}</p>
-
-      {brief.source_urls.length > 0 && (
-        <div className="livability-brief__sources">
-          {brief.source_urls.map((url) => (
-            <a key={url} href={url} target="_blank" rel="noreferrer">
-              Source
-            </a>
-          ))}
-        </div>
-      )}
     </section>
   );
 }

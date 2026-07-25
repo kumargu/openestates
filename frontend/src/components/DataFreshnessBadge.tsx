@@ -45,7 +45,7 @@ export function DataFreshnessBadge({ freshness, compact = false }: DataFreshness
 
   return (
     <span
-      title={`${freshness.fact_count} facts from ${Object.entries(freshness.source_breakdown).map(([k, v]) => `${k}: ${v}`).join(", ")}`}
+      title={`${freshness.fact_count} facts tracked for this home`}
       style={{
         display: "inline-flex",
         alignItems: "center",

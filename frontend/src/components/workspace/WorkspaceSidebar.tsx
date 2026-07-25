@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
 
@@ -95,6 +96,13 @@ export function WorkspaceSidebar({
 }: WorkspaceSidebarProps) {
   const navItems = workspaceNavItems(focusedId, compareHref, activeView);
   const canRemove = homes.length > 2;
+  const [showAllHomes, setShowAllHomes] = useState(false);
+  const previewHomes = homes.slice(0, 4);
+  const focusedHome = homes.find((home) => home.id === focusedId);
+  if (focusedHome && !previewHomes.some((home) => home.id === focusedHome.id)) {
+    previewHomes[previewHomes.length - 1] = focusedHome;
+  }
+  const visibleHomes = showAllHomes ? homes : previewHomes;
 
   return (
     <aside className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}`}>
@@ -135,11 +143,11 @@ export function WorkspaceSidebar({
       {!collapsed && (
         <section className="workspace-sidebar__shortlist" aria-labelledby="workspace-shortlist-title">
           <div className="workspace-sidebar__shortlist-head">
-            <h2 id="workspace-shortlist-title">Active selection</h2>
+            <h2 id="workspace-shortlist-title">Shortlist</h2>
             <span>{homes.length}</span>
           </div>
           <div className="workspace-sidebar__shortlist-list">
-            {homes.map((home) => {
+            {visibleHomes.map((home) => {
               const name = societyLabel(home);
               const state = homeStateHint(home);
               return (
@@ -174,6 +182,16 @@ export function WorkspaceSidebar({
               );
             })}
           </div>
+          {homes.length > previewHomes.length && (
+            <button
+              type="button"
+              className="workspace-sidebar__shortlist-toggle"
+              aria-expanded={showAllHomes}
+              onClick={() => setShowAllHomes((current) => !current)}
+            >
+              {showAllHomes ? "Show fewer" : "… More"}
+            </button>
+          )}
         </section>
       )}
 

@@ -17,7 +17,8 @@ const METRO_CORRIDOR_RADIUS_KM: f64 = 6.0;
 const METRO_STATION_MATCH_KM: f64 = 2.5;
 const METRO_SEGMENT_JOIN_KM: f64 = 0.15;
 const GREEN_RADIUS_KM: f64 = 4.0;
-const MAX_METRO_SEGMENTS: usize = 24;
+const MAX_METRO_SEGMENTS: usize = 96;
+const MAX_METRO_NETWORK_SEGMENTS: usize = 48;
 const MAX_PARKS: usize = 12;
 const MAX_LAKES: usize = 8;
 
@@ -198,6 +199,74 @@ pub fn nearest_metro_corridor(
     corridor
 }
 
+/// Return every named trunk line that crosses the property's metro context
+/// window. The client map clips these naturally to its viewport, giving buyers
+/// network context without shipping the full city GeoJSON on every detail call.
+pub fn metro_network_near(
+    overlays: &CityMapOverlays,
+    home: (f64, f64),
+    metro_stations: &[MetroCorridorAnchor],
+) -> Vec<MapOverlayLine> {
+    let mut by_display: BTreeMap<String, BTreeMap<&str, Vec<usize>>> = BTreeMap::new();
+    for (index, line) in overlays.metro_lines.iter().enumerate() {
+        let Some(display_name) = trunk_line_display_name(&line.name) else {
+            continue;
+        };
+        by_display
+            .entry(display_name)
+            .or_default()
+            .entry(line.name.as_str())
+            .or_default()
+            .push(index);
+    }
+
+    let mut network = Vec::new();
+    for (display_name, source_groups) in by_display {
+        let Some((_, indices)) = source_groups.iter().min_by(|left, right| {
+            group_distance_km(overlays, left.1, home)
+                .total_cmp(&group_distance_km(overlays, right.1, home))
+        }) else {
+            continue;
+        };
+        if group_distance_km(overlays, indices, home) > METRO_CORRIDOR_RADIUS_KM {
+            continue;
+        }
+
+        for &index in indices {
+            let line = &overlays.metro_lines[index];
+            let coordinates =
+                clip_line_near(&line.coordinates, home.0, home.1, METRO_CORRIDOR_RADIUS_KM);
+            if coordinates.len() >= 2 {
+                network.push(MapOverlayLine {
+                    id: line.id.clone(),
+                    name: display_name.clone(),
+                    kind: "metro_line".to_string(),
+                    coordinates,
+                    source_type: "OpenStreetMap".to_string(),
+                });
+            }
+        }
+    }
+
+    if network.is_empty() {
+        return nearest_metro_corridor(overlays, home, metro_stations);
+    }
+    network.sort_by(|left, right| {
+        left.name
+            .cmp(&right.name)
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    network.truncate(MAX_METRO_NETWORK_SEGMENTS);
+    network
+}
+
+fn group_distance_km(overlays: &CityMapOverlays, indices: &[usize], anchor: (f64, f64)) -> f64 {
+    indices
+        .iter()
+        .map(|&index| nearest_line_distance_km(&overlays.metro_lines[index], anchor))
+        .fold(f64::INFINITY, f64::min)
+}
+
 /// Known Namma Metro trunk-line colors. The clean OSM route relations are named
 /// like `Purple Line (Whitefield (Kadugodi) → Challaghatta)`; we surface just
 /// the color line (`Purple Line`) to buyers.
@@ -251,9 +320,10 @@ pub fn trunk_line_display_name(name: &str) -> Option<String> {
     None
 }
 
-/// Pick the single named trunk line whose geometry passes closest to the anchor
-/// and clip it to the corridor radius. Groups by exact source name so the two
-/// directional relations stay separate and only the nearest direction is drawn.
+/// Pick the single named trunk line whose geometry passes closest to the anchor.
+/// Keep its full geometry so the property map can show a recognizable corridor,
+/// while the map viewport naturally clips what is currently visible. Groups by
+/// exact source name so duplicate directional relations are not drawn together.
 /// When DAG `preferred_lines` are present, restrict to those trunk colors first.
 fn trunk_line_corridor(
     overlays: &CityMapOverlays,
@@ -303,21 +373,15 @@ fn trunk_line_corridor(
     let display_name = trunk_line_display_name(best_name)?;
     let mut corridor = groups[best_name]
         .iter()
-        .filter_map(|&index| {
+        .map(|&index| {
             let line = &overlays.metro_lines[index];
-            let coordinates = clip_line_near(
-                &line.coordinates,
-                anchor.0,
-                anchor.1,
-                METRO_CORRIDOR_RADIUS_KM,
-            );
-            (coordinates.len() >= 2).then(|| MapOverlayLine {
+            MapOverlayLine {
                 id: line.id.clone(),
                 name: display_name.clone(),
                 kind: "metro_line".to_string(),
-                coordinates,
+                coordinates: line.coordinates.clone(),
                 source_type: "OpenStreetMap".to_string(),
-            })
+            }
         })
         .collect::<Vec<_>>();
 
@@ -737,6 +801,38 @@ mod tests {
         assert_eq!(corridor.len(), 1);
         assert_eq!(corridor[0].name, "Purple Line");
         assert_eq!(corridor[0].id, "relation/purple");
+    }
+
+    #[test]
+    fn returns_all_trunk_lines_near_the_home() {
+        let overlays = CityMapOverlays {
+            metro_lines: vec![
+                SeedLine {
+                    id: "relation/purple".to_string(),
+                    name: "Purple Line (Whitefield → Challaghatta)".to_string(),
+                    coordinates: vec![[77.75, 12.98], [77.76, 12.99]],
+                },
+                SeedLine {
+                    id: "relation/green".to_string(),
+                    name: "Green Line (Silk Institute → Madavara)".to_string(),
+                    coordinates: vec![[77.74, 12.98], [77.75, 12.99]],
+                },
+                SeedLine {
+                    id: "relation/blue".to_string(),
+                    name: "Blue Line (Airport → Central Silk Board)".to_string(),
+                    coordinates: vec![[78.0, 13.2], [78.01, 13.21]],
+                },
+            ],
+            parks: Vec::new(),
+            lakes: Vec::new(),
+        };
+
+        let network = metro_network_near(&overlays, (12.985, 77.755), &[]);
+
+        assert_eq!(network.len(), 2);
+        assert!(network.iter().any(|line| line.name == "Purple Line"));
+        assert!(network.iter().any(|line| line.name == "Green Line"));
+        assert!(network.iter().all(|line| line.name != "Blue Line"));
     }
 
     #[test]

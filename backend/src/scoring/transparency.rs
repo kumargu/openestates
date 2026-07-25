@@ -1,10 +1,12 @@
-//! Transparency Score: composite 0-100 score from document completeness,
-//! society quality, builder quality, and RERA status.
+//! Transparency Score: buyer-facing trust summary derived from shared scoring
+//! policy signals.
 
 use serde::Serialize;
 
 use crate::models::Property;
 use crate::routes::enrichment::ReraInfo;
+
+use super::policy::{CandidateScore, FactAvailability};
 
 #[derive(Debug, Clone, Serialize)]
 pub struct TransparencyComponent {
@@ -20,17 +22,15 @@ pub struct TransparencyScore {
     pub explainer: String,
 }
 
-/// Compute a composite transparency score (0-100) from property data.
-///
-/// Weights:
-/// - document_completeness: 30%
-/// - society_quality: 25%
-/// - builder_quality: 25%
-/// - RERA status: 20%
 pub fn compute_transparency_score(
     property: &Property,
     rera: Option<&ReraInfo>,
+    policy_score: Option<&CandidateScore>,
 ) -> TransparencyScore {
+    if let Some(policy_score) = policy_score {
+        return transparency_from_policy_score(policy_score);
+    }
+
     let doc_score = property.document_completeness_score.unwrap_or(0.0) * 30.0;
     let society_score = property.society_quality_score.unwrap_or(0.0) * 25.0;
     let builder_score = property.builder_quality_score.unwrap_or(0.0) * 25.0;
@@ -99,5 +99,73 @@ pub fn compute_transparency_score(
         overall,
         components,
         explainer,
+    }
+}
+
+fn transparency_from_policy_score(policy_score: &CandidateScore) -> TransparencyScore {
+    let observed_count = policy_score
+        .signals
+        .iter()
+        .filter(|signal| signal.availability != FactAvailability::Missing)
+        .count();
+    let missing_count = policy_score.signals.len().saturating_sub(observed_count);
+    let overall = if observed_count == 0 {
+        0.0
+    } else {
+        (policy_score.total_score * 100.0).round().clamp(0.0, 100.0)
+    };
+
+    let components = policy_score
+        .signals
+        .iter()
+        .map(|signal| TransparencyComponent {
+            label: signal_label(&signal.signal_id).to_string(),
+            score: if signal.availability == FactAvailability::Missing {
+                0.0
+            } else {
+                (signal.score * 100.0).round()
+            },
+            max_score: 100.0,
+        })
+        .collect();
+
+    let explainer = if observed_count == 0 {
+        "Transparency is not scored yet because serving evidence is missing.".into()
+    } else if missing_count > 0 {
+        format!(
+            "Transparency is based on {observed_count} observed signal{}; {missing_count} evidence gap{} remain.",
+            plural(observed_count),
+            plural(missing_count)
+        )
+    } else if overall >= 75.0 {
+        "Strong transparency from shared proof and safety signals.".into()
+    } else if overall >= 50.0 {
+        "Moderate transparency from shared proof and safety signals.".into()
+    } else {
+        "Limited transparency from the currently observed proof and safety signals.".into()
+    };
+
+    TransparencyScore {
+        overall,
+        components,
+        explainer,
+    }
+}
+
+fn signal_label(signal_id: &str) -> &str {
+    match signal_id {
+        "proof_strength" => "Proof strength",
+        "legal_timeline_safety" => "Legal and timeline safety",
+        "access_strength" => "Access strength",
+        "price_value" => "Price value",
+        _ => signal_id,
+    }
+}
+
+fn plural(count: usize) -> &'static str {
+    if count == 1 {
+        ""
+    } else {
+        "s"
     }
 }

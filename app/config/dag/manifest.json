@@ -14,6 +14,7 @@
     "fact_registry.json",
     "ontology.json",
     "resolution_policies.json",
+    "scoring_policy.json",
     "search_intent.json",
     "source_adapters/",
     "ui_surfaces.json"

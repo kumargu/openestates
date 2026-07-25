@@ -683,6 +683,8 @@ def collect_google_places(
                 "review_snippets": optional_string_list(
                     fact_data(values.get("google_review_snippets"))
                 ),
+                "latitude": optional_float(fact_data(values.get("geo.latitude"))),
+                "longitude": optional_float(fact_data(values.get("geo.longitude"))),
                 "address": optional_string(fact_data(values.get("google_place_address")))
                 or optional_string(input_data.get("address")),
                 "confidence": float(result.confidence),

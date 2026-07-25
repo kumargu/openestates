@@ -86,6 +86,26 @@ Use compact, memorable lines sparingly in landing, search, and plan surfaces. Go
 
 Do not over-explain with long in-app text. Keep quotes and captions short, premium, and useful.
 
+### Buyer UI copy — no internal annotations
+Buyer-facing UI must never read like agent notes, pipeline status, or how-to chrome for the implementer.
+
+**Never put on product surfaces:**
+- Interaction tutorials ("click a lower image to bring it forward", "pick a layer to read…")
+- Pipeline / enrichment jargon ("enrichment queued", "still enriching", "zone geometry not drawn", "source-backed")
+- Internal provenance labels that sound like file ops ("RERA file", "Seller file", "Source pending") when a short buyer label or silence is enough
+- Map/debug chrome that explains the renderer ("Home centered", "Home estimated") unless it is a clear buyer caveat
+- Empty-state essays that narrate our data gaps instead of one calm next step
+
+**Allowed:**
+- Short buyer facts (`4 views`, `0.6 km`, `Google 4.1`)
+- Quiet source links (`Source`) next to a fact, not as instructional caption glue
+- Real system states buyers need (`Verification pending`, temporary outage copy)
+- `aria-label` / `sr-only` for accessibility when visible text would be clutter
+
+If copy would only make sense to someone who built the feature, delete it or move it to logs/admin. Prefer no caption over an annotate caption.
+
+Before completing any buyer-facing frontend change, audit newly added and nearby visible strings. Remove implementation instructions, enrichment state, renderer notes, and internal provenance terminology unless the buyer must act on that information.
+
 ---
 
 ## 3. Engineering Themes
@@ -336,6 +356,15 @@ At the start of each day of work:
 3. Checkpoint after each meaningful unit — compile, test, manual check. Don't stack 5 unverified changes.
 
 Do not start fresh each day and ignore what was built. That leads to conflicting and duplicated code.
+
+### Restart after code changes
+
+After completing a coherent set of code changes, restart both local product servers before handing the result back to the user:
+
+- Rust API on port `4000`
+- Vite frontend on port `5173`
+
+Do not rely on an older backend process or frontend hot reload when presenting completed work. Confirm `/api/health` and the frontend root both return successfully after the restart. A documentation-only change does not require a restart.
 
 ---
 

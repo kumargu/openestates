@@ -56,6 +56,7 @@ pub enum DagConfigError {
     Io(std::io::Error),
     Parse(serde_json::Error),
     Registry(RegistryError),
+    InvalidConfig(String),
 }
 
 impl std::fmt::Display for DagConfigError {
@@ -64,6 +65,7 @@ impl std::fmt::Display for DagConfigError {
             Self::Io(err) => write!(f, "failed to read DAG config: {err}"),
             Self::Parse(err) => write!(f, "failed to parse DAG config: {err}"),
             Self::Registry(err) => write!(f, "invalid asset registry config: {err}"),
+            Self::InvalidConfig(err) => write!(f, "invalid DAG config: {err}"),
         }
     }
 }

@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
+import { SoftComparableIcon } from "../ui/SoftIcons.tsx";
 
 type ComparableId =
   | "space"
@@ -353,6 +354,8 @@ export function SocietyComparisonChart({
   catalog,
 }: SocietyComparisonChartProps) {
   const [searchParams, setSearchParams] = useSearchParams();
+  const tableRef = useRef<HTMLDivElement | null>(null);
+  const previousFocusedIdRef = useRef<string | null>(null);
   const groups = useMemo(
     () => buildSocietyGroups(selectedHomes, catalog),
     [catalog, selectedHomes],
@@ -361,7 +364,12 @@ export function SocietyComparisonChart({
     group.listings.map((listing) => listing.bhk)
   ))].sort((left, right) => left - right);
   const requestedBhk = Number(searchParams.get("bhk"));
-  const selectedHomeBhk = selectedHomes[0]?.bhk;
+  const requestedFocusedId = searchParams.get("focus");
+  const focusedHome = selectedHomes.find((home) => home.id === requestedFocusedId)
+    ?? selectedHomes[0];
+  const focusedId = focusedHome?.id ?? null;
+  const focusedSocietyKey = focusedHome ? societyKey(focusedHome) : null;
+  const selectedHomeBhk = focusedHome?.bhk ?? selectedHomes[0]?.bhk;
   const activeBhk = availableBhks.includes(requestedBhk)
     ? requestedBhk
     : availableBhks.includes(selectedHomeBhk)
@@ -401,6 +409,22 @@ export function SocietyComparisonChart({
   const rowsWithBands = visibleRows
     .map((row) => ({ ...row, band: priceBand(row.listings) }))
     .filter((row): row is typeof row & { band: PriceBand } => row.band !== null);
+
+  useEffect(() => {
+    const previousFocusedId = previousFocusedIdRef.current;
+    previousFocusedIdRef.current = focusedId;
+    if (!focusedId || !previousFocusedId || focusedId === previousFocusedId) return;
+
+    const focusedRow = tableRef.current?.querySelector<HTMLElement>(
+      ".compare-society-table__row.is-focused",
+    );
+    if (!focusedRow) return;
+    const bounds = focusedRow.getBoundingClientRect();
+    if (bounds.top < 0 || bounds.bottom > window.innerHeight) {
+      focusedRow.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [focusedId, focusedSocietyKey]);
+
   if (rowsWithBands.length === 0) return null;
 
   const range = chartRange(rowsWithBands.map((row) => row.band));
@@ -455,6 +479,7 @@ export function SocietyComparisonChart({
                 aria-pressed={activeComparableIds.includes(definition.id)}
                 onClick={() => toggleComparable(definition.id)}
               >
+                <SoftComparableIcon id={definition.id} size={15} />
                 {definition.label}
               </button>
             ))}
@@ -462,12 +487,18 @@ export function SocietyComparisonChart({
         </div>
       </header>
 
-      <div className={`compare-society-table compare-society-table--facts-${activeComparables.length}`}>
+      <div
+        ref={tableRef}
+        className={`compare-society-table compare-society-table--facts-${activeComparables.length}`}
+      >
         <div className="compare-society-table__head" aria-hidden="true">
           <span>Society</span>
           <span>Price</span>
           {activeComparables.map((definition) => (
-            <span key={definition.id}>{definition.label}</span>
+            <span key={definition.id} className="compare-society-table__fact-label">
+              <SoftComparableIcon id={definition.id} size={14} />
+              {definition.label}
+            </span>
           ))}
         </div>
 
@@ -475,7 +506,12 @@ export function SocietyComparisonChart({
           {rowsWithBands.map((row, index) => (
             <div
               key={row.group.key}
-              className={`compare-society-table__row compare-society-table__row--tone-${index % 6}`}
+              className={[
+                "compare-society-table__row",
+                `compare-society-table__row--tone-${index % 6}`,
+                row.group.key === focusedSocietyKey ? "is-focused" : "",
+              ].filter(Boolean).join(" ")}
+              aria-current={row.group.key === focusedSocietyKey ? "true" : undefined}
             >
               <div className="compare-society-table__identity" title={row.group.name}>
                 <span aria-hidden="true">{row.group.name.charAt(0)}</span>

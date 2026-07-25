@@ -43,6 +43,10 @@ pub struct GooglePlaceSnapshotRecord {
     pub review_count: Option<u64>,
     #[serde(default)]
     pub review_snippets: Vec<String>,
+    #[serde(default)]
+    pub latitude: Option<f64>,
+    #[serde(default)]
+    pub longitude: Option<f64>,
     pub address: Option<String>,
     pub confidence: f32,
     pub fetched_at: DateTime<Utc>,
@@ -770,6 +774,32 @@ fn append_google_review_facts(
             annotations,
         )?;
     }
+    if valid_optional_coordinate(row.latitude, row.longitude) {
+        if let (Some(latitude), Some(longitude)) = (row.latitude, row.longitude) {
+            push_fact(
+                row,
+                run_id,
+                "geo.latitude",
+                FactValue::Numeric(latitude),
+                "Latitude: {value}",
+                &["coordinates", "location", "latitude"],
+                None,
+                facts,
+                annotations,
+            )?;
+            push_fact(
+                row,
+                run_id,
+                "geo.longitude",
+                FactValue::Numeric(longitude),
+                "Longitude: {value}",
+                &["coordinates", "location", "longitude"],
+                None,
+                facts,
+                annotations,
+            )?;
+        }
+    }
     if let Some(rating) = row.rating {
         push_fact(
             row,
@@ -1085,6 +1115,8 @@ fn write_places_parquet(
         Field::new("rating", DataType::Float64, true),
         Field::new("review_count", DataType::UInt64, true),
         string_list_field("review_snippets", false),
+        Field::new("latitude", DataType::Float64, true),
+        Field::new("longitude", DataType::Float64, true),
         Field::new("address", DataType::Utf8, true),
         Field::new("confidence", DataType::Float32, false),
         Field::new("fetched_at", DataType::Utf8, false),
@@ -1106,6 +1138,8 @@ fn write_places_parquet(
                     .iter()
                     .map(|record| Some(record.review_snippets.clone())),
             ),
+            optional_f64_array(records.iter().map(|record| record.latitude)),
+            optional_f64_array(records.iter().map(|record| record.longitude)),
             optional_string_array(records.iter().map(|record| record.address.clone())),
             Arc::new(Float32Array::from(
                 records
@@ -1134,6 +1168,8 @@ fn read_places_parquet(
         let reviews_url = string_column(&batch, "reviews_url")?;
         let rating = f64_column(&batch, "rating")?;
         let review_count = u64_column(&batch, "review_count")?;
+        let latitude = optional_f64_column(&batch, "latitude");
+        let longitude = optional_f64_column(&batch, "longitude");
         let address = string_column(&batch, "address")?;
         let confidence = f32_column(&batch, "confidence")?;
         let fetched_at = string_column(&batch, "fetched_at")?;
@@ -1149,6 +1185,8 @@ fn read_places_parquet(
                 rating: optional_f64(rating, row),
                 review_count: optional_u64(review_count, row),
                 review_snippets: string_list_column(&batch, "review_snippets", row)?,
+                latitude: optional_f64_from_column(latitude, row),
+                longitude: optional_f64_from_column(longitude, row),
                 address: optional_string(address, row),
                 confidence: required_f32(confidence, row, "confidence")?,
                 fetched_at: DateTime::parse_from_rfc3339(&required_string(

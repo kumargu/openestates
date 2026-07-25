@@ -1,8 +1,12 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use backend::recommendations::RECOMMENDATION_ENGINE_VERSION;
+use backend::scoring::scoring_policy;
+use backend::state::AppState;
 use backend::{data_loader, routes};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
@@ -11,12 +15,26 @@ use tower_http::cors::{Any, CorsLayer};
 struct HealthResponse {
     service: &'static str,
     status: &'static str,
+    process_started_at: String,
+    scoring_policy_version: u32,
+    recommendation_engine_version: &'static str,
+    serving_bundle_version: Option<String>,
 }
 
-async fn health() -> Json<HealthResponse> {
+async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+    let serving_bundle_version = state
+        .serving_bundle
+        .read()
+        .await
+        .as_ref()
+        .map(|bundle| bundle.manifest.bundle_version.clone());
     Json(HealthResponse {
         service: "openestates-api",
         status: "ok",
+        process_started_at: state.process_started_at.to_rfc3339(),
+        scoring_policy_version: scoring_policy().version,
+        recommendation_engine_version: RECOMMENDATION_ENGINE_VERSION,
+        serving_bundle_version,
     })
 }
 
@@ -49,6 +67,10 @@ async fn main() {
         .route(
             "/api/properties/{id}/evidence",
             get(routes::properties::get_property_evidence),
+        )
+        .route(
+            "/api/properties/{id}/recommendations",
+            get(routes::properties::get_property_recommendations),
         )
         .route(
             "/api/properties/evidence/batch",
@@ -119,7 +141,7 @@ async fn main() {
     println!("OpenEstates API listening on http://{bind_address}");
     println!("Routes:");
     println!("  GET /api/health");
-    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence");
+    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/recommendations");
     println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
     println!("  GET /api/discovery");

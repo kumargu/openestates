@@ -106,6 +106,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
+        recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas,
         societies,
         sellers: RwLock::new(sellers),
@@ -113,6 +114,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         map_overlays,
         knowledge: Arc::new(RwLock::new(graph)),
         project_root: project_root.to_path_buf(),
+        process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
         registration_counter: AtomicU64::new(0),
@@ -1425,7 +1427,10 @@ fn parse_market_pricing(raw: &str) -> Option<MarketPricing> {
         return None;
     }
 
-    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(value) => value,
+        Err(_) => return parse_text_listing_pricing(raw),
+    };
     let price_range = value.get("price_range_lakh")?.as_str()?;
     let sqft_range = value.get("sqft_range")?.as_str()?;
     let (price_low_lakh, price_high_lakh) = parse_number_range(price_range)?;
@@ -1446,7 +1451,10 @@ fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
         return None;
     }
 
-    let value: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let value: serde_json::Value = match serde_json::from_str(raw) {
+        Ok(value) => value,
+        Err(_) => return parse_text_listing_pricing(raw),
+    };
     let price = value.get("price")?.as_f64()?;
     let sqft = value.get("area_sqft")?.as_f64()?;
     if !price.is_finite() || !sqft.is_finite() || price <= 0.0 || sqft <= 0.0 {
@@ -1488,6 +1496,46 @@ fn parse_listing_pricing(raw: &str) -> Option<MarketPricing> {
         sqft_low: sqft_low.round() as u32,
         sqft_high: sqft_high.round() as u32,
     })
+}
+
+fn parse_text_listing_pricing(raw: &str) -> Option<MarketPricing> {
+    let lowered = raw.to_ascii_lowercase();
+    let price = parse_text_price(&lowered)?;
+    let sqft = parse_text_sqft(&lowered)?;
+    if price == 0 || sqft == 0 {
+        return None;
+    }
+    Some(MarketPricing {
+        price,
+        price_low: price,
+        price_high: price,
+        sqft,
+        sqft_low: sqft,
+        sqft_high: sqft,
+    })
+}
+
+fn parse_text_price(raw: &str) -> Option<u64> {
+    let marker = raw.find("inr").or_else(|| raw.find('₹'))?;
+    let after_marker = &raw[marker..];
+    let number = parse_number_range(after_marker)?.0;
+    if after_marker.contains(" cr") || after_marker.contains("crore") {
+        return Some((number * 10_000_000.0).round() as u64);
+    }
+    if after_marker.contains(" lakh") || after_marker.contains(" lac") {
+        return Some((number * 100_000.0).round() as u64);
+    }
+    Some(number.round() as u64)
+}
+
+fn parse_text_sqft(raw: &str) -> Option<u32> {
+    let sqft_marker = raw
+        .find("sq ft")
+        .or_else(|| raw.find("sqft"))
+        .or_else(|| raw.find("sq. ft"))?;
+    let before_marker = &raw[..sqft_marker];
+    let number = parse_number_range(before_marker)?.1;
+    Some(number.round() as u32)
 }
 
 fn parse_number_range(raw: &str) -> Option<(f64, f64)> {

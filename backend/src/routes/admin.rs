@@ -91,6 +91,7 @@ pub async fn reload_serving_bundle(
             let summary = bundle.as_ref().map(serving_bundle_summary);
             let mut current = state.serving_bundle.write().await;
             *current = bundle;
+            state.recommendation_cache.write().await.clear();
             Json(serde_json::json!({
                 "status": "reloaded",
                 "serving_bundle": summary,

@@ -3,6 +3,7 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
+  RecommendationResponse,
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
@@ -18,8 +19,7 @@ import {
 
 const API_BASE = import.meta.env.VITE_API_BASE
   ?? (import.meta.env.DEV ? "" : "http://127.0.0.1:4000");
-const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API !== "false"
-  && (import.meta.env.DEV || import.meta.env.VITE_USE_FIXTURE_API === "true");
+const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 
 type ApiFetchOptions = {
@@ -73,7 +73,14 @@ async function postJson<T>(path: string, body: unknown): Promise<T> {
   return res.json();
 }
 
-export function getHealth(): Promise<{ service: string; status: string }> {
+export function getHealth(): Promise<{
+  service: string;
+  status: string;
+  process_started_at?: string;
+  scoring_policy_version?: number;
+  recommendation_engine_version?: string;
+  serving_bundle_version?: string;
+}> {
   return fetchJson("/api/health");
 }
 
@@ -83,6 +90,10 @@ export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]
 
 export function getProperty(id: string): Promise<PropertyDetailResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}`);
+}
+
+export function getPropertyRecommendations(id: string): Promise<RecommendationResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/recommendations`);
 }
 
 export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {

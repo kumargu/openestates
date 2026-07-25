@@ -434,12 +434,9 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
               <path d="M2 12l10 5 10-5" />
             </svg>
             <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#15803d" }}>
-              Just discovered {discoveryCount} new {discoveryCount === 1 ? "property" : "properties"}
+              {discoveryCount} new {discoveryCount === 1 ? "match" : "matches"}
             </span>
           </div>
-          <p style={{ margin: "0.35rem 0 0", fontSize: "0.78rem", color: "#166534", lineHeight: 1.5 }}>
-            We searched the web in real time to find these. Details are being verified — look for the "Verification Pending" tag.
-          </p>
         </div>
       )}
 

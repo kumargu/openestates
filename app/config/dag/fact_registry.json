@@ -1495,8 +1495,7 @@
           "water",
           "water supply",
           "borewell",
-          "cauvery",
-          "tanker"
+          "cauvery"
         ],
         "label": "water supply",
         "expanded_keys": [
@@ -2170,8 +2169,7 @@
           "bad approach road",
           "narrow approach road",
           "poor access road",
-          "approach roads",
-          "near approach roads",
+          "stagnant rainwater near approach roads",
           "approach road waterlogging"
         ],
         "label": "approach road",

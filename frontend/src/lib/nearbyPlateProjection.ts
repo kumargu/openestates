@@ -8,7 +8,8 @@ import type {
 export type PlateScaleMode = "nearby" | "area";
 export type PlateStory =
   | { kind: "essentials" }
-  | { kind: "layer"; layer: MapNearbyLayer };
+  | { kind: "layer"; layer: MapNearbyLayer }
+  | { kind: "water" };
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
 export const PLATE_LIST_LIMIT = 5;
@@ -129,6 +130,10 @@ export function placesForStory(
   context: PropertyMapContext,
   story: PlateStory,
 ): MapPlacePin[] {
+  if (story.kind === "water") {
+    return [];
+  }
+
   if (story.kind === "layer") {
     return context.places.filter((place) => place.layer === story.layer);
   }
@@ -154,6 +159,81 @@ export function filterPlacesByScale(
   const maxKm = scale === "nearby" ? 1.5 : 10;
   return places.filter((place) => (place.distance_km ?? 0) <= maxKm
     || typeof place.distance_km !== "number");
+}
+
+export function metroStationsAroundHome(
+  places: MapPlacePin[],
+  home: { latitude: number; longitude: number },
+  metroLines: MapOverlayLine[],
+): MapPlacePin[] {
+  if (places.length <= 2) return places;
+
+  const latitudeScale = Math.cos((home.latitude * Math.PI) / 180);
+  const toLocalPoint = (longitude: number, latitude: number): [number, number] => [
+    (longitude - home.longitude) * latitudeScale,
+    latitude - home.latitude,
+  ];
+
+  let nearestSegment:
+    | { projection: [number, number]; tangent: [number, number] }
+    | undefined;
+  let nearestDistance = Number.POSITIVE_INFINITY;
+
+  for (const line of metroLines) {
+    for (let index = 1; index < line.coordinates.length; index += 1) {
+      const start = toLocalPoint(...line.coordinates[index - 1]);
+      const end = toLocalPoint(...line.coordinates[index]);
+      const dx = end[0] - start[0];
+      const dy = end[1] - start[1];
+      const lengthSquared = dx * dx + dy * dy;
+      if (lengthSquared === 0) continue;
+      const t = clamp(-(start[0] * dx + start[1] * dy) / lengthSquared, 0, 1);
+      const projection: [number, number] = [start[0] + t * dx, start[1] + t * dy];
+      const projectionDistance = Math.hypot(projection[0], projection[1]);
+      if (projectionDistance < nearestDistance) {
+        const length = Math.sqrt(lengthSquared);
+        nearestDistance = projectionDistance;
+        nearestSegment = {
+          projection,
+          tangent: [dx / length, dy / length],
+        };
+      }
+    }
+  }
+
+  if (!nearestSegment) {
+    return places
+      .slice()
+      .sort((left, right) =>
+        (left.distance_km ?? Number.POSITIVE_INFINITY)
+        - (right.distance_km ?? Number.POSITIVE_INFINITY))
+      .slice(0, 2);
+  }
+
+  const segment = nearestSegment;
+  const ranked = places
+    .filter(
+      (place): place is MapPlacePin & { latitude: number; longitude: number } =>
+        typeof place.latitude === "number" && typeof place.longitude === "number",
+    )
+    .map((place) => {
+      const point = toLocalPoint(place.longitude, place.latitude);
+      const along = (point[0] - segment.projection[0]) * segment.tangent[0]
+        + (point[1] - segment.projection[1]) * segment.tangent[1];
+      return { place, along };
+    });
+  const before = ranked
+    .filter((item) => item.along < 0)
+    .sort((left, right) => Math.abs(left.along) - Math.abs(right.along))[0];
+  const after = ranked
+    .filter((item) => item.along >= 0)
+    .sort((left, right) => Math.abs(left.along) - Math.abs(right.along))[0];
+
+  if (before && after) return [before.place, after.place];
+  return ranked
+    .sort((left, right) => Math.abs(left.along) - Math.abs(right.along))
+    .slice(0, 2)
+    .map((item) => item.place);
 }
 
 export function chooseRadiusKm(
@@ -208,6 +288,37 @@ export function zoomForRadiusKm(radiusKm: number): number {
   if (radiusKm <= 6) return 11.8;
   if (radiusKm <= 8) return 11.3;
   return 10.9;
+}
+
+function collisionZoomBoost(
+  home: { latitude: number; longitude: number },
+  places: NumberedPlace[],
+  zoom: number,
+): number {
+  if (places.length === 0) return 0;
+  const points = [home, ...places];
+  let nearestKm = Number.POSITIVE_INFINITY;
+  for (let left = 0; left < points.length; left += 1) {
+    for (let right = left + 1; right < points.length; right += 1) {
+      nearestKm = Math.min(
+        nearestKm,
+        distanceKm(
+          points[left].latitude,
+          points[left].longitude,
+          points[right].latitude,
+          points[right].longitude,
+        ),
+      );
+    }
+  }
+  if (!Number.isFinite(nearestKm) || nearestKm <= 0) return 1.4;
+
+  const metersPerPixel = (156543.03 * Math.cos((home.latitude * Math.PI) / 180))
+    / (2 ** zoom);
+  const separationPixels = (nearestKm * 1000) / metersPerPixel;
+  const markerGuardPixels = 34;
+  if (separationPixels >= markerGuardPixels) return 0;
+  return clamp(Math.log2(markerGuardPixels / separationPixels), 0, 1.4);
 }
 
 export function buildNumberedPlaces(
@@ -280,13 +391,24 @@ export function buildPlateViewport(
   places: NumberedPlace[],
   scale: PlateScaleMode,
   metroLines: MapOverlayLine[] = [],
+  metroExtent: "full" | "nearest" = "full",
 ): PlateViewport {
-  const overlayCoordinates = metroLines.flatMap((line) => line.coordinates);
+  let overlayCoordinates = metroLines.flatMap((line) => line.coordinates);
+  if (metroExtent === "nearest" && overlayCoordinates.length > 1) {
+    overlayCoordinates = [
+      overlayCoordinates.reduce((nearest, candidate) =>
+        distanceKm(home.latitude, home.longitude, candidate[1], candidate[0])
+          < distanceKm(home.latitude, home.longitude, nearest[1], nearest[0])
+          ? candidate
+          : nearest),
+    ];
+  }
   const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates);
+  const baseZoom = zoomForRadiusKm(radiusKm);
   return {
     center: home,
     radiusKm,
-    zoom: zoomForRadiusKm(radiusKm),
+    zoom: baseZoom + collisionZoomBoost(home, places, baseZoom),
     paddingFactor: clamp(0.18 + radiusKm * 0.02, 0.18, 0.28),
   };
 }

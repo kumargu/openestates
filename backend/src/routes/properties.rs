@@ -9,8 +9,12 @@ use serde::{Deserialize, Serialize};
 use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
 use crate::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
+    RecommendationEnvelope, RecommendationResponse, RecommendationStatus,
+    RECOMMENDATION_ENGINE_VERSION,
 };
-use crate::scoring::{self, compute_transparency_score, MarketActivityResponse, TransparencyScore};
+use crate::scoring::{
+    compute_transparency_score, score_property_for_surface, scoring_policy, TransparencyScore,
+};
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
 use crate::serving::{
@@ -69,12 +73,14 @@ pub struct PropertyDetail {
     pub evidence: PropertyEvidenceResponse,
     pub society: Option<crate::models::Society>,
     pub area: Option<crate::models::AreaProfile>,
-    pub market_activity: MarketActivityResponse,
     /// Similar properties from locally precomputed society embeddings.
     pub similar_properties: Vec<PropertyCard>,
     /// Counterfactual branches — why you might consider an alternative instead.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub recommendation_branches: Vec<RecommendationBranch>,
+    /// Async recommendation status. The detail page should fetch the branch cards
+    /// from `/api/properties/{id}/recommendations` instead of doing this work inline.
+    pub recommendations: RecommendationEnvelope,
     /// RERA regulatory data from the knowledge graph (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera: Option<ReraInfo>,
@@ -348,6 +354,56 @@ fn canonical_property_id(id: &str) -> &str {
         "fixture-prestige-city-3bhk" => "discovered-the-prestige-city-3bhk",
         _ => id,
     }
+}
+
+fn recommendation_cache_key(property_id: &str, serving_bundle_version: Option<&str>) -> String {
+    format!(
+        "property:{property_id}:bundle:{}:policy:{}:engine:{}",
+        serving_bundle_version.unwrap_or("missing"),
+        scoring_policy().version,
+        RECOMMENDATION_ENGINE_VERSION
+    )
+}
+
+fn recommendation_envelope_for(
+    property_id: &str,
+    serving_bundle_version: Option<String>,
+) -> RecommendationEnvelope {
+    RecommendationEnvelope {
+        status: RecommendationStatus::Pending,
+        cache_key: recommendation_cache_key(property_id, serving_bundle_version.as_deref()),
+        engine_version: RECOMMENDATION_ENGINE_VERSION.to_string(),
+        scoring_policy_version: scoring_policy().version,
+        serving_bundle_version,
+    }
+}
+
+fn area_median_ppsf_for(
+    property: &crate::models::Property,
+    properties: &[crate::models::Property],
+    areas: &[crate::models::AreaProfile],
+) -> Option<u64> {
+    areas
+        .iter()
+        .find(|area| {
+            area_lookup_key(&area.id) == area_lookup_key(&property.area_id)
+                || area_lookup_key(&area.name) == area_lookup_key(&property.area)
+        })
+        .map(|area| area.median_price_per_sqft)
+        .or_else(|| {
+            let mut values = properties
+                .iter()
+                .filter(|candidate| {
+                    candidate.area_id == property.area_id && candidate.price_per_sqft > 0
+                })
+                .map(|candidate| candidate.price_per_sqft)
+                .collect::<Vec<_>>();
+            if values.is_empty() {
+                return None;
+            }
+            values.sort_unstable();
+            Some(values[values.len() / 2])
+        })
 }
 
 fn find_property_by_request_id<'a>(
@@ -2261,6 +2317,79 @@ pub async fn get_property_evidence_batch(
     })
 }
 
+/// GET /api/properties/:id/recommendations — computes serving-native branches
+/// from recall channels and the shared scoring policy. This intentionally runs
+/// outside the detail endpoint so the first paint is not gated on recommendation
+/// work.
+pub async fn get_property_recommendations(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<RecommendationResponse>, (StatusCode, Json<ErrorResponse>)> {
+    let properties = state.properties.read().await;
+    let property = find_property_by_request_id(&properties, &id)
+        .cloned()
+        .ok_or_else(|| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorResponse {
+                    error: "property_not_found".to_string(),
+                }),
+            )
+        })?;
+    if !property.is_listable() {
+        return Err((
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "property_not_found".to_string(),
+            }),
+        ));
+    }
+
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let bundle_version = serving_bundle
+        .as_ref()
+        .map(|bundle| bundle.manifest.bundle_version.clone());
+    let cache_key = recommendation_cache_key(&property.id, bundle_version.as_deref());
+    if let Some(cached) = state
+        .recommendation_cache
+        .read()
+        .await
+        .get(&cache_key)
+        .cloned()
+    {
+        return Ok(Json(cached));
+    }
+
+    let graph = state.knowledge.read().await;
+    let sellers = state.sellers.read().await;
+    let evidence = build_property_evidence_response(&graph, &property, serving_bundle.as_deref());
+    let area_median_ppsf = area_median_ppsf_for(&property, &properties, &state.areas);
+    let items = build_recommendation_branches(RecommendationBranchInputs {
+        current: &property,
+        current_evidence: &evidence,
+        graph: &graph,
+        properties: &properties,
+        societies: &state.societies,
+        sellers: &sellers,
+        serving_bundle: serving_bundle.as_deref(),
+        area_median_ppsf,
+    });
+    let response = RecommendationResponse {
+        status: RecommendationStatus::Ready,
+        engine_version: RECOMMENDATION_ENGINE_VERSION.to_string(),
+        scoring_policy_version: scoring_policy().version,
+        serving_bundle_version: bundle_version,
+        items,
+    };
+
+    state
+        .recommendation_cache
+        .write()
+        .await
+        .insert(cache_key, response.clone());
+    Ok(Json(response))
+}
+
 /// GET /api/properties/:id — returns joined property + society + area,
 /// enriched from the knowledge graph.
 pub async fn get_property(
@@ -2320,29 +2449,31 @@ pub async fn get_property(
         enrich_area(ap, &graph);
     }
 
-    // Compute market activity context from listing facts.
-    let market_activity = scoring::compute_market_activity(&property, area.as_ref());
-
     // Hold a read lock on sellers — no clone needed, just borrow for the
     // duration of this request.
     let sellers_guard = state.sellers.read().await;
 
-    // Find similar properties via local embedding similarity on the society node.
+    // Find similar properties via local embedding similarity on the society node,
+    // then fill with same-area same-BHK homes so the page still has alternatives
+    // when society embeddings are sparse.
     let similar_properties = {
         let soc_node_id = society_node_id(&property.society_id);
-        let similar_societies = graph.similar_to(&soc_node_id, 5, Some(NodeType::Society));
+        let similar_societies = graph.similar_to(&soc_node_id, 8, Some(NodeType::Society));
         let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+        let mut seen = std::collections::HashSet::new();
+        seen.insert(property.id.clone());
 
         let mut similar = Vec::new();
         for sim_soc in &similar_societies {
-            if sim_soc.similarity < 0.3 {
+            if sim_soc.similarity < 0.28 {
                 continue;
             }
-            // Find one property from this society
-            if let Some(prop) = properties
-                .iter()
-                .find(|p| society_node_id(&p.society_id) == sim_soc.node_id && p.id != property.id)
-            {
+            if let Some(prop) = properties.iter().find(|p| {
+                society_node_id(&p.society_id) == sim_soc.node_id
+                    && p.bhk == property.bhk
+                    && !seen.contains(&p.id)
+            }) {
+                seen.insert(prop.id.clone());
                 let card = enrich_property_card_with_sellers(
                     prop,
                     &state.societies,
@@ -2354,9 +2485,36 @@ pub async fn get_property(
                     &prop.society_id,
                     serving_facts,
                 ));
-                if similar.len() >= 4 {
+                if similar.len() >= 6 {
                     break;
                 }
+            }
+        }
+
+        if similar.len() < 4 {
+            let mut area_props: Vec<&crate::models::Property> = properties
+                .iter()
+                .filter(|p| {
+                    p.id != property.id
+                        && p.area_id == property.area_id
+                        && p.bhk == property.bhk
+                        && !seen.contains(&p.id)
+                })
+                .collect();
+            area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
+            for prop in area_props.into_iter().take(6 - similar.len()) {
+                seen.insert(prop.id.clone());
+                let card = enrich_property_card_with_sellers(
+                    prop,
+                    &state.societies,
+                    &graph,
+                    &sellers_guard,
+                );
+                similar.push(overlay_serving_google_reviews(
+                    card,
+                    &prop.society_id,
+                    serving_facts,
+                ));
             }
         }
         similar
@@ -2372,8 +2530,14 @@ pub async fn get_property(
     // Extract area intelligence from the area's KG node
     let area_intelligence = extract_area_intelligence(&graph, &property.area);
 
-    // Compute transparency score
-    let transparency_score = compute_transparency_score(&property, rera.as_ref());
+    let detail_score = score_property_for_surface(
+        &property,
+        serving_bundle.as_ref().map(|bundle| bundle.as_ref()),
+        None,
+        "detail",
+    );
+    let transparency_score =
+        compute_transparency_score(&property, rera.as_ref(), Some(&detail_score));
 
     // Compute area price range from all properties in the same area
     let (area_price_range_low, area_price_range_high) = {
@@ -2518,25 +2682,12 @@ pub async fn get_property(
         source_panels.clone(),
     );
 
-    let area_median_ppsf = area
-        .as_ref()
-        .map(|profile| profile.median_price_per_sqft)
-        .or_else(|| match (area_price_range_low, area_price_range_high) {
-            (Some(low), Some(high)) => Some((low + high) / 2),
-            (Some(low), None) => Some(low),
-            (None, Some(high)) => Some(high),
-            (None, None) => None,
-        });
-    let recommendation_branches = build_recommendation_branches(RecommendationBranchInputs {
-        current: &property,
-        current_evidence: &evidence,
-        graph: &graph,
-        properties: &properties,
-        societies: &state.societies,
-        sellers: &sellers_guard,
-        serving_bundle: serving_bundle.as_deref(),
-        area_median_ppsf,
-    });
+    let recommendations = recommendation_envelope_for(
+        &property.id,
+        serving_bundle
+            .as_ref()
+            .map(|bundle| bundle.manifest.bundle_version.clone()),
+    );
 
     // Extract data freshness from KG
     let data_freshness = extract_data_freshness(&graph, &property.society_id);
@@ -2556,9 +2707,9 @@ pub async fn get_property(
         property,
         society,
         area,
-        market_activity,
         similar_properties,
-        recommendation_branches,
+        recommendation_branches: Vec::new(),
+        recommendations,
         rera,
         area_intelligence,
         transparency_score,

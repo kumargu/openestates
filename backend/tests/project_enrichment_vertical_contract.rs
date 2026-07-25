@@ -282,6 +282,8 @@ fn source_inputs(
                 review_count: None,
                 review_snippets: Vec::new(),
                 address: Some("Whitefield".to_string()),
+                latitude: None,
+                longitude: None,
                 confidence: 0.7,
                 fetched_at: observed_at,
                 fetch_source: "fixture".to_string(),

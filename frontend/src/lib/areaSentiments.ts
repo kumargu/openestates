@@ -142,7 +142,7 @@ export const AREA_SENTIMENTS: readonly AreaSentiment[] = [
   { areaKeys: n("whitefield"), kind: "housing", theme: "Not one market", line: "Whitefield is not one market. Prestige-side and Varthur-edge live different lives.", source: "documented", polarity: "tradeoff" },
   { areaKeys: n("varthur", "brigade cornerstone"), kind: "housing", theme: "Early phases", line: "Mega projects look finished on the brochure. Early phases still eat dust and trucks.", source: "google", polarity: "tradeoff" },
   { areaKeys: n("sarjapur"), kind: "housing", theme: "Launch stack", line: "Sarjapur launches stack up. People compare possession risk as much as floor plans.", source: "reddit", polarity: "tradeoff" },
-  { areaKeys: n("*"), kind: "housing", theme: "RERA first", line: "Serious threads still say: open the RERA file before the sample flat.", source: "reddit", polarity: "positive" },
+  { areaKeys: n("*"), kind: "housing", theme: "RERA first", line: "Serious threads still say: check the RERA registration before the sample flat.", source: "reddit", polarity: "positive" },
   { areaKeys: n("*"), kind: "housing", theme: "Maintenance", line: "Google praises the clubhouse. A year later, people talk about maintenance hikes.", source: "google", polarity: "tradeoff" },
   { areaKeys: n("*"), kind: "housing", theme: "Approach road", line: "Inner approach roads decide daily life more than the gate photos.", source: "reddit", polarity: "caution" },
   { areaKeys: n("hoodi"), kind: "housing", theme: "Metro premium", line: "Hoodi asks jumped with metro talk. Amenities didn't always keep the same pace.", source: "reddit", polarity: "tradeoff" },

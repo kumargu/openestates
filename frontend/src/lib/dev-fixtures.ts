@@ -675,20 +675,6 @@ function makeDetail(card: PropertyCard): PropertyDetailResponse {
       infrastructure_tags: area.infrastructure_tags,
       community_notes: area.community_notes,
     },
-    market_activity: {
-      interest_level: card.price_per_sqft > 17000 ? "moderate" : "high",
-      saves_last_7d: card.root_source === "rera" ? 18 : 7,
-      offers_last_7d: card.root_source === "rera" ? 2 : 0,
-      days_on_market: 28,
-      days_on_market_label: "Fresh",
-      interest_label: card.price_per_sqft > 17000 ? "Selective demand" : "Active demand",
-      area_trend_summary: area.trend_summary,
-      price_vs_median: {
-        pct_diff: (card.price_per_sqft - area.median_price_per_sqft) / area.median_price_per_sqft,
-        verdict: card.price_per_sqft <= area.median_price_per_sqft ? "Below local median" : "Above local median",
-        verdict_class: card.price_per_sqft <= area.median_price_per_sqft ? "positive" : "caution",
-      },
-    },
     similar_properties: fixtureProperties.filter((property) => property.id !== card.id && property.area === card.area).slice(0, 3),
     transparency_score: {
       overall: Math.round(trust.overall * 100),

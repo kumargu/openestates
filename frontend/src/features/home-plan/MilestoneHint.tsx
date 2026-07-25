@@ -11,7 +11,6 @@ export function MilestoneHint({ milestone }: MilestoneHintProps) {
     <div className="home-plan-milestone-hint" role="status">
       <strong>{milestone.label}</strong>
       <span>{milestone.definition}</span>
-      <em>Tap again to jump to year {milestone.year}</em>
     </div>
   );
 }

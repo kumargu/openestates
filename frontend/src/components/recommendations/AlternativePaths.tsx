@@ -1,15 +1,22 @@
-import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import type { RecommendationBranch, RecommendationLens } from "../../lib/types.ts";
+import type {
+  PropertyCard,
+  RecommendationBranch,
+  RecommendationLens,
+  RecommendationStatus,
+} from "../../lib/types.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
-import { initialPropertySceneUrls } from "../../lib/propertyScene.ts";
+import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 import {
   BuildingIcon,
-  ChevronIcon,
   RupeeIcon,
   SealIcon,
   TrainIcon,
 } from "../evidence/EvidenceIcons.tsx";
+
+type RecommendationItem =
+  | { kind: "branch"; id: string; property: PropertyCard; branch: RecommendationBranch }
+  | { kind: "nearby"; id: string; property: PropertyCard };
 
 function formatPrice(price: number): string {
   if (price >= 1_00_00_000) return `₹${(price / 1_00_00_000).toFixed(2)} Cr`;
@@ -27,131 +34,148 @@ const LENS_META: Record<
   commute: { spine: "commute", icon: TrainIcon, gainLabel: "Closer commute" },
 };
 
-function branchImage(branch: RecommendationBranch): string {
-  const urls = initialPropertySceneUrls({
-    heroImage: branch.property.hero_image,
-    societyId: branch.property.kg_entity_refs?.society_entity_id,
-  });
-  return urls[0] ?? branch.property.hero_image ?? "";
+function reviewStrength(property: PropertyCard): number {
+  const rating = property.google_rating ?? 0;
+  const reviewCount = property.google_review_count ?? 0;
+  if (rating <= 0 || reviewCount <= 0) return 0;
+  return rating * 100 + Math.log10(reviewCount + 1) * 12;
 }
 
-function PathCard({ branch }: { branch: RecommendationBranch }) {
-  const meta = LENS_META[branch.lens];
-  const Icon = meta.icon;
-  const image = branchImage(branch);
+function rankedItems(branches: RecommendationBranch[], nearby: PropertyCard[]): RecommendationItem[] {
+  const usedIds = new Set(branches.map((branch) => branch.property.id));
+  const branchItems: RecommendationItem[] = branches.map((branch) => ({
+    kind: "branch",
+    id: `${branch.branch_id}-${branch.property.id}`,
+    property: branch.property,
+    branch,
+  }));
+  const nearbyItems: RecommendationItem[] = nearby
+    .filter((property) => !usedIds.has(property.id))
+    .map((property) => ({
+      kind: "nearby",
+      id: property.id,
+      property,
+    }));
+
+  return [...branchItems, ...nearbyItems]
+    .sort((left, right) => {
+      const reviewDelta = reviewStrength(right.property) - reviewStrength(left.property);
+      if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
+      const branchDelta =
+        (right.kind === "branch" ? right.branch.magnitude : 0)
+        - (left.kind === "branch" ? left.branch.magnitude : 0);
+      if (Math.abs(branchDelta) > 0.001) return branchDelta;
+      return left.property.price - right.property.price;
+    })
+    .slice(0, 6);
+}
+
+function RecommendationCard({
+  property,
+  badge,
+  note,
+  spine = "nearby",
+}: {
+  property: PropertyCard;
+  badge?: string;
+  note?: string;
+  spine?: string;
+}) {
+  const { images } = usePropertySceneImages({
+    heroImage: property.hero_image,
+    societyId: property.kg_entity_refs?.society_entity_id,
+  });
+  const cardImage = images[0] ?? property.hero_image ?? null;
+  const Icon = badge
+    ? Object.values(LENS_META).find((meta) => meta.gainLabel === badge)?.icon
+    : undefined;
+  const meta = [
+    property.society_name,
+    property.area,
+    `${property.bhk} BHK`,
+  ].filter(Boolean).join(" · ");
 
   return (
-    <Link
-      to={`/property/${branch.property.id}`}
-      className={`alt-path alt-path--${meta.spine}`}
-    >
-      <div className="alt-path__media">
-        <ImageWithFallback
-          src={image || null}
-          alt={branch.property.title}
-          className="alt-path__image"
-          loading="lazy"
-        />
-        <span className="alt-path__vignette" aria-hidden="true" />
-        <span className="alt-path__badge">
-          <Icon size={13} />
-          {meta.gainLabel}
-        </span>
-        <div className="alt-path__glass">
-          <strong className="alt-path__name">{branch.property.title}</strong>
-          <span className="alt-path__sub">
-            {branch.property.society_name} · {branch.property.area}
-          </span>
-          <div className="alt-path__foot">
-            <span className="alt-path__price">{formatPrice(branch.property.price)}</span>
-            <span className="alt-path__hint">{branch.contrast}</span>
+    <article className={`catalog-card alt-paths__card alt-paths__card--${spine}`}>
+      <Link to={`/property/${property.id}`} className="catalog-card__link">
+        <div className="catalog-card__media alt-paths__media">
+          <ImageWithFallback
+            src={cardImage}
+            alt={property.title}
+            className="catalog-card__image alt-paths__image"
+            loading="lazy"
+          />
+          <span className="alt-paths__vignette" aria-hidden="true" />
+          <span className="alt-paths__grain" aria-hidden="true" />
+          {badge && (
+            <span className="catalog-card__kicker alt-paths__badge">
+              {Icon ? <Icon size={12} /> : null}
+              {badge}
+            </span>
+          )}
+        </div>
+        <div className="catalog-card__caption alt-paths__caption">
+          <h3 className="catalog-card__title">{property.title}</h3>
+          <p className="catalog-card__meta">{meta}</p>
+          <div className="catalog-card__foot alt-paths__foot">
+            <span className="catalog-card__price">{formatPrice(property.price)}</span>
+            {note ? <span className="alt-paths__note">{note}</span> : null}
           </div>
         </div>
-      </div>
-    </Link>
+      </Link>
+    </article>
   );
 }
 
-export function AlternativePaths({ branches }: { branches: RecommendationBranch[] }) {
-  const trackRef = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(0);
+export function AlternativePaths({
+  branches,
+  nearby = [],
+  status = "ready",
+  runtimeLabel,
+}: {
+  branches: RecommendationBranch[];
+  nearby?: PropertyCard[];
+  status?: RecommendationStatus;
+  runtimeLabel?: string;
+}) {
+  const items = rankedItems(branches, nearby);
+  const total = items.length;
 
-  if (branches.length === 0) return null;
-
-  const scrollToIndex = (index: number) => {
-    const track = trackRef.current;
-    if (!track) return;
-    const clamped = Math.max(0, Math.min(index, branches.length - 1));
-    const card = track.children[clamped] as HTMLElement | undefined;
-    card?.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
-    setActive(clamped);
-  };
-
-  const onScroll = () => {
-    const track = trackRef.current;
-    if (!track) return;
-    const index = Math.round(track.scrollLeft / (track.clientWidth * 0.82));
-    setActive(Math.max(0, Math.min(index, branches.length - 1)));
-  };
-
-  const multi = branches.length > 1;
+  if (total === 0 && status !== "pending") return null;
 
   return (
-    <section className="alt-paths">
-      <div className="alt-paths__header">
-        <div className="property-section-heading">
-          <span>If this isn&apos;t quite right</span>
-          <h2>Also worth a look</h2>
-        </div>
-        {multi && (
-          <div className="alt-paths__nav">
-            <button
-              type="button"
-              className="alt-paths__arrow"
-              aria-label="Previous alternative"
-              onClick={() => scrollToIndex(active - 1)}
-              disabled={active === 0}
-            >
-              <ChevronIcon size={18} />
-            </button>
-            <button
-              type="button"
-              className="alt-paths__arrow alt-paths__arrow--next"
-              aria-label="Next alternative"
-              onClick={() => scrollToIndex(active + 1)}
-              disabled={active === branches.length - 1}
-            >
-              <ChevronIcon size={18} />
-            </button>
-          </div>
-        )}
+    <section className="alt-paths" title={runtimeLabel} aria-label="Homes that may interest you">
+      <div className="property-section-heading">
+        <span>Continue exploring</span>
+        <h2>May interest you</h2>
       </div>
 
-      <div
-        className={`alt-paths__track${multi ? " alt-paths__track--slider" : ""}`}
-        ref={trackRef}
-        onScroll={multi ? onScroll : undefined}
-      >
-        {branches.map((branch) => (
-          <PathCard key={`${branch.lens}-${branch.property.id}`} branch={branch} />
+      <div className="results-grid alt-paths__grid">
+        {status === "pending" && total === 0 && (
+          <>
+            <div className="alt-paths__skeleton" aria-hidden="true" />
+            <div className="alt-paths__skeleton" aria-hidden="true" />
+            <div className="alt-paths__skeleton" aria-hidden="true" />
+          </>
+        )}
+        {items.map((item) => (
+          item.kind === "branch" ? (
+            <RecommendationCard
+              key={item.id}
+              property={item.property}
+              badge={LENS_META[item.branch.lens].gainLabel}
+              note={item.branch.contrast}
+              spine={LENS_META[item.branch.lens].spine}
+            />
+          ) : (
+            <RecommendationCard
+              key={item.id}
+              property={item.property}
+              note={`Same area · ${item.property.bhk} BHK`}
+            />
+          )
         ))}
       </div>
-
-      {multi && (
-        <div className="alt-paths__dots" role="tablist" aria-label="Alternatives">
-          {branches.map((branch, index) => (
-            <button
-              key={`${branch.lens}-${branch.property.id}-dot`}
-              type="button"
-              className={`alt-paths__dot${index === active ? " alt-paths__dot--active" : ""}`}
-              aria-label={`Go to alternative ${index + 1}`}
-              aria-selected={index === active}
-              role="tab"
-              onClick={() => scrollToIndex(index)}
-            />
-          ))}
-        </div>
-      )}
     </section>
   );
 }

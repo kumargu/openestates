@@ -63,7 +63,7 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
 
     skill_id = "fetch_google_review_links"
     description = "Collect Google Maps review links and place metadata without LLMs."
-    version = "1.1"
+    version = "1.2"
     output_keys = [
         "google_reviews_url",
         "google_place_id",
@@ -418,6 +418,29 @@ def place_to_skill_result(
                     "thresholds": [],
                 },
             )
+        )
+
+    location = google_place_location(place)
+    if location:
+        facts.extend(
+            [
+                SourcedFact(
+                    key="geo.latitude",
+                    value={"type": "Numeric", "data": location["latitude"]},
+                    confidence=min(confidence, 0.85),
+                    source=source,
+                    display_template="Latitude: {value}",
+                    answers_preferences=["coordinates", "location", "latitude"],
+                ),
+                SourcedFact(
+                    key="geo.longitude",
+                    value={"type": "Numeric", "data": location["longitude"]},
+                    confidence=min(confidence, 0.85),
+                    source=source,
+                    display_template="Longitude: {value}",
+                    answers_preferences=["coordinates", "location", "longitude"],
+                ),
+            ]
         )
 
     rating = parse_float(place.get("rating"))

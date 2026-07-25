@@ -527,13 +527,6 @@
   text-transform: uppercase;
 }
 
-.home-plan-verdict__hint {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 500;
-  color: var(--plan-muted);
-}
-
 .home-plan-verdict__headline {
   max-width: 18ch;
   margin: 0.5rem 0 0;

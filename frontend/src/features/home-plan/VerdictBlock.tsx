@@ -43,7 +43,6 @@ export function VerdictBlock({
     <header className="home-plan-verdict">
       <p className="home-plan-verdict__year">
         {isPreview ? `Year ${activeYear} (preview)` : `Year ${activeYear}`}
-        {isPreview && <span className="home-plan-verdict__hint"> — tap the chart to keep this year</span>}
       </p>
       <h1 className="home-plan-verdict__headline">
         <span className="home-plan-verdict__leader">{leader}</span>

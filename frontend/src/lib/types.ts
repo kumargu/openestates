@@ -83,8 +83,23 @@ export type DiscoveryResponse = {
 };
 
 export type RecommendationLens = "proof" | "value" | "trust" | "commute";
+export type RecommendationStatus = "pending" | "ready" | "unavailable";
+
+export type RecommendationEnvelope = {
+  status: RecommendationStatus;
+  cache_key: string;
+  engine_version: string;
+  scoring_policy_version: number;
+  serving_bundle_version?: string;
+};
+
+export type RecallChannelHit = {
+  channel: string;
+  score: number;
+};
 
 export type RecommendationBranch = {
+  branch_id: string;
   lens: RecommendationLens;
   headline: string;
   property: PropertyCard;
@@ -93,10 +108,20 @@ export type RecommendationBranch = {
   evidence_delta: {
     fact_count: number;
     gap_count: number;
+    confidence_pct?: number;
     fact_delta: number;
     gap_delta: number;
   };
+  channels?: RecallChannelHit[];
   magnitude: number;
+};
+
+export type RecommendationResponse = {
+  status: RecommendationStatus;
+  engine_version: string;
+  scoring_policy_version: number;
+  serving_bundle_version?: string;
+  items: RecommendationBranch[];
 };
 
 export type PropertyDetailResponse = {
@@ -184,9 +209,10 @@ export type PropertyDetailResponse = {
     infrastructure_tags: string[];
     community_notes: string;
   } | null;
-  market_activity: MarketActivityResponse;
+  market_activity?: MarketActivityResponse;
   similar_properties: PropertyCard[];
   recommendation_branches?: RecommendationBranch[];
+  recommendations?: RecommendationEnvelope;
   rera?: ReraInfo;
   area_intelligence?: AreaIntelligence;
   transparency_score?: TransparencyScore;
@@ -252,6 +278,7 @@ export type MapPlacePin = {
 export type MapWaterContext = {
   groundwater_class: string;
   summary: string;
+  scope_radius_km?: number;
   source_type: string;
   source_url?: string;
   illustrative_zone: boolean;

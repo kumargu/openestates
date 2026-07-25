@@ -8,12 +8,15 @@ import {
   compactPlaceLabel,
   filterPlacesByScale,
   layerLabel,
+  metroStationsAroundHome,
   placesForStory,
   resolveHomeAnchor,
+  zoomForRadiusKm,
   type PlateScaleMode,
   type PlateStory,
   type PlaceCluster,
 } from "../../lib/nearbyPlateProjection.ts";
+import { SoftNearbyIcon } from "../ui/SoftIcons.tsx";
 
 const AroundThisHomeMap = lazy(async () => {
   const module = await import("./AroundThisHomeMap.tsx");
@@ -34,19 +37,24 @@ type AroundThisHomePlateProps = {
   context: PropertyMapContext;
 };
 
+const DEFAULT_WATER_SCOPE_RADIUS_KM = 3;
+
 export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
   const layers = availableLayers(context);
   const home = resolveHomeAnchor(context);
   const [scale, setScale] = useState<PlateScaleMode>("nearby");
   const [story, setStory] = useState<PlateStory>({ kind: "essentials" });
-  const [waterOn, setWaterOn] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openedClusterId, setOpenedClusterId] = useState<string | null>(null);
 
   const storyPlaces = useMemo(() => {
     const forStory = placesForStory(context, story);
-    return filterPlacesByScale(forStory, scale);
-  }, [context, story, scale]);
+    const filtered = filterPlacesByScale(forStory, scale);
+    if (story.kind === "layer" && story.layer === "metro" && home) {
+      return metroStationsAroundHome(filtered, home, context.metro_lines ?? []);
+    }
+    return filtered;
+  }, [context, home, story, scale]);
 
   const numbered = useMemo(() => buildNumberedPlaces(storyPlaces), [storyPlaces]);
 
@@ -57,11 +65,19 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     return clusterClosePlaces(numbered, scale);
   }, [numbered, openedClusterId, scale]);
 
-  // One station-linked corridor appears only in the Metro story.
-  const showMetroLines = Boolean(
-    (context.metro_lines?.length ?? 0) > 0
-    && story.kind === "layer"
-    && story.layer === "metro",
+  const showMetroLines = (context.metro_lines?.length ?? 0) > 0;
+  const metroFocused = story.kind === "layer" && story.layer === "metro";
+  const waterFocused = story.kind === "water";
+  const nearestMetroDistanceKm = useMemo(
+    () => context.places
+      .filter((place) => place.layer === "metro" && typeof place.distance_km === "number")
+      .reduce<number | undefined>(
+        (nearest, place) => nearest == null
+          ? place.distance_km
+          : Math.min(nearest, place.distance_km ?? nearest),
+        undefined,
+      ),
+    [context.places],
   );
 
   const viewport = useMemo(() => {
@@ -73,13 +89,33 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
         paddingFactor: 0.2,
       };
     }
+    if (waterFocused) {
+      const persistentMetroViewport = buildPlateViewport(
+        home,
+        [],
+        "area",
+        context.metro_lines ?? [],
+        "nearest",
+      );
+      const radiusKm = Math.max(
+        context.water?.scope_radius_km ?? DEFAULT_WATER_SCOPE_RADIUS_KM,
+        showMetroLines ? persistentMetroViewport.radiusKm : 0,
+      );
+      return {
+        center: { latitude: home.latitude, longitude: home.longitude },
+        radiusKm,
+        zoom: zoomForRadiusKm(radiusKm),
+        paddingFactor: 0.24,
+      };
+    }
     return buildPlateViewport(
       home,
       numbered,
-      scale,
-      showMetroLines ? context.metro_lines : [],
+      showMetroLines ? "area" : scale,
+      context.metro_lines ?? [],
+      "nearest",
     );
-  }, [context.metro_lines, home, numbered, scale, showMetroLines]);
+  }, [context.metro_lines, context.water?.scope_radius_km, home, numbered, scale, showMetroLines, waterFocused]);
 
   const selected =
     numbered.find((place) => place.id === selectedId)
@@ -90,8 +126,9 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     setStory(next);
     setSelectedId(null);
     setOpenedClusterId(null);
-    // Metro corridor needs a slightly wider frame; everything else stays Nearby.
-    if (next.kind === "layer" && next.layer === "metro") {
+    if (next.kind === "water") {
+      setScale("area");
+    } else if (next.kind === "layer" && next.layer === "metro") {
       setScale("area");
     } else {
       setScale("nearby");
@@ -108,7 +145,7 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     if (first) setSelectedId(first);
   }
 
-  const showWater = Boolean(context.water && waterOn);
+  const showWater = Boolean(context.water && waterFocused);
   const canRenderMap = Boolean(home);
 
   return (
@@ -117,34 +154,9 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
         <div>
           <p className="nearby-plate__kicker">Around this home</p>
           <h2 className="nearby-plate__title">{context.home.name}</h2>
-          <p className="nearby-plate__sub">
-            {context.home.area ? `${context.home.area} · ` : ""}
-            focused on this home
-          </p>
-        </div>
-        <div className="nearby-plate__scale" role="group" aria-label="Map scale">
-          <button
-            type="button"
-            className={`nearby-plate__scale-btn${scale === "nearby" ? " is-active" : ""}`}
-            aria-pressed={scale === "nearby"}
-            onClick={() => {
-              setScale("nearby");
-              setOpenedClusterId(null);
-            }}
-          >
-            Nearby
-          </button>
-          <button
-            type="button"
-            className={`nearby-plate__scale-btn${scale === "area" ? " is-active" : ""}`}
-            aria-pressed={scale === "area"}
-            onClick={() => {
-              setScale("area");
-              setOpenedClusterId(null);
-            }}
-          >
-            Area
-          </button>
+          {context.home.area && (
+            <p className="nearby-plate__sub">{context.home.area}</p>
+          )}
         </div>
       </div>
 
@@ -155,30 +167,40 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
           aria-pressed={story.kind === "essentials"}
           onClick={() => selectStory({ kind: "essentials" })}
         >
+          <SoftNearbyIcon kind="essentials" />
           Essentials
         </button>
         {layers.map((layer) => {
           const on = story.kind === "layer" && story.layer === layer;
+          const label = layerLabel(layer);
+          const iconOnly = layer === "metro"
+            || layer === "schools"
+            || layer === "hospitals";
           return (
             <button
               key={layer}
               type="button"
-              className={`nearby-plate__chip${on ? " is-active" : ""}`}
+              className={`nearby-plate__chip nearby-plate__chip--${layer}${iconOnly ? " nearby-plate__chip--icon" : ""}${on ? " is-active" : ""}`}
+              aria-label={label}
               aria-pressed={on}
+              title={label}
               onClick={() => selectStory({ kind: "layer", layer })}
             >
-              {layerLabel(layer)}
+              <SoftNearbyIcon kind={layer} />
+              {!iconOnly && label}
             </button>
           );
         })}
         {context.water && (
           <button
             type="button"
-            className={`nearby-plate__chip nearby-plate__chip--water${waterOn ? " is-active" : ""}`}
-            aria-pressed={waterOn}
-            onClick={() => setWaterOn((value) => !value)}
+            className={`nearby-plate__chip nearby-plate__chip--water nearby-plate__chip--icon${waterFocused ? " is-active" : ""}`}
+            aria-label="Water"
+            aria-pressed={waterFocused}
+            title="Water"
+            onClick={() => selectStory({ kind: "water" })}
           >
-            Water
+            <SoftNearbyIcon kind="water" />
           </button>
         )}
       </div>
@@ -200,13 +222,13 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                   longitude: home.longitude,
                   name: context.home.name,
                 }}
-                homeApproximated={home.approximated}
                 places={singles}
                 clusters={clusters}
                 selectedId={selected?.id ?? null}
                 viewport={viewport}
                 metroLines={context.metro_lines ?? []}
                 showMetroLines={showMetroLines}
+                nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
                 water={context.water}
                 waterTint={showWater}
                 onSelectPlace={selectPlace}
@@ -215,23 +237,24 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
             </Suspense>
           ) : (
             <div className="nearby-plate__empty-map">
-              <p>Map coordinates are still enriching for this home.</p>
-              <p>Receipts below still use the nearby place facts we have.</p>
+              <p>Map unavailable</p>
             </div>
           )}
 
-          {numbered.length > 0 && (
-            <ol className="nearby-plate__nearest" aria-label="Numbered nearby places">
+          {!waterFocused && numbered.length > 0 && (
+            <ol className="nearby-plate__nearest" aria-label="Nearby places">
               {numbered.map((place) => {
                 const isSelected = selected?.id === place.id;
                 return (
-                  <li key={place.id}>
+                  <li key={place.id} className="nearby-plate__nearest-item">
                     <button
                       type="button"
                       className={`nearby-plate__nearest-row${isSelected ? " is-selected" : ""}`}
                       onClick={() => selectPlace(place.id)}
                     >
-                      <span className="nearby-plate__nearest-num">{place.number}</span>
+                      <span className="nearby-plate__nearest-icon">
+                        <SoftNearbyIcon kind={place.layer} size={28} />
+                      </span>
                       <span className="nearby-plate__nearest-copy">
                         <span className="nearby-plate__nearest-name">
                           {compactPlaceLabel(place.name)}
@@ -244,6 +267,9 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                           {typeof place.rating === "number"
                             ? ` · ${place.rating.toFixed(1)}`
                             : ""}
+                          {typeof place.review_count === "number"
+                            ? ` · ${place.review_count} reviews`
+                            : ""}
                         </span>
                       </span>
                     </button>
@@ -252,82 +278,21 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
               })}
             </ol>
           )}
-        </div>
 
-        <aside className="nearby-plate__receipt">
-          {selected ? (
-            <>
-              <p className="nearby-plate__receipt-kicker">
-                Place {selected.number} · receipt
-              </p>
-              <h3>{selected.name}</h3>
-              <p className="nearby-plate__receipt-meta">
-                {typeof selected.distance_km === "number"
-                  ? `${selected.distance_km.toFixed(1)} km`
-                  : "Distance pending"}
-                {selected.note ? ` · ${selected.note}` : ""}
-              </p>
-              <dl className="nearby-plate__receipt-facts">
-                <div>
-                  <dt>Layer</dt>
-                  <dd>{layerLabel(selected.layer)}</dd>
-                </div>
-                {selected.lines && selected.lines.length > 0 && (
-                  <div>
-                    <dt>Line</dt>
-                    <dd>{selected.lines.join(" · ")}</dd>
-                  </div>
-                )}
-                <div>
-                  <dt>Source</dt>
-                  <dd>{selected.source_type || "Google"}</dd>
-                </div>
-              </dl>
-              {selected.source_url ? (
-                <a
-                  className="nearby-plate__receipt-link"
-                  href={selected.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Open source
-                </a>
-              ) : (
-                <p className="nearby-plate__receipt-note">
-                  Source link pending for this place.
-                </p>
-              )}
-            </>
-          ) : (
-            <p className="nearby-plate__receipt-note">
-              Pick Essentials or a layer to read nearby places around this home.
-            </p>
-          )}
-
-          {showWater && context.water && (
+          {waterFocused && context.water && (
             <div className="nearby-plate__water-card">
-              <strong>{context.water.groundwater_class} groundwater</strong>
+              <strong>{context.water.groundwater_class} groundwater potential</strong>
               <span>
-                {context.water.summary}
-                {" · "}
-                {context.water.source_type}
-                {context.water.illustrative_zone
-                  ? " · class is source-backed; zone geometry not drawn"
-                  : ""}
+                Area context for this society, not a borewell or water-supply reading.
               </span>
-              {context.water.source_url && (
-                <a
-                  className="nearby-plate__receipt-link"
-                  href={context.water.source_url}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Water source
-                </a>
-              )}
+              <div className="nearby-plate__water-actions">
+                <span>
+                  Around {(context.water.scope_radius_km ?? DEFAULT_WATER_SCOPE_RADIUS_KM).toFixed(0)} km
+                </span>
+              </div>
             </div>
           )}
-        </aside>
+        </div>
       </div>
     </section>
   );

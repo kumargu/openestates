@@ -407,10 +407,45 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
     assert_eq!(kg_entry.decision, PlanDecision::Run);
     assert_eq!(
         kg_entry.reason,
-        Some(PlanReason::DependencyChanged {
-            asset_id: asset_id("google_review_facts")
+        Some(PlanReason::DependencyPending {
+            asset_id: asset_id("approach_road_graph_facts")
         })
     );
+
+    let approach_road_facts = materialization_in_partition(
+        "approach_road_graph_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            canonical.materialization_id.clone(),
+            rera_facts.materialization_id.clone(),
+            google_facts.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &approach_road_facts).await;
+    let groundwater_facts = materialization_in_partition(
+        "society_groundwater_potential_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            canonical.materialization_id.clone(),
+            rera_facts.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &groundwater_facts).await;
+    let metro_station_facts = materialization_in_partition(
+        "bengaluru_metro_station_facts",
+        AssetStage::Silver,
+        "2026-07-13",
+        Vec::new(),
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &metro_station_facts).await;
 
     let fresh_kg = materialization_in_partition(
         "kg_society_view",
@@ -425,6 +460,9 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
             image_media_facts.materialization_id.clone(),
             builder_facts.materialization_id.clone(),
             home_state_facts.materialization_id.clone(),
+            approach_road_facts.materialization_id.clone(),
+            groundwater_facts.materialization_id.clone(),
+            metro_station_facts.materialization_id.clone(),
         ],
         now,
         AssetPartition::global(),

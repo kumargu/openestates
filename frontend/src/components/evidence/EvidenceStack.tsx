@@ -5,7 +5,7 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { constellationMeta, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
+import { canShowBuyerSource, constellationMeta, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
 import {
   LinkIcon,
   IconForKind,
@@ -22,8 +22,25 @@ function sectionKey(section: EvidenceSection): string {
   return `${section.kind}-${section.title}`;
 }
 
+function canShowItemSource(item: SourceItem): boolean {
+  const sourceType = item.source_type.trim().toLowerCase();
+  if (sourceType.includes("rera")) return true;
+  if (!sourceType.includes("google")) return false;
+  const key = item.key?.toLowerCase() ?? "";
+  const label = item.label.toLowerCase();
+  const relationship = item.relationship?.toLowerCase() ?? "";
+  return key.includes("review")
+    || label.includes("review")
+    || relationship.includes("review");
+}
+
 function itemSourceUrl(item: SourceItem): string | undefined {
-  return item.source_url ?? item.attributions?.find((a) => a.source_url)?.source_url;
+  if (!canShowItemSource(item)) return undefined;
+  if (item.source_url) {
+    return item.source_url;
+  }
+  return item.attributions?.find((attribution) =>
+    canShowBuyerSource(attribution.source_type) && attribution.source_url)?.source_url;
 }
 
 function isHttpUrl(value: string): boolean {
@@ -44,10 +61,10 @@ function httpUrlFrom(value: string): string | null {
 
 function shortLinkLabel(item: SourceItem, index = 0): string {
   const label = item.label.trim();
-  if (label.toLowerCase() === "evidence") return index === 0 ? "Open evidence" : `Open evidence ${index + 1}`;
-  if (label.toLowerCase().includes("map")) return index === 0 ? "Open map" : `Open map ${index + 1}`;
-  if (label.toLowerCase().includes("page")) return index === 0 ? "Open page" : `Open page ${index + 1}`;
-  return index === 0 ? "Open source" : `Open source ${index + 1}`;
+  if (label.toLowerCase() === "evidence") return index === 0 ? "Evidence" : `Evidence ${index + 1}`;
+  if (label.toLowerCase().includes("map")) return index === 0 ? "Map" : `Map ${index + 1}`;
+  if (label.toLowerCase().includes("page")) return index === 0 ? "Page" : `Page ${index + 1}`;
+  return index === 0 ? "Source" : `Source ${index + 1}`;
 }
 
 function compactValue(value: string): string {
@@ -58,11 +75,14 @@ function compactValue(value: string): string {
 
 function FactRow({ item }: { item: SourceItem }) {
   const url = itemSourceUrl(item);
-  const sourceLabel = displaySourceType(item.source_type);
-  const values = item.values?.filter(Boolean) ?? [];
+  const sourceLabel = canShowItemSource(item) ? displaySourceType(item.source_type) : null;
+  const values = item.values
+    ?.filter((value) => Boolean(value) && (canShowItemSource(item) || !httpUrlFrom(value)))
+    ?? [];
   const hasValue = values.length > 0 || (item.value && item.value.trim().length > 0);
   if (!hasValue) return null;
   const valueUrl = item.value ? httpUrlFrom(item.value) : null;
+  const canLinkValue = canShowItemSource(item);
 
   return (
     <div className="ev-fact">
@@ -72,7 +92,7 @@ function FactRow({ item }: { item: SourceItem }) {
         {values.length > 0 ? (
           <div className="ev-fact__chips">
             {values.slice(0, 8).map((v, index) => (
-              httpUrlFrom(v) ? (
+              httpUrlFrom(v) && canLinkValue ? (
                 <a
                   key={v}
                   className="ev-fact__chip ev-fact__chip--link"
@@ -87,7 +107,7 @@ function FactRow({ item }: { item: SourceItem }) {
               )
             ))}
           </div>
-        ) : valueUrl ? (
+        ) : valueUrl && canLinkValue ? (
           <a
             className="ev-fact__value-link"
             href={valueUrl}
@@ -96,6 +116,8 @@ function FactRow({ item }: { item: SourceItem }) {
           >
             {shortLinkLabel(item)}
           </a>
+        ) : valueUrl ? (
+          <div className="ev-fact__value">Available</div>
         ) : (
           <div className="ev-fact__value">{compactValue(item.value)}</div>
         )}
@@ -105,7 +127,7 @@ function FactRow({ item }: { item: SourceItem }) {
           <span className="ev-fact__source">{sourceLabel}</span>
         )}
         {url && (
-          <a className="ev-fact__link" href={url} target="_blank" rel="noreferrer" aria-label="Open source">
+          <a className="ev-fact__link" href={url} target="_blank" rel="noreferrer" aria-label="Source">
             <LinkIcon size={13} />
           </a>
         )}
@@ -126,16 +148,13 @@ function EvidenceMediaStripView({ strip }: { strip: EvidenceMediaStrip }) {
       </div>
       <div className="ev-media-strip__frames">
         {frames.map((frame) => (
-          <a
+          <div
             key={`${frame.image_url}-${frame.heading}`}
             className="ev-media-strip__frame"
-            href={frame.source_url}
-            target="_blank"
-            rel="noreferrer"
           >
             <img src={frame.image_url} alt={`${strip.title}: ${frame.label}`} loading="lazy" />
             <span>{frame.label}</span>
-          </a>
+          </div>
         ))}
       </div>
     </div>

@@ -187,9 +187,12 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       return;
     }
     if (activeView === "compare") {
-      navigate(`/compare?ids=${encodeURIComponent(idsValue)}&focus=${encodeURIComponent(nextId)}`, {
-        replace: true,
-      });
+      const next = new URLSearchParams(location.search);
+      const focusedHome = homes.find((home) => home.id === nextId);
+      next.set("ids", idsValue);
+      next.set("focus", nextId);
+      if (focusedHome) next.set("bhk", String(focusedHome.bhk));
+      navigate(`/compare?${next.toString()}`, { replace: true });
       return;
     }
     navigate(`/property/${nextId}`);

@@ -11,13 +11,13 @@ import {
 
 type AroundThisHomeMapProps = {
   home: { latitude: number; longitude: number; name: string };
-  homeApproximated: boolean;
   places: NumberedPlace[];
   clusters: PlaceCluster[];
   selectedId: string | null;
   viewport: PlateViewport;
   metroLines: MapOverlayLine[];
   showMetroLines: boolean;
+  nearestMetroDistanceKm?: number;
   water?: MapWaterContext | null;
   waterTint: boolean;
   onSelectPlace: (id: string) => void;
@@ -27,10 +27,10 @@ type AroundThisHomeMapProps = {
 function markerEl(
   kind: "home" | "place" | "cluster",
   options: {
-    number?: number;
     count?: number;
     selected?: boolean;
     layer?: string;
+    name?: string;
   } = {},
 ): HTMLButtonElement {
   const button = document.createElement("button");
@@ -43,7 +43,11 @@ function markerEl(
   ].filter(Boolean).join(" ");
 
   if (kind === "home") {
-    button.innerHTML = `<span class="nearby-map-marker__home-dot"></span><span class="nearby-map-marker__home-label">Home</span>`;
+    button.innerHTML = `
+      <svg viewBox="0 0 24 30" aria-hidden="true">
+        <path d="M12 29C9.8 25.6 4 19.2 4 12a8 8 0 1 1 16 0c0 7.2-5.8 13.6-8 17Z" />
+        <circle cx="12" cy="12" r="3.2" />
+      </svg>`;
     button.setAttribute("aria-label", "This home");
     return button;
   }
@@ -54,10 +58,53 @@ function markerEl(
     return button;
   }
 
-  // Quiet numbered dots — names live in the list/receipt, not on the map.
-  button.textContent = String(options.number ?? "");
-  button.setAttribute("aria-label", `Place ${options.number}`);
+  button.innerHTML = markerGlyph(options.layer);
+  button.setAttribute("aria-label", options.name ?? "Nearby place");
   return button;
+}
+
+function markerGlyph(layer?: string): string {
+  switch (layer) {
+    case "metro":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="13" rx="3"/><path d="M6 11h12M8 20l2-3m6 3-2-3"/><circle cx="9" cy="14" r=".8"/><circle cx="15" cy="14" r=".8"/></svg>`;
+    case "schools":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 9 9-4 9 4-9 4-9-4Z"/><path d="M7 11v4c0 1.2 2.2 2.3 5 2.3s5-1.1 5-2.3v-4"/></svg>`;
+    case "hospitals":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>`;
+    case "tech":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h2m2 0h2M9 11h2m2 0h2M9 15h6"/></svg>`;
+    default:
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z"/><circle cx="12" cy="11" r="2"/></svg>`;
+  }
+}
+
+function metroBadgeEl(name: string): HTMLDivElement {
+  const element = document.createElement("div");
+  const tone = name.toLowerCase().match(/purple|green|yellow|pink|blue|orange/)?.[0] ?? "default";
+  element.className = `nearby-map-metro-badge nearby-map-metro-badge--${tone}`;
+  element.innerHTML = `${markerGlyph("metro")}<span>${name}</span>`;
+  element.setAttribute("aria-label", `${name} metro corridor`);
+  return element;
+}
+
+function metroBadgePoints(
+  lines: MapOverlayLine[],
+  home: { latitude: number; longitude: number },
+): Array<{ name: string; coordinate: [number, number] }> {
+  const nearestByName = new Map<string, { coordinate: [number, number]; distance: number }>();
+  const latitudeScale = Math.cos((home.latitude * Math.PI) / 180);
+  for (const line of lines) {
+    for (const coordinate of line.coordinates) {
+      const dx = (coordinate[0] - home.longitude) * latitudeScale;
+      const dy = coordinate[1] - home.latitude;
+      const distance = dx * dx + dy * dy;
+      const current = nearestByName.get(line.name);
+      if (!current || distance < current.distance) {
+        nearestByName.set(line.name, { coordinate, distance });
+      }
+    }
+  }
+  return [...nearestByName].map(([name, value]) => ({ name, coordinate: value.coordinate }));
 }
 
 function emptyCollection() {
@@ -69,13 +116,28 @@ function linesToFeatureCollection(lines: MapOverlayLine[]) {
     type: "FeatureCollection" as const,
     features: lines.map((line) => ({
       type: "Feature" as const,
-      properties: { id: line.id, name: line.name },
+      properties: {
+        id: line.id,
+        name: line.name,
+        color: metroLineColor(line.name),
+      },
       geometry: {
         type: "LineString" as const,
         coordinates: line.coordinates,
       },
     })),
   };
+}
+
+function metroLineColor(name: string): string {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("purple")) return "#7651a8";
+  if (normalized.includes("green")) return "#2f8a58";
+  if (normalized.includes("yellow")) return "#d4a900";
+  if (normalized.includes("pink")) return "#d85d8d";
+  if (normalized.includes("blue")) return "#397fb5";
+  if (normalized.includes("orange")) return "#d87932";
+  return "#526d91";
 }
 
 function ringFeatureCollection(
@@ -103,6 +165,44 @@ function ringFeatureCollection(
   return { type: "FeatureCollection" as const, features };
 }
 
+function waterZoneFeatureCollection(
+  home: { latitude: number; longitude: number },
+  water: MapWaterContext,
+) {
+  const scopeRadiusKm = water.scope_radius_km ?? 3;
+  const majorRadiusKm = scopeRadiusKm * 0.75;
+  const minorRadiusKm = scopeRadiusKm * 0.45;
+  const rotation = 18 * (Math.PI / 180);
+  const points: [number, number][] = [];
+
+  for (let step = 0; step <= 64; step += 1) {
+    const angle = (step / 64) * Math.PI * 2;
+    const x = majorRadiusKm * Math.cos(angle);
+    const y = minorRadiusKm * Math.sin(angle);
+    const rotatedX = x * Math.cos(rotation) - y * Math.sin(rotation);
+    const rotatedY = x * Math.sin(rotation) + y * Math.cos(rotation);
+    const latitude = home.latitude + rotatedY / 110.57;
+    const longitude = home.longitude
+      + rotatedX / (111.32 * Math.cos((home.latitude * Math.PI) / 180));
+    points.push([longitude, latitude]);
+  }
+
+  return {
+    type: "FeatureCollection" as const,
+    features: [{
+      type: "Feature" as const,
+      properties: {
+        label: `${water.groundwater_class} groundwater`,
+        scope: `Around ${scopeRadiusKm.toFixed(0)} km`,
+      },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [points],
+      },
+    }],
+  };
+}
+
 function ringRadiiForViewport(radiusKm: number): number[] {
   if (radiusKm <= 0.6) return [0.25, 0.5];
   if (radiusKm <= 1.2) return [0.5, 1];
@@ -117,6 +217,7 @@ function quietBasemap(map: MapLibreMap) {
   if (!style?.layers) return;
   for (const layer of style.layers) {
     const id = layer.id.toLowerCase();
+    if (id.startsWith("oe-")) continue;
     const isLabel = layer.type === "symbol";
     const isPoiNoise = /poi|place-|housenumber|transit|rail|airport|golf|pitch/.test(id);
     if (isLabel || isPoiNoise) {
@@ -130,6 +231,48 @@ function quietBasemap(map: MapLibreMap) {
 }
 
 function ensureOverlayLayers(map: MapLibreMap) {
+  if (!map.getSource("oe-water-zone")) {
+    map.addSource("oe-water-zone", { type: "geojson", data: emptyCollection() });
+    map.addLayer({
+      id: "oe-water-zone-fill",
+      type: "fill",
+      source: "oe-water-zone",
+      paint: {
+        "fill-color": "#78b8b3",
+        "fill-opacity": 0.2,
+      },
+    });
+    map.addLayer({
+      id: "oe-water-zone-line",
+      type: "line",
+      source: "oe-water-zone",
+      paint: {
+        "line-color": "#3f8884",
+        "line-width": 2,
+        "line-dasharray": [2, 1.5],
+        "line-opacity": 0.8,
+      },
+    });
+    map.addLayer({
+      id: "oe-water-zone-label",
+      type: "symbol",
+      source: "oe-water-zone",
+      layout: {
+        "text-field": ["concat", ["get", "label"], "\n", ["get", "scope"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 12,
+        "text-line-height": 1.25,
+        "text-anchor": "center",
+        "text-offset": [0, -2.4],
+      },
+      paint: {
+        "text-color": "#285f5d",
+        "text-halo-color": "rgba(255, 255, 255, 0.86)",
+        "text-halo-width": 1.5,
+      },
+    });
+  }
+
   if (!map.getSource("oe-rings")) {
     map.addSource("oe-rings", { type: "geojson", data: emptyCollection() });
     map.addLayer({
@@ -172,9 +315,8 @@ function ensureOverlayLayers(map: MapLibreMap) {
         "line-join": "round",
       },
       paint: {
-        "line-color": "#3f5c8a",
-        "line-width": 3.4,
-        "line-dasharray": [1.6, 1.4],
+        "line-color": ["get", "color"],
+        "line-width": 4.2,
         "line-opacity": 0.95,
       },
     });
@@ -195,13 +337,13 @@ function setSourceData(
 
 export function AroundThisHomeMap({
   home,
-  homeApproximated,
   places,
   clusters,
   selectedId,
   viewport,
   metroLines,
   showMetroLines,
+  nearestMetroDistanceKm,
   water,
   waterTint,
   onSelectPlace,
@@ -211,13 +353,13 @@ export function AroundThisHomeMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const markersRef = useRef<Marker[]>([]);
   const styleReadyRef = useRef(false);
-  const homeRef = useRef(home);
+  const viewportCenterRef = useRef(viewport.center);
   const onSelectPlaceRef = useRef(onSelectPlace);
   const onSelectClusterRef = useRef(onSelectCluster);
 
   useEffect(() => {
-    homeRef.current = home;
-  }, [home]);
+    viewportCenterRef.current = viewport.center;
+  }, [viewport.center]);
 
   useEffect(() => {
     onSelectPlaceRef.current = onSelectPlace;
@@ -228,6 +370,10 @@ export function AroundThisHomeMap({
     () => places.find((place) => place.id === selectedId) ?? places[0] ?? null,
     [places, selectedId],
   );
+  const metroLineLabel = useMemo(
+    () => [...new Set(metroLines.map((line) => line.name).filter(Boolean))].join(" · "),
+    [metroLines],
+  );
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -235,11 +381,12 @@ export function AroundThisHomeMap({
     const map = new maplibregl.Map({
       container: containerRef.current,
       style: NEARBY_MAP_STYLE,
-      center: [home.longitude, home.latitude],
+      center: [viewport.center.longitude, viewport.center.latitude],
       zoom: viewport.zoom,
       attributionControl: { compact: true },
       dragPan: false,
       dragRotate: false,
+      scrollZoom: false,
       pitchWithRotate: false,
       touchPitch: false,
       keyboard: false,
@@ -254,7 +401,7 @@ export function AroundThisHomeMap({
       styleReadyRef.current = true;
     });
     map.on("zoomend", () => {
-      const anchor = homeRef.current;
+      const anchor = viewportCenterRef.current;
       const center = map.getCenter();
       if (
         Math.abs(center.lng - anchor.longitude) > 0.00001
@@ -279,10 +426,10 @@ export function AroundThisHomeMap({
     const map = mapRef.current;
     if (!map) return;
     map.jumpTo({
-      center: [home.longitude, home.latitude],
+      center: [viewport.center.longitude, viewport.center.latitude],
       zoom: viewport.zoom,
     });
-  }, [home.latitude, home.longitude, viewport.zoom, viewport.radiusKm]);
+  }, [viewport.center.latitude, viewport.center.longitude, viewport.zoom, viewport.radiusKm]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -298,6 +445,13 @@ export function AroundThisHomeMap({
       );
       setSourceData(
         map,
+        "oe-water-zone",
+        waterTint && water
+          ? waterZoneFeatureCollection(home, water)
+          : emptyCollection(),
+      );
+      setSourceData(
+        map,
         "oe-metro-lines",
         linesToFeatureCollection(showMetroLines ? metroLines : []),
       );
@@ -308,7 +462,7 @@ export function AroundThisHomeMap({
       return;
     }
     map.once("load", syncOverlays);
-  }, [home, metroLines, showMetroLines, viewport.radiusKm]);
+  }, [home, metroLines, showMetroLines, viewport.radiusKm, water, waterTint]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -325,6 +479,18 @@ export function AroundThisHomeMap({
       .addTo(map);
     markersRef.current.push(homeMarker);
 
+    if (showMetroLines) {
+      for (const badge of metroBadgePoints(metroLines, home)) {
+        const marker = new maplibregl.Marker({
+          element: metroBadgeEl(badge.name),
+          anchor: "center",
+        })
+          .setLngLat(badge.coordinate)
+          .addTo(map);
+        markersRef.current.push(marker);
+      }
+    }
+
     for (const cluster of clusters) {
       const element = markerEl("cluster", { count: cluster.count });
       element.addEventListener("click", (event) => {
@@ -340,9 +506,9 @@ export function AroundThisHomeMap({
     for (const place of places) {
       if (clusters.some((cluster) => cluster.placeIds.includes(place.id))) continue;
       const element = markerEl("place", {
-        number: place.number,
         selected: place.id === selectedId || place.id === selectedPlace?.id,
         layer: place.layer,
+        name: place.name,
       });
       element.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -353,20 +519,29 @@ export function AroundThisHomeMap({
         .addTo(map);
       markersRef.current.push(marker);
     }
-  }, [clusters, home.latitude, home.longitude, places, selectedId, selectedPlace?.id]);
+  }, [
+    clusters,
+    home,
+    metroLines,
+    places,
+    selectedId,
+    selectedPlace?.id,
+    showMetroLines,
+  ]);
 
   return (
-    <div className={`nearby-map${waterTint && water ? " nearby-map--water-tint" : ""}`}>
+    <div className="nearby-map">
       <div ref={containerRef} className="nearby-map__canvas" role="presentation" />
       <div className="nearby-map__chrome" aria-hidden="true">
-        <span>Home centered</span>
         <span>{viewport.radiusKm < 1
           ? `${Math.round(viewport.radiusKm * 1000)} m`
           : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km`}
         </span>
-        {homeApproximated && <span>Home estimated</span>}
-        {showMetroLines && metroLines.length > 0 && (
-          <span>{metroLines[0].name || "Metro corridor"}</span>
+        {typeof nearestMetroDistanceKm === "number" && (
+          <span>Metro · {nearestMetroDistanceKm.toFixed(1)} km</span>
+        )}
+        {showMetroLines && metroLineLabel && (
+          <span>{metroLineLabel}</span>
         )}
       </div>
     </div>
