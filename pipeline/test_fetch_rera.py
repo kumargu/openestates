@@ -37,7 +37,7 @@ class FetchReraSkillTest(unittest.TestCase):
             {"type": "Numeric", "data": 100.0},
         )
 
-    def test_location_emits_legacy_and_structured_coordinate_facts(self):
+    def test_location_emits_rera_coordinate_audit_fact_only(self):
         detail = ReraProjectDetail(latitude="12.9698", longitude="77.75")
 
         facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
@@ -46,14 +46,8 @@ class FetchReraSkillTest(unittest.TestCase):
             facts["rera_lat_lng"].value,
             {"type": "Text", "data": "12.9698,77.75"},
         )
-        self.assertEqual(
-            facts["geo.latitude"].value,
-            {"type": "Numeric", "data": 12.9698},
-        )
-        self.assertEqual(
-            facts["geo.longitude"].value,
-            {"type": "Numeric", "data": 77.75},
-        )
+        self.assertNotIn("geo.latitude", facts)
+        self.assertNotIn("geo.longitude", facts)
 
     def test_parse_project_details_when_rera_uses_menu1(self):
         html = """
@@ -138,6 +132,51 @@ class FetchReraSkillTest(unittest.TestCase):
         )
         self.assertEqual(facts["has_2bhk"].value, {"type": "Bool", "data": True})
         self.assertEqual(facts["has_3bhk"].value, {"type": "Bool", "data": True})
+
+    def test_parse_waterford_cross_tab_schedule_fields(self):
+        html = """
+        <div id="home" class="tab-pane">Promoter Details</div>
+        <div id="menu1" class="tab-pane">
+          Project Start Date : 15-09-2020 Proposed Project Completion Date : 15-09-2024
+          Total Area Of Land (Sq Mtr) : 66823
+          Total Open Area (Sq Mtr) : 59380
+          No of Parking for Sale : 106
+        </div>
+        <div id="menu3" class="tab-pane">
+          Tower Details FAR Sanctioned : 1.88 Number of Towers : 7
+          Tower Details - B1-T1 No. of Floors 22 Total No. of Units 129 Total No. of Parking 161
+          Tower Details - B1-T2 No. of Floors 23 Total No. of Units 92 Total No. of Parking 137
+          Tower Details - B5-T7 No. of Floors 24 Total No. of Units 92 Total No. of Parking 194
+          Total No of Units 689
+          Sewage Treatment Plant (STP) Yes
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM/KA/RERA/1251/446/PR/200811/003528",
+            promoter_name="Prestige",
+            project_name="Prestige Waterford",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="15-09-2024",
+            original_completion_date="15-12-2023",
+            numeric_id="6981",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+
+        self.assertEqual(facts["project_start_date"].value, {"type": "Text", "data": "2020-09-15"})
+        self.assertEqual(facts["project_unit_count"].value, {"type": "Numeric", "data": 689})
+        self.assertEqual(facts["project_tower_count"].value, {"type": "Numeric", "data": 7})
+        self.assertEqual(facts["project_max_floor_count"].value, {"type": "Numeric", "data": 24})
+        self.assertEqual(facts["parking_total_car_count"].value, {"type": "Numeric", "data": 492})
+        self.assertEqual(facts["parking_offered_for_sale_count"].value, {"type": "Numeric", "data": 106})
+        self.assertEqual(facts["stp_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["project_units_per_acre"].value, {"type": "Numeric", "data": 41.73})
 
 
 if __name__ == "__main__":

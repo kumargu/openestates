@@ -42,6 +42,8 @@ export type PropertyCard = {
   society_land_acres?: number;
   /** Source-backed open or green-space share; compare UI hides this dimension when absent. */
   open_space_pct?: number;
+  /** Derived homes-per-acre density from promoted project facts. */
+  units_per_acre?: number;
   /** Delivery-record category supplied by a future DAG-backed buyer-surface view. */
   builder_category?: "A" | "B" | "C";
   seller_id?: string;
@@ -784,6 +786,10 @@ export type ReraInfo = {
   original_completion_date?: string;
   delay_months?: number;
   total_units?: number;
+  total_land_area_sqm?: number;
+  total_land_area_acres?: number;
+  open_area_pct?: number;
+  units_per_acre?: number;
   total_project_cost_inr?: number;
   land_cost_inr?: number;
   construction_cost_inr?: number;

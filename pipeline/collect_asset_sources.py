@@ -157,14 +157,18 @@ def collect_asset_sources(
         try:
             from pipeline.sources.external_listings import collect_external_listings
 
-            output[EXTERNAL_LISTINGS_WEEKLY] = collect_external_listings(request)
+            output[EXTERNAL_LISTINGS_WEEKLY] = collect_external_listings(
+                request_with_rera_detail_facts(request, output.get(RERA_REGISTRY_MONTHLY))
+            )
         except Exception as error:
             record_source_failure(source_failures, [EXTERNAL_LISTINGS_WEEKLY], error)
     if EXTERNAL_IMAGES_WEEKLY in requested:
         try:
             from pipeline.sources.external_images import collect_external_images
 
-            output[EXTERNAL_IMAGES_WEEKLY] = collect_external_images(request)
+            output[EXTERNAL_IMAGES_WEEKLY] = collect_external_images(
+                request_with_rera_detail_facts(request, output.get(RERA_REGISTRY_MONTHLY))
+            )
         except Exception as error:
             record_source_failure(source_failures, [EXTERNAL_IMAGES_WEEKLY], error)
     if SOCIETY_GROUNDWATER_POTENTIAL_FACTS in requested:
@@ -862,6 +866,73 @@ def source_society_inputs(
     return inputs
 
 
+def request_with_rera_detail_facts(
+    request: Dict[str, Any], rera_input: Dict[str, Any] = None
+) -> Dict[str, Any]:
+    if not rera_input:
+        return request
+    facts_by_entity = rera_detail_facts_by_entity(rera_input)
+    if not facts_by_entity:
+        return request
+    enriched = dict(request)
+    source_entities = []
+    changed = False
+    for seed in request.get("source_entities", []):
+        if not isinstance(seed, dict):
+            source_entities.append(seed)
+            continue
+        entity_ids = [
+            optional_string(seed.get("entity_id")),
+            optional_string(seed.get("alias_entity_id")),
+        ]
+        rera_facts = {}
+        for entity_id in entity_ids:
+            if entity_id and entity_id in facts_by_entity:
+                rera_facts.update(facts_by_entity[entity_id])
+        if not rera_facts:
+            source_entities.append(seed)
+            continue
+        updated = dict(seed)
+        if "rera_configurations" not in updated and rera_facts.get("available_configurations"):
+            updated["rera_configurations"] = rera_facts["available_configurations"]
+            changed = True
+        if "rera_plan_artifact_manifest" not in updated and rera_facts.get("rera_plan_artifact_manifest"):
+            updated["rera_plan_artifact_manifest"] = rera_facts["rera_plan_artifact_manifest"]
+            changed = True
+        source_entities.append(updated)
+    if not changed:
+        return request
+    enriched["source_entities"] = source_entities
+    return enriched
+
+
+def rera_detail_facts_by_entity(rera_input: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
+    by_entity = {}  # type: Dict[str, Dict[str, Any]]
+    for fact in rera_input.get("detail_facts") or []:
+        entity_id = optional_string(fact.get("entity_id"))
+        fact_key = optional_string(fact.get("fact_key"))
+        if not entity_id or fact_key not in (
+            "available_configurations",
+            "rera_plan_artifact_manifest",
+        ):
+            continue
+        value = fact_value_data(fact)
+        if value is None:
+            continue
+        by_entity.setdefault(entity_id, {})[fact_key] = value
+    return by_entity
+
+
+def fact_value_data(fact: Dict[str, Any]) -> Any:
+    try:
+        value = json.loads(str(fact.get("value_json") or "{}"))
+    except (TypeError, ValueError):
+        return None
+    if not isinstance(value, dict):
+        return None
+    return value.get("data")
+
+
 def society_query(input_data: Dict[str, Any]) -> str:
     name = optional_string(
         input_data.get("society_name")
@@ -1317,6 +1388,8 @@ def skill_result_rows(
     annotations = []  # type: List[Dict[str, Any]]
 
     for fact in result.facts:
+        if should_skip_skill_fact(skill_id, fact):
+            continue
         value = fact.value or {}
         source = fact.source
         scoring = fact.scoring_hint or {}
@@ -1367,6 +1440,15 @@ def skill_result_rows(
         )
 
     return facts, annotations
+
+
+def should_skip_skill_fact(skill_id: str, fact: Any) -> bool:
+    if skill_id == "fetch_rera" and getattr(fact, "key", None) in (
+        "geo.latitude",
+        "geo.longitude",
+    ):
+        return True
+    return False
 
 
 def partition_values(request: Dict[str, Any]) -> Dict[str, str]:

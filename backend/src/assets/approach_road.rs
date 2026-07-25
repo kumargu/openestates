@@ -406,13 +406,17 @@ impl SocietyRoadEvidence {
                 }
             }
             "geo.latitude" => {
-                if let Some(value) = numeric_fact_value(fact)? {
-                    self.latitude = Some(FactSignal::from_numeric_fact(fact, value));
+                if fact.source_type.eq_ignore_ascii_case("google") {
+                    if let Some(value) = numeric_fact_value(fact)? {
+                        self.latitude = Some(FactSignal::from_numeric_fact(fact, value));
+                    }
                 }
             }
             "geo.longitude" => {
-                if let Some(value) = numeric_fact_value(fact)? {
-                    self.longitude = Some(FactSignal::from_numeric_fact(fact, value));
+                if fact.source_type.eq_ignore_ascii_case("google") {
+                    if let Some(value) = numeric_fact_value(fact)? {
+                        self.longitude = Some(FactSignal::from_numeric_fact(fact, value));
+                    }
                 }
             }
             "google_place_id" => {
@@ -454,7 +458,7 @@ impl SocietyRoadEvidence {
                 evidence_keys.insert(address.fact_key.clone());
             }
             DerivedRoadQuality {
-                value: "Approach road inferred from RERA project coordinates; visual road-width verification is pending.".to_string(),
+                value: "Approach road inferred from Google project coordinates; visual road-width verification is pending.".to_string(),
                 confidence: if self.address.is_some() { 0.74 } else { 0.7 },
                 source_type: latitude.source_type.clone(),
                 source_url: latitude.source_url.clone().or_else(|| longitude.source_url.clone()),
@@ -507,20 +511,22 @@ impl SocietyRoadEvidence {
                 (latitude.numeric, longitude.numeric)
             {
                 let frames = approach_road_frame_specs()
-                    .map(|(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
-                        label: label.to_string(),
-                        distance_from_gate_m,
-                        pano_id: None,
-                        latitude: Some(latitude_value),
-                        longitude: Some(longitude_value),
-                        location_query: None,
-                        radius_m: Some(250),
-                        heading,
-                        pitch: 0.0,
-                        fov: 80.0,
-                        capture_date: "latest available".to_string(),
-                        image_url: None,
-                    })
+                    .map(
+                        |(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
+                            label: label.to_string(),
+                            distance_from_gate_m,
+                            pano_id: None,
+                            latitude: Some(latitude_value),
+                            longitude: Some(longitude_value),
+                            location_query: None,
+                            radius_m: Some(250),
+                            heading,
+                            pitch: 0.0,
+                            fov: 80.0,
+                            capture_date: "latest available".to_string(),
+                            image_url: None,
+                        },
+                    )
                     .collect::<Vec<_>>();
                 let source_url = latitude
                     .source_url
@@ -555,20 +561,22 @@ impl SocietyRoadEvidence {
         confidence: f32,
     ) -> DerivedRoadMedia {
         let frames = approach_road_frame_specs()
-            .map(|(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
-                label: label.to_string(),
-                distance_from_gate_m,
-                pano_id: None,
-                latitude: None,
-                longitude: None,
-                location_query: Some(location_query.to_string()),
-                radius_m: Some(250),
-                heading,
-                pitch: 0.0,
-                fov: 80.0,
-                capture_date: "latest available".to_string(),
-                image_url: None,
-            })
+            .map(
+                |(label, distance_from_gate_m, heading)| ApproachRoadVisualFrameFact {
+                    label: label.to_string(),
+                    distance_from_gate_m,
+                    pano_id: None,
+                    latitude: None,
+                    longitude: None,
+                    location_query: Some(location_query.to_string()),
+                    radius_m: Some(250),
+                    heading,
+                    pitch: 0.0,
+                    fov: 80.0,
+                    capture_date: "latest available".to_string(),
+                    image_url: None,
+                },
+            )
             .collect::<Vec<_>>();
         DerivedRoadMedia {
             record: ApproachRoadVisualFact {
@@ -992,12 +1000,12 @@ mod tests {
                     "rera_project_address",
                     FactValue::Text("Pattandur Agrahara".to_string()),
                 ),
-                test_fact(
+                test_google_fact(
                     "society:sumadhura-capitol-residences",
                     "geo.latitude",
                     FactValue::Numeric(12.9853),
                 ),
-                test_fact(
+                test_google_fact(
                     "society:sumadhura-capitol-residences",
                     "geo.longitude",
                     FactValue::Numeric(77.7507),
@@ -1225,12 +1233,12 @@ mod tests {
         };
         let upstream = SkillFactArtifactRows {
             facts: vec![
-                test_fact(
+                test_google_fact(
                     "society:frontage-test",
                     "geo.latitude",
                     FactValue::Numeric(12.9853),
                 ),
-                test_fact(
+                test_google_fact(
                     "society:frontage-test",
                     "geo.longitude",
                     FactValue::Numeric(77.7507),
@@ -1270,6 +1278,46 @@ mod tests {
     }
 
     #[test]
+    fn upstream_rows_ignore_rera_coordinates_for_approach_road_frames() {
+        let canonical = CanonicalSocietyRows {
+            entities: vec![KgViewEntityRecord {
+                entity_id: "society:rera-coordinate-test".to_string(),
+                entity_type: "society".to_string(),
+                name: "RERA COORDINATE TEST".to_string(),
+                root_source: Some("rera".to_string()),
+                fact_count: 0,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }],
+            edges: Vec::new(),
+            mappings: Vec::new(),
+        };
+        let upstream = SkillFactArtifactRows {
+            facts: vec![
+                test_fact(
+                    "society:rera-coordinate-test",
+                    "geo.latitude",
+                    FactValue::Numeric(13.640739),
+                ),
+                test_fact(
+                    "society:rera-coordinate-test",
+                    "geo.longitude",
+                    FactValue::Numeric(78.244397),
+                ),
+            ],
+            fact_annotations: Vec::new(),
+        };
+
+        let rows = rows_from_upstream(&canonical, &upstream, Utc::now(), &MaterializationId::new())
+            .expect("upstream rows should materialize");
+
+        assert!(
+            rows.skill_facts.facts.is_empty(),
+            "RERA coordinates must not create approach-road geometry"
+        );
+    }
+
+    #[test]
     fn extracts_frontage_road_names_from_address_text() {
         assert_eq!(
             extract_frontage_road_name(
@@ -1289,6 +1337,35 @@ mod tests {
     }
 
     fn test_fact(entity_id: &str, fact_key: &str, value: FactValue) -> SkillFactRecord {
+        test_fact_with_source(
+            entity_id,
+            fact_key,
+            value,
+            "Rera",
+            "https://rera.karnataka.gov.in/projectViewDetails",
+            "fetch_rera",
+        )
+    }
+
+    fn test_google_fact(entity_id: &str, fact_key: &str, value: FactValue) -> SkillFactRecord {
+        test_fact_with_source(
+            entity_id,
+            fact_key,
+            value,
+            "Google",
+            "https://maps.google.com/?cid=test",
+            "fetch_google_review_links",
+        )
+    }
+
+    fn test_fact_with_source(
+        entity_id: &str,
+        fact_key: &str,
+        value: FactValue,
+        source_type: &str,
+        source_url: &str,
+        skill_id: &str,
+    ) -> SkillFactRecord {
         let value_type = match &value {
             FactValue::Numeric(_) => "numeric",
             FactValue::Tags(_) => "tags",
@@ -1300,10 +1377,10 @@ mod tests {
             value_type: value_type.to_string(),
             value_json: serde_json::to_string(&value).unwrap(),
             confidence: 1.0,
-            source_type: "Rera".to_string(),
-            source_url: Some("https://rera.karnataka.gov.in/projectViewDetails".to_string()),
+            source_type: source_type.to_string(),
+            source_url: Some(source_url.to_string()),
             model: None,
-            skill_id: Some("fetch_rera".to_string()),
+            skill_id: Some(skill_id.to_string()),
             triggered_by: None,
             learned_at: Utc::now(),
             run_id: "test".to_string(),

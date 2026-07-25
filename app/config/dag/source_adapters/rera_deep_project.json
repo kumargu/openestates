@@ -55,6 +55,7 @@
     "parking_total_car_count",
     "parking_covered_count",
     "parking_surface_count",
+    "parking_offered_for_sale_count",
     "stp_count",
     "stp_capacity_kld",
     "borewell_proposed_count",

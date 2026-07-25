@@ -1,9 +1,10 @@
 {
-  "_comment": "Magicbricks pricing/rent adapter contract. Listing crawls must be seeded by RERA-derived configurations rather than broad project-only queries when configuration facts exist.",
+  "_comment": "Focused external pricing/rent adapter contract. Listing crawls must be seeded by RERA-derived configurations rather than broad project-only queries when configuration facts exist.",
   "version": 1,
-  "source_id": "magicbricks_rera_pricing",
+  "source_id": "focused_rera_pricing",
   "source_type": "ExternalListing",
   "trust_tier": "support",
+  "sources": ["MagicBricks", "SquareYards"],
   "request_path_policy": {
     "allow_runtime_downloads": false,
     "required_join_phase": "dag_materialization"
@@ -19,11 +20,10 @@
     "listing_price_range",
     "listing_area_sqft",
     "listing_price_per_sqft_range",
-    "listing_source_url"
-  ],
-  "planned_rent_fact_keys": [
+    "listing_source_url",
     "rent_monthly",
     "rent_monthly_range",
+    "rent_area_sqft",
     "rent_source_url"
   ]
 }

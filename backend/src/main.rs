@@ -10,6 +10,7 @@ use backend::state::AppState;
 use backend::{data_loader, routes};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 
 #[derive(Serialize)]
 struct HealthResponse {
@@ -59,6 +60,10 @@ async fn main() {
     let app = Router::new()
         .route("/", get(health))
         .route("/api/health", get(health))
+        .nest_service(
+            "/media",
+            ServeDir::new(project_root.join("data/lake/media")),
+        )
         .route("/api/properties", get(routes::properties::list_properties))
         .route(
             "/api/properties/{id}",
@@ -141,6 +146,7 @@ async fn main() {
     println!("OpenEstates API listening on http://{bind_address}");
     println!("Routes:");
     println!("  GET /api/health");
+    println!("  GET /media/*path");
     println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/recommendations");
     println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");

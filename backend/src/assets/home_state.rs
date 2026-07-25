@@ -147,7 +147,13 @@ fn append_home_state_signals(
             latest_fact.learned_at.max(as_of),
             run_id,
             "Delivery state: {value}",
-            &["new property", "old society", "upcoming", "under construction", "delivered"],
+            &[
+                "new property",
+                "old society",
+                "upcoming",
+                "under construction",
+                "delivered",
+            ],
             facts,
             annotations,
         )?;
@@ -513,7 +519,12 @@ fn home_state_preferences(state: &str) -> Vec<&'static str> {
 fn age_bucket_preferences(bucket: &str) -> Vec<&'static str> {
     match bucket {
         "newly delivered" | "new_0_1y" => {
-            vec!["new property", "newly delivered", "new society", "1 year old"]
+            vec![
+                "new property",
+                "newly delivered",
+                "new society",
+                "1 year old",
+            ]
         }
         "1-5 yrs old" | "young_1_5y" => {
             vec!["recently delivered", "newer society", "property age"]
@@ -609,8 +620,10 @@ mod tests {
             .iter()
             .any(|fact| fact.fact_key == "project_age_bucket"
                 && fact.value_json.contains("mature_5_10y")));
-        assert!(facts.iter().any(|fact| fact.fact_key == "project_delivery_state"
-            && fact.value_json.contains("delivered")));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.fact_key == "project_delivery_state"
+                && fact.value_json.contains("delivered")));
         assert!(!facts
             .iter()
             .any(|fact| fact.fact_key == "home_delay_months"));
@@ -658,8 +671,10 @@ mod tests {
         assert!(facts
             .iter()
             .any(|fact| fact.fact_key == "home_timeline_state"));
-        assert!(facts.iter().any(|fact| fact.fact_key == "project_delivery_state"
-            && fact.value_json.contains("delayed_under_construction")));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.fact_key == "project_delivery_state"
+                && fact.value_json.contains("delayed_under_construction")));
         assert!(facts
             .iter()
             .any(|fact| fact.fact_key == "project_timeline_state"));

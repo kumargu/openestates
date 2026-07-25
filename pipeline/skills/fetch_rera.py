@@ -177,6 +177,7 @@ class ReraProjectDetail:
     parking_accessible_count: Optional[int] = None
     parking_ev_ready_count: Optional[int] = None
     parking_two_wheeler_count: Optional[int] = None
+    parking_offered_for_sale_count: Optional[int] = None
     stp_count: Optional[int] = None
     stp_capacity_kld: Optional[float] = None
     borewell_proposed_count: Optional[int] = None
@@ -295,6 +296,17 @@ def _extract_int(text: str, pattern: str) -> Optional[int]:
     return int(val) if val is not None else None
 
 
+def _extract_ints(text: str, pattern: str) -> List[int]:
+    """Extract all integer values following a label-like pattern."""
+    values: List[int] = []
+    for match in re.finditer(pattern + r'\s*:?\s*([\d,]+)', text, re.IGNORECASE):
+        try:
+            values.append(int(match.group(1).replace(",", "")))
+        except ValueError:
+            continue
+    return values
+
+
 def _extract_text(text: str, pattern: str) -> Optional[str]:
     """Extract text value following a label pattern.
 
@@ -341,7 +353,7 @@ def _truncate_at_next_label(val: str) -> str:
     _RERA_LABELS = [
         "Project Name", "Project Type", "Project Sub Type", "Project Status",
         "Project Start Date", "Project Description", "Project Address",
-        "Proposed Completion Date", "Registration Start Date",
+        "Proposed Completion Date", "Proposed Project Completion Date", "Registration Start Date",
         "Total Number", "Number of Towers", "No. of Open", "No. of Covered",
         "No of Open", "No of Covered",
         "Total Area", "Total Carpet Area", "Total Built", "Total Coverd",
@@ -833,6 +845,7 @@ def _extract_infra_counts(text: str, detail: ReraProjectDetail) -> None:
     detail.stp_count = (
         _extract_int(text, r"No\.?\s*of STP")
         or _extract_int(text, r"Number of STP")
+        or _applicable_work_present(text, ("STP", "Sewage Treatment Plant"))
         or _count_keywords(text, ("STP", "Sewage Treatment Plant"))
     )
     detail.stp_capacity_kld = (
@@ -849,6 +862,50 @@ def _extract_infra_counts(text: str, detail: ReraProjectDetail) -> None:
     )
     detail.borewell_depth_ft = _extract_number(text, r"Borewell.*?Depth.*?(?:Feet|Ft)")
     detail.borewell_yield_lph = _extract_number(text, r"Borewell.*?Yield.*?(?:LPH|Ltrs)")
+
+
+def _applicable_work_present(text: str, labels: Tuple[str, ...]) -> Optional[int]:
+    """Return 1 when a project-schedule work row is marked applicable."""
+    for label in labels:
+        idx = text.lower().find(label.lower())
+        if idx < 0:
+            continue
+        window = text[max(0, idx - 80):idx + len(label) + 120]
+        if re.search(r"\bYes\b", window, re.IGNORECASE):
+            return 1
+    return None
+
+
+def _fill_detail_wide_schedule_fields(detail_html: str, detail: ReraProjectDetail) -> None:
+    """Fill fields that Karnataka RERA often keeps outside the project-detail tab."""
+    text = _clean_html(detail_html)
+    if not text:
+        return
+
+    if detail.total_units is None:
+        detail.total_units = (
+            _extract_int(text, r"Total No of Units")
+            or _extract_int(text, r"No of Inventory")
+            or _extract_int(text, r"Total Number of Inventories")
+        )
+
+    if detail.num_towers is None:
+        detail.num_towers = _extract_int(text, r"Number of Towers")
+
+    if detail.max_floor_count is None:
+        floor_counts = _extract_ints(text, r"No\.?\s*of Floors")
+        if floor_counts:
+            detail.max_floor_count = max(floor_counts)
+
+    if detail.parking_total_car_count is None:
+        tower_parking_counts = _extract_ints(text, r"Total No\.?\s*of Parking")
+        if tower_parking_counts:
+            detail.parking_total_car_count = sum(tower_parking_counts)
+
+    if detail.parking_offered_for_sale_count is None:
+        detail.parking_offered_for_sale_count = _extract_int(text, r"No of Parking for Sale")
+
+    _extract_infra_counts(text, detail)
 
 
 def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> ReraProjectDetail:
@@ -945,6 +1002,8 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         detail.parking_ev_ready_count = _extract_int(menu3, r"(?:EV|Electric Vehicle).*?Parking")
         detail.parking_two_wheeler_count = _extract_int(menu3, r"Two Wheeler.*?Parking")
         _extract_infra_counts(menu3, detail)
+
+    _fill_detail_wide_schedule_fields(detail_html, detail)
 
     # --- menu4 (Bank/Escrow) ---
     menu4 = _get_tab_text(detail_html, "menu4")
@@ -1260,6 +1319,7 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
         ("parking_accessible_count", detail.parking_accessible_count, "{value} accessible parking spots", ["parking", "accessible parking"]),
         ("parking_ev_ready_count", detail.parking_ev_ready_count, "{value} EV-ready parking spots", ["parking", "ev parking"]),
         ("parking_two_wheeler_count", detail.parking_two_wheeler_count, "{value} two-wheeler parking spots", ["parking", "two wheeler parking"]),
+        ("parking_offered_for_sale_count", detail.parking_offered_for_sale_count, "{value} parking spots offered for sale", ["parking", "parking for sale"]),
     ]:
         add_numeric_fact(key, value, label, prefs)
 
@@ -1476,20 +1536,6 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             {"type": "Text", "data": f"{detail.latitude},{detail.longitude}"},
             "Location: {value}",
         )
-        add_fact(
-            "geo.latitude",
-            {"type": "Numeric", "data": float(detail.latitude)},
-            "Latitude: {value}",
-            ["coordinates", "location", "latitude"],
-            {"direction": "LowerIsBetter", "weight": 0.0},
-        )
-        add_fact(
-            "geo.longitude",
-            {"type": "Numeric", "data": float(detail.longitude)},
-            "Longitude: {value}",
-            ["coordinates", "location", "longitude"],
-            {"direction": "LowerIsBetter", "weight": 0.0},
-        )
 
     # --- Portal URL ---
     add_fact(
@@ -1528,7 +1574,7 @@ class FetchReraSkill(BaseSkill):
         "has_1bhk", "has_2bhk", "has_3bhk", "has_4bhk",
         "parking_total_car_count", "parking_covered_count", "parking_surface_count",
         "parking_basement_count", "parking_visitor_count", "parking_accessible_count",
-        "parking_ev_ready_count", "parking_two_wheeler_count",
+        "parking_ev_ready_count", "parking_two_wheeler_count", "parking_offered_for_sale_count",
         "stp_count", "stp_capacity_kld", "borewell_proposed_count",
         "borewell_existing_count", "borewell_depth_ft", "borewell_yield_lph",
         "site_plan_asset_count", "floor_plan_asset_count", "sanction_plan_asset_count",

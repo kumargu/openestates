@@ -789,7 +789,10 @@ fn detect_max_age_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, Str
                     || before.eq_ignore_ascii_case("below")
                     || before.eq_ignore_ascii_case("within")
                 {
-                    return Some((value, format!("up to {} {}", format_number(value), unit.unit)));
+                    return Some((
+                        value,
+                        format!("up to {} {}", format_number(value), unit.unit),
+                    ));
                 }
             }
         }
@@ -801,7 +804,10 @@ fn detect_max_age_value(tokens: &[String], unit: &QueryUnit) -> Option<(f64, Str
                 || before.eq_ignore_ascii_case("below")
                 || before.eq_ignore_ascii_case("within")
             {
-                return Some((value, format!("up to {} {}", format_number(value), unit.unit)));
+                return Some((
+                    value,
+                    format!("up to {} {}", format_number(value), unit.unit),
+                ));
             }
         }
     }

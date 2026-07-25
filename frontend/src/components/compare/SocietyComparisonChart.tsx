@@ -6,6 +6,7 @@ import { SoftComparableIcon } from "../ui/SoftIcons.tsx";
 type ComparableId =
   | "space"
   | "land"
+  | "density"
   | "openSpace"
   | "homeState"
   | "builder";
@@ -37,7 +38,7 @@ type ComparableDefinition = {
   value: (listings: PropertyCard[]) => ComparableValue | null;
 };
 
-const MAX_VISIBLE_COMPARABLES = 2;
+const MAX_VISIBLE_COMPARABLES = 3;
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) {
@@ -83,7 +84,8 @@ function mostCommonLabel(labels: string[]): string | null {
 
 function explicitHomeStateLabel(label: string): string {
   const normalized = label.toLowerCase().replace(/[_-]+/g, " ");
-  if (normalized.includes("delay")) return "Timeline delayed";
+  if (normalized.includes("delivered") || normalized.includes("ready")) return "Delivered";
+  if (normalized.includes("delay")) return "Delayed";
   if (normalized.includes("under construction") || normalized.includes("construction")) {
     return "Under construction";
   }
@@ -122,7 +124,16 @@ const COMPARABLES: ComparableDefinition[] = [
     value: (listings) => numericRange(
       listings,
       (listing) => listing.open_space_pct ?? null,
-      (value) => `${Math.round(value)}%`,
+      (value) => `${value.toFixed(1).replace(/\.0$/, "")}%`,
+    ),
+  },
+  {
+    id: "density",
+    label: "Density",
+    value: (listings) => numericRange(
+      listings,
+      (listing) => listing.units_per_acre ?? null,
+      (value) => `${Math.round(value)} homes/acre`,
     ),
   },
   {
@@ -295,25 +306,6 @@ function PriceRange({
   );
 }
 
-function LandAreaPendingMark() {
-  return (
-    <span
-      className="compare-land-pending"
-      title="Land area is not verified yet"
-      role="img"
-      aria-label="Land area not verified"
-    >
-      <svg viewBox="0 0 42 32" aria-hidden="true">
-        <path className="compare-land-pending__backdrop" d="M8 3.5h24a6.5 6.5 0 0 1 6.5 6.5v12A6.5 6.5 0 0 1 32 28.5H8A6.5 6.5 0 0 1 1.5 22V10A6.5 6.5 0 0 1 8 3.5Z" />
-        <circle className="compare-land-pending__sun" cx="31.5" cy="10" r="2.4" />
-        <path className="compare-land-pending__plot" d="m8 22 8.5-6 17 3.5-8.5 6Z" />
-        <path className="compare-land-pending__furrow" d="m13 20.4 12.4 2.5M18 17.6l11.8 2.5" />
-        <path className="compare-land-pending__sprout" d="M18.5 17v-4.2m0 1.8c-2.8-.2-4.2-1.5-4.4-3.8 2.8-.1 4.2 1.2 4.4 3.8Zm.1-1.8c.4-2.5 1.9-3.7 4.5-3.6-.2 2.5-1.7 3.7-4.5 3.6Z" />
-      </svg>
-    </span>
-  );
-}
-
 function ComparableCell({
   definition,
   listings,
@@ -322,13 +314,6 @@ function ComparableCell({
   listings: PropertyCard[];
 }) {
   const observed = definition.value(listings);
-  if (!observed && definition.id === "land") {
-    return (
-      <div className="compare-fact-cell compare-fact-cell--pending">
-        <LandAreaPendingMark />
-      </div>
-    );
-  }
   const statusTone = definition.id === "homeState" && observed
     ? homeStateTone(observed.primary)
     : null;
@@ -383,8 +368,7 @@ export function SocietyComparisonChart({
     }))
     .filter((row) => row.listings.length > 0);
   const dataBackedComparables = COMPARABLES.filter((definition) =>
-    definition.id === "land"
-    || visibleRows.some((row) => definition.value(row.listings) !== null)
+    visibleRows.some((row) => definition.value(row.listings) !== null)
   );
   const availableComparables = dataBackedComparables;
   const requestedComparableIds = (searchParams.get("facts") ?? "")
@@ -392,7 +376,7 @@ export function SocietyComparisonChart({
     .filter((id): id is ComparableId =>
       availableComparables.some((definition) => definition.id === id)
     );
-  const defaultComparableIds: ComparableId[] = ["space", "land"];
+  const defaultComparableIds: ComparableId[] = ["land", "density", "openSpace"];
   const activeComparableIds = [
     ...new Set([
       ...requestedComparableIds,
@@ -443,7 +427,7 @@ export function SocietyComparisonChart({
     }
     const next = activeComparableIds.length < MAX_VISIBLE_COMPARABLES
       ? [...activeComparableIds, id]
-      : [activeComparableIds[1], id];
+      : [...activeComparableIds.slice(1), id];
     updateParam("facts", next.join(","));
   }
 

@@ -3,6 +3,8 @@
   "version": 1,
   "source_id": "google_project_images",
   "source_type": "GoogleImages",
+  "enabled": false,
+  "disabled_reason": "Optimized project media downloads are disabled by default until we explicitly enable this lane; current DAG runs keep link-backed observations.",
   "trust_tier": "support",
   "max_confidence": 0.8,
   "request_path_policy": {

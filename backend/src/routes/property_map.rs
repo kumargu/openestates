@@ -691,10 +691,10 @@ fn place_lookup_by_google_url(facts: &ServingFactIndex) -> HashMap<String, Place
 fn coordinates_for_candidates(facts: &ServingFactIndex, society_id: &str) -> Option<(f64, f64)> {
     for candidate in society_entity_id_candidates(society_id) {
         if let Some(rows) = facts.entity(&candidate) {
-            let latitude = numeric_fact(rows, "geo.latitude")
-                .or_else(|| numeric_fact(rows, "project_latitude"))?;
-            let longitude = numeric_fact(rows, "geo.longitude")
-                .or_else(|| numeric_fact(rows, "project_longitude"))?;
+            let latitude = preferred_coordinate_fact(rows, "geo.latitude")
+                .or_else(|| preferred_coordinate_fact(rows, "project_latitude"))?;
+            let longitude = preferred_coordinate_fact(rows, "geo.longitude")
+                .or_else(|| preferred_coordinate_fact(rows, "project_longitude"))?;
             if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) {
                 return Some((latitude, longitude));
             }
@@ -717,16 +717,59 @@ fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
     }
 }
 
+fn preferred_coordinate_fact(rows: &ServingEntityFactRows, key: &str) -> Option<f64> {
+    coordinate_fact_from_sources(rows, key, &["Google", "Manual"])
+        .or_else(|| coordinate_fact_excluding_sources(rows, key, &["Rera"]))
+}
+
+fn coordinate_fact_from_sources(
+    rows: &ServingEntityFactRows,
+    key: &str,
+    source_types: &[&str],
+) -> Option<f64> {
+    rows.facts
+        .iter()
+        .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
+        .filter(|fact| {
+            source_types
+                .iter()
+                .any(|source_type| fact.source_type.eq_ignore_ascii_case(source_type))
+        })
+        .filter_map(finite_numeric_fact)
+        .max_by(|left, right| left.total_cmp(right))
+}
+
+fn coordinate_fact_excluding_sources(
+    rows: &ServingEntityFactRows,
+    key: &str,
+    excluded_source_types: &[&str],
+) -> Option<f64> {
+    rows.facts
+        .iter()
+        .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
+        .filter(|fact| {
+            !excluded_source_types
+                .iter()
+                .any(|source_type| fact.source_type.eq_ignore_ascii_case(source_type))
+        })
+        .filter_map(finite_numeric_fact)
+        .max_by(|left, right| left.total_cmp(right))
+}
+
 fn numeric_fact(rows: &ServingEntityFactRows, key: &str) -> Option<f64> {
     rows.facts
         .iter()
         .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-        .filter_map(|fact| match &fact.value {
-            FactValue::Numeric(value) if value.is_finite() => Some(*value),
-            FactValue::Score { value, .. } if value.is_finite() => Some(*value),
-            _ => None,
-        })
+        .filter_map(finite_numeric_fact)
         .max_by(|left, right| left.total_cmp(right))
+}
+
+fn finite_numeric_fact(fact: &crate::serving::ServingFactRecord) -> Option<f64> {
+    match &fact.value {
+        FactValue::Numeric(value) if value.is_finite() => Some(*value),
+        FactValue::Score { value, .. } if value.is_finite() => Some(*value),
+        _ => None,
+    }
 }
 
 fn text_fact(rows: &ServingEntityFactRows, key: &str) -> Option<String> {
@@ -819,6 +862,17 @@ mod tests {
         source_url: Option<&str>,
         learned_at: i64,
     ) -> ServingFactRecord {
+        fact_with_source(entity_id, key, value, "Google", source_url, learned_at)
+    }
+
+    fn fact_with_source(
+        entity_id: &str,
+        key: &str,
+        value: FactValue,
+        source_type: &str,
+        source_url: Option<&str>,
+        learned_at: i64,
+    ) -> ServingFactRecord {
         ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: key.to_string(),
@@ -826,7 +880,7 @@ mod tests {
             value_text: None,
             value,
             confidence: 0.9,
-            source_type: "Google".to_string(),
+            source_type: source_type.to_string(),
             source_url: source_url.map(str::to_string),
             model: None,
             skill_id: None,
@@ -990,6 +1044,53 @@ mod tests {
         );
         assert_eq!(school.latitude, Some(12.985));
         assert_eq!(school.distance_km, Some(1.2));
+    }
+
+    #[test]
+    fn map_context_prefers_google_coordinates_over_rera_coordinates() {
+        let property = sample_property();
+        let serving = ServingFactIndex::from_records(
+            vec![
+                fact_with_source(
+                    "society:assetz-marq",
+                    "geo.latitude",
+                    FactValue::Numeric(13.640739),
+                    "Rera",
+                    None,
+                    10,
+                ),
+                fact_with_source(
+                    "society:assetz-marq",
+                    "geo.longitude",
+                    FactValue::Numeric(78.244397),
+                    "Rera",
+                    None,
+                    10,
+                ),
+                fact(
+                    "society:assetz-marq",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9819914),
+                    None,
+                    11,
+                ),
+                fact(
+                    "society:assetz-marq",
+                    "geo.longitude",
+                    FactValue::Numeric(77.7421819),
+                    None,
+                    11,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let context =
+            build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
+                .expect("map context should build");
+
+        assert_eq!(context.home.latitude, Some(12.9819914));
+        assert_eq!(context.home.longitude, Some(77.7421819));
     }
 
     #[test]

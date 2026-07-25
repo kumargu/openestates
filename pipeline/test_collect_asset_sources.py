@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from io import BytesIO
@@ -19,6 +20,7 @@ from pipeline.collect_asset_sources import (
     collect_rera_registry,
     google_society_inputs,
     reddit_society_inputs,
+    request_with_rera_detail_facts,
 )
 from pipeline.skills.base import FactSource, SkillCost, SkillResult, SourcedFact
 from pipeline.skills.fetch_google_review_links import (
@@ -33,10 +35,47 @@ from pipeline.skills.search_reddit import (
     fetch_reddit_threads_with_retry,
     threads_to_skill_result,
 )
-from pipeline.sources.external_listings import magicbricks_source_pages
+from pipeline.sources.external_listings import (
+    magicbricks_source_pages,
+    squareyards_source_pages,
+)
+from pipeline.sources.external_images import skip_image_optimization, write_optimized_preview
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
+    def setUp(self):
+        self._old_skip_image_optimization = os.environ.get(
+            "OPENESTATES_SKIP_IMAGE_OPTIMIZATION"
+        )
+        self._old_enable_image_optimization = os.environ.get(
+            "OPENESTATES_ENABLE_IMAGE_OPTIMIZATION"
+        )
+        self._old_skip_local_society_photo_collection = os.environ.get(
+            "OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION"
+        )
+        os.environ["OPENESTATES_SKIP_IMAGE_OPTIMIZATION"] = "1"
+        os.environ["OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION"] = "1"
+
+    def tearDown(self):
+        if self._old_skip_image_optimization is None:
+            os.environ.pop("OPENESTATES_SKIP_IMAGE_OPTIMIZATION", None)
+        else:
+            os.environ["OPENESTATES_SKIP_IMAGE_OPTIMIZATION"] = (
+                self._old_skip_image_optimization
+            )
+        if self._old_enable_image_optimization is None:
+            os.environ.pop("OPENESTATES_ENABLE_IMAGE_OPTIMIZATION", None)
+        else:
+            os.environ["OPENESTATES_ENABLE_IMAGE_OPTIMIZATION"] = (
+                self._old_enable_image_optimization
+            )
+        if self._old_skip_local_society_photo_collection is None:
+            os.environ.pop("OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION", None)
+        else:
+            os.environ["OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION"] = (
+                self._old_skip_local_society_photo_collection
+            )
+
     def test_rera_detail_collection_is_scoped_and_preserves_alias_lineage(self):
         request = {
             "partition": {"parts": [["dt", "2026-07-14"]]},
@@ -545,6 +584,78 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["observed_at"], "2026-07-16T09:30:00Z")
         self.assertNotIn("confidence", listing)
 
+    def test_external_listing_collection_keeps_rent_separate(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
+                            {
+                                "source_url": "https://www.magicbricks.com/3-bhk-flats-for-rent-in-example-green-bangalore-pppfr",
+                                "query_kind": "rent",
+                                "text": """
+                                    ## 3 BHK Flat for Rent in Example Green, Whitefield, Bangalore
+
+                                    Super Area
+
+                                    1800 sqft
+
+                                    Bathroom
+
+                                    3
+
+                                    ₹95,000
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["listing_type"], "rent")
+        self.assertEqual(listing["price"], 95_000)
+        self.assertEqual(listing["configuration"], "3 BHK")
+
+    def test_rera_detail_configurations_feed_listing_queries_in_same_run(self):
+        request = {
+            "source_entities": [
+                {
+                    "entity_id": "society:example-green",
+                    "name": "Example Green",
+                    "city": "Bengaluru",
+                }
+            ]
+        }
+        rera_input = {
+            "detail_facts": [
+                {
+                    "entity_id": "society:example-green",
+                    "fact_key": "available_configurations",
+                    "value_json": json.dumps(
+                        {"type": "Tags", "data": ["2BHK", "3BHK"]},
+                        separators=(",", ":"),
+                    ),
+                }
+            ]
+        }
+
+        enriched = request_with_rera_detail_facts(request, rera_input)
+        pages = magicbricks_source_pages(enriched["source_entities"][0], "Example Green")
+        urls = [page["source_url"] for page in pages]
+
+        self.assertTrue(any("2-bhk-flats-for-sale" in url for url in urls))
+        self.assertTrue(any("3-bhk-flats-for-sale" in url for url in urls))
+        self.assertTrue(any("2-bhk-flats-for-rent" in url for url in urls))
+        self.assertTrue(any("3-bhk-flats-for-rent" in url for url in urls))
+
     def test_magicbricks_queries_are_seeded_by_rera_configurations(self):
         pages = magicbricks_source_pages(
             {
@@ -565,26 +676,65 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertFalse(any("4-bhk-flats-for-rent" in url for url in urls))
 
-    def test_external_image_collection_extracts_magicbricks_images(self):
+    def test_squareyards_uses_focused_project_pages(self):
+        pages = squareyards_source_pages(
+            {
+                "city": "Bengaluru",
+                "available_configurations": ["2BHK", "3BHK", "4BHK"],
+            },
+            "Example Green",
+        )
+
+        self.assertEqual(
+            [page["source_url"] for page in pages],
+            [
+                "https://www.squareyards.com/sale/resale-properties-in-example-green-bangalore",
+                "https://www.squareyards.com/rent/property-for-rent-in-example-green-bangalore",
+            ],
+        )
+
+    def test_external_listing_collection_normalizes_squareyards_project_page(self):
         output = collect_asset_sources(
             {
                 "partition": {"parts": [["dt", "2026-07-16"]]},
                 "planned_at": "2026-07-16T09:30:00Z",
-                "requested_assets": ["external_images_weekly"],
+                "requested_assets": ["external_listings_weekly"],
                 "source_entities": [
                     {
                         "entity_id": "society:example-green",
                         "name": "Example Green",
-                        "project_key": "PRM-EXAMPLE-GREEN",
-                        "image_source_pages": [
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
                             {
-                                "source_name": "magicbricks",
-                                "source_page_url": "https://www.magicbricks.com/example-green",
-                                "html": """
-                                    <html>
-                                      <img data-src="https://img.staticmb.com/mbimages/project/example-green-elevation.jpg" alt="Example Green elevation" width="1200" height="800">
-                                      <img src="//img.staticmb.com/mbimages/project/example-green-clubhouse.webp" alt="Example Green clubhouse">
-                                    </html>
+                                "source_name": "SquareYards",
+                                "source_url": "https://www.squareyards.com/rent/property-for-rent-in-example-green-bangalore",
+                                "query_kind": "rent",
+                                "text": """
+                                    Other Project
+                                    ## 2 BHK Flat for Rent in Whitefield, Bangalore
+
+                                    **₹ 90,000**/ Per Month
+
+                                    Config 2 BHK + 2 Bath
+
+                                    Area Built-up Area
+
+                                     1700
+
+                                    Sq.Ft.
+
+                                    Example Green
+                                    ## 3 BHK Flat for Rent in Whitefield, Bangalore
+
+                                    **₹ 1.4 L**/ Per Month
+
+                                    Config 3 BHK + 3 Bath
+
+                                    Area Built-up Area
+
+                                     1800
+
+                                    Sq.Ft.
                                 """,
                             }
                         ],
@@ -592,6 +742,45 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 ],
             }
         )
+
+        self.assertEqual(len(output["external_listings_weekly"]["records"]), 1)
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["source_name"], "SquareYards")
+        self.assertEqual(listing["listing_type"], "rent")
+        self.assertEqual(listing["price"], 140_000)
+        self.assertEqual(listing["area_sqft"], 1800)
+        self.assertEqual(listing["area_type"], "built-up")
+        self.assertEqual(listing["bathrooms"], 3.0)
+
+    def test_external_image_collection_extracts_magicbricks_images(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "magicbricks",
+                                    "source_page_url": "https://www.magicbricks.com/example-green",
+                                    "html": """
+                                        <html>
+                                          <img data-src="https://img.staticmb.com/mbimages/project/example-green-elevation.jpg" alt="Example Green elevation" width="1200" height="800">
+                                          <img src="//img.staticmb.com/mbimages/project/example-green-clubhouse.webp" alt="Example Green clubhouse">
+                                        </html>
+                                    """,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
 
         records = output["external_images_weekly"]["records"]
         self.assertEqual(output["external_images_weekly"]["snapshot_date"], "2026-07-16")
@@ -609,13 +798,209 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(records[0]["storage_policy"], "link_only")
         self.assertNotIn("confidence", records[0])
 
+    def test_external_image_collection_prefers_downloaded_society_photos(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            photo_dir = (
+                Path(temp_dir)
+                / "frontend"
+                / "public"
+                / "societies"
+                / "example-green"
+            )
+            photo_dir.mkdir(parents=True)
+            (photo_dir / "1.jpg").write_bytes(b"local-photo-one")
+            (photo_dir / "2.jpg").write_bytes(b"local-photo-two")
+
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "SquareYards",
+                                    "source_page_url": "https://www.squareyards.com/example-green",
+                                    "html": """
+                                        <img src="https://img.squareyards.com/secondaryPortal/optImages/example-green-room.jpg?aio=w-300;h-300;fill;">
+                                    """,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 3)
+        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
+        self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
+        self.assertEqual(records[0]["storage_policy"], "static_public_asset")
+        self.assertEqual(records[1]["image_url"], "/societies/example-green/2.jpg")
+        self.assertEqual(records[2]["source_name"], "SquareYards")
+        self.assertGreater(records[2]["rank"], records[1]["rank"])
+
+    def test_external_image_collection_uses_name_slug_for_rera_hash_entities(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            photo_dir = (
+                Path(temp_dir)
+                / "frontend"
+                / "public"
+                / "societies"
+                / "prestige-waterford"
+            )
+            photo_dir.mkdir(parents=True)
+            (photo_dir / "1.jpg").write_bytes(b"local-photo-one")
+
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:rera-53c0b81882e6acc6",
+                            "name": "Prestige Waterford",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "dry-run",
+                                    "source_page_url": "https://example.invalid/waterford",
+                                    "html": "<html></html>",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["image_url"], "/societies/prestige-waterford/1.jpg")
+
+    def test_external_image_collection_skips_portals_when_local_gallery_is_complete(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            photo_dir = (
+                Path(temp_dir)
+                / "frontend"
+                / "public"
+                / "societies"
+                / "example-green"
+            )
+            photo_dir.mkdir(parents=True)
+            for index in range(1, 6):
+                (photo_dir / "{}.jpg".format(index)).write_bytes(
+                    "local-photo-{}".format(index).encode("utf-8")
+                )
+
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "SquareYards",
+                                    "source_page_url": "https://www.squareyards.com/example-green",
+                                    "html": """
+                                        <img src="https://img.squareyards.com/secondaryPortal/optImages/example-green-room.jpg?aio=w-300;h-300;fill;">
+                                    """,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 5)
+        self.assertEqual(records[0]["source_name"], "LocalSocietyPhotos")
+        self.assertTrue(
+            all(record["image_url"].startswith("/societies/example-green/") for record in records)
+        )
+
+    def test_external_image_collection_can_fill_local_society_photos_from_policy(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            policy_dir = (
+                Path(temp_dir) / "app" / "config" / "dag" / "crawl_policies"
+            )
+            policy_dir.mkdir(parents=True)
+            (policy_dir / "local_society_photo_collection.json").write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "target_images": 5,
+                        "skip_env": "OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION",
+                    }
+                )
+            )
+
+            def fake_fetch(**kwargs):
+                photo_dir = (
+                    Path(temp_dir)
+                    / "frontend"
+                    / "public"
+                    / "societies"
+                    / "example-green"
+                )
+                photo_dir.mkdir(parents=True)
+                (photo_dir / "1.jpg").write_bytes(b"\xff\xd8\xfflocal-photo")
+                return {
+                    "entity_id": kwargs["entity_id"],
+                    "all_photos": ["/societies/example-green/1.jpg"],
+                }
+
+            os.environ.pop("OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION", None)
+            with patch("pipeline.skills.fetch_images.fetch_images_for_entity", side_effect=fake_fetch) as fetch:
+                output = collect_asset_sources(
+                    {
+                        "project_root": temp_dir,
+                        "partition": {"parts": [["dt", "2026-07-16"]]},
+                        "planned_at": "2026-07-16T09:30:00Z",
+                        "requested_assets": ["external_images_weekly"],
+                        "source_entities": [
+                            {
+                                "entity_id": "society:example-green",
+                                "name": "Example Green",
+                                "project_key": "PRM-EXAMPLE-GREEN",
+                                "image_source_pages": [
+                                    {
+                                        "source_name": "dry-run",
+                                        "source_page_url": "https://example.invalid/example-green",
+                                        "html": "<html></html>",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+
+        fetch.assert_called_once()
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
+        self.assertEqual(records[0]["storage_policy"], "static_public_asset")
+
     def test_external_image_collection_uses_magicbricks_project_page_fallback(self):
         html = """
             <html>
               <img data-src="https://img.staticmb.com/mbimages/project/example-green-tower.jpg" alt="Example Green tower">
             </html>
         """
-        with patch("pipeline.sources.external_images.fetch_html", return_value=html) as fetch:
+        def fake_fetch(url, source_name=None):
+            return html if "magicbricks" in url else None
+
+        with patch("pipeline.sources.external_images.fetch_page_text", side_effect=fake_fetch) as fetch:
             output = collect_asset_sources(
                 {
                     "partition": {"parts": [["dt", "2026-07-16"]]},
@@ -630,11 +1015,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         }
                     ],
                 }
-            )
+        )
 
         records = output["external_images_weekly"]["records"]
-        fetch.assert_called_once_with(
-            "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs"
+        fetch.assert_any_call(
+            "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+            "MagicBricks",
         )
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["source_name"], "MagicBricks")
@@ -643,6 +1029,85 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
         )
         self.assertEqual(records[0]["image_kind"], "exterior")
+
+    def test_external_image_collection_uses_squareyards_project_page_fallback(self):
+        html = """
+            ![Image 1: Room in 3 BHK Apartment at Example Green](https://img.squareyards.com/secondaryPortal/optImages/example-green-room.jpg?aio=w-300;h-300;fill;)**Agent**
+            ![Image 2](https://img.squareyards.com/connect/profilepic/agent.jpg?aio=w-32;h-32;crop;)**Agent**
+            ![Image 3](https://static.squareyards.com/ui-assets/images/app-store.png)**App**
+            ![Image 4](https://www.squareyards.com/assets/images/qr-code/qr-code.png)**QR**
+        """
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "project_key": "PRM-EXAMPLE-GREEN",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "SquareYards",
+                                    "source_page_url": "https://www.squareyards.com/rent/property-for-rent-in-example-green-bangalore",
+                                    "html": html,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["source_name"], "SquareYards")
+        self.assertEqual(
+            records[0]["image_url"],
+            "https://img.squareyards.com/secondaryPortal/optImages/example-green-room.jpg?aio=w-300;h-300;fill;",
+        )
+
+    def test_external_image_optimizer_writes_webp_preview(self):
+        try:
+            from PIL import Image
+        except Exception:
+            self.skipTest("Pillow is not installed")
+
+        os.environ.pop("OPENESTATES_SKIP_IMAGE_OPTIMIZATION", None)
+        image_buffer = BytesIO()
+        Image.new("RGB", (1800, 1200), color=(80, 120, 160)).save(
+            image_buffer, format="JPEG"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = write_optimized_preview(
+                project_root=Path(temp_dir),
+                entity_id="society:example-green",
+                image_url="https://img.example.com/example-green-elevation.jpg",
+                source_page_url="https://www.magicbricks.com/example-green",
+                image_bytes=image_buffer.getvalue(),
+            )
+
+            self.assertIsNotNone(result)
+            assert result is not None
+            self.assertTrue(result["preview_url"].startswith("/media/previews/"))
+            preview_path = Path(result["preview_path"])
+            self.assertTrue(preview_path.exists())
+            self.assertEqual(preview_path.suffix, ".webp")
+            self.assertLessEqual(result["width"], 1280)
+            self.assertLessEqual(result["height"], 960)
+
+    def test_external_image_optimization_is_disabled_until_explicitly_enabled(self):
+        os.environ.pop("OPENESTATES_SKIP_IMAGE_OPTIMIZATION", None)
+        os.environ.pop("OPENESTATES_ENABLE_IMAGE_OPTIMIZATION", None)
+
+        self.assertTrue(skip_image_optimization())
+
+        os.environ["OPENESTATES_ENABLE_IMAGE_OPTIMIZATION"] = "1"
+        self.assertFalse(skip_image_optimization())
 
     def test_stale_google_collection_forces_skill_refresh(self):
         calls = []

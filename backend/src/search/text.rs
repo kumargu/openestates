@@ -629,6 +629,9 @@ impl TextSearch {
                         google_rating: None,
                         google_review_count: None,
                         google_reviews_url: None,
+                        society_land_acres: None,
+                        open_space_pct: None,
+                        units_per_acre: None,
                         seller_id: p.seller_id.clone(),
                         seller_completeness_pct: None,
                         documents_provided: Vec::new(),
@@ -767,6 +770,7 @@ pub(crate) fn enrich_card_from_serving_facts(
     card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
         .project_home_state()
         .display;
+    crate::routes::enrichment::overlay_project_scale_facts(card, serving_facts, society_id);
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {
