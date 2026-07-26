@@ -9,7 +9,7 @@ import {
   type PlateViewport,
 } from "../../lib/nearbyPlateProjection.ts";
 
-type AroundThisHomeMapProps = {
+export type AroundThisHomeMapProps = {
   home: { latitude: number; longitude: number; name: string };
   places: NumberedPlace[];
   clusters: PlaceCluster[];
@@ -553,7 +553,11 @@ export function AroundThisHomeMap({
   ]);
 
   return (
-    <div className="nearby-map">
+    <div
+      className="nearby-map"
+      role="region"
+      aria-label={`Map of places around ${home.name}`}
+    >
       <div ref={containerRef} className="nearby-map__canvas" role="presentation" />
       <div className="nearby-map__chrome" aria-hidden="true">
         <span>{viewport.radiusKm < 1

@@ -1,6 +1,6 @@
 # Property Detail UI Consistency — Implementation Plan
 
-**Status:** P0–P4 implemented; P5–P7 planned
+**Status:** P0–P5 implemented; P6–P7 planned
 **Last updated:** 2026-07-26
 **Surface:** `/property/:id` (verified on `discovered-prestige-waterford-1bhk`)
 **Owners:** OpenEstates discovery / detail UI
@@ -56,7 +56,7 @@ This plan fixes those issues in passes. No backend, ranking, or DAG work.
 | P6 | Medium | Detail-state rules lack regression tests | Add focused unit coverage |
 | P7 | Low | Superseded detail CSS remains | Remove verified unreferenced selectors |
 
-**Implemented scope:** **P0–P4**.
+**Implemented scope:** **P0–P5**.
 
 ---
 
@@ -212,7 +212,7 @@ No Rust, pipeline, or config changes expected.
 - [x] P2 desktop + mobile headless screenshots reviewed
 - [x] P3 desktop recommendation tracks and image variety verified
 - [x] P4 builder/source hierarchy verified
-- [ ] P5 retry and accessible map region verified
+- [x] P5 retry and accessible map region verified
 - [ ] P6 focused detail tests pass
 - [ ] P7 stale-code deletion verified
 - [x] No new buyer-facing internal jargon

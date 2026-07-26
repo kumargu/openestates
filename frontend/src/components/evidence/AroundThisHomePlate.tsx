@@ -1,9 +1,10 @@
 import {
   Component,
-  lazy,
-  Suspense,
+  createRef,
+  useEffect,
   useMemo,
   useState,
+  type ComponentType,
   type ErrorInfo,
   type ReactNode,
 } from "react";
@@ -25,17 +26,58 @@ import {
   type PlaceCluster,
 } from "../../lib/nearbyPlateProjection.ts";
 import { SoftNearbyIcon } from "../ui/SoftIcons.tsx";
+import type { AroundThisHomeMapProps } from "./AroundThisHomeMap.tsx";
 
-const AroundThisHomeMap = lazy(async () => {
+const loadAroundThisHomeMap = async () => {
   const module = await import("./AroundThisHomeMap.tsx");
   return { default: module.AroundThisHomeMap };
-});
+};
+
+function RetryableAroundThisHomeMap({
+  ...props
+}: AroundThisHomeMapProps) {
+  const [MapComponent, setMapComponent] =
+    useState<ComponentType<AroundThisHomeMapProps> | null>(null);
+  const [loadError, setLoadError] = useState<unknown>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadAroundThisHomeMap()
+      .then((module) => {
+        if (!cancelled) setMapComponent(() => module.default);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setLoadError(error);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (loadError) throw loadError;
+  if (!MapComponent) {
+    return (
+      <div className="nearby-plate__empty-map">
+        <p>Loading neighborhood map…</p>
+      </div>
+    );
+  }
+  return <MapComponent {...props} />;
+}
 
 class NearbyMapBoundary extends Component<
   { children: ReactNode },
-  { failed: boolean }
+  { failed: boolean; retries: number }
 > {
-  state = { failed: false };
+  state = { failed: false, retries: 0 };
+  retryButtonRef = createRef<HTMLButtonElement>();
+
+  retry = () => {
+    this.setState((state) => ({
+      failed: false,
+      retries: state.retries + 1,
+    }));
+  };
 
   static getDerivedStateFromError() {
     return { failed: true };
@@ -45,11 +87,32 @@ class NearbyMapBoundary extends Component<
     console.error("[AroundThisHomeMap] Map unavailable", error, info);
   }
 
+  componentDidUpdate(
+    _previousProps: Readonly<{ children: ReactNode }>,
+    previousState: Readonly<{ failed: boolean; retries: number }>,
+  ) {
+    if (
+      this.state.failed
+      && !previousState.failed
+      && this.state.retries > 0
+    ) {
+      this.retryButtonRef.current?.focus();
+    }
+  }
+
   render() {
     if (this.state.failed) {
       return (
         <div className="nearby-plate__empty-map" role="status">
           <p>Map unavailable</p>
+          <button
+            ref={this.retryButtonRef}
+            type="button"
+            className="nearby-plate__map-retry"
+            onClick={this.retry}
+          >
+            Retry map
+          </button>
         </div>
       );
     }
@@ -235,32 +298,24 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
             <NearbyMapBoundary
               key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
             >
-              <Suspense
-                fallback={(
-                  <div className="nearby-plate__empty-map">
-                    <p>Loading neighborhood map…</p>
-                  </div>
-                )}
-              >
-                <AroundThisHomeMap
-                  home={{
-                    latitude: home.latitude,
-                    longitude: home.longitude,
-                    name: context.home.name,
-                  }}
-                  places={singles}
-                  clusters={clusters}
-                  selectedId={selected?.id ?? null}
-                  viewport={viewport}
-                  metroLines={context.metro_lines ?? []}
-                  showMetroLines={showMetroLines}
-                  nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
-                  water={context.water}
-                  waterTint={showWater}
-                  onSelectPlace={selectPlace}
-                  onSelectCluster={selectCluster}
-                />
-              </Suspense>
+              <RetryableAroundThisHomeMap
+                home={{
+                  latitude: home.latitude,
+                  longitude: home.longitude,
+                  name: context.home.name,
+                }}
+                places={singles}
+                clusters={clusters}
+                selectedId={selected?.id ?? null}
+                viewport={viewport}
+                metroLines={context.metro_lines ?? []}
+                showMetroLines={showMetroLines}
+                nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
+                water={context.water}
+                waterTint={showWater}
+                onSelectPlace={selectPlace}
+                onSelectCluster={selectCluster}
+              />
             </NearbyMapBoundary>
           ) : (
             <div className="nearby-plate__empty-map">
