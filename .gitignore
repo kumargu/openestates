@@ -43,6 +43,8 @@ frontend/dist/
 data/reddit_cache/
 
 # Generated/cached data
+.tmp/
+tmp/
 .fastembed_cache/
 data/cache/
 data/lake/
