@@ -51,6 +51,10 @@ pub struct AssetDagExecutionOptions {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub skip_current_promotion_assets: Vec<AssetId>,
     #[serde(default)]
+    pub skip_missing_source_inputs: bool,
+    #[serde(default)]
+    pub only_forced_assets: bool,
+    #[serde(default)]
     pub retry_policy: AssetRetryPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resume_lease_id: Option<MaterializationId>,
@@ -85,6 +89,8 @@ impl AssetDagExecutionOptions {
             source_inputs: AssetSourceInputs::default(),
             force_assets: Vec::new(),
             skip_current_promotion_assets: Vec::new(),
+            skip_missing_source_inputs: false,
+            only_forced_assets: false,
             retry_policy: AssetRetryPolicy::default(),
             resume_lease_id: None,
             asset_execution_timeout_ms: DEFAULT_ASSET_EXECUTION_TIMEOUT_MS,
@@ -116,6 +122,16 @@ impl AssetDagExecutionOptions {
         self.skip_current_promotion_assets
             .sort_by(|left, right| left.as_str().cmp(right.as_str()));
         self.skip_current_promotion_assets.dedup();
+        self
+    }
+
+    pub fn with_skip_missing_source_inputs(mut self, skip_missing_source_inputs: bool) -> Self {
+        self.skip_missing_source_inputs = skip_missing_source_inputs;
+        self
+    }
+
+    pub fn with_only_forced_assets(mut self, only_forced_assets: bool) -> Self {
+        self.only_forced_assets = only_forced_assets;
         self
     }
 
@@ -448,11 +464,31 @@ impl AssetDagExecutor {
 
             let asset_id = step.asset_id;
             let asset_partition = step.partition;
+            if options.only_forced_assets && !options.force_assets.contains(&asset_id) {
+                manifest.mark_step_skipped(
+                    &asset_id,
+                    Utc::now(),
+                    "only-forced-assets mode; using current dependency snapshot",
+                )?;
+                self.persist_manifest(&mut manifest, false).await?;
+                continue;
+            }
             if should_skip_missing_optional_source_input(&asset_id, &options.source_inputs) {
                 manifest.mark_step_skipped(
                     &asset_id,
                     Utc::now(),
                     "optional source input missing; enrichment gap recorded",
+                )?;
+                self.persist_manifest(&mut manifest, false).await?;
+                continue;
+            }
+            if options.skip_missing_source_inputs
+                && should_skip_missing_source_input(&asset_id, &options.source_inputs)
+            {
+                manifest.mark_step_skipped(
+                    &asset_id,
+                    Utc::now(),
+                    "scoped source input missing; skipped",
                 )?;
                 self.persist_manifest(&mut manifest, false).await?;
                 continue;
@@ -2444,6 +2480,27 @@ fn should_skip_missing_optional_source_input(
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
         STORMWATER_DRAIN_FACTS_ASSET_ID => source_inputs.stormwater_drains.is_none(),
+        _ => false,
+    }
+}
+
+fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSourceInputs) -> bool {
+    if source_inputs
+        .source_failures
+        .contains_key(asset_id.as_str())
+    {
+        return false;
+    }
+    match asset_id.as_str() {
+        RERA_REGISTRY_MONTHLY_ASSET_ID => source_inputs.rera_registry_monthly.is_none(),
+        GOOGLE_PLACES_WEEKLY_ASSET_ID => source_inputs.google_places_weekly.is_none(),
+        GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID => source_inputs.google_nearby_places_weekly.is_none(),
+        EXTERNAL_LISTINGS_WEEKLY_ASSET_ID => source_inputs.external_listings_weekly.is_none(),
+        EXTERNAL_IMAGES_WEEKLY_ASSET_ID => source_inputs.external_images_weekly.is_none(),
+        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID => {
+            source_inputs.environment_groundwater_potential.is_none()
+        }
+        BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         _ => false,
     }
 }

@@ -1,0 +1,229 @@
+{
+  "id": "media_source_policy",
+  "version": 1,
+  "enabled": true,
+  "pilot_limit": 10,
+  "reason": "Collect project media candidates from direct source pages, then promote only QA-approved slot-specific media.",
+  "runtime_policy": {
+    "allow_runtime_crawling": false,
+    "allow_google_images_scraping": false,
+    "allow_runtime_vision": false
+  },
+  "classification": {
+    "hero_min_width": 900,
+    "gallery_min_width": 600,
+    "vision_command_env": "OPENESTATES_MEDIA_VISION_COMMAND",
+    "vision_timeout_seconds": 20,
+    "ambiguous_kinds": ["unknown", "exterior_or_render"],
+    "watermark_source_rejects": ["SquareYards"],
+    "watermark_reject_patterns": [
+      "square yards",
+      "squareyards",
+      "square-yards"
+    ],
+    "rejected_content_sha256": []
+  },
+  "promotion_slots": {
+    "hero": ["exterior", "tower", "entrance"],
+    "gallery": ["exterior", "tower", "entrance", "amenity"],
+    "floor_plan": ["floor_plan"],
+    "site_plan": ["site_plan"],
+    "location": ["location_context"]
+  },
+  "reject_kinds": [
+    "logo",
+    "thumbnail",
+    "stock_or_marketing",
+    "interior_room",
+    "bad_crop",
+    "qr",
+    "unknown"
+  ],
+  "global_reject_url_patterns": [
+    "Photo_h180_w240",
+    "Photo_h300_w450",
+    "thumb",
+    "thumbnail",
+    "logo",
+    "sprite",
+    "favicon",
+    "qr-code",
+    "/qr/",
+    "profile_pic",
+    "profilepic",
+    "app-store",
+    "google-play"
+  ],
+  "sources": [
+    {
+      "id": "builder_official",
+      "source_name": "BuilderOfficial",
+      "enabled": true,
+      "priority": 95,
+      "crawl_budget_per_run": 8,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["godrejproperties.com"],
+      "trust_profile": "official",
+      "url_templates": [],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "master": "site_plan",
+        "layout": "site_plan",
+        "amenit": "amenity",
+        "tower": "exterior",
+        "elevation": "exterior"
+      }
+    },
+    {
+      "id": "google_place_photos",
+      "source_name": "GooglePlacePhotos",
+      "enabled": false,
+      "priority": 90,
+      "crawl_budget_per_run": 10,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["maps.googleapis.com", "googleusercontent.com"],
+      "trust_profile": "user_uploaded",
+      "url_templates": [],
+      "path_kind_rules": {}
+    },
+    {
+      "id": "houssed",
+      "source_name": "Houssed",
+      "enabled": true,
+      "priority": 80,
+      "crawl_budget_per_run": 12,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["houssed.com", "imgcdn.houssed.com"],
+      "trust_profile": "portal",
+      "url_templates": [],
+      "path_kind_rules": {
+        "Project Image": "exterior",
+        "Amenities": "amenity",
+        "BHK_Configuration": "floor_plan",
+        "Master Plan": "site_plan",
+        "Location": "location_context"
+      }
+    },
+    {
+      "id": "magicbricks",
+      "source_name": "MagicBricks",
+      "enabled": true,
+      "priority": 55,
+      "crawl_budget_per_run": 8,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["magicbricks.com", "staticmb.com"],
+      "trust_profile": "portal_low_confidence",
+      "url_templates": [
+        "https://www.magicbricks.com/project-{project_slug}-for-sale-in-{city_slug}-pppfs"
+      ],
+      "reject_url_patterns": ["Photo_h180_w240", "Photo_h300_w450", "Photo_h310_w462"],
+      "path_kind_rules": {
+        "floorplan": "floor_plan",
+        "floor-plan": "floor_plan",
+        "amenity": "amenity",
+        "clubhouse": "amenity",
+        "elevation": "exterior",
+        "tower": "exterior"
+      }
+    },
+    {
+      "id": "housing",
+      "source_name": "Housing",
+      "enabled": true,
+      "priority": 60,
+      "crawl_budget_per_run": 8,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["housing.com"],
+      "trust_profile": "portal",
+      "url_templates": [],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "amenity": "amenity",
+        "elevation": "exterior",
+        "project": "exterior"
+      }
+    },
+    {
+      "id": "99acres",
+      "source_name": "99acres",
+      "enabled": true,
+      "priority": 60,
+      "crawl_budget_per_run": 8,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["99acres.com"],
+      "trust_profile": "portal",
+      "url_templates": [],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "amenity": "amenity",
+        "elevation": "exterior",
+        "project": "exterior"
+      }
+    },
+    {
+      "id": "nobroker",
+      "source_name": "NoBroker",
+      "enabled": true,
+      "priority": 50,
+      "crawl_budget_per_run": 6,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["nobroker.in"],
+      "trust_profile": "portal",
+      "url_templates": [],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "amenity": "amenity",
+        "building": "exterior",
+        "project": "exterior"
+      }
+    },
+    {
+      "id": "squareyards",
+      "source_name": "SquareYards",
+      "enabled": true,
+      "priority": 40,
+      "crawl_budget_per_run": 6,
+      "min_interval_hours": 168,
+      "backoff_on_block_hours": 336,
+      "domains": ["squareyards.com", "img.squareyards.com", "static.squareyards.com"],
+      "trust_profile": "portal_watermarked",
+      "url_templates": [
+        "https://www.squareyards.com/sale/resale-properties-in-{project_slug}-{city_slug}",
+        "https://www.squareyards.com/rent/property-for-rent-in-{project_slug}-{city_slug}"
+      ],
+      "reject_url_patterns": ["/assets/images/squareyards"],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "amenity": "amenity",
+        "elevation": "exterior",
+        "project": "exterior",
+        "building": "exterior"
+      }
+    },
+    {
+      "id": "rera_documents",
+      "source_name": "ReraDocuments",
+      "enabled": true,
+      "priority": 75,
+      "crawl_budget_per_run": 6,
+      "min_interval_hours": 720,
+      "backoff_on_block_hours": 720,
+      "domains": ["rera.karnataka.gov.in"],
+      "trust_profile": "official_document",
+      "url_templates": [],
+      "path_kind_rules": {
+        "floor": "floor_plan",
+        "plan": "site_plan",
+        "layout": "site_plan",
+        "site": "site_plan"
+      }
+    }
+  ]
+}

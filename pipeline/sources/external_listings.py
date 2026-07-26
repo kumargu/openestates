@@ -472,7 +472,7 @@ def parse_inr_price(text: str) -> Optional[float]:
 def locality_from_heading(
     heading_location: str, society_name: str, fallback_locality: Optional[str]
 ) -> Optional[str]:
-    location = re.sub(r"\s+", " ", heading_location).strip(" ,")
+    location = clean_heading_location(heading_location)
     if not location:
         return fallback_locality
     lower = location.lower()
@@ -485,6 +485,18 @@ def locality_from_heading(
         if part.strip() and part.strip().lower() not in ("bangalore", "bengaluru")
     ]
     return ", ".join(parts) if parts else fallback_locality
+
+
+def clean_heading_location(value: str) -> str:
+    location = re.sub(r"!\[[^\]]*\]\([^)]+\)", " ", value or "")
+    location = re.sub(r"\[[^\]]*\]\([^)]+\)", " ", location)
+    location = re.sub(r"https?://\S+", " ", location)
+    location = re.sub(r"_+", " ", location)
+    location = re.sub(r"\s+", " ", location).strip(" ,")
+    marker = re.search(r"\bImage\s+\d+\s*:", location, re.IGNORECASE)
+    if marker:
+        location = location[: marker.start()].strip(" ,")
+    return location
 
 
 def labeled_number(block: str, label: str) -> Optional[float]:

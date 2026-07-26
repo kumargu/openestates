@@ -334,6 +334,17 @@ fn source_inputs(
                         slug(project.name)
                     )),
                     image_kind: Some("exterior".to_string()),
+                    source_bucket: Some("Project Image".to_string()),
+                    candidate_kind: Some("exterior".to_string()),
+                    quality_score: Some(0.92),
+                    relevance_score: Some(0.88),
+                    reject_reason: None,
+                    allowed_slots: vec!["hero".to_string(), "gallery".to_string()],
+                    dedupe_key: Some(format!(
+                        "url:https://images.example/{}/hero.jpg",
+                        slug(project.name)
+                    )),
+                    classification_method: Some("heuristic".to_string()),
                     width: Some(1200),
                     height: Some(800),
                     rank: Some(1),
@@ -344,6 +355,8 @@ fn source_inputs(
                     observed_at,
                 })
                 .collect(),
+            source_health: Vec::new(),
+            media_qa_report: None,
             source_watermarks: watermark.clone(),
         }),
         ..AssetSourceInputs::default()

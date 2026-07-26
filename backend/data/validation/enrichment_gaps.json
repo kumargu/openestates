@@ -1,405 +1,5 @@
 [
   {
-    "entity_id": "society:eden-at-brigade-cornerstone-utopia",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "premium",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: premium",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:godrej-air",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "premium",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: premium",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:paradise-at-brigade-cornerstone-utopia",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "open_space",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: density risk",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:paradise-at-brigade-cornerstone-utopia",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "premium",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: premium",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:prestige-waterford",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "premium",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: premium",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:serene-at-brigade-cornerstone-utopia",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "premium",
-    "query": "good family project but not fake luxury and not too dense",
-    "query_categories": [
-      "negative:density risk",
-      "negative:premium",
-      "buyer_archetype:Family"
-    ],
-    "reason": "Avoid preference: premium",
-    "recorded_at": "2026-07-23T18:07:00.290222120+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-godrej-air",
-      "soc-paradise-at-brigade-cornerstone-utopia",
-      "soc-prestige-waterford",
-      "soc-serene-at-brigade-cornerstone-utopia"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "occupancy_signal",
-    "query": "society that feels easier to live in, not just impressive on paper",
-    "query_categories": [
-      "positive:liveability",
-      "buyer_archetype:EndUser"
-    ],
-    "reason": "User preference: liveability",
-    "recorded_at": "2026-07-23T18:07:00.393256946+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq-building-3-tower-6",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "occupancy_signal",
-    "query": "society that feels easier to live in, not just impressive on paper",
-    "query_categories": [
-      "positive:liveability",
-      "buyer_archetype:EndUser"
-    ],
-    "reason": "User preference: liveability",
-    "recorded_at": "2026-07-23T18:07:00.393256946+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:brigade-lakefront-crimson",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "occupancy_signal",
-    "query": "society that feels easier to live in, not just impressive on paper",
-    "query_categories": [
-      "positive:liveability",
-      "buyer_archetype:EndUser"
-    ],
-    "reason": "User preference: liveability",
-    "recorded_at": "2026-07-23T18:07:00.393256946+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:candeur-landmark",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "occupancy_signal",
-    "query": "society that feels easier to live in, not just impressive on paper",
-    "query_categories": [
-      "positive:liveability",
-      "buyer_archetype:EndUser"
-    ],
-    "reason": "User preference: liveability",
-    "recorded_at": "2026-07-23T18:07:00.393256946+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:candeur-signature",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "occupancy_signal",
-    "query": "society that feels easier to live in, not just impressive on paper",
-    "query_categories": [
-      "positive:liveability",
-      "buyer_archetype:EndUser"
-    ],
-    "reason": "User preference: liveability",
-    "recorded_at": "2026-07-23T18:07:00.393256946+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.506392402+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq-building-3-tower-6",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.506392402+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:brigade-lakefront-crimson",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.506392402+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:candeur-landmark",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.506392402+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:candeur-signature",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "peaceful less crowded with greenery, okay to be slightly far from city",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.506392402+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark",
-      "soc-candeur-signature"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "operating.tanker_dependence",
-    "query": "avoid water issues, no tanker dependency",
-    "query_categories": [
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-07-23T18:07:00.569724924+00:00",
-    "results_returned": 20,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-godrej-splendour",
-      "soc-candeur-landmark",
-      "soc-godrej-woodscapes"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "water_supply_risk",
-    "query": "avoid water issues, no tanker dependency",
-    "query_categories": [
-      "negative:water issues"
-    ],
-    "reason": "Avoid preference: water issues",
-    "recorded_at": "2026-07-23T18:07:00.569724924+00:00",
-    "results_returned": 20,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-godrej-splendour",
-      "soc-candeur-landmark",
-      "soc-godrej-woodscapes"
-    ]
-  },
-  {
     "entity_id": "society:assetz-marq-building-3-tower-6",
     "intent_area": null,
     "intent_bhk": null,
@@ -10926,6 +10526,389 @@
     "results_returned": 1,
     "top_candidate_society_ids": [
       "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:godrej-splendour",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "school_access",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-lakeside-habitat",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "school_access",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-lakeside-habitat",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "school_access",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: social infrastructure",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T17:19:06.306057739+00:00",
+    "results_returned": 4,
+    "top_candidate_society_ids": [
+      "soc-godrej-splendour",
+      "soc-assetz-marq",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T17:52:58.123927385+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T17:52:58.123927385+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T18:00:33.394755426+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T18:00:33.394755426+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T18:02:59.849813722+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T18:02:59.849813722+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:assetz-marq",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T18:42:44.520836585+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-candeur-signature",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence",
+      "soc-godrej-splendour"
+    ]
+  },
+  {
+    "entity_id": "society:candeur-signature",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T18:42:44.520836585+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-candeur-signature",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence",
+      "soc-godrej-splendour"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-lakeside-habitat",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T18:42:44.520836585+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-candeur-signature",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence",
+      "soc-godrej-splendour"
+    ]
+  },
+  {
+    "entity_id": "society:sbr-one-residence",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T18:42:44.520836585+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-candeur-signature",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence",
+      "soc-godrej-splendour"
+    ]
+  },
+  {
+    "entity_id": "society:godrej-splendour",
+    "intent_area": null,
+    "intent_bhk": 3,
+    "intent_budget_max": 25000000,
+    "missing_fact": "noise_score",
+    "query": "Quiet 3BHK near good schools under 2.5Cr",
+    "query_categories": [
+      "positive:social infrastructure",
+      "positive:quiet neighborhood",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: quiet neighborhood",
+    "recorded_at": "2026-07-26T18:42:44.520836585+00:00",
+    "results_returned": 5,
+    "top_candidate_society_ids": [
+      "soc-assetz-marq",
+      "soc-candeur-signature",
+      "soc-prestige-lakeside-habitat",
+      "soc-sbr-one-residence",
+      "soc-godrej-splendour"
     ]
   }
 ]

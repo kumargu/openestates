@@ -40,7 +40,11 @@ from pipeline.sources.external_listings import (
     magicbricks_source_pages,
     squareyards_source_pages,
 )
-from pipeline.sources.external_images import skip_image_optimization, write_optimized_preview
+from pipeline.sources.external_images import (
+    classify_media_candidate,
+    skip_image_optimization,
+    write_optimized_preview,
+)
 
 
 class CollectAssetSourcesTest(unittest.TestCase):
@@ -780,6 +784,45 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["area_type"], "built-up")
         self.assertEqual(listing["bathrooms"], 3.0)
 
+    def test_external_listing_collection_strips_markdown_images_from_locality(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
+                            {
+                                "source_name": "SquareYards",
+                                "source_url": "https://www.squareyards.com/sale/resale-properties-in-example-green-bangalore",
+                                "text": """
+                                    Example Green
+                                    ## 3 BHK Flat for Sale in Varthur, Bangalore _![Image 118: Location map of 3 BHK Flat for Sale in Varthur, Bangalore located at 12.929851, 77.740097](https://www.squareyards.com/assets/images/map-icon.png)_
+
+                                    **₹ 1.4 Cr**
+
+                                    Config 3 BHK + 3 Bath
+
+                                    Area Built-up Area
+
+                                     1800
+
+                                    Sq.Ft.
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["locality"], "Varthur")
+
     def test_external_image_collection_extracts_magicbricks_images(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             output = collect_asset_sources(
@@ -797,10 +840,12 @@ class CollectAssetSourcesTest(unittest.TestCase):
                                 {
                                     "source_name": "magicbricks",
                                     "source_page_url": "https://www.magicbricks.com/example-green",
+                                    "reject_url_patterns": ["Photo_h300_w450"],
                                     "html": """
                                         <html>
                                           <img data-src="https://img.staticmb.com/mbimages/project/example-green-elevation.jpg" alt="Example Green elevation" width="1200" height="800">
                                           <img src="//img.staticmb.com/mbimages/project/example-green-clubhouse.webp" alt="Example Green clubhouse">
+                                          <img src="https://img.staticmb.com/mbimages/project/Photo_h300_w450/example-green-tower.jpg" alt="Example Green tower">
                                         </html>
                                     """,
                                 }
@@ -812,19 +857,108 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         records = output["external_images_weekly"]["records"]
         self.assertEqual(output["external_images_weekly"]["snapshot_date"], "2026-07-16")
-        self.assertEqual(len(records), 2)
-        self.assertEqual(records[0]["entity_id"], "society:example-green")
-        self.assertEqual(records[0]["source_name"], "magicbricks")
-        self.assertEqual(records[0]["source_page_url"], "https://www.magicbricks.com/example-green")
+        self.assertEqual(len(records), 3)
+        elevation = next(
+            record
+            for record in records
+            if record["image_url"].endswith("example-green-elevation.jpg")
+        )
+        thumbnail = next(
+            record
+            for record in records
+            if "Photo_h300_w450" in record["image_url"]
+        )
+        self.assertEqual(elevation["entity_id"], "society:example-green")
+        self.assertEqual(elevation["source_name"], "magicbricks")
+        self.assertEqual(elevation["source_page_url"], "https://www.magicbricks.com/example-green")
         self.assertEqual(
-            records[0]["image_url"],
+            elevation["image_url"],
             "https://img.staticmb.com/mbimages/project/example-green-elevation.jpg",
         )
-        self.assertEqual(records[0]["image_kind"], "exterior")
-        self.assertEqual(records[0]["width"], 1200)
-        self.assertEqual(records[0]["height"], 800)
-        self.assertEqual(records[0]["storage_policy"], "link_only")
-        self.assertNotIn("confidence", records[0])
+        self.assertEqual(elevation["image_kind"], "exterior")
+        self.assertEqual(elevation["width"], 1200)
+        self.assertEqual(elevation["height"], 800)
+        self.assertEqual(elevation["storage_policy"], "link_only")
+        self.assertNotIn("confidence", elevation)
+        self.assertEqual(thumbnail["reject_reason"], "reject_pattern:Photo_h300_w450")
+        self.assertEqual(thumbnail["allowed_slots"], [])
+
+    def test_external_image_collection_classifies_houssed_media_slots(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:godrej-splendour",
+                            "name": "Godrej Splendour",
+                            "image_source_pages": [
+                                {
+                                    "source_name": "Houssed",
+                                    "source_page_url": "https://houssed.com/bangalore/godrej-properties/godrej-splendour-2579",
+                                    "html": """
+                                      <img src="https://imgcdn.houssed.com/assets/Files/Projects/2579/Project%20Image/tower.webp" alt="Godrej Splendour project image" width="1200" height="675">
+                                      <img src="https://imgcdn.houssed.com/assets/Files/Projects/2579/Amenities/pool.webp" alt="Amenities" width="780" height="441">
+                                      <img src="https://imgcdn.houssed.com/assets/Files/Projects/2579/BHK_Configuration/floor.webp" alt="1 BHK Flat">
+                                      <img src="https://imgcdn.houssed.com/assets/Files/Projects/2579/Master%20Plan/master.webp" alt="Master Plan">
+                                      <img src="https://imgcdn.houssed.com/assets/Files/Developer/FirmLogos/godrej.webp" alt="Godrej logo">
+                                    """,
+                                }
+                            ],
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        by_kind = {record["candidate_kind"]: record for record in records}
+        self.assertIn("exterior", by_kind)
+        self.assertIn("amenity", by_kind)
+        self.assertIn("floor_plan", by_kind)
+        self.assertIn("site_plan", by_kind)
+        self.assertIn("hero", by_kind["exterior"]["allowed_slots"])
+        self.assertIn("gallery", by_kind["amenity"]["allowed_slots"])
+        self.assertEqual(by_kind["floor_plan"]["allowed_slots"], ["floor_plan"])
+        self.assertEqual(by_kind["site_plan"]["allowed_slots"], ["site_plan"])
+        self.assertEqual(by_kind["logo"]["reject_reason"], "kind:logo")
+        report = output["external_images_weekly"]["media_qa_report"]
+        self.assertEqual(report["entities"]["society:godrej-splendour"]["candidate_count"], 5)
+
+    def test_external_image_collection_records_source_health_on_fetch_failure(self):
+        def fake_fetch(url, source_name=None):
+            return None
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch("pipeline.sources.external_images.fetch_page_text", side_effect=fake_fetch):
+                output = collect_asset_sources(
+                    {
+                        "project_root": temp_dir,
+                        "partition": {"parts": [["dt", "2026-07-16"]]},
+                        "planned_at": "2026-07-16T09:30:00Z",
+                        "requested_assets": ["external_images_weekly"],
+                        "source_entities": [
+                            {
+                                "entity_id": "society:example-green",
+                                "name": "Example Green",
+                                "image_source_pages": [
+                                    {
+                                        "source_name": "MagicBricks",
+                                        "source_page_url": "https://www.magicbricks.com/example-green",
+                                    }
+                                ],
+                            }
+                        ],
+                    }
+                )
+
+        self.assertEqual(output["external_images_weekly"]["records"], [])
+        self.assertEqual(
+            output["external_images_weekly"]["source_health"][0]["status"],
+            "fetch_failed",
+        )
 
     def test_external_image_collection_prefers_downloaded_society_photos(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -1097,6 +1231,135 @@ class CollectAssetSourcesTest(unittest.TestCase):
             records[0]["image_url"],
             "https://img.squareyards.com/secondaryPortal/optImages/example-green-room.jpg?aio=w-300;h-300;fill;",
         )
+
+    def test_media_classifier_rejects_watermarked_source_images(self):
+        policy = {
+            "classification": {
+                "watermark_source_rejects": ["SquareYards"],
+                "watermark_reject_patterns": ["square yards", "squareyards"],
+            },
+            "promotion_slots": {
+                "hero": ["exterior"],
+                "gallery": ["exterior"],
+            },
+            "reject_kinds": [],
+        }
+
+        qa = classify_media_candidate(
+            image_url="https://img.squareyards.com/secondaryPortal/optImages/example-green.jpg",
+            original_image_url="https://img.squareyards.com/secondaryPortal/optImages/example-green.jpg",
+            alt_text="Example Green exterior",
+            width=1200,
+            height=800,
+            source_name="SquareYards",
+            source_bucket=None,
+            source_page={"source_name": "SquareYards"},
+            policy=policy,
+            score=80.0,
+        )
+
+        self.assertEqual(qa["reject_reason"], "watermark:squareyards")
+        self.assertEqual(qa["allowed_slots"], [])
+        self.assertEqual(qa["quality_score"], 0.0)
+        self.assertEqual(qa["relevance_score"], 0.0)
+
+    def test_media_classifier_rejects_configured_local_content_hashes(self):
+        policy = {
+            "classification": {
+                "rejected_content_sha256": ["abc123"],
+            },
+            "promotion_slots": {
+                "hero": ["exterior"],
+                "gallery": ["exterior"],
+            },
+            "reject_kinds": [],
+        }
+
+        qa = classify_media_candidate(
+            image_url="/societies/example-green/1.jpg",
+            original_image_url="/societies/example-green/1.jpg",
+            alt_text="Example Green photo 1",
+            width=1200,
+            height=800,
+            source_name="LocalSocietyPhotos",
+            source_bucket="local_society_photo",
+            source_page={},
+            policy=policy,
+            score=100.0,
+            content_sha256="abc123",
+        )
+
+        self.assertEqual(qa["reject_reason"], "watermark:content_sha256")
+        self.assertEqual(qa["allowed_slots"], [])
+
+    def test_local_society_photos_use_provenance_for_watermark_rejection(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            policy_dir = root / "app" / "config" / "dag" / "crawl_policies"
+            policy_dir.mkdir(parents=True)
+            (policy_dir / "media_source_policy.json").write_text(
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "classification": {
+                            "watermark_source_rejects": ["SquareYards"],
+                            "watermark_reject_patterns": ["squareyards"],
+                        },
+                        "promotion_slots": {
+                            "hero": ["exterior"],
+                            "gallery": ["exterior"],
+                        },
+                        "reject_kinds": [],
+                        "sources": [],
+                    }
+                )
+            )
+            (policy_dir / "local_society_photo_collection.json").write_text(
+                json.dumps({"enabled": True, "target_images": 1})
+            )
+            photo_dir = root / "frontend" / "public" / "societies" / "example-green"
+            photo_dir.mkdir(parents=True)
+            (photo_dir / "1.jpg").write_bytes(b"local-photo-one")
+            metadata_dir = root / "data" / "cache" / "image_metadata"
+            metadata_dir.mkdir(parents=True)
+            (metadata_dir / "example-green.json").write_text(
+                json.dumps(
+                    {
+                        "sources": [
+                            {
+                                "file": "1.jpg",
+                                "source_page_url": "https://www.squareyards.com/example-green/project",
+                                "original_image_url": "https://static.squareyards.com/resources/images/example-green.jpg",
+                            }
+                        ]
+                    }
+                )
+            )
+
+            output = collect_asset_sources(
+                {
+                    "project_root": temp_dir,
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "requested_assets": ["external_images_weekly"],
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                        }
+                    ],
+                }
+            )
+
+        records = output["external_images_weekly"]["records"]
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["image_url"], "/societies/example-green/1.jpg")
+        self.assertEqual(
+            records[0]["original_image_url"],
+            "https://static.squareyards.com/resources/images/example-green.jpg",
+        )
+        self.assertEqual(records[0]["reject_reason"], "watermark:squareyards")
+        self.assertEqual(records[0]["allowed_slots"], [])
 
     def test_external_image_optimizer_writes_webp_preview(self):
         try:

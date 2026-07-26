@@ -403,6 +403,7 @@ fn append_listing_facts(
         area_sqft_min,
         area_sqft_max,
     );
+    let clean_locality = row.locality.as_deref().and_then(clean_listing_locality);
     let listing_payload = serde_json::json!({
         "price": price_inr as u64,
         "price_min": price_min as u64,
@@ -421,7 +422,7 @@ fn append_listing_facts(
         "bathrooms": row.bathrooms,
         "floor": row.floor.as_deref(),
         "society": row.society.as_deref(),
-        "locality": row.locality.as_deref(),
+        "locality": clean_locality.as_deref(),
         "source_url": row.source_url.as_deref(),
         "listing_type": listing_type,
         "observed_at": row.observed_at.to_rfc3339(),
@@ -633,11 +634,7 @@ fn append_listing_facts(
             annotations,
         )?;
     }
-    if let Some(value) = row
-        .locality
-        .clone()
-        .filter(|value| !value.trim().is_empty())
-    {
+    if let Some(value) = clean_locality {
         append_derived_fact(
             entity_id,
             "listing_locality",
@@ -712,6 +709,44 @@ fn append_listing_facts(
         )?;
     }
     Ok(())
+}
+
+fn clean_listing_locality(value: &str) -> Option<String> {
+    let mut cleaned = value.to_string();
+    while let Some(start) = cleaned.find("![") {
+        let Some(relative_end) = cleaned[start..].find(')') else {
+            cleaned.truncate(start);
+            break;
+        };
+        let end = start + relative_end + 1;
+        cleaned.replace_range(start..end, " ");
+    }
+    while let Some(start) = cleaned.find('[') {
+        let Some(relative_end) = cleaned[start..].find(')') else {
+            break;
+        };
+        let end = start + relative_end + 1;
+        cleaned.replace_range(start..end, " ");
+    }
+    let lower = cleaned.to_ascii_lowercase();
+    if let Some(index) = lower.find("image ") {
+        cleaned.truncate(index);
+    }
+    if let Some(index) = cleaned.find("http://").or_else(|| cleaned.find("https://")) {
+        cleaned.truncate(index);
+    }
+    let cleaned = cleaned
+        .replace('_', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim_matches(|ch| ch == ',' || ch == ' ')
+        .to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
 }
 
 #[allow(clippy::too_many_arguments)]

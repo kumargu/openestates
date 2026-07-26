@@ -7,6 +7,10 @@ edition = "2021"
 name = "openestates-api"
 path = "src/main.rs"
 
+[[bin]]
+name = "openestates-promote-materialization"
+path = "src/bin/openestates-promote-materialization.rs"
+
 [lib]
 name = "backend"
 path = "src/lib.rs"

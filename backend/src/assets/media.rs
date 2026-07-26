@@ -37,6 +37,22 @@ pub struct ExternalImageObservationRecord {
     pub image_url: String,
     pub original_image_url: Option<String>,
     pub image_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_bucket: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub candidate_kind: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quality_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relevance_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reject_reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub allowed_slots: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub dedupe_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub classification_method: Option<String>,
     pub width: Option<u64>,
     pub height: Option<u64>,
     pub rank: Option<u64>,
@@ -53,7 +69,43 @@ pub struct ExternalImagesWeeklyInput {
     #[serde(default)]
     pub records: Vec<ExternalImageObservationRecord>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_health: Vec<ExternalImageSourceHealthRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_qa_report: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source_watermarks: Vec<SourceWatermark>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct ExternalImageSourceHealthRecord {
+    pub entity_id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_id: Option<String>,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub priority: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub crawl_budget: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub min_interval_hours: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub backoff_on_block_hours: Option<u64>,
+    pub source_name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_page_url: Option<String>,
+    pub status: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_success_at: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub candidate_count: u64,
+    pub observed_at: DateTime<Utc>,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -64,6 +116,10 @@ pub struct ExternalImageSnapshotManifest {
     pub run_id: String,
     pub created_at: DateTime<Utc>,
     pub row_count: u64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_health: Vec<ExternalImageSourceHealthRecord>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_qa_report: Option<serde_json::Value>,
     pub artifacts: Vec<ArtifactRef>,
 }
 
@@ -115,6 +171,8 @@ impl MediaAssetMaterializer {
             run_id: run_id.clone(),
             created_at: Utc::now(),
             row_count: input.records.len() as u64,
+            source_health: input.source_health.clone(),
+            media_qa_report: input.media_qa_report.clone(),
             artifacts: artifacts.clone(),
         };
         let manifest_meta = self.lake.put_json(&manifest_key, &manifest).await?;
@@ -193,6 +251,14 @@ async fn read_external_image_rows(
         let image_url = string_column(&batch, "image_url")?;
         let original_image_url = string_column(&batch, "original_image_url")?;
         let image_kind = string_column(&batch, "image_kind")?;
+        let source_bucket = optional_string_column(&batch, "source_bucket");
+        let candidate_kind = optional_string_column(&batch, "candidate_kind");
+        let quality_score = optional_f64_column(&batch, "quality_score");
+        let relevance_score = optional_f64_column(&batch, "relevance_score");
+        let reject_reason = optional_string_column(&batch, "reject_reason");
+        let allowed_slots = optional_string_column(&batch, "allowed_slots");
+        let dedupe_key = optional_string_column(&batch, "dedupe_key");
+        let classification_method = optional_string_column(&batch, "classification_method");
         let width = u64_column(&batch, "width")?;
         let height = u64_column(&batch, "height")?;
         let rank = u64_column(&batch, "rank")?;
@@ -210,6 +276,14 @@ async fn read_external_image_rows(
                 image_url: required_string(image_url, row, "image_url")?,
                 original_image_url: optional_string(original_image_url, row),
                 image_kind: optional_string(image_kind, row),
+                source_bucket: optional_string_opt(source_bucket, row),
+                candidate_kind: optional_string_opt(candidate_kind, row),
+                quality_score: optional_f64_opt(quality_score, row),
+                relevance_score: optional_f64_opt(relevance_score, row),
+                reject_reason: optional_string_opt(reject_reason, row),
+                allowed_slots: parse_allowed_slots(optional_string_opt(allowed_slots, row))?,
+                dedupe_key: optional_string_opt(dedupe_key, row),
+                classification_method: optional_string_opt(classification_method, row),
                 width: optional_u64(width, row),
                 height: optional_u64(height, row),
                 rank: optional_u64(rank, row),
@@ -235,6 +309,14 @@ fn write_external_images_parquet(
         Field::new("image_url", DataType::Utf8, false),
         Field::new("original_image_url", DataType::Utf8, true),
         Field::new("image_kind", DataType::Utf8, true),
+        Field::new("source_bucket", DataType::Utf8, true),
+        Field::new("candidate_kind", DataType::Utf8, true),
+        Field::new("quality_score", DataType::Float64, true),
+        Field::new("relevance_score", DataType::Float64, true),
+        Field::new("reject_reason", DataType::Utf8, true),
+        Field::new("allowed_slots", DataType::Utf8, true),
+        Field::new("dedupe_key", DataType::Utf8, true),
+        Field::new("classification_method", DataType::Utf8, true),
         Field::new("width", DataType::UInt64, true),
         Field::new("height", DataType::UInt64, true),
         Field::new("rank", DataType::UInt64, true),
@@ -258,6 +340,24 @@ fn write_external_images_parquet(
                     .map(|record| record.original_image_url.clone()),
             ),
             optional_strings(records.iter().map(|record| record.image_kind.clone())),
+            optional_strings(records.iter().map(|record| record.source_bucket.clone())),
+            optional_strings(records.iter().map(|record| record.candidate_kind.clone())),
+            optional_f64s(records.iter().map(|record| record.quality_score)),
+            optional_f64s(records.iter().map(|record| record.relevance_score)),
+            optional_strings(records.iter().map(|record| record.reject_reason.clone())),
+            optional_strings(records.iter().map(|record| {
+                if record.allowed_slots.is_empty() {
+                    None
+                } else {
+                    Some(serde_json::to_string(&record.allowed_slots).unwrap_or_default())
+                }
+            })),
+            optional_strings(records.iter().map(|record| record.dedupe_key.clone())),
+            optional_strings(
+                records
+                    .iter()
+                    .map(|record| record.classification_method.clone()),
+            ),
             optional_u64s(records.iter().map(|record| record.width)),
             optional_u64s(records.iter().map(|record| record.height)),
             optional_u64s(records.iter().map(|record| record.rank)),
@@ -336,35 +436,79 @@ fn append_image_facts(
         .max()
         .unwrap_or_else(Utc::now);
     let source_url = rows.first().map(|row| row.source_page_url.clone());
-    let image_urls = rows
-        .iter()
+    let hero = best_slot_row(rows, "hero");
+    if let Some(hero) = hero {
+        append_fact(
+            entity_id,
+            FactValue::Text(hero.image_url.clone()),
+            Some(hero.source_page_url.clone()),
+            learned_at,
+            run_id,
+            MediaFactContext {
+                fact_key: "hero_image",
+                display_template: "Hero image: {value}",
+                answers_preferences: &["photos", "image", "project photo", "hero image"],
+            },
+            MediaFactSink { facts, annotations },
+        )?;
+    }
+    let image_urls = slot_rows(rows, "gallery")
+        .into_iter()
         .map(|row| row.image_url.clone())
         .collect::<Vec<_>>();
-    append_fact(
+    if !image_urls.is_empty() {
+        append_fact(
+            entity_id,
+            FactValue::Tags(image_urls),
+            source_url.clone(),
+            learned_at,
+            run_id,
+            MediaFactContext {
+                fact_key: "images",
+                display_template: "Project photos: {value}",
+                answers_preferences: &["photos", "gallery", "project images"],
+            },
+            MediaFactSink { facts, annotations },
+        )?;
+    }
+    append_slot_fact(
         entity_id,
-        FactValue::Text(image_urls[0].clone()),
+        "floor_plan_images",
+        "floor_plan",
+        "Floor plan images: {value}",
+        &["floor plan", "unit layout"],
+        rows,
         source_url.clone(),
         learned_at,
         run_id,
-        MediaFactContext {
-            fact_key: "hero_image",
-            display_template: "Hero image: {value}",
-            answers_preferences: &["photos", "image", "project photo", "hero image"],
-        },
-        MediaFactSink { facts, annotations },
+        facts,
+        annotations,
     )?;
-    append_fact(
+    append_slot_fact(
         entity_id,
-        FactValue::Tags(image_urls),
+        "site_plan_images",
+        "site_plan",
+        "Site plan images: {value}",
+        &["site plan", "master plan", "project layout"],
+        rows,
         source_url.clone(),
         learned_at,
         run_id,
-        MediaFactContext {
-            fact_key: "images",
-            display_template: "Project photos: {value}",
-            answers_preferences: &["photos", "gallery", "project images"],
-        },
-        MediaFactSink { facts, annotations },
+        facts,
+        annotations,
+    )?;
+    append_slot_fact(
+        entity_id,
+        "location_images",
+        "location",
+        "Location images: {value}",
+        &["location map", "nearby context"],
+        rows,
+        source_url.clone(),
+        learned_at,
+        run_id,
+        facts,
+        annotations,
     )?;
     let gallery = rows
         .iter()
@@ -375,6 +519,14 @@ fn append_image_facts(
                 "source_name": row.source_name,
                 "source_page_url": row.source_page_url,
                 "image_kind": row.image_kind,
+                "source_bucket": row.source_bucket,
+                "candidate_kind": row.candidate_kind,
+                "quality_score": row.quality_score,
+                "relevance_score": row.relevance_score,
+                "reject_reason": row.reject_reason,
+                "allowed_slots": row.allowed_slots,
+                "dedupe_key": row.dedupe_key,
+                "classification_method": row.classification_method,
                 "width": row.width,
                 "height": row.height,
                 "rank": row.rank,
@@ -418,6 +570,80 @@ fn append_image_facts(
         },
         MediaFactSink { facts, annotations },
     )
+}
+
+fn append_slot_fact(
+    entity_id: &str,
+    fact_key: &'static str,
+    slot: &str,
+    display_template: &'static str,
+    answers_preferences: &'static [&'static str],
+    rows: &[ExternalImageObservationRecord],
+    source_url: Option<String>,
+    learned_at: DateTime<Utc>,
+    run_id: &MaterializationId,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), MediaAssetError> {
+    let urls = slot_rows(rows, slot)
+        .into_iter()
+        .map(|row| row.image_url.clone())
+        .collect::<Vec<_>>();
+    if urls.is_empty() {
+        return Ok(());
+    }
+    append_fact(
+        entity_id,
+        FactValue::Tags(urls),
+        source_url,
+        learned_at,
+        run_id,
+        MediaFactContext {
+            fact_key,
+            display_template,
+            answers_preferences,
+        },
+        MediaFactSink { facts, annotations },
+    )
+}
+
+fn best_slot_row<'a>(
+    rows: &'a [ExternalImageObservationRecord],
+    slot: &str,
+) -> Option<&'a ExternalImageObservationRecord> {
+    slot_rows(rows, slot).into_iter().next()
+}
+
+fn slot_rows<'a>(
+    rows: &'a [ExternalImageObservationRecord],
+    slot: &str,
+) -> Vec<&'a ExternalImageObservationRecord> {
+    let mut approved = rows
+        .iter()
+        .filter(|row| row.reject_reason.is_none())
+        .filter(|row| row.allowed_slots.iter().any(|allowed| allowed == slot))
+        .collect::<Vec<_>>();
+    approved.sort_by(|left, right| {
+        right
+            .quality_score
+            .unwrap_or(0.0)
+            .partial_cmp(&left.quality_score.unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| {
+                right
+                    .relevance_score
+                    .unwrap_or(0.0)
+                    .partial_cmp(&left.relevance_score.unwrap_or(0.0))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .then_with(|| {
+                left.rank
+                    .unwrap_or(u64::MAX)
+                    .cmp(&right.rank.unwrap_or(u64::MAX))
+            })
+            .then_with(|| left.image_url.cmp(&right.image_url))
+    });
+    approved
 }
 
 struct MediaFactContext<'a> {
@@ -544,6 +770,12 @@ fn string_column<'a>(
         .ok_or_else(|| MediaAssetError::InvalidSchema(name.to_string()))
 }
 
+fn optional_string_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a StringArray> {
+    batch
+        .column_by_name(name)
+        .and_then(|column| column.as_any().downcast_ref::<StringArray>())
+}
+
 fn u64_column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a UInt64Array, MediaAssetError> {
     batch
         .column_by_name(name)
@@ -556,6 +788,12 @@ fn f64_column<'a>(batch: &'a RecordBatch, name: &str) -> Result<&'a Float64Array
         .column_by_name(name)
         .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
         .ok_or_else(|| MediaAssetError::InvalidSchema(name.to_string()))
+}
+
+fn optional_f64_column<'a>(batch: &'a RecordBatch, name: &str) -> Option<&'a Float64Array> {
+    batch
+        .column_by_name(name)
+        .and_then(|column| column.as_any().downcast_ref::<Float64Array>())
 }
 
 fn required_string(
@@ -573,12 +811,39 @@ fn optional_string(column: &StringArray, row: usize) -> Option<String> {
     (!column.is_null(row)).then(|| column.value(row).to_string())
 }
 
+fn optional_string_opt(column: Option<&StringArray>, row: usize) -> Option<String> {
+    column.and_then(|column| optional_string(column, row))
+}
+
 fn optional_u64(column: &UInt64Array, row: usize) -> Option<u64> {
     (!column.is_null(row)).then(|| column.value(row))
 }
 
 fn optional_f64(column: &Float64Array, row: usize) -> Option<f64> {
     (!column.is_null(row)).then(|| column.value(row))
+}
+
+fn optional_f64_opt(column: Option<&Float64Array>, row: usize) -> Option<f64> {
+    column.and_then(|column| optional_f64(column, row))
+}
+
+fn parse_allowed_slots(value: Option<String>) -> Result<Vec<String>, MediaAssetError> {
+    let Some(value) = value else {
+        return Ok(Vec::new());
+    };
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(Vec::new());
+    }
+    if trimmed.starts_with('[') {
+        return Ok(serde_json::from_str::<Vec<String>>(trimmed)?);
+    }
+    Ok(trimmed
+        .split(',')
+        .map(str::trim)
+        .filter(|slot| !slot.is_empty())
+        .map(str::to_string)
+        .collect())
 }
 
 fn parse_timestamp(column: &StringArray, row: usize) -> Result<DateTime<Utc>, MediaAssetError> {
@@ -648,3 +913,166 @@ from_error!(parquet::errors::ParquetError, Parquet);
 from_error!(serde_json::Error, Json);
 from_error!(ReraAssetError, Rera);
 from_error!(crate::lake::keys::KeyError, Key);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn media_promotion_excludes_floor_plan_from_hero_and_gallery() {
+        let rows = vec![
+            test_row(
+                "https://img.example.com/floor-plan.webp",
+                "floor_plan",
+                vec!["floor_plan"],
+                None,
+                Some(0.95),
+                Some(0.93),
+                Some(841),
+                Some(566),
+            ),
+            test_row(
+                "https://img.example.com/tower.webp",
+                "exterior",
+                vec!["hero", "gallery"],
+                None,
+                Some(0.9),
+                Some(0.88),
+                Some(1200),
+                Some(800),
+            ),
+        ];
+        let facts = facts_for(&rows);
+
+        assert_eq!(
+            text_fact(&facts, "hero_image").as_deref(),
+            Some("https://img.example.com/tower.webp")
+        );
+        assert_eq!(
+            tags_fact(&facts, "images"),
+            vec!["https://img.example.com/tower.webp"]
+        );
+        assert_eq!(
+            tags_fact(&facts, "floor_plan_images"),
+            vec!["https://img.example.com/floor-plan.webp"]
+        );
+    }
+
+    #[test]
+    fn media_promotion_rejects_unknown_and_thumbnail_hero_candidates() {
+        let rows = vec![
+            test_row(
+                "https://img.example.com/unknown.webp",
+                "unknown",
+                vec![],
+                Some("kind:unknown"),
+                Some(0.0),
+                Some(0.0),
+                Some(1600),
+                Some(900),
+            ),
+            test_row(
+                "https://img.example.com/Photo_h300_w450.webp",
+                "exterior",
+                vec![],
+                Some("reject_pattern:Photo_h300_w450"),
+                Some(0.0),
+                Some(0.0),
+                Some(450),
+                Some(300),
+            ),
+            test_row(
+                "https://img.example.com/master-plan.webp",
+                "site_plan",
+                vec!["site_plan"],
+                None,
+                Some(0.82),
+                Some(0.9),
+                Some(900),
+                Some(500),
+            ),
+        ];
+        let facts = facts_for(&rows);
+
+        assert!(text_fact(&facts, "hero_image").is_none());
+        assert!(tags_fact(&facts, "images").is_empty());
+        assert_eq!(
+            tags_fact(&facts, "site_plan_images"),
+            vec!["https://img.example.com/master-plan.webp"]
+        );
+    }
+
+    fn facts_for(rows: &[ExternalImageObservationRecord]) -> Vec<SkillFactRecord> {
+        let mut facts = Vec::new();
+        let mut annotations = Vec::new();
+        append_image_facts(
+            "society:example-green",
+            rows,
+            &MaterializationId::new(),
+            &mut facts,
+            &mut annotations,
+        )
+        .expect("media facts should append");
+        facts
+    }
+
+    fn text_fact(facts: &[SkillFactRecord], key: &str) -> Option<String> {
+        facts
+            .iter()
+            .find(|fact| fact.fact_key == key)
+            .and_then(|fact| serde_json::from_str::<FactValue>(&fact.value_json).ok())
+            .and_then(|value| match value {
+                FactValue::Text(text) => Some(text),
+                _ => None,
+            })
+    }
+
+    fn tags_fact(facts: &[SkillFactRecord], key: &str) -> Vec<String> {
+        facts
+            .iter()
+            .find(|fact| fact.fact_key == key)
+            .and_then(|fact| serde_json::from_str::<FactValue>(&fact.value_json).ok())
+            .and_then(|value| match value {
+                FactValue::Tags(tags) => Some(tags),
+                _ => None,
+            })
+            .unwrap_or_default()
+    }
+
+    fn test_row(
+        image_url: &str,
+        kind: &str,
+        slots: Vec<&str>,
+        reject_reason: Option<&str>,
+        quality_score: Option<f64>,
+        relevance_score: Option<f64>,
+        width: Option<u64>,
+        height: Option<u64>,
+    ) -> ExternalImageObservationRecord {
+        ExternalImageObservationRecord {
+            entity_id: "society:example-green".to_string(),
+            project_key: Some("PRM/KA/RERA/TEST".to_string()),
+            source_name: "Fixture".to_string(),
+            source_page_url: "https://source.example/project".to_string(),
+            image_url: image_url.to_string(),
+            original_image_url: Some(image_url.to_string()),
+            image_kind: Some(kind.to_string()),
+            source_bucket: None,
+            candidate_kind: Some(kind.to_string()),
+            quality_score,
+            relevance_score,
+            reject_reason: reject_reason.map(str::to_string),
+            allowed_slots: slots.into_iter().map(str::to_string).collect(),
+            dedupe_key: Some(format!("url:{image_url}")),
+            classification_method: Some("heuristic".to_string()),
+            width,
+            height,
+            rank: Some(1),
+            score: Some(80.0),
+            alt_text: Some(kind.to_string()),
+            storage_policy: Some("link_only".to_string()),
+            content_sha256: None,
+            observed_at: Utc::now(),
+        }
+    }
+}

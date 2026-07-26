@@ -12,9 +12,10 @@ import hashlib
 import io
 import urllib.parse
 import urllib.request
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 HEADERS = {
     "User-Agent": (
@@ -40,6 +41,7 @@ MAX_OPTIMIZED_IMAGES_PER_ENTITY = 8
 LOCAL_SOCIETY_PHOTO_EXTENSIONS = ("jpg", "jpeg", "png", "webp")
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DAG_ROOT = PROJECT_ROOT / "app" / "config" / "dag"
+MEDIA_SOURCE_POLICY_ID = "media_source_policy"
 
 
 def collect_external_images(request: Dict[str, Any]) -> Dict[str, Any]:
@@ -50,23 +52,32 @@ def collect_external_images(request: Dict[str, Any]) -> Dict[str, Any]:
 
     project_root = Path(request.get("project_root") or ".").resolve()
     records = []  # type: List[Dict[str, Any]]
+    source_health = []  # type: List[Dict[str, Any]]
     for input_data in request.get("source_entities", []):
-        records.extend(records_for_entity(project_root, input_data, observed_at))
+        entity_records, entity_health = records_for_entity(project_root, input_data, observed_at)
+        records.extend(entity_records)
+        source_health.extend(entity_health)
 
     deduped = dedupe_records(records)
     if not deduped:
-        return skipped_snapshot(snapshot_date, observed_at)
+        skipped = skipped_snapshot(snapshot_date, observed_at)
+        if source_health:
+            skipped["source_health"] = source_health
+            skipped["media_qa_report"] = media_qa_report([], source_health)
+        return skipped
 
     return {
         "snapshot_date": snapshot_date,
         "records": deduped,
         "source_watermarks": source_watermarks(deduped, observed_at),
+        "source_health": source_health,
+        "media_qa_report": media_qa_report(deduped, source_health),
     }
 
 
 def records_for_entity(
     project_root: Path, input_data: Dict[str, Any], observed_at: str
-) -> List[Dict[str, Any]]:
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     entity_id = optional_string(input_data.get("entity_id"))
     society_name = optional_string(
         input_data.get("society_name")
@@ -74,21 +85,23 @@ def records_for_entity(
         or input_data.get("project_name")
     )
     if not entity_id or not society_name:
-        return []
+        return [], []
 
+    policy = load_project_crawl_policy(project_root, MEDIA_SOURCE_POLICY_ID)
     source_pages = explicit_source_pages(input_data)
     if not source_pages:
         source_pages = magicbricks_pages_from_kg(project_root, entity_id, society_name)
     if not source_pages:
-        source_pages = magicbricks_source_pages(input_data, society_name)
+        source_pages = configured_source_pages(project_root, input_data, society_name)
     ensure_local_society_photos(project_root, input_data, entity_id, society_name)
     records = local_society_photo_records(
-        project_root, entity_id, society_name, observed_at
+        project_root, entity_id, society_name, observed_at, policy
     )
     if len(records) >= local_society_photo_target(project_root):
-        return records[:MAX_OPTIMIZED_IMAGES_PER_ENTITY]
+        return records[:MAX_OPTIMIZED_IMAGES_PER_ENTITY], []
     optimized_count = 0
     external_rank_offset = len(records) + 20 if records else 0
+    source_health = []  # type: List[Dict[str, Any]]
     for source_page in source_pages:
         if len(records) >= MAX_OPTIMIZED_IMAGES_PER_ENTITY:
             break
@@ -99,9 +112,18 @@ def records_for_entity(
         if html is None:
             html = fetch_page_text(page_url, optional_string(source_page.get("source_name")))
         if not html:
+            source_health.append(
+                media_source_health(entity_id, source_page, "fetch_failed", observed_at, 0)
+            )
             continue
         candidates = image_candidates_from_html(html, page_url, society_name)
-        for rank, candidate in enumerate(candidates[:8], start=1 + external_rank_offset):
+        budget = source_crawl_budget(source_page, 8)
+        source_health.append(
+            media_source_health(
+                entity_id, source_page, "ok", observed_at, min(len(candidates), budget)
+            )
+        )
+        for rank, candidate in enumerate(candidates[:budget], start=1 + external_rank_offset):
             if len(records) >= MAX_OPTIMIZED_IMAGES_PER_ENTITY:
                 break
             optimized = None
@@ -124,17 +146,44 @@ def records_for_entity(
                 content_sha256 = optimized["content_sha256"]
                 width = optimized["width"]
                 height = optimized["height"]
+            source_name = (
+                optional_string(source_page.get("source_name"))
+                if isinstance(source_page, dict)
+                else "external"
+            )
+            source_bucket = source_bucket_for_url(candidate["image_url"]) or source_bucket_for_url(
+                page_url
+            )
+            qa = classify_media_candidate(
+                image_url=image_url,
+                original_image_url=candidate["image_url"],
+                alt_text=optional_string(candidate.get("alt_text")),
+                width=width,
+                height=height,
+                source_name=source_name or "external",
+                source_bucket=source_bucket,
+                source_page=source_page if isinstance(source_page, dict) else {},
+                policy=policy,
+                score=candidate["score"],
+                content_sha256=content_sha256,
+            )
             records.append(
                 {
                     "entity_id": entity_id,
                     "project_key": optional_string(input_data.get("project_key")),
-                    "source_name": optional_string(source_page.get("source_name"))
-                    if isinstance(source_page, dict)
-                    else "magicbricks",
+                    "source_name": source_name or "external",
                     "source_page_url": page_url,
                     "image_url": image_url,
                     "original_image_url": candidate["image_url"],
-                    "image_kind": classify_image(candidate["image_url"], candidate.get("alt_text")),
+                    "image_kind": qa["candidate_kind"],
+                    "source_bucket": source_bucket,
+                    "candidate_kind": qa["candidate_kind"],
+                    "quality_score": qa["quality_score"],
+                    "relevance_score": qa["relevance_score"],
+                    "reject_reason": qa["reject_reason"],
+                    "allowed_slots": qa["allowed_slots"],
+                    "dedupe_key": qa["dedupe_key"],
+                    "classification_method": qa["classification_method"],
                     "width": width,
                     "height": height,
                     "rank": rank,
@@ -153,7 +202,7 @@ def records_for_entity(
             record["image_url"],
         )
     )
-    return records
+    return records, source_health
 
 
 def ensure_local_society_photos(
@@ -199,7 +248,11 @@ def local_society_photo_target(project_root: Path) -> int:
 
 
 def local_society_photo_records(
-    project_root: Path, entity_id: str, society_name: str, observed_at: str
+    project_root: Path,
+    entity_id: str,
+    society_name: str,
+    observed_at: str,
+    policy: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     """Promote previously downloaded high-quality society photos into DAG media.
 
@@ -207,36 +260,83 @@ def local_society_photo_records(
     useful as curated local assets while the newer DAG collector backfills
     optimized remote previews.
     """
-    photo_dir = project_root / "frontend" / "public" / "societies" / entity_slug(
-        entity_id, society_name
-    )
+    photo_dir = local_society_photo_dir(project_root, entity_id, society_name)
     if not photo_dir.exists():
         return []
 
     records = []
+    provenance_by_file = local_society_photo_provenance(project_root, photo_dir.name)
     for rank, path in enumerate(local_society_photo_paths(photo_dir), start=1):
         image_url = public_society_photo_url(photo_dir.name, path.name)
+        provenance = provenance_by_file.get(path.name) or {}
+        original_image_url = optional_string(provenance.get("original_image_url")) or image_url
+        source_page_url = optional_string(provenance.get("source_page_url")) or image_url
+        provenance_source_name = image_source_name(
+            original_image_url if original_image_url != image_url else source_page_url
+        )
         width, height = image_dimensions(path)
+        content_sha256 = file_sha256(path)
+        qa = classify_media_candidate(
+            image_url=image_url,
+            original_image_url=original_image_url,
+            alt_text="{} photo {}".format(society_name, rank),
+            width=width,
+            height=height,
+            source_name="LocalSocietyPhotos",
+            source_bucket="local_society_photo",
+            source_page={
+                "source_name": provenance_source_name,
+                "source_page_url": source_page_url,
+            },
+            policy=policy,
+            score=100.0 + max(0, 10 - rank),
+            content_sha256=content_sha256,
+        )
         records.append(
             {
                 "entity_id": entity_id,
                 "project_key": None,
                 "source_name": "LocalSocietyPhotos",
-                "source_page_url": image_url,
+                "source_page_url": source_page_url,
                 "image_url": image_url,
-                "original_image_url": image_url,
-                "image_kind": classify_image(image_url, path.name),
+                "original_image_url": original_image_url,
+                "image_kind": qa["candidate_kind"],
+                "source_bucket": "local_society_photo",
+                "candidate_kind": qa["candidate_kind"],
+                "quality_score": qa["quality_score"],
+                "relevance_score": qa["relevance_score"],
+                "reject_reason": qa["reject_reason"],
+                "allowed_slots": qa["allowed_slots"],
+                "dedupe_key": qa["dedupe_key"],
+                "classification_method": qa["classification_method"],
                 "width": width,
                 "height": height,
                 "rank": rank,
                 "score": 100.0 + max(0, 10 - rank),
                 "alt_text": "{} photo {}".format(society_name, rank),
                 "storage_policy": "static_public_asset",
-                "content_sha256": file_sha256(path),
+                "content_sha256": content_sha256,
                 "observed_at": observed_at,
             }
         )
     return records
+
+
+def local_society_photo_provenance(
+    project_root: Path, society_slug: str
+) -> Dict[str, Dict[str, Any]]:
+    path = project_root / "data" / "cache" / "image_metadata" / "{}.json".format(society_slug)
+    metadata = read_json_file(path)
+    if not metadata:
+        return {}
+    by_file = {}
+    for source in metadata.get("sources") or []:
+        if not isinstance(source, dict):
+            continue
+        filename = optional_string(source.get("file"))
+        if filename:
+            by_file[filename] = source
+    return by_file
 
 
 def local_society_photo_paths(photo_dir: Path) -> List[Path]:
@@ -247,6 +347,18 @@ def local_society_photo_paths(photo_dir: Path) -> List[Path]:
         if path.is_file() and path.suffix.lower().lstrip(".") in LOCAL_SOCIETY_PHOTO_EXTENSIONS:
             paths.append(path)
     return sorted(paths, key=local_society_photo_sort_key)
+
+
+def local_society_photo_dir(project_root: Path, entity_id: str, society_name: str) -> Path:
+    societies_dir = project_root / "frontend" / "public" / "societies"
+    preferred = societies_dir / entity_slug(entity_id, society_name)
+    if preferred.exists():
+        return preferred
+    if entity_id.startswith("society:"):
+        legacy = societies_dir / slug(entity_id.split(":", 1)[1])
+        if legacy.exists():
+            return legacy
+    return preferred
 
 
 def local_society_photo_sort_key(path: Path) -> tuple:
@@ -476,12 +588,6 @@ def magicbricks_source_pages(
             ),
         },
         {
-            "source_name": "GoogleImages",
-            "source_page_url": "https://www.google.com/search?tbm=isch&q={}".format(
-                urllib.parse.quote_plus("{} {} project photos".format(society_name, city))
-            ),
-        },
-        {
             "source_name": "SquareYards",
             "source_page_url": "https://www.squareyards.com/sale/resale-properties-in-{}-{}".format(
                 project_slug, city
@@ -494,6 +600,60 @@ def magicbricks_source_pages(
             ),
         },
     ]
+
+
+def configured_source_pages(
+    project_root: Path, input_data: Dict[str, Any], society_name: str
+) -> List[Dict[str, Any]]:
+    policy = load_project_crawl_policy(project_root, MEDIA_SOURCE_POLICY_ID)
+    if not policy or not bool(policy.get("enabled", True)):
+        return magicbricks_source_pages(input_data, society_name)
+
+    city = magicbricks_city_slug(optional_string(input_data.get("city")))
+    project_slug = slug(society_name)
+    pages = []  # type: List[Dict[str, Any]]
+    for source in sorted(
+        policy.get("sources") or [],
+        key=lambda item: -positive_int(item.get("priority"), 0),
+    ):
+        if not bool(source.get("enabled", True)):
+            continue
+        for template in source.get("url_templates") or []:
+            if not project_slug or not city:
+                continue
+            url = str(template).format(project_slug=project_slug, city_slug=city)
+            pages.append(
+                {
+                    "source_id": optional_string(source.get("id")),
+                    "source_name": optional_string(source.get("source_name"))
+                    or optional_string(source.get("id"))
+                    or image_source_name(url),
+                    "source_page_url": url,
+                    "priority": positive_int(source.get("priority"), 0),
+                    "enabled": bool(source.get("enabled", True)),
+                    "crawl_budget_per_run": positive_int(
+                        source.get("crawl_budget_per_run"), 8
+                    ),
+                    "min_interval_hours": positive_int(
+                        source.get("min_interval_hours"), 168
+                    ),
+                    "backoff_on_block_hours": positive_int(
+                        source.get("backoff_on_block_hours"), 336
+                    ),
+                    "trust_profile": optional_string(source.get("trust_profile")),
+                    "path_kind_rules": source.get("path_kind_rules") or {},
+                    "reject_url_patterns": source.get("reject_url_patterns") or [],
+                }
+            )
+    if not pages:
+        return magicbricks_source_pages(input_data, society_name)
+    return pages
+
+
+def source_crawl_budget(source_page: Any, default: int) -> int:
+    if not isinstance(source_page, dict):
+        return default
+    return min(positive_int(source_page.get("crawl_budget_per_run"), default), 24)
 
 
 def image_candidates_from_html(
@@ -591,26 +751,504 @@ def is_low_resolution_derivative_url(image_url: str) -> bool:
 
 
 def classify_image(image_url: str, alt_text: Optional[str]) -> str:
-    text = "{} {}".format(image_url, alt_text or "").lower()
-    if any(word in text for word in ("floorplan", "floor-plan", "floor_plan")):
+    return deterministic_candidate_kind(
+        image_url=image_url,
+        alt_text=alt_text,
+        source_bucket=None,
+        source_page={},
+        policy=None,
+    )
+
+
+def classify_media_candidate(
+    image_url: str,
+    original_image_url: str,
+    alt_text: Optional[str],
+    width: Optional[int],
+    height: Optional[int],
+    source_name: str,
+    source_bucket: Optional[str],
+    source_page: Dict[str, Any],
+    policy: Optional[Dict[str, Any]],
+    score: float,
+    content_sha256: Optional[str] = None,
+) -> Dict[str, Any]:
+    kind = deterministic_candidate_kind(
+        image_url=original_image_url or image_url,
+        alt_text=alt_text,
+        source_bucket=source_bucket,
+        source_page=source_page,
+        policy=policy,
+    )
+    classification_method = "heuristic"
+    if should_run_vision(kind, policy):
+        vision = vision_classification(
+            image_url=image_url,
+            original_image_url=original_image_url,
+            alt_text=alt_text,
+            source_name=source_name,
+            source_bucket=source_bucket,
+            width=width,
+            height=height,
+            policy=policy,
+        )
+        if vision:
+            kind = optional_string(vision.get("candidate_kind")) or kind
+            classification_method = "vision"
+        else:
+            classification_method = "heuristic_only"
+
+    reject_reason = reject_reason_for(
+        kind=kind,
+        image_url=original_image_url or image_url,
+        alt_text=alt_text,
+        width=width,
+        height=height,
+        source_name=source_name,
+        source_page=source_page,
+        policy=policy,
+        content_sha256=content_sha256,
+    )
+    allowed_slots = allowed_slots_for(kind, width, reject_reason, policy)
+    quality_score = media_quality_score(kind, width, height, source_name, reject_reason, score)
+    relevance_score = media_relevance_score(kind, source_name, source_bucket, reject_reason, score)
+    return {
+        "candidate_kind": kind,
+        "quality_score": round(quality_score, 4),
+        "relevance_score": round(relevance_score, 4),
+        "reject_reason": reject_reason,
+        "allowed_slots": allowed_slots,
+        "dedupe_key": dedupe_key_for(original_image_url or image_url, image_url),
+        "classification_method": classification_method,
+    }
+
+
+def deterministic_candidate_kind(
+    image_url: str,
+    alt_text: Optional[str],
+    source_bucket: Optional[str],
+    source_page: Dict[str, Any],
+    policy: Optional[Dict[str, Any]],
+) -> str:
+    decoded_url = urllib.parse.unquote(image_url or "")
+    text = "{} {} {}".format(decoded_url, alt_text or "", source_bucket or "").lower()
+    source_rules = {}
+    if isinstance(source_page, dict):
+        source_rules.update(source_page.get("path_kind_rules") or {})
+    source_rules.update(policy_path_kind_rules(policy, source_page, image_url))
+    for marker, kind in source_rules.items():
+        if str(marker).lower() in text:
+            return str(kind)
+    if any(word in text for word in ("floorplan", "floor-plan", "floor_plan", "bhk_configuration")):
         return "floor_plan"
-    if any(word in text for word in ("amenity", "clubhouse", "pool", "gym", "garden")):
-        return "amenities"
-    if any(word in text for word in ("elevation", "exterior", "tower", "building", "project")):
+    if any(word in text for word in ("master plan", "master%20plan", "site plan", "layout plan")):
+        return "site_plan"
+    if any(word in text for word in ("location", "map", "nearby", "neighbourhood", "neighborhood")):
+        return "location_context"
+    if any(word in text for word in ("amenity", "clubhouse", "pool", "gym", "garden", "landscape")):
+        return "amenity"
+    if any(word in text for word in ("entrance", "gate")):
+        return "entrance"
+    if any(word in text for word in ("elevation", "exterior", "tower", "building", "project image")):
+        return "exterior"
+    if any(word in text for word in ("bedroom", "bathroom", "kitchen", "living-room", "living room")):
+        return "interior_room"
+    if any(word in text for word in ("logo", "favicon", "sprite")):
+        return "logo"
+    if any(word in text for word in ("stock", "shutterstock", "getty", "representation")):
+        return "stock_or_marketing"
+    if "localsocietyphotos" in text or source_bucket == "local_society_photo":
         return "exterior"
     return "unknown"
+
+
+def policy_path_kind_rules(
+    policy: Optional[Dict[str, Any]], source_page: Dict[str, Any], image_url: str
+) -> Dict[str, str]:
+    if not policy:
+        return {}
+    source_name = optional_string(source_page.get("source_name")) or image_source_name(image_url)
+    source_id = optional_string(source_page.get("source_id"))
+    rules = {}
+    for source in policy.get("sources") or []:
+        if source_id and source_id == optional_string(source.get("id")):
+            rules.update(source.get("path_kind_rules") or {})
+        elif source_name and source_name.lower() == (
+            optional_string(source.get("source_name")) or ""
+        ).lower():
+            rules.update(source.get("path_kind_rules") or {})
+    return rules
+
+
+def reject_reason_for(
+    kind: str,
+    image_url: str,
+    alt_text: Optional[str],
+    width: Optional[int],
+    height: Optional[int],
+    source_name: str,
+    source_page: Dict[str, Any],
+    policy: Optional[Dict[str, Any]],
+    content_sha256: Optional[str] = None,
+) -> Optional[str]:
+    lower = "{} {} {}".format(image_url or "", alt_text or "", source_name or "").lower()
+    content_reject = watermark_content_reject_reason(policy, content_sha256)
+    if content_reject:
+        return content_reject
+    watermark_reject = watermark_reject_reason(
+        policy=policy,
+        source_page=source_page,
+        lower=lower,
+        source_name=source_name,
+    )
+    if watermark_reject:
+        return watermark_reject
+    for pattern in reject_url_patterns(policy, source_page):
+        if str(pattern).lower() in lower:
+            return "reject_pattern:{}".format(pattern)
+    if kind in reject_kinds(policy):
+        return "kind:{}".format(kind)
+    if width is not None and height is not None:
+        if width < 240 or height < 160:
+            return "too_small"
+        ratio = float(width) / float(height or 1)
+        if ratio < 0.35 or ratio > 4.5:
+            return "bad_aspect_ratio"
+    return None
+
+
+def allowed_slots_for(
+    kind: str, width: Optional[int], reject_reason: Optional[str], policy: Optional[Dict[str, Any]]
+) -> List[str]:
+    if reject_reason:
+        return []
+    slots = []  # type: List[str]
+    slot_policy = (policy or {}).get("promotion_slots") or default_promotion_slots()
+    if kind in slot_policy.get("hero", []) and width is not None and width >= hero_min_width(policy):
+        slots.append("hero")
+    if kind in slot_policy.get("gallery", []) and (
+        width is None or width >= gallery_min_width(policy)
+    ):
+        slots.append("gallery")
+    if kind in slot_policy.get("floor_plan", []):
+        slots.append("floor_plan")
+    if kind in slot_policy.get("site_plan", []):
+        slots.append("site_plan")
+    if kind in slot_policy.get("location", []):
+        slots.append("location")
+    return slots
+
+
+def default_promotion_slots() -> Dict[str, List[str]]:
+    return {
+        "hero": ["exterior", "tower", "entrance"],
+        "gallery": ["exterior", "tower", "entrance", "amenity"],
+        "floor_plan": ["floor_plan"],
+        "site_plan": ["site_plan"],
+        "location": ["location_context"],
+    }
+
+
+def media_quality_score(
+    kind: str,
+    width: Optional[int],
+    height: Optional[int],
+    source_name: str,
+    reject_reason: Optional[str],
+    source_score: float,
+) -> float:
+    if reject_reason:
+        return 0.0
+    score = 0.35 + min(max(source_score, 0.0), 100.0) / 300.0
+    if width is not None and height is not None:
+        if width >= 1200:
+            score += 0.18
+        elif width >= 900:
+            score += 0.12
+        elif width >= 600:
+            score += 0.06
+    if kind in ("exterior", "tower", "entrance"):
+        score += 0.12
+    elif kind == "amenity":
+        score += 0.08
+    elif kind in ("floor_plan", "site_plan"):
+        score += 0.1
+    if source_name.lower() in ("localsocietyphotos", "googleplacephotos", "builderofficial"):
+        score += 0.08
+    return max(0.0, min(score, 1.0))
+
+
+def media_relevance_score(
+    kind: str,
+    source_name: str,
+    source_bucket: Optional[str],
+    reject_reason: Optional[str],
+    source_score: float,
+) -> float:
+    if reject_reason:
+        return 0.0
+    score = 0.4 + min(max(source_score, 0.0), 100.0) / 350.0
+    if kind != "unknown":
+        score += 0.15
+    if source_bucket:
+        score += 0.08
+    if source_name.lower() in ("houssed", "builderofficial", "googleplacephotos", "reradocuments"):
+        score += 0.06
+    return max(0.0, min(score, 1.0))
+
+
+def should_run_vision(kind: str, policy: Optional[Dict[str, Any]]) -> bool:
+    command = optional_string(os.environ.get(vision_command_env(policy)))
+    if not command:
+        return False
+    ambiguous = (policy or {}).get("classification", {}).get("ambiguous_kinds") or [
+        "unknown"
+    ]
+    return kind in ambiguous
+
+
+def vision_classification(
+    image_url: str,
+    original_image_url: str,
+    alt_text: Optional[str],
+    source_name: str,
+    source_bucket: Optional[str],
+    width: Optional[int],
+    height: Optional[int],
+    policy: Optional[Dict[str, Any]],
+) -> Optional[Dict[str, Any]]:
+    command = optional_string(os.environ.get(vision_command_env(policy)))
+    if not command:
+        return None
+    payload = json.dumps(
+        {
+            "image_url": image_url,
+            "original_image_url": original_image_url,
+            "alt_text": alt_text,
+            "source_name": source_name,
+            "source_bucket": source_bucket,
+            "width": width,
+            "height": height,
+        },
+        separators=(",", ":"),
+    )
+    try:
+        result = subprocess.run(
+            command,
+            input=payload,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True,
+            shell=True,
+            timeout=positive_int(
+                (policy or {}).get("classification", {}).get("vision_timeout_seconds"), 20
+            ),
+        )
+        if result.returncode != 0:
+            return None
+        decoded = json.loads(result.stdout)
+        return decoded if isinstance(decoded, dict) else None
+    except Exception:
+        return None
+
+
+def source_bucket_for_url(url: str) -> Optional[str]:
+    decoded = urllib.parse.unquote(url or "")
+    parts = [part for part in urllib.parse.urlparse(decoded).path.split("/") if part]
+    known = (
+        "Project Image",
+        "Amenities",
+        "BHK_Configuration",
+        "Master Plan",
+        "Location",
+    )
+    for part in parts:
+        if part in known:
+            return part
+    return None
+
+
+def reject_url_patterns(
+    policy: Optional[Dict[str, Any]], source_page: Optional[Dict[str, Any]] = None
+) -> List[str]:
+    patterns = []  # type: List[str]
+    if policy:
+        patterns.extend(policy.get("global_reject_url_patterns") or [])
+    source_page = source_page or {}
+    patterns.extend(source_page.get("reject_url_patterns") or [])
+    source_id = optional_string(source_page.get("source_id"))
+    source_name = optional_string(source_page.get("source_name"))
+    if policy:
+        for source in policy.get("sources") or []:
+            if source_id and source_id == optional_string(source.get("id")):
+                patterns.extend(source.get("reject_url_patterns") or [])
+            elif source_name and source_name.lower() == (
+                optional_string(source.get("source_name")) or ""
+            ).lower():
+                patterns.extend(source.get("reject_url_patterns") or [])
+    return patterns
+
+
+def watermark_reject_reason(
+    policy: Optional[Dict[str, Any]],
+    source_page: Optional[Dict[str, Any]],
+    lower: str,
+    source_name: str,
+) -> Optional[str]:
+    classification = (policy or {}).get("classification") or {}
+    source_names = set(
+        str(name).strip().lower()
+        for name in classification.get("watermark_source_rejects") or []
+        if str(name).strip()
+    )
+    page_source_name = optional_string((source_page or {}).get("source_name"))
+    for name in (source_name, page_source_name):
+        normalized = (name or "").strip().lower()
+        if normalized and normalized in source_names:
+            return "watermark:{}".format(normalized)
+    for pattern in classification.get("watermark_reject_patterns") or []:
+        marker = str(pattern).strip().lower()
+        if marker and marker in lower:
+            return "watermark:{}".format(marker.replace(" ", "_"))
+    return None
+
+
+def watermark_content_reject_reason(
+    policy: Optional[Dict[str, Any]], content_sha256: Optional[str]
+) -> Optional[str]:
+    if not content_sha256:
+        return None
+    rejected = set(
+        str(value).strip().lower()
+        for value in ((policy or {}).get("classification") or {}).get(
+            "rejected_content_sha256"
+        )
+        or []
+        if str(value).strip()
+    )
+    digest = str(content_sha256).strip().lower()
+    if digest in rejected or "sha256:{}".format(digest) in rejected:
+        return "watermark:content_sha256"
+    return None
+
+
+def reject_kinds(policy: Optional[Dict[str, Any]]) -> Set[str]:
+    if not policy:
+        return {"logo", "thumbnail", "stock_or_marketing", "interior_room", "bad_crop", "qr"}
+    return set(str(kind) for kind in policy.get("reject_kinds") or [])
+
+
+def hero_min_width(policy: Optional[Dict[str, Any]]) -> int:
+    return positive_int((policy or {}).get("classification", {}).get("hero_min_width"), 900)
+
+
+def gallery_min_width(policy: Optional[Dict[str, Any]]) -> int:
+    return positive_int((policy or {}).get("classification", {}).get("gallery_min_width"), 600)
+
+
+def vision_command_env(policy: Optional[Dict[str, Any]]) -> str:
+    return (
+        optional_string((policy or {}).get("classification", {}).get("vision_command_env"))
+        or "OPENESTATES_MEDIA_VISION_COMMAND"
+    )
+
+
+def dedupe_key_for(original_image_url: str, image_url: str) -> str:
+    source = original_image_url or image_url
+    parsed = urllib.parse.urlparse(source)
+    normalized = urllib.parse.urlunparse(
+        (parsed.scheme.lower(), parsed.netloc.lower(), parsed.path, "", "", "")
+    )
+    return "url:{}".format(normalized)
 
 
 def dedupe_records(records: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
     deduped = []
     seen = set()
     for record in records:
-        key = (record["entity_id"], record["image_url"])
+        key = (record["entity_id"], record.get("dedupe_key") or record["image_url"])
         if key in seen:
             continue
         seen.add(key)
         deduped.append(record)
     return deduped
+
+
+def media_source_health(
+    entity_id: str,
+    source_page: Any,
+    status: str,
+    observed_at: str,
+    candidate_count: int,
+) -> Dict[str, Any]:
+    if not isinstance(source_page, dict):
+        source_page = {"source_page_url": optional_string(source_page)}
+    return {
+        "entity_id": entity_id,
+        "source_id": optional_string(source_page.get("source_id")),
+        "enabled": bool(source_page.get("enabled", True)),
+        "priority": optional_int(source_page.get("priority")),
+        "crawl_budget": optional_int(source_page.get("crawl_budget_per_run")),
+        "min_interval_hours": optional_int(source_page.get("min_interval_hours")),
+        "backoff_on_block_hours": optional_int(source_page.get("backoff_on_block_hours")),
+        "source_name": optional_string(source_page.get("source_name"))
+        or image_source_name(source_page.get("source_page_url")),
+        "source_page_url": required_page_url(source_page),
+        "status": status,
+        "last_status": status,
+        "last_success_at": observed_at if status == "ok" else None,
+        "candidate_count": candidate_count,
+        "observed_at": observed_at,
+    }
+
+
+def media_qa_report(
+    records: List[Dict[str, Any]], source_health: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    by_entity = {}  # type: Dict[str, Dict[str, Any]]
+    for record in records:
+        entity = by_entity.setdefault(
+            record["entity_id"],
+            {
+                "candidate_count": 0,
+                "approved_count": 0,
+                "rejected_count": 0,
+                "by_source": {},
+                "by_kind": {},
+                "selected": {
+                    "hero": None,
+                    "gallery": [],
+                    "floor_plan": [],
+                    "site_plan": [],
+                    "location": [],
+                },
+                "validation_failures": [],
+            },
+        )
+        entity["candidate_count"] += 1
+        source = optional_string(record.get("source_name")) or "external"
+        entity["by_source"][source] = entity["by_source"].get(source, 0) + 1
+        kind = optional_string(record.get("candidate_kind") or record.get("image_kind")) or "unknown"
+        entity["by_kind"][kind] = entity["by_kind"].get(kind, 0) + 1
+        if record.get("reject_reason"):
+            entity["rejected_count"] += 1
+            continue
+        entity["approved_count"] += 1
+        for slot in record.get("allowed_slots") or []:
+            if slot == "hero" and entity["selected"]["hero"] is None:
+                entity["selected"]["hero"] = record.get("image_url")
+            elif slot in entity["selected"] and slot != "hero":
+                entity["selected"][slot].append(record.get("image_url"))
+    for entity_id, entity in by_entity.items():
+        if not entity["selected"]["hero"]:
+            entity["validation_failures"].append("missing_approved_hero")
+    health_by_entity = {}  # type: Dict[str, List[Dict[str, Any]]]
+    for health in source_health:
+        health_by_entity.setdefault(health.get("entity_id") or "unknown", []).append(health)
+    return {
+        "entities": by_entity,
+        "source_health": health_by_entity,
+    }
 
 
 def source_watermarks(
@@ -728,7 +1366,11 @@ def fetch_image_bytes(url: str) -> Optional[bytes]:
 
 def required_page_url(source_page: Any) -> Optional[str]:
     if isinstance(source_page, dict):
-        return optional_string(source_page.get("source_page_url") or source_page.get("url"))
+        return optional_string(
+            source_page.get("source_page_url")
+            or source_page.get("source_url")
+            or source_page.get("url")
+        )
     return optional_string(source_page)
 
 
@@ -742,10 +1384,20 @@ def should_use_reader(source_name: Optional[str], url: str) -> bool:
 def image_source_name(url: Any) -> str:
     value = optional_string(url) or ""
     lower = value.lower()
-    if "google." in lower:
-        return "GoogleImages"
+    if "houssed" in lower:
+        return "Houssed"
+    if "housing.com" in lower:
+        return "Housing"
+    if "99acres" in lower:
+        return "99acres"
+    if "nobroker" in lower:
+        return "NoBroker"
     if "squareyards" in lower:
         return "SquareYards"
+    if "magicbricks" in lower or "staticmb" in lower:
+        return "MagicBricks"
+    if "godrejproperties" in lower:
+        return "BuilderOfficial"
     return "MagicBricks"
 
 

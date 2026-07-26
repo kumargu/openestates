@@ -8,13 +8,17 @@ use backend::assets::{
     AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
-    SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SourceInputRequest, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
+use backend::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
 use chrono::{Duration as ChronoDuration, Utc};
 
 #[tokio::main]
@@ -60,6 +64,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     if !cli.force_asset_ids.is_empty() {
         options = options.with_forced_assets(cli.force_asset_ids.clone());
+    }
+    if cli.only_forced_assets {
+        options = options.with_only_forced_assets(true);
     }
     let mut resume_lease_id = None;
     if cli.dry_run && cli.source_command.is_some() {
@@ -127,10 +134,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             options = options
                 .with_source_inputs(source_inputs)
                 .with_forced_assets(force_assets);
-            if resume_manifest.is_none() && !cli.source_entity_ids.is_empty() {
-                options = options.with_skip_current_promotion_assets(
-                    scoped_current_promotion_exclusions(&cli.source_entity_ids),
-                );
+            if resume_manifest.is_none()
+                && (!cli.source_entity_ids.is_empty() || cli.scoped_source_inputs)
+                && !cli.promote_scoped_current
+            {
+                options = options
+                    .with_skip_current_promotion_assets(scoped_current_promotion_exclusions());
+            }
+            if resume_manifest.is_none() && cli.scoped_source_inputs {
+                options = options.with_skip_missing_source_inputs(true);
             }
         }
     }
@@ -212,15 +224,28 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
     collection_plan.force_assets.dedup();
 }
 
-fn scoped_current_promotion_exclusions(selected_entity_ids: &[String]) -> Vec<AssetId> {
-    if selected_entity_ids.is_empty() {
-        return Vec::new();
-    }
-    vec![
+fn scoped_current_promotion_exclusions() -> Vec<AssetId> {
+    let mut exclusions = vec![
         AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)
             .expect("valid static canonical society asset ID"),
         AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA registry asset ID"),
-    ]
+        AssetId::new(RERA_LEGAL_FACTS_ASSET_ID).expect("valid static RERA legal asset ID"),
+        AssetId::new(BUILDER_RERA_AGGREGATES_ASSET_ID)
+            .expect("valid static builder aggregate asset ID"),
+        AssetId::new(HOME_STATE_SIGNALS_ASSET_ID).expect("valid static home state asset ID"),
+        AssetId::new(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
+            .expect("valid static approach-road asset ID"),
+        AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID)
+            .expect("valid static groundwater asset ID"),
+        AssetId::new(BENGALURU_METRO_STATION_FACTS_ASSET_ID).expect("valid static metro asset ID"),
+        AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID)
+            .expect("valid static current project asset ID"),
+        AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).expect("valid static KG view asset ID"),
+        AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).expect("valid static serving bundle asset ID"),
+    ];
+    exclusions.sort_by(|left, right| left.as_str().cmp(right.as_str()));
+    exclusions.dedup();
+    exclusions
 }
 
 async fn release_cli_resume_lease(
@@ -356,6 +381,9 @@ struct CliOptions {
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
     source_entity_ids: Vec<String>,
+    scoped_source_inputs: bool,
+    promote_scoped_current: bool,
+    only_forced_assets: bool,
     force_asset_ids: Vec<AssetId>,
     resume_run_id: Option<MaterializationId>,
     dry_run: bool,
@@ -433,6 +461,15 @@ impl CliOptions {
                         return Err("--source-entity requires an entity id".to_string());
                     }
                     options.source_entity_ids.push(value.to_string());
+                }
+                "--scoped-source-inputs" => {
+                    options.scoped_source_inputs = true;
+                }
+                "--promote-scoped-current" => {
+                    options.promote_scoped_current = true;
+                }
+                "--only-forced-assets" => {
+                    options.only_forced_assets = true;
                 }
                 "--force-asset" => {
                     let value = args
@@ -562,6 +599,11 @@ fn print_help() {
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
     println!("  --source-entity Limit source collection to one entity, alias, or project key");
+    println!("  --scoped-source-inputs Treat --source-inputs as already scoped to a partial run");
+    println!("  --promote-scoped-current Promote scoped source runs to current global outputs");
+    println!(
+        "  --only-forced-assets Skip non-forced planned assets and use their current snapshots"
+    );
     println!("  --force-asset   Force one asset id to run even when freshness says skip");
     println!("  --resume-run Resume one failed or interrupted run by UUID");
     println!(
@@ -613,16 +655,22 @@ mod tests {
 
     #[test]
     fn scoped_source_runs_keep_global_canonical_current_pointer() {
-        assert!(scoped_current_promotion_exclusions(&[]).is_empty());
-
-        let exclusions =
-            scoped_current_promotion_exclusions(&["society:rera-waterford".to_string()]);
+        let exclusions = scoped_current_promotion_exclusions();
 
         assert_eq!(
             exclusions,
             vec![
+                AssetId::new(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(BENGALURU_METRO_STATION_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(BUILDER_RERA_AGGREGATES_ASSET_ID).unwrap(),
                 AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID).unwrap(),
+                AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(HOME_STATE_SIGNALS_ASSET_ID).unwrap(),
+                AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).unwrap(),
+                AssetId::new(RERA_LEGAL_FACTS_ASSET_ID).unwrap(),
                 AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+                AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).unwrap(),
+                AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID).unwrap(),
             ]
         );
     }

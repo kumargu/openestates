@@ -1733,6 +1733,17 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                         .to_string(),
                 ),
                 image_kind: Some("exterior".to_string()),
+                source_bucket: Some("Project Image".to_string()),
+                candidate_kind: Some("exterior".to_string()),
+                quality_score: Some(0.94),
+                relevance_score: Some(0.9),
+                reject_reason: None,
+                allowed_slots: vec!["hero".to_string(), "gallery".to_string()],
+                dedupe_key: Some(
+                    "url:https://img.staticmb.com/mbimages/project/green-acre-elevation.jpg"
+                        .to_string(),
+                ),
+                classification_method: Some("heuristic".to_string()),
                 width: Some(1200),
                 height: Some(800),
                 rank: Some(1),
@@ -1742,6 +1753,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
                 content_sha256: None,
                 observed_at: now + Duration::minutes(2),
             }],
+            source_health: Vec::new(),
+            media_qa_report: None,
             source_watermarks: Vec::new(),
         }),
         reddit_threads_daily: Some(RedditThreadsDailyInput {
