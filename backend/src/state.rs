@@ -1,37 +1,44 @@
 use std::path::PathBuf;
-use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
+use std::sync::Arc;
 
-use tokio::sync::{Mutex, RwLock};
+use chrono::{DateTime, Utc};
+use tokio::sync::RwLock;
 
-use crate::cache::Cache;
-use crate::discovery::{DiscoveryCache, GeminiClient};
+use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
-use crate::knowledge::embed_client::EmbedClient;
 use crate::models::{AreaProfile, Property, Seller, Society};
-use crate::storage::StorageBackend;
+use crate::recommendations::RecommendationResponse;
+use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
+use crate::serving::LoadedServingBundle;
 
 pub struct AppState {
-    #[allow(dead_code)] // Infrastructure for future S3-backed storage — not yet read at request time
-    pub storage: Arc<dyn StorageBackend>,
-    #[allow(dead_code)] // Pre-populated at startup, request-time cache reads not yet wired
-    pub cache: Arc<dyn Cache>,
     /// In-memory hot data loaded at startup. Routes can read directly from here
     /// for fast access without going through storage/cache on every request.
     pub properties: RwLock<Vec<Property>>,
+    /// Local recall index rebuilt from app-owned property data.
+    pub search_index: RwLock<SearchIndex>,
+    /// Local semantic recall index over serving search documents.
+    pub semantic_index: RwLock<SemanticSearchIndex>,
+    /// Query/document embedder used by the semantic recall index.
+    pub semantic_embedder: Arc<dyn SemanticEmbedder>,
+    /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
+    pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
+    /// In-process cache keyed by property + bundle + scoring policy + engine version.
+    pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
     pub areas: Vec<AreaProfile>,
     pub societies: Vec<Society>,
     pub sellers: RwLock<Vec<Seller>>,
+    /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
+    pub discovery_config: DiscoveryConfig,
+    /// Offline city map overlays (metro / parks / lakes) clipped per property detail.
+    pub map_overlays: Arc<crate::routes::map_overlays::CityMapOverlays>,
     /// The knowledge graph — the brain that learns from every search.
     pub knowledge: Arc<RwLock<KnowledgeGraph>>,
     /// Project root path (for persistence operations).
     pub project_root: PathBuf,
-    /// Gemini client for live discovery (None if GOOGLE_AI_API_KEY not set).
-    pub gemini: Option<GeminiClient>,
-    /// Discovery cache — prevents duplicate Gemini calls.
-    pub discovery_cache: Mutex<DiscoveryCache>,
-    /// Embedding client for semantic search (None if GOOGLE_AI_API_KEY not set).
-    pub embed_client: Option<EmbedClient>,
+    /// Runtime start timestamp, exposed for stale-backend detection in development.
+    pub process_started_at: DateTime<Utc>,
     /// Monotonic counter for generating collision-free interest IDs.
     pub interest_counter: AtomicU64,
     /// Global rate limiter for POST /api/interests: (window_start, count_in_window).

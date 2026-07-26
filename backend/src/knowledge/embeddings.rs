@@ -4,9 +4,9 @@
 //! Phase 2: FAISS IVF index when >5000 vectors.
 //! Phase 3: Rust-native HNSW or pgvector.
 //!
-//! Embeddings are computed by the Python `embed_entity` skill and stored
-//! on each Node's `summary_embedding` field. This module provides in-memory
-//! search over those embeddings.
+//! Embeddings, when present, are produced by an offline job and stored on each
+//! Node's `summary_embedding` field. This module provides in-memory search over
+//! those embeddings without making external API calls.
 
 use serde::Serialize;
 
@@ -52,42 +52,6 @@ impl KnowledgeGraph {
             .filter_map(|n| {
                 let emb = n.summary_embedding.as_ref()?;
                 let sim = cosine_similarity(target_emb, emb);
-                Some(SimilarEntity {
-                    node_id: n.id.clone(),
-                    name: n.name.clone(),
-                    node_type: format!("{}", n.node_type),
-                    similarity: sim,
-                })
-            })
-            .collect();
-
-        scored.sort_by(|a, b| {
-            b.similarity
-                .partial_cmp(&a.similarity)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        scored.truncate(top_n);
-        scored
-    }
-
-    /// Find the top-N most similar nodes to a raw embedding vector.
-    /// Useful for query embedding → similar entity search.
-    pub fn similar_to_vector(
-        &self,
-        query_embedding: &[f32],
-        top_n: usize,
-        node_type_filter: Option<NodeType>,
-    ) -> Vec<SimilarEntity> {
-        let mut scored: Vec<SimilarEntity> = self
-            .nodes
-            .values()
-            .filter(|n| {
-                n.summary_embedding.is_some()
-                    && node_type_filter.is_none_or(|nt| n.node_type == nt)
-            })
-            .filter_map(|n| {
-                let emb = n.summary_embedding.as_ref()?;
-                let sim = cosine_similarity(query_embedding, emb);
                 Some(SimilarEntity {
                     node_id: n.id.clone(),
                     name: n.name.clone(),

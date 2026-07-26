@@ -58,6 +58,45 @@ check() {
   printf "  %s %s\n" "$(green "✓")" "$name"
 }
 
+check_post() {
+  local name="$1"
+  local url="$2"
+  local body_json="$3"
+  local jq_expr="$4"
+  local desc="$5"
+
+  local http_code body
+  http_code=$(curl -s -X POST -H "Content-Type: application/json" -d "$body_json" -o /tmp/oe_test_body.json -w "%{http_code}" "$url" 2>/dev/null) || {
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — connection refused (is backend running on port $PORT?)\n"
+    printf "  %s %s — connection refused\n" "$(red "✗")" "$name"
+    return
+  }
+
+  body=$(cat /tmp/oe_test_body.json)
+
+  if [[ "$http_code" != "200" ]]; then
+    FAIL=$((FAIL + 1))
+    ERRORS+="  FAIL: $name — HTTP $http_code (expected 200)\n"
+    printf "  %s %s — HTTP %s\n" "$(red "✗")" "$name" "$http_code"
+    return
+  fi
+
+  if [[ -n "$jq_expr" ]]; then
+    local result
+    result=$(echo "$body" | jq -r "$jq_expr" 2>/dev/null) || result="jq_error"
+    if [[ "$result" == "false" || "$result" == "null" || "$result" == "jq_error" || -z "$result" ]]; then
+      FAIL=$((FAIL + 1))
+      ERRORS+="  FAIL: $name — assertion failed: $desc\n"
+      printf "  %s %s — %s\n" "$(red "✗")" "$name" "$desc"
+      return
+    fi
+  fi
+
+  PASS=$((PASS + 1))
+  printf "  %s %s\n" "$(green "✓")" "$name"
+}
+
 echo ""
 bold "OpenEstates Smoke Tests"
 echo " (${BASE})"
@@ -69,6 +108,24 @@ check "GET /api/health returns ok" \
   "${BASE}/api/health" \
   '.status == "ok"' \
   "expected status=ok"
+
+# ── Discovery ──
+echo ""
+echo "Discovery"
+check "GET /api/discovery returns product promise" \
+  "${BASE}/api/discovery" \
+  '.product_promise | type == "string" and length > 0' \
+  "expected non-empty product_promise"
+
+check "GET /api/discovery returns quotes" \
+  "${BASE}/api/discovery" \
+  '.quotes | type == "array" and length > 0 and (.[0] | has("text", "tone"))' \
+  "expected quote text and tone"
+
+check "GET /api/discovery returns shelves with cards" \
+  "${BASE}/api/discovery" \
+  '.shelves | type == "array" and length > 0 and (.[0] | has("id", "title", "quote", "description", "search_query", "receipt_copy", "cards")) and (.[0].cards | type == "array" and length > 0)' \
+  "expected shelf metadata and property cards"
 
 # ── Properties List ──
 echo ""
@@ -130,6 +187,27 @@ if [[ -n "$FIRST_ID" ]]; then
     "${BASE}/api/properties/${FIRST_ID}" \
     '.themes.value.label | IN("strong", "good", "mixed", "weak")' \
     "expected label in strong/good/mixed/weak"
+
+  check "Property evidence returns dynamic sections" \
+    "${BASE}/api/properties/${FIRST_ID}/evidence" \
+    '.property_id != null and (.entity_refs | has("property_entity_id", "society_entity_id", "area_entity_id")) and (.sections | type == "array" and length > 0)' \
+    "expected property_id, entity_refs, and non-empty sections"
+
+  check "Property detail includes canonical evidence read model" \
+    "${BASE}/api/properties/${FIRST_ID}" \
+    '.evidence.property_id == .property.id and (.evidence.sections | type == "array" and length > 0)' \
+    "expected property detail to expose evidence.sections for one-call UI rendering"
+
+  check "Property evidence sections have render fields" \
+    "${BASE}/api/properties/${FIRST_ID}/evidence" \
+    '.sections | all(has("kind", "title", "summary", "priority", "confidence_pct", "source_types", "entity_ids", "items", "missing"))' \
+    "expected each evidence section to be UI-renderable"
+
+  check_post "Property evidence batch returns matching result" \
+    "${BASE}/api/properties/evidence/batch" \
+    "{\"property_ids\":[\"${FIRST_ID}\"],\"limit\":1}" \
+    '(.results | length == 1) and (.results[0].sections | type == "array") and (.missing_property_ids | length == 0)' \
+    "expected one evidence result and no missing ids"
 else
   echo "  $(red "✗") Skipping detail tests — no property ID available"
   FAIL=$((FAIL + 1))
@@ -175,6 +253,16 @@ check "Empty search returns empty results" \
   '.results | length == 0' \
   "expected empty results for empty query"
 
+check "GET /api/search?q=waterford returns Prestige Waterford" \
+  "${BASE}/api/search?q=waterford" \
+  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
+  "expected society-name recall for waterford"
+
+check "GET /api/search?q=wateford tolerates typo" \
+  "${BASE}/api/search?q=wateford" \
+  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
+  "expected fuzzy recall for wateford typo"
+
 # ── Areas ──
 echo ""
 echo "Areas"
@@ -193,23 +281,10 @@ check "Area items have required fields" \
   '.[0] | has("id", "name", "median_price_per_sqft", "trend_direction")' \
   "expected id, name, median_price_per_sqft, trend_direction"
 
-# ── Knowledge Graph ──
-echo ""
-echo "Knowledge Graph"
-check "GET /api/knowledge/stats returns counts" \
-  "${BASE}/api/knowledge/stats" \
-  '.total_nodes > 0' \
-  "expected total_nodes > 0"
-
-check "Knowledge stats has fact count" \
-  "${BASE}/api/knowledge/stats" \
-  'has("total_facts")' \
-  "expected total_facts field"
-
-check "GET /api/knowledge/nodes?type=society returns nodes" \
-  "${BASE}/api/knowledge/nodes?type=society" \
-  'length > 0' \
-  "expected society nodes"
+check "GET /api/areas/tracker returns markets" \
+  "${BASE}/api/areas/tracker" \
+  '.total_areas > 0 and (.markets | type == "array" and length > 0) and (.markets[0] | has("id", "name", "listing_count", "avg_price_per_sqft", "price_min", "price_max", "bhks", "ready_to_move", "near_metro", "top_builder", "societies", "demand_score", "recent_searches"))' \
+  "expected backend area tracker market summaries"
 
 # ── Area Detail ──
 echo ""
@@ -242,8 +317,8 @@ else
 fi
 
 # ── Society Search ──
-# Note: society search may return 503 when GOOGLE_AI_API_KEY is not set (requires Gemini).
-# We test what we can — at minimum the endpoint exists and responds.
+# Society search is local-first. Offline enrichment can improve evidence, but the
+# endpoint should not require a live LLM/API key.
 echo ""
 echo "Society Search"
 SOC_SEARCH_CODE=$(curl -s -o /tmp/oe_test_body.json -w "%{http_code}" "${BASE}/api/societies/search?q=best%20societies%20Whitefield" 2>/dev/null || echo "000")
@@ -255,8 +330,8 @@ if [[ "$SOC_SEARCH_CODE" == "200" ]]; then
     '.results | type == "array"' \
     "expected results array"
 elif [[ "$SOC_SEARCH_CODE" == "503" ]]; then
-  PASS=$((PASS + 1))
-  printf "  %s Society search returns 503 (Gemini API key not set — expected)\n" "$(green "✓")"
+  FAIL=$((FAIL + 1))
+  printf "  %s Society search returned 503; local search should not require live Gemini\n" "$(red "✗")"
 else
   FAIL=$((FAIL + 1))
   printf "  %s Society search — unexpected HTTP %s\n" "$(red "✗")" "$SOC_SEARCH_CODE"
@@ -320,67 +395,6 @@ if [[ -n "$FIRST_ID" ]]; then
     "expected area to be null or have id+name+city"
 fi
 
-# ── Knowledge Graph: Node Detail ──
-echo ""
-echo "Knowledge Graph (deep)"
-
-FIRST_NODE_ID=$(curl -s "${BASE}/api/knowledge/nodes?type=society" 2>/dev/null | jq -r '.[0].id // empty' 2>/dev/null || echo "")
-
-if [[ -n "$FIRST_NODE_ID" ]]; then
-  check "GET /api/knowledge/nodes/:id returns node" \
-    "${BASE}/api/knowledge/nodes/${FIRST_NODE_ID}" \
-    '.id != null and .node_type != null' \
-    "expected node with id and node_type"
-
-  check "Node has facts array" \
-    "${BASE}/api/knowledge/nodes/${FIRST_NODE_ID}" \
-    '.facts | type == "array"' \
-    "expected facts array"
-
-  check "GET /api/knowledge/nodes/:id/neighbors returns array" \
-    "${BASE}/api/knowledge/nodes/${FIRST_NODE_ID}/neighbors" \
-    'type == "array"' \
-    "expected neighbors array"
-
-  check "GET /api/knowledge/nodes/:id/similar returns array" \
-    "${BASE}/api/knowledge/nodes/${FIRST_NODE_ID}/similar?top_n=3" \
-    'type == "array"' \
-    "expected similar nodes array"
-else
-  echo "  $(red "✗") Skipping node detail tests — no node ID available"
-  FAIL=$((FAIL + 1))
-fi
-
-check "GET /api/knowledge/enrichment/queue returns array" \
-  "${BASE}/api/knowledge/enrichment/queue" \
-  'type == "array"' \
-  "expected enrichment queue array"
-
-check "GET /api/knowledge/search-log returns array" \
-  "${BASE}/api/knowledge/search-log" \
-  'type == "array"' \
-  "expected search log array"
-
-check "GET /api/knowledge/embeddings/stats returns array" \
-  "${BASE}/api/knowledge/embeddings/stats" \
-  'type == "array" and length > 0' \
-  "expected non-empty array of embedding stats"
-
-check "Embedding stats items have expected fields" \
-  "${BASE}/api/knowledge/embeddings/stats" \
-  '.[0] | has("node_type", "total", "with_embedding")' \
-  "expected node_type, total, with_embedding fields"
-
-check "GET /api/knowledge/coverage?type=society returns coverage map" \
-  "${BASE}/api/knowledge/coverage?type=society" \
-  'keys | length > 0' \
-  "expected non-empty coverage map"
-
-check "Coverage values have has/total/pct" \
-  "${BASE}/api/knowledge/coverage?type=society" \
-  'to_entries[0].value | has("has", "total", "pct")' \
-  "expected has, total, pct in coverage values"
-
 # ── Shortlist ──
 echo ""
 echo "Shortlist"
@@ -399,16 +413,6 @@ if [[ "$PROP_COUNT" -gt 0 ]]; then
 else
   FAIL=$((FAIL + 1))
   printf "  %s Properties count is 0 or unavailable\n" "$(red "✗")"
-fi
-
-KG_NODES=$(curl -s "${BASE}/api/knowledge/stats" 2>/dev/null | jq '.total_nodes // 0' 2>/dev/null || echo "0")
-KG_FACTS=$(curl -s "${BASE}/api/knowledge/stats" 2>/dev/null | jq '.total_facts // 0' 2>/dev/null || echo "0")
-if [[ "$KG_NODES" -gt 0 && "$KG_FACTS" -gt 0 ]]; then
-  PASS=$((PASS + 1))
-  printf "  %s KG has %s nodes, %s facts\n" "$(green "✓")" "$KG_NODES" "$KG_FACTS"
-else
-  FAIL=$((FAIL + 1))
-  printf "  %s KG nodes=%s facts=%s (expected both > 0)\n" "$(red "✗")" "$KG_NODES" "$KG_FACTS"
 fi
 
 # ── Summary ──

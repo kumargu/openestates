@@ -1,0 +1,10 @@
+{
+  "id": "local_society_photo_collection",
+  "enabled": true,
+  "target_images": 8,
+  "source_skill": "fetch_images",
+  "storage_path_template": "frontend/public/societies/{society_slug}/{index}.{ext}",
+  "public_url_template": "/societies/{society_slug}/{index}.{ext}",
+  "skip_env": "OPENESTATES_SKIP_LOCAL_SOCIETY_PHOTO_COLLECTION",
+  "reason": "Keep curated high-quality society photos in the same DAG media abstraction and fill missing local gallery slots offline."
+}

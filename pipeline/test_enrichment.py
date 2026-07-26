@@ -7,7 +7,7 @@ Usage:
 Checks:
   1. All entities exist on disk
   2. Minimum fact counts per entity type
-  3. Required facts present per type (e.g., areas must have metro_status)
+  3. Required facts present per type (e.g., areas must have metro_access)
   4. No empty/null fact values
   5. Embeddings present and correct dimensionality
   6. Source provenance is valid
@@ -40,8 +40,8 @@ REQUIRED_FACTS = {
     "area": [
         # Bootstrap facts
         "city", "median_price_per_sqft",
-        # Enrichment facts (from learn_area)
-        "metro_status", "traffic_reality", "waterlogging_risk",
+        # Area intelligence facts
+        "metro_access", "traffic_reality", "waterlogging_risk",
         "price_trend", "livability_summary",
     ],
     "society": [
@@ -60,7 +60,16 @@ EXPECTED_FACTS = {
     "society": ["google_rating", "google_sentiment"],
 }
 
-VALID_SOURCE_TYPES = {"Manual", "Reddit", "Google", "Rera", "Bbmp", "News", "Computed", "Llm"}
+VALID_SOURCE_TYPES = {
+    "Manual",
+    "Reddit",
+    "Google",
+    "Rera",
+    "Bbmp",
+    "News",
+    "Computed",
+    "Llm",  # Legacy KG compatibility only; active enrichment should not emit this.
+}
 VALID_VALUE_TYPES = {"Text", "Numeric", "Bool", "Tags", "Score"}
 
 

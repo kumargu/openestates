@@ -1,0 +1,199 @@
+{
+  "version": 1,
+  "description": "Buyer-facing surfaces map to leaf sets. One signal, one primary surface.",
+  "surfaces": [
+    {
+      "id": "around_this_home",
+      "title": "Around this home",
+      "kicker": "Neighborhood plate",
+      "leaf_keys": [
+        "nearby_schools",
+        "nearby_metro_stations",
+        "nearby_hospitals",
+        "nearby_fitness",
+        "nearby_tech_parks",
+        "environment.groundwater_potential_class"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society nearby_* attributions -> place:google:*"
+      ],
+      "components": [
+        "AroundThisHomePlate",
+        "search_chip:nearby"
+      ],
+      "primary_entity": "society"
+    },
+    {
+      "id": "approach_road",
+      "title": "Approach road",
+      "kicker": "Access proof",
+      "leaf_keys": [
+        "risk.approach_road_traffic",
+        "risk.approach_road_waterlogging"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society \u2192 served_by_road \u2192 road_segment"
+      ],
+      "components": [
+        "ApproachRoadTrail",
+        "livability_brief:risk",
+        "search_chip:approach_road"
+      ],
+      "primary_entity": "road_segment"
+    },
+    {
+      "id": "water_context",
+      "title": "Water context",
+      "kicker": "Environmental proof",
+      "leaf_keys": [
+        "environment.groundwater_potential_class",
+        "environment.water_body_distance_m",
+        "resilience.rainwater_harvesting_present"
+      ],
+      "traversal": [
+        "property -> in_society -> society",
+        "society -> in_area -> area"
+      ],
+      "components": [
+        "AroundThisHomePlate",
+        "EvidenceStack:water_context",
+        "livability_brief:risk",
+        "search_chip:water_context"
+      ],
+      "primary_entity": "society"
+    },
+    {
+      "id": "water_supply",
+      "title": "Water supply",
+      "kicker": "Operating proof",
+      "leaf_keys": [
+        "operating.bwssb_unknown",
+        "operating.power_backup",
+        "operating.power_wiring_issue",
+        "operating.summer_water_shortage",
+        "operating.tanker_dependence",
+        "operating.utility_outage",
+        "operating.water_source",
+        "operating.water_supply_good",
+        "positive.stable_water",
+        "risk.approach_road_waterlogging",
+        "risk.basement_seepage",
+        "risk.rajakaluve_proximity"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society",
+        "society \u2192 in_area \u2192 area"
+      ],
+      "components": [
+        "livability_brief:operating",
+        "search_chip:water_issues"
+      ],
+      "primary_entity": "society"
+    },
+    {
+      "id": "flooding",
+      "title": "Flooding & drainage",
+      "kicker": "Risk proof",
+      "leaf_keys": [
+        "risk.approach_road_waterlogging",
+        "risk.basement_seepage",
+        "risk.nala_nearby",
+        "risk.open_drain_nearby",
+        "risk.rajakaluve_proximity"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society",
+        "society \u2192 served_by_road \u2192 road_segment"
+      ],
+      "components": [
+        "livability_brief:risk",
+        "search_chip:waterlogging"
+      ],
+      "primary_entity": "road_segment"
+    },
+    {
+      "id": "legal_rera",
+      "title": "Legal & RERA",
+      "kicker": "Regulatory proof",
+      "leaf_keys": [
+        "legal.ekhata_issue",
+        "legal.kharab_land",
+        "legal.litigation",
+        "legal.oc_status",
+        "legal.sale_agreement_clause",
+        "legal.seller_documentation_delay",
+        "legal.title_clear",
+        "legal.uds_mismatch",
+        "lifecycle.builder_reputation_negative",
+        "operating.association_responsiveness"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society \u2192 built_by \u2192 builder"
+      ],
+      "components": [
+        "EvidenceStack:legal",
+        "TrustBadge",
+        "search_chip:legal_safety"
+      ],
+      "primary_entity": "society"
+    },
+    {
+      "id": "home_state",
+      "title": "Delivery & OC",
+      "kicker": "Lifecycle proof",
+      "leaf_keys": [
+        "legal.oc_status",
+        "lifecycle.amenity_delivery",
+        "lifecycle.builder_delay",
+        "operating.construction_quality",
+        "risk.construction_dust"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society"
+      ],
+      "components": [
+        "ProjectStatusTag",
+        "livability_brief:lifecycle",
+        "search_chip:delivered"
+      ],
+      "primary_entity": "society"
+    },
+    {
+      "id": "livability_positive",
+      "title": "Living positives",
+      "kicker": "Resident proof",
+      "leaf_keys": [
+        "operating.power_backup",
+        "operating.water_supply_good",
+        "positive.stable_water",
+        "legal.title_clear",
+        "positive.maintenance_quality",
+        "positive.maintenance_value",
+        "access.metro_good",
+        "access.tech_park",
+        "positive.connectivity",
+        "positive.school_access",
+        "layout.efficient",
+        "layout.parking_sufficient",
+        "layout.privacy",
+        "layout.sunlight",
+        "positive.clubhouse",
+        "positive.greenery",
+        "positive.open_space",
+        "positive.security",
+        "lifecycle.rental_demand",
+        "positive.association_responsive"
+      ],
+      "traversal": [
+        "property \u2192 in_society \u2192 society"
+      ],
+      "components": [
+        "livability_brief:positive",
+        "CommunityPulse"
+      ],
+      "primary_entity": "society"
+    }
+  ],
+  "surface_count": 7
+}

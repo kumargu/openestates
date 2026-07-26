@@ -12,9 +12,7 @@ use crate::state::AppState;
 use super::enrichment::enrich_property_card;
 
 /// GET /api/sellers — returns all sellers as SellerCards.
-pub async fn list_sellers(
-    State(state): State<Arc<AppState>>,
-) -> Json<Vec<SellerCard>> {
+pub async fn list_sellers(State(state): State<Arc<AppState>>) -> Json<Vec<SellerCard>> {
     let sellers = state.sellers.read().await;
     let cards: Vec<SellerCard> = sellers.iter().map(|s| s.to_card()).collect();
     Json(cards)
@@ -54,17 +52,14 @@ pub async fn get_seller(
     Path(id): Path<String>,
 ) -> Result<Json<SellerDetail>, (StatusCode, Json<SellerError>)> {
     let sellers = state.sellers.read().await;
-    let seller = sellers
-        .iter()
-        .find(|s| s.id == id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(SellerError {
-                    error: format!("seller '{}' not found", id),
-                }),
-            )
-        })?;
+    let seller = sellers.iter().find(|s| s.id == id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(SellerError {
+                error: format!("seller '{}' not found", id),
+            }),
+        )
+    })?;
 
     let graph = state.knowledge.read().await;
     let properties_lock = state.properties.read().await;
@@ -73,6 +68,7 @@ pub async fn get_seller(
         .property_ids
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
+        .filter(|property| property.is_listable())
         .map(|p| enrich_property_card(p, &state.societies, &graph))
         .collect();
 
@@ -152,17 +148,14 @@ pub async fn get_seller_dashboard(
     Path(id): Path<String>,
 ) -> Result<Json<SellerDashboard>, (StatusCode, Json<SellerError>)> {
     let sellers = state.sellers.read().await;
-    let seller = sellers
-        .iter()
-        .find(|s| s.id == id)
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(SellerError {
-                    error: format!("seller '{}' not found", id),
-                }),
-            )
-        })?;
+    let seller = sellers.iter().find(|s| s.id == id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(SellerError {
+                error: format!("seller '{}' not found", id),
+            }),
+        )
+    })?;
 
     let graph = state.knowledge.read().await;
     let properties_lock = state.properties.read().await;
@@ -172,6 +165,7 @@ pub async fn get_seller_dashboard(
         .property_ids
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
+        .filter(|property| property.is_listable())
         .map(|p| enrich_property_card(p, &state.societies, &graph))
         .collect();
 

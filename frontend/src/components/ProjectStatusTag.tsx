@@ -4,13 +4,18 @@
  * falls back to possession_status from seed data.
  */
 
+import {
+  resolveBuyerProjectStatus,
+  type BuyerProjectStatusKey,
+} from "../lib/projectStatus.ts";
+
 type ProjectStatusTagProps = {
   status?: string;
   displayText?: string;
   possessionStatus?: string;
 };
 
-const STATUS_COLORS: Record<string, { bg: string; color: string; border: string }> = {
+const STATUS_COLORS: Record<BuyerProjectStatusKey, { bg: string; color: string; border: string }> = {
   ready_to_move: { bg: "#f0fdf4", color: "#15803d", border: "#bbf7d0" },
   under_construction: { bg: "#eff6ff", color: "#1d4ed8", border: "#bfdbfe" },
   new_launch: { bg: "#faf5ff", color: "#7c3aed", border: "#ddd6fe" },
@@ -18,43 +23,10 @@ const STATUS_COLORS: Record<string, { bg: string; color: string; border: string 
   upcoming: { bg: "#f9fafb", color: "#6b7280", border: "#e5e7eb" },
 };
 
-// Map possession_status values from seed data to status keys
-function normalizePossessionStatus(ps: string): string {
-  const lower = ps.toLowerCase().replace(/[_\s-]+/g, "_");
-  if (lower === "ready" || lower === "ready_to_move") return "ready_to_move";
-  if (lower.includes("construction") || lower === "under_construction") return "under_construction";
-  if (lower.includes("new_launch") || lower === "new_launch") return "new_launch";
-  if (lower.includes("delay")) return "delayed";
-  if (lower.includes("upcoming")) return "upcoming";
-  return lower;
-}
-
-// Fallback display text when display_template is not available
-function fallbackDisplayText(status: string): string {
-  switch (status) {
-    case "ready_to_move": return "Ready to move";
-    case "under_construction": return "Under construction";
-    case "new_launch": return "New launch";
-    case "delayed": return "Delayed";
-    case "upcoming": return "Upcoming";
-    default: return status.replace(/_/g, " ");
-  }
-}
-
 export function ProjectStatusTag({ status, displayText, possessionStatus }: ProjectStatusTagProps) {
-  // Determine the status key for coloring
-  const statusKey = status
-    ? status
-    : possessionStatus
-      ? normalizePossessionStatus(possessionStatus)
-      : null;
-
-  if (!statusKey) return null;
-
-  // Determine the display text
-  const text = displayText || fallbackDisplayText(statusKey);
-
-  const colors = STATUS_COLORS[statusKey] || STATUS_COLORS["upcoming"];
+  const resolved = resolveBuyerProjectStatus({ status, displayText, possessionStatus });
+  if (!resolved) return null;
+  const colors = STATUS_COLORS[resolved.key];
 
   return (
     <span
@@ -72,7 +44,7 @@ export function ProjectStatusTag({ status, displayText, possessionStatus }: Proj
         lineHeight: 1.4,
       }}
     >
-      {text}
+      {resolved.label}
     </span>
   );
 }

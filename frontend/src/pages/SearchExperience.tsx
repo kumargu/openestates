@@ -1,0 +1,519 @@
+/**
+ * Results page with backend search integration.
+ * In local development, the API layer can serve checked-in fixtures when the
+ * Rust backend is unavailable so product review does not render a blank shell.
+ */
+import { useEffect, useState, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
+import type {
+  PropertyCard as PropertyCardType,
+  SearchResponse,
+  SearchAreaContext,
+  MatchExplanation,
+  SearchResultItem,
+} from "../lib/types.ts";
+import { getProperties, searchProperties } from "../lib/api.ts";
+import type { MatchResult } from "../lib/search.ts";
+import { PageState } from "../components/PageState.tsx";
+import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
+import { addRecentSearch } from "../lib/recent-searches.ts";
+import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.tsx";
+import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
+import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
+
+/* ---------- Area Context Bar ---------- */
+
+function isEnriched(text: string | undefined): boolean {
+  if (!text) return false;
+  return !text.toLowerCase().includes("not yet enriched") && !text.toLowerCase().includes("not assessed");
+}
+
+// Extract a compact signal from verbose summary text
+function extractSignal(text: string): string {
+  // Take first sentence only, cap at 60 chars
+  const first = text.split(/\.\s/)[0].replace(/\.$/, "");
+  if (first.length <= 60) return first;
+  return first.slice(0, 57).replace(/\s+\S*$/, "") + "...";
+}
+
+type AreaSignal = {
+  icon: string;
+  label: string;
+  detail: string;
+  sentiment: "positive" | "neutral" | "caution";
+};
+
+function deriveAreaSignals(ctx: SearchAreaContext): AreaSignal[] {
+  const signals: AreaSignal[] = [];
+
+  // Metro
+  if (isEnriched(ctx.metro_access_summary)) {
+    const text = ctx.metro_access_summary.toLowerCase();
+    const hasMetro = text.includes("operational") || text.includes("metro station");
+    signals.push({
+      icon: "\u{1F687}",
+      label: hasMetro ? "Metro access" : "Metro planned",
+      detail: extractSignal(ctx.metro_access_summary),
+      sentiment: hasMetro ? "positive" : "neutral",
+    });
+  }
+
+  // Traffic
+  if (isEnriched(ctx.traffic_summary)) {
+    const text = ctx.traffic_summary.toLowerCase();
+    const severe = text.includes("severe") || text.includes("notorious") || text.includes("heavy");
+    signals.push({
+      icon: "\u{1F697}",
+      label: severe ? "Heavy traffic" : "Moderate traffic",
+      detail: extractSignal(ctx.traffic_summary),
+      sentiment: severe ? "caution" : "neutral",
+    });
+  }
+
+  // Waterlogging
+  if (isEnriched(ctx.waterlogging_summary)) {
+    const text = ctx.waterlogging_summary.toLowerCase();
+    const risk = text.includes("waterlogging") || text.includes("flooding");
+    if (risk) {
+      signals.push({
+        icon: "\u{1F4A7}",
+        label: "Waterlogging risk",
+        detail: extractSignal(ctx.waterlogging_summary),
+        sentiment: "caution",
+      });
+    }
+  }
+
+  // Livability
+  if (isEnriched(ctx.livability_summary)) {
+    signals.push({
+      icon: "\u{2728}",
+      label: "Livability",
+      detail: extractSignal(ctx.livability_summary),
+      sentiment: "positive",
+    });
+  }
+
+  return signals;
+}
+
+const SENTIMENT_STYLES: Record<string, { bg: string; color: string; border: string }> = {
+  positive: { bg: "rgba(42,122,42,0.06)", color: "#2a7a2a", border: "rgba(42,122,42,0.12)" },
+  neutral: { bg: "rgba(0,0,0,0.03)", color: "#555", border: "rgba(0,0,0,0.06)" },
+  caution: { bg: "rgba(180,100,20,0.06)", color: "#8a6d00", border: "rgba(180,100,20,0.12)" },
+};
+
+function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
+  const signals = deriveAreaSignals(ctx);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  // Collect externality tags, skip duplicates with signals
+  const tags = (ctx.externality_tags ?? []).slice(0, 5);
+
+  return (
+    <div
+      className="section-card"
+      style={{ padding: "0.85rem 1.25rem", marginBottom: "1.25rem" }}
+    >
+      {/* Header row: area name + price + trend */}
+      <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: signals.length > 0 || tags.length > 0 ? "0.65rem" : 0, flexWrap: "wrap" }}>
+        <h2 style={{ margin: 0, fontSize: "1rem", fontWeight: 600, color: "var(--color-text)", letterSpacing: "-0.01em" }}>
+          {ctx.name}
+        </h2>
+        {ctx.median_price_per_sqft > 0 && (
+          <span style={{
+            fontSize: "0.82rem",
+            fontWeight: 600,
+            color: "var(--color-text)",
+            padding: "0.15rem 0.5rem",
+            borderRadius: "6px",
+            backgroundColor: "rgba(0,0,0,0.04)",
+          }}>
+            {ctx.median_price_per_sqft.toLocaleString("en-IN")} /sqft
+          </span>
+        )}
+        {ctx.trend_direction && isEnriched(ctx.trend_direction) && (
+          <span style={{
+            fontSize: "0.75rem",
+            fontWeight: 500,
+            color: ctx.trend_direction === "up" ? "#2a7a2a" : ctx.trend_direction === "down" ? "#b33" : "#888",
+          }}>
+            {ctx.trend_direction === "up" ? "\u2197" : ctx.trend_direction === "down" ? "\u2198" : "\u2192"} {ctx.trend_direction}
+          </span>
+        )}
+        {ctx.community_notes && isEnriched(ctx.community_notes) && (
+          <span style={{ fontSize: "0.8rem", color: "var(--color-text-muted)", fontStyle: "italic" }}>
+            {ctx.community_notes.length > 80 ? ctx.community_notes.slice(0, 77).replace(/\s+\S*$/, "") + "..." : ctx.community_notes}
+          </span>
+        )}
+      </div>
+
+      {/* Signal chips — scannable, no paragraphs */}
+      {signals.length > 0 && (
+        <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap", marginBottom: tags.length > 0 ? "0.5rem" : 0 }}>
+          {signals.map((s, i) => {
+            const style = SENTIMENT_STYLES[s.sentiment];
+            const isHovered = hoveredIdx === i;
+            return (
+              <div
+                key={s.label}
+                onMouseEnter={() => setHoveredIdx(i)}
+                onMouseLeave={() => setHoveredIdx(null)}
+                style={{
+                  position: "relative",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  padding: "0.3rem 0.65rem",
+                  borderRadius: "8px",
+                  fontSize: "0.78rem",
+                  fontWeight: 500,
+                  backgroundColor: style.bg,
+                  color: style.color,
+                  border: `1px solid ${style.border}`,
+                  cursor: "default",
+                  transition: "box-shadow 0.15s",
+                  boxShadow: isHovered ? "0 2px 8px rgba(0,0,0,0.08)" : "none",
+                }}
+              >
+                <span style={{ fontSize: "0.85rem" }}>{s.icon}</span>
+                {s.label}
+                {/* Tooltip on hover */}
+                {isHovered && (
+                  <div style={{
+                    position: "absolute",
+                    bottom: "calc(100% + 6px)",
+                    left: "50%",
+                    transform: "translateX(-50%)",
+                    padding: "0.5rem 0.75rem",
+                    borderRadius: "8px",
+                    backgroundColor: "#1a1a1a",
+                    color: "#eee",
+                    fontSize: "0.75rem",
+                    lineHeight: 1.4,
+                    whiteSpace: "nowrap",
+                    maxWidth: "280px",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    zIndex: 10,
+                    pointerEvents: "none",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                  }}>
+                    {s.detail}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Infrastructure/externality tags */}
+      {tags.length > 0 && (
+        <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+          {tags.map((t) => (
+            <span key={t} className="tag tag-neutral" style={{ fontSize: "0.7rem" }}>{t}</span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Landing search experience ---------- */
+
+type SearchExperienceProps = {
+  onSearchCommit?: (query: string) => void;
+};
+
+export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
+  const [properties, setProperties] = useState<PropertyCardType[]>([]);
+  const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
+  const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
+  const [searchFailed, setSearchFailed] = useState(false);
+  const [panelPropertyId, setPanelPropertyId] = useState<string | null>(null);
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const query = searchParams.get("q") || "";
+  const areaFilter = searchParams.get("area") || "";
+
+  useEffect(() => {
+    if (searchParams.get("view") === "saved") {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("view");
+      setSearchParams(nextParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
+
+  const setQueryPreservingView = (nextQuery: string) => {
+    const nextParams = new URLSearchParams();
+    if (nextQuery) nextParams.set("q", nextQuery);
+    setSearchParams(nextParams);
+  };
+
+  // When there's a search query, call the backend search API.
+  // When there's no query, load all properties.
+  // The API layer owns the development fixture fallback when the backend is down.
+  useEffect(() => {
+    let cancelled = false;
+
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setSearchResponse(null);
+      setSearchFailed(false);
+    });
+
+    if (query) {
+      addRecentSearch(query);
+      onSearchCommit?.(query);
+      searchProperties(query)
+        .then((data) => {
+          if (cancelled) return;
+          setSearchResponse(data);
+          setStatus("ok");
+        })
+        .catch(() => {
+          if (cancelled) return;
+          setSearchFailed(true);
+          setStatus("error");
+        });
+    } else {
+      getProperties()
+        .then((data) => {
+          if (cancelled) return;
+          setProperties(data);
+          setStatus("ok");
+        })
+        .catch(() => {
+          if (!cancelled) setStatus("error");
+        });
+    }
+    return () => {
+      cancelled = true;
+    };
+  }, [query, onSearchCommit]);
+
+  const hasQuery = query.trim().length > 0;
+  const useBackendResults = hasQuery && searchResponse !== null && !searchFailed;
+  const waitingForSearchResults = hasQuery && searchResponse === null && !searchFailed;
+
+  // Apply area filter client-side (from homepage area card clicks)
+  const filtered = useMemo(() => {
+    if (!areaFilter) return properties;
+    const filter = areaFilter.toLowerCase();
+    return properties.filter((p) => p.area.toLowerCase().includes(filter));
+  }, [properties, areaFilter]);
+
+  const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
+    if (useBackendResults) {
+      return searchResponse.results.map((r) => ({
+        property: r as PropertyCardType,
+        match: {
+          label: r.match_label as MatchResult["label"],
+          reason: r.match_reason,
+        },
+        explanation: r.match_explanation,
+      }));
+    }
+    if (hasQuery) return [];
+    // No query — show all properties without match labels
+    return filtered.map((p) => ({ property: p }));
+  }, [hasQuery, useBackendResults, searchResponse, filtered]);
+
+  const propertiesById = useMemo(() => {
+    const next = new Map<string, PropertyCardType>();
+    for (const property of properties) next.set(property.id, property);
+    for (const { property } of matchResults) next.set(property.id, property);
+    return next;
+  }, [matchResults, properties]);
+
+  const universeResults: SearchResultItem[] = useMemo(() => {
+    if (useBackendResults && searchResponse) return searchResponse.results;
+    if (hasQuery) return [];
+    return filtered.map((property) => ({
+      ...property,
+      match_score: 0,
+      match_label: "Browse",
+      match_reason: "In catalog",
+    }));
+  }, [hasQuery, useBackendResults, searchResponse, filtered]);
+
+  const propertyIds = useMemo(
+    () => universeResults.map((result) => result.id),
+    [universeResults],
+  );
+  const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
+
+  const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
+  const totalCount = useBackendResults ? searchResponse.total_results : hasQuery ? 0 : filtered.length;
+  const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
+  const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
+  const intent = useBackendResults ? searchResponse.intent : null;
+  const containerClass = "inline-results-shell";
+
+  if (status === "loading") return (
+    <div className={containerClass}>
+      <div className="results-grid">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="skeleton-card">
+            <div className="skeleton-card-image skeleton-bar" />
+            <div className="skeleton-card-body">
+              <div className="skeleton-card-title skeleton-bar" />
+              <div className="skeleton-card-location skeleton-bar" />
+              <div className="skeleton-card-price skeleton-bar" />
+              <div className="skeleton-card-tags">
+                <div className="skeleton-card-tag skeleton-bar" />
+                <div className="skeleton-card-tag skeleton-bar" />
+                <div className="skeleton-card-tag skeleton-bar" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+  if (status === "error") {
+    return (
+      <div className={containerClass}>
+        <PageState variant="error" context="results" />
+      </div>
+    );
+  }
+
+  const hardConstraints = intent?.hard_constraints ?? [];
+  const hardConstraintLabels = hardConstraints.map((constraint) => constraint.raw_text);
+
+  const helmetTitle = query
+    ? `${query} — Property Search | OpenEstates`
+    : "All Properties — OpenEstates";
+  const helmetDescription = query
+    ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
+    : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
+
+  const renderTile = (result: SearchResultItem) => (
+    <LivingEvidenceTile
+      property={result}
+      onQuickView={setPanelPropertyId}
+    />
+  );
+
+  return (
+    <div className={containerClass}>
+      <Helmet>
+        <title>{helmetTitle}</title>
+        <meta name="description" content={helmetDescription} />
+        <meta property="og:title" content={helmetTitle} />
+        <meta property="og:description" content={helmetDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content="OpenEstates" />
+      </Helmet>
+
+      {/* Accessible live region — announces result count to screen readers */}
+      <div aria-live="polite" className="sr-only">
+        {query
+          ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
+          : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
+      </div>
+
+      {/* Deprecated compatibility banner; backend no longer performs request-time discovery. */}
+      {discoveryStatus === "discovered_new" && discoveryCount && discoveryCount > 0 && (
+        <div
+          className="section-card"
+          style={{
+            padding: "0.85rem 1.25rem",
+            marginBottom: "1.25rem",
+            background: "linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)",
+            border: "1px solid #bbf7d0",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5" />
+              <path d="M2 12l10 5 10-5" />
+            </svg>
+            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#15803d" }}>
+              {discoveryCount} new {discoveryCount === 1 ? "match" : "matches"}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Area context bar — shown when backend search returns area info */}
+      {areaContext && <AreaContextBar ctx={areaContext} />}
+
+      {matchResults.length === 0 && query && !waitingForSearchResults && (
+        <div className="empty-state">
+          <h2>No properties match "{query}"</h2>
+          <p>Try broadening your search or explore one of these suggestions.</p>
+          <div className="empty-state-chips">
+            {intent?.area && (
+              <button className="empty-state-chip" onClick={() => setQueryPreservingView(intent.area!)}>
+                Just {intent.area}
+              </button>
+            )}
+            {intent?.bhk && (
+              <button className="empty-state-chip" onClick={() => {
+                const without = query.replace(/\d+\s*bhk/i, "").trim();
+                if (without) setQueryPreservingView(without);
+              }}>
+                Without BHK filter
+              </button>
+            )}
+            {["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
+              <button key={s} className="empty-state-chip" onClick={() => setQueryPreservingView(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="inline-results-clear"
+            onClick={() => setSearchParams({})}
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
+      {waitingForSearchResults ? (
+        <div className="results-grid" aria-label="Loading search results">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="skeleton-card">
+              <div className="skeleton-card-image skeleton-bar" />
+              <div className="skeleton-card-body">
+                <div className="skeleton-card-title skeleton-bar" />
+                <div className="skeleton-card-location skeleton-bar" />
+                <div className="skeleton-card-price skeleton-bar" />
+                <div className="skeleton-card-tags">
+                  <div className="skeleton-card-tag skeleton-bar" />
+                  <div className="skeleton-card-tag skeleton-bar" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <UniverseBoard
+          results={universeResults}
+          evidenceById={evidenceById}
+          renderResult={renderTile}
+        />
+      )}
+
+      {/* Side panel — quick view */}
+      {panelPropertyId && (() => {
+        const panelCard = matchResults.find(r => r.property.id === panelPropertyId)?.property ?? propertiesById.get(panelPropertyId);
+        if (!panelCard) return null;
+        return (
+          <PropertySidePanel
+            propertyId={panelPropertyId}
+            card={panelCard}
+            onClose={() => setPanelPropertyId(null)}
+          />
+        );
+      })()}
+    </div>
+  );
+}

@@ -22,6 +22,7 @@ data/context_graphs/
 
 # Environment
 .env
+.env.local
 
 # ChatGPT browser session (Playwright)
 pipeline/.chatgpt_session/
@@ -42,8 +43,14 @@ frontend/dist/
 data/reddit_cache/
 
 # Generated/cached data
+.tmp/
+tmp/
+.fastembed_cache/
 data/cache/
 data/lake/
+data/knowledge/search_log/
+data/validation/search_layered_*/
+data/validation/ui_*/
 *.bak
 
 # Pipeline checkpoints and learnings

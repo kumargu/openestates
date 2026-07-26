@@ -1,45 +1,66 @@
-//! Search quality tests — realistic customer queries against the real knowledge graph.
+//! Search quality tests — realistic customer queries against the serving bundle.
 //!
 //! Run with: cargo test -p backend --test search_quality -- --nocapture
 //!
-//! These tests load the actual knowledge graph and properties, fire queries
+//! These tests load the promoted serving bundle and properties, fire queries
 //! that real customers would type, and evaluate whether the search system
 //! returns sensible, well-ranked, well-explained results.
 
 use std::collections::HashMap;
 use std::path::Path;
 
-use backend::knowledge::{self, store as kg_store};
+use backend::knowledge;
 use backend::models::{Property, Society};
 use backend::search::intent::parse_intent;
-use backend::search::TextSearch;
+use backend::search::{SearchIndex, TextSearch};
 
-/// Load real KG + derive properties and societies for testing.
-fn load_test_data() -> (Vec<Property>, Vec<Society>, knowledge::KnowledgeGraph, HashMap<String, String>) {
+/// Load the promoted serving bundle and derive request-path data for testing.
+fn load_test_data() -> (
+    Vec<Property>,
+    Vec<Society>,
+    knowledge::KnowledgeGraph,
+    HashMap<String, String>,
+    SearchIndex,
+) {
     let project_root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap();
-    let kg_dir = kg_store::knowledge_dir(project_root);
-    let graph = kg_store::load_graph(&kg_dir).expect("Knowledge graph must exist for search quality tests");
-
-    let societies = backend::data_loader::societies_from_graph(&graph);
-    let properties = backend::data_loader::properties_from_graph(&graph);
+    let runtime = tokio::runtime::Runtime::new().expect("tokio runtime");
+    let bundle = runtime
+        .block_on(backend::data_loader::load_serving_bundle(project_root))
+        .expect("serving bundle loader should run")
+        .expect("promoted serving bundle must exist for search quality tests");
+    let graph = knowledge::KnowledgeGraph::new();
+    let societies = backend::data_loader::societies_from_serving_bundle(&bundle);
+    let properties = backend::data_loader::properties_from_serving_bundle(&bundle);
 
     let society_names: HashMap<String, String> = societies
         .iter()
         .map(|s| (s.id.clone(), s.name.clone()))
         .collect();
 
-    (properties, societies, graph, society_names)
+    let search_index = SearchIndex::build(&properties);
+
+    (properties, societies, graph, society_names, search_index)
 }
 
-fn run_search<'a>(
+fn run_search(
     properties: &[Property],
     society_names: &HashMap<String, String>,
     societies: &[Society],
+    search_index: &SearchIndex,
     query: &str,
     graph: &knowledge::KnowledgeGraph,
 ) -> Vec<backend::search::SearchResultCard> {
     let intent = parse_intent(query);
-    TextSearch::search_with_intent(properties, society_names, societies, query, &intent, Some(graph))
+    TextSearch::search_with_index_and_intent_and_sellers(
+        properties,
+        Some(search_index),
+        society_names,
+        societies,
+        query,
+        &intent,
+        Some(graph),
+        &[],
+    )
 }
 
 /// A test query with expected behavior.
@@ -91,7 +112,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // === TIER 2: Preference-driven queries ===
         QueryTest {
             query: "ready to move 3bhk whitefield",
@@ -137,7 +157,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // === TIER 3: Builder trust queries ===
         QueryTest {
             query: "reliable builder 3bhk whitefield",
@@ -161,7 +180,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // === TIER 4: Status-specific queries ===
         QueryTest {
             query: "under construction projects in hebbal",
@@ -185,7 +203,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // === TIER 5: Complex multi-signal queries ===
         QueryTest {
             query: "peaceful green 3bhk ready to move whitefield under 2.5cr",
@@ -209,7 +226,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // === TIER 6: Edge cases ===
         QueryTest {
             query: "whitefield",
@@ -255,7 +271,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: Some("prestige"),
             min_score_threshold: 0.0,
         },
-
         // === TIER 7: Semantic/lifestyle queries (Sprint 4 enrichment targets) ===
         // These test preferences that require enriched facts from Reddit, Google
         // reviews, and society-level intelligence skills. Most will show gaps now
@@ -269,7 +284,7 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Whitefield"),
             expect_bhk: Some(3),
             expect_budget: Some(20_000_000),
-            expect_preferences: vec![],  // GAP: "family friendly" not yet a preference
+            expect_preferences: vec![], // GAP: "family friendly" not yet a preference
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
@@ -280,11 +295,10 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Bellandur"),
             expect_bhk: Some(2),
             expect_budget: None,
-            expect_preferences: vec![],  // GAP: "safe"/"gated" not yet preferences
+            expect_preferences: vec![], // GAP: "safe"/"gated" not yet preferences
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Commute & connectivity ---
         QueryTest {
             query: "walkable to metro 2bhk koramangala under 1.5cr",
@@ -297,7 +311,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Investment & resale ---
         QueryTest {
             query: "good resale value 3bhk sarjapur",
@@ -306,7 +319,7 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Sarjapur Road"),
             expect_bhk: Some(3),
             expect_budget: None,
-            expect_preferences: vec!["value for money"],  // closest current mapping
+            expect_preferences: vec!["value for money"], // closest current mapping
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
@@ -317,11 +330,10 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Whitefield"),
             expect_bhk: Some(3),
             expect_budget: None,
-            expect_preferences: vec!["ready to move"],  // "rera verified" not yet a preference
+            expect_preferences: vec!["ready to move"], // "rera verified" not yet a preference
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Society quality & maintenance ---
         QueryTest {
             query: "well maintained society 3bhk hebbal",
@@ -341,24 +353,22 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Whitefield"),
             expect_bhk: Some(3),
             expect_budget: None,
-            expect_preferences: vec!["premium"],  // GAP: "good amenities" doesn't trigger "good society"
+            expect_preferences: vec!["premium"], // GAP: "good amenities" doesn't trigger "good society"
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Waterlogging & risk ---
         QueryTest {
             query: "no waterlogging 3bhk bellandur under 2cr",
-            scenario: "ENRICHMENT TARGET: waterlogging risk from area intelligence",
+            scenario: "Negative preference — avoid waterlogging risk",
             min_results: 0,
             expect_area: Some("Bellandur"),
             expect_bhk: Some(3),
             expect_budget: Some(20_000_000),
-            expect_preferences: vec![],  // "no waterlogging" not yet a preference
+            expect_preferences: vec!["avoid waterlogging risk"],
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Natural language / conversational ---
         QueryTest {
             query: "peaceful 3bhk with park view in sarjapur under 1.8cr",
@@ -378,11 +388,10 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_area: Some("Whitefield"),
             expect_bhk: Some(3),
             expect_budget: None,
-            expect_preferences: vec!["ready to move"],  // GAP: "school" not yet a preference
+            expect_preferences: vec!["ready to move"], // GAP: "school" not yet a preference
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Comparative / competitive queries ---
         QueryTest {
             query: "sobha vs prestige 3bhk whitefield",
@@ -392,10 +401,9 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_bhk: Some(3),
             expect_budget: None,
             expect_preferences: vec![],
-            expect_society_in_results: Some("sobha"),  // at least one should show
+            expect_society_in_results: Some("sobha"), // at least one should show
             min_score_threshold: 0.0,
         },
-
         // --- High-intent buyer signals ---
         QueryTest {
             query: "immediate possession 2bhk hsr layout under 1cr",
@@ -419,7 +427,6 @@ fn customer_queries() -> Vec<QueryTest> {
             expect_society_in_results: None,
             min_score_threshold: 0.0,
         },
-
         // --- Area micro-market queries ---
         QueryTest {
             query: "3bhk varthur under 1.5cr",
@@ -467,25 +474,39 @@ fn test_intent_parsing_quality() {
         let mut errors: Vec<String> = Vec::new();
 
         if intent.area.as_deref() != qt.expect_area {
-            errors.push(format!("area: expected {:?}, got {:?}", qt.expect_area, intent.area));
+            errors.push(format!(
+                "area: expected {:?}, got {:?}",
+                qt.expect_area, intent.area
+            ));
         }
         if intent.bhk != qt.expect_bhk {
-            errors.push(format!("bhk: expected {:?}, got {:?}", qt.expect_bhk, intent.bhk));
+            errors.push(format!(
+                "bhk: expected {:?}, got {:?}",
+                qt.expect_bhk, intent.bhk
+            ));
         }
         if intent.budget_max != qt.expect_budget {
-            errors.push(format!("budget: expected {:?}, got {:?}", qt.expect_budget, intent.budget_max));
+            errors.push(format!(
+                "budget: expected {:?}, got {:?}",
+                qt.expect_budget, intent.budget_max
+            ));
         }
         for pref in &qt.expect_preferences {
             if !intent.preferences.contains(&pref.to_string()) {
-                errors.push(format!("missing preference '{}' (got: {:?})", pref, intent.preferences));
+                errors.push(format!(
+                    "missing preference '{}' (got: {:?})",
+                    pref, intent.preferences
+                ));
             }
         }
 
         if errors.is_empty() {
             pass += 1;
             println!("  PASS  \"{}\"", qt.query);
-            println!("        -> area={:?} bhk={:?} budget={:?} prefs={:?}",
-                intent.area, intent.bhk, intent.budget_max, intent.preferences);
+            println!(
+                "        -> area={:?} bhk={:?} budget={:?} prefs={:?}",
+                intent.area, intent.bhk, intent.budget_max, intent.preferences
+            );
         } else {
             fail += 1;
             println!("  FAIL  \"{}\" ({})", qt.query, qt.scenario);
@@ -507,13 +528,17 @@ fn test_intent_parsing_quality() {
 
 #[test]
 fn test_search_result_quality() {
-    let (properties, societies, graph, society_names) = load_test_data();
+    let (properties, societies, graph, society_names, search_index) = load_test_data();
 
     println!();
     println!("================================================================================");
     println!("  SEARCH RESULT QUALITY REPORT");
-    println!("  Properties: {}, Societies: {}, Graph nodes: {}",
-        properties.len(), societies.len(), graph.stats().total_nodes);
+    println!(
+        "  Properties: {}, Societies: {}, Graph nodes: {}",
+        properties.len(),
+        societies.len(),
+        graph.stats().total_nodes
+    );
     println!("================================================================================");
     println!();
 
@@ -524,22 +549,33 @@ fn test_search_result_quality() {
 
     for qt in &queries {
         let intent = parse_intent(qt.query);
-        let results = TextSearch::search_with_intent(
-            &properties, &society_names, &societies, qt.query, &intent, Some(&graph),
+        let results = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            qt.query,
+            &graph,
         );
 
         let mut issues: Vec<String> = Vec::new();
 
         // Check minimum results
         if results.len() < qt.min_results {
-            issues.push(format!("expected >= {} results, got {}", qt.min_results, results.len()));
+            issues.push(format!(
+                "expected >= {} results, got {}",
+                qt.min_results,
+                results.len()
+            ));
         }
 
         // Check score threshold
         for (i, r) in results.iter().enumerate() {
             if r.match_score < qt.min_score_threshold {
-                issues.push(format!("result #{} score {:.2} below threshold {:.2}",
-                    i, r.match_score, qt.min_score_threshold));
+                issues.push(format!(
+                    "result #{} score {:.2} below threshold {:.2}",
+                    i, r.match_score, qt.min_score_threshold
+                ));
             }
         }
 
@@ -551,8 +587,11 @@ fn test_search_result_quality() {
                     || r.card.builder_name.to_lowercase().contains(expected_soc)
             });
             if !found && !results.is_empty() {
-                issues.push(format!("expected '{}' in results, not found in {} results",
-                    expected_soc, results.len()));
+                issues.push(format!(
+                    "expected '{}' in results, not found in {} results",
+                    expected_soc,
+                    results.len()
+                ));
             }
         }
 
@@ -574,13 +613,19 @@ fn test_search_result_quality() {
             }
 
             if !results.is_empty() && graph_scored == 0 && no_data > 0 {
-                issues.push(format!("NO preference data: {} preferences had 'no_data' across all results",
-                    no_data / results.len().max(1)));
+                issues.push(format!(
+                    "NO preference data: {} preferences had 'no_data' across all results",
+                    no_data / results.len().max(1)
+                ));
             }
         }
 
         let status = if issues.is_empty() { "PASS" } else { "WARN" };
-        if issues.is_empty() { total_pass += 1; } else { total_fail += 1; }
+        if issues.is_empty() {
+            total_pass += 1;
+        } else {
+            total_fail += 1;
+        }
 
         println!("  {}  \"{}\"", status, qt.query);
         println!("        Scenario: {}", qt.scenario);
@@ -592,21 +637,36 @@ fn test_search_result_quality() {
 
         // Show top 3 results
         for (i, r) in results.iter().take(3).enumerate() {
-            let graph_pct = r.match_explanation.as_ref()
+            let graph_pct = r
+                .match_explanation
+                .as_ref()
                 .map(|e| format!("{:.0}%", e.graph_driven_pct))
                 .unwrap_or_else(|| "n/a".into());
-            let confidence = r.confidence_score.as_ref()
+            let confidence = r
+                .confidence_score
+                .as_ref()
                 .map(|c| format!("{:.0} ({})", c.overall * 100.0, c.label))
                 .unwrap_or_else(|| "n/a".into());
 
-            println!("        #{}: {} | score={:.2} | graph={} | confidence={}",
-                i + 1, r.card.title, r.match_score, graph_pct, confidence);
+            println!(
+                "        #{}: {} | score={:.2} | graph={} | confidence={}",
+                i + 1,
+                r.card.title,
+                r.match_score,
+                graph_pct,
+                confidence
+            );
 
             if let Some(ref expl) = r.match_explanation {
                 for reason in &expl.reasons {
-                    println!("             {} -> {} [{}] (conf={:.1}, src={})",
-                        reason.preference, reason.display, reason.scoring_method,
-                        reason.confidence, reason.source_type);
+                    println!(
+                        "             {} -> {} [{}] (conf={:.1}, src={})",
+                        reason.preference,
+                        reason.display,
+                        reason.scoring_method,
+                        reason.confidence,
+                        reason.source_type
+                    );
                 }
                 for cov in &expl.preference_coverage {
                     if cov.status == "no_data" {
@@ -625,7 +685,11 @@ fn test_search_result_quality() {
 
     // === Summary ===
     println!("================================================================================");
-    println!("  SUMMARY: {}/{} queries passed quality checks", total_pass, total_pass + total_fail);
+    println!(
+        "  SUMMARY: {}/{} queries passed quality checks",
+        total_pass,
+        total_pass + total_fail
+    );
 
     if !quality_issues.is_empty() {
         println!();
@@ -641,7 +705,14 @@ fn test_search_result_quality() {
     let mut total_with_explanation = 0;
 
     for qt in &queries {
-        let results = run_search(&properties, &society_names, &societies, qt.query, &graph);
+        let results = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            qt.query,
+            &graph,
+        );
         total_results += results.len();
         for r in &results {
             if let Some(ref expl) = r.match_explanation {
@@ -653,7 +724,9 @@ fn test_search_result_quality() {
 
     let avg_graph = if total_with_explanation > 0 {
         total_graph_driven / total_with_explanation as f64
-    } else { 0.0 };
+    } else {
+        0.0
+    };
 
     println!();
     println!("  Aggregate:");
@@ -664,11 +737,15 @@ fn test_search_result_quality() {
     println!();
 
     // Hard-fail only if queries that should have results return 0
-    let critical_failures: Vec<_> = quality_issues.iter()
+    let critical_failures: Vec<_> = quality_issues
+        .iter()
         .filter(|i| i.contains("expected >=") && i.contains("got 0"))
         .collect();
-    assert!(critical_failures.is_empty(),
-        "Critical: {} queries returned 0 results when matches were expected", critical_failures.len());
+    assert!(
+        critical_failures.is_empty(),
+        "Critical: {} queries returned 0 results when matches were expected",
+        critical_failures.len()
+    );
 }
 
 // ============================================================================
@@ -677,7 +754,7 @@ fn test_search_result_quality() {
 
 #[test]
 fn test_ranking_sanity() {
-    let (properties, societies, graph, society_names) = load_test_data();
+    let (properties, societies, graph, society_names, search_index) = load_test_data();
 
     println!();
     println!("================================================================================");
@@ -687,19 +764,41 @@ fn test_ranking_sanity() {
 
     // Test 1: Preferences should boost scores
     {
-        let results_basic = run_search(&properties, &society_names, &societies, "3bhk whitefield", &graph);
-        let results_pref = run_search(&properties, &society_names, &societies,
-            "3bhk whitefield ready to move good society", &graph);
+        let results_basic = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield",
+            &graph,
+        );
+        let results_pref = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield ready to move good society",
+            &graph,
+        );
 
         println!("  Ranking shift test: basic vs preference query");
         println!("    \"3bhk whitefield\" -> {} results", results_basic.len());
-        println!("    \"3bhk whitefield ready to move good society\" -> {} results", results_pref.len());
+        println!(
+            "    \"3bhk whitefield ready to move good society\" -> {} results",
+            results_pref.len()
+        );
 
         if results_basic.len() >= 2 && results_pref.len() >= 2 {
             let top_basic_score = results_basic[0].match_score;
             let top_pref_score = results_pref[0].match_score;
-            println!("    Basic top: {} ({:.2})", results_basic[0].card.title, top_basic_score);
-            println!("    Pref top:  {} ({:.2})", results_pref[0].card.title, top_pref_score);
+            println!(
+                "    Basic top: {} ({:.2})",
+                results_basic[0].card.title, top_basic_score
+            );
+            println!(
+                "    Pref top:  {} ({:.2})",
+                results_pref[0].card.title, top_pref_score
+            );
 
             if top_pref_score > top_basic_score {
                 println!("    PASS: Preference query boosts top score");
@@ -711,31 +810,66 @@ fn test_ranking_sanity() {
 
     // Test 2: Budget constraint filters correctly
     {
-        let results_all = run_search(&properties, &society_names, &societies, "3bhk whitefield", &graph);
-        let results_budget = run_search(&properties, &society_names, &societies, "3bhk whitefield under 1cr", &graph);
+        let results_all = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield",
+            &graph,
+        );
+        let results_budget = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield under 1cr",
+            &graph,
+        );
 
         println!();
         println!("  Budget filtering test:");
         println!("    No budget: {} results", results_all.len());
         println!("    Under 1cr: {} results", results_budget.len());
 
-        assert!(results_budget.len() <= results_all.len(), "Budget filter should not produce MORE results");
+        assert!(
+            results_budget.len() <= results_all.len(),
+            "Budget filter should not produce MORE results"
+        );
 
         for r in &results_budget {
-            assert!(r.card.price <= 10_000_000,
-                "Property {} has price {} which exceeds 1cr budget", r.card.title, r.card.price);
+            assert!(
+                r.card.price <= 10_000_000,
+                "Property {} has price {} which exceeds 1cr budget",
+                r.card.title,
+                r.card.price
+            );
         }
         println!("    PASS: Budget constraint correctly filters");
     }
 
     // Test 3: Confidence scoring coverage
     {
-        let results = run_search(&properties, &society_names, &societies, "3bhk whitefield", &graph);
-        let with_confidence = results.iter().filter(|r| r.confidence_score.is_some()).count();
+        let results = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield",
+            &graph,
+        );
+        let with_confidence = results
+            .iter()
+            .filter(|r| r.confidence_score.is_some())
+            .count();
 
         println!();
         println!("  Confidence scoring coverage:");
-        println!("    {}/{} results have confidence scores", with_confidence, results.len());
+        println!(
+            "    {}/{} results have confidence scores",
+            with_confidence,
+            results.len()
+        );
 
         if !results.is_empty() {
             let pct = (with_confidence as f64 / results.len() as f64) * 100.0;
@@ -750,8 +884,17 @@ fn test_ranking_sanity() {
 
     // Test 4: Results sorted by match_score descending
     {
-        let results = run_search(&properties, &society_names, &societies, "3bhk whitefield ready to move", &graph);
-        let sorted = results.windows(2).all(|w| w[0].match_score >= w[1].match_score);
+        let results = run_search(
+            &properties,
+            &society_names,
+            &societies,
+            &search_index,
+            "3bhk whitefield ready to move",
+            &graph,
+        );
+        let sorted = results
+            .windows(2)
+            .all(|w| w[0].match_score >= w[1].match_score);
         println!();
         if sorted {
             println!("  PASS: Results correctly sorted by match_score descending");

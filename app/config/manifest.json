@@ -1,0 +1,59 @@
+{
+  "_comment": "ROOT CONFIG INDEX. Read this first. app/config = Git schemas; data/lake = Parquet instances. See coverage.json for full audit.",
+  "version": 1,
+  "description": "OpenEstates application config root. Git is source of truth. No entity instances, no Parquet, no society/road names.",
+  "docs": {
+    "storage_layout": "docs/storage_and_config_layout.md",
+    "dag_architecture": "docs/dag_convergence_design.md",
+    "dag_execution": "docs/dag_execution_plan.md"
+  },
+  "packages": {
+    "dag": {
+      "path": "app/config/dag",
+      "manifest": "app/config/dag/manifest.json",
+      "purpose": "Control plane: ontology, leaves, asset graph, enrichment, UI surfaces, crawl policies"
+    },
+    "bootstrap": {
+      "path": "app/config/bootstrap",
+      "files": ["policy.json", "edge_inference.json"],
+      "purpose": "How importers infer nodes/edges. Output goes to lake only."
+    },
+    "lake": {
+      "path": "app/config/lake",
+      "files": ["layout.json", "sync.json"],
+      "purpose": "Parquet zone layout and S3/local sync contract"
+    },
+    "runtime": {
+      "path": "app/config/runtime",
+      "files": ["defaults.json"],
+      "purpose": "Environment variable names and local-only path defaults"
+    },
+    "product": {
+      "path": "app/config/product",
+      "files": ["discovery_home.json", "evidence_sections.json"],
+      "purpose": "Landing copy, curated shelves, property evidence panel layout"
+    },
+    "coverage": {
+      "path": "app/config/coverage.json",
+      "purpose": "Audit: what is in config vs lake vs still hardcoded in Rust"
+    }
+  },
+  "separation": {
+    "app_config": "Schemas, policies, registries — versioned in Git",
+    "data_lake": "Enriched entities, facts, edges, serving bundles — Parquet in data/lake or S3",
+    "data_cache": "Rebuildable local caches — never synced, never source of truth",
+    "data_validation": "Eval baselines and QA reports — optional, not runtime input"
+  },
+  "agent_routing": {
+    "read_first": "app/config/manifest.json",
+    "add_leaf": "app/config/dag/concern_taxonomy.json + fact_registry.json",
+    "add_entity_type": "app/config/dag/ontology.json",
+    "enrich": "app/config/dag/enrichment_targets.json",
+    "bootstrap": "app/config/bootstrap/",
+    "lake_paths": "app/config/lake/layout.json",
+    "s3_sync": "app/config/lake/sync.json",
+    "coverage_audit": "app/config/coverage.json"
+  },
+  "legacy_migrate_to_dag": [],
+  "legacy_import_only": []
+}

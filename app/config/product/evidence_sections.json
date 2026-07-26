@@ -1,0 +1,323 @@
+[
+  {
+    "kind": "home_state",
+    "priority": 5,
+    "constellation": "trust",
+    "surfaces": ["buyer_context"],
+    "title": "Lifecycle",
+    "subtitle": "Delivered, under-construction, age, and timeline facts.",
+    "scope": "society",
+    "relationship": "project lifecycle",
+    "presentation": {
+      "variant": "timeline",
+      "density": "compact",
+      "max_preview_items": 3
+    },
+    "facts": [
+      {
+        "key": "home_state",
+        "label": "Delivery state",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      },
+      {
+        "key": "home_age_bucket",
+        "label": "Age band",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      },
+      {
+        "key": "home_timeline_state",
+        "label": "Timeline",
+        "scope": "society",
+        "relationship": "project lifecycle"
+      }
+    ]
+  },
+  {
+    "kind": "rera",
+    "priority": 10,
+    "constellation": "trust",
+    "title": "RERA",
+    "subtitle": "Official project registration and delivery record.",
+    "scope": "society",
+    "relationship": "project registration",
+    "presentation": {
+      "variant": "timeline",
+      "density": "compact",
+      "max_preview_items": 4
+    },
+    "facts": [
+      { "key": "rera_number", "label": "Registration", "scope": "society", "relationship": "project registration" },
+      { "key": "rera_status", "label": "Status", "scope": "society", "relationship": "project registration" },
+      { "key": "rera_completion_date", "label": "Completion", "scope": "society", "relationship": "project registration" }
+    ]
+  },
+  {
+    "kind": "approach_road",
+    "priority": 15,
+    "constellation": "commute",
+    "surfaces": ["buyer_context"],
+    "title": "Approach road",
+    "subtitle": "Last-lane access context from reviews and visual proof.",
+    "scope": "road_segment",
+    "relationship": "gate approach",
+    "presentation": {
+      "variant": "media_grid",
+      "density": "standard",
+      "max_preview_items": 3
+    },
+    "media": ["approach_road_visuals"],
+    "facts": [
+      {
+        "key": "approach_road_visual_available",
+        "label": "Visual proof",
+        "scope": "society",
+        "relationship": "approach road"
+      },
+      {
+        "key": "approach_road_condition",
+        "label": "Review signal",
+        "scope": "society",
+        "relationship": "approach road"
+      },
+      {
+        "key": "access_road_quality",
+        "label": "Road quality",
+        "scope": "road_segment",
+        "relationship": "approach road"
+      },
+      {
+        "key": "road_width",
+        "label": "Road width",
+        "scope": "road_segment",
+        "relationship": "approach road"
+      }
+    ]
+  },
+  {
+    "kind": "market",
+    "priority": 20,
+    "constellation": "value",
+    "title": "Market trail",
+    "subtitle": "Pricing, appreciation, and nearby comparable signals.",
+    "scope": "society",
+    "relationship": "project market trail",
+    "presentation": {
+      "variant": "fact_grid",
+      "density": "standard",
+      "max_preview_items": 6
+    },
+    "facts": [
+      { "key": "listing_3bhk", "label": "3BHK listing", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_3bhk", "label": "3BHK listing price", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_range_3bhk", "label": "3BHK listing price range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_3bhk", "label": "3BHK listing area", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_range_3bhk", "label": "3BHK listing area range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_per_sqft_range_3bhk", "label": "3BHK listing rate range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_type_3bhk", "label": "3BHK area basis", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_url_3bhk", "label": "3BHK listing source", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_name_3bhk", "label": "3BHK source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_monthly_range_3bhk", "label": "3BHK monthly rent", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_area_sqft_range_3bhk", "label": "3BHK rent area", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_per_sqft_range_3bhk", "label": "3BHK rent rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_url_3bhk", "label": "3BHK rent source", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_name_3bhk", "label": "3BHK rent source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_range_1bhk", "label": "1BHK listing price range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_range_1bhk", "label": "1BHK listing area range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_per_sqft_range_1bhk", "label": "1BHK listing rate range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_url_1bhk", "label": "1BHK listing source", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_name_1bhk", "label": "1BHK source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_monthly_range_1bhk", "label": "1BHK monthly rent", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_area_sqft_range_1bhk", "label": "1BHK rent area", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_per_sqft_range_1bhk", "label": "1BHK rent rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_url_1bhk", "label": "1BHK rent source", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_name_1bhk", "label": "1BHK rent source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_range_4bhk", "label": "4BHK listing price range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_area_sqft_range_4bhk", "label": "4BHK listing area range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_price_per_sqft_range_4bhk", "label": "4BHK listing rate range", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_url_4bhk", "label": "4BHK listing source", "scope": "society", "relationship": "project market trail" },
+      { "key": "listing_source_name_4bhk", "label": "4BHK source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_monthly_range_4bhk", "label": "4BHK monthly rent", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_area_sqft_range_4bhk", "label": "4BHK rent area", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_per_sqft_range_4bhk", "label": "4BHK rent rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_url_4bhk", "label": "4BHK rent source", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_name_4bhk", "label": "4BHK rent source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_monthly_range_3_5bhk", "label": "3.5BHK monthly rent", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_area_sqft_range_3_5bhk", "label": "3.5BHK rent area", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_per_sqft_range_3_5bhk", "label": "3.5BHK rent rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_url_3_5bhk", "label": "3.5BHK rent source", "scope": "society", "relationship": "project market trail" },
+      { "key": "rent_source_name_3_5bhk", "label": "3.5BHK rent source name", "scope": "society", "relationship": "project market trail" },
+      { "key": "pricing_3bhk", "label": "3BHK pricing", "scope": "society", "relationship": "project market trail" },
+      { "key": "price_per_sqft", "label": "Market rate", "scope": "society", "relationship": "project market trail" },
+      { "key": "price_appreciation", "label": "Price movement", "scope": "society", "relationship": "project market trail" },
+      { "key": "comparable_projects", "label": "Nearby comparables", "scope": "society", "relationship": "project market trail" }
+    ]
+  },
+  {
+    "kind": "nearby",
+    "priority": 30,
+    "constellation": "commute",
+    "title": "Nearby",
+    "subtitle": "Map-backed places near the society.",
+    "scope": "society",
+    "relationship": "nearby map context",
+    "presentation": {
+      "variant": "schematic_map",
+      "density": "compact",
+      "max_preview_items": 6
+    },
+    "facts": [
+      { "key": "nearby_schools", "label": "Schools", "scope": "society", "relationship": "nearby map context", "max_values": 4 },
+      { "key": "nearby_metro_stations", "label": "Metro", "scope": "society", "relationship": "nearby map context", "max_values": 2 },
+      { "key": "nearby_hospitals", "label": "Hospitals", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
+      { "key": "nearby_fitness", "label": "Cult / gyms", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
+      { "key": "nearby_tech_parks", "label": "Tech parks / offices", "scope": "society", "relationship": "nearby map context", "max_values": 3 }
+    ]
+  },
+  {
+    "kind": "water_context",
+    "priority": 34,
+    "constellation": "risk",
+    "surfaces": ["buyer_context"],
+    "title": "Water context",
+    "subtitle": "Groundwater potential around the society, joined offline from public environmental data.",
+    "scope": "society",
+    "relationship": "surrounding water quality",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 3
+    },
+    "facts": [
+      {
+        "key": "environment.groundwater_potential_class",
+        "label": "Groundwater potential",
+        "scope": "society",
+        "relationship": "surrounding water quality"
+      }
+    ]
+  },
+  {
+    "kind": "waterlogging_context",
+    "priority": 35,
+    "constellation": "risk",
+    "surfaces": ["buyer_context"],
+    "title": "Waterlogging",
+    "subtitle": "Flooding, lake, and drainage context scoped around the home.",
+    "scope": "area",
+    "relationship": "locality risk",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "waterlogging_detail",
+        "label": "Area waterlogging",
+        "scope": "area",
+        "relationship": "locality risk"
+      },
+      {
+        "key": "waterlogging_risk",
+        "label": "Waterlogging risk",
+        "scope": "area",
+        "relationship": "locality risk"
+      },
+      {
+        "key": "nearest_lake_distance_m",
+        "label": "Nearest lake",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      },
+      {
+        "key": "lake_proximity",
+        "label": "Lake proximity",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      },
+      {
+        "key": "lake_waterlogging_context",
+        "label": "Lake context",
+        "scope": "waterbody",
+        "relationship": "nearby waterbody"
+      }
+    ]
+  },
+  {
+    "kind": "surroundings",
+    "priority": 36,
+    "constellation": "risk",
+    "surfaces": ["buyer_context"],
+    "title": "Surroundings",
+    "subtitle": "Airport, STP, high-tension, pollution, and nearby externalities.",
+    "scope": "area",
+    "relationship": "externality context",
+    "presentation": {
+      "variant": "risk_grid",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "airport_distance_km",
+        "label": "Airport distance",
+        "scope": "poi",
+        "relationship": "externality"
+      },
+      {
+        "key": "airport_noise_score",
+        "label": "Airport noise",
+        "scope": "area",
+        "relationship": "externality"
+      },
+      {
+        "key": "stp_concern",
+        "label": "STP concern",
+        "scope": "society",
+        "relationship": "reviewed surroundings"
+      },
+      {
+        "key": "high_tension_wire_concern",
+        "label": "High-tension wires",
+        "scope": "society",
+        "relationship": "reviewed surroundings"
+      },
+      {
+        "key": "environment_sensitivity",
+        "label": "Environment",
+        "scope": "area",
+        "relationship": "externality"
+      },
+      {
+        "key": "surroundings_signal",
+        "label": "Surroundings",
+        "scope": "area",
+        "relationship": "externality"
+      }
+    ]
+  },
+  {
+    "kind": "community",
+    "priority": 40,
+    "constellation": "lifestyle",
+    "title": "Community pulse",
+    "subtitle": "Resident and review context.",
+    "scope": "society",
+    "relationship": "resident and review context",
+    "presentation": {
+      "variant": "story",
+      "density": "standard",
+      "max_preview_items": 4
+    },
+    "facts": [
+      {
+        "key": "google_review_snippets",
+        "label": "Review snippets",
+        "scope": "society",
+        "relationship": "resident and review context"
+      }
+    ]
+  }
+]

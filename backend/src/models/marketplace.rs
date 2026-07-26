@@ -11,7 +11,7 @@ pub enum PropertySource {
     SellerListed,
     /// Ingested from an external crawler (MagicBricks etc.).
     Crawled,
-    /// Discovered via live Gemini discovery.
+    /// Ingested from offline discovery or enrichment.
     Discovered,
 }
 

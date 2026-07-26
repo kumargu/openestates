@@ -61,13 +61,13 @@ impl RegistrationDraft {
     /// Compute completeness as a percentage (7 steps total, each ~14%).
     pub fn completeness_pct(&self) -> u32 {
         let steps = [
-            self.name.is_some(),                // Step 1
-            self.property_prompt.is_some(),      // Step 2
-            self.property_details.is_some(),     // Step 3
-            self.pricing.is_some(),              // Step 4
-            self.documents.is_some(),            // Step 5
-            self.photos.is_some(),               // Step 6
-            self.society_info.is_some(),          // Step 7
+            self.name.is_some(),             // Step 1
+            self.property_prompt.is_some(),  // Step 2
+            self.property_details.is_some(), // Step 3
+            self.pricing.is_some(),          // Step 4
+            self.documents.is_some(),        // Step 5
+            self.photos.is_some(),           // Step 6
+            self.society_info.is_some(),     // Step 7
         ];
         let count = steps.iter().filter(|&&v| v).count() as u32;
         (count * 100) / 7

@@ -1,0 +1,162 @@
+{
+  "_comment": "LAKE PARQUET LAYOUT — zones (raw/silver/gold/serving/manifests), LakeKey patterns, table schemas. Same keys local and S3.",
+  "version": 1,
+  "description": "Logical lake layout. All keys are relative to the lake root (OPENESTATES_LAKE_URL). Same keys on local FS and S3.",
+  "lake_root": {
+    "env": "OPENESTATES_LAKE_URL",
+    "default_local": "data/lake",
+    "s3_example": "s3://openestates-prod/lake"
+  },
+  "formats": {
+    "parquet": {
+      "compression": "zstd",
+      "extension": ".parquet"
+    },
+    "control_plane": {
+      "formats": ["json"],
+      "note": "Manifests and current pointers only — small JSON, not bulk data"
+    }
+  },
+  "zones": [
+    {
+      "id": "raw",
+      "purpose": "Immutable source snapshots from crawls",
+      "mutable": "append_only",
+      "key_pattern": "raw/source={source}/{partition}/run_id={run_id}/{file}",
+      "example": "raw/source=rera/dt=2026-07/run_id=abc123/projects/part-00000.parquet",
+      "tables": []
+    },
+    {
+      "id": "silver",
+      "purpose": "Normalized sourced facts and skill outputs",
+      "mutable": "versioned_by_run",
+      "key_patterns": [
+        "silver/facts/entity_type={type}/fact_key={key}/source={source}/{partition}/{file}",
+        "silver/{asset_id}/source={source}/dt={dt}/run_id={run_id}/{file}"
+      ],
+      "example": "silver/reddit_resident_facts/source=reddit/dt=2026-07-17/run_id=abc/manifest.json",
+      "tables": [
+        {
+          "name": "facts",
+          "columns_ref": "app/config/dag/fact_registry.json",
+          "row_identity": "entity_id + fact_key + source_type + learned_at"
+        }
+      ]
+    },
+    {
+      "id": "gold",
+      "purpose": "KG views — merged entities, edges, facts, annotations",
+      "mutable": "versioned",
+      "key_pattern": "gold/{asset_id}/version={version}/{table}/part-00000.parquet",
+      "example": "gold/kg_society_view/version=2026-07-17/entities/part-00000.parquet",
+      "assets": [
+        {
+          "asset_id": "kg_society_view",
+          "tables": [
+            {
+              "name": "entities",
+              "path": "entities/part-00000.parquet",
+              "columns": ["entity_id", "entity_type", "name", "aliases", "root_source"]
+            },
+            {
+              "name": "edges",
+              "path": "edges/part-00000.parquet",
+              "columns": ["from_entity_id", "edge_type", "to_entity_id", "confidence", "source_type"]
+            },
+            {
+              "name": "facts",
+              "path": "facts/part-00000.parquet",
+              "columns": ["entity_id", "fact_key", "value_type", "value_text", "value_number", "value_bool", "confidence", "source_type", "source_url", "learned_at"]
+            },
+            {
+              "name": "fact_annotations",
+              "path": "fact_annotations/part-00000.parquet",
+              "columns": ["entity_id", "fact_key", "display_template", "answers_preferences", "scoring_direction", "scoring_weight"]
+            }
+          ]
+        },
+        {
+          "asset_id": "canonical_society_nodes",
+          "note": "Future: standalone entity/edge parquet before kg merge"
+        }
+      ]
+    },
+    {
+      "id": "serving",
+      "purpose": "Promoted runtime input for Rust API — search, property page, brief",
+      "mutable": "versioned",
+      "key_pattern": "serving/search_bundle/version={version}/{artifact}",
+      "example": "serving/search_bundle/version=2026-07-17/entities/part-00000.parquet",
+      "bundle": {
+        "asset_id": "search_serving_bundle",
+        "artifacts": [
+          "manifest.json",
+          "schema.json",
+          "trust_policy.json",
+          "entities/part-00000.parquet",
+          "edges/part-00000.parquet",
+          "facts/part-00000.parquet",
+          "search_metadata/part-00000.parquet",
+          "tantivy_index/"
+        ],
+        "tables": [
+          {
+            "name": "entities",
+            "columns": ["entity_id", "entity_type", "name", "root_source", "searchable_text"]
+          },
+          {
+            "name": "edges",
+            "status": "planned_phase_4",
+            "source": "gold/kg_society_view/edges",
+            "columns": ["from_entity_id", "edge_type", "to_entity_id", "confidence", "source_type"],
+            "note": "Required for graph traversal UI (Phase 10). Not loaded by Rust API yet."
+          },
+          {
+            "name": "facts",
+            "columns": ["entity_id", "fact_key", "value_*", "confidence", "source_type", "source_url", "skill_id", "learned_at"]
+          },
+          {
+            "name": "search_metadata",
+            "columns": ["entity_id", "fact_key", "display_template", "answers_preferences", "scoring_direction", "scoring_weight", "scoring_thresholds"]
+          }
+        ],
+        "index": {
+          "name": "tantivy_index",
+          "built_from": ["entities.searchable_text", "facts", "search_metadata"]
+        }
+      }
+    },
+    {
+      "id": "manifests",
+      "purpose": "Materialization records, current pointers, DAG run manifests",
+      "mutable": "pointer_updates",
+      "format": "json",
+      "key_patterns": [
+        "manifests/assets/{asset_id}/{partition}/current.json",
+        "manifests/assets/{asset_id}/{partition}/materializations/{materialization_id}.json",
+        "manifests/materializations/{materialization_id}.json",
+        "manifests/runs/{partition}/current.json",
+        "manifests/runs/{partition}/{run_id}.json"
+      ],
+      "promotion": {
+        "serving_bundle_pointer": "manifests/assets/search_serving_bundle/partition=global/current.json",
+        "resolves_to": "serving/search_bundle/version={version}/"
+      }
+    }
+  ],
+  "entity_id_prefixes": {
+    "property": "property:",
+    "society": "society:",
+    "area": "area:",
+    "builder": "builder:",
+    "road_segment": "road:",
+    "place": "place:",
+    "transaction": "txn:"
+  },
+  "never_in_app_config": [
+    "entity instances (society names, road names)",
+    "edges between specific entities",
+    "fact values",
+    "promoted bundle version strings"
+  ]
+}

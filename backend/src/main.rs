@@ -1,34 +1,41 @@
-mod cache;
-mod data_loader;
-mod discovery;
-mod enrichment_queue;
-mod knowledge;
-mod models;
-mod routes;
-mod scoring;
-mod search;
-mod state;
-mod storage;
-mod utils;
-
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use axum::extract::State;
 use axum::routing::{get, post, put};
 use axum::{Json, Router};
+use backend::recommendations::RECOMMENDATION_ENGINE_VERSION;
+use backend::scoring::scoring_policy;
+use backend::state::AppState;
+use backend::{data_loader, routes};
 use serde::Serialize;
 use tower_http::cors::{Any, CorsLayer};
+use tower_http::services::ServeDir;
 
 #[derive(Serialize)]
 struct HealthResponse {
     service: &'static str,
     status: &'static str,
+    process_started_at: String,
+    scoring_policy_version: u32,
+    recommendation_engine_version: &'static str,
+    serving_bundle_version: Option<String>,
 }
 
-async fn health() -> Json<HealthResponse> {
+async fn health(State(state): State<Arc<AppState>>) -> Json<HealthResponse> {
+    let serving_bundle_version = state
+        .serving_bundle
+        .read()
+        .await
+        .as_ref()
+        .map(|bundle| bundle.manifest.bundle_version.clone());
     Json(HealthResponse {
         service: "openestates-api",
         status: "ok",
+        process_started_at: state.process_started_at.to_rfc3339(),
+        scoring_policy_version: scoring_policy().version,
+        recommendation_engine_version: RECOMMENDATION_ENGINE_VERSION,
+        serving_bundle_version,
     })
 }
 
@@ -38,8 +45,12 @@ async fn main() {
         .parent()
         .expect("backend must be inside project root")
         .to_path_buf();
+    backend::local_env::load_project_env(&project_root);
+    backend::dag_config::set_project_dag_root(&project_root);
 
     let state = Arc::new(data_loader::load_app_state(&project_root).await);
+    let bind_address =
+        std::env::var("OPENESTATES_API_ADDR").unwrap_or_else(|_| "0.0.0.0:4000".to_string());
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -49,60 +60,38 @@ async fn main() {
     let app = Router::new()
         .route("/", get(health))
         .route("/api/health", get(health))
+        .nest_service(
+            "/media",
+            ServeDir::new(project_root.join("data/lake/media")),
+        )
         .route("/api/properties", get(routes::properties::list_properties))
         .route(
             "/api/properties/{id}",
             get(routes::properties::get_property),
         )
+        .route(
+            "/api/properties/{id}/evidence",
+            get(routes::properties::get_property_evidence),
+        )
+        .route(
+            "/api/properties/{id}/recommendations",
+            get(routes::properties::get_property_recommendations),
+        )
+        .route(
+            "/api/properties/evidence/batch",
+            post(routes::properties::get_property_evidence_batch),
+        )
         .route("/api/areas", get(routes::areas::list_areas))
+        .route("/api/areas/tracker", get(routes::areas::area_tracker))
         .route("/api/areas/{id}", get(routes::areas::get_area))
         .route("/api/shortlist", get(routes::shortlist::get_shortlist))
+        .route("/api/discovery", get(routes::discovery::discovery_home))
         .route("/api/search", get(routes::search::search_properties))
         .route(
             "/api/societies/search",
             get(routes::societies::search_societies),
         )
-        .route(
-            "/api/societies/{slug}",
-            get(routes::societies::get_society),
-        )
-        // Knowledge graph endpoints
-        .route("/api/knowledge/stats", get(routes::knowledge::graph_stats))
-        .route("/api/knowledge/nodes", get(routes::knowledge::list_nodes))
-        .route(
-            "/api/knowledge/nodes/{id}",
-            get(routes::knowledge::get_node),
-        )
-        .route(
-            "/api/knowledge/nodes/{id}/neighbors",
-            get(routes::knowledge::get_neighbors),
-        )
-        .route(
-            "/api/knowledge/nodes/{id}/facts",
-            post(routes::knowledge::add_facts),
-        )
-        .route(
-            "/api/knowledge/enrichment/queue",
-            get(routes::knowledge::enrichment_queue),
-        )
-        .route(
-            "/api/knowledge/search-log",
-            get(routes::knowledge::search_log),
-        )
-        // Graph query endpoints
-        .route("/api/knowledge/path", get(routes::knowledge::find_path))
-        .route(
-            "/api/knowledge/nodes/{id}/subgraph",
-            get(routes::knowledge::get_subgraph),
-        )
-        .route(
-            "/api/knowledge/compare",
-            get(routes::knowledge::compare_nodes),
-        )
-        .route(
-            "/api/knowledge/coverage",
-            get(routes::knowledge::fact_coverage),
-        )
+        .route("/api/societies/{slug}", get(routes::societies::get_society))
         // Seller endpoints
         .route("/api/sellers", get(routes::sellers::list_sellers))
         .route("/api/sellers/{id}", get(routes::sellers::get_seller))
@@ -138,53 +127,45 @@ async fn main() {
         // Sitemap endpoint
         .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
+        .route("/api/admin/data-health", get(routes::admin::data_health))
         .route(
-            "/api/admin/reload-knowledge",
-            post(routes::admin::reload_knowledge),
-        )
-        // Embedding / similarity endpoints
-        .route(
-            "/api/knowledge/nodes/{id}/similar",
-            get(routes::knowledge::similar_nodes),
+            "/api/admin/serving-bundle/reload",
+            post(routes::admin::reload_serving_bundle),
         )
         .route(
-            "/api/knowledge/embeddings/stats",
-            get(routes::knowledge::embedding_stats),
+            "/api/admin/asset-runs/current",
+            get(routes::admin::current_asset_run),
+        )
+        .route(
+            "/api/admin/asset-runs",
+            post(routes::admin::trigger_asset_run),
         )
         .layer(cors)
         .with_state(state);
 
-    println!("OpenEstates API listening on http://localhost:4000");
+    println!("OpenEstates API listening on http://{bind_address}");
     println!("Routes:");
     println!("  GET /api/health");
-    println!("  GET /api/properties | /api/properties/{{id}}");
-    println!("  GET /api/areas | /api/areas/{{id}}");
+    println!("  GET /media/*path");
+    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/recommendations");
+    println!("  POST /api/properties/evidence/batch");
+    println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
+    println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");
     println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
-    println!("  GET /api/knowledge/stats");
-    println!("  GET /api/knowledge/nodes?type=... | /api/knowledge/nodes/{{id}}");
-    println!("  GET /api/knowledge/nodes/{{id}}/neighbors");
-    println!("  GET /api/knowledge/enrichment/queue");
-    println!("  GET /api/knowledge/search-log");
-    println!("  GET /api/knowledge/path?from=...&to=...");
-    println!("  GET /api/knowledge/nodes/{{id}}/subgraph?depth=2");
-    println!("  GET /api/knowledge/compare?a=...&b=...");
-    println!("  GET /api/knowledge/coverage?type=society");
-    println!("  GET /api/knowledge/nodes/{{id}}/similar?top_n=5");
-    println!("  GET /api/knowledge/embeddings/stats");
     println!("  GET /api/sellers | /api/sellers/{{id}} | /api/sellers/{{id}}/dashboard");
     println!("  POST /api/interests");
     println!("  GET /api/properties/{{id}}/interests/count");
     println!("  POST /api/registrations | GET /api/registrations/{{id}} | PUT /api/registrations/{{id}}/step/{{n}} | POST /api/registrations/{{id}}/publish");
     println!("  POST /api/claims");
     println!("  GET  /api/sitemap.xml");
-    println!("  POST /api/admin/reload-knowledge");
+    println!("  POST /api/admin/serving-bundle/reload");
+    println!("  GET  /api/admin/asset-runs/current");
+    println!("  POST /api/admin/asset-runs");
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:4000")
+    let listener = tokio::net::TcpListener::bind(&bind_address)
         .await
-        .expect("Failed to bind port 4000");
+        .unwrap_or_else(|error| panic!("Failed to bind {bind_address}: {error}"));
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }

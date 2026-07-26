@@ -7,6 +7,8 @@
 export type MatchLabel =
   | "Strong match"
   | "Good match"
+  | "Partial match"
+  | "Partial fit"
   | "Value pick"
   | "Premium match"
   | "Candidate"
@@ -17,23 +19,52 @@ export interface MatchResult {
   reason: string;
 }
 
-/** Format a search summary for display from backend-parsed intent. */
-export function formatSearchSummary(intent: {
-  query: string;
-  area?: string;
-  bhk?: number;
-  budgetMax?: number;
-  preferences: string[];
-}): string {
-  const parts: string[] = [];
-  if (intent.area) parts.push(intent.area);
-  if (intent.bhk) parts.push(`${intent.bhk} BHK`);
-  if (intent.budgetMax) {
-    const cr = intent.budgetMax / 10_000_000;
-    parts.push(cr >= 1 ? `under ${cr} Cr` : `under ${(intent.budgetMax / 100_000).toFixed(0)}L`);
-  }
-  parts.push(...intent.preferences);
+/** Avoid repeating parsed search filters on every result card. */
+export function isGenericFilterReason(reason: string): boolean {
+  const distinctive = extractDistinctiveMatchParts(reason);
+  return distinctive.length === 0;
+}
 
-  if (parts.length === 0) return "Showing all properties ranked by transparency signals";
-  return `Ranking based on ${parts.join(", ")}`;
+function extractDistinctiveMatchParts(reason: string): string[] {
+  const trimmed = reason.trim();
+  if (!trimmed) return [];
+  if (/^near\s+/i.test(trimmed) && !/^matches\s+/i.test(trimmed)) {
+    return [trimmed];
+  }
+  if (!/^matches\s+/i.test(trimmed)) {
+    return [trimmed];
+  }
+
+  const preferenceHints = /greenery|metro|quiet|premium|family|school|traffic|ready|verified|proof|society|builder|value|maintenance|commute|noise|water/i;
+
+  return trimmed
+    .replace(/^matches\s+/i, "")
+    .split(/,\s*/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((segment) => {
+      if (/^\d+\s*bhk$/i.test(segment)) return false;
+      if (/^under\s+/i.test(segment)) return false;
+      if (/^avoid\s+/i.test(segment)) return true;
+      if (preferenceHints.test(segment)) return true;
+      if (segment.split(/\s+/).length <= 3) return false;
+      return true;
+    });
+}
+
+export function displayMatchReason(
+  reason: string | undefined,
+  fallback?: string | null,
+): string | null {
+  if (!reason?.trim()) return fallback ?? null;
+  const distinctive = extractDistinctiveMatchParts(reason);
+  if (distinctive.length > 0) return distinctive.join(" · ");
+  return fallback ?? null;
+}
+
+export function friendlyMatchLabel(label: string): string {
+  const normalized = label.trim().toLowerCase();
+  if (normalized === "weak match") return "Partial fit";
+  if (normalized === "partial match") return "Partial fit";
+  return label;
 }

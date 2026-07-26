@@ -1,12 +1,22 @@
-//! Scoring module: computes themes, tradeoffs, and market activity for properties.
-//! KG-facts-first: checks knowledge graph for pre-scored facts before falling back
-//! to Property struct field thresholds.
+//! Scoring module.
+//!
+//! Buyer-facing quality signals now come from DAG-backed evidence folds and the
+//! livability brief (see `crate::livability_brief`). This module keeps only:
+//! - `market`: listing-derived market activity context (interest, days-on-market).
+//! - `transparency`: an internal composite trust score used for ranking/decisions,
+//!   not rendered as a raw number to buyers.
+//!
+//! The old hand-written `CompareThemes`/`compute_tradeoffs` heuristics over seed
+//! Property fields were removed in favor of source-backed facts.
 
-mod themes;
+mod market;
+mod policy;
 mod transparency;
 
-pub use themes::{
-    CompareThemes, MarketActivityResponse, TradeoffsResponse, compute_market_activity,
-    compute_themes, compute_tradeoffs,
+pub use market::{compute_market_activity, MarketActivityResponse, PriceVsMedian};
+pub use policy::{
+    score_property_for_surface, scoring_policy, search_ranking_policy, signal_score,
+    CandidateScore, FactAvailability, RecommendationBranchPolicy, ScoredSignal, ScoringPolicyFile,
+    SearchRankingPolicy,
 };
-pub use transparency::{TransparencyScore, compute_transparency_score};
+pub use transparency::{compute_transparency_score, TransparencyScore};

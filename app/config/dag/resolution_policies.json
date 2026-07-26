@@ -1,0 +1,31 @@
+{
+  "_comment": "SOURCE CONFLICT RULES — which source tier wins, confidence caps per source_type, never_default prefixes for risk/operating facts.",
+  "version": 1,
+  "default_strategy": "prefer_highest_confidence",
+  "source_tiers": [
+    "rera",
+    "registered_transactions",
+    "google",
+    "computed",
+    "reddit_theme",
+    "seller_claim"
+  ],
+  "never_default_fact_prefixes": [
+    "risk.",
+    "operating.",
+    "legal.",
+    "layout."
+  ],
+  "source_caps": {
+    "reddit_theme": 0.45,
+    "seller_claim": 0.4
+  },
+  "overrides": {
+    "legal.rera_registered": {
+      "source_priority": ["rera", "computed"]
+    },
+    "market.transaction.price_per_sqft": {
+      "source_priority": ["registered_transactions", "google"]
+    }
+  }
+}

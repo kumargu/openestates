@@ -1,0 +1,7 @@
+{
+  "id": "external_image_optimization",
+  "enabled": false,
+  "reason": "Disabled by default like Reddit live collection; keep link-backed image observations until optimized media storage is deliberately enabled.",
+  "enable_env": "OPENESTATES_ENABLE_IMAGE_OPTIMIZATION",
+  "skip_env": "OPENESTATES_SKIP_IMAGE_OPTIMIZATION"
+}

@@ -24,15 +24,24 @@ pub struct Property {
     pub possession_status: String,
     pub metro_distance_mins: u32,
     pub maintenance_cost_monthly: u32,
-    pub society_quality_score: f64,
-    pub builder_quality_score: f64,
-    pub document_completeness_score: f64,
-    pub litigation_risk: f64,
-    pub noise_score: f64,
-    pub sunlight_score: f64,
-    pub airport_noise_score: f64,
-    pub waterlogging_risk_score: f64,
-    pub traffic_score: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub society_quality_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub builder_quality_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub document_completeness_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub litigation_risk: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub noise_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sunlight_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub airport_noise_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub waterlogging_risk_score: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub traffic_score: Option<f64>,
     pub days_on_market: u32,
     #[serde(default)]
     pub greenery_score: Option<f64>,
@@ -55,16 +64,41 @@ pub struct Property {
     pub seller_id: Option<String>,
 }
 
+impl Property {
+    /// Buyer-facing surfaces should only show homes with a real asking price.
+    pub fn is_listable(&self) -> bool {
+        self.price > 0
+    }
+}
+
 /// UI-ready property card for the results page.
 #[derive(Debug, Clone, Serialize)]
 pub struct PropertyCard {
     pub id: String,
+    /// Stable entity handles attached to the serving bundle.
+    ///
+    /// This is the contract that keeps cards and detail pages from becoming a
+    /// fixed list of hardcoded sections. The flat fields in `PropertyCard`
+    /// support fast first paint and search-result scanning. `kg_entity_refs`
+    /// supports the second layer: expandable evidence, compare rows, side
+    /// panels, source drill-down, and dynamic sections that only appear when
+    /// facts actually exist.
+    ///
+    /// Backend rules:
+    /// - Populate these IDs from app-owned entity identity, never from UI labels.
+    /// - Add new fact families to serving/source panels instead of adding
+    ///   one-off card fields unless the value is needed on the hot first-paint path.
+    /// - It is okay for some referenced concepts to have sparse facts. The UI
+    ///   should render from fact availability and confidence.
+    pub kg_entity_refs: KgEntityRefs,
     pub title: String,
     pub area: String,
     pub price: u64,
     pub price_per_sqft: u64,
     pub bhk: u32,
     pub sqft: u32,
+    pub carpet_area_sqft: u32,
+    pub super_builtup_sqft: u32,
     pub society_name: String,
     pub builder_name: String,
     pub hero_image: String,
@@ -79,6 +113,17 @@ pub struct PropertyCard {
     pub google_rating: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub google_review_count: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub google_reviews_url: Option<String>,
+    /// RERA-backed project land extent. Kept on the card because compare needs it at first paint.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub society_land_acres: Option<f64>,
+    /// RERA-backed open-area percentage. Omitted when the source did not expose it clearly.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub open_space_pct: Option<f64>,
+    /// Derived homes-per-acre project density from typed RERA units and land area.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub units_per_acre: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub seller_id: Option<String>,
     /// Seller trust fields — populated from seller data when available.
@@ -97,10 +142,57 @@ pub struct PropertyCard {
     /// Human-readable project status from skill's display_template, e.g. "Ready to Move — delivered 31/01/2020"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub project_status_display: Option<String>,
+    /// Compact buyer-facing state signal for result tiles, e.g. "Delivered · 5-10 yrs old".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub home_state_display: Option<String>,
     /// Human-readable builder delivery track record, e.g. "Builder delivers on time: 100% of projects"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_delivery_display: Option<String>,
     /// Data freshness — how recent and rich the underlying data is
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
+}
+
+/// Minimal entity identity bundle attached to property/search/detail responses.
+///
+/// These fields are stable API identifiers, not display copy and not a complete
+/// serving export. They exist so the UI can ask follow-up endpoints for richer
+/// context when a user shows intent: opens a property, expands a card, compares
+/// homes, clicks a source trail, or requests a nearby/risk/community breakdown.
+///
+/// Current usage pattern:
+/// 1. Render fast listing data from `PropertyCard` or `PropertyDetailResponse`.
+/// 2. Use `source_entity_ids` as opaque provenance handles for the property,
+///    society, area, and builder.
+/// 3. Use source/evidence read models when the UI needs a larger drill-down
+///    such as builder portfolio, nearby projects, or lineage.
+/// 4. Build optional UI sections from facts with source/confidence metadata.
+/// 5. Hide sections that have no backed facts instead of rendering empty cards.
+///
+/// Important distinction: these are KG node IDs, not necessarily canonical RERA
+/// IDs. Some societies have an alias node such as `society:prestige-park-grove`
+/// while lake artifacts may also contain a RERA-rooted canonical ID. The UI
+/// should not infer canonicalization from the string shape. It should treat the
+/// IDs as opaque handles and follow the API.
+#[derive(Debug, Clone, Serialize)]
+pub struct KgEntityRefs {
+    /// Listing-level node for facts specific to this flat/unit/listing.
+    pub property_entity_id: String,
+    /// Society/project node for RERA, reviews, nearby places, amenities, and
+    /// community evidence.
+    pub society_entity_id: String,
+    /// Area/locality node for traffic, waterlogging, metro, schools, price trend,
+    /// and other externalities.
+    pub area_entity_id: String,
+    /// Builder node when the society has a known BuiltBy edge in the KG.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub builder_entity_id: Option<String>,
+    /// Existing graph nodes the UI can safely prefetch first.
+    ///
+    /// This list is backend-filtered to nodes present in the current KG, sorted,
+    /// and deduplicated. It may omit an otherwise valid field ID if that node has
+    /// not been materialized yet. UI code should treat it as a convenient fetch
+    /// plan, not as a complete semantic model.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_entity_ids: Vec<String>,
 }

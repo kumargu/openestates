@@ -80,12 +80,7 @@ pub struct ComparisonEntry {
 impl KnowledgeGraph {
     /// Find the shortest path between two nodes using BFS.
     /// Returns None if no path exists.
-    pub fn find_path(
-        &self,
-        from: &str,
-        to: &str,
-        max_hops: usize,
-    ) -> Option<GraphPath> {
+    pub fn find_path(&self, from: &str, to: &str, max_hops: usize) -> Option<GraphPath> {
         if from == to {
             return Some(GraphPath {
                 nodes: vec![from.to_string()],
@@ -250,15 +245,9 @@ impl KnowledgeGraph {
             })
             .collect();
 
-        let unique_to_a: Vec<String> = keys_a
-            .difference(&keys_b)
-            .map(|k| k.to_string())
-            .collect();
+        let unique_to_a: Vec<String> = keys_a.difference(&keys_b).map(|k| k.to_string()).collect();
 
-        let unique_to_b: Vec<String> = keys_b
-            .difference(&keys_a)
-            .map(|k| k.to_string())
-            .collect();
+        let unique_to_b: Vec<String> = keys_b.difference(&keys_a).map(|k| k.to_string()).collect();
 
         Some(NodeComparison {
             node_a: id_a.to_string(),

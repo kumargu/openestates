@@ -1,8 +1,25 @@
+pub mod analyzer;
+pub mod engine;
+pub mod geo;
+pub mod index;
 pub mod intent;
+pub mod resolver;
+pub mod schema;
 pub mod semantic;
 pub mod text;
 
+pub use engine::{
+    CandidateScore, SearchDiagnostics, SearchEngine, SearchLayerTiming, SearchRecallDiagnostics,
+    SearchRelaxation,
+};
+pub use index::SearchIndex;
 pub use intent::SearchIntent;
+#[cfg(feature = "fastembed")]
+pub use semantic::FastEmbedSemanticEmbedder;
+pub use semantic::{
+    semantic_embedding_documents_from_serving_entities, HashSemanticEmbedder, SemanticEmbedder,
+    SemanticEmbeddingDocument, SemanticSearchIndex,
+};
 pub use text::TextSearch;
 
 use serde::Serialize;
@@ -22,9 +39,9 @@ pub struct MatchReason {
     pub score: f64,
     /// Fact confidence (1.0 for RERA, 0.6 for Reddit, etc.)
     pub confidence: f32,
-    /// Source type: "Reddit", "Rera", "Llm", "Seed", etc.
+    /// Source type: "Reddit", "Rera", "Computed", "Manual", etc.
     pub source_type: String,
-    /// "graph" or "legacy"
+    /// "graph" or "local"
     pub scoring_method: String,
 }
 
@@ -47,7 +64,7 @@ pub struct MatchExplanation {
     pub reasons: Vec<MatchReason>,
     /// Per-preference coverage status
     pub preference_coverage: Vec<PreferenceCoverage>,
-    /// Percentage of score derived from graph facts vs legacy scoring (0-100)
+    /// Percentage of score derived from graph facts vs local scoring (0-100)
     pub graph_driven_pct: f32,
     /// Total number of facts the scorer examined
     pub total_facts_consulted: usize,
@@ -89,7 +106,7 @@ pub struct SearchResultCard {
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
-    /// Cosine similarity score if this result was semantically boosted, None otherwise.
+    /// Reserved for precomputed local similarity scores.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_score: Option<f64>,
     /// Data confidence score — how trustworthy is this result's data?
@@ -128,10 +145,16 @@ pub struct SearchResponse {
     /// Knowledge graph provenance for the results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_context: Option<KnowledgeContext>,
-    /// Whether live discovery was triggered: "discovered_new", "from_cache", "rate_limited", "discovery_failed", or null
+    /// Internal search diagnostics used by benchmarks and milestone validation.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_diagnostics: Option<SearchDiagnostics>,
+    /// Deterministic relaxations applied after exact constraints produced no results.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub relaxations: Vec<SearchRelaxation>,
+    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_status: Option<String>,
-    /// How many properties were discovered (if discovery happened)
+    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_count: Option<usize>,
 }

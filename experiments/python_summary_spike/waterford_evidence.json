@@ -1,0 +1,35 @@
+{
+  "entity_id": "society:prestige-waterford",
+  "property_name": "Prestige Waterford",
+  "summary_scope": "society",
+  "summary_kind": "livability_context",
+  "target_words": {
+    "min": 80,
+    "max": 120
+  },
+  "evidence": [
+    "Road/access: ECC Road and Pattandur Agrahara are the strongest location anchors.",
+    "Transit: Kadugodi Tree Park, Hopefarm Channasandra, and Seegehalli metro appear in nearby evidence.",
+    "Family needs: Deens Public School and Manipal Hospital Whitefield appear in local evidence.",
+    "Daily life/work: Prestige Shantiniketan mall, Whitefield Marriott, Bagmane Tech Park, Google, and Amazon office hubs appear around the society.",
+    "Caution: approach-road traffic and waterlogging are mentioned; do not describe connectivity as friction-free."
+  ],
+  "expected_terms": [
+    "ECC Road",
+    "Pattandur Agrahara",
+    "metro",
+    "Deens Public School",
+    "Manipal Hospital",
+    "Prestige Shantiniketan",
+    "Bagmane",
+    "traffic"
+  ],
+  "forbidden_terms": [
+    "guaranteed",
+    "minutes away",
+    "walkable",
+    "zero traffic",
+    "best investment",
+    "price appreciation"
+  ]
+}

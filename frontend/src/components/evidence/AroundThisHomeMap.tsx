@@ -1,0 +1,576 @@
+import { useEffect, useMemo, useRef } from "react";
+import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
+import "maplibre-gl/dist/maplibre-gl.css";
+import type { MapOverlayLine, MapWaterContext } from "../../lib/types.ts";
+import {
+  NEARBY_MAP_STYLE,
+  type NumberedPlace,
+  type PlaceCluster,
+  type PlateViewport,
+} from "../../lib/nearbyPlateProjection.ts";
+
+export type AroundThisHomeMapProps = {
+  home: { latitude: number; longitude: number; name: string };
+  places: NumberedPlace[];
+  clusters: PlaceCluster[];
+  selectedId: string | null;
+  viewport: PlateViewport;
+  metroLines: MapOverlayLine[];
+  showMetroLines: boolean;
+  nearestMetroDistanceKm?: number;
+  water?: MapWaterContext | null;
+  waterTint: boolean;
+  onSelectPlace: (id: string) => void;
+  onSelectCluster: (cluster: PlaceCluster) => void;
+};
+
+function markerEl(
+  kind: "home" | "place" | "cluster",
+  options: {
+    count?: number;
+    selected?: boolean;
+    layer?: string;
+    name?: string;
+  } = {},
+): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = [
+    "nearby-map-marker",
+    `nearby-map-marker--${kind}`,
+    options.layer ? `nearby-map-marker--${options.layer}` : "",
+    options.selected ? "is-selected" : "",
+  ].filter(Boolean).join(" ");
+
+  if (kind === "home") {
+    button.innerHTML = `
+      <svg viewBox="0 0 24 30" aria-hidden="true">
+        <path d="M12 29C9.8 25.6 4 19.2 4 12a8 8 0 1 1 16 0c0 7.2-5.8 13.6-8 17Z" />
+        <circle cx="12" cy="12" r="3.2" />
+      </svg>`;
+    button.setAttribute("aria-label", "This home");
+    return button;
+  }
+
+  if (kind === "cluster") {
+    button.textContent = String(options.count ?? 0);
+    button.setAttribute("aria-label", `${options.count} places nearby`);
+    return button;
+  }
+
+  button.innerHTML = markerGlyph(options.layer);
+  button.setAttribute("aria-label", options.name ?? "Nearby place");
+  return button;
+}
+
+function markerGlyph(layer?: string): string {
+  switch (layer) {
+    case "metro":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="4" width="12" height="13" rx="3"/><path d="M6 11h12M8 20l2-3m6 3-2-3"/><circle cx="9" cy="14" r=".8"/><circle cx="15" cy="14" r=".8"/></svg>`;
+    case "schools":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 9 9-4 9 4-9 4-9-4Z"/><path d="M7 11v4c0 1.2 2.2 2.3 5 2.3s5-1.1 5-2.3v-4"/></svg>`;
+    case "hospitals":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>`;
+    case "tech":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h2m2 0h2M9 11h2m2 0h2M9 15h6"/></svg>`;
+    default:
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z"/><circle cx="12" cy="11" r="2"/></svg>`;
+  }
+}
+
+function metroBadgeEl(name: string): HTMLDivElement {
+  const element = document.createElement("div");
+  const tone = name.toLowerCase().match(/purple|green|yellow|pink|blue|orange/)?.[0] ?? "default";
+  element.className = `nearby-map-metro-badge nearby-map-metro-badge--${tone}`;
+  element.innerHTML = markerGlyph("metro");
+  element.setAttribute("aria-label", `${name} metro corridor`);
+  return element;
+}
+
+function metroBadgePoints(
+  lines: MapOverlayLine[],
+  home: { latitude: number; longitude: number },
+): Array<{ name: string; coordinate: [number, number] }> {
+  const nearestByName = new Map<string, { coordinate: [number, number]; distance: number }>();
+  const latitudeScale = Math.cos((home.latitude * Math.PI) / 180);
+  for (const line of lines) {
+    for (const coordinate of line.coordinates) {
+      const dx = (coordinate[0] - home.longitude) * latitudeScale;
+      const dy = coordinate[1] - home.latitude;
+      const distance = dx * dx + dy * dy;
+      const current = nearestByName.get(line.name);
+      if (!current || distance < current.distance) {
+        nearestByName.set(line.name, { coordinate, distance });
+      }
+    }
+  }
+  return [...nearestByName].map(([name, value]) => ({ name, coordinate: value.coordinate }));
+}
+
+function emptyCollection() {
+  return { type: "FeatureCollection" as const, features: [] as Array<Record<string, unknown>> };
+}
+
+function linesToFeatureCollection(lines: MapOverlayLine[]) {
+  return {
+    type: "FeatureCollection" as const,
+    features: lines.map((line) => ({
+      type: "Feature" as const,
+      properties: {
+        id: line.id,
+        name: line.name,
+        color: metroLineColor(line.name),
+      },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: line.coordinates,
+      },
+    })),
+  };
+}
+
+function metroLineColor(name: string): string {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("purple")) return "#7651a8";
+  if (normalized.includes("green")) return "#2f8a58";
+  if (normalized.includes("yellow")) return "#d4a900";
+  if (normalized.includes("pink")) return "#d85d8d";
+  if (normalized.includes("blue")) return "#397fb5";
+  if (normalized.includes("orange")) return "#d87932";
+  return "#526d91";
+}
+
+function ringFeatureCollection(
+  home: { latitude: number; longitude: number },
+  radiiKm: number[],
+) {
+  const features = radiiKm.map((radiusKm) => {
+    const points: [number, number][] = [];
+    for (let step = 0; step <= 64; step += 1) {
+      const angle = (step / 64) * Math.PI * 2;
+      const dLat = (radiusKm / 110.57) * Math.cos(angle);
+      const dLng = (radiusKm / (111.32 * Math.cos((home.latitude * Math.PI) / 180)))
+        * Math.sin(angle);
+      points.push([home.longitude + dLng, home.latitude + dLat]);
+    }
+    return {
+      type: "Feature" as const,
+      properties: { radiusKm },
+      geometry: {
+        type: "LineString" as const,
+        coordinates: points,
+      },
+    };
+  });
+  return { type: "FeatureCollection" as const, features };
+}
+
+function waterZoneFeatureCollection(
+  home: { latitude: number; longitude: number },
+  water: MapWaterContext,
+) {
+  const scopeRadiusKm = water.scope_radius_km ?? 3;
+  const majorRadiusKm = scopeRadiusKm * 0.75;
+  const minorRadiusKm = scopeRadiusKm * 0.45;
+  const rotation = 18 * (Math.PI / 180);
+  const points: [number, number][] = [];
+
+  for (let step = 0; step <= 64; step += 1) {
+    const angle = (step / 64) * Math.PI * 2;
+    const x = majorRadiusKm * Math.cos(angle);
+    const y = minorRadiusKm * Math.sin(angle);
+    const rotatedX = x * Math.cos(rotation) - y * Math.sin(rotation);
+    const rotatedY = x * Math.sin(rotation) + y * Math.cos(rotation);
+    const latitude = home.latitude + rotatedY / 110.57;
+    const longitude = home.longitude
+      + rotatedX / (111.32 * Math.cos((home.latitude * Math.PI) / 180));
+    points.push([longitude, latitude]);
+  }
+
+  return {
+    type: "FeatureCollection" as const,
+    features: [{
+      type: "Feature" as const,
+      properties: {
+        label: `${water.groundwater_class} groundwater`,
+        scope: `Around ${scopeRadiusKm.toFixed(0)} km`,
+      },
+      geometry: {
+        type: "Polygon" as const,
+        coordinates: [points],
+      },
+    }],
+  };
+}
+
+function ringRadiiForViewport(radiusKm: number): number[] {
+  if (radiusKm <= 0.6) return [0.25, 0.5];
+  if (radiusKm <= 1.2) return [0.5, 1];
+  if (radiusKm <= 2) return [0.5, 1, 2];
+  if (radiusKm <= 3) return [1, 2];
+  return [2, 5];
+}
+
+/** Strip basemap POI/label noise so the plate reads like a focused activity map. */
+function quietBasemap(map: MapLibreMap) {
+  const style = map.getStyle();
+  if (!style?.layers) return;
+  for (const layer of style.layers) {
+    const id = layer.id.toLowerCase();
+    if (id.startsWith("oe-")) continue;
+    const isLabel = layer.type === "symbol";
+    const isPoiNoise = /poi|place-|housenumber|transit|rail|airport|golf|pitch/.test(id);
+    if (isLabel || isPoiNoise) {
+      try {
+        map.setLayoutProperty(layer.id, "visibility", "none");
+      } catch {
+        // Some style layers are immutable; ignore.
+      }
+    }
+  }
+}
+
+function ensureOverlayLayers(map: MapLibreMap) {
+  if (!map.getSource("oe-water-zone")) {
+    map.addSource("oe-water-zone", { type: "geojson", data: emptyCollection() });
+    map.addLayer({
+      id: "oe-water-zone-fill",
+      type: "fill",
+      source: "oe-water-zone",
+      paint: {
+        "fill-color": "#78b8b3",
+        "fill-opacity": 0.2,
+      },
+    });
+    map.addLayer({
+      id: "oe-water-zone-line",
+      type: "line",
+      source: "oe-water-zone",
+      paint: {
+        "line-color": "#3f8884",
+        "line-width": 2,
+        "line-dasharray": [2, 1.5],
+        "line-opacity": 0.8,
+      },
+    });
+    map.addLayer({
+      id: "oe-water-zone-label",
+      type: "symbol",
+      source: "oe-water-zone",
+      layout: {
+        "text-field": ["concat", ["get", "label"], "\n", ["get", "scope"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 12,
+        "text-line-height": 1.25,
+        "text-anchor": "center",
+        "text-offset": [0, -2.4],
+      },
+      paint: {
+        "text-color": "#285f5d",
+        "text-halo-color": "rgba(255, 255, 255, 0.86)",
+        "text-halo-width": 1.5,
+      },
+    });
+  }
+
+  if (!map.getSource("oe-rings")) {
+    map.addSource("oe-rings", { type: "geojson", data: emptyCollection() });
+    map.addLayer({
+      id: "oe-rings",
+      type: "line",
+      source: "oe-rings",
+      paint: {
+        "line-color": "rgba(0, 0, 0, 0.14)",
+        "line-width": 1,
+        "line-opacity": 0.65,
+      },
+    });
+  }
+
+  if (!map.getSource("oe-metro-lines")) {
+    map.addSource("oe-metro-lines", {
+      type: "geojson",
+      data: emptyCollection(),
+    });
+    map.addLayer({
+      id: "oe-metro-lines-casing",
+      type: "line",
+      source: "oe-metro-lines",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": "rgba(255, 255, 255, 0.9)",
+        "line-width": 6.5,
+        "line-opacity": 0.95,
+      },
+    });
+    map.addLayer({
+      id: "oe-metro-lines",
+      type: "line",
+      source: "oe-metro-lines",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": 4.2,
+        "line-opacity": 0.95,
+      },
+    });
+  }
+}
+
+function setSourceData(
+  map: MapLibreMap,
+  sourceId: string,
+  data: {
+    type: "FeatureCollection";
+    features: Array<Record<string, unknown>>;
+  },
+) {
+  const source = map.getSource(sourceId) as GeoJSONSource | undefined;
+  source?.setData(data as never);
+}
+
+export function AroundThisHomeMap({
+  home,
+  places,
+  clusters,
+  selectedId,
+  viewport,
+  metroLines,
+  showMetroLines,
+  nearestMetroDistanceKm,
+  water,
+  waterTint,
+  onSelectPlace,
+  onSelectCluster,
+}: AroundThisHomeMapProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
+  const markersRef = useRef<Marker[]>([]);
+  const styleReadyRef = useRef(false);
+  const viewportCenterRef = useRef(viewport.center);
+  const onSelectPlaceRef = useRef(onSelectPlace);
+  const onSelectClusterRef = useRef(onSelectCluster);
+
+  useEffect(() => {
+    viewportCenterRef.current = viewport.center;
+  }, [viewport.center]);
+
+  useEffect(() => {
+    onSelectPlaceRef.current = onSelectPlace;
+    onSelectClusterRef.current = onSelectCluster;
+  }, [onSelectPlace, onSelectCluster]);
+
+  const selectedPlace = useMemo(
+    () => places.find((place) => place.id === selectedId) ?? places[0] ?? null,
+    [places, selectedId],
+  );
+  const metroLineLabel = useMemo(
+    () => [...new Set(metroLines.map((line) => line.name).filter(Boolean))].join(" · "),
+    [metroLines],
+  );
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const container = containerRef.current;
+    const map = new maplibregl.Map({
+      container,
+      style: NEARBY_MAP_STYLE,
+      center: [viewport.center.longitude, viewport.center.latitude],
+      zoom: viewport.zoom,
+      attributionControl: { compact: true },
+      dragPan: false,
+      dragRotate: false,
+      scrollZoom: false,
+      pitchWithRotate: false,
+      touchPitch: false,
+      keyboard: false,
+    });
+    map.addControl(
+      new maplibregl.NavigationControl({ showCompass: false, visualizePitch: false }),
+      "top-right",
+    );
+    map.on("load", () => {
+      quietBasemap(map);
+      ensureOverlayLayers(map);
+      styleReadyRef.current = true;
+      map.resize();
+      map.jumpTo({
+        center: [viewportCenterRef.current.longitude, viewportCenterRef.current.latitude],
+      });
+    });
+    map.on("zoomend", () => {
+      const anchor = viewportCenterRef.current;
+      const center = map.getCenter();
+      if (
+        Math.abs(center.lng - anchor.longitude) > 0.00001
+        || Math.abs(center.lat - anchor.latitude) > 0.00001
+      ) {
+        map.setCenter([anchor.longitude, anchor.latitude]);
+      }
+    });
+    mapRef.current = map;
+
+    let resizeFrame: number | null = null;
+    const resizeMap = () => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        map.resize();
+        const anchor = viewportCenterRef.current;
+        map.jumpTo({ center: [anchor.longitude, anchor.latitude] });
+      });
+    };
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(resizeMap);
+    resizeObserver?.observe(container);
+    resizeMap();
+
+    return () => {
+      resizeObserver?.disconnect();
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      for (const marker of markersRef.current) marker.remove();
+      markersRef.current = [];
+      map.remove();
+      mapRef.current = null;
+      styleReadyRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.jumpTo({
+      center: [viewport.center.longitude, viewport.center.latitude],
+      zoom: viewport.zoom,
+    });
+  }, [viewport.center.latitude, viewport.center.longitude, viewport.zoom, viewport.radiusKm]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const syncOverlays = () => {
+      quietBasemap(map);
+      ensureOverlayLayers(map);
+      setSourceData(
+        map,
+        "oe-rings",
+        ringFeatureCollection(home, ringRadiiForViewport(viewport.radiusKm)),
+      );
+      setSourceData(
+        map,
+        "oe-water-zone",
+        waterTint && water
+          ? waterZoneFeatureCollection(home, water)
+          : emptyCollection(),
+      );
+      setSourceData(
+        map,
+        "oe-metro-lines",
+        linesToFeatureCollection(showMetroLines ? metroLines : []),
+      );
+    };
+
+    if (styleReadyRef.current || map.isStyleLoaded()) {
+      syncOverlays();
+      return;
+    }
+    map.once("load", syncOverlays);
+  }, [home, metroLines, showMetroLines, viewport.radiusKm, water, waterTint]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    for (const marker of markersRef.current) marker.remove();
+    markersRef.current = [];
+
+    const homeMarker = new maplibregl.Marker({
+      element: markerEl("home"),
+      anchor: "center",
+    })
+      .setLngLat([home.longitude, home.latitude])
+      .addTo(map);
+    markersRef.current.push(homeMarker);
+
+    if (showMetroLines) {
+      for (const badge of metroBadgePoints(metroLines, home)) {
+        const marker = new maplibregl.Marker({
+          element: metroBadgeEl(badge.name),
+          anchor: "center",
+        })
+          .setLngLat(badge.coordinate)
+          .addTo(map);
+        markersRef.current.push(marker);
+      }
+    }
+
+    for (const cluster of clusters) {
+      const element = markerEl("cluster", { count: cluster.count });
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelectClusterRef.current(cluster);
+      });
+      const marker = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([cluster.longitude, cluster.latitude])
+        .addTo(map);
+      markersRef.current.push(marker);
+    }
+
+    for (const place of places) {
+      if (clusters.some((cluster) => cluster.placeIds.includes(place.id))) continue;
+      const element = markerEl("place", {
+        selected: place.id === selectedId || place.id === selectedPlace?.id,
+        layer: place.layer,
+        name: place.name,
+      });
+      element.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onSelectPlaceRef.current(place.id);
+      });
+      const marker = new maplibregl.Marker({ element, anchor: "center" })
+        .setLngLat([place.longitude, place.latitude])
+        .addTo(map);
+      markersRef.current.push(marker);
+    }
+  }, [
+    clusters,
+    home,
+    metroLines,
+    places,
+    selectedId,
+    selectedPlace?.id,
+    showMetroLines,
+  ]);
+
+  return (
+    <div
+      className="nearby-map"
+      role="region"
+      aria-label={`Map of places around ${home.name}`}
+    >
+      <div ref={containerRef} className="nearby-map__canvas" role="presentation" />
+      <div className="nearby-map__chrome" aria-hidden="true">
+        <span>{viewport.radiusKm < 1
+          ? `${Math.round(viewport.radiusKm * 1000)} m`
+          : `${viewport.radiusKm.toFixed(viewport.radiusKm < 3 ? 1 : 0)} km`}
+        </span>
+        {typeof nearestMetroDistanceKm === "number" && (
+          <span>Metro · {nearestMetroDistanceKm.toFixed(1)} km</span>
+        )}
+        {showMetroLines && metroLineLabel && (
+          <span>{metroLineLabel}</span>
+        )}
+      </div>
+    </div>
+  );
+}

@@ -5,7 +5,7 @@ type Variant = "loading" | "error" | "empty" | "not_found" | "backend_unavailabl
 interface PageStateProps {
   variant: Variant;
   message?: string;
-  context?: "results" | "shortlist" | "property" | "society" | "generic";
+  context?: "results" | "property" | "generic";
 }
 
 const contextMessages: Record<string, Record<Variant, { title: string; subtitle: string; actions?: { label: string; path: string }[] }>> = {
@@ -27,38 +27,16 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
         { label: "Return home", path: "/" },
       ],
     },
-    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse properties", path: "/results" }] },
-    not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
-  },
-  shortlist: {
-    loading: { title: "Loading your shortlist...", subtitle: "Retrieving your saved properties." },
-    error: {
-      title: "Compare saved homes",
-      subtitle: "We couldn't load property details right now. Your shortlist is stored locally on this device.",
-      actions: [{ label: "Browse properties", path: "/results" }],
-    },
-    backend_unavailable: {
-      title: "Compare saved homes",
-      subtitle: "We couldn't load property details right now. Your shortlist is stored locally on this device.",
-      actions: [{ label: "Browse properties", path: "/results" }],
-    },
-    empty: {
-      title: "Compare saved homes",
-      subtitle: "Your shortlist is stored on this device. Save a few homes to compare value, commute, openness, and risk side by side.",
-      actions: [
-        { label: "Browse properties", path: "/results" },
-        { label: "Return home", path: "/" },
-      ],
-    },
+    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse homes", path: "/" }] },
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {
-    loading: { title: "Loading property details...", subtitle: "Preparing the full transparency report." },
+    loading: { title: "Loading property details...", subtitle: "Gathering proof-backed facts and market context." },
     error: {
       title: "Property details unavailable",
       subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
       actions: [
-        { label: "Back to results", path: "/results" },
+        { label: "Back to search", path: "/" },
         { label: "Browse areas", path: "/" },
       ],
     },
@@ -66,7 +44,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       title: "Property details unavailable",
       subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
       actions: [
-        { label: "Back to results", path: "/results" },
+        { label: "Back to search", path: "/" },
         { label: "Browse areas", path: "/" },
       ],
     },
@@ -75,35 +53,7 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
       title: "Property not found",
       subtitle: "This listing may no longer be available or the link may be incorrect.",
       actions: [
-        { label: "Browse properties", path: "/results" },
-        { label: "Return home", path: "/" },
-      ],
-    },
-  },
-  society: {
-    loading: { title: "Ranking societies...", subtitle: "Evaluating societies across multiple dimensions." },
-    error: {
-      title: "Society results unavailable",
-      subtitle: "We couldn't load society rankings right now. Please try again later.",
-      actions: [
-        { label: "Retry", path: "/societies" },
-        { label: "Return home", path: "/" },
-      ],
-    },
-    backend_unavailable: {
-      title: "Society results unavailable",
-      subtitle: "We couldn't load society rankings right now. Please try again later.",
-      actions: [
-        { label: "Retry", path: "/societies" },
-        { label: "Return home", path: "/" },
-      ],
-    },
-    empty: { title: "No societies match", subtitle: "Try adjusting your search criteria or explore a different area.", actions: [{ label: "Browse societies", path: "/societies" }] },
-    not_found: {
-      title: "Society not found",
-      subtitle: "This society may not be in our database yet.",
-      actions: [
-        { label: "Browse societies", path: "/societies" },
+        { label: "Browse homes", path: "/" },
         { label: "Return home", path: "/" },
       ],
     },

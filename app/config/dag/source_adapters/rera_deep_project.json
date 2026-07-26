@@ -1,0 +1,67 @@
+{
+  "_comment": "RERA deep project adapter contract. Source crawling and document/image parsing happen offline; request paths consume promoted facts and media refs only.",
+  "version": 1,
+  "source_id": "rera_deep_project",
+  "source_type": "Rera",
+  "trust_tier": "root",
+  "max_confidence": 1.0,
+  "request_path_policy": {
+    "allow_runtime_downloads": false,
+    "allow_runtime_pdf_parsing": false,
+    "allow_runtime_image_conversion": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "must_attempt_artifacts": [
+    {
+      "kind": "site_plan",
+      "promoted_count_fact": "site_plan_asset_count",
+      "serving_policy": "optimized_preview_refs_only"
+    },
+    {
+      "kind": "floor_plan",
+      "promoted_count_fact": "floor_plan_asset_count",
+      "derived_schedule": "rera_unit_configuration_schedule",
+      "serving_policy": "configuration_facts_plus_preview_refs"
+    },
+    {
+      "kind": "sanction_plan",
+      "promoted_count_fact": "sanction_plan_asset_count",
+      "serving_policy": "optimized_preview_refs_only"
+    }
+  ],
+  "do_not_promote_fact_keys": [
+    "rera_total_project_cost",
+    "rera_land_cost",
+    "rera_construction_cost",
+    "rera_cost_per_unit",
+    "development_plan_available",
+    "brochure_available",
+    "sewage_drainage_mode"
+  ],
+  "promoted_fact_keys": [
+    "project_land_area_sqm",
+    "project_land_area_acres",
+    "project_open_area_pct",
+    "project_unit_count",
+    "project_tower_count",
+    "project_max_floor_count",
+    "project_units_per_acre",
+    "available_configurations",
+    "configuration_count",
+    "has_1bhk",
+    "has_2bhk",
+    "has_3bhk",
+    "has_4bhk",
+    "parking_total_car_count",
+    "parking_covered_count",
+    "parking_surface_count",
+    "parking_offered_for_sale_count",
+    "stp_count",
+    "stp_capacity_kld",
+    "borewell_proposed_count",
+    "borewell_existing_count",
+    "site_plan_asset_count",
+    "floor_plan_asset_count",
+    "sanction_plan_asset_count"
+  ]
+}

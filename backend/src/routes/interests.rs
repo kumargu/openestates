@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::extract::{Path as AxumPath, State};
@@ -85,8 +85,18 @@ pub async fn express_interest(
     let interest = Interest {
         id: interest_id.clone(),
         property_id: property_id.clone(),
-        buyer_name: req.buyer_name.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from),
-        buyer_contact: req.buyer_contact.as_deref().map(|s| s.trim()).filter(|s| !s.is_empty()).map(String::from),
+        buyer_name: req
+            .buyer_name
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(String::from),
+        buyer_contact: req
+            .buyer_contact
+            .as_deref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(String::from),
         created_at: now.to_rfc3339(),
     };
 

@@ -1,0 +1,28 @@
+{
+  "_comment": "BOOTSTRAP POLICY — writes entity and edge instances to data/lake only. No society names here.",
+  "version": 1,
+  "description": "Bootstrap policy. Writes entity instances and edges to canonical lake assets only — never back into app/config/.",
+  "never_write_instances_to_config": true,
+  "output": {
+    "lake_assets": [
+      "canonical_society_nodes"
+    ],
+    "formats": ["parquet"]
+  },
+  "entity_types": ["property", "society", "area", "builder", "road_segment", "place"],
+  "source_priority": [
+    "rera_registry_monthly",
+    "canonical_society_nodes",
+    "google_places_weekly",
+    "openstreetmap",
+    "seller_claim"
+  ],
+  "confidence_caps": {
+    "seller_claim": 0.4,
+    "inferred_edge": 0.6
+  },
+  "notes": [
+    "Edges are emitted only when inference confidence meets edge_inference.min_confidence.",
+    "Re-bootstrap and re-enrichment are safe: facts are versioned in the lake."
+  ]
+}

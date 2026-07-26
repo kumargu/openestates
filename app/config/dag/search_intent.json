@@ -1,0 +1,150 @@
+{
+  "_comment": "Search intent config. Buyer archetypes and area alias migration target. Preference patterns largely live in fact_registry.json.",
+  "version": 1,
+  "description": "NL search parsing helpers. Area aliases loaded from this file via dag_config.",
+  "buyer_archetypes": [
+    {
+      "id": "family",
+      "label": "Family buyer",
+      "signals": ["family", "schools", "3BHK", "kids", "society quality"]
+    },
+    {
+      "id": "investor",
+      "label": "Investor",
+      "signals": ["investment", "rental yield", "appreciation", "resale"]
+    },
+    {
+      "id": "risk_averse",
+      "label": "Risk-averse",
+      "signals": ["legal", "rera", "litigation", "clear title", "reliable builder"]
+    },
+    {
+      "id": "value_buyer",
+      "label": "Value buyer",
+      "signals": ["affordable", "budget", "value for money", "2BHK"]
+    },
+    {
+      "id": "luxury_buyer",
+      "label": "Luxury buyer",
+      "signals": ["premium", "4BHK", "builder reputation", "luxury"]
+    },
+    {
+      "id": "end_user",
+      "label": "End user",
+      "signals": ["self use", "own stay", "long term"]
+    }
+  ],
+  "area_aliases": {
+    "city": "bengaluru",
+    "entries": [
+      {
+        "canonical": "Whitefield",
+        "aliases": [
+          "whitefield",
+          "witefield",
+          "wf",
+          "kadugodi",
+          "varthur",
+          "itpl",
+          "hope farm",
+          "kundalahalli",
+          "pattandur agrahara",
+          "brookefield",
+          "nallurhalli",
+          "hagadur"
+        ]
+      },
+      {
+        "canonical": "Sarjapur Road",
+        "aliases": ["sarjapur", "sarjapur road", "sjr", "doddakannelli", "carmelaram"]
+      },
+      {
+        "canonical": "Bellandur",
+        "aliases": ["bellandur", "outer ring road", "orr bellandur"]
+      },
+      {
+        "canonical": "HSR Layout",
+        "aliases": ["hsr", "hsr layout", "agara", "sector 1 hsr", "sector 2 hsr"]
+      },
+      {
+        "canonical": "North Bengaluru",
+        "aliases": [
+          "north bangalore",
+          "north bengaluru",
+          "north blr",
+          "devanahalli",
+          "hebbal",
+          "yelahanka",
+          "thanisandra",
+          "jakkur"
+        ]
+      },
+      {
+        "canonical": "Electronic City",
+        "aliases": ["electronic city", "ec", "ecity"]
+      },
+      {
+        "canonical": "Koramangala",
+        "aliases": ["koramangala", "koramangala 5th block"]
+      },
+      {
+        "canonical": "Marathahalli",
+        "aliases": ["marathahalli", "marathon halli"]
+      },
+      {
+        "canonical": "Indiranagar",
+        "aliases": ["indiranagar", "indira nagar"]
+      },
+      {
+        "canonical": "Jayanagar",
+        "aliases": ["jayanagar", "jaya nagar"]
+      },
+      {
+        "canonical": "Bannerghatta Road",
+        "aliases": ["bannerghatta", "bannerghatta road", "btm"]
+      }
+    ]
+  },
+  "resolution": {
+    "min_resolvable_entity_name_chars": 3,
+    "ignored_entity_names": ["a", "an", "the", "in", "near", "for", "with"],
+    "place_families": [
+      {
+        "id": "metro",
+        "label": "metro",
+        "aliases": ["metro", "metro station", "station", "purple line"]
+      },
+      {
+        "id": "school",
+        "label": "school",
+        "aliases": ["school", "schools", "kid school", "children school"]
+      },
+      {
+        "id": "hospital",
+        "label": "hospital",
+        "aliases": ["hospital", "hospitals", "clinic", "medical"]
+      },
+      {
+        "id": "tech_park",
+        "label": "tech park",
+        "aliases": ["tech park", "tech parks", "office", "offices"]
+      },
+      {
+        "id": "mall",
+        "label": "mall",
+        "aliases": ["mall", "shopping mall", "forum", "galleria"]
+      },
+      {
+        "id": "landmark",
+        "label": "landmark",
+        "aliases": ["landmark", "nearby", "near by", "close to"]
+      }
+    ]
+  },
+  "hard_constraint_dimensions": [
+    {
+      "field": "land_area",
+      "registry_ref": "app/config/dag/fact_registry.json numeric_constraints"
+    }
+  ]
+}

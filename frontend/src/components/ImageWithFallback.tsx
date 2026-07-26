@@ -35,9 +35,10 @@ export function ImageWithFallback({
   className?: string;
   loading?: "lazy" | "eager";
 }) {
-  const [failed, setFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
 
   const isPlaceholder = !src || src.startsWith("placeholder://");
+  const failed = Boolean(src && failedSrc === src);
 
   if (isPlaceholder || failed) {
     const bg = stringToColor(alt);
@@ -74,7 +75,7 @@ export function ImageWithFallback({
       className={className}
       style={{ objectFit: "cover", ...style }}
       loading={loading}
-      onError={() => setFailed(true)}
+      onError={() => setFailedSrc(src)}
     />
   );
 }

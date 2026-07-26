@@ -1,0 +1,38 @@
+{
+  "entity_id": "society:brigade-woods",
+  "property_name": "Brigade Woods",
+  "summary_scope": "society",
+  "summary_kind": "livability_context",
+  "target_words": {
+    "min": 80,
+    "max": 130
+  },
+  "evidence": [
+    "Location/project: Brigade Woods is a Whitefield apartment project from Brigade Group and appears as ready to move in local seed data.",
+    "Reviews: Google evidence shows a 4.1 rating from about 184 reviews, with snippets mentioning peaceful living, greenery, maintenance, and facilities.",
+    "Family needs: review evidence mentions Deens Academy, Manipal Hospital, Cloud Nine, and Vaidehi near the society.",
+    "Daily life/work: review evidence mentions metro access, ITPL, tech parks, Loyal City Super Market, Shantiniketan, and nearby malls.",
+    "Approach-road evidence: street-view validation has usable gate/road context frames within roughly 82-148m of the gate.",
+    "Caution: Reddit validation mentions high traffic, and one Google review snippet raised resale/ground-floor/view concerns; do not describe access or resale as friction-free."
+  ],
+  "expected_terms": [
+    "Whitefield",
+    "Brigade",
+    "4.1",
+    "greenery",
+    "Deens",
+    "Manipal",
+    "metro",
+    "ITPL",
+    "traffic"
+  ],
+  "forbidden_terms": [
+    "guaranteed",
+    "minutes away",
+    "walkable",
+    "zero traffic",
+    "best investment",
+    "price appreciation",
+    "waterlogging"
+  ]
+}

@@ -65,17 +65,14 @@ pub enum ScoringDirection {
 }
 
 /// What kind of value a fact holds.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum FactValue {
     Numeric(f64),
     Text(String),
     Bool(bool),
     Tags(Vec<String>),
-    Score {
-        value: f64,
-        explanation: String,
-    },
+    Score { value: f64, explanation: String },
 }
 
 /// Where a fact came from — the provenance chain.
@@ -113,7 +110,8 @@ pub enum SourceType {
     Computed,
     /// Seed data, hand-curated — static until manually updated
     Manual,
-    /// AI-generated synthesis — dynamic, refresh with new data
+    /// Legacy AI-generated synthesis. Retained so older KG facts still load.
+    /// New enrichment code should not emit this source type.
     Llm,
 }
 
@@ -156,5 +154,179 @@ impl SourcedFact {
             scoring_hint: None,
         }
     }
+}
 
+pub fn google_reviews_url_from_facts(facts: &[SourcedFact], entity_name: &str) -> Option<String> {
+    for key in [
+        "google_reviews_url",
+        "google_maps_url",
+        "google_place_url",
+        "google_review_url",
+    ] {
+        if let Some(url) = latest_text_fact(facts, key).filter(|url| is_web_url(url)) {
+            return Some(url);
+        }
+    }
+
+    for fact in facts {
+        if is_google_review_link_fact(fact) {
+            if let Some(url) = fact.source.url.as_deref().filter(|url| is_web_url(url)) {
+                return Some(url.trim().to_string());
+            }
+        }
+    }
+
+    for key in ["google_place_id", "future_google_place_id"] {
+        if let Some(place_id) = latest_text_fact(facts, key).filter(|value| !value.is_empty()) {
+            return Some(google_maps_place_url(entity_name, &place_id));
+        }
+    }
+
+    if facts.iter().any(is_google_review_link_fact) {
+        return Some(google_maps_search_url(entity_name));
+    }
+
+    None
+}
+
+fn latest_text_fact(facts: &[SourcedFact], key: &str) -> Option<String> {
+    facts
+        .iter()
+        .filter(|fact| fact.key == key)
+        .max_by_key(|fact| fact.version)
+        .and_then(|fact| match &fact.value {
+            FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+            _ => None,
+        })
+}
+
+fn is_web_url(url: &str) -> bool {
+    let url = url.trim();
+    url.starts_with("https://") || url.starts_with("http://")
+}
+
+fn is_google_review_link_fact(fact: &SourcedFact) -> bool {
+    if fact.source.source_type != SourceType::Google {
+        return false;
+    }
+
+    if fact.source.skill_id.as_deref().is_some_and(|skill_id| {
+        skill_id == "fetch_google_review_links" || skill_id == "fetch_google_reviews"
+    }) {
+        return true;
+    }
+
+    matches!(
+        fact.key.as_str(),
+        "google_reviews_url"
+            | "google_maps_url"
+            | "google_place_url"
+            | "google_review_url"
+            | "google_rating"
+            | "google_review_count"
+            | "google_sentiment"
+            | "google_common_themes"
+            | "google_top_positives"
+            | "google_top_negatives"
+    )
+}
+
+fn google_maps_place_url(entity_name: &str, place_id: &str) -> String {
+    format!(
+        "https://www.google.com/maps/search/?api=1&query={}&query_place_id={}",
+        percent_encode_query(entity_name),
+        percent_encode_query(place_id)
+    )
+}
+
+fn google_maps_search_url(entity_name: &str) -> String {
+    format!(
+        "https://www.google.com/maps/search/?api=1&query={}",
+        percent_encode_query(entity_name)
+    )
+}
+
+fn percent_encode_query(value: &str) -> String {
+    let mut encoded = String::new();
+    for byte in value.as_bytes() {
+        match *byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~' => {
+                encoded.push(*byte as char)
+            }
+            b' ' => encoded.push_str("%20"),
+            other => encoded.push_str(&format!("%{other:02X}")),
+        }
+    }
+    encoded
+}
+
+#[cfg(test)]
+mod google_reviews_url_tests {
+    use super::*;
+
+    #[test]
+    fn google_reviews_url_prefers_explicit_url_fact() {
+        let mut fact = SourcedFact::manual(
+            "google_reviews_url",
+            FactValue::Text("https://maps.google.com/?cid=123".to_string()),
+        );
+        fact.source.source_type = SourceType::Google;
+
+        assert_eq!(
+            google_reviews_url_from_facts(&[fact], "Test Society").as_deref(),
+            Some("https://maps.google.com/?cid=123")
+        );
+    }
+
+    #[test]
+    fn google_reviews_url_uses_google_source_url() {
+        let mut fact = SourcedFact::manual("google_rating", FactValue::Numeric(4.3));
+        fact.source.source_type = SourceType::Google;
+        fact.source.skill_id = Some("fetch_google_review_links".to_string());
+        fact.source.url = Some("https://www.google.com/maps/place/test".to_string());
+
+        assert_eq!(
+            google_reviews_url_from_facts(&[fact], "Test Society").as_deref(),
+            Some("https://www.google.com/maps/place/test")
+        );
+    }
+
+    #[test]
+    fn google_reviews_url_ignores_unrelated_google_source_url() {
+        let mut fact = SourcedFact::manual("pricing_3bhk", FactValue::Numeric(250.0));
+        fact.source.source_type = SourceType::Google;
+        fact.source.skill_id = Some("market_pricing_facts".to_string());
+        fact.source.url = Some("https://www.magicbricks.com/test".to_string());
+
+        assert_eq!(google_reviews_url_from_facts(&[fact], "Test Society"), None);
+    }
+
+    #[test]
+    fn google_reviews_url_builds_maps_link_from_place_id() {
+        let fact = SourcedFact::manual(
+            "google_place_id",
+            FactValue::Text("ChIJ_Test Place".to_string()),
+        );
+
+        assert_eq!(
+            google_reviews_url_from_facts(&[fact], "Test Society").as_deref(),
+            Some(
+                "https://www.google.com/maps/search/?api=1&query=Test%20Society&query_place_id=ChIJ_Test%20Place"
+            )
+        );
+    }
+
+    #[test]
+    fn google_reviews_url_builds_search_link_from_review_fact_without_url() {
+        let mut fact = SourcedFact::manual(
+            "google_sentiment",
+            FactValue::Text("Reviews mention amenities".to_string()),
+        );
+        fact.source.source_type = SourceType::Google;
+
+        assert_eq!(
+            google_reviews_url_from_facts(&[fact], "Test Society").as_deref(),
+            Some("https://www.google.com/maps/search/?api=1&query=Test%20Society")
+        );
+    }
 }

@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::extract::{Path, State};
@@ -7,8 +7,8 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::dag_config::area_alias_entries;
 use crate::models::{AreaProfile, Property, RegistrationDraft, Seller};
-use crate::search::intent::AREA_ALIASES;
 use crate::state::AppState;
 
 /// Max registration creations per rate-limit window (60 seconds).
@@ -232,8 +232,7 @@ pub async fn update_registration_step(
                 )
             })?;
             validate_step3(&payload)?;
-            draft.property_details =
-                Some(serde_json::to_value(&payload).unwrap_or_default());
+            draft.property_details = Some(serde_json::to_value(&payload).unwrap_or_default());
             if draft.current_step < 3 {
                 draft.current_step = 3;
             }
@@ -248,8 +247,7 @@ pub async fn update_registration_step(
                 )
             })?;
             validate_step4(&payload)?;
-            draft.pricing =
-                Some(serde_json::to_value(&payload).unwrap_or_default());
+            draft.pricing = Some(serde_json::to_value(&payload).unwrap_or_default());
             if draft.current_step < 4 {
                 draft.current_step = 4;
             }
@@ -264,8 +262,7 @@ pub async fn update_registration_step(
                 )
             })?;
             validate_step5(&payload)?;
-            draft.documents =
-                Some(serde_json::to_value(&payload).unwrap_or_default());
+            draft.documents = Some(serde_json::to_value(&payload).unwrap_or_default());
             if draft.current_step < 5 {
                 draft.current_step = 5;
             }
@@ -280,8 +277,7 @@ pub async fn update_registration_step(
                 )
             })?;
             validate_step6(&payload)?;
-            draft.photos =
-                Some(serde_json::to_value(&payload).unwrap_or_default());
+            draft.photos = Some(serde_json::to_value(&payload).unwrap_or_default());
             if draft.current_step < 6 {
                 draft.current_step = 6;
             }
@@ -296,8 +292,7 @@ pub async fn update_registration_step(
                 )
             })?;
             validate_step7(&payload)?;
-            draft.society_info =
-                Some(serde_json::to_value(&payload).unwrap_or_default());
+            draft.society_info = Some(serde_json::to_value(&payload).unwrap_or_default());
             if draft.current_step < 7 {
                 draft.current_step = 7;
             }
@@ -398,10 +393,7 @@ fn validate_step3(payload: &Step3Payload) -> Result<(), (StatusCode, Json<Regist
         return Err((
             StatusCode::BAD_REQUEST,
             Json(RegistrationError {
-                error: format!(
-                    "property_type must be one of: {}",
-                    valid_types.join(", ")
-                ),
+                error: format!("property_type must be one of: {}", valid_types.join(", ")),
             }),
         ));
     }
@@ -464,8 +456,14 @@ fn validate_step3(payload: &Step3Payload) -> Result<(), (StatusCode, Json<Regist
 
     if let Some(ref facing) = payload.facing {
         let valid = [
-            "north", "south", "east", "west", "north_east", "north_west",
-            "south_east", "south_west",
+            "north",
+            "south",
+            "east",
+            "west",
+            "north_east",
+            "north_west",
+            "south_east",
+            "south_west",
         ];
         if !valid.contains(&facing.as_str()) {
             return Err((
@@ -753,36 +751,41 @@ async fn load_draft(
 /// canonical name = more specific).
 ///
 /// Returns a reference to the best-matching Society, or None if no overlap found.
-fn fuzzy_match_society<'a>(input: &str, societies: &'a [crate::models::Society]) -> Option<&'a crate::models::Society> {
+fn fuzzy_match_society<'a>(
+    input: &str,
+    societies: &'a [crate::models::Society],
+) -> Option<&'a crate::models::Society> {
     let input_lower = input.to_lowercase();
-    societies.iter().filter_map(|s| {
-        let s_lower = s.name.to_lowercase();
+    societies
+        .iter()
+        .filter_map(|s| {
+            let s_lower = s.name.to_lowercase();
 
-        // Exact match = highest score (u32::MAX)
-        if s_lower == input_lower {
-            return Some((s, u32::MAX));
-        }
+            // Exact match = highest score (u32::MAX)
+            if s_lower == input_lower {
+                return Some((s, u32::MAX));
+            }
 
-        // Score by longest common substring overlap (bidirectional)
-        let overlap = if s_lower.contains(&input_lower) {
-            input_lower.len()
-        } else if input_lower.contains(&s_lower) {
-            s_lower.len()
-        } else {
-            0
-        };
+            // Score by longest common substring overlap (bidirectional)
+            let overlap = if s_lower.contains(&input_lower) {
+                input_lower.len()
+            } else if input_lower.contains(&s_lower) {
+                s_lower.len()
+            } else {
+                0
+            };
 
-        if overlap > 0 {
-            // Prefer most specific match (shorter name = more specific when it fully contains input)
-            // Use overlap as primary score, penalize longer names to break ties
-            let specificity_bonus = 1000u32.saturating_sub(s_lower.len() as u32);
-            Some((s, (overlap as u32) * 1000 + specificity_bonus))
-        } else {
-            None
-        }
-    })
-    .max_by_key(|(_, score)| *score)
-    .map(|(s, _)| s)
+            if overlap > 0 {
+                // Prefer most specific match (shorter name = more specific when it fully contains input)
+                // Use overlap as primary score, penalize longer names to break ties
+                let specificity_bonus = 1000u32.saturating_sub(s_lower.len() as u32);
+                Some((s, (overlap as u32) * 1000 + specificity_bonus))
+            } else {
+                None
+            }
+        })
+        .max_by_key(|(_, score)| *score)
+        .map(|(s, _)| s)
 }
 
 /// Extract area from free-text using AREA_ALIASES, falling back to state.areas name match.
@@ -792,12 +795,12 @@ fn extract_area_from_text(text: &str, areas: &[AreaProfile]) -> Option<(String, 
 
     // Scan AREA_ALIASES for the longest alias match (same strategy as detect_area in intent.rs)
     let mut best: Option<(&str, usize)> = None;
-    for (aliases, canonical) in AREA_ALIASES {
-        for alias in *aliases {
-            if text_lower.contains(alias) {
+    for entry in area_alias_entries() {
+        for alias in &entry.aliases {
+            if text_contains_phrase(&text_lower, alias) {
                 let len = alias.len();
                 if best.is_none() || len > best.unwrap().1 {
-                    best = Some((canonical, len));
+                    best = Some((entry.canonical.as_str(), len));
                 }
             }
         }
@@ -821,6 +824,38 @@ fn extract_area_from_text(text: &str, areas: &[AreaProfile]) -> Option<(String, 
     }
 
     None
+}
+
+fn text_contains_phrase(text: &str, phrase: &str) -> bool {
+    let phrase = phrase.trim();
+    if phrase.is_empty() {
+        return false;
+    }
+
+    let mut search_start = 0;
+    while let Some(relative_pos) = text[search_start..].find(phrase) {
+        let start = search_start + relative_pos;
+        let end = start + phrase.len();
+        let before_ok = text[..start]
+            .chars()
+            .next_back()
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
+        let after_ok = text[end..]
+            .chars()
+            .next()
+            .is_none_or(|ch| !ch.is_ascii_alphanumeric());
+
+        if before_ok && after_ok {
+            return true;
+        }
+
+        search_start = end;
+        if search_start >= text.len() {
+            return false;
+        }
+    }
+
+    false
 }
 
 // --- Publish endpoint ---
@@ -893,16 +928,17 @@ pub async fn publish_registration(
     // Extract property details from step 3
     let (property_type, bhk, carpet_area, floor, total_floors, facing, _furnishing) =
         if let Some(ref details) = draft.property_details {
-            let pd: Step3Payload = serde_json::from_value(details.clone()).unwrap_or(Step3Payload {
-                property_type: "apartment".to_string(),
-                bhk: None,
-                carpet_area_sqft: None,
-                floor: None,
-                total_floors: None,
-                facing: None,
-                furnishing: None,
-                age_years: None,
-            });
+            let pd: Step3Payload =
+                serde_json::from_value(details.clone()).unwrap_or(Step3Payload {
+                    property_type: "apartment".to_string(),
+                    bhk: None,
+                    carpet_area_sqft: None,
+                    floor: None,
+                    total_floors: None,
+                    facing: None,
+                    furnishing: None,
+                    age_years: None,
+                });
             (
                 pd.property_type,
                 pd.bhk.unwrap_or(2) as u32,
@@ -913,7 +949,15 @@ pub async fn publish_registration(
                 pd.furnishing.unwrap_or_default(),
             )
         } else {
-            ("apartment".to_string(), 2, 1000, 0, 1, String::new(), String::new())
+            (
+                "apartment".to_string(),
+                2,
+                1000,
+                0,
+                1,
+                String::new(),
+                String::new(),
+            )
         };
 
     // Extract pricing from step 4
@@ -944,10 +988,18 @@ pub async fn publish_registration(
             rera_number: None,
         });
         let mut provided = Vec::new();
-        if d.has_sale_deed == Some(true) { provided.push("sale_deed".to_string()); }
-        if d.has_khata == Some(true) { provided.push("khata".to_string()); }
-        if d.has_ec == Some(true) { provided.push("ec".to_string()); }
-        if d.has_rera_registration == Some(true) { provided.push("rera".to_string()); }
+        if d.has_sale_deed == Some(true) {
+            provided.push("sale_deed".to_string());
+        }
+        if d.has_khata == Some(true) {
+            provided.push("khata".to_string());
+        }
+        if d.has_ec == Some(true) {
+            provided.push("ec".to_string());
+        }
+        if d.has_rera_registration == Some(true) {
+            provided.push("rera".to_string());
+        }
         provided
     } else {
         Vec::new()
@@ -955,11 +1007,13 @@ pub async fn publish_registration(
 
     // Extract society name and area from step 7
     let (society_name, seller_area) = if let Some(ref info) = draft.society_info {
-        let sn = info.get("society_name")
+        let sn = info
+            .get("society_name")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown Society")
             .to_string();
-        let sa = info.get("area")
+        let sa = info
+            .get("area")
             .and_then(|v| v.as_str())
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
@@ -979,14 +1033,23 @@ pub async fn publish_registration(
     let (resolved_society_id, resolved_area, resolved_area_id, resolved_builder) =
         if let Some(soc) = matched_society {
             // Find area_id from state.areas by matching the society's area name
-            let area_id = state.areas.iter()
+            let area_id = state
+                .areas
+                .iter()
                 .find(|a| a.name.to_lowercase() == soc.area.to_lowercase())
                 .map(|a| a.id.clone())
                 .unwrap_or_default();
-            (soc.id.clone(), soc.area.clone(), area_id, soc.builder_name.clone())
+            (
+                soc.id.clone(),
+                soc.area.clone(),
+                area_id,
+                soc.builder_name.clone(),
+            )
         } else if let Some(ref area_str) = seller_area {
             // No society match, but seller provided an area — try to match area_id
-            let area_id = state.areas.iter()
+            let area_id = state
+                .areas
+                .iter()
                 .find(|a| a.name.to_lowercase() == area_str.to_lowercase())
                 .map(|a| a.id.clone())
                 .unwrap_or_default();
@@ -1002,14 +1065,20 @@ pub async fn publish_registration(
             (String::new(), String::new(), String::new(), String::new())
         };
 
-    // KG indexing deferred to enrichment pipeline — published properties start with
+    // DAG enrichment deferred to the offline pipeline — published properties start with
     // transparency_tags: ["seller-registered", "verification-pending"] and get enriched
-    // by Python skills per CLAUDE.md §17.4.
+    // by Python skills and promoted serving bundles per AGENTS.md.
 
-    let seller_name = draft.name.clone().unwrap_or_else(|| "Unknown Seller".to_string());
+    let seller_name = draft
+        .name
+        .clone()
+        .unwrap_or_else(|| "Unknown Seller".to_string());
 
     // Auto-generate property title
-    let title = format!("{} BHK {} in {} by {}", bhk, property_type, society_name, seller_name);
+    let title = format!(
+        "{} BHK {} in {} by {}",
+        bhk, property_type, society_name, seller_name
+    );
 
     // Compute price_per_sqft
     let price_per_sqft = if carpet_area > 0 {
@@ -1063,15 +1132,15 @@ pub async fn publish_registration(
         possession_status,
         metro_distance_mins: 0,
         maintenance_cost_monthly: maintenance_monthly,
-        society_quality_score: 0.0,
-        builder_quality_score: 0.0,
-        document_completeness_score: 0.0,
-        litigation_risk: 0.0,
-        noise_score: 0.0,
-        sunlight_score: 0.0,
-        airport_noise_score: 0.0,
-        waterlogging_risk_score: 0.0,
-        traffic_score: 0.0,
+        society_quality_score: None,
+        builder_quality_score: None,
+        document_completeness_score: None,
+        litigation_risk: None,
+        noise_score: None,
+        sunlight_score: None,
+        airport_noise_score: None,
+        waterlogging_risk_score: None,
+        traffic_score: None,
         days_on_market: 0,
         greenery_score: None,
         open_space_score: None,
@@ -1082,7 +1151,10 @@ pub async fn publish_registration(
         images: Vec::new(),
         hero_image: String::new(),
         description_summary: draft.property_prompt.clone().unwrap_or_default(),
-        transparency_tags: vec!["seller-registered".to_string(), "verification-pending".to_string()],
+        transparency_tags: vec![
+            "seller-registered".to_string(),
+            "verification-pending".to_string(),
+        ],
         source_reference: format!("registration:{}", draft.id),
         seller_id: Some(seller_id.clone()),
     };
@@ -1090,7 +1162,9 @@ pub async fn publish_registration(
     // Safety net: if area is still empty but description_summary has content,
     // try to extract area from description_summary (which contains property_prompt).
     let property = if property.area.is_empty() && !property.description_summary.is_empty() {
-        if let Some((area_name, area_id)) = extract_area_from_text(&property.description_summary, &state.areas) {
+        if let Some((area_name, area_id)) =
+            extract_area_from_text(&property.description_summary, &state.areas)
+        {
             Property {
                 area: area_name,
                 area_id,
@@ -1117,139 +1191,15 @@ pub async fn publish_registration(
     })?;
     let sellers_path = sellers_dir.join("sellers.json");
     let mut all_sellers: Vec<Seller> = if sellers_path.exists() {
-        let content = tokio::fs::read_to_string(&sellers_path).await.unwrap_or_else(|_| "[]".to_string());
+        let content = tokio::fs::read_to_string(&sellers_path)
+            .await
+            .unwrap_or_else(|_| "[]".to_string());
         serde_json::from_str(&content).unwrap_or_default()
     } else {
         Vec::new()
     };
     all_sellers.push(seller.clone());
     atomic_write_json(&sellers_path, &all_sellers).await?;
-
-    // 2. Create KG property node and persist to data/knowledge/nodes/property/
-    {
-        use crate::knowledge::fact::{FactSource, FactValue, SourceType, SourcedFact};
-        use crate::knowledge::node::{Node, NodeType, RootSource};
-        use crate::knowledge::store as kg_store;
-        use chrono::Utc;
-
-        let prop_node_id = format!("property:{}", property.id);
-        let mut prop_node = Node::new(&prop_node_id, NodeType::Property, &property.title);
-        prop_node.root_source = Some(RootSource::Seller);
-
-        let source = FactSource {
-            source_type: SourceType::Manual,
-            url: None,
-            model: None,
-            skill_id: Some("seller_registration".to_string()),
-            triggered_by: Some(format!("seller:{}", seller_id)),
-        };
-
-        let mut facts = vec![
-            SourcedFact {
-                key: "area".to_string(),
-                value: FactValue::Text(property.area.clone()),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-            SourcedFact {
-                key: "city".to_string(),
-                value: FactValue::Text(property.city.clone()),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-            SourcedFact {
-                key: "bhk".to_string(),
-                value: FactValue::Numeric(property.bhk as f64),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-            SourcedFact {
-                key: "price".to_string(),
-                value: FactValue::Numeric(property.price as f64),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-            SourcedFact {
-                key: "builder_name".to_string(),
-                value: FactValue::Text(property.builder_name.clone()),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-            SourcedFact {
-                key: "title".to_string(),
-                value: FactValue::Text(property.title.clone()),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            },
-        ];
-        if property.carpet_area_sqft > 0 {
-            facts.push(SourcedFact {
-                key: "carpet_area_sqft".to_string(),
-                value: FactValue::Numeric(property.carpet_area_sqft as f64),
-                confidence: 0.9,
-                source: source.clone(),
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            });
-        }
-        if !property.seller_id.as_ref().map_or(true, |s| s.is_empty()) {
-            facts.push(SourcedFact {
-                key: "seller_id".to_string(),
-                value: FactValue::Text(property.seller_id.clone().unwrap_or_default()),
-                confidence: 1.0,
-                source,
-                learned_at: Utc::now(),
-                version: 1,
-                display_template: None,
-                answers_preferences: Vec::new(),
-                scoring_hint: None,
-            });
-        }
-        prop_node.add_facts(facts);
-
-        // Save to disk
-        let kg_dir = kg_store::knowledge_dir(&state.project_root);
-        if let Err(e) = kg_store::save_node(&kg_dir, &prop_node) {
-            eprintln!("WARN: Failed to persist KG property node: {}", e);
-        }
-
-        // Add to in-memory KG
-        let mut graph = state.knowledge.write().await;
-        graph.add_node(prop_node);
-    }
 
     // --- Insert into in-memory state ---
     {
@@ -1258,6 +1208,8 @@ pub async fn publish_registration(
     }
     {
         let mut properties_lock = state.properties.write().await;
+        let mut search_index = state.search_index.write().await;
+        search_index.insert(&property);
         properties_lock.push(property);
     }
 
@@ -1293,14 +1245,16 @@ async fn atomic_write_json<T: Serialize>(
     })?;
 
     let tmp_path = path.with_extension("json.tmp");
-    tokio::fs::write(&tmp_path, json.as_bytes()).await.map_err(|e| {
-        (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(RegistrationError {
-                error: format!("failed to write tmp file: {}", e),
-            }),
-        )
-    })?;
+    tokio::fs::write(&tmp_path, json.as_bytes())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(RegistrationError {
+                    error: format!("failed to write tmp file: {}", e),
+                }),
+            )
+        })?;
 
     tokio::fs::rename(&tmp_path, path).await.map_err(|e| {
         (
@@ -1317,7 +1271,10 @@ async fn atomic_write_json<T: Serialize>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::{Society, area_profile::{AreaProfile, PriceRange, RedditSignals}};
+    use crate::models::{
+        area_profile::{AreaProfile, PriceRange, RedditSignals},
+        Society,
+    };
 
     /// Helper to build a minimal Society for testing.
     fn test_society(id: &str, name: &str) -> Society {
@@ -1335,6 +1292,7 @@ mod tests {
             common_positives: Vec::new(),
             common_complaints: Vec::new(),
             review_summary: String::new(),
+            google_reviews_url: None,
             future_google_place_name: String::new(),
             future_google_place_id: None,
             future_review_enrichment_status: String::new(),
@@ -1348,7 +1306,10 @@ mod tests {
             name: name.to_string(),
             city: "bengaluru".to_string(),
             median_price_per_sqft: 8000,
-            price_range_per_sqft: PriceRange { low: 6000, high: 12000 },
+            price_range_per_sqft: PriceRange {
+                low: 6000,
+                high: 12000,
+            },
             trend_direction: String::new(),
             trend_summary: String::new(),
             metro_access_summary: String::new(),
@@ -1406,9 +1367,7 @@ mod tests {
 
     #[test]
     fn test_fuzzy_match_case_insensitive() {
-        let societies = vec![
-            test_society("s1", "Prestige Lakeside Habitat"),
-        ];
+        let societies = vec![test_society("s1", "Prestige Lakeside Habitat")];
         let result = fuzzy_match_society("prestige lakeside habitat", &societies);
         assert_eq!(result.map(|s| s.id.as_str()), Some("s1"));
     }
@@ -1448,5 +1407,13 @@ mod tests {
         assert!(result.is_some());
         let (area_name, _) = result.unwrap();
         assert_eq!(area_name, "Whitefield");
+    }
+
+    #[test]
+    fn test_extract_area_alias_does_not_match_inside_words() {
+        // "ec" is an Electronic City alias and must not match the middle of "tech".
+        let areas = vec![test_area("area-electronic-city", "Electronic City")];
+        let result = extract_area_from_text("Office near tech parks", &areas);
+        assert!(result.is_none());
     }
 }

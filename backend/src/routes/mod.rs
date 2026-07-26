@@ -1,10 +1,12 @@
 pub mod admin;
 pub mod areas;
 pub mod claims;
+pub mod discovery;
 pub mod enrichment;
 pub mod interests;
-pub mod knowledge;
+pub mod map_overlays;
 pub mod properties;
+pub mod property_map;
 pub mod registration;
 pub mod search;
 pub mod sellers;

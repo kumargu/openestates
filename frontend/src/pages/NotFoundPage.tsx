@@ -57,8 +57,8 @@ export function NotFoundPage() {
           <Link to="/" className="btn btn-primary" style={{ textDecoration: "none" }}>
             Go home
           </Link>
-          <Link to="/results" className="btn btn-outline" style={{ textDecoration: "none" }}>
-            Search properties
+          <Link to="/" className="btn btn-outline" style={{ textDecoration: "none" }}>
+            Search homes
           </Link>
         </div>
       </div>

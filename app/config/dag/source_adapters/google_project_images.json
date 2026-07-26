@@ -1,0 +1,27 @@
+{
+  "_comment": "Google Images adapter contract for high-quality project media. The collector stores source-backed observations and optimized previews offline.",
+  "version": 1,
+  "source_id": "google_project_images",
+  "source_type": "GoogleImages",
+  "enabled": false,
+  "disabled_reason": "Optimized project media downloads are disabled by default until we explicitly enable this lane; current DAG runs keep link-backed observations.",
+  "trust_tier": "support",
+  "max_confidence": 0.8,
+  "request_path_policy": {
+    "allow_runtime_image_search": false,
+    "allow_runtime_downloads": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "quality_policy": {
+    "target_project_images": 6,
+    "prefer_kinds": ["exterior", "aerial", "amenities", "entrance"],
+    "reject_kinds": ["logo", "icon", "stock", "floor_plan", "site_plan"],
+    "serving_policy": "optimized_preview_refs_only"
+  },
+  "emits_fact_keys": [
+    "image.hero",
+    "image.gallery",
+    "image.source_url",
+    "image.quality_score"
+  ]
+}

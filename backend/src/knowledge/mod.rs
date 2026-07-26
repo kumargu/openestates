@@ -9,15 +9,13 @@
 //! - **KnowledgeGraph**: The container with indexes for fast traversal
 
 pub mod edge;
-pub mod embed_client;
 pub mod embeddings;
 pub mod fact;
 pub mod graph;
 pub mod node;
 pub mod query;
 pub mod search_event;
-pub mod store;
 
-pub use fact::{FactValue, SourcedFact};
+pub use fact::{google_reviews_url_from_facts, FactValue, SourcedFact};
 pub use graph::{GraphStats, KnowledgeGraph};
 pub use search_event::SearchEvent;

@@ -46,6 +46,7 @@ pub struct Edge {
 
 impl Edge {
     /// Create a simple edge with manual source.
+    #[cfg(test)]
     pub fn new(from: NodeId, to: NodeId, relation: Relation) -> Self {
         Self {
             from,
@@ -62,5 +63,4 @@ impl Edge {
             },
         }
     }
-
 }
