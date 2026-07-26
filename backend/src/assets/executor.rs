@@ -16,21 +16,22 @@ use super::{
     read_skill_fact_artifact_rows, sort_materialization_records, ApproachRoadGraphError,
     ApproachRoadGraphMaterializer, AssetDagPlan, AssetDagRunManifest, AssetDefinition,
     AssetFanInError, AssetId, AssetMaterializationStore, AssetPartition, AssetPlanner,
-    AssetRunManifestStore, AssetSourceInputs, AssetStage, DependencyFanInPolicy,
-    EnvironmentalAssetError, GooglePlaceAssetError, GooglePlaceSnapshotMaterializer,
-    KgSocietyViewMaterialization, KgSocietyViewMaterializeError, KgSocietyViewMaterializer,
-    KgViewManifest, KgViewRecords, MaterializationId, MaterializationRecord, MediaAssetError,
-    MediaAssetMaterializer, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    AssetRunManifestStore, AssetSourceInputs, AssetStage, CurrentProjectFactsError,
+    CurrentProjectFactsMaterializer, DependencyFanInPolicy, EnvironmentalAssetError,
+    GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
+    KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
+    MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
+    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
     TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -45,6 +46,8 @@ pub struct AssetDagExecutionOptions {
     pub source_inputs: AssetSourceInputs,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub force_assets: Vec<AssetId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skip_current_promotion_assets: Vec<AssetId>,
     #[serde(default)]
     pub retry_policy: AssetRetryPolicy,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -79,6 +82,7 @@ impl AssetDagExecutionOptions {
             dry_run: false,
             source_inputs: AssetSourceInputs::default(),
             force_assets: Vec::new(),
+            skip_current_promotion_assets: Vec::new(),
             retry_policy: AssetRetryPolicy::default(),
             resume_lease_id: None,
             asset_execution_timeout_ms: DEFAULT_ASSET_EXECUTION_TIMEOUT_MS,
@@ -105,6 +109,14 @@ impl AssetDagExecutionOptions {
         self
     }
 
+    pub fn with_skip_current_promotion_assets(mut self, assets: Vec<AssetId>) -> Self {
+        self.skip_current_promotion_assets = assets;
+        self.skip_current_promotion_assets
+            .sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        self.skip_current_promotion_assets.dedup();
+        self
+    }
+
     pub fn with_retry_policy(mut self, retry_policy: AssetRetryPolicy) -> Self {
         self.retry_policy = retry_policy;
         self
@@ -124,6 +136,12 @@ impl AssetDagExecutionOptions {
     fn asset_execution_timeout_ms(&self) -> u64 {
         self.asset_execution_timeout_ms
             .min(DEFAULT_ASSET_EXECUTION_TIMEOUT_MS)
+    }
+
+    fn should_skip_current_promotion(&self, asset_id: &AssetId) -> bool {
+        self.skip_current_promotion_assets
+            .binary_search_by(|candidate| candidate.as_str().cmp(asset_id.as_str()))
+            .is_ok()
     }
 }
 
@@ -368,6 +386,17 @@ impl AssetDagExecutor {
         for step in manifest.steps.clone() {
             if step.status == super::AssetRunStepStatus::Materialized {
                 let record = self.record_for_manifest_step(&step).await?;
+                if options.should_skip_current_promotion(&step.asset_id) {
+                    manifest.mark_step_promoted(&step.asset_id, Utc::now())?;
+                    self.persist_manifest(&mut manifest, false).await?;
+                    records_by_asset.insert(step.asset_id.clone(), record);
+                    if step.asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
+                        kg_view = self
+                            .restore_kg_view_runtime(graph, &records_by_asset)
+                            .await?;
+                    }
+                    continue;
+                }
                 match self
                     .promote_materialization_with_retry(
                         &record,
@@ -487,6 +516,18 @@ impl AssetDagExecutor {
                             completed_at,
                         )?;
                         self.persist_manifest(&mut manifest, false).await?;
+                        if options.should_skip_current_promotion(&asset_id) {
+                            manifest.mark_step_promoted(&asset_id, Utc::now())?;
+                            self.persist_manifest(&mut manifest, false).await?;
+                            records_by_asset.insert(asset_id.clone(), record);
+                            if asset_id.as_str() == KG_SOCIETY_VIEW_ASSET_ID {
+                                kg_view = self
+                                    .restore_kg_view_runtime(graph, &records_by_asset)
+                                    .await?;
+                            }
+                            executed_assets.push(asset_id.clone());
+                            break;
+                        }
                         match self
                             .promote_materialization_with_retry(
                                 &record,
@@ -1133,6 +1174,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::BengaluruMetroStationFacts,
         );
         executors.insert(
+            static_asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::CurrentProjectFacts,
+        );
+        executors.insert(
             static_asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             BuiltInAssetExecutor::KgSocietyView,
         );
@@ -1166,6 +1211,7 @@ enum BuiltInAssetExecutor {
     ApproachRoadGraphFacts,
     SocietyGroundwaterPotentialFacts,
     BengaluruMetroStationFacts,
+    CurrentProjectFacts,
     KgSocietyView,
     SearchServingBundle,
     #[cfg(test)]
@@ -1643,6 +1689,28 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::CurrentProjectFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let materialization =
+                    CurrentProjectFactsMaterializer::new(context.dag.lake.clone())
+                        .materialize_for_run(
+                            &parent_records,
+                            &context.options.version,
+                            context.run_id.clone(),
+                            context.asset_partition.clone(),
+                        )
+                        .await?;
+                Ok(ExecutedAsset::Record(materialization.record))
+            }
             Self::KgSocietyView => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1837,10 +1905,11 @@ fn support_fact_records(
     parent_records
         .iter()
         .filter(|record| {
-            record.stage == AssetStage::Silver
-                && (definition.dependencies.contains(&record.asset_id)
-                    || definition.dependency_fan_in_policy(&record.asset_id)
-                        == DependencyFanInPolicy::AllCurrentPartitions)
+            record.asset_id.as_str() == CURRENT_PROJECT_FACTS_ASSET_ID
+                || (record.stage == AssetStage::Silver
+                    && (definition.dependencies.contains(&record.asset_id)
+                        || definition.dependency_fan_in_policy(&record.asset_id)
+                            == DependencyFanInPolicy::AllCurrentPartitions))
         })
         .cloned()
         .collect()
@@ -1906,6 +1975,7 @@ pub enum AssetDagExecutorError {
     ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
     Transit(TransitAssetError),
+    CurrentProjectFacts(CurrentProjectFactsError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
@@ -1991,6 +2061,9 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
             Self::Transit(err) => write!(f, "transit asset execution failed: {err}"),
+            Self::CurrentProjectFacts(err) => {
+                write!(f, "current project facts compaction failed: {err}")
+            }
             Self::GooglePlace(err) => write!(f, "Google place source execution failed: {err}"),
             Self::ProjectEnrichment(err) => {
                 write!(f, "project enrichment execution failed: {err}")
@@ -2121,6 +2194,7 @@ impl AssetDagExecutorError {
             | Self::Media(MediaAssetError::Lake(err))
             | Self::SkillFact(SkillFactMaterializeError::Lake(err))
             | Self::ApproachRoadGraph(ApproachRoadGraphError::Lake(err))
+            | Self::CurrentProjectFacts(CurrentProjectFactsError::Lake(err))
             | Self::Rera(ReraAssetError::Lake(err))
             | Self::CanonicalNodes(super::CanonicalNodesError::Lake(err))
             | Self::KgSocietyView(KgSocietyViewMaterializeError::Lake(err))
@@ -2178,6 +2252,12 @@ impl From<EnvironmentalAssetError> for AssetDagExecutorError {
 impl From<TransitAssetError> for AssetDagExecutorError {
     fn from(err: TransitAssetError) -> Self {
         Self::Transit(err)
+    }
+}
+
+impl From<CurrentProjectFactsError> for AssetDagExecutorError {
+    fn from(err: CurrentProjectFactsError) -> Self {
+        Self::CurrentProjectFacts(err)
     }
 }
 
@@ -2405,6 +2485,58 @@ mod tests {
         assert_eq!(step.attempts.len(), 2);
         assert!(step.attempts[0].error.is_some());
         assert!(step.attempts[1].error.is_none());
+    }
+
+    #[tokio::test]
+    async fn skipped_current_promotion_still_completes_the_run_step() {
+        let root = tempdir().unwrap();
+        let lake = LakeStore::local(root.path()).unwrap();
+        let asset_id = AssetId::new("scoped_root").unwrap();
+        let registry = AssetRegistry::new(vec![AssetDefinition::new(
+            asset_id.clone(),
+            AssetStage::Raw,
+            "scoped test root",
+            Vec::new(),
+            RefreshCadence::Daily,
+            CostTier::Free,
+            TrustTier::Root,
+        )])
+        .unwrap();
+        let attempts = Arc::new(AtomicUsize::new(1));
+        let mut executors = HashMap::new();
+        executors.insert(
+            asset_id.clone(),
+            BuiltInAssetExecutor::TestFailOnce(attempts.clone()),
+        );
+        let executor = AssetDagExecutor {
+            materializations: AssetMaterializationStore::new(lake.clone()),
+            run_manifests: AssetRunManifestStore::new(lake.clone()),
+            lake: lake.clone(),
+            registry,
+            executors: BuiltInAssetExecutorRegistry { executors },
+        };
+        let now = Utc.with_ymd_and_hms(2026, 7, 26, 8, 0, 0).unwrap();
+
+        let report = executor
+            .execute(
+                &KnowledgeGraph::new(),
+                AssetDagExecutionOptions::new(AssetPartition::global(), now)
+                    .with_skip_current_promotion_assets(vec![asset_id.clone()]),
+            )
+            .await
+            .unwrap();
+
+        let step = report
+            .manifest
+            .steps
+            .iter()
+            .find(|step| step.asset_id == asset_id)
+            .unwrap();
+        assert_eq!(step.status, super::super::AssetRunStepStatus::Succeeded);
+        assert!(AssetMaterializationStore::new(lake)
+            .current_record(&asset_id, &AssetPartition::global())
+            .await
+            .is_err());
     }
 
     #[tokio::test]

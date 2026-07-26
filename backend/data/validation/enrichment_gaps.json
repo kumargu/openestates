@@ -1,260 +1,5 @@
 [
   {
-    "entity_id": "society:sumadhura-capitol-residences",
-    "intent_area": "Whitefield",
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "quiet apartment near metro whitefield",
-    "query_categories": [
-      "positive:metro access",
-      "positive:social infrastructure",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:06:59.979786283+00:00",
-    "results_returned": 38,
-    "top_candidate_society_ids": [
-      "soc-godrej-united",
-      "soc-sbr-one-residence",
-      "soc-sumadhura-capitol-residences",
-      "soc-vaswani-starlight",
-      "soc-brigade-lakefront-crimson"
-    ]
-  },
-  {
-    "entity_id": "society:vaswani-starlight",
-    "intent_area": "Whitefield",
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "quiet apartment near metro whitefield",
-    "query_categories": [
-      "positive:metro access",
-      "positive:social infrastructure",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:06:59.979786283+00:00",
-    "results_returned": 38,
-    "top_candidate_society_ids": [
-      "soc-godrej-united",
-      "soc-sbr-one-residence",
-      "soc-sumadhura-capitol-residences",
-      "soc-vaswani-starlight",
-      "soc-brigade-lakefront-crimson"
-    ]
-  },
-  {
-    "entity_id": "society:brigade-lakefront-crimson",
-    "intent_area": "Whitefield",
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "quiet apartment near metro whitefield",
-    "query_categories": [
-      "positive:metro access",
-      "positive:social infrastructure",
-      "positive:quiet neighborhood"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:06:59.979786283+00:00",
-    "results_returned": 38,
-    "top_candidate_society_ids": [
-      "soc-godrej-united",
-      "soc-sbr-one-residence",
-      "soc-sumadhura-capitol-residences",
-      "soc-vaswani-starlight",
-      "soc-brigade-lakefront-crimson"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq-building-3-tower-6",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "facing",
-    "query": "good society for family in east bangalore",
-    "query_categories": [
-      "positive:good society",
-      "positive:east facing",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: east facing",
-    "recorded_at": "2026-07-23T18:07:00.072199251+00:00",
-    "results_returned": 9,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-godrej-air"
-    ]
-  },
-  {
-    "entity_id": "society:brigade-lakefront-crimson",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "facing",
-    "query": "good society for family in east bangalore",
-    "query_categories": [
-      "positive:good society",
-      "positive:east facing",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: east facing",
-    "recorded_at": "2026-07-23T18:07:00.072199251+00:00",
-    "results_returned": 9,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-godrej-air"
-    ]
-  },
-  {
-    "entity_id": "society:godrej-air",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "facing",
-    "query": "good society for family in east bangalore",
-    "query_categories": [
-      "positive:good society",
-      "positive:east facing",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: east facing",
-    "recorded_at": "2026-07-23T18:07:00.072199251+00:00",
-    "results_returned": 9,
-    "top_candidate_society_ids": [
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-godrej-air"
-    ]
-  },
-  {
-    "entity_id": "society:eden-at-brigade-cornerstone-utopia",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "something calmer for my parents, less chaos, more breathing room",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.189793558+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "something calmer for my parents, less chaos, more breathing room",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.189793558+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark"
-    ]
-  },
-  {
-    "entity_id": "society:assetz-marq-building-3-tower-6",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "something calmer for my parents, less chaos, more breathing room",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.189793558+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark"
-    ]
-  },
-  {
-    "entity_id": "society:brigade-lakefront-crimson",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "something calmer for my parents, less chaos, more breathing room",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.189793558+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark"
-    ]
-  },
-  {
-    "entity_id": "society:candeur-landmark",
-    "intent_area": null,
-    "intent_bhk": null,
-    "intent_budget_max": null,
-    "missing_fact": "noise_score",
-    "query": "something calmer for my parents, less chaos, more breathing room",
-    "query_categories": [
-      "positive:greenery",
-      "positive:quiet neighborhood",
-      "positive:family friendly",
-      "buyer_archetype:Family"
-    ],
-    "reason": "User preference: quiet neighborhood",
-    "recorded_at": "2026-07-23T18:07:00.189793558+00:00",
-    "results_returned": 16,
-    "top_candidate_society_ids": [
-      "soc-eden-at-brigade-cornerstone-utopia",
-      "soc-assetz-marq",
-      "soc-assetz-marq-building-3-tower-6",
-      "soc-brigade-lakefront-crimson",
-      "soc-candeur-landmark"
-    ]
-  },
-  {
     "entity_id": "society:eden-at-brigade-cornerstone-utopia",
     "intent_area": null,
     "intent_bhk": null,
@@ -10971,6 +10716,213 @@
     ],
     "reason": "User preference: 3bhk configuration",
     "recorded_at": "2026-07-25T18:26:30.656933204+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:prestige-waterford",
+    "intent_area": null,
+    "intent_bhk": null,
+    "intent_budget_max": null,
+    "missing_fact": "facing",
+    "query": "prestige east bangalore",
+    "query_categories": [
+      "positive:east facing"
+    ],
+    "reason": "User preference: east facing",
+    "recorded_at": "2026-07-26T09:06:26.404713739+00:00",
+    "results_returned": 3,
+    "top_candidate_society_ids": [
+      "soc-prestige-waterford"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T10:08:19.685211147+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T10:08:19.685211147+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T10:08:48.088357500+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T10:08:48.088357500+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T10:09:09.420112199+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T10:09:09.420112199+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T10:09:27.655957450+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T10:09:27.655957450+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "google_review_snippets",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: greenery",
+    "recorded_at": "2026-07-26T10:09:53.171778761+00:00",
+    "results_returned": 1,
+    "top_candidate_society_ids": [
+      "rera-meadows"
+    ]
+  },
+  {
+    "entity_id": "society:rera-meadows",
+    "intent_area": "Whitefield",
+    "intent_bhk": 3,
+    "intent_budget_max": null,
+    "missing_fact": "has_3bhk",
+    "query": "3bhk with greenery in whitefield above 10 acres",
+    "query_categories": [
+      "hard_constraint:land_area",
+      "positive:greenery",
+      "positive:3bhk configuration"
+    ],
+    "reason": "User preference: 3bhk configuration",
+    "recorded_at": "2026-07-26T10:09:53.171778761+00:00",
     "results_returned": 1,
     "top_candidate_society_ids": [
       "rera-meadows"

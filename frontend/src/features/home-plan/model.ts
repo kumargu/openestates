@@ -86,6 +86,8 @@ export type LoanJourney = {
 const MONTHS_IN_YEAR = 12;
 const LAKH = 100_000;
 
+const DEFAULT_MONTHLY_EMI_THOUSANDS = 90;
+
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
   construction?: ConstructionProfile,
@@ -95,13 +97,18 @@ export function buildBaselinePlanInputs(
     20,
     Math.round((propertyPriceInr * 0.032 / MONTHS_IN_YEAR) / 1_000 / 5) * 5,
   );
+  // Keep the rent-path cash out aligned with the buy EMI by default.
+  const monthlySipThousands = Math.max(
+    0,
+    DEFAULT_MONTHLY_EMI_THOUSANDS - estimatedRentThousands,
+  );
   return {
     propertyPriceLakh,
-    monthlyEmiThousands: 90,
+    monthlyEmiThousands: DEFAULT_MONTHLY_EMI_THOUSANDS,
     loanRate: 7.5,
     currentRentThousands: estimatedRentThousands,
     equityReturn: 10,
-    monthlySipThousands: 90,
+    monthlySipThousands,
     holdingPeriodYears: 20,
     purchaseYear: 0,
     construction: construction ?? {
@@ -246,7 +253,7 @@ export const BASE_INPUTS: PlanInputs = {
   loanRate: 7.5,
   currentRentThousands: 55,
   equityReturn: 10,
-  monthlySipThousands: 90,
+  monthlySipThousands: 35,
   holdingPeriodYears: 15,
   purchaseYear: 0,
   construction: {

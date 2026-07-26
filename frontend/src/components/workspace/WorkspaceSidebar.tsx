@@ -61,7 +61,7 @@ function workspaceNavItems(
     { view: "browse" as const, label: "Home", icon: "browse" as const, to: "/" },
     { view: "home" as const, label: "Detail", icon: "home" as const, to: detailHref },
     { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref },
-    { view: "plan" as const, label: "Plan", icon: "plan" as const, to: planHref },
+    { view: "plan" as const, label: "EMI Plan", icon: "plan" as const, to: planHref },
   ].map((item) => ({
     ...item,
     active: item.view === activeView,

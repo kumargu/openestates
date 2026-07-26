@@ -5,7 +5,7 @@ import type {
   SourceItem,
   PropertyEvidenceResponse,
 } from "../../lib/types.ts";
-import { canShowBuyerSource, constellationMeta, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
+import { canShowBuyerSource, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
 import {
   LinkIcon,
   IconForKind,
@@ -71,6 +71,46 @@ function compactValue(value: string): string {
   const trimmed = humanizeFactText(value.trim());
   if (trimmed.length <= 160) return trimmed;
   return `${trimmed.slice(0, 159).trimEnd()}...`;
+}
+
+function itemText(item: SourceItem): string {
+  const values = item.values?.filter(Boolean) ?? [];
+  return values.length > 0 ? values.join(" ") : item.value;
+}
+
+function itemToken(item: SourceItem): string {
+  return `${item.key ?? ""} ${item.label} ${itemText(item)}`.toLowerCase();
+}
+
+function hasAnyToken(item: SourceItem, tokens: string[]): boolean {
+  const haystack = itemToken(item);
+  return tokens.some((token) => haystack.includes(token));
+}
+
+function itemValue(item: SourceItem): string | null {
+  const values = item.values?.filter(Boolean) ?? [];
+  if (values.length > 0) return compactValue(values[0]);
+  if (item.value?.trim()) return compactValue(item.value);
+  return null;
+}
+
+function firstFact(facts: SourceItem[], tokens: string[]): SourceItem | null {
+  return facts.find((item) => hasAnyToken(item, tokens)) ?? null;
+}
+
+function factValue(facts: SourceItem[], tokens: string[]): string | null {
+  const item = firstFact(facts, tokens);
+  return item ? itemValue(item) : null;
+}
+
+function formatStoryNumber(value: string | null, suffix: string): string | null {
+  if (!value) return null;
+  const match = value.match(/-?\d+(?:\.\d+)?/);
+  return match ? `${Number(match[0]).toLocaleString("en-IN")}${suffix}` : value;
+}
+
+function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
 }
 
 function FactRow({ item }: { item: SourceItem }) {
@@ -181,9 +221,109 @@ function FactListBody({ facts }: { facts: SourceItem[] }) {
   );
 }
 
+function WaterResilienceStory({ facts }: { facts: SourceItem[] }) {
+  const groundwater = factValue(facts, ["groundwater"]);
+  const waterDistance = formatStoryNumber(
+    factValue(facts, ["water_body_distance", "water body distance", "nearest water body"]),
+    " m",
+  );
+  const resilience = uniqueNonEmpty([
+    firstFact(facts, ["borewell_existing_count", "existing borewell", "borewell"])
+      ? "Borewell exists"
+      : null,
+    firstFact(facts, ["rainwater_harvesting_present", "rainwater harvesting"])
+      ? "Rainwater harvesting"
+      : null,
+    formatStoryNumber(
+      factValue(facts, ["rainwater_harvesting_area", "harvesting area", "recharge area"]),
+      " sqm",
+    ),
+    formatStoryNumber(factValue(facts, ["stp_capacity_kld", "stp capacity"]), " KLD STP"),
+  ]);
+
+  return (
+    <div className="ev-water-story">
+      {groundwater && (
+        <div className="ev-water-story__rail" aria-label={`${groundwater} groundwater potential`}>
+          <span />
+          <b>{groundwater}</b>
+        </div>
+      )}
+      <div className="ev-water-story__legend">
+        {waterDistance && <span>Water body {waterDistance}</span>}
+        {resilience.map((value) => <span key={value}>{value}</span>)}
+      </div>
+    </div>
+  );
+}
+
+type ReraStoryStep = {
+  id: string;
+  label: string;
+  values: string[];
+};
+
+function ReraStory({ facts }: { facts: SourceItem[] }) {
+  const status = factValue(facts, ["rera_status", "registration", "registered", "approved"]);
+  const reraNumber = factValue(facts, ["rera_number", "registration number"]);
+  const start = factValue(facts, ["project_start_date", "rera_start_date", "start date"]);
+  const completion = factValue(facts, [
+    "project_actual_completion_date",
+    "project_revised_completion_date",
+    "rera_completion_date",
+    "completion date",
+  ]);
+  const delay = factValue(facts, ["delay_months", "rera_delay"]);
+  const acres = factValue(facts, ["project_land_area_acres", "land area", "acres"]);
+  const open = factValue(facts, ["project_open_area_pct", "open area"]);
+  const units = factValue(facts, ["project_unit_count", "total units"]);
+  const density = factValue(facts, ["project_units_per_acre", "units per acre"]);
+  const towers = factValue(facts, ["project_tower_count", "tower count"]);
+  const floors = factValue(facts, ["project_max_floor_count", "floor count"]);
+  const configs = factValue(facts, ["available_configurations", "configuration"]);
+  const sitePlans = factValue(facts, ["site_plan_asset_count", "site plan"]);
+  const floorPlans = factValue(facts, ["floor_plan_asset_count", "floor plan"]);
+  const parking = factValue(facts, ["parking_total_car_count", "car parks", "car parking"]);
+  const covered = factValue(facts, ["parking_covered_count", "covered"]);
+  const evReady = factValue(facts, ["ev_ready", "ev-ready", "ev parking"]);
+  const stp = factValue(facts, ["stp_capacity_kld", "stp capacity"]);
+  const borewell = factValue(facts, ["borewell_existing_count", "existing borewell"]);
+  const rainwater = factValue(facts, ["rainwater_harvesting_present", "rainwater harvesting"]);
+  const clubhouse = factValue(facts, ["clubhouse_area", "clubhouse"]);
+  const pool = factValue(facts, ["swimming_pool_area", "swimming pool"]);
+
+  const steps: ReraStoryStep[] = [
+    { id: "registration", label: "Registration", values: uniqueNonEmpty([status, reraNumber]) },
+    { id: "timeline", label: "Timeline", values: uniqueNonEmpty([start, completion, delay ? `${delay} delay` : null]) },
+    { id: "scale", label: "Scale", values: uniqueNonEmpty([acres, open, units, density]) },
+    { id: "layout", label: "Layout", values: uniqueNonEmpty([towers, floors, configs, sitePlans, floorPlans]) },
+    { id: "infra", label: "Infra", values: uniqueNonEmpty([stp, borewell, rainwater, clubhouse, pool]) },
+    { id: "parking", label: "Parking", values: uniqueNonEmpty([parking, covered, evReady]) },
+  ].filter((step) => step.values.length > 0);
+
+  if (steps.length === 0) return <FactGridBody facts={facts} />;
+
+  return (
+    <div className="ev-rera-story" aria-label="RERA project facts">
+      {steps.map((step, index) => (
+        <div key={step.id} className="ev-rera-story__step">
+          <span className="ev-rera-story__marker">{index + 1}</span>
+          <div>
+            <b>{step.label}</b>
+            <div>
+              {step.values.slice(0, 4).map((value) => (
+                <span key={`${step.id}-${value}`}>{value}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function useSectionContent(section: EvidenceSection) {
   const constellation = sectionConstellation(section);
-  const meta = constellationMeta(constellation);
   const facts = section.items.filter(
     (it) => (it.values?.some(Boolean) ?? false) || (it.value && it.value.trim().length > 0),
   );
@@ -198,9 +338,41 @@ function useSectionContent(section: EvidenceSection) {
     ? FactGridBody
     : FactListBody;
 
-  return { constellation, meta, facts, media, presentation, variant, FactBody };
+  return { constellation, facts, media, presentation, variant, FactBody };
 }
 
+function closedSectionSignal(section: EvidenceSection, facts: SourceItem[]): string {
+  if (section.community_pulse) {
+    const sentiment = humanizeFactText(section.community_pulse.sentiment_band);
+    const positiveCount = section.community_pulse.positives.length;
+    return positiveCount > 0
+      ? `${sentiment} · ${positiveCount} positive theme${positiveCount === 1 ? "" : "s"}`
+      : sentiment;
+  }
+  if (section.kind === "rera") {
+    const compact = (value: string | null) =>
+      value?.replace(/^[^:]{1,36}:\s*/, "").trim() || null;
+    const status = compact(factValue(facts, [
+      "rera_status",
+      "registration status",
+      "project status",
+      "approved",
+    ]));
+    const completion = compact(factValue(facts, [
+      "project_actual_completion_date",
+      "project_revised_completion_date",
+      "rera_completion_date",
+      "completion date",
+    ]));
+    const parts = uniqueNonEmpty([
+      status,
+      completion ? `Target ${completion}` : null,
+    ]);
+    if (parts.length > 0) return parts.join(" · ");
+    return `${facts.length} RERA project fact${facts.length === 1 ? "" : "s"}`;
+  }
+  return sectionTileSignal(section);
+}
 
 function EvidenceFold({
   section,
@@ -211,8 +383,8 @@ function EvidenceFold({
   open: boolean;
   onToggle: () => void;
 }) {
-  const { constellation, meta, facts, media, presentation, variant, FactBody } = useSectionContent(section);
-  const signal = sectionTileSignal(section);
+  const { constellation, facts, media, presentation, variant, FactBody } = useSectionContent(section);
+  const signal = closedSectionSignal(section, facts);
   const count = sectionTileCount(section);
   const panelId = `evidence-${section.kind}`;
 
@@ -220,7 +392,6 @@ function EvidenceFold({
     <div
       className={`detail-action-tile ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density}${open ? " ev-fold--open" : ""}`}
     >
-      <span className="ev-fold__spine" aria-hidden="true" />
       <button
         type="button"
         className="ev-fold__head"
@@ -230,7 +401,6 @@ function EvidenceFold({
       >
         <span className="ev-fold__icon"><IconForKind kind={section.kind} size={18} /></span>
         <span className="ev-fold__headings">
-          <span className="ev-fold__kicker">{meta.label}</span>
           <span className="ev-fold__title">{section.title}</span>
           <span className="ev-fold__read">{signal}</span>
         </span>
@@ -253,6 +423,10 @@ function EvidenceFold({
           )}
           {variant === "story" && section.community_pulse ? (
             <CommunityPulseCard pulse={section.community_pulse} />
+          ) : section.kind === "rera" ? (
+            <ReraStory facts={facts} />
+          ) : section.kind === "water_context" ? (
+            <WaterResilienceStory facts={facts} />
           ) : (
             <>
               {section.community_pulse && (

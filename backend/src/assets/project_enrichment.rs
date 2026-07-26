@@ -1045,9 +1045,13 @@ fn validate_external_listing_input(
         ));
     }
     if input.records.is_empty() {
-        return Err(ProjectEnrichmentAssetError::InvalidInput(
-            "external listing snapshot is empty".to_string(),
-        ));
+        if !input.source_watermarks.iter().any(|watermark| {
+            watermark.source.ends_with("_empty") || watermark.source.ends_with("_skipped")
+        }) {
+            return Err(ProjectEnrichmentAssetError::InvalidInput(
+                "external listing snapshot is empty".to_string(),
+            ));
+        }
     }
     for record in &input.records {
         if record.entity_id.trim().is_empty() || record.source_name.trim().is_empty() {
@@ -1430,7 +1434,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn empty_source_snapshots_are_rejected() {
+    fn empty_source_snapshots_require_an_explicit_empty_watermark() {
         let listings = ExternalListingsWeeklyInput {
             snapshot_date: "2026-07-14".to_string(),
             records: Vec::new(),
@@ -1442,5 +1446,15 @@ mod tests {
             Err(ProjectEnrichmentAssetError::InvalidInput(message))
                 if message.contains("snapshot is empty")
         ));
+
+        let empty_with_coverage = ExternalListingsWeeklyInput {
+            snapshot_date: "2026-07-14".to_string(),
+            records: Vec::new(),
+            source_watermarks: vec![SourceWatermark {
+                source: "external_listing_empty".to_string(),
+                high_watermark: "2026-07-14T10:00:00Z".to_string(),
+            }],
+        };
+        assert!(validate_external_listing_input(&empty_with_coverage).is_ok());
     }
 }

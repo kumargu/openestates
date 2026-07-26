@@ -36,6 +36,7 @@ from pipeline.skills.search_reddit import (
     threads_to_skill_result,
 )
 from pipeline.sources.external_listings import (
+    collect_external_listings,
     magicbricks_source_pages,
     squareyards_source_pages,
 )
@@ -623,6 +624,33 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["listing_type"], "rent")
         self.assertEqual(listing["price"], 95_000)
         self.assertEqual(listing["configuration"], "3 BHK")
+
+    def test_external_listing_collection_records_empty_and_thin_coverage(self):
+        output = collect_external_listings(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "skip_external_listing_fetch": True,
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "area": "Whitefield",
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(output["records"], [])
+        watermarks = {
+            watermark["source"]: watermark["high_watermark"]
+            for watermark in output["source_watermarks"]
+        }
+        self.assertIn("external_listing_empty", watermarks)
+        self.assertEqual(
+            watermarks["external_listing_coverage"],
+            "entities=1;records=0;entities_below_min=1;min_records_per_entity=4",
+        )
 
     def test_rera_detail_configurations_feed_listing_queries_in_same_run(self):
         request = {

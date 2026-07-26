@@ -9,6 +9,7 @@
   "includes": [
     "asset_registry.json",
     "concern_taxonomy.json",
+    "compaction_policies.json",
     "crawl_policies/",
     "enrichment_targets.json",
     "fact_registry.json",

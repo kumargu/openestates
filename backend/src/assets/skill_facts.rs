@@ -184,10 +184,7 @@ impl SkillFactMaterializer {
         dag_run_id: MaterializationId,
         record_partition: AssetPartition,
     ) -> Result<SkillFactMaterialization, SkillFactMaterializeError> {
-        if !source_watermarks
-            .iter()
-            .any(|watermark| watermark.source.ends_with("_skipped"))
-        {
+        if !allows_empty_skill_fact_batch(&source_watermarks) {
             return Err(SkillFactMaterializeError::EmptyFacts);
         }
         self.materialize_for_run_inner(
@@ -302,6 +299,12 @@ impl SkillFactMaterializer {
 
         Ok(SkillFactMaterialization { manifest, record })
     }
+}
+
+fn allows_empty_skill_fact_batch(source_watermarks: &[SourceWatermark]) -> bool {
+    source_watermarks.iter().any(|watermark| {
+        watermark.source.ends_with("_skipped") || watermark.source.ends_with("_empty")
+    })
 }
 
 pub async fn read_skill_fact_artifact_rows(
@@ -657,7 +660,17 @@ fn validate_artifact_ref(
     artifact: &ArtifactRef,
     suffix: &str,
 ) -> Result<(), SkillFactMaterializeError> {
-    let expected_prefix = format!("silver/{}/", materialization.asset_id);
+    let expected_prefix = match materialization.stage {
+        AssetStage::Silver => format!("silver/{}/", materialization.asset_id),
+        AssetStage::Gold => format!("gold/{}/", materialization.asset_id),
+        other => {
+            return Err(invalid_artifact_metadata(
+                materialization,
+                artifact,
+                format!("skill-fact rows cannot be read from {other:?} assets"),
+            ));
+        }
+    };
     if !artifact.key.starts_with(&expected_prefix) {
         return Err(invalid_artifact_metadata(
             materialization,
@@ -928,5 +941,26 @@ impl From<serde_json::Error> for SkillFactMaterializeError {
 impl From<parquet::errors::ParquetError> for SkillFactMaterializeError {
     fn from(err: parquet::errors::ParquetError) -> Self {
         Self::Parquet(err)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_skill_fact_batches_require_explicit_empty_or_skipped_watermark() {
+        assert!(allows_empty_skill_fact_batch(&[SourceWatermark {
+            source: "external_listing_empty".to_string(),
+            high_watermark: "2026-07-26T08:00:00Z".to_string(),
+        }]));
+        assert!(allows_empty_skill_fact_batch(&[SourceWatermark {
+            source: "external_images_skipped".to_string(),
+            high_watermark: "2026-07-26T08:00:00Z".to_string(),
+        }]));
+        assert!(!allows_empty_skill_fact_batch(&[SourceWatermark {
+            source: "external_listing_magicbricks".to_string(),
+            high_watermark: "2026-07-26T08:00:00Z".to_string(),
+        }]));
     }
 }

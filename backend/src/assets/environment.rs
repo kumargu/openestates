@@ -118,6 +118,16 @@ pub async fn society_groundwater_potential_facts_input(
             society_names.len()
         ),
     });
+    if facts.is_empty() {
+        watermarks.push(SourceWatermark {
+            source: "society_groundwater_potential_empty".to_string(),
+            high_watermark: format!(
+                "matched=0;coordinates={};societies={}",
+                coordinates.len(),
+                society_names.len()
+            ),
+        });
+    }
 
     Ok(SkillFactsInput {
         source: GROUNDWATER_SOURCE.to_string(),

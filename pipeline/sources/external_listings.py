@@ -4,6 +4,7 @@ The collector produces generic listing observations. Portal-specific adapters
 normalize into this shape before Rust materializes durable DAG assets.
 """
 
+import json
 import math
 import os
 import re
@@ -12,6 +13,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 
@@ -61,10 +63,12 @@ def collect_external_listings(request: Dict[str, Any]) -> Dict[str, Any]:
             record.get("source_url") or "",
         )
     )
+    watermarks = source_watermarks(records, "external_listing", observed_at)
+    watermarks.extend(listing_coverage_watermarks(records, request, observed_at))
     return {
         "snapshot_date": snapshot_date,
         "records": records,
-        "source_watermarks": source_watermarks(records, "external_listing", observed_at),
+        "source_watermarks": watermarks,
     }
 
 
@@ -599,6 +603,70 @@ def source_watermarks(
         {"source": source, "high_watermark": watermark}
         for source, watermark in sorted(watermarks.items())
     ]
+
+
+def listing_coverage_watermarks(
+    records: Iterable[Dict[str, Any]], request: Dict[str, Any], observed_at: str
+) -> List[Dict[str, str]]:
+    source_entities = [
+        entity
+        for entity in request.get("source_entities", [])
+        if isinstance(entity, dict) and optional_string(entity.get("entity_id"))
+    ]
+    if not source_entities:
+        return []
+    records_by_entity = {}  # type: Dict[str, int]
+    for record in records:
+        entity_id = optional_string(record.get("entity_id"))
+        if entity_id:
+            records_by_entity[entity_id] = records_by_entity.get(entity_id, 0) + 1
+    min_records = external_listing_min_records_per_entity(request)
+    thin_entities = [
+        optional_string(entity.get("entity_id")) or ""
+        for entity in source_entities
+        if records_by_entity.get(optional_string(entity.get("entity_id")) or "", 0) < min_records
+    ]
+    return [
+        {
+            "source": "external_listing_coverage",
+            "high_watermark": (
+                "entities={};records={};entities_below_min={};min_records_per_entity={}".format(
+                    len(source_entities),
+                    sum(records_by_entity.values()),
+                    len(thin_entities),
+                    min_records,
+                )
+            ),
+        },
+        {
+            "source": "external_listing_coverage_at",
+            "high_watermark": observed_at,
+        },
+    ]
+
+
+def external_listing_min_records_per_entity(request: Dict[str, Any]) -> int:
+    project_root = Path(request.get("project_root") or ".").resolve()
+    policy = load_project_crawl_policy(project_root, "external_listing_coverage")
+    if not policy:
+        return 4
+    return max(1, positive_int(policy.get("min_records_per_entity"), 4))
+
+
+def load_project_crawl_policy(project_root: Path, policy_id: str) -> Optional[Dict[str, Any]]:
+    path = project_root / "app" / "config" / "dag" / "crawl_policies" / "{}.json".format(policy_id)
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError, TypeError):
+        return None
+
+
+def positive_int(value: Any, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 def dedupe_source_pages(pages: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:

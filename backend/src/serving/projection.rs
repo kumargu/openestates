@@ -31,6 +31,7 @@ pub struct ProjectStatusEvidence {
 pub struct HomeStateEvidence {
     pub state: Option<String>,
     pub age_bucket: Option<String>,
+    pub age_years: Option<f64>,
     pub display: Option<String>,
 }
 
@@ -178,15 +179,24 @@ impl<'a> SocietyFactProjection<'a> {
     pub fn project_home_state(&self) -> HomeStateEvidence {
         let state = self.latest_text("home_state").map(|fact| fact.value);
         let age_bucket = self.latest_text("home_age_bucket").map(|fact| fact.value);
+        let age_years = self
+            .latest_numeric("home_age_years")
+            .or_else(|| self.latest_numeric("project_age_years"))
+            .map(|fact| fact.value);
         let timeline = self
             .latest_text("home_timeline_state")
             .map(|fact| fact.value);
-        let display =
-            home_state_display(state.as_deref(), age_bucket.as_deref(), timeline.as_deref());
+        let display = home_state_display(
+            state.as_deref(),
+            age_years,
+            age_bucket.as_deref(),
+            timeline.as_deref(),
+        );
 
         HomeStateEvidence {
             state,
             age_bucket,
+            age_years,
             display,
         }
     }
@@ -251,15 +261,15 @@ fn is_http_url(value: &str) -> bool {
 
 fn home_state_display(
     state: Option<&str>,
+    age_years: Option<f64>,
     age_bucket: Option<&str>,
     timeline: Option<&str>,
 ) -> Option<String> {
     match state {
-        Some("delivered") => match age_bucket {
-            Some("newly delivered") => Some("Delivered".to_string()),
-            Some(bucket) => Some(format!("Delivered · {bucket}")),
-            None => Some("Delivered".to_string()),
-        },
+        Some("delivered") => Some(match format_age_years(age_years) {
+            Some(age) => format!("Delivered · {age}"),
+            None => "Delivered".to_string(),
+        }),
         Some("under_construction")
             if timeline.is_some_and(|value| value.eq_ignore_ascii_case("delayed")) =>
         {
@@ -267,8 +277,30 @@ fn home_state_display(
         }
         Some("under_construction") => Some("Under construction".to_string()),
         Some("delayed") => Some("Delayed".to_string()),
-        _ => age_bucket.map(|bucket| format!("Est. {bucket}")),
+        _ => format_age_years(age_years)
+            .map(|age| format!("Est. {age}"))
+            .or_else(|| age_bucket.map(|bucket| format!("Est. {bucket}"))),
     }
+}
+
+fn format_age_years(age_years: Option<f64>) -> Option<String> {
+    let age = age_years?;
+    if !age.is_finite() || age < 0.0 {
+        return None;
+    }
+    if age < 0.5 {
+        return Some("newly delivered".to_string());
+    }
+    if age < 1.0 {
+        return Some("<1 yr old".to_string());
+    }
+    let rounded = (age * 10.0).round() / 10.0;
+    let formatted = if (rounded.fract()).abs() < f64::EPSILON {
+        format!("{rounded:.0}")
+    } else {
+        format!("{rounded:.1}")
+    };
+    Some(format!("{formatted} yrs old"))
 }
 
 #[cfg(test)]
@@ -422,16 +454,37 @@ mod tests {
                 FactValue::Text("5-10 yrs old".to_string()),
                 1,
             ),
+            fact(
+                "society:sample",
+                "home_age_years",
+                FactValue::Numeric(5.7),
+                2,
+            ),
         ]);
 
         let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
 
         assert_eq!(projected.state.as_deref(), Some("delivered"));
         assert_eq!(projected.age_bucket.as_deref(), Some("5-10 yrs old"));
+        assert_eq!(projected.age_years, Some(5.7));
         assert_eq!(
             projected.display.as_deref(),
-            Some("Delivered · 5-10 yrs old")
+            Some("Delivered · 5.7 yrs old")
         );
+    }
+
+    #[test]
+    fn home_state_projection_falls_back_to_legacy_age_bucket() {
+        let index = index(vec![fact(
+            "society:sample",
+            "home_age_bucket",
+            FactValue::Text("5-10 yrs old".to_string()),
+            1,
+        )]);
+
+        let projected = SocietyFactProjection::from_index(&index, "sample").project_home_state();
+
+        assert_eq!(projected.display.as_deref(), Some("Est. 5-10 yrs old"));
     }
 
     #[test]

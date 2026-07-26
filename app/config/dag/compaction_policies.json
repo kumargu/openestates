@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "description": "Offline lake compaction policies. Parquet files remain immutable; compaction rewrites sparse delta files into compact gold/current artifacts for fast search and serving-bundle builds.",
+  "policies": [
+    {
+      "id": "project_claim_facts",
+      "enabled": true,
+      "input_datasets": [
+        "silver/project_claim_facts_delta",
+        "gold/rera_project_facts"
+      ],
+      "output_dataset": "gold/current_project_facts",
+      "partition_keys": [
+        "city",
+        "area"
+      ],
+      "target_file_size_mb": 128,
+      "small_file_threshold": 24,
+      "delta_row_threshold": 5000,
+      "delta_byte_threshold_mb": 64,
+      "max_delta_age_hours": 24,
+      "reasoning": [
+        "Search and serving-bundle promotion should scan compact current facts, not many sparse delta files.",
+        "Compaction keeps backend startup and evidence lookup latency predictable as seller/manual/RERA refreshes accumulate.",
+        "Conflict resolution stays offline so request handlers only read promoted facts."
+      ],
+      "dedupe_keys": [
+        "entity_id",
+        "fact_key",
+        "source_id"
+      ],
+      "current_fact_order": [
+        {
+          "field": "is_retracted",
+          "direction": "ascending",
+          "reason": "Non-retracted assertions stay visible unless a tombstone wins for the same source."
+        },
+        {
+          "field": "source_priority",
+          "direction": "descending",
+          "reason": "RERA/computed/manual verified facts should beat lower-trust duplicates."
+        },
+        {
+          "field": "confidence",
+          "direction": "descending",
+          "reason": "Higher-confidence observations win inside the same trust tier."
+        },
+        {
+          "field": "learned_at",
+          "direction": "descending",
+          "reason": "Fresh facts win when trust and confidence tie."
+        }
+      ],
+      "source_priority": {
+        "Rera": 100,
+        "Computed": 90,
+        "SellerVerified": 80,
+        "Manual": 70,
+        "Google": 60,
+        "SquareYards": 50,
+        "MagicBricks": 50,
+        "SellerClaim": 40
+      },
+      "schema_version_policy": {
+        "allow_additive_fact_keys": true,
+        "reject_incompatible_value_type_changes": true,
+        "fact_shape": "row_based_assertions"
+      },
+      "serving_rebuild_policy": {
+        "mode": "full_bundle_rebuild",
+        "future_mode": "affected_partition_rebuild",
+        "trigger_after_success": true
+      },
+      "output": {
+        "compression": "zstd",
+        "rows_per_row_group": 20000,
+        "file_name_template": "part-{part_number}.parquet"
+      }
+    }
+  ]
+}

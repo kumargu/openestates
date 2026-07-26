@@ -289,11 +289,10 @@
       }
     },
     {
-      "id": "kg_society_view",
+      "id": "current_project_facts",
       "stage": "gold",
-      "description": "Versioned society KG view merged by source precedence and fact policy.",
+      "description": "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
       "dependencies": [
-        "canonical_society_nodes",
         "rera_legal_facts",
         "google_review_facts",
         "google_nearby_place_facts",
@@ -301,7 +300,6 @@
         "image_media_facts",
         "builder_rera_aggregates",
         "home_state_signals",
-        "approach_road_graph_facts",
         "society_groundwater_potential_facts",
         "bengaluru_metro_station_facts"
       ],
@@ -335,9 +333,28 @@
         "external_listing_facts",
         "image_media_facts",
         "home_state_signals",
-        "approach_road_graph_facts",
         "society_groundwater_potential_facts",
         "bengaluru_metro_station_facts"
+      ]
+    },
+    {
+      "id": "kg_society_view",
+      "stage": "gold",
+      "description": "Versioned society KG view merged by source precedence and fact policy.",
+      "dependencies": [
+        "canonical_society_nodes",
+        "current_project_facts",
+        "approach_road_graph_facts"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "derived",
+      "partition_policy": {
+        "kind": "global"
+      },
+      "optional_dependencies": [
+        "current_project_facts",
+        "approach_road_graph_facts"
       ]
     },
     {

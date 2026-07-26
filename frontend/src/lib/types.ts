@@ -527,6 +527,8 @@ export type BuilderProjectRecord = {
   rera_number?: string;
   rera_portal_url?: string;
   rera_status?: string;
+  rera_registered: boolean;
+  start_date?: string;
   completion_date?: string;
   delay_months?: number;
   complaints_count?: number;

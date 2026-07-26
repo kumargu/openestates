@@ -3178,119 +3178,276 @@ body {
   gap: 0.85rem;
 }
 
-.builder-record {
-  display: grid;
-  gap: 0.85rem;
-  padding: 0.95rem 1rem;
+.builder-health {
+  overflow: hidden;
   border: 1px solid var(--detail-card-border, rgba(38, 35, 32, 0.08));
   border-radius: var(--detail-card-radius, 14px);
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(252, 249, 245, 0.92));
+  background: rgba(255, 255, 255, 0.92);
 }
 
-.builder-record__coverage {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.74rem;
-  line-height: 1.35;
-}
-
-.builder-record__stats {
+.builder-health__summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.55rem;
+  width: 100%;
+  min-height: 5rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.builder-record__stats > div {
+.builder-health__summary:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -3px;
+}
+
+.builder-health__summary-copy {
   display: grid;
-  gap: 0.18rem;
+  gap: 0.28rem;
   min-width: 0;
-  padding: 0.55rem 0.65rem;
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.72);
 }
 
-.builder-record__stats span {
-  color: var(--color-text-muted);
-  font-size: 0.62rem;
+.builder-health__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.builder-health__title-row strong {
+  font-size: 1rem;
+  line-height: 1.25;
+}
+
+.builder-health__title-row em {
+  padding: 0.14rem 0.48rem;
+  border-radius: 999px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
+  font-size: 0.64rem;
+  font-style: normal;
+  font-weight: 750;
+}
+
+.builder-health__title-row em.is-watch {
+  background: #fff7ed;
+  color: var(--color-warning);
+}
+
+.builder-health__title-row em.is-clear {
+  background: var(--color-positive-bg);
+  color: var(--color-positive);
+}
+
+.builder-health__summary-copy > span:last-child {
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.builder-health__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.04em;
+}
+
+.builder-health__summary[aria-expanded="true"] .builder-health__toggle svg {
+  transform: rotate(180deg);
+}
+
+.builder-health__panel {
+  border-top: 1px solid var(--color-border);
+}
+
+.builder-health__panel-inner {
+  padding: 0.9rem 1rem 1rem;
+}
+
+.builder-health__stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0;
+  margin: 0 0 0.9rem;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+}
+
+.builder-health__stats > div {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border-left: 1px solid var(--color-border);
+}
+
+.builder-health__stats > div:first-child {
+  border-left: 0;
+}
+
+.builder-health__stats dt {
+  color: var(--color-text-muted);
+  font-size: 0.6rem;
+  font-weight: 750;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
-.builder-record__stats strong {
+.builder-health__stats dd {
+  margin: 0.22rem 0 0;
   color: var(--color-text);
   font-size: 0.92rem;
-  line-height: 1.2;
+  font-weight: 750;
 }
 
-.builder-record__projects {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.55rem;
+.builder-health__table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
 }
 
-.builder-record__project {
-  display: grid;
-  gap: 0.45rem;
-  min-width: 0;
-  padding: 0.7rem 0.75rem;
-  border: 1px solid rgba(38, 35, 32, 0.07);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.78);
-  color: inherit;
+.builder-health__table {
+  width: 100%;
+  min-width: 780px;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.72rem;
+}
+
+.builder-health__table th,
+.builder-health__table td {
+  padding: 0.68rem 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.builder-health__table th {
+  color: var(--color-text-muted);
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.builder-health__table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.builder-health__table tbody tr:nth-child(even) {
+  background: rgba(249, 245, 242, 0.34);
+}
+
+.builder-health__table td:first-child {
+  min-width: 12rem;
+}
+
+.builder-health__table td:first-child a,
+.builder-health__table td:nth-child(2) a {
+  color: var(--color-text);
+  font-weight: 700;
   text-decoration: none;
-  transition: border-color 0.15s ease, background 0.15s ease;
 }
 
-.builder-record__project:hover {
-  border-color: rgba(201, 107, 79, 0.28);
+.builder-health__table td:first-child > span,
+.builder-health__table td:nth-child(2) > span {
+  display: block;
+  margin-top: 0.18rem;
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+}
+
+.builder-health__table td:nth-child(2) {
+  max-width: 12rem;
+  overflow-wrap: anywhere;
+}
+
+.builder-health__timeline {
+  min-width: 13.5rem;
+}
+
+.builder-health__timeline-read {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.42rem;
+}
+
+.builder-health__timeline-read strong {
+  color: var(--color-text);
+  font-size: 0.68rem;
+}
+
+.builder-health__timeline.is-delayed .builder-health__timeline-read strong {
+  color: var(--color-warning);
+}
+
+.builder-health__timeline-read span {
+  color: var(--color-text-muted);
+  font-size: 0.64rem;
+  white-space: nowrap;
+}
+
+.builder-health__rail {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.builder-health__milestone {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.24rem;
+  min-width: 0;
+}
+
+.builder-health__milestone i {
+  position: relative;
+  z-index: 1;
+  width: 0.58rem;
+  height: 0.58rem;
+  border: 2px solid var(--color-border-hover);
+  border-radius: 999px;
   background: #fff;
 }
 
-.builder-record__project.is-current {
-  border-color: rgba(72, 148, 104, 0.28);
-  background: rgba(240, 247, 240, 0.72);
+.builder-health__milestone b {
+  position: absolute;
+  top: 0.25rem;
+  left: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--color-border);
 }
 
-.builder-record__project-copy {
-  display: grid;
-  gap: 0.18rem;
-  min-width: 0;
-}
-
-.builder-record__project-copy strong {
-  overflow: hidden;
-  color: var(--color-text);
-  font-size: 0.82rem;
-  line-height: 1.3;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.builder-record__project-copy span {
+.builder-health__milestone small {
   overflow: hidden;
   color: var(--color-text-muted);
-  font-size: 0.68rem;
-  line-height: 1.35;
+  font-size: 0.56rem;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.builder-record__flags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
+.builder-health__milestone.is-complete i {
+  border-color: var(--color-positive);
+  background: var(--color-positive);
 }
 
-.builder-record__flags em {
-  padding: 0.12rem 0.42rem;
-  border-radius: 999px;
-  background: #fff7ed;
-  color: var(--color-warning);
-  font-size: 0.62rem;
-  font-style: normal;
-  font-weight: 700;
+.builder-health__milestone.is-complete b {
+  background: var(--color-positive-border);
+}
+
+.builder-health__milestone.is-current i {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 3px rgba(201, 107, 79, 0.12);
 }
 
 @media (max-width: 1040px) {
@@ -3329,12 +3486,16 @@ body {
     display: none;
   }
 
-  .builder-record__stats {
-    grid-template-columns: 1fr;
+  .builder-health__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .builder-record__projects {
-    grid-template-columns: 1fr;
+  .builder-health__stats > div:nth-child(odd) {
+    border-left: 0;
+  }
+
+  .builder-health__stats > div:nth-child(n + 3) {
+    border-top: 1px solid var(--color-border);
   }
 
 }

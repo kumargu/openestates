@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { useParams, Link, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
-  BuilderPortfolio,
   PropertyDetailResponse,
   RecommendationResponse,
   RecommendationStatus,
@@ -18,6 +17,7 @@ import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/
 import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import { BuilderHealthPanel } from "../components/property/BuilderHealthPanel.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import {
   detailEvidenceExcludeKindsForPlate,
@@ -362,10 +362,7 @@ export function PropertyPage() {
             excludeKinds={evidenceExcludeKinds}
           />
 
-          <BuilderSection
-            portfolio={data.builder_portfolio}
-            builderName={p.builder_name}
-          />
+          <BuilderHealthPanel portfolio={data.builder_portfolio} />
 
           {(recommendationStatus === "pending"
             || recommendationBranches.length
@@ -379,98 +376,6 @@ export function PropertyPage() {
           ) : null}
         </main>
       </div>
-    </div>
-  );
-}
-
-function BuilderSection({
-  portfolio,
-  builderName,
-}: {
-  portfolio?: BuilderPortfolio | null;
-  builderName?: string | null;
-}) {
-  const name = portfolio?.builder_name
-    ?? (isKnownText(builderName) ? builderName : null);
-  if (!name) return null;
-
-  return (
-    <section className="property-evidence-section" aria-labelledby="builder-record-title">
-      <div className="property-section-heading">
-        <span>Builder</span>
-        <h2 id="builder-record-title">{name}</h2>
-      </div>
-      {portfolio && <BuilderRecordPanel portfolio={portfolio} />}
-    </section>
-  );
-}
-
-function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
-  const revocations = portfolio.revocations == null
-    ? "—"
-    : String(portfolio.revocations);
-  const projects = portfolio.projects.slice(0, 4);
-
-  return (
-    <div className="builder-record" aria-label="Builder record">
-      <p className="builder-record__coverage">
-        {portfolio.rera_registered_projects} of {portfolio.tracked_projects} projects RERA registered
-      </p>
-
-      <div className="builder-record__stats" role="list">
-        <div role="listitem">
-          <span>Delayed</span>
-          <strong>{portfolio.delayed_projects}</strong>
-        </div>
-        <div role="listitem">
-          <span>Complaints</span>
-          <strong>{portfolio.complaint_projects}</strong>
-        </div>
-        <div role="listitem">
-          <span>Revocations</span>
-          <strong>{revocations}</strong>
-        </div>
-      </div>
-
-      {projects.length > 0 && (
-        <div className="builder-record__projects">
-          {projects.map((project) => {
-            const hasDelay = project.delay_months != null && project.delay_months > 0;
-            const hasComplaints = project.complaints_count != null && project.complaints_count > 0;
-            const status = project.rera_status
-              ?? project.project_status_display
-              ?? (project.rera_number ? project.rera_number : null);
-
-            return (
-              <Link
-                key={`${project.property_id}-${project.project_name}`}
-                to={`/property/${project.property_id}`}
-                className={`builder-record__project${project.current ? " is-current" : ""}`}
-              >
-                <div className="builder-record__project-copy">
-                  <strong>{project.project_name}</strong>
-                  <span>
-                    {project.area}
-                    {project.current ? " · This home" : ""}
-                    {status ? ` · ${status}` : ""}
-                  </span>
-                </div>
-                {(hasDelay || hasComplaints) && (
-                  <div className="builder-record__flags">
-                    {hasDelay && <em>{project.delay_months} mo delay</em>}
-                    {hasComplaints && (
-                      <em>
-                        {project.complaints_count} complaint
-                        {project.complaints_count === 1 ? "" : "s"}
-                      </em>
-                    )}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      )}
     </div>
   );
 }

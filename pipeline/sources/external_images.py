@@ -86,10 +86,12 @@ def records_for_entity(
         project_root, entity_id, society_name, observed_at
     )
     if len(records) >= local_society_photo_target(project_root):
-        return records
+        return records[:MAX_OPTIMIZED_IMAGES_PER_ENTITY]
     optimized_count = 0
     external_rank_offset = len(records) + 20 if records else 0
     for source_page in source_pages:
+        if len(records) >= MAX_OPTIMIZED_IMAGES_PER_ENTITY:
+            break
         page_url = required_page_url(source_page)
         if not page_url:
             continue
@@ -100,6 +102,8 @@ def records_for_entity(
             continue
         candidates = image_candidates_from_html(html, page_url, society_name)
         for rank, candidate in enumerate(candidates[:8], start=1 + external_rank_offset):
+            if len(records) >= MAX_OPTIMIZED_IMAGES_PER_ENTITY:
+                break
             optimized = None
             if optimized_count < MAX_OPTIMIZED_IMAGES_PER_ENTITY:
                 optimized = optimized_preview_for_candidate(

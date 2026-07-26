@@ -170,6 +170,9 @@ pub struct BuilderProjectRecord {
     pub rera_portal_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera_status: Option<String>,
+    pub rera_registered: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub completion_date: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2213,6 +2216,8 @@ fn build_builder_portfolio(
             rera_number: rera.as_ref().and_then(|r| r.registration_number.clone()),
             rera_portal_url: rera.as_ref().and_then(|r| r.rera_portal_url.clone()),
             rera_status: rera.as_ref().and_then(|r| r.status.clone()),
+            rera_registered: rera.as_ref().is_some_and(|r| r.registered),
+            start_date: rera.as_ref().and_then(|r| r.start_date.clone()),
             completion_date: rera.as_ref().and_then(|r| r.completion_date.clone()),
             delay_months: rera.as_ref().and_then(|r| r.delay_months),
             complaints_count: rera.as_ref().and_then(|r| r.complaints_count),
@@ -2231,7 +2236,6 @@ fn build_builder_portfolio(
             .then_with(|| a.project_name.cmp(&b.project_name))
     });
     let tracked_projects = projects.len();
-    projects.truncate(8);
 
     Some(BuilderPortfolio {
         builder_name: current.builder_name.clone(),

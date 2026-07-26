@@ -127,6 +127,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             options = options
                 .with_source_inputs(source_inputs)
                 .with_forced_assets(force_assets);
+            if resume_manifest.is_none() && !cli.source_entity_ids.is_empty() {
+                options = options.with_skip_current_promotion_assets(
+                    scoped_current_promotion_exclusions(&cli.source_entity_ids),
+                );
+            }
         }
     }
 
@@ -205,6 +210,17 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
         .force_assets
         .sort_by(|left, right| left.as_str().cmp(right.as_str()));
     collection_plan.force_assets.dedup();
+}
+
+fn scoped_current_promotion_exclusions(selected_entity_ids: &[String]) -> Vec<AssetId> {
+    if selected_entity_ids.is_empty() {
+        return Vec::new();
+    }
+    vec![
+        AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)
+            .expect("valid static canonical society asset ID"),
+        AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA registry asset ID"),
+    ]
 }
 
 async fn release_cli_resume_lease(
@@ -592,6 +608,22 @@ mod tests {
                 AssetId::new("google_nearby_places_weekly").unwrap(),
                 AssetId::new("google_places_weekly").unwrap(),
                 AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()
+            ]
+        );
+    }
+
+    #[test]
+    fn scoped_source_runs_keep_global_canonical_current_pointer() {
+        assert!(scoped_current_promotion_exclusions(&[]).is_empty());
+
+        let exclusions =
+            scoped_current_promotion_exclusions(&["society:rera-waterford".to_string()]);
+
+        assert_eq!(
+            exclusions,
+            vec![
+                AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID).unwrap(),
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
             ]
         );
     }

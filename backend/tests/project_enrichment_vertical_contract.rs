@@ -234,6 +234,7 @@ fn source_inputs(
             project_key: Some(project.registration.to_string()),
             source_name: "MagicBricks".to_string(),
             source_url: Some(format!("https://listings.example/{}", slug(project.name))),
+            listing_type: Some("sale".to_string()),
             price: Some(project.price),
             price_min: Some(project.price),
             price_max: Some(project.price),
@@ -328,6 +329,10 @@ fn source_inputs(
                     source_name: "MagicBricks".to_string(),
                     source_page_url: format!("https://images.example/{}", slug(project.name)),
                     image_url: format!("https://images.example/{}/hero.jpg", slug(project.name)),
+                    original_image_url: Some(format!(
+                        "https://images.example/{}/hero.jpg",
+                        slug(project.name)
+                    )),
                     image_kind: Some("exterior".to_string()),
                     width: Some(1200),
                     height: Some(800),

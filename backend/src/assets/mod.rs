@@ -10,6 +10,7 @@
 
 pub mod approach_road;
 pub mod canonical_nodes;
+pub mod compaction;
 pub mod environment;
 pub mod executor;
 pub mod fan_in;
@@ -36,6 +37,10 @@ pub use approach_road::{
     ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
 };
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
+pub use compaction::{
+    CurrentProjectFactsError, CurrentProjectFactsMaterialization, CurrentProjectFactsMaterializer,
+    CURRENT_PROJECT_FACTS_ASSET_ID,
+};
 pub use environment::{
     society_groundwater_potential_facts_input, EnvironmentGroundwaterPotentialInput,
     EnvironmentGroundwaterPotentialZone, EnvironmentRingPoint, EnvironmentalAssetError,

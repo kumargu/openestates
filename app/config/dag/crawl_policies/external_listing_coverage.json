@@ -1,0 +1,6 @@
+{
+  "id": "external_listing_coverage",
+  "enabled": true,
+  "min_records_per_entity": 4,
+  "reason": "Track thin focused listing coverage without broadening portal traffic or failing the DAG."
+}

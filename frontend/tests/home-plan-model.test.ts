@@ -128,7 +128,10 @@ test("baseline exposes only the five editable money inputs", () => {
 
   assert.equal(inputs.monthlyEmiThousands, 90);
   assert.ok(inputs.currentRentThousands > 0);
-  assert.equal(inputs.monthlySipThousands, 90);
+  assert.equal(
+    inputs.monthlySipThousands + inputs.currentRentThousands,
+    inputs.monthlyEmiThousands,
+  );
   assert.equal(inputs.loanRate, 7.5);
   assert.equal(inputs.equityReturn, 10);
 });

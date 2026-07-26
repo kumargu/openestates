@@ -160,10 +160,11 @@ fn append_home_state_signals(
 
         if completion <= as_of.date_naive() {
             let years = completed_years(completion, as_of.date_naive());
+            let age_years = completed_years_precise(completion, as_of.date_naive());
             append_fact(
                 entity_id,
                 "home_age_years",
-                FactValue::Numeric(years as f64),
+                FactValue::Numeric(age_years),
                 0.85,
                 source
                     .completion_date
@@ -184,7 +185,7 @@ fn append_home_state_signals(
             append_fact(
                 entity_id,
                 "project_age_years",
-                FactValue::Numeric(years as f64),
+                FactValue::Numeric(age_years),
                 0.85,
                 source
                     .completion_date
@@ -482,6 +483,11 @@ fn completed_years(completion: NaiveDate, as_of: NaiveDate) -> i32 {
         years -= 1;
     }
     years.max(0)
+}
+
+fn completed_years_precise(completion: NaiveDate, as_of: NaiveDate) -> f64 {
+    let days = as_of.signed_duration_since(completion).num_days().max(0) as f64;
+    (days / 365.2425 * 10.0).round() / 10.0
 }
 
 fn age_bucket(years: i32) -> &'static str {

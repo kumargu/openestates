@@ -711,11 +711,10 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
-            "kg_society_view",
+            "current_project_facts",
             AssetStage::Gold,
-            "Versioned society KG view merged by source precedence and fact policy.",
+            "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
             &[
-                "canonical_society_nodes",
                 "rera_legal_facts",
                 "google_review_facts",
                 "google_nearby_place_facts",
@@ -723,7 +722,6 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "image_media_facts",
                 "builder_rera_aggregates",
                 "home_state_signals",
-                "approach_road_graph_facts",
                 "society_groundwater_potential_facts",
                 "bengaluru_metro_station_facts",
             ],
@@ -749,9 +747,25 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
-        .with_optional_dependency("approach_road_graph_facts")
         .with_optional_dependency("society_groundwater_potential_facts")
         .with_optional_dependency("bengaluru_metro_station_facts"),
+        asset(
+            "kg_society_view",
+            AssetStage::Gold,
+            "Versioned society KG view merged by source precedence and fact policy.",
+            &[
+                "canonical_society_nodes",
+                "current_project_facts",
+                // Approach-road data includes road-segment entities and graph edges, so it bypasses
+                // fact-row compaction and remains a direct KG input.
+                "approach_road_graph_facts",
+            ],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Derived,
+        )
+        .with_optional_dependency("approach_road_graph_facts")
+        .with_optional_dependency("current_project_facts"),
         asset(
             "search_serving_bundle",
             AssetStage::Serving,
@@ -841,16 +855,24 @@ mod tests {
     #[test]
     fn default_registry_fans_support_facts_into_global_kg() {
         let registry = default_openestates_registry();
+        let current_project_facts = registry
+            .get(&AssetId::new("current_project_facts").unwrap())
+            .unwrap();
         let kg = registry
             .get(&AssetId::new("kg_society_view").unwrap())
             .unwrap();
 
         assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
+            current_project_facts
+                .dependency_fan_in_policy(&AssetId::new("google_review_facts").unwrap()),
             DependencyFanInPolicy::AllCurrentPartitions
         );
         assert_eq!(
-            kg.dependency_fan_in_policy(&AssetId::new("rera_legal_facts").unwrap()),
+            kg.dependency_fan_in_policy(&AssetId::new("current_project_facts").unwrap()),
+            DependencyFanInPolicy::ResolvedPartition
+        );
+        assert_eq!(
+            kg.dependency_fan_in_policy(&AssetId::new("approach_road_graph_facts").unwrap()),
             DependencyFanInPolicy::ResolvedPartition
         );
     }
