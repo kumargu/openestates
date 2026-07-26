@@ -887,7 +887,8 @@
   .workspace-shell,
   .workspace-shell--collapsed {
     display: block;
-    padding-bottom: 4.35rem;
+    padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
+    scroll-padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
   }
 
   .workspace-sidebar,

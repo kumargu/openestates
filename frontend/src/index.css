@@ -3052,9 +3052,11 @@ body {
 
 .property-brief-copy h1 {
   margin: 0.9rem 0 0.35rem;
+  max-width: 100%;
   font-size: clamp(1.7rem, 1.3rem + 1.4vw, 2.45rem);
   line-height: 1.08;
   letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
 }
 
 .property-brief-location,
@@ -4332,7 +4334,7 @@ body {
 
   .property-brief-copy h1 {
     font-size: 1.6rem;
-    overflow-wrap: anywhere;
+    line-height: 1.12;
   }
 
   .property-brief-location,

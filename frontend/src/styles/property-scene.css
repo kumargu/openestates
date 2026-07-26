@@ -293,6 +293,22 @@
   .property-scene__mosaic-frame {
     min-width: 72px;
   }
+
+  .property-scene__mosaic-frame > span {
+    right: 0.35rem;
+    bottom: 0.35rem;
+    left: 0.35rem;
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 0.5rem;
+    line-height: 1.15;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+    text-transform: none;
+    white-space: normal;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

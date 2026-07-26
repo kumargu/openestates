@@ -51,10 +51,13 @@ export function ProjectStatusTag({ status, displayText, possessionStatus }: Proj
 
   if (!statusKey) return null;
 
+  const colors = STATUS_COLORS[statusKey];
+  // Unknown source values are not buyer-facing labels. The lifecycle tag
+  // already carries the useful state, so prefer silence to raw values.
+  if (!colors) return null;
+
   // Determine the display text
   const text = displayText || fallbackDisplayText(statusKey);
-
-  const colors = STATUS_COLORS[statusKey] || STATUS_COLORS["upcoming"];
 
   return (
     <span

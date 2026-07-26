@@ -1909,7 +1909,7 @@
   .alt-paths__grid {
     display: grid;
     grid-auto-flow: column;
-    grid-auto-columns: minmax(186px, 72vw);
+    grid-auto-columns: minmax(250px, min(82vw, 320px));
     grid-template-columns: none;
     gap: 1rem;
     overflow-x: auto;
@@ -1925,6 +1925,17 @@
   .alt-paths__card,
   .alt-paths__skeleton {
     scroll-snap-align: start;
+  }
+
+  .alt-paths__foot {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .alt-paths__note {
+    margin-left: 0;
+    max-width: 100%;
+    text-align: left;
   }
 
   .ev-media-strip {
