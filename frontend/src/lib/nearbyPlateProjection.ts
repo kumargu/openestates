@@ -31,6 +31,16 @@ const CLUSTER_GAP_KM_AREA = 0.35;
 /** Keep markers inside the canvas, not glued to the ring edge. */
 const VIEWPORT_PADDING = 1.45;
 
+export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boolean {
+  return Boolean(
+    context && (
+      context.places.length > 0
+      || context.water
+      || (context.metro_lines?.length ?? 0) > 0
+    ),
+  );
+}
+
 export type NumberedPlace = MapPlacePin & {
   id: string;
   number: number;

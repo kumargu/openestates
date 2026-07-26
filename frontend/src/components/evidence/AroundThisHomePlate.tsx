@@ -1,4 +1,12 @@
-import { lazy, Suspense, useMemo, useState } from "react";
+import {
+  Component,
+  lazy,
+  Suspense,
+  useMemo,
+  useState,
+  type ErrorInfo,
+  type ReactNode,
+} from "react";
 import type { PropertyMapContext } from "../../lib/types.ts";
 import {
   availableLayers,
@@ -23,14 +31,30 @@ const AroundThisHomeMap = lazy(async () => {
   return { default: module.AroundThisHomeMap };
 });
 
-export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boolean {
-  return Boolean(
-    context && (
-      context.places.length > 0
-      || context.water
-      || (context.metro_lines?.length ?? 0) > 0
-    ),
-  );
+class NearbyMapBoundary extends Component<
+  { children: ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("[AroundThisHomeMap] Map unavailable", error, info);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <div className="nearby-plate__empty-map" role="status">
+          <p>Map unavailable</p>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 type AroundThisHomePlateProps = {
@@ -208,33 +232,36 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
       <div className="nearby-plate__body">
         <div className="nearby-plate__canvas">
           {canRenderMap && home ? (
-            <Suspense
-              fallback={(
-                <div className="nearby-plate__empty-map">
-                  <p>Loading neighborhood map…</p>
-                </div>
-              )}
+            <NearbyMapBoundary
+              key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
             >
-              <AroundThisHomeMap
-                key={`${home.latitude.toFixed(5)}-${home.longitude.toFixed(5)}`}
-                home={{
-                  latitude: home.latitude,
-                  longitude: home.longitude,
-                  name: context.home.name,
-                }}
-                places={singles}
-                clusters={clusters}
-                selectedId={selected?.id ?? null}
-                viewport={viewport}
-                metroLines={context.metro_lines ?? []}
-                showMetroLines={showMetroLines}
-                nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
-                water={context.water}
-                waterTint={showWater}
-                onSelectPlace={selectPlace}
-                onSelectCluster={selectCluster}
-              />
-            </Suspense>
+              <Suspense
+                fallback={(
+                  <div className="nearby-plate__empty-map">
+                    <p>Loading neighborhood map…</p>
+                  </div>
+                )}
+              >
+                <AroundThisHomeMap
+                  home={{
+                    latitude: home.latitude,
+                    longitude: home.longitude,
+                    name: context.home.name,
+                  }}
+                  places={singles}
+                  clusters={clusters}
+                  selectedId={selected?.id ?? null}
+                  viewport={viewport}
+                  metroLines={context.metro_lines ?? []}
+                  showMetroLines={showMetroLines}
+                  nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
+                  water={context.water}
+                  waterTint={showWater}
+                  onSelectPlace={selectPlace}
+                  onSelectCluster={selectCluster}
+                />
+              </Suspense>
+            </NearbyMapBoundary>
           ) : (
             <div className="nearby-plate__empty-map">
               <p>Map unavailable</p>

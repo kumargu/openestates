@@ -378,8 +378,9 @@ export function AroundThisHomeMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
+    const container = containerRef.current;
     const map = new maplibregl.Map({
-      container: containerRef.current,
+      container,
       style: NEARBY_MAP_STYLE,
       center: [viewport.center.longitude, viewport.center.latitude],
       zoom: viewport.zoom,
@@ -399,6 +400,10 @@ export function AroundThisHomeMap({
       quietBasemap(map);
       ensureOverlayLayers(map);
       styleReadyRef.current = true;
+      map.resize();
+      map.jumpTo({
+        center: [viewportCenterRef.current.longitude, viewportCenterRef.current.latitude],
+      });
     });
     map.on("zoomend", () => {
       const anchor = viewportCenterRef.current;
@@ -412,7 +417,25 @@ export function AroundThisHomeMap({
     });
     mapRef.current = map;
 
+    let resizeFrame: number | null = null;
+    const resizeMap = () => {
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        map.resize();
+        const anchor = viewportCenterRef.current;
+        map.jumpTo({ center: [anchor.longitude, anchor.latitude] });
+      });
+    };
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(resizeMap);
+    resizeObserver?.observe(container);
+    resizeMap();
+
     return () => {
+      resizeObserver?.disconnect();
+      if (resizeFrame !== null) window.cancelAnimationFrame(resizeFrame);
       for (const marker of markersRef.current) marker.remove();
       markersRef.current = [];
       map.remove();

@@ -16,16 +16,14 @@ import { EvidenceStack } from "../components/evidence/EvidenceStack.tsx";
 import { LivabilityBriefCard } from "../components/evidence/LivabilityBriefCard.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
 import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
-import {
-  AroundThisHomePlate,
-  hasAroundThisHomePlate,
-} from "../components/evidence/AroundThisHomePlate.tsx";
+import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import {
   detailEvidenceExcludeKindsForPlate,
   isRedundantHomeState,
 } from "../lib/property-signals.ts";
+import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
