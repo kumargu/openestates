@@ -14,6 +14,7 @@ use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use crate::dag_config::{dag_root, load_json, DagConfigError};
 use crate::knowledge::FactValue;
 use crate::lake::{LakeError, LakeKey, LakeStore};
 use crate::parquet_data::{
@@ -419,19 +420,14 @@ fn google_nearby_place_facts_from_rows(
     run_id: &MaterializationId,
     aliases: &HashMap<String, String>,
 ) -> Result<SkillFactsInput, GooglePlaceAssetError> {
+    let config = load_nearby_place_category_config()?;
     let mut rows_by_fact = BTreeMap::<(String, String), Vec<GoogleNearbyPlaceRecord>>::new();
     let mut facts = Vec::new();
     let mut annotations = Vec::new();
     let mut emitted_place_fact_keys = HashSet::<(String, String)>::new();
     for row in rows {
-        if let Some(fact_key) = nearby_fact_key(&row.category) {
-            append_google_nearby_place_identity_facts(
-                &row,
-                run_id,
-                &mut facts,
-                &mut annotations,
-                &mut emitted_place_fact_keys,
-            )?;
+        if let Some(category_config) = config.category_for_alias(&row.category) {
+            let fact_key = category_config.fact_key.as_str();
             rows_by_fact
                 .entry((row.entity_id.clone(), fact_key.to_string()))
                 .or_default()
@@ -448,9 +444,21 @@ fn google_nearby_place_facts_from_rows(
     }
 
     for ((entity_id, fact_key), mut grouped_rows) in rows_by_fact {
-        grouped_rows.retain(|row| nearby_row_has_serving_evidence(&fact_key, row));
+        let Some(category_config) = config.category_for_fact_key(&fact_key) else {
+            continue;
+        };
+        grouped_rows.retain(|row| nearby_row_has_serving_evidence(category_config, row));
         if grouped_rows.is_empty() {
             continue;
+        }
+        for row in &grouped_rows {
+            append_google_nearby_place_identity_facts(
+                row,
+                run_id,
+                &mut facts,
+                &mut annotations,
+                &mut emitted_place_fact_keys,
+            )?;
         }
         grouped_rows.sort_by(|left, right| {
             left.distance_km
@@ -471,38 +479,60 @@ fn google_nearby_place_facts_from_rows(
         for row in values {
             let display = nearby_place_display(&row);
             let value = FactValue::Text(display.clone());
-            facts.push(SkillFactRecord {
-                entity_id: entity_id.clone(),
-                fact_key: fact_key.clone(),
-                value_type: "text".to_string(),
-                value_json: serde_json::to_string(&value)?,
-                confidence: row.confidence,
-                source_type: "Google".to_string(),
-                source_url: Some(row.place_url.clone()),
-                model: None,
-                skill_id: Some("fetch_google_nearby_places".to_string()),
-                triggered_by: Some(row.query.clone()),
-                learned_at: row.fetched_at,
-                run_id: run_id.to_string(),
-                input_hash: format!(
-                    "sha256:{}",
-                    sha256_hex(
-                        format!("{}:{fact_key}:{}:{display}", entity_id, row.place_url).as_bytes()
-                    )
-                ),
-            });
+            push_nearby_society_fact(
+                &mut facts, &entity_id, &fact_key, value, &row, run_id, &display,
+            )?;
+            for risk in &category_config.derived_distance_risks {
+                if row
+                    .distance_km
+                    .is_some_and(|distance_km| distance_km <= risk.max_distance_km)
+                {
+                    let risk_value = FactValue::Text(display.clone());
+                    push_nearby_society_fact(
+                        &mut facts,
+                        &entity_id,
+                        &risk.fact_key,
+                        risk_value,
+                        &row,
+                        run_id,
+                        &display,
+                    )?;
+                }
+            }
         }
         annotations.push(SkillFactAnnotationRecord {
-            entity_id,
+            entity_id: entity_id.clone(),
             fact_key: fact_key.clone(),
-            display_template: Some(format!("{}: {{value}}", nearby_display_label(&fact_key))),
+            display_template: Some(format!("{}: {{value}}", category_config.display_label)),
             answers_preferences_json: serde_json::to_string(&nearby_answers_preferences(
-                &fact_key,
+                category_config,
             ))?,
             scoring_direction: Some("TextMatch".to_string()),
             scoring_weight: Some(0.8),
             scoring_thresholds_json: "[]".to_string(),
         });
+        for risk in &category_config.derived_distance_risks {
+            if facts
+                .iter()
+                .any(|fact| fact.entity_id == entity_id && fact.fact_key == risk.fact_key)
+            {
+                annotations.push(SkillFactAnnotationRecord {
+                    entity_id: entity_id.clone(),
+                    fact_key: risk.fact_key.clone(),
+                    display_template: Some(format!("{}: {{value}}", risk.display_label)),
+                    answers_preferences_json: serde_json::to_string(
+                        &risk
+                            .answers_preferences
+                            .iter()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>(),
+                    )?,
+                    scoring_direction: Some("TextMatch".to_string()),
+                    scoring_weight: Some(risk.scoring_weight),
+                    scoring_thresholds_json: "[]".to_string(),
+                });
+            }
+        }
     }
     Ok(SkillFactsInput {
         source: "google".to_string(),
@@ -511,6 +541,36 @@ fn google_nearby_place_facts_from_rows(
         fact_annotations: annotations,
         source_watermarks: nearby_record.source_watermarks.clone(),
     })
+}
+
+fn push_nearby_society_fact(
+    facts: &mut Vec<SkillFactRecord>,
+    entity_id: &str,
+    fact_key: &str,
+    value: FactValue,
+    row: &GoogleNearbyPlaceRecord,
+    run_id: &MaterializationId,
+    display: &str,
+) -> Result<(), GooglePlaceAssetError> {
+    facts.push(SkillFactRecord {
+        entity_id: entity_id.to_string(),
+        fact_key: fact_key.to_string(),
+        value_type: fact_value_type(&value).to_string(),
+        value_json: serde_json::to_string(&value)?,
+        confidence: row.confidence,
+        source_type: "Google".to_string(),
+        source_url: Some(row.place_url.clone()),
+        model: None,
+        skill_id: Some("fetch_google_nearby_places".to_string()),
+        triggered_by: Some(row.query.clone()),
+        learned_at: row.fetched_at,
+        run_id: run_id.to_string(),
+        input_hash: format!(
+            "sha256:{}",
+            sha256_hex(format!("{entity_id}:{fact_key}:{}:{display}", row.place_url).as_bytes())
+        ),
+    });
+    Ok(())
 }
 
 fn append_google_nearby_place_identity_facts(
@@ -1373,6 +1433,7 @@ fn validate_input(input: &GooglePlacesWeeklyInput) -> Result<(), GooglePlaceAsse
 fn validate_nearby_input(
     input: &GoogleNearbyPlacesWeeklyInput,
 ) -> Result<(), GooglePlaceAssetError> {
+    let config = load_nearby_place_category_config()?;
     if input.snapshot_date.trim().is_empty() {
         return Err(GooglePlaceAssetError::InvalidInput(
             "Google nearby snapshot date cannot be empty".to_string(),
@@ -1395,7 +1456,7 @@ fn validate_nearby_input(
                 record.entity_id
             )));
         }
-        if nearby_fact_key(&record.category).is_none() {
+        if config.category_for_alias(&record.category).is_none() {
             return Err(GooglePlaceAssetError::InvalidInput(format!(
                 "Google nearby row for {} has unsupported category {}",
                 record.entity_id, record.category
@@ -1473,53 +1534,162 @@ fn nearby_watermarks(input: &GoogleNearbyPlacesWeeklyInput) -> Vec<SourceWaterma
     }]
 }
 
-fn nearby_fact_key(category: &str) -> Option<&'static str> {
-    match category
-        .trim()
-        .to_ascii_lowercase()
-        .replace([' ', '-'], "_")
-        .as_str()
-    {
-        "school" | "schools" => Some("nearby_schools"),
-        "metro" | "metro_station" | "metro_stations" | "subway" | "subway_station" => {
-            Some("nearby_metro_stations")
-        }
-        "hospital" | "hospitals" => Some("nearby_hospitals"),
-        "fitness" | "gym" | "gyms" | "cult" | "sports" => Some("nearby_fitness"),
-        "tech_park" | "tech_parks" | "office" | "offices" => Some("nearby_tech_parks"),
-        _ => None,
+#[derive(Debug, Clone, Deserialize)]
+struct NearbyPlaceCategoryFile {
+    categories: Vec<NearbyPlaceCategory>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NearbyPlaceCategory {
+    fact_key: String,
+    #[serde(default)]
+    category_aliases: Vec<String>,
+    display_label: String,
+    #[serde(default)]
+    answers_preferences: Vec<String>,
+    max_distance_km: f64,
+    #[serde(default)]
+    strong_local_distance_km: Option<f64>,
+    #[serde(default)]
+    min_review_count_for_far: Option<u64>,
+    #[serde(default)]
+    allow_missing_place_types: bool,
+    #[serde(default)]
+    accepted_place_types: Vec<String>,
+    #[serde(default)]
+    name_markers: Vec<String>,
+    #[serde(default)]
+    name_block_markers: Vec<String>,
+    #[serde(default)]
+    derived_distance_risks: Vec<NearbyDerivedDistanceRisk>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NearbyDerivedDistanceRisk {
+    fact_key: String,
+    display_label: String,
+    #[serde(default)]
+    answers_preferences: Vec<String>,
+    max_distance_km: f64,
+    #[serde(default = "default_nearby_derived_risk_weight")]
+    scoring_weight: f32,
+}
+
+fn default_nearby_derived_risk_weight() -> f32 {
+    1.0
+}
+
+impl NearbyPlaceCategoryFile {
+    fn category_for_alias(&self, category: &str) -> Option<&NearbyPlaceCategory> {
+        let normalized = normalize_category_key(category);
+        self.categories.iter().find(|config| {
+            config
+                .category_aliases
+                .iter()
+                .any(|alias| normalize_category_key(alias) == normalized)
+        })
+    }
+
+    fn category_for_fact_key(&self, fact_key: &str) -> Option<&NearbyPlaceCategory> {
+        self.categories
+            .iter()
+            .find(|config| config.fact_key == fact_key)
     }
 }
 
-struct NearbyEvidencePolicy {
-    max_distance_km: f64,
-    strong_local_distance_km: Option<f64>,
-    min_review_count_for_far: Option<u64>,
+fn load_nearby_place_category_config() -> Result<NearbyPlaceCategoryFile, GooglePlaceAssetError> {
+    let config: NearbyPlaceCategoryFile =
+        load_json(&dag_root().join("nearby_place_categories.json"))?;
+    validate_nearby_place_category_config(&config)?;
+    Ok(config)
 }
 
-fn nearby_row_has_serving_evidence(fact_key: &str, row: &GoogleNearbyPlaceRecord) -> bool {
-    if !nearby_row_matches_fact_key(fact_key, row) {
+fn validate_nearby_place_category_config(
+    config: &NearbyPlaceCategoryFile,
+) -> Result<(), GooglePlaceAssetError> {
+    if config.categories.is_empty() {
+        return Err(GooglePlaceAssetError::InvalidInput(
+            "nearby place category config must define at least one category".to_string(),
+        ));
+    }
+    let mut aliases = HashSet::new();
+    let mut fact_keys = HashSet::new();
+    for category in &config.categories {
+        if category.fact_key.trim().is_empty()
+            || category.display_label.trim().is_empty()
+            || category.category_aliases.is_empty()
+            || !category.max_distance_km.is_finite()
+            || category.max_distance_km < 0.0
+        {
+            return Err(GooglePlaceAssetError::InvalidInput(format!(
+                "nearby category {} is missing required config",
+                category.fact_key
+            )));
+        }
+        if !fact_keys.insert(category.fact_key.clone()) {
+            return Err(GooglePlaceAssetError::InvalidInput(format!(
+                "nearby category fact key {} is duplicated",
+                category.fact_key
+            )));
+        }
+        for alias in &category.category_aliases {
+            let alias = normalize_category_key(alias);
+            if alias.is_empty() || !aliases.insert(alias.clone()) {
+                return Err(GooglePlaceAssetError::InvalidInput(format!(
+                    "nearby category alias {alias} is empty or duplicated"
+                )));
+            }
+        }
+        for risk in &category.derived_distance_risks {
+            if risk.fact_key.trim().is_empty()
+                || risk.display_label.trim().is_empty()
+                || !risk.max_distance_km.is_finite()
+                || risk.max_distance_km < 0.0
+                || !risk.scoring_weight.is_finite()
+                || risk.scoring_weight < 0.0
+            {
+                return Err(GooglePlaceAssetError::InvalidInput(format!(
+                    "nearby category {} has invalid derived distance risk config",
+                    category.fact_key
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn normalize_category_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
+fn nearby_row_has_serving_evidence(
+    category_config: &NearbyPlaceCategory,
+    row: &GoogleNearbyPlaceRecord,
+) -> bool {
+    if !nearby_row_matches_fact_key(category_config, row) {
         return false;
     }
     let Some(distance_km) = row.distance_km else {
         return false;
     };
-    let policy = nearby_evidence_policy(fact_key);
-    if distance_km > policy.max_distance_km {
+    if distance_km > category_config.max_distance_km {
         return false;
     }
-    if let Some(strong_local_distance_km) = policy.strong_local_distance_km {
+    if let Some(strong_local_distance_km) = category_config.strong_local_distance_km {
         if distance_km <= strong_local_distance_km {
             return true;
         }
     }
-    if let Some(min_review_count) = policy.min_review_count_for_far {
+    if let Some(min_review_count) = category_config.min_review_count_for_far {
         return row.review_count.unwrap_or(0) >= min_review_count;
     }
     true
 }
 
-fn nearby_row_matches_fact_key(fact_key: &str, row: &GoogleNearbyPlaceRecord) -> bool {
+fn nearby_row_matches_fact_key(
+    category_config: &NearbyPlaceCategory,
+    row: &GoogleNearbyPlaceRecord,
+) -> bool {
     let mut place_types = row
         .place_types
         .iter()
@@ -1534,138 +1704,35 @@ fn nearby_row_matches_fact_key(fact_key: &str, row: &GoogleNearbyPlaceRecord) ->
     }
     let has_place_types = !place_types.is_empty();
     let name = row.place_name.to_ascii_lowercase();
-    match fact_key {
-        "nearby_schools" => {
-            !has_place_types
-                || place_types.iter().any(|value| {
-                    matches!(
-                        value.as_str(),
-                        "school"
-                            | "primary_school"
-                            | "secondary_school"
-                            | "preschool"
-                            | "university"
-                    )
-                })
-        }
-        "nearby_metro_stations" => {
-            place_types.iter().any(|value| {
-                matches!(
-                    value.as_str(),
-                    "subway_station" | "metro_station" | "light_rail_station"
-                )
-            }) || ["metro station", "namma metro", "subway station"]
-                .iter()
-                .any(|marker| name.contains(marker))
-        }
-        "nearby_hospitals" => {
-            !has_place_types
-                || place_types.iter().any(|value| {
-                    matches!(
-                        value.as_str(),
-                        "hospital" | "doctor" | "medical_lab" | "health"
-                    )
-                })
-        }
-        "nearby_fitness" => {
-            !has_place_types
-                || place_types.iter().any(|value| {
-                    matches!(value.as_str(), "gym" | "fitness_center" | "sports_complex")
-                })
-                || [
-                    "cult",
-                    "cult.fit",
-                    "gym",
-                    "fitness",
-                    "crossfit",
-                    "yoga",
-                    "sports club",
-                ]
-                .iter()
-                .any(|marker| name.contains(marker))
-        }
-        "nearby_tech_parks" => {
-            if [" road", " bus stop", " metro station"]
-                .iter()
-                .any(|blocked| name.contains(blocked))
-            {
-                return false;
-            }
-            place_types
-                .iter()
-                .any(|value| matches!(value.as_str(), "business_center" | "corporate_office"))
-                || [
-                    "tech park",
-                    "technology park",
-                    "it park",
-                    "itpb",
-                    "itpl",
-                    "business park",
-                    "tech forest",
-                    "office park",
-                ]
-                .iter()
-                .any(|marker| name.contains(marker))
-        }
-        _ => true,
+    if category_config
+        .name_block_markers
+        .iter()
+        .any(|blocked| name.contains(&blocked.to_ascii_lowercase()))
+    {
+        return false;
     }
+    if category_config.allow_missing_place_types && !has_place_types {
+        return true;
+    }
+    if category_config
+        .accepted_place_types
+        .iter()
+        .any(|accepted| place_types.contains(&accepted.to_ascii_lowercase()))
+    {
+        return true;
+    }
+    category_config
+        .name_markers
+        .iter()
+        .any(|marker| name.contains(&marker.to_ascii_lowercase()))
 }
 
-fn nearby_evidence_policy(fact_key: &str) -> NearbyEvidencePolicy {
-    match fact_key {
-        "nearby_schools" => NearbyEvidencePolicy {
-            max_distance_km: 5.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-        "nearby_metro_stations" => NearbyEvidencePolicy {
-            max_distance_km: 6.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-        "nearby_hospitals" => NearbyEvidencePolicy {
-            max_distance_km: 8.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-        "nearby_fitness" => NearbyEvidencePolicy {
-            max_distance_km: 3.5,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-        "nearby_tech_parks" => NearbyEvidencePolicy {
-            max_distance_km: 15.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-        _ => NearbyEvidencePolicy {
-            max_distance_km: 8.0,
-            strong_local_distance_km: None,
-            min_review_count_for_far: None,
-        },
-    }
-}
-
-fn nearby_display_label(fact_key: &str) -> &'static str {
-    match fact_key {
-        "nearby_schools" => "Nearby schools",
-        "nearby_metro_stations" => "Nearby metro",
-        "nearby_hospitals" => "Nearby hospitals",
-        "nearby_fitness" => "Nearby fitness",
-        "nearby_tech_parks" => "Nearby tech parks and offices",
-        _ => "Nearby places",
-    }
-}
-
-fn nearby_answers_preferences(fact_key: &str) -> Vec<&'static str> {
-    match fact_key {
-        "nearby_schools" => vec!["nearby", "school", "schools", "family friendly"],
-        "nearby_metro_stations" => vec!["nearby", "metro", "metro station", "commute"],
-        "nearby_hospitals" => vec!["nearby", "hospital", "hospitals"],
-        "nearby_fitness" => vec!["nearby", "gym", "fitness", "cult"],
-        "nearby_tech_parks" => vec!["nearby", "tech park", "office", "offices", "commute"],
-        _ => vec!["nearby"],
-    }
+fn nearby_answers_preferences(category_config: &NearbyPlaceCategory) -> Vec<&str> {
+    category_config
+        .answers_preferences
+        .iter()
+        .map(String::as_str)
+        .collect()
 }
 
 fn nearby_place_display(row: &GoogleNearbyPlaceRecord) -> String {
@@ -1862,6 +1929,7 @@ fn asset_id(value: &str) -> AssetId {
 pub enum GooglePlaceAssetError {
     Arrow(arrow::error::ArrowError),
     Chrono(chrono::ParseError),
+    Config(DagConfigError),
     InvalidInput(String),
     InvalidSchema(String),
     Lake(LakeError),
@@ -1876,6 +1944,7 @@ impl fmt::Display for GooglePlaceAssetError {
         match self {
             Self::Arrow(err) => write!(f, "Google place Arrow error: {err}"),
             Self::Chrono(err) => write!(f, "Google place timestamp error: {err}"),
+            Self::Config(err) => write!(f, "Google nearby place config error: {err}"),
             Self::InvalidInput(message) => write!(f, "invalid Google place input: {message}"),
             Self::InvalidSchema(column) => {
                 write!(f, "invalid Google place Parquet column: {column}")
@@ -1902,6 +1971,12 @@ impl From<arrow::error::ArrowError> for GooglePlaceAssetError {
 impl From<chrono::ParseError> for GooglePlaceAssetError {
     fn from(value: chrono::ParseError) -> Self {
         Self::Chrono(value)
+    }
+}
+
+impl From<DagConfigError> for GooglePlaceAssetError {
+    fn from(value: DagConfigError) -> Self {
+        Self::Config(value)
     }
 }
 

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "description": "OpenStreetMap power-infrastructure selectors and buyer-facing risk thresholds.",
+  "transmission_lines": {
+    "fact_key": "high_voltage_transmission_line_nearby",
+    "display_label": "High-voltage transmission line nearby",
+    "answers_preferences": ["avoid high tension wires", "avoid transmission line", "red flag", "power line"],
+    "linked_place_fact_key": "high_voltage_transmission_line_place_entity",
+    "linked_place_display_label": "High-voltage transmission line map entity",
+    "accepted_power_values": ["line"],
+    "min_voltage_kv": 66.0,
+    "include_unknown_voltage": false,
+    "max_distance_meters": 1000.0,
+    "severity_bands": [
+      { "severity": "critical", "max_distance_meters": 50.0 },
+      { "severity": "high", "max_distance_meters": 150.0 },
+      { "severity": "medium", "max_distance_meters": 300.0 },
+      { "severity": "info", "max_distance_meters": 1000.0 }
+    ]
+  }
+}

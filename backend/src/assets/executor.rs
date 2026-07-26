@@ -21,17 +21,19 @@ use super::{
     GooglePlaceAssetError, GooglePlaceSnapshotMaterializer, KgSocietyViewMaterialization,
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
     MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
-    PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
+    OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
     SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
-    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
-    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
+    StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
+    BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
+    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
     RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1174,6 +1176,14 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::BengaluruMetroStationFacts,
         );
         executors.insert(
+            static_asset_id(OSM_POWER_LINE_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::OsmPowerLineFacts,
+        );
+        executors.insert(
+            static_asset_id(STORMWATER_DRAIN_FACTS_ASSET_ID),
+            BuiltInAssetExecutor::StormwaterDrainFacts,
+        );
+        executors.insert(
             static_asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
             BuiltInAssetExecutor::CurrentProjectFacts,
         );
@@ -1211,6 +1221,8 @@ enum BuiltInAssetExecutor {
     ApproachRoadGraphFacts,
     SocietyGroundwaterPotentialFacts,
     BengaluruMetroStationFacts,
+    OsmPowerLineFacts,
+    StormwaterDrainFacts,
     CurrentProjectFacts,
     KgSocietyView,
     SearchServingBundle,
@@ -1689,6 +1701,71 @@ impl BuiltInAssetExecutor {
                 let materialization = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(materialization))
             }
+            Self::OsmPowerLineFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .osm_power_infrastructure
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::canonicalize_osm_power_infrastructure_input(
+                    &context.dag.lake,
+                    input,
+                    canonical_record,
+                )
+                .await?;
+                let input = super::osm_power_line_facts_input(&input, &context.run_id.to_string())?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
+            Self::StormwaterDrainFacts => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = context
+                    .options
+                    .source_inputs
+                    .stormwater_drains
+                    .as_ref()
+                    .ok_or_else(|| source_input_error(&context))?;
+                let parent_records = context
+                    .dag
+                    .dependency_materialization_records(
+                        context.asset_id,
+                        &context.options.partition,
+                        context.records_by_asset,
+                        context.dependency_snapshot,
+                    )
+                    .await?;
+                let canonical_record = dependency_record(
+                    context.asset_id,
+                    &parent_records,
+                    CANONICAL_SOCIETY_NODES_ASSET_ID,
+                )?;
+                let input = super::canonicalize_stormwater_drain_input(
+                    &context.dag.lake,
+                    input,
+                    canonical_record,
+                )
+                .await?;
+                let input =
+                    super::stormwater_drain_facts_input(&input, &context.run_id.to_string())?;
+                let materialization = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(materialization))
+            }
             Self::CurrentProjectFacts => {
                 ensure_global_partition(context.asset_id, context.asset_partition)?;
                 let parent_records = context
@@ -1975,6 +2052,8 @@ pub enum AssetDagExecutorError {
     ApproachRoadGraph(ApproachRoadGraphError),
     Environmental(EnvironmentalAssetError),
     Transit(TransitAssetError),
+    OsmPower(OsmPowerAssetError),
+    Stormwater(StormwaterAssetError),
     CurrentProjectFacts(CurrentProjectFactsError),
     Rera(ReraAssetError),
     CanonicalNodes(super::CanonicalNodesError),
@@ -2061,6 +2140,8 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::Environmental(err) => write!(f, "environmental asset execution failed: {err}"),
             Self::Transit(err) => write!(f, "transit asset execution failed: {err}"),
+            Self::OsmPower(err) => write!(f, "OSM power asset execution failed: {err}"),
+            Self::Stormwater(err) => write!(f, "stormwater asset execution failed: {err}"),
             Self::CurrentProjectFacts(err) => {
                 write!(f, "current project facts compaction failed: {err}")
             }
@@ -2255,6 +2336,18 @@ impl From<TransitAssetError> for AssetDagExecutorError {
     }
 }
 
+impl From<OsmPowerAssetError> for AssetDagExecutorError {
+    fn from(err: OsmPowerAssetError) -> Self {
+        Self::OsmPower(err)
+    }
+}
+
+impl From<StormwaterAssetError> for AssetDagExecutorError {
+    fn from(err: StormwaterAssetError) -> Self {
+        Self::Stormwater(err)
+    }
+}
+
 impl From<CurrentProjectFactsError> for AssetDagExecutorError {
     fn from(err: CurrentProjectFactsError) -> Self {
         Self::CurrentProjectFacts(err)
@@ -2349,6 +2442,8 @@ fn should_skip_missing_optional_source_input(
             source_inputs.environment_groundwater_potential.is_none()
         }
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
+        OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
+        STORMWATER_DRAIN_FACTS_ASSET_ID => source_inputs.stormwater_drains.is_none(),
         _ => false,
     }
 }
@@ -2419,6 +2514,8 @@ fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
         && source_inputs.external_images_weekly.is_none()
         && source_inputs.environment_groundwater_potential.is_none()
         && source_inputs.bengaluru_metro_stations.is_none()
+        && source_inputs.osm_power_infrastructure.is_none()
+        && source_inputs.stormwater_drains.is_none()
 }
 
 #[cfg(test)]
@@ -2537,6 +2634,30 @@ mod tests {
             .current_record(&asset_id, &AssetPartition::global())
             .await
             .is_err());
+    }
+
+    #[test]
+    fn osm_power_line_facts_skip_when_optional_source_input_is_missing() {
+        for asset_id in [
+            OSM_POWER_LINE_FACTS_ASSET_ID,
+            STORMWATER_DRAIN_FACTS_ASSET_ID,
+        ] {
+            let asset_id = AssetId::new(asset_id).unwrap();
+
+            assert!(should_skip_missing_optional_source_input(
+                &asset_id,
+                &AssetSourceInputs::default()
+            ));
+
+            let mut source_inputs = AssetSourceInputs::default();
+            source_inputs
+                .source_failures
+                .insert(asset_id.to_string(), "collector failed".to_string());
+            assert!(!should_skip_missing_optional_source_input(
+                &asset_id,
+                &source_inputs
+            ));
+        }
     }
 
     #[tokio::test]

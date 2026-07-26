@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "description": "Stormwater drain / Rajakaluve proximity policy. Source collectors should normalize OpenCity, BBMP, or survey-map geometry into these drain types.",
+  "drains": {
+    "fact_key": "stormwater_drain_nearby",
+    "display_label": "Stormwater drain nearby",
+    "answers_preferences": ["stormwater drain", "rajakaluve", "swd", "flooding risk", "red flag"],
+    "linked_place_fact_key": "stormwater_drain_place_entity",
+    "linked_place_display_label": "Stormwater drain map entity",
+    "accepted_drain_types": ["stormwater_drain", "rajakaluve", "primary_swd", "secondary_swd", "tertiary_swd"],
+    "max_distance_meters": 250.0,
+    "severity_bands": [
+      { "severity": "critical", "max_distance_meters": 25.0 },
+      { "severity": "high", "max_distance_meters": 50.0 },
+      { "severity": "medium", "max_distance_meters": 100.0 },
+      { "severity": "info", "max_distance_meters": 250.0 }
+    ],
+    "type_specific_facts": [
+      {
+        "fact_key": "rajakaluve_nearby",
+        "display_label": "Rajakaluve nearby",
+        "answers_preferences": ["rajakaluve", "stormwater drain", "red flag"],
+        "drain_type_aliases": ["rajakaluve"]
+      }
+    ],
+    "encroachment_fact": {
+      "fact_key": "rajakaluve_encroachment_record",
+      "display_label": "Rajakaluve encroachment record",
+      "answers_preferences": ["rajakaluve encroachment", "swd encroachment", "legal risk", "red flag"]
+    }
+  }
+}

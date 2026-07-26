@@ -3,6 +3,8 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use super::environment::EnvironmentGroundwaterPotentialInput;
+use super::osm_power::OsmPowerInfrastructureInput;
+use super::stormwater::StormwaterDrainRiskInput;
 use super::transit::BengaluruMetroStationsInput;
 use super::{
     AssetDagPlan, AssetDagRunManifest, AssetId, AssetRunStepStatus, ExternalImagesWeeklyInput,
@@ -12,8 +14,9 @@ use super::{
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
+    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -42,6 +45,10 @@ pub struct AssetSourceInputs {
     pub environment_groundwater_potential: Option<EnvironmentGroundwaterPotentialInput>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bengaluru_metro_stations: Option<BengaluruMetroStationsInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub osm_power_infrastructure: Option<OsmPowerInfrastructureInput>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stormwater_drains: Option<StormwaterDrainRiskInput>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -61,6 +68,8 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
             BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+            OSM_POWER_LINE_FACTS_ASSET_ID,
+            STORMWATER_DRAIN_FACTS_ASSET_ID,
         ]
         .into_iter()
         .map(|id| AssetId::new(id).expect("static source input asset id is valid"))
@@ -77,6 +86,8 @@ impl AssetSourceInputs {
                 | EXTERNAL_IMAGES_WEEKLY_ASSET_ID
                 | SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID
                 | BENGALURU_METRO_STATION_FACTS_ASSET_ID
+                | OSM_POWER_LINE_FACTS_ASSET_ID
+                | STORMWATER_DRAIN_FACTS_ASSET_ID
         )
     }
 

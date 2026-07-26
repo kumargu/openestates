@@ -289,6 +289,34 @@
       }
     },
     {
+      "id": "osm_power_line_facts",
+      "stage": "silver",
+      "description": "OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
+      "id": "stormwater_drain_facts",
+      "stage": "silver",
+      "description": "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
+      "dependencies": [
+        "canonical_society_nodes"
+      ],
+      "refresh": "monthly",
+      "cost_tier": "free",
+      "trust_tier": "support",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "current_project_facts",
       "stage": "gold",
       "description": "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
@@ -301,7 +329,9 @@
         "builder_rera_aggregates",
         "home_state_signals",
         "society_groundwater_potential_facts",
-        "bengaluru_metro_station_facts"
+        "bengaluru_metro_station_facts",
+        "osm_power_line_facts",
+        "stormwater_drain_facts"
       ],
       "refresh": "on_change",
       "cost_tier": "free",
@@ -334,7 +364,9 @@
         "image_media_facts",
         "home_state_signals",
         "society_groundwater_potential_facts",
-        "bengaluru_metro_station_facts"
+        "bengaluru_metro_station_facts",
+        "osm_power_line_facts",
+        "stormwater_drain_facts"
       ]
     },
     {

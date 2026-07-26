@@ -19,6 +19,7 @@ pub mod home_state;
 pub mod kg_view;
 pub mod materialization;
 pub mod media;
+pub mod osm_power;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
@@ -29,6 +30,7 @@ pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
 pub mod source_provider;
+pub mod stormwater;
 pub mod transit;
 pub mod types;
 
@@ -78,6 +80,10 @@ pub use media::{
     ExternalImageSnapshotManifest, ExternalImagesWeeklyInput, MediaAssetError,
     MediaAssetMaterializer, EXTERNAL_IMAGES_WEEKLY_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
 };
+pub use osm_power::{
+    canonicalize_osm_power_infrastructure_input, osm_power_line_facts_input, OsmPowerAssetError,
+    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, OSM_POWER_LINE_FACTS_ASSET_ID,
+};
 pub use paths::AssetPathBuilder;
 pub use planner::{
     AssetDagPlan, AssetFreshness, AssetPlanEntry, AssetPlanner, FreshnessPolicy,
@@ -122,6 +128,10 @@ pub use source_inputs::{
 pub use source_provider::{
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
     SourceEntitySeed, SourceInputProvider, SourceInputProviderError, SourceInputRequest,
+};
+pub use stormwater::{
+    canonicalize_stormwater_drain_input, stormwater_drain_facts_input, StormwaterAssetError,
+    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 pub use transit::{
     bengaluru_metro_station_facts_input, BengaluruMetroStationInput, BengaluruMetroStationsInput,

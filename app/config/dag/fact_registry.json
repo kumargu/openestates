@@ -18,7 +18,17 @@
       "nearby_metro_stations",
       "nearby_hospitals",
       "nearby_fitness",
-      "nearby_tech_parks"
+      "nearby_tech_parks",
+      "nearby_public_parks",
+      "nearby_graveyards",
+      "nearby_lakes",
+      "lake_within_250m",
+      "high_voltage_transmission_line_nearby",
+      "high_voltage_transmission_line_place_entity",
+      "stormwater_drain_nearby",
+      "stormwater_drain_place_entity",
+      "rajakaluve_nearby",
+      "rajakaluve_encroachment_record"
     ],
     "query_stopwords": [
       "near",
@@ -219,6 +229,32 @@
         ],
         "expanded_keys": [
           "nearby_fitness"
+        ]
+      },
+      {
+        "preference": "social infrastructure",
+        "patterns": [
+          "park",
+          "parks",
+          "public park",
+          "open space"
+        ],
+        "expanded_keys": [
+          "nearby_public_parks"
+        ]
+      },
+      {
+        "preference": "externality risk",
+        "patterns": [
+          "lake within 250m",
+          "lake buffer",
+          "near lake",
+          "nearby lake",
+          "water body"
+        ],
+        "expanded_keys": [
+          "nearby_lakes",
+          "lake_within_250m"
         ]
       },
       {
@@ -554,7 +590,8 @@
         "nearby_metro_stations",
         "nearby_hospitals",
         "nearby_fitness",
-        "nearby_tech_parks"
+        "nearby_tech_parks",
+        "nearby_public_parks"
       ],
       "nearby_distance_full_score_km": 0.75,
       "nearby_distance_zero_score_km": 3.0,
@@ -1120,7 +1157,8 @@
         "nearby_metro_stations",
         "nearby_hospitals",
         "nearby_fitness",
-        "nearby_tech_parks"
+        "nearby_tech_parks",
+        "nearby_public_parks"
       ],
       "source_priority": [
         "maps",
@@ -1572,7 +1610,8 @@
           "nearby_metro_stations",
           "nearby_hospitals",
           "nearby_fitness",
-          "nearby_tech_parks"
+          "nearby_tech_parks",
+          "nearby_public_parks"
         ],
         "weight": 0.8
       },
@@ -2361,6 +2400,7 @@
         ],
         "label": "high tension wires",
         "expanded_keys": [
+          "high_voltage_transmission_line_nearby",
           "high_tension_wire_concern",
           "google_review_snippets",
           "surroundings_signal"
@@ -2369,6 +2409,56 @@
       },
       {
         "rank": 11,
+        "patterns": [
+          "lake within 250m",
+          "lake buffer",
+          "water body nearby",
+          "near lake"
+        ],
+        "label": "lake proximity risk",
+        "expanded_keys": [
+          "lake_within_250m",
+          "nearby_lakes",
+          "surroundings_signal"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 12,
+        "patterns": [
+          "rajakaluve",
+          "stormwater drain",
+          "storm water drain",
+          "swd",
+          "drain encroachment"
+        ],
+        "label": "stormwater drain nearby",
+        "expanded_keys": [
+          "stormwater_drain_nearby",
+          "rajakaluve_nearby",
+          "rajakaluve_encroachment_record",
+          "surroundings_signal"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 13,
+        "patterns": [
+          "graveyard",
+          "graveyards",
+          "cemetery",
+          "cemeteries",
+          "burial ground"
+        ],
+        "label": "graveyard nearby",
+        "expanded_keys": [
+          "nearby_graveyards",
+          "surroundings_signal"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 14,
         "patterns": [
           "water issues",
           "water issue",
@@ -3041,6 +3131,7 @@
         "nearby_hospitals",
         "nearby_fitness",
         "nearby_tech_parks",
+        "nearby_public_parks",
         "sentiment_summary",
         "reddit_threads"
       ],
@@ -3313,6 +3404,7 @@
         "power lines"
       ],
       "fact_keys": [
+        "high_voltage_transmission_line_nearby",
         "high_tension_wire_concern",
         "google_review_snippets",
         "surroundings_signal"
@@ -3594,6 +3686,81 @@
         "Computed"
       ],
       "display_template": null,
+      "scoring_hint": {
+        "direction": "numeric",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "geo.geometry_geojson",
+      "bucket": "geo",
+      "label": "geometry GeoJSON",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [
+        "map overlay",
+        "geometry",
+        "geojson"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap",
+        "OpenCity",
+        "Manual"
+      ],
+      "display_template": null,
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "osm.power",
+      "bucket": "geo",
+      "label": "OSM power tag",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [
+        "openstreetmap",
+        "power line"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "OSM power tag: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "electrical.voltage_kv",
+      "bucket": "geo",
+      "label": "voltage kV",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "place"
+      ],
+      "enrichment_terms": [],
+      "answers_preferences": [
+        "voltage",
+        "transmission line"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "Voltage: {value} kV",
       "scoring_hint": {
         "direction": "numeric",
         "weight": 0.0
@@ -6117,6 +6284,300 @@
       }
     },
     {
+      "fact_key": "nearby_public_parks",
+      "bucket": "social_infra",
+      "label": "nearby public parks",
+      "lens": "positive",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "park",
+        "public park",
+        "open space"
+      ],
+      "answers_preferences": [
+        "nearby parks",
+        "public parks",
+        "open space"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "nearby public parks: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.8
+      }
+    },
+    {
+      "fact_key": "nearby_graveyards",
+      "bucket": "externalities",
+      "label": "nearby burial grounds",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "graveyard",
+        "cemetery",
+        "burial ground"
+      ],
+      "answers_preferences": [
+        "graveyard",
+        "cemetery",
+        "burial ground",
+        "resale concern"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "nearby burial grounds: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "high_voltage_transmission_line_nearby",
+      "bucket": "externalities",
+      "label": "high-voltage transmission line nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "high voltage transmission line",
+        "high tension line",
+        "power line"
+      ],
+      "answers_preferences": [
+        "avoid high tension wires",
+        "avoid transmission line",
+        "red flag",
+        "power line"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "high-voltage transmission line nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "high_voltage_transmission_line_place_entity",
+      "bucket": "externalities",
+      "label": "high-voltage transmission line map entity",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "high voltage transmission line",
+        "map overlay"
+      ],
+      "answers_preferences": [
+        "map overlay",
+        "geometry",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenStreetMap"
+      ],
+      "display_template": "high-voltage transmission line map entity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "nearby_lakes",
+      "bucket": "externalities",
+      "label": "nearby lakes",
+      "lens": "risk",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "lake",
+        "water body"
+      ],
+      "answers_preferences": [
+        "nearby lake",
+        "water body"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "nearby lakes: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.7
+      }
+    },
+    {
+      "fact_key": "lake_within_250m",
+      "bucket": "externalities",
+      "label": "lake within 250 m",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "lake within 250m",
+        "lake buffer",
+        "water body nearby"
+      ],
+      "answers_preferences": [
+        "lake within 250m",
+        "lake buffer",
+        "flooding risk",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "lake within 250 m: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "stormwater_drain_nearby",
+      "bucket": "externalities",
+      "label": "stormwater drain nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "stormwater drain",
+        "storm water drain",
+        "swd"
+      ],
+      "answers_preferences": [
+        "stormwater drain",
+        "swd",
+        "flooding risk",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Manual"
+      ],
+      "display_template": "stormwater drain nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "stormwater_drain_place_entity",
+      "bucket": "externalities",
+      "label": "stormwater drain map entity",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "stormwater drain",
+        "map overlay"
+      ],
+      "answers_preferences": [
+        "map overlay",
+        "geometry",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Manual"
+      ],
+      "display_template": "stormwater drain map entity: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.0
+      }
+    },
+    {
+      "fact_key": "rajakaluve_nearby",
+      "bucket": "externalities",
+      "label": "Rajakaluve nearby",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "rajakaluve",
+        "stormwater drain"
+      ],
+      "answers_preferences": [
+        "rajakaluve",
+        "stormwater drain",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Manual"
+      ],
+      "display_template": "Rajakaluve nearby: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "rajakaluve_encroachment_record",
+      "bucket": "externalities",
+      "label": "Rajakaluve encroachment record",
+      "lens": "risk",
+      "polarity": "concern",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "rajakaluve encroachment",
+        "swd encroachment",
+        "drain encroachment"
+      ],
+      "answers_preferences": [
+        "rajakaluve encroachment",
+        "swd encroachment",
+        "legal risk",
+        "red flag"
+      ],
+      "never_default": true,
+      "source_types": [
+        "OpenCity",
+        "Manual"
+      ],
+      "display_template": "Rajakaluve encroachment record: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.3
+      }
+    },
+    {
       "fact_key": "positive.association_responsive",
       "bucket": "other",
       "label": "responsive association",
@@ -6145,5 +6606,5 @@
       }
     }
   ],
-  "fact_count": 86
+  "fact_count": 103
 }

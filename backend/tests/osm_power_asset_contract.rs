@@ -1,0 +1,105 @@
+use std::collections::BTreeMap;
+
+use backend::assets::{
+    osm_power_line_facts_input, KgViewRecords, OsmPowerInfrastructureInput,
+    OsmPowerLineObservationRecord,
+};
+use backend::knowledge::KnowledgeGraph;
+use chrono::{TimeZone, Utc};
+
+#[test]
+fn osm_power_line_facts_emit_transmission_red_flag_and_geometry() {
+    let fetched_at = Utc.with_ymd_and_hms(2026, 7, 27, 9, 0, 0).unwrap();
+    let input = OsmPowerInfrastructureInput {
+        snapshot_date: "2026-07-27".to_string(),
+        records: vec![
+            OsmPowerLineObservationRecord {
+                entity_id: "society:prestige-southern-star".to_string(),
+                project_key: None,
+                query: "power=line around Prestige Southern Star".to_string(),
+                osm_id: "way/12345".to_string(),
+                name: Some("220 kV Somanahalli line".to_string()),
+                power: "line".to_string(),
+                voltage_kv: Some(220.0),
+                distance_meters: 82.0,
+                latitude: 12.915,
+                longitude: 77.585,
+                geometry_geojson:
+                    r#"{"type":"LineString","coordinates":[[77.58,12.91],[77.59,12.92]]}"#
+                        .to_string(),
+                source_tags: BTreeMap::from([
+                    ("power".to_string(), "line".to_string()),
+                    ("voltage".to_string(), "220000".to_string()),
+                ]),
+                source_url: Some("https://www.openstreetmap.org/way/12345".to_string()),
+                confidence: 0.86,
+                fetched_at,
+                fetch_source: "overpass_power_snapshot".to_string(),
+            },
+            OsmPowerLineObservationRecord {
+                entity_id: "society:prestige-southern-star".to_string(),
+                project_key: None,
+                query: "power=line around Prestige Southern Star".to_string(),
+                osm_id: "way/low-voltage".to_string(),
+                name: Some("Local distribution line".to_string()),
+                power: "line".to_string(),
+                voltage_kv: Some(11.0),
+                distance_meters: 30.0,
+                latitude: 12.91,
+                longitude: 77.58,
+                geometry_geojson:
+                    r#"{"type":"LineString","coordinates":[[77.58,12.91],[77.581,12.911]]}"#
+                        .to_string(),
+                source_tags: BTreeMap::new(),
+                source_url: Some("https://www.openstreetmap.org/way/low-voltage".to_string()),
+                confidence: 0.7,
+                fetched_at,
+                fetch_source: "overpass_power_snapshot".to_string(),
+            },
+        ],
+        source_watermarks: Vec::new(),
+    };
+
+    let facts = osm_power_line_facts_input(&input, "test-run").unwrap();
+
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "society:prestige-southern-star"
+            && fact.fact_key == "high_voltage_transmission_line_nearby"
+            && fact.value_json.contains("220 kV Somanahalli line")
+            && fact.value_json.contains("severity: high")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "society:prestige-southern-star"
+            && fact.fact_key == "high_voltage_transmission_line_place_entity"
+            && fact.value_json.contains("place:osm-power-line:way-12345")
+    }));
+    assert!(!facts
+        .facts
+        .iter()
+        .any(|fact| fact.value_json.contains("Local distribution line")));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.entity_id == "place:osm-power-line:way-12345"
+            && fact.fact_key == "geo.geometry_geojson"
+            && fact.value_json.contains("LineString")
+    }));
+    assert!(facts.fact_annotations.iter().any(|annotation| {
+        annotation.fact_key == "high_voltage_transmission_line_nearby"
+            && annotation
+                .answers_preferences_json
+                .contains("avoid transmission line")
+    }));
+
+    let kg_records = KgViewRecords::from_graph_with_skill_facts(
+        &KnowledgeGraph::new(),
+        &facts.facts,
+        &facts.fact_annotations,
+    )
+    .unwrap();
+    assert!(kg_records.entities.iter().any(|entity| {
+        entity.entity_id == "place:osm-power-line:way-12345" && entity.entity_type == "place"
+    }));
+    assert!(kg_records.facts.iter().any(|fact| {
+        fact.entity_id == "place:osm-power-line:way-12345"
+            && fact.fact_key == "geo.geometry_geojson"
+    }));
+}

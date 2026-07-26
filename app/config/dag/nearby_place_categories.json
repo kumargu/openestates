@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "description": "Google nearby place category normalization and evidence policy. Collectors may use any alias; DAG derivation maps aliases to canonical fact keys here.",
+  "categories": [
+    {
+      "fact_key": "nearby_schools",
+      "category_aliases": ["school", "schools"],
+      "display_label": "Nearby schools",
+      "answers_preferences": ["nearby", "school", "schools", "family friendly"],
+      "max_distance_km": 5.0,
+      "allow_missing_place_types": true,
+      "accepted_place_types": ["school", "primary_school", "secondary_school", "preschool", "university"]
+    },
+    {
+      "fact_key": "nearby_metro_stations",
+      "category_aliases": ["metro", "metro_station", "metro_stations", "subway", "subway_station"],
+      "display_label": "Nearby metro",
+      "answers_preferences": ["nearby", "metro", "metro station", "commute"],
+      "max_distance_km": 6.0,
+      "accepted_place_types": ["subway_station", "metro_station", "light_rail_station"],
+      "name_markers": ["metro station", "namma metro", "subway station"]
+    },
+    {
+      "fact_key": "nearby_hospitals",
+      "category_aliases": ["hospital", "hospitals"],
+      "display_label": "Nearby hospitals",
+      "answers_preferences": ["nearby", "hospital", "hospitals"],
+      "max_distance_km": 8.0,
+      "allow_missing_place_types": true,
+      "accepted_place_types": ["hospital", "doctor", "medical_lab", "health"]
+    },
+    {
+      "fact_key": "nearby_fitness",
+      "category_aliases": ["fitness", "gym", "gyms", "cult", "sports"],
+      "display_label": "Nearby fitness",
+      "answers_preferences": ["nearby", "gym", "fitness", "cult"],
+      "max_distance_km": 3.5,
+      "allow_missing_place_types": true,
+      "accepted_place_types": ["gym", "fitness_center", "sports_complex"],
+      "name_markers": ["cult", "cult.fit", "gym", "fitness", "crossfit", "yoga", "sports club"]
+    },
+    {
+      "fact_key": "nearby_tech_parks",
+      "category_aliases": ["tech_park", "tech_parks", "office", "offices"],
+      "display_label": "Nearby tech parks and offices",
+      "answers_preferences": ["nearby", "tech park", "office", "offices", "commute"],
+      "max_distance_km": 15.0,
+      "accepted_place_types": ["business_center", "corporate_office"],
+      "name_markers": ["tech park", "technology park", "it park", "itpb", "itpl", "business park", "tech forest", "office park"],
+      "name_block_markers": [" road", " bus stop", " metro station"]
+    },
+    {
+      "fact_key": "nearby_public_parks",
+      "category_aliases": ["park", "parks", "public_park", "public_parks"],
+      "display_label": "Nearby public parks",
+      "answers_preferences": ["nearby", "park", "parks", "public park", "open space"],
+      "max_distance_km": 3.0,
+      "allow_missing_place_types": false,
+      "accepted_place_types": ["park", "national_park", "garden"],
+      "name_block_markers": ["business park", "tech park", "office park"]
+    },
+    {
+      "fact_key": "nearby_graveyards",
+      "category_aliases": ["graveyard", "graveyards", "cemetery", "cemeteries", "burial_ground", "burial_grounds"],
+      "display_label": "Nearby burial grounds",
+      "answers_preferences": ["nearby", "graveyard", "cemetery", "burial ground", "resale concern"],
+      "max_distance_km": 1.0,
+      "allow_missing_place_types": false,
+      "accepted_place_types": ["cemetery"],
+      "name_markers": ["graveyard", "cemetery", "burial ground", "kabristan", "qabrastan", "kabarstan", "shamshan", "crematorium"]
+    },
+    {
+      "fact_key": "nearby_lakes",
+      "category_aliases": ["lake", "lakes", "water_body", "water_bodies"],
+      "display_label": "Nearby lakes",
+      "answers_preferences": ["nearby", "lake", "lakes", "water body", "red flag"],
+      "max_distance_km": 1.0,
+      "allow_missing_place_types": false,
+      "accepted_place_types": ["lake"],
+      "name_markers": ["lake", "kere"],
+      "derived_distance_risks": [
+        {
+          "fact_key": "lake_within_250m",
+          "display_label": "Lake within 250 m",
+          "answers_preferences": ["lake within 250m", "lake buffer", "flooding risk", "red flag"],
+          "max_distance_km": 0.25,
+          "scoring_weight": 1.1
+        }
+      ]
+    }
+  ]
+}

@@ -711,6 +711,24 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Support,
         ),
         asset(
+            "osm_power_line_facts",
+            AssetStage::Silver,
+            "OpenStreetMap transmission-line proximity facts with geometry for red-flag map overlays.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
+            "stormwater_drain_facts",
+            AssetStage::Silver,
+            "Stormwater drain and Rajakaluve proximity facts with geometry for red-flag map overlays.",
+            &["canonical_society_nodes"],
+            RefreshCadence::Monthly,
+            CostTier::Free,
+            TrustTier::Support,
+        ),
+        asset(
             "current_project_facts",
             AssetStage::Gold,
             "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
@@ -724,6 +742,8 @@ pub fn default_openestates_registry() -> AssetRegistry {
                 "home_state_signals",
                 "society_groundwater_potential_facts",
                 "bengaluru_metro_station_facts",
+                "osm_power_line_facts",
+                "stormwater_drain_facts",
             ],
             RefreshCadence::OnChange,
             CostTier::Free,
@@ -748,7 +768,9 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
         .with_optional_dependency("society_groundwater_potential_facts")
-        .with_optional_dependency("bengaluru_metro_station_facts"),
+        .with_optional_dependency("bengaluru_metro_station_facts")
+        .with_optional_dependency("osm_power_line_facts")
+        .with_optional_dependency("stormwater_drain_facts"),
         asset(
             "kg_society_view",
             AssetStage::Gold,

@@ -1842,6 +1842,8 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
         }),
         environment_groundwater_potential: None,
         bengaluru_metro_stations: None,
+        osm_power_infrastructure: None,
+        stormwater_drains: None,
     }
 }
 

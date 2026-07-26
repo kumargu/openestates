@@ -216,6 +216,82 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
                 fetched_at,
                 fetch_source: "google_places_text_search_nearby".to_string(),
             },
+            GoogleNearbyPlaceRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: None,
+                query: "public parks near Green Acre Whitefield Bengaluru".to_string(),
+                category: "public_park".to_string(),
+                place_name: "Inner Circle Municipal Park".to_string(),
+                place_id: Some("park-1".to_string()),
+                place_url: "https://www.google.com/maps/place/inner-circle-park".to_string(),
+                distance_km: Some(0.8),
+                latitude: Some(12.9710),
+                longitude: Some(77.7310),
+                rating: Some(4.2),
+                review_count: Some(140),
+                primary_type: Some("park".to_string()),
+                place_types: vec!["park".to_string()],
+                confidence: 0.81,
+                fetched_at,
+                fetch_source: "google_places_nearby_search".to_string(),
+            },
+            GoogleNearbyPlaceRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: None,
+                query: "public parks near Green Acre Whitefield Bengaluru".to_string(),
+                category: "public_park".to_string(),
+                place_name: "Sigma Business Park".to_string(),
+                place_id: Some("business-park-1".to_string()),
+                place_url: "https://www.google.com/maps/place/sigma-business-park".to_string(),
+                distance_km: Some(0.4),
+                latitude: Some(12.9712),
+                longitude: Some(77.7312),
+                rating: Some(4.6),
+                review_count: Some(900),
+                primary_type: Some("business_center".to_string()),
+                place_types: vec!["business_center".to_string()],
+                confidence: 0.81,
+                fetched_at,
+                fetch_source: "google_places_nearby_search".to_string(),
+            },
+            GoogleNearbyPlaceRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: None,
+                query: "graveyards near Green Acre Whitefield Bengaluru".to_string(),
+                category: "graveyard".to_string(),
+                place_name: "Hope Burial Ground".to_string(),
+                place_id: Some("graveyard-1".to_string()),
+                place_url: "https://www.google.com/maps/place/hope-burial-ground".to_string(),
+                distance_km: Some(0.6),
+                latitude: Some(12.9722),
+                longitude: Some(77.7322),
+                rating: Some(3.9),
+                review_count: Some(38),
+                primary_type: Some("cemetery".to_string()),
+                place_types: vec!["cemetery".to_string()],
+                confidence: 0.78,
+                fetched_at,
+                fetch_source: "google_places_nearby_search".to_string(),
+            },
+            GoogleNearbyPlaceRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: None,
+                query: "lakes near Green Acre Whitefield Bengaluru".to_string(),
+                category: "lake".to_string(),
+                place_name: "Varthur Lake".to_string(),
+                place_id: Some("lake-1".to_string()),
+                place_url: "https://www.google.com/maps/place/varthur-lake".to_string(),
+                distance_km: Some(0.22),
+                latitude: Some(12.9410),
+                longitude: Some(77.7460),
+                rating: Some(4.0),
+                review_count: Some(320),
+                primary_type: Some("lake".to_string()),
+                place_types: vec!["lake".to_string()],
+                confidence: 0.8,
+                fetched_at,
+                fetch_source: "google_places_nearby_search".to_string(),
+            },
         ],
         source_watermarks: Vec::new(),
     };
@@ -266,6 +342,31 @@ async fn google_nearby_snapshot_materializes_raw_parquet_and_derives_category_fa
         fact.fact_key == "nearby_fitness"
             && fact.source_url.as_deref()
                 == Some("https://www.google.com/maps/place/cult-whitefield")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "nearby_public_parks"
+            && fact.source_url.as_deref()
+                == Some("https://www.google.com/maps/place/inner-circle-park")
+    }));
+    assert!(!facts.facts.iter().any(|fact| {
+        fact.fact_key == "nearby_public_parks" && fact.value_json.contains("Sigma Business Park")
+    }));
+    assert!(!facts.facts.iter().any(|fact| {
+        fact.entity_id == "place:google:business-park-1" && fact.fact_key == "place.name"
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "nearby_graveyards"
+            && fact.source_url.as_deref()
+                == Some("https://www.google.com/maps/place/hope-burial-ground")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "nearby_lakes"
+            && fact.source_url.as_deref() == Some("https://www.google.com/maps/place/varthur-lake")
+    }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "lake_within_250m"
+            && fact.value_json.contains("Varthur Lake")
+            && fact.value_json.contains("0.2 km")
     }));
     assert!(!facts
         .facts
