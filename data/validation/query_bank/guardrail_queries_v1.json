@@ -1,0 +1,130 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-26T00:00:00Z",
+  "purpose": "Early search guardrail suite for rejecting or clarifying bad, vague, unsupported, assistant-directed, or no-home-intent queries before ranking.",
+  "cases": [
+    {
+      "id": "GR-001",
+      "mode": "search_guardrail",
+      "category": "too_short",
+      "query": "hi",
+      "expected": {
+        "search_guidance_mode": "too_short",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-002",
+      "mode": "search_guardrail",
+      "category": "no_home_intent",
+      "query": "what should I do with my life",
+      "expected": {
+        "search_guidance_mode": "out_of_scope",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-003",
+      "mode": "search_guardrail",
+      "category": "assistant_directed",
+      "query": "are you looking for a home",
+      "expected": {
+        "search_guidance_mode": "out_of_scope",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-004",
+      "mode": "search_guardrail",
+      "category": "vague",
+      "query": "find me something good",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-005",
+      "mode": "search_guardrail",
+      "category": "vague",
+      "query": "best property",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-006",
+      "mode": "search_guardrail",
+      "category": "decision_brief",
+      "query": "I am confused, should I buy or rent",
+      "expected": {
+        "search_guidance_mode": "needs_more_specifics",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-007",
+      "mode": "search_guardrail",
+      "category": "unsupported_inventory",
+      "query": "villa with garden near metro under 80 lakh",
+      "expected": {
+        "unsupported_inventory_types": ["villa"],
+        "search_guidance_mode": "unsupported_inventory",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-008",
+      "mode": "search_guardrail",
+      "category": "unsupported_inventory",
+      "query": "plot or villa style calm layout near Bagalur metro",
+      "expected": {
+        "unsupported_inventory_types": ["plot", "villa"],
+        "search_guidance_mode": "unsupported_inventory",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-009",
+      "mode": "search_guardrail",
+      "category": "needs_anchor",
+      "query": "near office",
+      "expected": {
+        "search_guidance_mode": "needs_home_anchor",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-010",
+      "mode": "search_guardrail",
+      "category": "needs_anchor",
+      "query": "close to school",
+      "expected": {
+        "search_guidance_mode": "needs_home_anchor",
+        "max_results": 0
+      }
+    },
+    {
+      "id": "GR-011",
+      "mode": "search_guardrail",
+      "category": "valid_query",
+      "query": "3bhk whitefield under 2cr avoid water issues",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 20000000,
+        "negative_preferences": ["water_issues"]
+      }
+    },
+    {
+      "id": "GR-012",
+      "mode": "search_guardrail",
+      "category": "valid_query",
+      "query": "quiet home for parents near hospital",
+      "expected": {
+        "positive_preferences": ["quiet", "social_infrastructure"]
+      }
+    }
+  ]
+}

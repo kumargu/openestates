@@ -120,15 +120,16 @@ def main() -> None:
         print(f"  checks={passed}/{len(checks)} results={len(response.get('results') or [])}")
         results.append(case_result(case, response, checks))
 
+    scoreable_modes = spec.get("scoreable_modes") or ["data_backed"]
     output = {
         "benchmark": spec.get("benchmark"),
         "version": spec.get("version"),
         "generated_at": datetime.utcnow().isoformat(timespec="seconds") + "Z",
         "base_url": args.base_url,
-        "scoreable_modes": ["data_backed"],
+        "scoreable_modes": scoreable_modes,
         "query_sources": query_sources,
         "search_runtime": search_runtime_summary(results),
-        "summary": summarize(results),
+        "summary": summarize(results, scoreable_modes),
         "results": results,
     }
 
@@ -279,6 +280,28 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 f"expected excluded areas {sorted(want)}, got {sorted(got)}",
             )
         )
+    if "accepted_tradeoffs" in expected:
+        got = normalized_string_values(intent, "accepted_tradeoffs")
+        want = {normalize_token(value) for value in expected["accepted_tradeoffs"]}
+        checks.append(
+            check(
+                "intent",
+                "accepted_tradeoffs",
+                want.issubset(got),
+                f"expected accepted tradeoffs {sorted(want)}, got {sorted(got)}",
+            )
+        )
+    if "unsupported_inventory_types" in expected:
+        got = normalized_string_values(intent, "unsupported_inventory_types")
+        want = {normalize_token(value) for value in expected["unsupported_inventory_types"]}
+        checks.append(
+            check(
+                "intent",
+                "unsupported_inventory_types",
+                want.issubset(got),
+                f"expected unsupported inventory {sorted(want)}, got {sorted(got)}",
+            )
+        )
 
     positive_values = preference_values(intent, "positive_preferences")
     negative_values = preference_values(intent, "negative_preferences")
@@ -388,6 +411,27 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 f"expected one relaxation from {sorted(wanted_kinds)}, got {sorted(got_kinds)}",
             )
         )
+    if "search_guidance_mode" in expected:
+        guidance = search_guidance(response)
+        got_mode = normalize_token(guidance.get("mode"))
+        wanted_mode = normalize_token(expected["search_guidance_mode"])
+        checks.append(
+            check(
+                "guardrail",
+                "search_guidance_mode",
+                got_mode == wanted_mode,
+                f"expected guidance mode {wanted_mode!r}, got {got_mode!r}",
+            )
+        )
+    if "max_results" in expected:
+        checks.append(
+            check(
+                "guardrail",
+                "max_results",
+                len(results) <= expected["max_results"],
+                f"expected at most {expected['max_results']} results, got {len(results)}",
+            )
+        )
     if "forbidden_reason_fact_keys" in expected:
         forbidden = {normalize_fact_key(key) for key in expected["forbidden_reason_fact_keys"]}
         leaked = sorted(reason_keys.intersection(forbidden))
@@ -484,9 +528,14 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return summaries
 
 
-def summarize(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> Dict[str, Any]:
     checks = [item for result in results for item in result["checks"]]
-    scoreable_results = [result for result in results if result.get("mode", "data_backed") == "data_backed"]
+    scoreable_mode_set = {str(mode) for mode in scoreable_modes}
+    scoreable_results = [
+        result
+        for result in results
+        if result.get("mode", "data_backed") in scoreable_mode_set
+    ]
     scoreable_checks = [item for result in scoreable_results for item in result["checks"]]
     by_layer: Dict[str, Counter] = defaultdict(Counter)
     by_category: Dict[str, Counter] = defaultdict(Counter)
@@ -650,6 +699,15 @@ def preference_values(intent: Dict[str, Any], field: str) -> set[str]:
     return values
 
 
+def normalized_string_values(intent: Dict[str, Any], field: str) -> set[str]:
+    values = intent.get(field) or intent.get(camelize(field)) or []
+    return {
+        normalize_token(value)
+        for value in values
+        if isinstance(value, str) and value.strip()
+    }
+
+
 def add_preference_value(values: set[str], value: Any) -> None:
     if not isinstance(value, str) or not value.strip():
         return
@@ -701,6 +759,11 @@ def search_relaxations(response: Dict[str, Any]) -> List[Dict[str, Any]]:
         diagnostics = search_diagnostics(response)
         relaxations = diagnostics.get("relaxations") or []
     return [item for item in relaxations if isinstance(item, dict)]
+
+
+def search_guidance(response: Dict[str, Any]) -> Dict[str, Any]:
+    guidance = response.get("search_guidance") or response.get("searchGuidance") or {}
+    return guidance if isinstance(guidance, dict) else {}
 
 
 def search_runtime_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:

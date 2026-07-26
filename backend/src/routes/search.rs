@@ -13,7 +13,8 @@ use crate::knowledge::fact::ScoringDirection;
 use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
-    intent, schema, KnowledgeContext, SearchEngine, SearchResponse, SearchResultCard, SourcedClaim,
+    guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
+    SearchResponse, SearchResultCard, SourcedClaim,
 };
 use crate::state::AppState;
 
@@ -61,6 +62,39 @@ pub async fn search_properties(
             knowledge_context: None,
             search_diagnostics: None,
             relaxations: Vec::new(),
+            search_guidance: None,
+            discovery_status: None,
+            discovery_count: None,
+        });
+    }
+
+    if let Some(guarded) = guard_search_query(&query) {
+        let knowledge_context = KnowledgeContext {
+            claims: Vec::new(),
+            nodes_consulted: 0,
+            learning_gaps: guarded.guidance.suggestions.clone(),
+        };
+        let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
+        event.enrichment_gaps.push(EnrichmentGap {
+            entity_id: "search:guardrail".to_string(),
+            missing_fact: guarded.guidance.mode.clone(),
+            reason: guarded.guidance.message.clone(),
+        });
+        {
+            let mut graph = state.knowledge.write().await;
+            graph.log_search(event);
+        }
+
+        return Json(SearchResponse {
+            query,
+            intent: guarded.intent,
+            results: Vec::new(),
+            area_context: None,
+            total_results: 0,
+            knowledge_context: Some(knowledge_context),
+            search_diagnostics: None,
+            relaxations: Vec::new(),
+            search_guidance: Some(guarded.guidance),
             discovery_status: None,
             discovery_count: None,
         });
@@ -173,6 +207,7 @@ pub async fn search_properties(
         knowledge_context: Some(knowledge_context),
         search_diagnostics: include_diagnostics.then_some(search_diagnostics),
         relaxations,
+        search_guidance: (total_results == 0).then(no_results_guidance),
         discovery_status: None,
         discovery_count: None,
     })

@@ -20,6 +20,7 @@
 mod fact_registry;
 mod loader;
 mod resolution;
+mod search_guardrails;
 mod search_intent;
 
 pub use fact_registry::{
@@ -35,6 +36,12 @@ pub use loader::{
 pub use resolution::{
     better_source_type, buyer_visible_fact, load_resolution_policies, source_tier_rank,
     ResolutionPoliciesFile,
+};
+pub use search_guardrails::{
+    load_search_guardrails, load_search_guardrails_from_path, search_guardrail_config,
+    search_guardrails_path, AssistantDirectedQuestionConfig, HomeIntentDetectionConfig,
+    PhraseGuardrailConfig, SearchGuardrailFile, SearchGuardrailGuidanceConfig,
+    SearchGuidanceTemplate, StructuredSignalScores, TooShortGuardrailConfig, WeightedTermGroup,
 };
 pub use search_intent::{
     area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,

@@ -768,6 +768,13 @@ export type KnowledgeContext = {
   learning_gaps: string[];
 };
 
+export type SearchGuidance = {
+  mode: string;
+  title: string;
+  message: string;
+  suggestions: string[];
+};
+
 export type SearchResponse = {
   query: string;
   intent: SearchIntent;
@@ -775,6 +782,7 @@ export type SearchResponse = {
   area_context: SearchAreaContext | null;
   total_results: number;
   knowledge_context: KnowledgeContext | null;
+  search_guidance?: SearchGuidance | null;
   discovery_status?: string;
   discovery_count?: number;
 };

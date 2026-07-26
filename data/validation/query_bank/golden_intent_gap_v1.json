@@ -1,0 +1,1206 @@
+{
+  "version": 1,
+  "generated_at": "2026-07-26T00:00:00Z",
+  "purpose": "Golden buyer-brief set for judging structured intent extraction and missing-evidence classification before introducing a small LLM.",
+  "notes": [
+    "These cases are intentionally inventory-independent. Do not require min_results, top_title_any, or result_title_any unless a future oracle-backed variant is created.",
+    "The primary success criteria are parsed constraints, positive/negative preferences, buyer archetype, unsupported inventory, accepted tradeoffs, and expected learning gap keys.",
+    "Use this suite to compare deterministic parser output with a future small-LLM parser. The LLM should improve structure and gap classification, not just rewrite the query."
+  ],
+  "coverage": {
+    "cases": 100,
+    "categories": {
+      "family": 10,
+      "commute": 10,
+      "legal_safety": 10,
+      "water_risk": 10,
+      "maintenance": 10,
+      "investment": 10,
+      "parents": 10,
+      "schools": 10,
+      "hospitals": 10,
+      "avoid_queries": 10
+    }
+  },
+  "cases": [
+    {
+      "id": "GQ-001",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "3bhk in whitefield around 2.5 cr for a family with kids and decent open space",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 25000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "open_space"],
+        "gap_keys": ["nearby_schools", "open_space_score"]
+      }
+    },
+    {
+      "id": "GQ-002",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "family friendly sarjapur road apartment under 1.8cr, not too packed",
+      "expected": {
+        "area": "Sarjapur Road",
+        "budget_max": 18000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "negative_preferences": ["open_space"],
+        "gap_keys": ["nearby_schools", "density_risk"]
+      }
+    },
+    {
+      "id": "GQ-003",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "good society for young family in east bangalore, schools and grocery should be close",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "social_infrastructure"],
+        "gap_keys": ["nearby_schools", "social_infra_score"]
+      }
+    },
+    {
+      "id": "GQ-004",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "2bhk for couple planning kid, budget below 1.3 cr, prefer safe society over fancy clubhouse",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 13000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "legal_safety"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["nearby_schools", "rera_status"]
+      }
+    },
+    {
+      "id": "GQ-005",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "need a 3 bhk where kids can play, less traffic inside campus, whitefield or nearby",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "open_space"],
+        "negative_preferences": ["commute"],
+        "gap_keys": ["open_space_score", "traffic_reality"]
+      }
+    },
+    {
+      "id": "GQ-006",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "not looking for party crowd, want calm family project near schools in hsr",
+      "expected": {
+        "area": "HSR Layout",
+        "buyer_archetype": "family",
+        "positive_preferences": ["quiet", "family_friendly"],
+        "negative_preferences": ["noise"],
+        "gap_keys": ["nearby_schools", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-007",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "4bhk premium is ok but family livability and builder reliability matter more",
+      "expected": {
+        "bhk": 4,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "livability", "builder_trust", "premium"],
+        "gap_keys": ["livability_sentiment", "delivery_track_record"]
+      }
+    },
+    {
+      "id": "GQ-008",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "under 2cr bellandur 3bhk, family friendly but avoid noisy main road",
+      "expected": {
+        "area": "Bellandur",
+        "bhk": 3,
+        "budget_max": 20000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "negative_preferences": ["quiet"],
+        "gap_keys": ["nearby_schools", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-009",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "want a sensible family home, not fake luxury, with usable amenities and enough breathing room",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "amenity_quality", "open_space"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["amenity_quality", "open_space_score"]
+      }
+    },
+    {
+      "id": "GQ-010",
+      "mode": "golden_intent_gap",
+      "category": "family",
+      "query": "3bhk north bengaluru for family, budget within 1.6 cr, schools plus hospital nearby",
+      "expected": {
+        "area": "North Bengaluru",
+        "bhk": 3,
+        "budget_max": 16000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "social_infrastructure"],
+        "gap_keys": ["nearby_schools", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-011",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "2bhk near metro in whitefield, office commute to itpl should be easy",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 2,
+        "positive_preferences": ["commute", "social_infrastructure"],
+        "gap_keys": ["nearby_metro_stations", "distance_to_nearest_metro_km"]
+      }
+    },
+    {
+      "id": "GQ-012",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "sarjapur road apartment but not a daily traffic nightmare",
+      "expected": {
+        "area": "Sarjapur Road",
+        "positive_preferences": ["commute"],
+        "negative_preferences": ["commute"],
+        "gap_keys": ["traffic_reality", "commute_reality"]
+      }
+    },
+    {
+      "id": "GQ-013",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "near kadugodi metro, 3bhk under 2.2cr, don't want to be cut off from offices",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "budget_max": 22000000,
+        "positive_preferences": ["commute", "social_infrastructure"],
+        "gap_keys": ["nearby_metro_stations", "within_15_min_drive_to_whitefield_offices"]
+      }
+    },
+    {
+      "id": "GQ-014",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "home near orr bellandur offices, ok with smaller flat if commute is predictable",
+      "expected": {
+        "area": "Bellandur",
+        "accepted_tradeoffs": ["flat_size"],
+        "positive_preferences": ["commute"],
+        "gap_keys": ["commute_reality", "traffic_reality"]
+      }
+    },
+    {
+      "id": "GQ-015",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "north blr apartment close to airport road but avoid airport noise",
+      "expected": {
+        "area": "North Bengaluru",
+        "positive_preferences": ["commute"],
+        "negative_preferences": ["quiet"],
+        "gap_keys": ["airport_noise_score", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-016",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "3bhk in marathahalli with metro access and less outer ring road chaos",
+      "expected": {
+        "area": "Marathahalli",
+        "bhk": 3,
+        "positive_preferences": ["commute"],
+        "negative_preferences": ["commute"],
+        "gap_keys": ["nearby_metro_stations", "traffic_reality"]
+      }
+    },
+    {
+      "id": "GQ-017",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "I can tolerate traffic if the project has great amenities and metro is close",
+      "expected": {
+        "accepted_tradeoffs": ["traffic"],
+        "positive_preferences": ["amenity_quality", "commute"],
+        "gap_keys": ["amenity_quality", "nearby_metro_stations"]
+      }
+    },
+    {
+      "id": "GQ-018",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "whitefield but not too far from phoenix marketcity and hospitals",
+      "expected": {
+        "area": "Whitefield",
+        "positive_preferences": ["commute", "social_infrastructure"],
+        "gap_keys": ["distance_to_phoenix_marketcity_km", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-019",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "need quick commute to Manyata, 2bhk under 1.4cr, north bangalore preferred",
+      "expected": {
+        "area": "North Bengaluru",
+        "bhk": 2,
+        "budget_max": 14000000,
+        "positive_preferences": ["commute"],
+        "gap_keys": ["nearby_tech_parks", "commute_reality"]
+      }
+    },
+    {
+      "id": "GQ-020",
+      "mode": "golden_intent_gap",
+      "category": "commute",
+      "query": "not electronic city, want metro reachable 3bhk for whitefield office commute",
+      "expected": {
+        "area": "Whitefield",
+        "excluded_areas": ["Electronic City"],
+        "bhk": 3,
+        "positive_preferences": ["commute"],
+        "gap_keys": ["nearby_metro_stations", "commute_reality"]
+      }
+    },
+    {
+      "id": "GQ-021",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "safe legal paperwork, rera approved, reliable builder, no litigation risk",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["legal_safety", "builder_trust"],
+        "negative_preferences": ["legal_safety"],
+        "gap_keys": ["rera_status", "legal.litigation", "delivery_track_record"]
+      }
+    },
+    {
+      "id": "GQ-022",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "3bhk under 2cr but only if approvals and OC look clean",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 20000000,
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["legal_safety"],
+        "gap_keys": ["rera_status", "occupancy_certificate_status"]
+      }
+    },
+    {
+      "id": "GQ-023",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "avoid projects with unclear title or builder complaints",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "negative_preferences": ["legal_safety", "builder_trust"],
+        "gap_keys": ["legal.litigation", "rera_builder_revocations"]
+      }
+    },
+    {
+      "id": "GQ-024",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "whitefield premium 4bhk, builder track record and rera receipts matter",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 4,
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["premium", "builder_trust", "legal_safety"],
+        "gap_keys": ["delivery_track_record", "rera_number"]
+      }
+    },
+    {
+      "id": "GQ-025",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "first home buyer, please avoid any shady paperwork or unverified seller",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "negative_preferences": ["legal_safety", "seller_trust"],
+        "gap_keys": ["documents_provided", "seller_verified"]
+      }
+    },
+    {
+      "id": "GQ-026",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "rera registered sarjapur project from reputed builder, budget under 1.7 cr",
+      "expected": {
+        "area": "Sarjapur Road",
+        "budget_max": 17000000,
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["legal_safety", "builder_trust"],
+        "gap_keys": ["rera_status", "rera_builder_projects_count"]
+      }
+    },
+    {
+      "id": "GQ-027",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "ready to move only, legal risk low, no pending approvals",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["ready_to_move", "legal_safety"],
+        "negative_preferences": ["legal_safety"],
+        "gap_keys": ["project_status", "approval_status"]
+      }
+    },
+    {
+      "id": "GQ-028",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "avoid prelaunch marketing, show me projects with documents and rera number",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "negative_preferences": ["project_status"],
+        "positive_preferences": ["legal_safety"],
+        "gap_keys": ["rera_number", "documents_provided"]
+      }
+    },
+    {
+      "id": "GQ-029",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "need legal clarity more than discount, no builder delivery issues",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["legal_safety", "builder_trust"],
+        "negative_preferences": ["builder_trust"],
+        "gap_keys": ["legal.litigation", "delivery_track_record"]
+      }
+    },
+    {
+      "id": "GQ-030",
+      "mode": "golden_intent_gap",
+      "category": "legal_safety",
+      "query": "under 90 lakh is fine but don't show legal grey area properties",
+      "expected": {
+        "budget_max": 9000000,
+        "buyer_archetype": "risk_averse",
+        "negative_preferences": ["legal_safety"],
+        "gap_keys": ["legal.litigation", "approval_status"]
+      }
+    },
+    {
+      "id": "GQ-031",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "avoid water issues, no tanker dependency in summer",
+      "expected": {
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["operating.tanker_dependence", "operating.summer_water_shortage"]
+      }
+    },
+    {
+      "id": "GQ-032",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "whitefield 3bhk but monsoon waterlogging should not block approach road",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "negative_preferences": ["water_issues", "approach_road"],
+        "gap_keys": ["waterlogging_risk_score", "approach_road_condition"]
+      }
+    },
+    {
+      "id": "GQ-033",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "sarjapur apartment with dependable water supply, not tanker based",
+      "expected": {
+        "area": "Sarjapur Road",
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["water_supply_risk", "operating.tanker_dependence"]
+      }
+    },
+    {
+      "id": "GQ-034",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "parents will stay, avoid basement flooding and bad drainage",
+      "expected": {
+        "buyer_archetype": "family",
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["waterlogging_risk_score", "project.sewage_drainage_mode"]
+      }
+    },
+    {
+      "id": "GQ-035",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "north bangalore under 1.5cr, check borewell or water reliability before shortlist",
+      "expected": {
+        "area": "North Bengaluru",
+        "budget_max": 15000000,
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["water_supply_risk", "project.water_supply_mode"]
+      }
+    },
+    {
+      "id": "GQ-036",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "not interested if residents complain about water shortage",
+      "expected": {
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["operating.summer_water_shortage", "resident_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-037",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "bellandur home but avoid lake smell, flooding, and sewage problems",
+      "expected": {
+        "area": "Bellandur",
+        "negative_preferences": ["water_issues", "environment_sensitivity"],
+        "gap_keys": ["waterlogging_risk_score", "project.sewage_drainage_mode"]
+      }
+    },
+    {
+      "id": "GQ-038",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "3bhk for own stay, water reliability is more important than clubhouse",
+      "expected": {
+        "bhk": 3,
+        "buyer_archetype": "end_user",
+        "negative_preferences": ["water_issues"],
+        "positive_preferences": ["livability"],
+        "gap_keys": ["water_supply_risk", "livability_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-039",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "avoid societies where roads flood during rain near varthur",
+      "expected": {
+        "area": "Whitefield",
+        "negative_preferences": ["water_issues", "approach_road"],
+        "gap_keys": ["waterlogging_risk_score", "approach_road_condition"]
+      }
+    },
+    {
+      "id": "GQ-040",
+      "mode": "golden_intent_gap",
+      "category": "water_risk",
+      "query": "gud 2bhk but no tanker headache, budget undr 1.2cr",
+      "expected": {
+        "bhk": 2,
+        "budget_max": 12000000,
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["operating.tanker_dependence"]
+      }
+    },
+    {
+      "id": "GQ-041",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "don't want maintenance headaches or poor association management",
+      "expected": {
+        "negative_preferences": ["good_maintenance"],
+        "gap_keys": ["maintenance_sentiment", "association_issues"]
+      }
+    },
+    {
+      "id": "GQ-042",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "good society maintenance, clean common areas, not just brochure amenities",
+      "expected": {
+        "positive_preferences": ["good_maintenance", "livability"],
+        "gap_keys": ["maintenance_quality", "resident_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-043",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "family project but avoid high maintenance charges",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "negative_preferences": ["maintenance_cost"],
+        "gap_keys": ["maintenance_cost", "maintenance_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-044",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "ready to move 3bhk where residents say upkeep is good",
+      "expected": {
+        "bhk": 3,
+        "positive_preferences": ["ready_to_move", "good_maintenance", "review_quality"],
+        "gap_keys": ["project_status", "maintenance_sentiment", "google_review_snippets"]
+      }
+    },
+    {
+      "id": "GQ-045",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "avoid leaking walls, lift problems, and poor facility management",
+      "expected": {
+        "negative_preferences": ["good_maintenance"],
+        "gap_keys": ["maintenance_sentiment", "facility_management_issues"]
+      }
+    },
+    {
+      "id": "GQ-046",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "whitefield society with strong resident reviews about maintenance",
+      "expected": {
+        "area": "Whitefield",
+        "positive_preferences": ["good_maintenance", "review_quality"],
+        "gap_keys": ["maintenance_sentiment", "google_review_snippets"]
+      }
+    },
+    {
+      "id": "GQ-047",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "not too dense and should not feel badly maintained after possession",
+      "expected": {
+        "negative_preferences": ["open_space", "good_maintenance"],
+        "gap_keys": ["density_risk", "maintenance_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-048",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "premium 4bhk is okay only if finish quality and upkeep are proven",
+      "expected": {
+        "bhk": 4,
+        "buyer_archetype": "luxury_buyer",
+        "positive_preferences": ["premium", "finish_quality", "good_maintenance"],
+        "gap_keys": ["finish_quality", "maintenance_quality"]
+      }
+    },
+    {
+      "id": "GQ-049",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "sarjapur under 1.5cr, avoid society with complaints about security or cleaning",
+      "expected": {
+        "area": "Sarjapur Road",
+        "budget_max": 15000000,
+        "negative_preferences": ["good_maintenance", "security"],
+        "gap_keys": ["maintenance_sentiment", "security_complaints"]
+      }
+    },
+    {
+      "id": "GQ-050",
+      "mode": "golden_intent_gap",
+      "category": "maintenance",
+      "query": "self use home, I care about daily upkeep more than resale upside",
+      "expected": {
+        "buyer_archetype": "end_user",
+        "positive_preferences": ["good_maintenance", "livability"],
+        "negative_preferences": ["investment"],
+        "gap_keys": ["maintenance_quality", "livability_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-051",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "best investment opportunity in whitefield under 1.5 cr",
+      "expected": {
+        "area": "Whitefield",
+        "budget_max": 15000000,
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "value_for_money"],
+        "gap_keys": ["resale_potential", "price_per_sqft"]
+      }
+    },
+    {
+      "id": "GQ-052",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "2bhk with rental demand near tech parks, not purely luxury",
+      "expected": {
+        "bhk": 2,
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "commute"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["rental_and_resale_demand", "nearby_tech_parks"]
+      }
+    },
+    {
+      "id": "GQ-053",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "sarjapur project with appreciation potential but legal risk should be low",
+      "expected": {
+        "area": "Sarjapur Road",
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "legal_safety"],
+        "gap_keys": ["resale_potential", "legal.litigation"]
+      }
+    },
+    {
+      "id": "GQ-054",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "value buy 3bhk, price per sqft should not be inflated",
+      "expected": {
+        "bhk": 3,
+        "buyer_archetype": "value_buyer",
+        "positive_preferences": ["value_for_money"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["price_per_sqft", "pricing_insight"]
+      }
+    },
+    {
+      "id": "GQ-055",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "north bengaluru investment flat near airport growth corridor",
+      "expected": {
+        "area": "North Bengaluru",
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "commute"],
+        "gap_keys": ["resale_potential", "rental_and_resale_demand"]
+      }
+    },
+    {
+      "id": "GQ-056",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "under 1 cr apartment with resale liquidity, avoid dead inventory",
+      "expected": {
+        "budget_max": 10000000,
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "value_for_money"],
+        "negative_preferences": ["investment"],
+        "gap_keys": ["resale_strength_score", "market_status"]
+      }
+    },
+    {
+      "id": "GQ-057",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "bellandur rental yield matters more than huge clubhouse",
+      "expected": {
+        "area": "Bellandur",
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["rental_and_resale_demand", "amenity_quality"]
+      }
+    },
+    {
+      "id": "GQ-058",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "small 1bhk for rental, close to metro and offices",
+      "expected": {
+        "bhk": 1,
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "commute"],
+        "gap_keys": ["rental_and_resale_demand", "nearby_metro_stations"]
+      }
+    },
+    {
+      "id": "GQ-059",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "don't show overpriced launches, want fair price and builder trust",
+      "expected": {
+        "buyer_archetype": "investor",
+        "positive_preferences": ["value_for_money", "builder_trust"],
+        "negative_preferences": ["premium"],
+        "gap_keys": ["pricing_insight", "delivery_track_record"]
+      }
+    },
+    {
+      "id": "GQ-060",
+      "mode": "golden_intent_gap",
+      "category": "investment",
+      "query": "investment okay but I may live there later, so livability cannot be bad",
+      "expected": {
+        "buyer_archetype": "investor",
+        "positive_preferences": ["investment", "livability"],
+        "negative_preferences": ["livability"],
+        "gap_keys": ["resale_potential", "livability_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-061",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "something calmer for my parents, less chaos, more breathing room",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["quiet", "open_space", "family_friendly"],
+        "gap_keys": ["noise_score", "open_space_score", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-062",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "parents will stay alone, hospital nearby and safe community are must haves",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["social_infrastructure", "legal_safety", "family_friendly"],
+        "gap_keys": ["nearby_hospitals", "security_complaints"]
+      }
+    },
+    {
+      "id": "GQ-063",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "avoid high floor if lift reliability is bad, senior friendly apartment",
+      "expected": {
+        "positive_preferences": ["family_friendly", "good_maintenance"],
+        "negative_preferences": ["good_maintenance"],
+        "gap_keys": ["lift_reliability", "maintenance_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-064",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "quiet 2bhk near hospital in hsr for elderly parents",
+      "expected": {
+        "area": "HSR Layout",
+        "bhk": 2,
+        "positive_preferences": ["quiet", "social_infrastructure", "family_friendly"],
+        "gap_keys": ["nearby_hospitals", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-065",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "north bangalore home for parents, avoid isolated project with poor access road",
+      "expected": {
+        "area": "North Bengaluru",
+        "positive_preferences": ["family_friendly", "commute"],
+        "negative_preferences": ["approach_road"],
+        "gap_keys": ["approach_road_condition", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-066",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "need sunlight, calm surroundings, hospital within easy reach",
+      "expected": {
+        "positive_preferences": ["quiet", "social_infrastructure", "facing"],
+        "gap_keys": ["nearby_hospitals", "noise_score", "facing"]
+      }
+    },
+    {
+      "id": "GQ-067",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "parents don't drive, metro or shops should be walkable",
+      "expected": {
+        "positive_preferences": ["commute", "social_infrastructure"],
+        "gap_keys": ["nearby_metro_stations", "walkability_score"]
+      }
+    },
+    {
+      "id": "GQ-068",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "avoid construction dust and highway noise, senior friendly society preferred",
+      "expected": {
+        "positive_preferences": ["family_friendly"],
+        "negative_preferences": ["environment_sensitivity", "quiet"],
+        "gap_keys": ["construction_dust", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-069",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "ready to move, low legal risk, hospital nearby for parents",
+      "expected": {
+        "buyer_archetype": "risk_averse",
+        "positive_preferences": ["ready_to_move", "legal_safety", "social_infrastructure"],
+        "gap_keys": ["project_status", "rera_status", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-070",
+      "mode": "golden_intent_gap",
+      "category": "parents",
+      "query": "3bhk for parents and us, not too crowded, good maintenance",
+      "expected": {
+        "bhk": 3,
+        "positive_preferences": ["family_friendly", "good_maintenance"],
+        "negative_preferences": ["open_space"],
+        "gap_keys": ["maintenance_quality", "density_risk"]
+      }
+    },
+    {
+      "id": "GQ-071",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "whitefield home near deens academy, 3bhk preferred",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 3,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "gap_keys": ["nearby_schools"]
+      }
+    },
+    {
+      "id": "GQ-072",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "near chrysalis high school marq, budget below 2cr",
+      "expected": {
+        "budget_max": 20000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "gap_keys": ["nearby_schools"]
+      }
+    },
+    {
+      "id": "GQ-073",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "apartment close to gopalan national school hoodi but not noisy",
+      "expected": {
+        "area": "Whitefield",
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "quiet"],
+        "negative_preferences": ["quiet"],
+        "gap_keys": ["nearby_schools", "noise_score"]
+      }
+    },
+    {
+      "id": "GQ-074",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "2bhk near good school in sarjapur road under 1.2 cr",
+      "expected": {
+        "area": "Sarjapur Road",
+        "bhk": 2,
+        "budget_max": 12000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly"],
+        "gap_keys": ["nearby_schools"]
+      }
+    },
+    {
+      "id": "GQ-075",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "school bus route matters, avoid isolated projects",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "commute"],
+        "negative_preferences": ["approach_road"],
+        "gap_keys": ["nearby_schools", "approach_road_condition"]
+      }
+    },
+    {
+      "id": "GQ-076",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "kid school within 15 mins, playground and safe internal roads",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "open_space"],
+        "gap_keys": ["nearby_schools", "open_space_score"]
+      }
+    },
+    {
+      "id": "GQ-077",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "not just any school nearby, need reputed schools and traffic reality",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "commute"],
+        "gap_keys": ["nearby_schools", "traffic_reality"]
+      }
+    },
+    {
+      "id": "GQ-078",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "3bhk around 2cr where school and hospital are both close",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 20000000,
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "social_infrastructure"],
+        "gap_keys": ["nearby_schools", "nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-079",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "north blr family home near international school, not too far from office",
+      "expected": {
+        "area": "North Bengaluru",
+        "buyer_archetype": "family",
+        "positive_preferences": ["family_friendly", "commute"],
+        "gap_keys": ["nearby_schools", "commute_reality"]
+      }
+    },
+    {
+      "id": "GQ-080",
+      "mode": "golden_intent_gap",
+      "category": "schools",
+      "query": "whitefield 1bhk is ok if school access and resale are strong",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 1,
+        "buyer_archetype": "investor",
+        "positive_preferences": ["family_friendly", "investment"],
+        "gap_keys": ["nearby_schools", "resale_potential"]
+      }
+    },
+    {
+      "id": "GQ-081",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "home near hospital for parents, quiet and not too crowded",
+      "expected": {
+        "buyer_archetype": "family",
+        "positive_preferences": ["social_infrastructure", "quiet"],
+        "negative_preferences": ["open_space"],
+        "gap_keys": ["nearby_hospitals", "density_risk"]
+      }
+    },
+    {
+      "id": "GQ-082",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "whitefield 2bhk near manipal hospital and metro",
+      "expected": {
+        "area": "Whitefield",
+        "bhk": 2,
+        "positive_preferences": ["social_infrastructure", "commute"],
+        "gap_keys": ["nearby_hospitals", "nearby_metro_stations"]
+      }
+    },
+    {
+      "id": "GQ-083",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "hsr apartment near clinic, safe for elderly",
+      "expected": {
+        "area": "HSR Layout",
+        "buyer_archetype": "family",
+        "positive_preferences": ["social_infrastructure", "family_friendly"],
+        "gap_keys": ["nearby_hospitals", "security_complaints"]
+      }
+    },
+    {
+      "id": "GQ-084",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "hospital access is must, can compromise on clubhouse",
+      "expected": {
+        "accepted_tradeoffs": ["amenity_quality"],
+        "positive_preferences": ["social_infrastructure"],
+        "gap_keys": ["nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-085",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "bellandur home near hospital but avoid waterlogging near lake",
+      "expected": {
+        "area": "Bellandur",
+        "positive_preferences": ["social_infrastructure"],
+        "negative_preferences": ["water_issues"],
+        "gap_keys": ["nearby_hospitals", "waterlogging_risk_score"]
+      }
+    },
+    {
+      "id": "GQ-086",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "3bhk near hospital under 2.4cr, legal papers should be clean",
+      "expected": {
+        "bhk": 3,
+        "budget_max": 24000000,
+        "positive_preferences": ["social_infrastructure", "legal_safety"],
+        "gap_keys": ["nearby_hospitals", "rera_status"]
+      }
+    },
+    {
+      "id": "GQ-087",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "north bangalore near hospital and airport road, avoid noise",
+      "expected": {
+        "area": "North Bengaluru",
+        "positive_preferences": ["social_infrastructure", "commute"],
+        "negative_preferences": ["quiet"],
+        "gap_keys": ["nearby_hospitals", "airport_noise_score"]
+      }
+    },
+    {
+      "id": "GQ-088",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "medical emergency access matters, not isolated gated project",
+      "expected": {
+        "positive_preferences": ["social_infrastructure", "commute"],
+        "negative_preferences": ["approach_road"],
+        "gap_keys": ["nearby_hospitals", "approach_road_condition"]
+      }
+    },
+    {
+      "id": "GQ-089",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "senior friendly ready flat with nearby hospital and low maintenance hassle",
+      "expected": {
+        "positive_preferences": ["ready_to_move", "social_infrastructure", "good_maintenance"],
+        "negative_preferences": ["good_maintenance"],
+        "gap_keys": ["project_status", "nearby_hospitals", "maintenance_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-090",
+      "mode": "golden_intent_gap",
+      "category": "hospitals",
+      "query": "under 1.1 cr but hospital and pharmacy should be nearby",
+      "expected": {
+        "budget_max": 11000000,
+        "positive_preferences": ["social_infrastructure"],
+        "gap_keys": ["nearby_hospitals"]
+      }
+    },
+    {
+      "id": "GQ-091",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "avoid traffic, tanker issues, and shady builder",
+      "expected": {
+        "negative_preferences": ["commute", "water_issues", "builder_trust"],
+        "gap_keys": ["traffic_reality", "operating.tanker_dependence", "rera_builder_revocations"]
+      }
+    },
+    {
+      "id": "GQ-092",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "not electronic city, not too dense, no waterlogging",
+      "expected": {
+        "excluded_areas": ["Electronic City"],
+        "negative_preferences": ["open_space", "water_issues"],
+        "gap_keys": ["density_risk", "waterlogging_risk_score"]
+      }
+    },
+    {
+      "id": "GQ-093",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "don't want fake luxury or inflated price per sqft",
+      "expected": {
+        "negative_preferences": ["premium", "value_for_money"],
+        "gap_keys": ["premium_pricing", "price_per_sqft"]
+      }
+    },
+    {
+      "id": "GQ-094",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "avoid under construction delays, need ready to move",
+      "expected": {
+        "positive_preferences": ["ready_to_move"],
+        "negative_preferences": ["project_status"],
+        "gap_keys": ["project_status", "delivery_delay_risk"]
+      }
+    },
+    {
+      "id": "GQ-095",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "no main road noise, no construction dust, no bad approach road",
+      "expected": {
+        "negative_preferences": ["quiet", "environment_sensitivity", "approach_road"],
+        "gap_keys": ["noise_score", "construction_dust", "approach_road_condition"]
+      }
+    },
+    {
+      "id": "GQ-096",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "avoid projects with poor google reviews or resident complaints",
+      "expected": {
+        "negative_preferences": ["review_quality", "livability"],
+        "gap_keys": ["google_review_snippets", "resident_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-097",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "villa or plot style calm layout near metro, not a normal apartment",
+      "expected": {
+        "unsupported_inventory_types": ["villa", "plot"],
+        "positive_preferences": ["commute", "quiet"],
+        "gap_keys": ["inventory_type", "nearby_metro_stations"]
+      }
+    },
+    {
+      "id": "GQ-098",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "avoid cramped layouts, poor ventilation and west facing heat",
+      "expected": {
+        "negative_preferences": ["open_space", "layout_quality", "facing"],
+        "gap_keys": ["layout_quality", "facing"]
+      }
+    },
+    {
+      "id": "GQ-099",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "no legal risk, no water risk, no maintenance surprises",
+      "expected": {
+        "negative_preferences": ["legal_safety", "water_issues", "good_maintenance"],
+        "gap_keys": ["legal.litigation", "water_supply_risk", "maintenance_sentiment"]
+      }
+    },
+    {
+      "id": "GQ-100",
+      "mode": "golden_intent_gap",
+      "category": "avoid_queries",
+      "query": "show me what is actually good, but hide anything with weak proof",
+      "expected": {
+        "positive_preferences": ["livability", "review_quality", "legal_safety"],
+        "negative_preferences": ["proof_gap"],
+        "gap_keys": ["resident_sentiment", "google_review_snippets", "rera_status"]
+      }
+    }
+  ]
+}

@@ -350,6 +350,7 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
   const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
   const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
+  const searchGuidance = useBackendResults ? searchResponse.search_guidance : null;
   const containerClass = "inline-results-shell";
 
   if (status === "loading") return (
@@ -445,15 +446,20 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
 
       {matchResults.length === 0 && query && !waitingForSearchResults && (
         <div className="empty-state">
-          <h2>No properties match "{query}"</h2>
-          <p>Try broadening your search or explore one of these suggestions.</p>
+          <h2>{searchGuidance?.title ?? `No properties match "${query}"`}</h2>
+          <p>{searchGuidance?.message ?? "Try broadening your search or explore one of these suggestions."}</p>
           <div className="empty-state-chips">
-            {intent?.area && (
+            {searchGuidance?.suggestions?.map((suggestion) => (
+              <button key={suggestion} className="empty-state-chip" onClick={() => setQueryPreservingView(suggestion)}>
+                {suggestion}
+              </button>
+            ))}
+            {!searchGuidance && intent?.area && (
               <button className="empty-state-chip" onClick={() => setQueryPreservingView(intent.area!)}>
                 Just {intent.area}
               </button>
             )}
-            {intent?.bhk && (
+            {!searchGuidance && intent?.bhk && (
               <button className="empty-state-chip" onClick={() => {
                 const without = query.replace(/\d+\s*bhk/i, "").trim();
                 if (without) setQueryPreservingView(without);
@@ -461,7 +467,7 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
                 Without BHK filter
               </button>
             )}
-            {["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
+            {!searchGuidance && ["3BHK Whitefield under 2Cr", "Family-friendly Sarjapur", "Near metro Bellandur"].map((s) => (
               <button key={s} className="empty-state-chip" onClick={() => setQueryPreservingView(s)}>
                 {s}
               </button>
