@@ -3,9 +3,7 @@ import {
   calculateFinancingInterest,
   calculateProjectionPoints,
   constructionPlanFor,
-  DEFAULT_LOAN_TENURE_YEARS,
   monthsToPayoff,
-  monthlyPayment,
 } from "./financeEngine.ts";
 
 export type ConstructionProfile = {
@@ -93,20 +91,17 @@ export function buildBaselinePlanInputs(
   construction?: ConstructionProfile,
 ): PlanInputs {
   const propertyPriceLakh = Math.max(20, propertyPriceInr / LAKH);
-  const monthlyEmiThousands = Math.ceil(
-    monthlyPayment(propertyPriceInr, 8.5, DEFAULT_LOAN_TENURE_YEARS) / 1_000 / 5,
-  ) * 5;
   const estimatedRentThousands = Math.max(
     20,
     Math.round((propertyPriceInr * 0.032 / MONTHS_IN_YEAR) / 1_000 / 5) * 5,
   );
   return {
     propertyPriceLakh,
-    monthlyEmiThousands,
-    loanRate: 8.5,
+    monthlyEmiThousands: 90,
+    loanRate: 7.5,
     currentRentThousands: estimatedRentThousands,
     equityReturn: 10,
-    monthlySipThousands: 40,
+    monthlySipThousands: 90,
     holdingPeriodYears: 20,
     purchaseYear: 0,
     construction: construction ?? {
@@ -247,11 +242,11 @@ export function calculateProjection(
 
 export const BASE_INPUTS: PlanInputs = {
   propertyPriceLakh: 150,
-  monthlyEmiThousands: 135,
-  loanRate: 8.5,
+  monthlyEmiThousands: 90,
+  loanRate: 7.5,
   currentRentThousands: 55,
   equityReturn: 10,
-  monthlySipThousands: 40,
+  monthlySipThousands: 90,
   holdingPeriodYears: 15,
   purchaseYear: 0,
   construction: {

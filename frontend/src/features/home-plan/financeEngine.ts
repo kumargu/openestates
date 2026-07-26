@@ -37,7 +37,7 @@ const DEFAULT_TOTAL_CONSTRUCTION_MONTHS = 36;
 const MINIMUM_BOOKING_RATE = 0.1;
 export const DEFAULT_LOAN_TENURE_YEARS = 20;
 export const FIXED_HOME_GROWTH_RATE = 6;
-export const FIXED_RENT_INFLATION_RATE = 0;
+export const FIXED_RENT_INFLATION_RATE = 10;
 
 type ConstructionPlan = {
   startDate: Date;

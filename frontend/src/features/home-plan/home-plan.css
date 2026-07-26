@@ -589,6 +589,22 @@
   letter-spacing: -0.025em;
 }
 
+.home-plan-graph__assumptions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+  margin-top: 0.45rem;
+  color: var(--plan-faint);
+  font-size: 0.68rem;
+  font-weight: 550;
+}
+
+.home-plan-graph__assumptions span::before {
+  content: "•";
+  margin-right: 0.35rem;
+  color: var(--plan-axis-accent);
+}
+
 .home-plan-graph-svg {
   display: block;
   width: 100%;

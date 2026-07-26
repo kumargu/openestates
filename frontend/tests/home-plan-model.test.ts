@@ -117,19 +117,19 @@ test("extra EMIs pull the loan-free marker forward", () => {
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
 });
 
-test("rent rise is fixed at zero in the simple plan", () => {
-  assert.equal(FIXED_RENT_INFLATION_RATE, 0);
+test("rent rises by the fixed yearly assumption", () => {
+  assert.equal(FIXED_RENT_INFLATION_RATE, 10);
   assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 0), 55_000);
-  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 120), 55_000);
+  assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 120), 142_656);
 });
 
 test("baseline exposes only the five editable money inputs", () => {
   const inputs = buildBaselinePlanInputs(15_000_000);
 
-  assert.ok(inputs.monthlyEmiThousands > 0);
+  assert.equal(inputs.monthlyEmiThousands, 90);
   assert.ok(inputs.currentRentThousands > 0);
-  assert.ok(inputs.monthlySipThousands >= 0);
-  assert.equal(inputs.loanRate, 8.5);
+  assert.equal(inputs.monthlySipThousands, 90);
+  assert.equal(inputs.loanRate, 7.5);
   assert.equal(inputs.equityReturn, 10);
 });
 

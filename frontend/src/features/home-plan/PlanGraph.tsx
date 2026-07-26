@@ -20,8 +20,8 @@ const GRAPH_INSET = { left: 72, right: 172, top: 40, bottom: 44 };
 
 function graphSeries(projection: PlanProjection): GraphSeries[] {
   return [
-    { id: "buy", label: "Buy", values: projection.points.map((point) => point.buyNetWorth) },
-    { id: "rent", label: "Rent + invest", values: projection.points.map((point) => point.rentNetWorth) },
+    { id: "buy", label: "Your home equity", values: projection.points.map((point) => point.buyNetWorth) },
+    { id: "rent", label: "Your savings", values: projection.points.map((point) => point.rentNetWorth) },
   ];
 }
 
@@ -89,6 +89,10 @@ export function PlanGraph({
     <div className="home-plan-graph">
       <div className="home-plan-graph__heading">
         <h2>Accumulated wealth: buying vs renting</h2>
+        <div className="home-plan-graph__assumptions" aria-label="Projection assumptions">
+          <span>6% yearly home appreciation</span>
+          <span>10% yearly rent increase</span>
+        </div>
       </div>
       <svg
         className="home-plan-graph-svg"
@@ -161,11 +165,11 @@ export function PlanGraph({
         ))}
 
         <g className="home-plan-graph-end-label home-plan-graph-end-label--buy" transform={`translate(${x(maxYear) + 14} ${buyLabelY})`}>
-          <text y="-4">Buy</text>
+          <text y="-4">{series[0].label}</text>
           <text y="13" className="home-plan-graph-end-value">{formatCurrency(buyValues[maxYear] ?? 0, true)}</text>
         </g>
         <g className="home-plan-graph-end-label home-plan-graph-end-label--rent" transform={`translate(${x(maxYear) + 14} ${rentLabelY})`}>
-          <text y="-4">Rent + invest</text>
+          <text y="-4">{series[1].label}</text>
           <text y="13" className="home-plan-graph-end-value">{formatCurrency(rentValues[maxYear] ?? 0, true)}</text>
         </g>
 
@@ -174,10 +178,10 @@ export function PlanGraph({
             <rect width="206" height="78" rx="14" />
             <text x="16" y="20" className="home-plan-tooltip-year">Year {displayYear}</text>
             <circle cx="19" cy="40" r="4.5" className="home-plan-tooltip-buy" />
-            <text x="32" y="43">Buy</text>
+            <text x="32" y="43">Home equity</text>
             <text x="190" y="43" className="home-plan-tooltip-value">{formatCurrency(buyValue, true)}</text>
             <circle cx="19" cy="61" r="4.5" className="home-plan-tooltip-rent" />
-            <text x="32" y="64">Rent + invest</text>
+            <text x="32" y="64">Savings</text>
             <text x="190" y="64" className="home-plan-tooltip-value">{formatCurrency(rentValue, true)}</text>
           </g>
         )}
