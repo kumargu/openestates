@@ -63,13 +63,14 @@ pub async fn get_seller(
 
     let graph = state.knowledge.read().await;
     let properties_lock = state.properties.read().await;
+    let societies = state.societies.read().await;
 
     let linked_properties: Vec<PropertyCard> = seller
         .property_ids
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
         .filter(|property| property.is_listable())
-        .map(|p| enrich_property_card(p, &state.societies, &graph))
+        .map(|p| enrich_property_card(p, &societies, &graph))
         .collect();
 
     Ok(Json(SellerDetail {
@@ -159,6 +160,7 @@ pub async fn get_seller_dashboard(
 
     let graph = state.knowledge.read().await;
     let properties_lock = state.properties.read().await;
+    let societies = state.societies.read().await;
 
     // Build linked property cards
     let linked_properties: Vec<PropertyCard> = seller
@@ -166,7 +168,7 @@ pub async fn get_seller_dashboard(
         .iter()
         .filter_map(|pid| properties_lock.iter().find(|p| &p.id == pid))
         .filter(|property| property.is_listable())
-        .map(|p| enrich_property_card(p, &state.societies, &graph))
+        .map(|p| enrich_property_card(p, &societies, &graph))
         .collect();
 
     // Build interest summary per property (with daily timeline for last 30 days)

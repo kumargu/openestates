@@ -69,45 +69,46 @@ pub async fn search_properties(
     }
 
     if let Some(guarded) = guard_search_query(&query) {
-        let knowledge_context = KnowledgeContext {
-            claims: Vec::new(),
-            nodes_consulted: 0,
-            learning_gaps: guarded.guidance.suggestions.clone(),
-        };
-        let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
-        event.enrichment_gaps.push(EnrichmentGap {
-            entity_id: "search:guardrail".to_string(),
-            missing_fact: guarded.guidance.mode.clone(),
-            reason: guarded.guidance.message.clone(),
-        });
-        {
-            let mut graph = state.knowledge.write().await;
-            graph.log_search(event);
-        }
+        if guarded_search_has_local_recall(&state, &query, &guarded).await {
+            // A loaded project/society name can look like a bare noun phrase to
+            // the guardrail. If deterministic local recall has a concrete
+            // candidate, let ranking handle the query instead of rejecting it.
+        } else {
+            let mut event = SearchEvent::new(query.clone(), guarded.intent.clone(), 0);
+            event.enrichment_gaps.push(EnrichmentGap {
+                entity_id: "search:guardrail".to_string(),
+                missing_fact: guarded.guidance.mode.clone(),
+                reason: guarded.guidance.message.clone(),
+            });
+            {
+                let mut graph = state.knowledge.write().await;
+                graph.log_search(event);
+            }
 
-        return Json(SearchResponse {
-            query,
-            intent: guarded.intent,
-            results: Vec::new(),
-            area_context: None,
-            total_results: 0,
-            knowledge_context: Some(knowledge_context),
-            search_diagnostics: None,
-            relaxations: Vec::new(),
-            search_guidance: Some(guarded.guidance),
-            discovery_status: None,
-            discovery_count: None,
-        });
+            return Json(SearchResponse {
+                query,
+                intent: guarded.intent,
+                results: Vec::new(),
+                area_context: None,
+                total_results: 0,
+                knowledge_context: None,
+                search_diagnostics: None,
+                relaxations: Vec::new(),
+                search_guidance: Some(guarded.guidance),
+                discovery_status: None,
+                discovery_count: None,
+            });
+        }
     }
 
     // Build society name lookup map.
-    let society_names: HashMap<String, String> = state
-        .societies
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let societies = state.societies.read().await;
+    let society_names: HashMap<String, String> = societies
         .iter()
         .map(|s| (s.id.clone(), s.name.clone()))
         .collect();
 
-    let serving_bundle = state.serving_bundle.read().await.clone();
     let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
     let engine_output = {
         let graph = state.knowledge.read().await;
@@ -123,7 +124,7 @@ pub async fn search_properties(
             semantic_index: &semantic_index,
             semantic_embedder: state.semantic_embedder.as_ref(),
             society_names: &society_names,
-            societies: &state.societies,
+            societies: &societies,
             graph: Some(&graph),
             sellers: &sellers,
         }
@@ -135,9 +136,9 @@ pub async fn search_properties(
     let relaxations = engine_output.relaxations;
 
     // Look up area context if the intent identified an area.
+    let areas = state.areas.read().await;
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
-        state
-            .areas
+        areas
             .iter()
             .find(|a| a.name.eq_ignore_ascii_case(area_name))
             .cloned()
@@ -185,12 +186,12 @@ pub async fn search_properties(
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps.clone();
-    persist_enrichment_gaps(
-        &enrichment_gaps,
-        &query,
-        &parsed_intent,
+    spawn_persist_enrichment_gaps(
+        enrichment_gaps.clone(),
+        query.clone(),
+        parsed_intent.clone(),
         total_results,
-        &gap_candidate_society_ids,
+        gap_candidate_society_ids.clone(),
     );
 
     {
@@ -198,13 +199,23 @@ pub async fn search_properties(
         graph.log_search(event);
     }
 
+    let buyer_knowledge_context = if include_diagnostics {
+        knowledge_context
+    } else {
+        KnowledgeContext {
+            claims: knowledge_context.claims,
+            nodes_consulted: knowledge_context.nodes_consulted,
+            learning_gaps: Vec::new(),
+        }
+    };
+
     Json(SearchResponse {
         query,
         intent: parsed_intent,
         results,
         area_context,
         total_results,
-        knowledge_context: Some(knowledge_context),
+        knowledge_context: Some(buyer_knowledge_context),
         search_diagnostics: include_diagnostics.then_some(search_diagnostics),
         relaxations,
         search_guidance: (total_results == 0).then(no_results_guidance),
@@ -1689,6 +1700,44 @@ mod tests {
         );
         assert_eq!(conf.label, "Low");
     }
+}
+
+async fn guarded_search_has_local_recall(
+    state: &AppState,
+    query: &str,
+    guarded: &crate::search::guard::GuardedSearch,
+) -> bool {
+    if !matches!(
+        guarded.guidance.mode.as_str(),
+        "too_short" | "out_of_scope" | "needs_home_anchor"
+    ) {
+        return false;
+    }
+
+    let search_index = state.search_index.read().await;
+    !search_index.recall_ids(query, &guarded.intent).is_empty()
+}
+
+fn spawn_persist_enrichment_gaps(
+    gaps: Vec<EnrichmentGap>,
+    query: String,
+    intent: intent::SearchIntent,
+    results_returned: usize,
+    top_candidate_society_ids: Vec<String>,
+) {
+    if gaps.is_empty() {
+        return;
+    }
+
+    tokio::task::spawn_blocking(move || {
+        persist_enrichment_gaps(
+            &gaps,
+            &query,
+            &intent,
+            results_returned,
+            &top_candidate_society_ids,
+        );
+    });
 }
 
 fn persist_enrichment_gaps(

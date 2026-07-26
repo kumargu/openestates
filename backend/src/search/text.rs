@@ -679,7 +679,12 @@ impl TextSearch {
                     .as_ref()
                     .map(|e| e.graph_driven_pct)
                     .unwrap_or(0.0);
-                let confidence_score = compute_confidence(graph, &p.society_id, gdp);
+                let confidence_score =
+                    compute_confidence(graph, &p.society_id, gdp).or_else(|| {
+                        serving_facts.and_then(|facts| {
+                            compute_confidence_from_serving_facts(facts, &p.society_id, gdp)
+                        })
+                    });
 
                 Some(RankedSearchResult {
                     ranking_score: normalized,
@@ -2134,6 +2139,102 @@ pub fn compute_confidence(
         overall: (overall * 100.0).round() / 100.0,
         label,
         components,
+    })
+}
+
+fn compute_confidence_from_serving_facts(
+    serving_facts: &ServingFactIndex,
+    society_id: &str,
+    graph_driven_pct: f32,
+) -> Option<ConfidenceScore> {
+    let rows = serving_facts.entity(&society_node_id(society_id))?;
+    let fact_count = rows.facts.len();
+    if fact_count == 0 {
+        return None;
+    }
+
+    let source_score = if rows
+        .facts
+        .iter()
+        .any(|fact| fact.source_type.eq_ignore_ascii_case("rera"))
+    {
+        1.0
+    } else if rows
+        .facts
+        .iter()
+        .any(|fact| fact.source_type.eq_ignore_ascii_case("seller"))
+    {
+        0.6
+    } else {
+        0.5
+    };
+    let source_explanation = format!(
+        "Serving bundle evidence from {} source{}",
+        rows.facts
+            .iter()
+            .map(|fact| fact.source_type.as_str())
+            .collect::<std::collections::BTreeSet<_>>()
+            .len(),
+        if fact_count == 1 { "" } else { "s" }
+    );
+
+    let threshold = schema::ranking_policy().fact_coverage_threshold;
+    let coverage_score = (fact_count as f64 / threshold).min(1.0);
+    let coverage_explanation = format!(
+        "{fact_count} serving facts available ({} = full coverage)",
+        threshold as u32
+    );
+
+    let newest = rows.facts.iter().map(|fact| fact.learned_at).max()?;
+    let days_ago = (chrono::Utc::now() - newest).num_days().max(0) as u32;
+    let freshness_score = if days_ago < 7 {
+        1.0
+    } else if days_ago < 30 {
+        0.8
+    } else if days_ago < 90 {
+        0.5
+    } else {
+        0.2
+    };
+    let freshness_explanation = format!("Newest serving fact learned {days_ago} days ago");
+
+    let match_score = (graph_driven_pct / 100.0) as f64;
+    let match_explanation = format!(
+        "{}% of scoring from serving/graph evidence",
+        graph_driven_pct.round() as u32
+    );
+    let overall =
+        source_score * 0.4 + coverage_score * 0.2 + freshness_score * 0.2 + match_score * 0.2;
+
+    Some(ConfidenceScore {
+        overall: (overall * 100.0).round() / 100.0,
+        label: confidence_label(overall),
+        components: vec![
+            ConfidenceComponent {
+                dimension: "source_quality".to_string(),
+                score: source_score,
+                weight: 0.4,
+                explanation: source_explanation,
+            },
+            ConfidenceComponent {
+                dimension: "fact_coverage".to_string(),
+                score: coverage_score,
+                weight: 0.2,
+                explanation: coverage_explanation,
+            },
+            ConfidenceComponent {
+                dimension: "freshness".to_string(),
+                score: freshness_score,
+                weight: 0.2,
+                explanation: freshness_explanation,
+            },
+            ConfidenceComponent {
+                dimension: "match_quality".to_string(),
+                score: match_score,
+                weight: 0.2,
+                explanation: match_explanation,
+            },
+        ],
     })
 }
 

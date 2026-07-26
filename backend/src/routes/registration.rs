@@ -867,6 +867,16 @@ pub struct PublishResult {
     pub dashboard_url: String,
 }
 
+#[derive(Serialize)]
+struct SellerValidationSubmission {
+    version: u32,
+    status: String,
+    seller_id: String,
+    draft_id: String,
+    property: Property,
+    submitted_at: String,
+}
+
 /// POST /api/registrations/{id}/publish — convert a completed draft into a real Seller + Property.
 pub async fn publish_registration(
     State(state): State<Arc<AppState>>,
@@ -1028,13 +1038,14 @@ pub async fn publish_registration(
     //   2) seller-provided area in step 7 -> use directly, match area_id
     //   3) property_prompt mentions a known area -> extract and use it
     //   4) empty (appears only in browse/keyword, not area search)
-    let matched_society = fuzzy_match_society(&society_name, &state.societies);
+    let societies = state.societies.read().await;
+    let areas = state.areas.read().await;
+    let matched_society = fuzzy_match_society(&society_name, &societies);
 
     let (resolved_society_id, resolved_area, resolved_area_id, resolved_builder) =
         if let Some(soc) = matched_society {
             // Find area_id from state.areas by matching the society's area name
-            let area_id = state
-                .areas
+            let area_id = areas
                 .iter()
                 .find(|a| a.name.to_lowercase() == soc.area.to_lowercase())
                 .map(|a| a.id.clone())
@@ -1047,8 +1058,7 @@ pub async fn publish_registration(
             )
         } else if let Some(ref area_str) = seller_area {
             // No society match, but seller provided an area — try to match area_id
-            let area_id = state
-                .areas
+            let area_id = areas
                 .iter()
                 .find(|a| a.name.to_lowercase() == area_str.to_lowercase())
                 .map(|a| a.id.clone())
@@ -1056,7 +1066,7 @@ pub async fn publish_registration(
             (String::new(), area_str.clone(), area_id, String::new())
         } else if let Some(ref prompt) = draft.property_prompt {
             // Fallback 3: extract area from property_prompt text
-            if let Some((area_name, area_id)) = extract_area_from_text(prompt, &state.areas) {
+            if let Some((area_name, area_id)) = extract_area_from_text(prompt, &areas) {
                 (String::new(), area_name, area_id, String::new())
             } else {
                 (String::new(), String::new(), String::new(), String::new())
@@ -1110,8 +1120,9 @@ pub async fn publish_registration(
         updated_at: now_str.clone(),
     };
 
-    // Build Property with sensible defaults for fields we don't have yet
-    let property = Property {
+    // Build a validation candidate with sensible defaults for fields we don't have yet.
+    // It is intentionally not inserted into public runtime state.
+    let property_candidate = Property {
         id: property_id.clone(),
         title,
         area: resolved_area,
@@ -1161,21 +1172,25 @@ pub async fn publish_registration(
 
     // Safety net: if area is still empty but description_summary has content,
     // try to extract area from description_summary (which contains property_prompt).
-    let property = if property.area.is_empty() && !property.description_summary.is_empty() {
+    let property_candidate = if property_candidate.area.is_empty()
+        && !property_candidate.description_summary.is_empty()
+    {
         if let Some((area_name, area_id)) =
-            extract_area_from_text(&property.description_summary, &state.areas)
+            extract_area_from_text(&property_candidate.description_summary, &areas)
         {
             Property {
                 area: area_name,
                 area_id,
-                ..property
+                ..property_candidate
             }
         } else {
-            property
+            property_candidate
         }
     } else {
-        property
+        property_candidate
     };
+    drop(areas);
+    drop(societies);
 
     // --- Persist to disk (atomic writes) ---
 
@@ -1201,17 +1216,28 @@ pub async fn publish_registration(
     all_sellers.push(seller.clone());
     atomic_write_json(&sellers_path, &all_sellers).await?;
 
-    // --- Insert into in-memory state ---
+    persist_validation_submission(
+        &state,
+        SellerValidationSubmission {
+            version: 1,
+            status: "pending_validation".to_string(),
+            seller_id: seller_id.clone(),
+            draft_id: draft.id.clone(),
+            property: property_candidate,
+            submitted_at: now_str.clone(),
+        },
+    )
+    .await?;
+
+    // --- Insert into seller runtime state ---
     {
         let mut sellers_lock = state.sellers.write().await;
         sellers_lock.push(seller);
     }
-    {
-        let mut properties_lock = state.properties.write().await;
-        let mut search_index = state.search_index.write().await;
-        search_index.insert(&property);
-        properties_lock.push(property);
-    }
+    // Do not publish unvalidated seller submissions into public search. The
+    // validation submission, structured draft, and seller record feed the
+    // offline validation/DAG flow; the property becomes searchable only after a
+    // promoted serving bundle includes it with evidence.
 
     // --- Mark draft as published (idempotency) ---
     draft.published_seller_id = Some(seller_id.clone());
@@ -1228,6 +1254,30 @@ pub async fn publish_registration(
             dashboard_url,
         }),
     ))
+}
+
+async fn persist_validation_submission(
+    state: &AppState,
+    submission: SellerValidationSubmission,
+) -> Result<(), (StatusCode, Json<RegistrationError>)> {
+    let submissions_dir = state
+        .project_root
+        .join("data")
+        .join("sellers")
+        .join("validation_submissions");
+    tokio::fs::create_dir_all(&submissions_dir)
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(RegistrationError {
+                    error: format!("failed to create validation submissions directory: {}", e),
+                }),
+            )
+        })?;
+
+    let path = submissions_dir.join(format!("{}.json", submission.property.id));
+    atomic_write_json(&path, &submission).await
 }
 
 /// Atomic write: serialize to JSON, write to .tmp, rename to final path.

@@ -34,8 +34,8 @@ pub use loader::{
     DagConfigError, DagManifest,
 };
 pub use resolution::{
-    better_source_type, buyer_visible_fact, load_resolution_policies, source_tier_rank,
-    ResolutionPoliciesFile,
+    better_source_type, better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
+    source_tier_rank, ResolutionPoliciesFile,
 };
 pub use search_guardrails::{
     load_search_guardrails, load_search_guardrails_from_path, search_guardrail_config,

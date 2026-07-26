@@ -182,7 +182,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        7
+        9
     );
 }
 
@@ -240,7 +240,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
-    assert_eq!(report.manifest.planned_count, expected_assets.len() + 2);
+    assert_eq!(report.manifest.planned_count, expected_assets.len() + 4);
     assert_eq!(report.executed_assets.len(), expected_assets.len());
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
@@ -444,7 +444,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 19);
+    assert_eq!(report.manifest.planned_count, 21);
     assert_eq!(report.executed_assets.len(), 17);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -607,8 +607,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         semantic_embedder,
         serving_bundle: RwLock::new(Some(Arc::new(loaded))),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
-        areas: Vec::new(),
-        societies,
+        areas: RwLock::new(Vec::new()),
+        societies: RwLock::new(societies),
         sellers: RwLock::new(Vec::new()),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
@@ -625,7 +625,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         State(state),
         Query(SearchQuery {
             q: Some(query.to_string()),
-            debug: None,
+            debug: Some("true".to_string()),
         }),
     )
     .await

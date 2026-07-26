@@ -13,7 +13,9 @@ use parquet::file::properties::WriterProperties;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
-use crate::dag_config::{better_source_type, load_fact_registry, load_resolution_policies};
+use crate::dag_config::{
+    better_source_type_for_fact, load_fact_registry, load_resolution_policies,
+};
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::lake::{ArtifactMetadata, LakeError, LakeStore};
 use crate::parquet_data::{
@@ -1253,7 +1255,8 @@ fn sort_facts(facts: &mut [KgViewFactRecord]) {
 fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> bool {
     if existing.entity_id == candidate.entity_id && existing.fact_key == candidate.fact_key {
         if let Ok(policies) = load_resolution_policies() {
-            if better_source_type(
+            if better_source_type_for_fact(
+                Some(&candidate.fact_key),
                 &candidate.source_type,
                 &existing.source_type,
                 candidate.confidence,
@@ -1262,7 +1265,8 @@ fn better_fact(existing: &KgViewFactRecord, candidate: &KgViewFactRecord) -> boo
             ) {
                 return true;
             }
-            if better_source_type(
+            if better_source_type_for_fact(
+                Some(&existing.fact_key),
                 &existing.source_type,
                 &candidate.source_type,
                 existing.confidence,

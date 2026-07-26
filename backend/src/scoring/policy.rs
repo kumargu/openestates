@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
@@ -103,6 +103,10 @@ pub struct ScoringPolicyFile {
     pub missing_data: MissingDataPolicy,
     #[serde(default)]
     pub search_ranking: SearchRankingPolicy,
+    #[serde(default)]
+    pub fact_groups: BTreeMap<String, Vec<String>>,
+    #[serde(default)]
+    pub runtime_fact_keys: Vec<String>,
     #[serde(default)]
     pub signals: Vec<ScoringSignalPolicy>,
     #[serde(default)]
@@ -377,13 +381,27 @@ fn signal_fact_matches(signal: &ScoringSignalPolicy, fact_key: &str) -> bool {
 }
 
 fn fact_belongs_to_group(fact_key: &str, group: &str) -> bool {
-    match group {
-        "rera" => fact_key.starts_with("rera_"),
-        "google_reviews" => fact_key.starts_with("google_"),
-        "nearby" => fact_key.starts_with("nearby_"),
-        "approach_road" => fact_key.contains("road") || fact_key.starts_with("media.approach_road"),
-        "home_state" => fact_key == "home_state" || fact_key == "home_timeline_state",
-        _ => fact_key.starts_with(group),
+    if let Some(patterns) = scoring_policy().fact_groups.get(group) {
+        return patterns
+            .iter()
+            .any(|pattern| fact_key_matches_pattern(fact_key, pattern));
+    }
+    fact_key.starts_with(group)
+}
+
+fn fact_key_matches_pattern(fact_key: &str, pattern: &str) -> bool {
+    let pattern = pattern.trim();
+    if pattern == "*" {
+        return true;
+    }
+    match (pattern.strip_prefix('*'), pattern.strip_suffix('*')) {
+        (Some(inner), Some(_)) if pattern.len() >= 2 => {
+            fact_key.contains(inner.trim_end_matches('*'))
+        }
+        (Some(_), Some(_)) => fact_key == pattern,
+        (None, Some(prefix)) => fact_key.starts_with(prefix),
+        (Some(suffix), None) => fact_key.ends_with(suffix),
+        (None, None) => fact_key == pattern,
     }
 }
 
@@ -514,7 +532,11 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     }
 
     let registry = load_fact_registry_index()?;
-    let runtime_fact_keys = runtime_fact_keys();
+    let runtime_fact_keys = policy
+        .runtime_fact_keys
+        .iter()
+        .map(String::as_str)
+        .collect::<BTreeSet<_>>();
     for signal in &policy.signals {
         if signal.weight < 0.0 || signal.weight > 5.0 {
             return Err(DagConfigError::InvalidConfig(format!(
@@ -533,38 +555,6 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
         }
     }
     Ok(())
-}
-
-fn runtime_fact_keys() -> BTreeSet<&'static str> {
-    [
-        "price_per_sqft",
-        "listing_price_per_sqft_range_1bhk",
-        "listing_price_per_sqft_range_2bhk",
-        "listing_price_per_sqft_range_3bhk",
-        "listing_price_per_sqft_range_4bhk",
-        "access_road_quality",
-        "google_rating",
-        "google_review_count",
-        "google_reviews_url",
-        "home_state",
-        "home_timeline_state",
-        "nearby_metro_stations",
-        "nearby_tech_parks",
-        "nearby_schools",
-        "nearby_hospitals",
-        "access.metro_good",
-        "legal.oc_status",
-        "environment.groundwater_potential_class",
-        "environment.water_body_distance_m",
-        "operating.water_supply_good",
-        "positive.maintenance_quality",
-        "positive.greenery",
-        "positive.open_space",
-        "rera_builder_revocations",
-        "rera_complaints_count",
-    ]
-    .into_iter()
-    .collect()
 }
 
 fn default_true() -> bool {

@@ -26,8 +26,8 @@ pub struct AppState {
     pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
-    pub areas: Vec<AreaProfile>,
-    pub societies: Vec<Society>,
+    pub areas: RwLock<Vec<AreaProfile>>,
+    pub societies: RwLock<Vec<Society>>,
     pub sellers: RwLock<Vec<Seller>>,
     /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
     pub discovery_config: DiscoveryConfig,

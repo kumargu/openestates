@@ -18,7 +18,6 @@ use super::{MatchExplanation, MatchReason, PreferenceCoverage, SearchResultCard,
 const SEMANTIC_RECALL_LIMIT: usize = 16;
 const TANTIVY_RECALL_LIMIT: usize = 128;
 const UNSTRUCTURED_LOCAL_CANDIDATE_LIMIT: usize = 16;
-const STRUCTURED_LOCAL_RECALL_SKIP_LIMIT: usize = 4;
 const DIAGNOSTIC_ID_LIMIT: usize = 12;
 const DIAGNOSTIC_SCORE_LIMIT: usize = 8;
 
@@ -723,8 +722,6 @@ fn should_skip_semantic_recall(intent: &SearchIntent, local_candidate_ids: &[Str
         return false;
     }
     !has_soft_intent(intent)
-        || has_filter_intent(intent)
-        || local_candidate_ids.len() >= STRUCTURED_LOCAL_RECALL_SKIP_LIMIT
 }
 
 fn has_soft_intent(intent: &SearchIntent) -> bool {
@@ -856,8 +853,39 @@ fn candidate_scores(results: &[SearchResultCard]) -> Vec<CandidateScore> {
 #[cfg(test)]
 mod tests {
     use crate::dag_config::SearchResolutionConfig;
+    use crate::search::intent::{BuyerArchetype, Polarity, PreferenceSignal, SearchIntent};
 
     use super::*;
+
+    fn intent_without_soft_signals() -> SearchIntent {
+        SearchIntent {
+            area: Some("Whitefield".to_string()),
+            excluded_areas: Vec::new(),
+            bhk: Some(3),
+            budget_max: Some(25_000_000),
+            hard_constraints: Vec::new(),
+            preferences: Vec::new(),
+            positive_preferences: Vec::new(),
+            negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
+            buyer_archetype: None,
+        }
+    }
+
+    fn intent_with_soft_signals() -> SearchIntent {
+        SearchIntent {
+            positive_preferences: vec![PreferenceSignal {
+                raw_text: "quiet".to_string(),
+                polarity: Polarity::Positive,
+                expanded_keys: vec!["noise_score".to_string()],
+                gap_keys: Vec::new(),
+                weight: 1.0,
+            }],
+            buyer_archetype: Some(BuyerArchetype::Family),
+            ..intent_without_soft_signals()
+        }
+    }
 
     #[test]
     fn resolver_rejects_junk_tiny_entity_names() {
@@ -872,5 +900,29 @@ mod tests {
         assert!(!is_resolvable_entity_name("  ", &config));
         assert!(is_resolvable_entity_name("Forum", &config));
         assert!(is_resolvable_entity_name("DSR", &config));
+    }
+
+    #[test]
+    fn semantic_recall_runs_for_soft_intent_even_with_local_candidates() {
+        let intent = intent_with_soft_signals();
+        assert!(!should_skip_semantic_recall(
+            &intent,
+            &[String::from("property:a")]
+        ));
+    }
+
+    #[test]
+    fn semantic_recall_can_skip_when_structured_local_candidates_have_no_soft_intent() {
+        let intent = intent_without_soft_signals();
+        assert!(should_skip_semantic_recall(
+            &intent,
+            &[String::from("property:a")]
+        ));
+    }
+
+    #[test]
+    fn semantic_recall_runs_when_local_candidates_are_empty() {
+        let intent = intent_without_soft_signals();
+        assert!(!should_skip_semantic_recall(&intent, &[]));
     }
 }

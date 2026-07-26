@@ -38,7 +38,8 @@ pub async fn sitemap_xml(State(state): State<Arc<AppState>>) -> impl IntoRespons
     }
 
     // Society pages
-    for s in &state.societies {
+    let societies = state.societies.read().await;
+    for s in societies.iter() {
         urls.push(format!(
             "  <url><loc>{}/societies/{}</loc><changefreq>weekly</changefreq><priority>0.6</priority></url>",
             base_url, s.id

@@ -56,10 +56,11 @@ impl SearchIndex {
         self.price_by_id.insert(property.id.clone(), property.price);
 
         let text = format!(
-            "{} {} {} {} {} {} {}",
+            "{} {} {} {} {} {} {} {}",
             property.title,
             property.area,
             property.city,
+            property.society_id.replace('-', " "),
             property.society_id,
             property.builder_name,
             property.description_summary,
@@ -335,6 +336,31 @@ mod tests {
     #[test]
     fn text_field_matches_term_handles_society_name() {
         assert!(text_field_matches_term("prestige waterford", "wateford"));
+    }
+
+    #[test]
+    fn recall_ids_indexes_readable_society_id_for_named_project_queries() {
+        let property = test_property("prop-1", "godrej-splendour");
+        let index = SearchIndex::build(&[property]);
+        let intent = SearchIntent {
+            area: None,
+            excluded_areas: Vec::new(),
+            bhk: None,
+            budget_max: None,
+            hard_constraints: Vec::new(),
+            preferences: Vec::new(),
+            positive_preferences: Vec::new(),
+            negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
+            buyer_archetype: None,
+        };
+
+        assert_eq!(
+            index.recall_ids("Godrej Splendour", &intent),
+            vec!["prop-1"]
+        );
+        assert_eq!(index.recall_ids("gorej", &intent), vec!["prop-1"]);
     }
 
     #[test]

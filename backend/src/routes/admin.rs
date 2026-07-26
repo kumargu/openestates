@@ -87,17 +87,41 @@ pub async fn reload_serving_bundle(
     }
 
     match data_loader::load_serving_bundle(&state.project_root).await {
-        Ok(bundle) => {
-            let summary = bundle.as_ref().map(serving_bundle_summary);
-            let mut current = state.serving_bundle.write().await;
-            *current = bundle;
+        Ok(Some(bundle)) => {
+            let snapshot = data_loader::runtime_snapshot_from_serving_bundle(
+                bundle,
+                state.semantic_embedder.as_ref(),
+            );
+            let summary = serving_bundle_summary(&snapshot.bundle);
+
+            let mut current_bundle = state.serving_bundle.write().await;
+            let mut properties = state.properties.write().await;
+            let mut societies = state.societies.write().await;
+            let mut areas = state.areas.write().await;
+            let mut search_index = state.search_index.write().await;
+            let mut semantic_index = state.semantic_index.write().await;
+
+            *current_bundle = Some(snapshot.bundle);
+            *properties = snapshot.properties;
+            *societies = snapshot.societies;
+            *areas = snapshot.areas;
+            *search_index = snapshot.search_index;
+            *semantic_index = snapshot.semantic_index;
             state.recommendation_cache.write().await.clear();
+
             Json(serde_json::json!({
                 "status": "reloaded",
                 "serving_bundle": summary,
             }))
             .into_response()
         }
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "error": "no promoted serving bundle found; current runtime state was left unchanged"
+            })),
+        )
+            .into_response(),
         Err(error) => (
             StatusCode::INTERNAL_SERVER_ERROR,
             Json(serde_json::json!({ "error": error })),

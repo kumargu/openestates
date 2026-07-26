@@ -19,12 +19,12 @@
     "no_positive_evidence_score_multiplier": 0.4,
     "nearby_area_score_penalty": -0.35,
     "graph_area_score_penalty": -0.25,
-      "geo_distance_fact_keys": [
-        "nearby_metro_stations",
-        "nearby_schools",
-        "nearby_hospitals",
-        "nearby_tech_parks",
-        "nearby_public_parks"
+    "geo_distance_fact_keys": [
+      "nearby_metro_stations",
+      "nearby_schools",
+      "nearby_hospitals",
+      "nearby_tech_parks",
+      "nearby_public_parks"
     ],
     "nearby_distance_full_score_km": 0.75,
     "nearby_distance_zero_score_km": 3.0,
@@ -38,6 +38,41 @@
     "min_score_with_constraint_only": 0.01,
     "fact_coverage_threshold": 25.0
   },
+  "fact_groups": {
+    "rera": ["rera_*"],
+    "google_reviews": ["google_*"],
+    "nearby": ["nearby_*"],
+    "approach_road": ["*road*", "media.approach_road*"],
+    "home_state": ["home_state", "home_timeline_state"]
+  },
+  "runtime_fact_keys": [
+    "price_per_sqft",
+    "listing_price_per_sqft_range_1bhk",
+    "listing_price_per_sqft_range_2bhk",
+    "listing_price_per_sqft_range_3bhk",
+    "listing_price_per_sqft_range_4bhk",
+    "access_road_quality",
+    "google_rating",
+    "google_review_count",
+    "google_reviews_url",
+    "home_state",
+    "home_timeline_state",
+    "nearby_metro_stations",
+    "nearby_tech_parks",
+    "nearby_schools",
+    "nearby_hospitals",
+    "nearby_public_parks",
+    "access.metro_good",
+    "legal.oc_status",
+    "environment.groundwater_potential_class",
+    "environment.water_body_distance_m",
+    "operating.water_supply_good",
+    "positive.maintenance_quality",
+    "positive.greenery",
+    "positive.open_space",
+    "rera_builder_revocations",
+    "rera_complaints_count"
+  ],
   "signals": [
     {
       "id": "price_value",

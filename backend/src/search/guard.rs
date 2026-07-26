@@ -54,6 +54,7 @@ pub fn guard_search_query(query: &str) -> Option<GuardedSearch> {
     }
 
     if tokens.len() < config.too_short.min_tokens
+        && !has_structured_anchor(&intent)
         && home_intent_score < config.home_intent_detection.minimum_short_query_score
     {
         return Some(guarded(query, &config.guidance.too_short));
@@ -296,6 +297,11 @@ mod tests {
     }
 
     #[test]
+    fn assistant_style_structured_buyer_query_passes_through() {
+        assert!(guard_search_query("can you help me choose 3bhk under 2cr").is_none());
+    }
+
+    #[test]
     fn vague_home_query_asks_for_specifics() {
         let guarded = guard_search_query("find me something good").unwrap();
 
@@ -303,10 +309,8 @@ mod tests {
     }
 
     #[test]
-    fn single_token_home_query_asks_for_more_context() {
-        let guarded = guard_search_query("3bhk").unwrap();
-
-        assert_eq!(guarded.guidance.mode, "too_short");
+    fn single_token_structured_home_query_passes_through() {
+        assert!(guard_search_query("3bhk").is_none());
     }
 
     #[test]

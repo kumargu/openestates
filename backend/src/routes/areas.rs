@@ -24,8 +24,8 @@ pub struct AreaListItem {
 
 /// GET /api/areas — returns lightweight area list for homepage cards.
 pub async fn list_areas(State(state): State<Arc<AppState>>) -> Json<Vec<AreaListItem>> {
-    let items: Vec<AreaListItem> = state
-        .areas
+    let areas = state.areas.read().await;
+    let items: Vec<AreaListItem> = areas
         .iter()
         .map(|a| {
             let primary_signal = a.externality_tags.first().cloned().unwrap_or_default();
@@ -82,12 +82,9 @@ pub struct AreaTrackerMarket {
 /// GET /api/areas/tracker — current micro-market inventory plus live search demand.
 pub async fn area_tracker(State(state): State<Arc<AppState>>) -> Json<AreaTrackerResponse> {
     let properties = state.properties.read().await;
+    let areas = state.areas.read().await;
     let graph = state.knowledge.read().await;
-    Json(build_area_tracker(
-        &state.areas,
-        &properties,
-        &graph.search_log,
-    ))
+    Json(build_area_tracker(&areas, &properties, &graph.search_log))
 }
 
 /// GET /api/areas/:id — returns full area profile.
@@ -95,19 +92,15 @@ pub async fn get_area(
     State(state): State<Arc<AppState>>,
     Path(id): Path<String>,
 ) -> Result<Json<AreaProfile>, (StatusCode, Json<ErrorResponse>)> {
-    let area = state
-        .areas
-        .iter()
-        .find(|a| a.id == id)
-        .cloned()
-        .ok_or_else(|| {
-            (
-                StatusCode::NOT_FOUND,
-                Json(ErrorResponse {
-                    error: "area_not_found".to_string(),
-                }),
-            )
-        })?;
+    let areas = state.areas.read().await;
+    let area = areas.iter().find(|a| a.id == id).cloned().ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "area_not_found".to_string(),
+            }),
+        )
+    })?;
 
     Ok(Json(area))
 }

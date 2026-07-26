@@ -106,12 +106,14 @@ pub async fn search_societies(
 ) -> Json<SocietySearchResponse> {
     let query = params.q.unwrap_or_default();
     let graph = state.knowledge.read().await;
-    let results = rank_societies(&state, &query, &graph);
-    let interpreted_area = infer_area(&query, &state.areas)
-        .or_else(|| results.first().map(|r| r_area(r, &state.societies)))
+    let societies = state.societies.read().await;
+    let areas = state.areas.read().await;
+    let results = rank_societies(&societies, &areas, &query, &graph);
+    let interpreted_area = infer_area(&query, &areas)
+        .or_else(|| results.first().map(|r| r_area(r, &societies)))
         .unwrap_or_else(|| "Bengaluru".to_string());
-    let area_context = area_context_for(&interpreted_area, &state.areas);
-    let enrichment_status = enrichment_status(&state, &results, &graph);
+    let area_context = area_context_for(&interpreted_area, &areas);
+    let enrichment_status = enrichment_status(&societies, &results, &graph);
 
     Json(SocietySearchResponse {
         query_interpreted: QueryInterpreted {
@@ -138,7 +140,9 @@ pub async fn get_society(
     Path(slug): Path<String>,
 ) -> Result<Json<SocietySearchResult>, (StatusCode, Json<ErrorResponse>)> {
     let graph = state.knowledge.read().await;
-    let result = rank_societies(&state, "", &graph)
+    let societies = state.societies.read().await;
+    let areas = state.areas.read().await;
+    let result = rank_societies(&societies, &areas, "", &graph)
         .into_iter()
         .find(|item| item.slug == slug)
         .ok_or_else(|| {
@@ -154,15 +158,15 @@ pub async fn get_society(
 }
 
 fn rank_societies(
-    state: &AppState,
+    societies: &[Society],
+    areas: &[AreaProfile],
     query: &str,
     graph: &KnowledgeGraph,
 ) -> Vec<SocietySearchResult> {
     let query_terms = normalized_terms(query);
-    let area = infer_area(query, &state.areas);
+    let area = infer_area(query, areas);
 
-    let mut scored: Vec<(f64, SocietySearchResult)> = state
-        .societies
+    let mut scored: Vec<(f64, SocietySearchResult)> = societies
         .iter()
         .filter_map(|society| {
             let haystack = format!(
@@ -371,12 +375,11 @@ fn area_context_for(area_name: &str, areas: &[AreaProfile]) -> Option<SocietyAre
 }
 
 fn enrichment_status(
-    state: &AppState,
+    societies: &[Society],
     results: &[SocietySearchResult],
     graph: &KnowledgeGraph,
 ) -> EnrichmentStatus {
-    let seed_matched = state
-        .societies
+    let seed_matched = societies
         .iter()
         .filter(|society| {
             graph
@@ -387,10 +390,9 @@ fn enrichment_status(
         .count();
 
     EnrichmentStatus {
-        societies_discovered: state.societies.len(),
+        societies_discovered: societies.len(),
         societies_scored: results.len(),
-        reddit_enriched: state
-            .societies
+        reddit_enriched: societies
             .iter()
             .filter(|society| !society.review_summary.is_empty())
             .count(),

@@ -253,15 +253,35 @@ check "Empty search returns empty results" \
   '.results | length == 0' \
   "expected empty results for empty query"
 
-check "GET /api/search?q=waterford returns Prestige Waterford" \
-  "${BASE}/api/search?q=waterford" \
-  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
-  "expected society-name recall for waterford"
+SOCIETY_FIXTURE=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '
+  [.[].society_name // empty | select(length > 0)] as $names
+  | ($names | unique) as $unique_names
+  | ($unique_names[]) as $name
+  | [($name | ascii_downcase | scan("[a-z0-9]{6,}"))] as $tokens
+  | $tokens[]? as $token
+  | select(($unique_names | map(ascii_downcase | gsub("[^a-z0-9]+"; " ") | split(" ") | index($token) != null) | map(select(.)) | length) == 1)
+  | [$name, $token] | @tsv
+' 2>/dev/null | head -n 1 || true)
+if [[ -z "$SOCIETY_FIXTURE" ]]; then
+  FAIL=$((FAIL + 1))
+  ERRORS+="  FAIL: Search society recall fixture — no loaded society had a unique 6+ character token\n"
+  printf "  %s Search society recall fixture — no loaded society had a unique 6+ character token\n" "$(red "✗")"
+else
+  IFS=$'\t' read -r FIRST_SOCIETY_NAME FIRST_SOCIETY_TOKEN <<< "$SOCIETY_FIXTURE"
+  export FIRST_SOCIETY_NAME
+  FIRST_SOCIETY_QUERY=$(jq -rn --arg q "$FIRST_SOCIETY_NAME" '$q|@uri')
+  FIRST_SOCIETY_TYPO="${FIRST_SOCIETY_TOKEN:0:2}${FIRST_SOCIETY_TOKEN:3}"
 
-check "GET /api/search?q=wateford tolerates typo" \
-  "${BASE}/api/search?q=wateford" \
-  '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase | contains("waterford")))' \
-  "expected fuzzy recall for wateford typo"
+  check "GET /api/search recalls loaded society" \
+    "${BASE}/api/search?q=${FIRST_SOCIETY_QUERY}" \
+    '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase))' \
+    "expected society-name recall for ${FIRST_SOCIETY_NAME}"
+
+  check "GET /api/search tolerates society typo" \
+    "${BASE}/api/search?q=${FIRST_SOCIETY_TYPO}" \
+    '(.results | length > 0) and any(.results[]; (.society_name | ascii_downcase) == (env.FIRST_SOCIETY_NAME | ascii_downcase))' \
+    "expected fuzzy recall for ${FIRST_SOCIETY_TYPO} typo"
+fi
 
 # ── Areas ──
 echo ""

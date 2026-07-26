@@ -7,7 +7,8 @@ use std::time::Instant;
 use tokio::sync::RwLock;
 
 use crate::dag_config::{
-    better_source_type, buyer_visible_fact, load_resolution_policies, ResolutionPoliciesFile,
+    better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
+    ResolutionPoliciesFile,
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
@@ -29,6 +30,15 @@ use crate::{
     serving::ServingBundleLoadError,
 };
 
+pub struct RuntimeServingSnapshot {
+    pub bundle: Arc<LoadedServingBundle>,
+    pub properties: Vec<Property>,
+    pub societies: Vec<Society>,
+    pub areas: Vec<AreaProfile>,
+    pub search_index: SearchIndex,
+    pub semantic_index: SemanticSearchIndex,
+}
+
 /// Load all data and construct the full AppState.
 ///
 /// The promoted serving bundle is the canonical request-path data source.
@@ -44,15 +54,21 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     let graph = KnowledgeGraph::new();
     println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
 
-    let properties = properties_from_serving_bundle(bundle);
+    let semantic_embedder = semantic_embedder_from_env();
+    let RuntimeServingSnapshot {
+        properties,
+        societies,
+        areas,
+        search_index,
+        semantic_index,
+        ..
+    } = runtime_snapshot_from_serving_bundle(bundle.clone(), semantic_embedder.as_ref());
     if properties.is_empty() {
         panic!(
             "Serving bundle {} has no property entities; refusing to fall back to legacy data",
             bundle.manifest.bundle_version
         );
     }
-    let societies = societies_from_serving_bundle(bundle);
-    let areas = areas_from_serving_properties(&properties);
     println!(
         "Derived {} properties, {} societies, {} areas from serving bundle {}",
         properties.len(),
@@ -61,15 +77,11 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         bundle.manifest.bundle_version
     );
 
-    let search_index = SearchIndex::build(&properties);
     println!(
         "Built local search index for {} properties",
         properties.len()
     );
 
-    let semantic_embedder = semantic_embedder_from_env();
-    let semantic_index =
-        semantic_index_from_bundle(bundle, semantic_embedder.as_ref(), &properties);
     println!(
         "Built semantic search index with {} documents using {}",
         semantic_index.len(),
@@ -107,8 +119,8 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
-        areas,
-        societies,
+        areas: RwLock::new(areas),
+        societies: RwLock::new(societies),
         sellers: RwLock::new(sellers),
         discovery_config,
         map_overlays,
@@ -120,6 +132,26 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         registration_counter: AtomicU64::new(0),
         registration_rate_limiter: RwLock::new((Instant::now(), 0)),
         publish_rate_limiter: RwLock::new((Instant::now(), 0)),
+    }
+}
+
+pub fn runtime_snapshot_from_serving_bundle(
+    bundle: Arc<LoadedServingBundle>,
+    embedder: &dyn SemanticEmbedder,
+) -> RuntimeServingSnapshot {
+    let properties = properties_from_serving_bundle(&bundle);
+    let societies = societies_from_serving_bundle(&bundle);
+    let areas = areas_from_serving_properties(&properties);
+    let search_index = SearchIndex::build(&properties);
+    let semantic_index = semantic_index_from_bundle(&bundle, embedder, &properties);
+
+    RuntimeServingSnapshot {
+        bundle,
+        properties,
+        societies,
+        areas,
+        search_index,
+        semantic_index,
     }
 }
 
@@ -966,6 +998,7 @@ fn resolution_policies() -> &'static ResolutionPoliciesFile {
             source_tiers: Vec::new(),
             never_default_fact_prefixes: Vec::new(),
             source_caps: HashMap::new(),
+            overrides: HashMap::new(),
         })
     })
 }
@@ -983,7 +1016,8 @@ fn latest_fact<'a>(
                 && buyer_visible_fact(&fact.fact_key, &fact.source_type, policies)
         })
         .max_by(|left, right| {
-            if better_source_type(
+            if better_source_type_for_fact(
+                Some(fact_key),
                 &left.source_type,
                 &right.source_type,
                 left.confidence,
@@ -991,7 +1025,8 @@ fn latest_fact<'a>(
                 policies,
             ) {
                 std::cmp::Ordering::Greater
-            } else if better_source_type(
+            } else if better_source_type_for_fact(
+                Some(fact_key),
                 &right.source_type,
                 &left.source_type,
                 right.confidence,
