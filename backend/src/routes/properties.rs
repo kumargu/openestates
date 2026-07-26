@@ -1106,6 +1106,7 @@ fn collect_structured_livability_facts(
     signals
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_livability_brief(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
@@ -2046,12 +2047,11 @@ fn section_summary(panel: &SourcePanel) -> String {
     if let Some(media) = panel.media.first() {
         return media.caption.clone();
     }
-    panel
-        .subtitle
-        .trim()
-        .is_empty()
-        .then(|| "Evidence will appear here once source-backed facts are promoted.".to_string())
-        .unwrap_or_else(|| truncate_summary(&panel.subtitle, 96))
+    if panel.subtitle.trim().is_empty() {
+        "Evidence will appear here once source-backed facts are promoted.".to_string()
+    } else {
+        truncate_summary(&panel.subtitle, 96)
+    }
 }
 
 fn groundwater_potential_summary(item: &SourceItem) -> String {

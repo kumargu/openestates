@@ -219,6 +219,7 @@ pub fn bengaluru_metro_station_facts_input(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn push_fact(
     facts: &mut Vec<SkillFactRecord>,
     annotations: &mut Vec<SkillFactAnnotationRecord>,

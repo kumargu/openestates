@@ -235,7 +235,7 @@ fn area_tracker_cards(candidates: &[DiscoveryCandidate]) -> Vec<DiscoveryShelfCa
             active_areas.push((candidate.property.area.clone(), 1));
         }
     }
-    active_areas.sort_by(|a, b| b.1.cmp(&a.1));
+    active_areas.sort_by_key(|area| std::cmp::Reverse(area.1));
     let top_areas: HashSet<String> = active_areas
         .into_iter()
         .filter(|(_, count)| *count >= 2)

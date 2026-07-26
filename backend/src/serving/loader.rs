@@ -196,7 +196,7 @@ async fn hydrate_atomically(
     hydrate_tantivy_index(lake, manifest, &temp_dir).await?;
     match std::fs::rename(&temp_dir, cache_dir) {
         Ok(()) => Ok(()),
-        Err(err) if cache_dir.exists() => {
+        Err(_err) if cache_dir.exists() => {
             let _ = std::fs::remove_dir_all(&temp_dir);
             Ok(())
         }

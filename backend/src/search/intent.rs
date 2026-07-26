@@ -278,10 +278,9 @@ fn parse_single_amount(token: &str) -> Option<u64> {
         (stripped, "l")
     } else if let Some(stripped) = token.strip_suffix("lakh") {
         (stripped, "l")
-    } else if let Some(stripped) = token.strip_suffix('l') {
-        (stripped, "l")
     } else {
-        return None;
+        let stripped = token.strip_suffix('l')?;
+        (stripped, "l")
     };
 
     let num: f64 = num_part.parse().ok()?;

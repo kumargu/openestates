@@ -118,7 +118,7 @@ impl AssetPartition {
             .into_iter()
             .map(|(key, value)| (key.into(), value.into()))
             .collect();
-        parts.sort_by(|left, right| left.0.to_lowercase().cmp(&right.0.to_lowercase()));
+        parts.sort_by_key(|left| left.0.to_lowercase());
         Self { parts }
     }
 

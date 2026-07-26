@@ -217,7 +217,7 @@ fn build_area_tracker(
         })
         .collect::<Vec<_>>();
     let mut markets = markets;
-    markets.sort_by(|left, right| right.listing_count.cmp(&left.listing_count));
+    markets.sort_by_key(|market| std::cmp::Reverse(market.listing_count));
 
     AreaTrackerResponse {
         generated_at: chrono::Utc::now().to_rfc3339(),

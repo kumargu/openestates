@@ -266,11 +266,11 @@ fn add_tantivy_recall(
 
 fn property_ids_for_tantivy_hit(hit: &TantivyRecallHit, properties: &[Property]) -> Vec<String> {
     if let Some(id) = hit.entity_id.strip_prefix("property:") {
-        return properties
-            .iter()
-            .any(|property| property.id == id)
-            .then(|| vec![id.to_string()])
-            .unwrap_or_default();
+        return if properties.iter().any(|property| property.id == id) {
+            vec![id.to_string()]
+        } else {
+            Vec::new()
+        };
     }
     if hit.entity_id.starts_with("society:") {
         return properties
