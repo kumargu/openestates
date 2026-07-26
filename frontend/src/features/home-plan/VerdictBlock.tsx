@@ -1,15 +1,18 @@
+import type { ReactNode } from "react";
 import { formatCurrency } from "./model.ts";
 
 type VerdictBlockProps = {
   activeYear: number;
   buyWins: boolean;
   advantage: number;
+  aside?: ReactNode;
 };
 
 export function VerdictBlock({
   activeYear,
   buyWins,
   advantage,
+  aside,
 }: VerdictBlockProps) {
   const timeLabel = activeYear === 0
     ? "Today"
@@ -24,6 +27,7 @@ export function VerdictBlock({
           <span className="home-plan-verdict__amount">{formatCurrency(advantage, true)} more</span>
           {" "}if you {choice}.
         </h1>
+        {aside && <aside className="home-plan-verdict__aside">{aside}</aside>}
       </div>
     </header>
   );

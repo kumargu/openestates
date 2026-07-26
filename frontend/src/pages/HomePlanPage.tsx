@@ -144,16 +144,13 @@ export function HomePlanPage() {
                   price={property.price}
                 />
               </div>
-
-              <div className="home-plan-hero__stage">
-                <PlanWhisper />
-              </div>
             </section>
 
             <VerdictBlock
               activeYear={activeYear}
               buyWins={buyWins}
               advantage={advantage}
+              aside={<PlanWhisper />}
             />
 
             <PlanAssumptionRail

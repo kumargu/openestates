@@ -20,7 +20,7 @@ const GRAPH_INSET = { left: 72, right: 172, top: 40, bottom: 44 };
 
 function graphSeries(projection: PlanProjection): GraphSeries[] {
   return [
-    { id: "buy", label: "Your home equity", values: projection.points.map((point) => point.buyNetWorth) },
+    { id: "buy", label: "Value of your home", values: projection.points.map((point) => point.buyNetWorth) },
     { id: "rent", label: "Your savings", values: projection.points.map((point) => point.rentNetWorth) },
   ];
 }
@@ -88,7 +88,7 @@ export function PlanGraph({
   return (
     <div className="home-plan-graph">
       <div className="home-plan-graph__heading">
-        <h2>Accumulated wealth: buying vs renting</h2>
+        <h2>Buying vs Renting</h2>
         <div className="home-plan-graph__assumptions" aria-label="Projection assumptions">
           <span>6% yearly home appreciation</span>
           <span>10% yearly rent increase</span>
@@ -138,7 +138,7 @@ export function PlanGraph({
               y2={GRAPH_INSET.top + plotHeight - 22}
             />
             <text x={loanFreeX} y={GRAPH_INSET.top + plotHeight - 8} textAnchor="middle">
-              Loan-free
+              Loan-free-Yay!
             </text>
           </g>
         )}

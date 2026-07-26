@@ -310,12 +310,6 @@
   gap: 0.55rem;
 }
 
-.home-plan-hero__stage {
-  display: grid;
-  justify-items: center;
-  text-align: center;
-}
-
 .home-plan-whisper-orbit {
   animation: home-plan-whisper-drift 34s ease-in-out infinite;
 }
@@ -470,6 +464,19 @@
   color: var(--plan-ink);
   font-variant-numeric: tabular-nums;
   transition: color 900ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-plan-verdict__aside {
+  flex: 0 1 25rem;
+  align-self: flex-end;
+  padding-left: 1.25rem;
+  border-left: 1px solid var(--plan-line);
+}
+
+.home-plan-verdict__aside .home-plan-whisper {
+  min-height: 4.2em;
+  max-width: 24rem;
+  font-size: clamp(0.86rem, 0.81rem + 0.2vw, 0.98rem);
 }
 
 .home-plan-shell--view-net-worth .home-plan-verdict__amount,
@@ -1695,6 +1702,18 @@
   }
 
   .home-plan-verdict__headline {
+    max-width: none;
+  }
+
+  .home-plan-verdict__aside {
+    width: 100%;
+    padding: 0.9rem 0 0;
+    border-top: 1px solid var(--plan-line);
+    border-left: 0;
+  }
+
+  .home-plan-verdict__aside .home-plan-whisper {
+    min-height: 2.9em;
     max-width: none;
   }
 

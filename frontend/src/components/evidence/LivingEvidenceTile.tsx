@@ -22,6 +22,14 @@ function isKnownText(value: string | null | undefined): value is string {
   return lowered.length > 0 && lowered !== "not specified" && lowered !== "unknown" && lowered !== "n/a";
 }
 
+function titleIncludesSociety(title: string, societyName: string): boolean {
+  return title.toLocaleLowerCase("en-IN").includes(societyName.toLocaleLowerCase("en-IN"));
+}
+
+function titleIncludesBhk(title: string, bhk: number): boolean {
+  return new RegExp(`\\b${bhk}\\s*bhk\\b`, "i").test(title);
+}
+
 type Props = {
   property: PropertyCard;
   onQuickView?: (id: string) => void;
@@ -39,13 +47,15 @@ export function LivingEvidenceTile({
   });
   const cardImage = images[0] ?? property.hero_image ?? null;
 
+  const societyKnown = isKnownText(property.society_name);
   const metaParts = [
-    isKnownText(property.society_name) ? property.society_name : null,
+    societyKnown && !titleIncludesSociety(property.title, property.society_name)
+      ? property.society_name
+      : null,
     property.area,
-    `${property.bhk} BHK`,
+    titleIncludesBhk(property.title, property.bhk) ? null : `${property.bhk} BHK`,
     hasKnownNumber(property.sqft) ? `${property.sqft.toLocaleString("en-IN")} sqft` : null,
   ].filter((part): part is string => part !== null);
-
 
   const handleQuickView = (e: React.MouseEvent) => {
     e.preventDefault();
