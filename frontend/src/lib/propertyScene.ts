@@ -39,6 +39,17 @@ export function initialPropertySceneUrls(input: {
   ]);
 }
 
+/** Pick a scene by stable list position, wrapping only when scenes are exhausted. */
+export function propertySceneImageAt(
+  images: string[],
+  index: number,
+  fallback?: string | null,
+): string | null {
+  if (images.length === 0) return fallback ?? null;
+  const safeIndex = Math.max(0, Math.floor(index)) % images.length;
+  return images[safeIndex] ?? fallback ?? null;
+}
+
 /** Probe which image URLs actually load in the browser. */
 export function probeImageUrls(urls: string[]): Promise<string[]> {
   if (urls.length === 0) return Promise.resolve([]);

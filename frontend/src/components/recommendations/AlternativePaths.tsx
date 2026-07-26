@@ -7,6 +7,7 @@ import type {
 } from "../../lib/types.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
+import { propertySceneImageAt } from "../../lib/propertyScene.ts";
 import {
   BuildingIcon,
   RupeeIcon,
@@ -75,17 +76,19 @@ function RecommendationCard({
   badge,
   note,
   spine = "nearby",
+  sceneIndex,
 }: {
   property: PropertyCard;
   badge?: string;
   note?: string;
   spine?: string;
+  sceneIndex: number;
 }) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
     societyId: property.kg_entity_refs?.society_entity_id,
   });
-  const cardImage = images[0] ?? property.hero_image ?? null;
+  const cardImage = propertySceneImageAt(images, sceneIndex, property.hero_image);
   const Icon = badge
     ? Object.values(LENS_META).find((meta) => meta.gainLabel === badge)?.icon
     : undefined;
@@ -140,6 +143,16 @@ export function AlternativePaths({
 }) {
   const items = rankedItems(branches, nearby);
   const total = items.length;
+  const societySceneCounts = new Map<string, number>();
+  const sceneIndexes = new Map<string, number>();
+  for (const item of items) {
+    const societyKey = item.property.kg_entity_refs?.society_entity_id
+      ?? item.property.society_name
+      ?? item.property.id;
+    const sceneIndex = societySceneCounts.get(societyKey) ?? 0;
+    sceneIndexes.set(item.id, sceneIndex);
+    societySceneCounts.set(societyKey, sceneIndex + 1);
+  }
 
   if (total === 0 && status !== "pending") return null;
 
@@ -166,12 +179,14 @@ export function AlternativePaths({
               badge={LENS_META[item.branch.lens].gainLabel}
               note={item.branch.contrast}
               spine={LENS_META[item.branch.lens].spine}
+              sceneIndex={sceneIndexes.get(item.id) ?? 0}
             />
           ) : (
             <RecommendationCard
               key={item.id}
               property={item.property}
               note={`Same area · ${item.property.bhk} BHK`}
+              sceneIndex={sceneIndexes.get(item.id) ?? 0}
             />
           )
         ))}

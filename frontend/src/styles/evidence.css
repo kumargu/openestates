@@ -1756,6 +1756,9 @@
 }
 
 .alt-paths__grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 320px));
+  justify-content: start;
+  gap: 1rem;
   margin-top: 0.15rem;
 }
 

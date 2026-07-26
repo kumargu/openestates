@@ -1,6 +1,6 @@
 # Property Detail UI Consistency — Implementation Plan
 
-**Status:** P0 + P1 + P2 implemented
+**Status:** P0–P3 implemented; P4–P7 planned
 **Last updated:** 2026-07-26
 **Surface:** `/property/:id` (verified on `discovered-prestige-waterford-1bhk`)
 **Owners:** OpenEstates discovery / detail UI
@@ -49,8 +49,14 @@ This plan fixes those issues in passes. No backend, ranking, or DAG work.
 | P2.1 | Low | Mixed card treatments | Align radius/border/padding tokens lightly |
 | P2.2 | Low | Narrow desktop content column | Slightly widen decision main / map plate |
 | P2.3 | Low | Low-contrast muted meta | Bump contrast on `/sqft`, empty builder, notes |
+| P3.1 | Medium | Desktop recommendations occupy ghost grid columns | Collapse to content-sized tracks |
+| P3.2 | Medium | Same-society recommendations repeat one image | Select a stable scene per property |
+| P4 | Medium | Sources and builder use different heading hierarchy | Align section heading structure |
+| P5 | Medium | Map fallback has no recovery action | Add accessible local retry |
+| P6 | Medium | Detail-state rules lack regression tests | Add focused unit coverage |
+| P7 | Low | Superseded detail CSS remains | Remove verified unreferenced selectors |
 
-**Implemented scope:** **P0 + P1 + P2**.
+**Implemented scope:** **P0–P3**.
 
 ---
 
@@ -145,6 +151,26 @@ This plan fixes those issues in passes. No backend, ranking, or DAG work.
 #### P2.3 — Contrast
 - Raise muted meta contrast (`/sqft`, builder empty line, alt-path notes) without changing hierarchy (title + price stay largest).
 
+### Pass P3 — Recommendation composition
+- Collapse the desktop recommendation grid to real cards instead of preserving empty `auto-fill` tracks.
+- Select a deterministic scene per property so adjacent configurations from one society remain distinguishable.
+- Preserve the mobile snap carousel.
+
+### Pass P4 — Evidence hierarchy
+- Use one section-heading pattern for Sources and Builder.
+- Keep the builder record as the receipt card, not a second competing heading.
+
+### Pass P5 — Map recovery and accessibility
+- Add a buyer-readable local retry action when WebGL initialization fails.
+- Give the map region an accessible name while preserving marker controls.
+
+### Pass P6 — Regression coverage
+- Add focused tests for detail visibility, status normalization, and deterministic scene selection.
+
+### Pass P7 — Scoped cleanup
+- Remove only verified-unreferenced property-detail selectors and helpers.
+- Run final desktop/mobile/WebGL-failure checks after deletion.
+
 ---
 
 ## 7. File touch list (expected)
@@ -184,6 +210,11 @@ No Rust, pipeline, or config changes expected.
 - [x] Gallery labels readable; alt-path notes readable on ~390px
 - [x] P2 card borders/radii align and secondary copy remains readable
 - [x] P2 desktop + mobile headless screenshots reviewed
+- [x] P3 desktop recommendation tracks and image variety verified
+- [ ] P4 builder/source hierarchy verified
+- [ ] P5 retry and accessible map region verified
+- [ ] P6 focused detail tests pass
+- [ ] P7 stale-code deletion verified
 - [x] No new buyer-facing internal jargon
 - [x] Frontend TypeScript build clean
 
