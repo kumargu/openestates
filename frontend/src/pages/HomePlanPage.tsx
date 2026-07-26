@@ -154,10 +154,6 @@ export function HomePlanPage() {
               activeYear={activeYear}
               buyWins={buyWins}
               advantage={advantage}
-              paymentSchedule={projection.paymentSchedule}
-              possessionDate={projection.possessionDate}
-              constructionDateSource={projection.constructionDateSource}
-              isUnderConstruction={projection.possessionMonth > inputs.purchaseYear * 12}
             />
 
             <PlanAssumptionRail

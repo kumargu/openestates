@@ -481,18 +481,6 @@
   color: var(--plan-buy-deep);
 }
 
-.home-plan-verdict__construction {
-  max-width: 62ch;
-  margin: 0.65rem 0 0;
-  padding: 0.65rem 0.8rem;
-  border-left: 3px solid var(--plan-payoff);
-  border-radius: 0 0.55rem 0.55rem 0;
-  color: var(--plan-muted);
-  background: rgba(196, 137, 58, 0.08);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
 /* ── View tabs (primary navigation) ─────────────────────────────────────── */
 
 .home-plan-view-tabs {
