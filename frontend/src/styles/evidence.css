@@ -575,8 +575,8 @@
   align-items: center;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.08));
-  border-radius: 14px;
+  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--detail-card-radius, 14px);
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-text, #1a1a1a);
   text-align: left;
@@ -795,8 +795,8 @@
 .nearby-plate {
   margin-bottom: 1rem;
   padding: 1.15rem 1.15rem 1rem;
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.06));
-  border-radius: 14px;
+  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.06));
+  border-radius: var(--detail-card-radius, 14px);
   background: rgba(255, 255, 255, 0.92);
 }
 
@@ -1297,8 +1297,8 @@
   --ev-icon-wash: rgba(243, 232, 218, 0.72);
   --ev-icon-border: rgba(50, 38, 30, 0.08);
   position: relative;
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.06));
-  border-radius: 14px;
+  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.06));
+  border-radius: var(--detail-card-radius, 14px);
   background: rgba(255, 255, 255, 0.9);
   overflow: hidden;
   transition: border-color 0.25s var(--ease-out, ease), box-shadow 0.25s var(--ease-out, ease),
@@ -1851,6 +1851,7 @@
 .alt-paths__caption .catalog-card__meta {
   display: -webkit-box;
   overflow: hidden;
+  color: var(--color-text-secondary, #666);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 1;
 }
@@ -1868,7 +1869,7 @@
   -webkit-line-clamp: 2;
   margin-left: auto;
   max-width: 58%;
-  color: #888;
+  color: var(--color-text-secondary, #666);
   font-size: 0.68rem;
   line-height: 1.35;
   text-align: right;

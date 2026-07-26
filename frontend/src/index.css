@@ -2705,8 +2705,8 @@ body {
   align-items: center;
   padding: 0;
   overflow: hidden;
-  border: 1px solid rgba(38, 35, 32, 0.09);
-  border-radius: 14px;
+  border: 1px solid var(--detail-card-border, rgba(38, 35, 32, 0.09));
+  border-radius: var(--detail-card-radius, 14px);
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-text);
   text-align: left;
@@ -2944,6 +2944,9 @@ body {
 
 /* --- Property page hero responsive --- */
 .property-decision-page {
+  --detail-card-border: var(--color-border);
+  --detail-card-radius: 14px;
+  max-width: 1380px;
   padding-top: 1.25rem;
 }
 
@@ -3083,7 +3086,7 @@ body {
 }
 
 .property-brief-price-row span {
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.86rem;
 }
 
@@ -3167,6 +3170,14 @@ body {
   display: grid;
   gap: 1rem;
   min-width: 0;
+}
+
+.property-decision-main > .nearby-plate,
+.property-decision-main > .area-trail,
+.property-decision-main > .market-trend,
+.property-decision-main > .evidence-stack,
+.property-decision-main > .alt-paths {
+  margin-bottom: 0;
 }
 
 .property-sticky-facts {
@@ -3466,8 +3477,8 @@ body {
   display: grid;
   gap: 0.85rem;
   padding: 0.95rem 1rem;
-  border: 1px solid rgba(38, 35, 32, 0.08);
-  border-radius: 14px;
+  border: 1px solid var(--detail-card-border, rgba(38, 35, 32, 0.08));
+  border-radius: var(--detail-card-radius, 14px);
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(252, 249, 245, 0.92));
 }
@@ -3499,7 +3510,7 @@ body {
 
 .builder-record__head p {
   margin: 0;
-  color: var(--color-text-muted);
+  color: var(--color-text-secondary);
   font-size: 0.74rem;
   line-height: 1.35;
   text-align: right;

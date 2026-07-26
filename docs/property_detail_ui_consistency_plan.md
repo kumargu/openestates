@@ -1,6 +1,6 @@
 # Property Detail UI Consistency — Implementation Plan
 
-**Status:** P0 + P1 implemented; P2 deferred
+**Status:** P0 + P1 + P2 implemented
 **Last updated:** 2026-07-26
 **Surface:** `/property/:id` (verified on `discovered-prestige-waterford-1bhk`)
 **Owners:** OpenEstates discovery / detail UI
@@ -50,8 +50,7 @@ This plan fixes those issues in passes. No backend, ranking, or DAG work.
 | P2.2 | Low | Narrow desktop content column | Slightly widen decision main / map plate |
 | P2.3 | Low | Low-contrast muted meta | Bump contrast on `/sqft`, empty builder, notes |
 
-**Implemented scope:** **P0 + P1**.
-**P2** remains an optional follow-up.
+**Implemented scope:** **P0 + P1 + P2**.
 
 ---
 
@@ -183,6 +182,8 @@ No Rust, pipeline, or config changes expected.
 - [x] Desktop map fills container (no half-blank tiles); pins remain sensible after resize
 - [x] Mobile: title wraps; tags wrap; dock does not cover content
 - [x] Gallery labels readable; alt-path notes readable on ~390px
+- [x] P2 card borders/radii align and secondary copy remains readable
+- [x] P2 desktop + mobile headless screenshots reviewed
 - [x] No new buyer-facing internal jargon
 - [x] Frontend TypeScript build clean
 
@@ -198,6 +199,6 @@ No Rust, pipeline, or config changes expected.
 
 ## 11. Implementation result
 
-P0 + P1 shipped in the working tree. The optional P2 card-language, desktop-width,
-and contrast polish remains deferred to avoid turning the reliability pass into a
-broader redesign.
+P0 + P1 + P2 shipped as separate commits. P2 standardizes detail-card geometry and
+section rhythm, slightly widens the large-screen canvas, and improves secondary-copy
+contrast without changing the information architecture.
