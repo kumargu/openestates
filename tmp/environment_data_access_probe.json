@@ -1,0 +1,746 @@
+{
+  "datasets": [
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Groundwater potential map for Bengaluru",
+      "organization": "Government of Karnataka",
+      "package_name": "bengaluru-groundwater-potential",
+      "query": "bengaluru groundwater potential",
+      "resources": [
+        {
+          "access": {
+            "content_length": 5841009,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 119,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/1dda919d-ff28-4aa9-90ce-bd18e708927b.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/1dda919d-ff28-4aa9-90ce-bd18e708927b.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Bengaluru Groundwater Potential Map",
+          "size": 5841009,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/1dda919d-ff28-4aa9-90ce-bd18e708927b.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        }
+      ],
+      "theme": "groundwater_potential",
+      "title": "Bengaluru Groundwater Potential"
+    },
+    {
+      "license_id": "cc-nc",
+      "license_title": "Creative Commons Non-Commercial (Any)",
+      "notes": "Groundwater Outlook of Bengaluru City - April 2025 Projections is a report from IISc authored by Prof. Lakshminarayana and Prof. Sekhar Muddu for BWSSB.",
+      "organization": "Bangalore Water Supply and Sewerage Board (BWSSB)",
+      "package_name": "groundwater-outlook-of-bengaluru-city-april-2025",
+      "query": "bengaluru groundwater potential",
+      "resources": [
+        {
+          "access": {
+            "content_length": 713157,
+            "content_type": "application/pdf",
+            "elapsed_ms": 87,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/32551941-ee4d-4bcb-8413-86a5a5936c16/resource/cd20c936-aef5-422b-9117-aaba6f92a99c/download/013503fa-f786-47f7-ad03-fa083cda11ec.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/32551941-ee4d-4bcb-8413-86a5a5936c16/resource/cd20c936-aef5-422b-9117-aaba6f92a99c/download/013503fa-f786-47f7-ad03-fa083cda11ec.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "CC-BY-NC-SA 4.0",
+          "name": "Groundwater Outlook of Bengaluru City - Interim Report - II - April 2025 Projections",
+          "size": 713157,
+          "source": "BWSSB",
+          "url": "https://data.opencity.in/dataset/32551941-ee4d-4bcb-8413-86a5a5936c16/resource/cd20c936-aef5-422b-9117-aaba6f92a99c/download/013503fa-f786-47f7-ad03-fa083cda11ec.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "groundwater_potential",
+      "title": "Groundwater Outlook of Bengaluru City - April 2025"
+    },
+    {
+      "license_id": null,
+      "license_title": null,
+      "notes": null,
+      "organization": "Department of Mines and Geology (DMG)",
+      "package_name": "status-of-groundwater-quality",
+      "query": "bengaluru groundwater potential",
+      "resources": [
+        {
+          "access": {
+            "content_length": 12439583,
+            "content_type": "application/pdf",
+            "elapsed_ms": 107,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/73594f09-2624-43d2-9e0f-d4584ce9e5e9/resource/b3f2e560-3db1-41e7-9221-8f73f4449d36/download/c99f65c9-2fbd-4e95-9c90-1d7929f37924.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/73594f09-2624-43d2-9e0f-d4584ce9e5e9/resource/b3f2e560-3db1-41e7-9221-8f73f4449d36/download/c99f65c9-2fbd-4e95-9c90-1d7929f37924.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "Status of groundwater quality in Bangalore: Conducted by the Department of Mines and Geology, Gover",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/73594f09-2624-43d2-9e0f-d4584ce9e5e9/resource/b3f2e560-3db1-41e7-9221-8f73f4449d36/download/c99f65c9-2fbd-4e95-9c90-1d7929f37924.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "groundwater_potential",
+      "title": "Status of groundwater quality"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Maps of stormwater drains in Bengaluru under BBMP area.\r\nIncludes primary, secondary and tertiary SWDs.",
+      "organization": "Bruhat Bengaluru Mahanagara Palike (BBMP)",
+      "package_name": "bengaluru-stormwater-drains-maps",
+      "query": "bengaluru stormwater drains",
+      "resources": [
+        {
+          "access": {
+            "content_length": 494239,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 85,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/114758e9-c356-46e0-afdb-e1d52f972863/download/03eea514-d4bf-4cd9-8c7b-f904b1ea83f2.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/114758e9-c356-46e0-afdb-e1d52f972863/download/03eea514-d4bf-4cd9-8c7b-f904b1ea83f2.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Bengaluru Primary Stormwater Drains Map - 2022",
+          "size": 494239,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/114758e9-c356-46e0-afdb-e1d52f972863/download/03eea514-d4bf-4cd9-8c7b-f904b1ea83f2.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        },
+        {
+          "access": {
+            "content_length": 1262361,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 86,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/4b26cd1b-7956-418d-92e4-35275caf547a/download/7033efa5-2382-4e4a-8884-5715698eac71.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/4b26cd1b-7956-418d-92e4-35275caf547a/download/7033efa5-2382-4e4a-8884-5715698eac71.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Bengaluru Secondary Stormwater Drains Map - 2022",
+          "size": 1262361,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/4b26cd1b-7956-418d-92e4-35275caf547a/download/7033efa5-2382-4e4a-8884-5715698eac71.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        },
+        {
+          "access": {
+            "content_length": 24737864,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 82,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/aa20362c-9769-46dc-9a88-c100504f6d4e/download/79494624-2682-4f31-a0e5-2fa26b867304.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/aa20362c-9769-46dc-9a88-c100504f6d4e/download/79494624-2682-4f31-a0e5-2fa26b867304.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Bengaluru Tertiary Stormwater Drains Map 2022",
+          "size": 24737864,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/fc97e05c-c54b-44e9-8d98-7663ee887922/resource/aa20362c-9769-46dc-9a88-c100504f6d4e/download/79494624-2682-4f31-a0e5-2fa26b867304.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        }
+      ],
+      "theme": "stormwater_drains",
+      "title": "Bengaluru Stormwater Drains Maps"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Documents about storm-water drains remodeling in Bengaluru in 2006 and 2008.\r\nThe plans were eventually dropped",
+      "organization": "Bruhat Bengaluru Mahanagara Palike (BBMP)",
+      "package_name": "bengaluru-stormwater-drains-remodeling-2006-08",
+      "query": "bengaluru stormwater drains",
+      "resources": [
+        {
+          "access": {
+            "content_length": 11184856,
+            "content_type": "application/pdf",
+            "elapsed_ms": 83,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/f09316a3-2de7-4e68-b011-60cccf9a0098/download/a1b7000a-b5b0-4de5-ba37-93e3ef84f451.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/f09316a3-2de7-4e68-b011-60cccf9a0098/download/a1b7000a-b5b0-4de5-ba37-93e3ef84f451.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "Detailed Project Report for Remodeling Stormwater Drains in Rajarajeshwarinagar Zone - 2008",
+          "size": 11184856,
+          "source": "BBMP",
+          "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/f09316a3-2de7-4e68-b011-60cccf9a0098/download/a1b7000a-b5b0-4de5-ba37-93e3ef84f451.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 12798313,
+            "content_type": "application/pdf",
+            "elapsed_ms": 136,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/df70c4a8-bb76-460c-a45a-911fca38c7d6/download/42d0ce7e-93c4-4c5b-aee6-973db8d9f384.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/df70c4a8-bb76-460c-a45a-911fca38c7d6/download/42d0ce7e-93c4-4c5b-aee6-973db8d9f384.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "DPR - Remodeling of Storm Water Drains in Vrishabhavathi Main Valley 2006 ",
+          "size": 12798313,
+          "source": "BBMP",
+          "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/df70c4a8-bb76-460c-a45a-911fca38c7d6/download/42d0ce7e-93c4-4c5b-aee6-973db8d9f384.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 11622745,
+            "content_type": "application/pdf",
+            "elapsed_ms": 88,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/1ef48c36-2c43-4ace-80ea-e55d794f4b7a/download/41fdbc5b-ae72-4e69-b03c-a1266603e17d.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/1ef48c36-2c43-4ace-80ea-e55d794f4b7a/download/41fdbc5b-ae72-4e69-b03c-a1266603e17d.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "DPR - Remodeling of Storm Water Drains in Challaghatta Valley 2006",
+          "size": 11622745,
+          "source": "BBMP",
+          "url": "https://data.opencity.in/dataset/45fbb5fe-29f2-41fd-b095-853a4749287b/resource/1ef48c36-2c43-4ace-80ea-e55d794f4b7a/download/41fdbc5b-ae72-4e69-b03c-a1266603e17d.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "stormwater_drains",
+      "title": "Bengaluru - Stormwater Drains Remodeling - 2006-08"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Wetlands in Karnataka and Bengaluru Urban.\r\nWetlands include - lakes, rivers, streams, man-made tanks, islands, salt pans among others.",
+      "organization": "Government of Karnataka",
+      "package_name": "wetlands-of-karnataka-and-bengaluru-urban",
+      "query": "bengaluru lakes wetlands",
+      "resources": [
+        {
+          "access": {
+            "content_length": 49541468,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 188,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/f791a357-ccaf-458e-9287-d22076050900/download/7a85800b-ff53-4e12-8e51-b9cd2b816717.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/f791a357-ccaf-458e-9287-d22076050900/download/7a85800b-ff53-4e12-8e51-b9cd2b816717.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Karnataka Wetlands Map",
+          "size": 49541468,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/f791a357-ccaf-458e-9287-d22076050900/download/7a85800b-ff53-4e12-8e51-b9cd2b816717.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        },
+        {
+          "access": {
+            "content_length": 725558,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 92,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/8f61888f-94c0-488f-bbdc-c7b160161458/download/5b8dca1e-1ded-4ad2-8cd9-3cea2cd0cfbd.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/8f61888f-94c0-488f-bbdc-c7b160161458/download/5b8dca1e-1ded-4ad2-8cd9-3cea2cd0cfbd.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Bengaluru Urban Wetlands Map",
+          "size": 725558,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/69d28d30-b11d-49a7-9ff0-0d4f7d881522/resource/8f61888f-94c0-488f-bbdc-c7b160161458/download/5b8dca1e-1ded-4ad2-8cd9-3cea2cd0cfbd.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        }
+      ],
+      "theme": "lakes_wetlands",
+      "title": "Wetlands of Karnataka and Bengaluru Urban"
+    },
+    {
+      "license_id": null,
+      "license_title": null,
+      "notes": null,
+      "organization": "Academic or Research Institution",
+      "package_name": "bengaluru-lakes-research-reports",
+      "query": "bengaluru lakes wetlands",
+      "resources": [
+        {
+          "access": {
+            "content_length": 69091,
+            "content_type": "application/pdf",
+            "elapsed_ms": 98,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/660fd20e-fe4c-444c-acd2-c5cf804df5ec/download/121e0d80-c12b-4cbc-9f23-ac76d87d4656.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/660fd20e-fe4c-444c-acd2-c5cf804df5ec/download/121e0d80-c12b-4cbc-9f23-ac76d87d4656.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "Report - Legal framework for lakes and wetlands",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/660fd20e-fe4c-444c-acd2-c5cf804df5ec/download/121e0d80-c12b-4cbc-9f23-ac76d87d4656.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 2452324,
+            "content_type": "application/pdf",
+            "elapsed_ms": 83,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/b1e9d1fc-3512-40dd-9e01-29af38d33c2c/download/316ebd28-d2b5-4e3e-aa7d-381680a133b5.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/b1e9d1fc-3512-40dd-9e01-29af38d33c2c/download/316ebd28-d2b5-4e3e-aa7d-381680a133b5.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "Vanishing lakes - A study of Bangalore City (2009)",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/b1e9d1fc-3512-40dd-9e01-29af38d33c2c/download/316ebd28-d2b5-4e3e-aa7d-381680a133b5.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 69091,
+            "content_type": "application/pdf",
+            "elapsed_ms": 87,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/f4eede2b-7f9b-4acf-9d21-46054987df92/download/6e0b5e0e-7264-4024-b634-e2228220805c.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/f4eede2b-7f9b-4acf-9d21-46054987df92/download/6e0b5e0e-7264-4024-b634-e2228220805c.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "CSE - Legal, Institutional and Technical Framework for Lake/Wetland Protection (2013)",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/a29db36b-ba1f-4fb6-b140-d460460e39ab/resource/f4eede2b-7f9b-4acf-9d21-46054987df92/download/6e0b5e0e-7264-4024-b634-e2228220805c.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "lakes_wetlands",
+      "title": "Bengaluru Lakes - Research Reports"
+    },
+    {
+      "license_id": null,
+      "license_title": null,
+      "notes": null,
+      "organization": "Academic or Research Institution",
+      "package_name": "energy-and-wetlands-research-documents",
+      "query": "bengaluru lakes wetlands",
+      "resources": [
+        {
+          "access": {
+            "content_length": 15047175,
+            "content_type": "application/pdf",
+            "elapsed_ms": 87,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8cdb3ff2-9308-4603-9b6f-02d726ab5759/download/4ad89228-3b82-498c-b1c4-5064927e6f40.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8cdb3ff2-9308-4603-9b6f-02d726ab5759/download/4ad89228-3b82-498c-b1c4-5064927e6f40.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "Energy & Wetlands Research Group - Pathetic Status of Wetlands in Bangalore (2015)",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8cdb3ff2-9308-4603-9b6f-02d726ab5759/download/4ad89228-3b82-498c-b1c4-5064927e6f40.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 8820740,
+            "content_type": "application/pdf",
+            "elapsed_ms": 90,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8c3d7eed-700b-4700-a93f-5aed33037dae/download/3e8b7d00-9541-4c57-89c8-a478d81f002d.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8c3d7eed-700b-4700-a93f-5aed33037dae/download/3e8b7d00-9541-4c57-89c8-a478d81f002d.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "ENVIS Technical Report 85 January 2015 Vanishing Lakes Interconnectivity & Violations in Valley Zon",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/8c3d7eed-700b-4700-a93f-5aed33037dae/download/3e8b7d00-9541-4c57-89c8-a478d81f002d.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 6570756,
+            "content_type": "application/pdf",
+            "elapsed_ms": 84,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/9e00b15a-1d9b-4456-9736-92729e653f60/download/3f2b2a97-a6c8-4750-8669-045c66100454.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/9e00b15a-1d9b-4456-9736-92729e653f60/download/3f2b2a97-a6c8-4750-8669-045c66100454.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": null,
+          "name": "Indian Institute of Science Energy and Wetlands Research Group: ENVIS Technical Report (06/2015)",
+          "size": null,
+          "source": null,
+          "url": "https://data.opencity.in/dataset/431e673e-0d93-40d4-addf-8a6d53e7f851/resource/9e00b15a-1d9b-4456-9736-92729e653f60/download/3f2b2a97-a6c8-4750-8669-045c66100454.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "lakes_wetlands",
+      "title": "Energy and Wetlands Research Documents"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Locations of common flooding points in Bengaluru Urban.",
+      "organization": "Bruhat Bengaluru Mahanagara Palike (BBMP)",
+      "package_name": "flooding-locations-in-bengaluru-urban",
+      "query": "bengaluru flood waterlogging",
+      "resources": [
+        {
+          "access": {
+            "content_length": 106139,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 79,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/a7d8a01f-1fbc-41e1-85f0-f15ea16b2d27/download/6b3c63b0-f461-4e9c-a2c2-006f734c5b41.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/a7d8a01f-1fbc-41e1-85f0-f15ea16b2d27/download/6b3c63b0-f461-4e9c-a2c2-006f734c5b41.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Map of Locations Vulnerable to Flooding in Bengaluru Urban",
+          "size": 106139,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/a7d8a01f-1fbc-41e1-85f0-f15ea16b2d27/download/6b3c63b0-f461-4e9c-a2c2-006f734c5b41.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        },
+        {
+          "access": {
+            "content_length": 22370,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 88,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/d90fe768-caba-4c6e-b6b5-a75acd5e88a9/download/00fb1229-dcfd-4f59-813f-885e0c629add.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/d90fe768-caba-4c6e-b6b5-a75acd5e88a9/download/00fb1229-dcfd-4f59-813f-885e0c629add.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "Flood Prone Locations Map",
+          "size": 22370,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/d90fe768-caba-4c6e-b6b5-a75acd5e88a9/download/00fb1229-dcfd-4f59-813f-885e0c629add.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        },
+        {
+          "access": {
+            "content_length": 40900,
+            "content_type": "application/vnd.google-earth.kml+xml",
+            "elapsed_ms": 82,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/62ceac3b-f6e2-4dd1-ae9f-be80b1f2fda8/download/8e87a2fc-e014-4c6e-81f1-d5cb4db57a46.kml",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/62ceac3b-f6e2-4dd1-ae9f-be80b1f2fda8/download/8e87a2fc-e014-4c6e-81f1-d5cb4db57a46.kml"
+          },
+          "dag_role": "spatial_feature_snapshot",
+          "format": "KML",
+          "license_id": "Public Domain",
+          "name": "BBMP Low Lying Areas",
+          "size": 40900,
+          "source": "KSRSAC",
+          "url": "https://data.opencity.in/dataset/b03218ea-4b7c-4fa9-ab67-b9054d7ecc4c/resource/62ceac3b-f6e2-4dd1-ae9f-be80b1f2fda8/download/8e87a2fc-e014-4c6e-81f1-d5cb4db57a46.kml",
+          "usable_for_dag": true,
+          "usage_notes": "Parse into normalized feature Parquet, then join to entities offline."
+        }
+      ],
+      "theme": "flood_waterlogging",
+      "title": "Flooding Locations in Bengaluru Urban"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Reports on the audit conducted by BBMP on underpasses in the city.",
+      "organization": "Bruhat Bengaluru Mahanagara Palike (BBMP)",
+      "package_name": "bbmp-underpasses-audit-reports-2023",
+      "query": "bengaluru flood waterlogging",
+      "resources": [
+        {
+          "access": {
+            "content_length": 1636499,
+            "content_type": "application/pdf",
+            "elapsed_ms": 91,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/c53619d2-b20c-427d-9e34-f5638599e65c/download/0102faf2-cabc-46e4-b063-7b6c94a50538.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/c53619d2-b20c-427d-9e34-f5638599e65c/download/0102faf2-cabc-46e4-b063-7b6c94a50538.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "Report on KR Circle Underpass Flooding",
+          "size": 1636499,
+          "source": "BBMP",
+          "url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/c53619d2-b20c-427d-9e34-f5638599e65c/download/0102faf2-cabc-46e4-b063-7b6c94a50538.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 4462396,
+            "content_type": "application/pdf",
+            "elapsed_ms": 99,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/3bc30859-8b9c-4868-a788-463e9ae09cab/download/c304bc4e-43a3-4765-9360-dbb4b2285a6e.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/3bc30859-8b9c-4868-a788-463e9ae09cab/download/c304bc4e-43a3-4765-9360-dbb4b2285a6e.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "BBMP Audit Report on 14 Underpasses in Bengaluru - 2023",
+          "size": 4462396,
+          "source": "BBMP",
+          "url": "https://data.opencity.in/dataset/668c76f9-53fe-4642-9e8c-c8d190bd7329/resource/3bc30859-8b9c-4868-a788-463e9ae09cab/download/c304bc4e-43a3-4765-9360-dbb4b2285a6e.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "flood_waterlogging",
+      "title": "BBMP - Underpasses Audit Reports 2023"
+    },
+    {
+      "license_id": "other-pd",
+      "license_title": "Other (Public Domain)",
+      "notes": "Report from the World Bank on the Karnataka Water Security and Resilience Program 2025.\r\nThe Program supports the state government with a loan of 426M USD (Rs. 3621 Cr) to achieve water security and resilience through three results areas (RA):\r\nRA1: Through a multi-agency approach, RA1 will incentivize BBMP to strengthen and fully integrate SWDs with lakes to create climate-resilient balancing reservoirs to dynamically retain and release water for groundwater recharge, recreation, and green zones along with storm flood management.\r\nRA2: Strengthening institutions and integrated planning. RA2 incentivizes integrated planning and institutional strengthening and reforms of disaster risk governance. The integrated planning involves water audits for 16 sub-basins across Karnataka, a comprehensive water security plan for  the greater Bengaluru, and detailed sub-catchment flood management plans for Bengaluru informed by advanced flood modelling.\r\nRA3: Enhancing financial capabilities and resources of key institutions. RA3 seeks to strengthen the financing sustainability of BWSSB and BBMP. It will incentivize the improvement of BWSSB\u2019s cost recovery through enhanced operational efficiencies, including energy efficiency, smart water meters for large volume consumers, and NRW reduction.",
+      "organization": "Government of Karnataka",
+      "package_name": "karnataka-water-security-and-resilience-program",
+      "query": "bengaluru flood waterlogging",
+      "resources": [
+        {
+          "access": {
+            "content_length": 264101,
+            "content_type": "application/pdf",
+            "elapsed_ms": 82,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/9e7b63c0-1949-46d9-b3c9-97b05aaeb302/download/ee080eb6-66b6-47d0-9a82-9a7480cc9add.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/9e7b63c0-1949-46d9-b3c9-97b05aaeb302/download/ee080eb6-66b6-47d0-9a82-9a7480cc9add.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "Program Information Document - January 2025",
+          "size": 264101,
+          "source": "World Bank",
+          "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/9e7b63c0-1949-46d9-b3c9-97b05aaeb302/download/ee080eb6-66b6-47d0-9a82-9a7480cc9add.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 1464695,
+            "content_type": "application/pdf",
+            "elapsed_ms": 82,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/61f7c13c-21e3-4c2d-88d3-168488f6a219/download/5e92a15b-1820-4d33-b2ea-137e81aaf6f5.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/61f7c13c-21e3-4c2d-88d3-168488f6a219/download/5e92a15b-1820-4d33-b2ea-137e81aaf6f5.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "Environment and Social Assessment",
+          "size": 1464695,
+          "source": "World Bank",
+          "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/61f7c13c-21e3-4c2d-88d3-168488f6a219/download/5e92a15b-1820-4d33-b2ea-137e81aaf6f5.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        },
+        {
+          "access": {
+            "content_length": 490793,
+            "content_type": "application/pdf",
+            "elapsed_ms": 86,
+            "error": null,
+            "final_url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/2578ef98-d69f-405c-9269-1447716e1915/download/48f51b2b-4985-4ca9-99cc-d115d5df8f70.pdf",
+            "ok": true,
+            "sample_kind": null,
+            "status": 200,
+            "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/2578ef98-d69f-405c-9269-1447716e1915/download/48f51b2b-4985-4ca9-99cc-d115d5df8f70.pdf"
+          },
+          "dag_role": "supporting_report",
+          "format": "PDF",
+          "license_id": "Public Domain",
+          "name": "Integrated Fiduciary Systems Assessment - March 2025",
+          "size": 490793,
+          "source": "World Bank",
+          "url": "https://data.opencity.in/dataset/d74ff824-fa87-443f-98f3-ee498769ac4c/resource/2578ef98-d69f-405c-9269-1447716e1915/download/48f51b2b-4985-4ca9-99cc-d115d5df8f70.pdf",
+          "usable_for_dag": false,
+          "usage_notes": "Use for provenance or manual review; not a direct spatial join input."
+        }
+      ],
+      "theme": "flood_waterlogging",
+      "title": "Karnataka Water Security and Resilience Program"
+    }
+  ],
+  "failures": [],
+  "generated_at": "2026-07-24T10:58:34Z",
+  "landing_pages": {
+    "bhuvan": {
+      "content_length": 14995,
+      "content_type": "text/html; charset=utf-8",
+      "elapsed_ms": 286,
+      "error": null,
+      "final_url": "https://bhuvan.nrsc.gov.in/ngmaps",
+      "ok": true,
+      "sample_kind": null,
+      "status": 200,
+      "url": "https://bhuvan.nrsc.gov.in/"
+    },
+    "cgwb": {
+      "content_length": null,
+      "content_type": null,
+      "elapsed_ms": 92,
+      "error": "URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1010)>",
+      "final_url": null,
+      "ok": false,
+      "sample_kind": null,
+      "status": null,
+      "url": "https://cgwb.gov.in/"
+    },
+    "india_wris": {
+      "content_length": 8834,
+      "content_type": "text/html",
+      "elapsed_ms": 295,
+      "error": null,
+      "final_url": "https://indiawris.gov.in/wris/",
+      "ok": true,
+      "sample_kind": null,
+      "status": 200,
+      "url": "https://indiawris.gov.in/"
+    }
+  },
+  "open_city_api": "https://data.opencity.in/api/3/action/package_search",
+  "summary": {
+    "blocked_resources": 0,
+    "dag_usable_resources": 9,
+    "dataset_count": 11,
+    "failure_count": 0,
+    "landing_pages_ok": {
+      "bhuvan": true,
+      "cgwb": false,
+      "india_wris": true
+    },
+    "reachable_resources": 25,
+    "resource_formats": {
+      "KML": 9,
+      "PDF": 16
+    },
+    "theme_counts": {
+      "flood_waterlogging": 3,
+      "groundwater_potential": 3,
+      "lakes_wetlands": 3,
+      "stormwater_drains": 2
+    }
+  }
+}

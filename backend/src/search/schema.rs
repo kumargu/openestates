@@ -413,15 +413,13 @@ pub fn registry() -> &'static SearchSchemaConfig {
     static REGISTRY: OnceLock<SearchSchemaConfig> = OnceLock::new();
     REGISTRY.get_or_init(|| {
         let mut config = load_search_schema_config();
-        config
-            .theme_layers
-            .sort_by(|left, right| left.rank.cmp(&right.rank));
+        config.theme_layers.sort_by_key(|layer| layer.rank);
         config
             .positive_preference_patterns
-            .sort_by(|left, right| left.rank.cmp(&right.rank));
+            .sort_by_key(|pattern| pattern.rank);
         config
             .negative_preference_patterns
-            .sort_by(|left, right| left.rank.cmp(&right.rank));
+            .sort_by_key(|pattern| pattern.rank);
         config
     })
 }

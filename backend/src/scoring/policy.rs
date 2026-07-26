@@ -389,7 +389,7 @@ fn fact_belongs_to_group(fact_key: &str, group: &str) -> bool {
 
 fn score_price_value(price_per_sqft: u64, area_median_ppsf: Option<u64>) -> f64 {
     let Some(median) = area_median_ppsf.filter(|median| *median > 0) else {
-        return (price_per_sqft > 0).then_some(0.5).unwrap_or(0.0);
+        return if price_per_sqft > 0 { 0.5 } else { 0.0 };
     };
     if price_per_sqft == 0 {
         return 0.0;

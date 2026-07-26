@@ -419,6 +419,7 @@ fn fact_numeric_value(fact: &SkillFactRecord) -> Result<f64, ProjectEnrichmentAs
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn append_fact(
     entity_id: &str,
     fact_key: &str,

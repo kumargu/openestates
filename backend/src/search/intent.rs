@@ -144,6 +144,7 @@ fn detect_area(q: &str, excluded_areas: &[String]) -> Option<String> {
         }
     }
     best.map(|(name, _)| name.to_string())
+        .or_else(|| super::area_alias::resolve_area_with_tantivy(q, excluded_areas))
 }
 
 fn detect_excluded_areas(q: &str) -> Vec<String> {
@@ -277,10 +278,9 @@ fn parse_single_amount(token: &str) -> Option<u64> {
         (stripped, "l")
     } else if let Some(stripped) = token.strip_suffix("lakh") {
         (stripped, "l")
-    } else if let Some(stripped) = token.strip_suffix('l') {
-        (stripped, "l")
     } else {
-        return None;
+        let stripped = token.strip_suffix('l')?;
+        (stripped, "l")
     };
 
     let num: f64 = num_part.parse().ok()?;
@@ -680,6 +680,14 @@ mod tests {
     #[test]
     fn test_parse_bhk() {
         let intent = parse_intent("3bhk in whitefield");
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    }
+
+    #[test]
+    fn test_area_typo_resolves_through_tantivy_alias_index() {
+        let intent = parse_intent("3bhk kadudgi under 2cr");
+
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.area.as_deref(), Some("Whitefield"));
     }

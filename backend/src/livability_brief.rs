@@ -336,7 +336,7 @@ fn compose_operating_block(
 
     let lifecycle_flag = derive_lifecycle_flag(input);
     let opener = match lifecycle_flag.as_deref() {
-        Some(flag) if flag == "livability-first" => format!(
+        Some("livability-first") => format!(
             "{} is best understood as a livability-first gated community rather than just a price-per-sqft asset.",
             input.society_name
         ),

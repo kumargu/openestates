@@ -406,7 +406,7 @@ impl<'a> SearchEngine<'a> {
 
 fn relaxation_attempts(intent: &SearchIntent) -> Vec<(SearchIntent, Vec<SearchRelaxation>)> {
     let mut attempts = Vec::new();
-    if intent.unsupported_inventory_types.len() > 0 {
+    if !intent.unsupported_inventory_types.is_empty() {
         return attempts;
     }
 

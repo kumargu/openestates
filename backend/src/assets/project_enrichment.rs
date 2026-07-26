@@ -1044,14 +1044,14 @@ fn validate_external_listing_input(
             "external listing snapshot date is empty".to_string(),
         ));
     }
-    if input.records.is_empty() {
-        if !input.source_watermarks.iter().any(|watermark| {
+    if input.records.is_empty()
+        && !input.source_watermarks.iter().any(|watermark| {
             watermark.source.ends_with("_empty") || watermark.source.ends_with("_skipped")
-        }) {
-            return Err(ProjectEnrichmentAssetError::InvalidInput(
-                "external listing snapshot is empty".to_string(),
-            ));
-        }
+        })
+    {
+        return Err(ProjectEnrichmentAssetError::InvalidInput(
+            "external listing snapshot is empty".to_string(),
+        ));
     }
     for record in &input.records {
         if record.entity_id.trim().is_empty() || record.source_name.trim().is_empty() {

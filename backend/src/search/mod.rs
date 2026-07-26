@@ -1,6 +1,8 @@
 pub mod analyzer;
+pub mod area_alias;
 pub mod engine;
 pub mod geo;
+pub mod guard;
 pub mod index;
 pub mod intent;
 pub mod resolver;
@@ -12,6 +14,7 @@ pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchLayerTiming, SearchRecallDiagnostics,
     SearchRelaxation,
 };
+pub use guard::{guard_search_query, no_results_guidance, SearchGuidance};
 pub use index::SearchIndex;
 pub use intent::SearchIntent;
 #[cfg(feature = "fastembed")]
@@ -151,6 +154,9 @@ pub struct SearchResponse {
     /// Deterministic relaxations applied after exact constraints produced no results.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub relaxations: Vec<SearchRelaxation>,
+    /// Early guardrail guidance for vague, unsupported, or off-topic queries.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub search_guidance: Option<SearchGuidance>,
     /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub discovery_status: Option<String>,

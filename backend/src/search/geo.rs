@@ -674,7 +674,7 @@ pub(crate) fn haversine_km(
     latitude_b: f64,
     longitude_b: f64,
 ) -> f64 {
-    const EARTH_RADIUS_KM: f64 = 6_371.0088;
+    const EARTH_RADIUS_KM: f64 = 6_371.008_8;
     let lat1 = latitude_a.to_radians();
     let lat2 = latitude_b.to_radians();
     let delta_lat = (latitude_b - latitude_a).to_radians();

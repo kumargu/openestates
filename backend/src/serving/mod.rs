@@ -9,6 +9,7 @@ pub mod loader;
 pub mod materializer;
 pub mod parquet;
 pub mod projection;
+pub mod proximity;
 pub mod tantivy_index;
 pub mod types;
 
@@ -23,6 +24,7 @@ pub use parquet::{
     read_search_metadata_parquet, write_embeddings_parquet, ParquetReadError,
 };
 pub use projection::{GoogleReviewEvidence, ProjectedFact, SocietyFactProjection};
+pub use proximity::{derive_proximity_records, DerivedProximityRecords};
 pub use tantivy_index::{
     hydrate_tantivy_index, TantivyIndexError, TantivyRecallHit, TantivyRecallIndex,
 };
