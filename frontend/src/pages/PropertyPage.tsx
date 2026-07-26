@@ -362,23 +362,10 @@ export function PropertyPage() {
             excludeKinds={evidenceExcludeKinds}
           />
 
-          {data.builder_portfolio ? (
-            <section className="property-evidence-section">
-              <BuilderRecordPanel portfolio={data.builder_portfolio} />
-            </section>
-          ) : isKnownText(p.builder_name) && (
-            <section className="property-evidence-section">
-              <div className="builder-record">
-                <div className="builder-record__head">
-                  <div>
-                    <span>Builder</span>
-                    <h2>{p.builder_name}</h2>
-                  </div>
-                  <p>No other tracked projects yet</p>
-                </div>
-              </div>
-            </section>
-          )}
+          <BuilderSection
+            portfolio={data.builder_portfolio}
+            builderName={p.builder_name}
+          />
 
           {(recommendationStatus === "pending"
             || recommendationBranches.length
@@ -396,6 +383,28 @@ export function PropertyPage() {
   );
 }
 
+function BuilderSection({
+  portfolio,
+  builderName,
+}: {
+  portfolio?: BuilderPortfolio | null;
+  builderName?: string | null;
+}) {
+  const name = portfolio?.builder_name
+    ?? (isKnownText(builderName) ? builderName : null);
+  if (!name) return null;
+
+  return (
+    <section className="property-evidence-section" aria-labelledby="builder-record-title">
+      <div className="property-section-heading">
+        <span>Builder</span>
+        <h2 id="builder-record-title">{name}</h2>
+      </div>
+      {portfolio && <BuilderRecordPanel portfolio={portfolio} />}
+    </section>
+  );
+}
+
 function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
   const revocations = portfolio.revocations == null
     ? "—"
@@ -403,16 +412,10 @@ function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
   const projects = portfolio.projects.slice(0, 4);
 
   return (
-    <section className="builder-record" aria-label="Builder record">
-      <div className="builder-record__head">
-        <div>
-          <span>Builder</span>
-          <h2>{portfolio.builder_name}</h2>
-        </div>
-        <p>
-          {portfolio.rera_registered_projects}/{portfolio.tracked_projects} with RERA
-        </p>
-      </div>
+    <div className="builder-record" aria-label="Builder record">
+      <p className="builder-record__coverage">
+        {portfolio.rera_registered_projects} of {portfolio.tracked_projects} projects RERA registered
+      </p>
 
       <div className="builder-record__stats" role="list">
         <div role="listitem">
@@ -468,6 +471,6 @@ function BuilderRecordPanel({ portfolio }: { portfolio: BuilderPortfolio }) {
           })}
         </div>
       )}
-    </section>
+    </div>
   );
 }
