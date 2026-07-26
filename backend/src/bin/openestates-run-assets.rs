@@ -315,13 +315,12 @@ async fn current_source_entities(
             mapping.alias_entity_id.as_deref(),
             Some(mapping.project_key.as_str()),
         ];
-        let selected = selected_entity_ids.is_empty()
-            || identifiers
-                .iter()
-                .flatten()
-                .fold(false, |matched, identifier| {
-                    unmatched.remove(*identifier) || matched
-                });
+        let mut selected = selected_entity_ids.is_empty();
+        if !selected {
+            for identifier in identifiers.iter().flatten() {
+                selected = unmatched.remove(*identifier) || selected;
+            }
+        }
         if !selected {
             continue;
         }
