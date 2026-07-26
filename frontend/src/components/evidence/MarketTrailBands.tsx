@@ -342,7 +342,7 @@ export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
     <section className="market-trend" aria-labelledby="market-trend-title">
       <button
         type="button"
-        className={`market-trend__tile${open ? " is-open" : ""}`}
+        className={`detail-action-tile market-trend__tile${open ? " is-open" : ""}`}
         aria-expanded={open}
         aria-controls="market-trend-panel"
         onClick={() => setOpen((current) => !current)}

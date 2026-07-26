@@ -218,7 +218,7 @@ function EvidenceFold({
 
   return (
     <div
-      className={`ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density}${open ? " ev-fold--open" : ""}`}
+      className={`detail-action-tile ev-fold ev-fold--${constellation} ev-fold--variant-${variant} ev-fold--density-${presentation.density}${open ? " ev-fold--open" : ""}`}
     >
       <span className="ev-fold__spine" aria-hidden="true" />
       <button
@@ -289,9 +289,8 @@ function hasRenderableContent(section: EvidenceSection): boolean {
 }
 
 export function EvidenceStack({ evidence, excludeKinds = [] }: StackProps) {
-  const excluded = new Set(excludeKinds);
-
   const folds = useMemo(() => {
+    const excluded = new Set(excludeKinds);
     const sections = evidence?.sections ?? [];
     return [...sections]
       .filter((section) => !excluded.has(section.kind))

@@ -91,7 +91,7 @@ export function ApproachRoadTrail({ sections }: Props) {
     <section className="area-trail" aria-labelledby="area-trail-title">
       <button
         type="button"
-        className="area-trail__tile"
+        className="detail-action-tile area-trail__tile"
         aria-haspopup="dialog"
         onClick={openTrail}
       >

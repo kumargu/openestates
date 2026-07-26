@@ -561,6 +561,30 @@
   margin-top: 0.5rem;
 }
 
+/* Shared geometry for compact detail-page action and evidence tiles. */
+
+.detail-action-tile {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--detail-tile-height, 5.75rem);
+  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.08));
+  border-radius: var(--detail-card-radius, 14px);
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--color-text, #1a1a1a);
+  box-shadow: none;
+  font: inherit;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.detail-action-tile:hover:not(.is-open):not(.ev-fold--open) {
+  border-color: var(--color-border-hover, rgba(0, 0, 0, 0.12));
+  background: #fff;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.05);
+}
+
 /* Approach road — compact tile with an on-demand visual trail. */
 
 .area-trail {
@@ -569,24 +593,13 @@
 
 .area-trail__tile {
   display: grid;
-  width: 100%;
   grid-template-columns: 8.5rem minmax(0, 1fr) auto;
   gap: 1rem;
   align-items: center;
   padding: 0;
   overflow: hidden;
-  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.08));
-  border-radius: var(--detail-card-radius, 14px);
-  background: rgba(255, 255, 255, 0.92);
-  color: var(--color-text, #1a1a1a);
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease;
-}
-
-.area-trail__tile:hover {
-  border-color: rgba(138, 109, 0, 0.28);
-  background: #fff;
 }
 
 .area-trail__tile:focus-visible,
@@ -597,7 +610,7 @@
 
 .area-trail__preview {
   display: block;
-  height: 6.75rem;
+  height: calc(var(--detail-tile-height, 5.75rem) - 2px);
   overflow: hidden;
   background: #e8e2dc;
 }
@@ -1300,7 +1313,7 @@
 
 .evidence-stack__rows {
   display: grid;
-  gap: 0.7rem;
+  gap: 1rem;
 }
 
 @media (max-width: 640px) {
@@ -1315,17 +1328,7 @@
   --ev-icon-wash: rgba(243, 232, 218, 0.72);
   --ev-icon-border: rgba(50, 38, 30, 0.08);
   position: relative;
-  border: 1px solid var(--detail-card-border, rgba(0, 0, 0, 0.06));
-  border-radius: var(--detail-card-radius, 14px);
-  background: rgba(255, 255, 255, 0.9);
   overflow: hidden;
-  transition: border-color 0.25s var(--ease-out, ease), box-shadow 0.25s var(--ease-out, ease),
-    transform 0.25s var(--ease-out, ease);
-}
-
-.ev-fold:hover {
-  border-color: var(--color-border-hover, rgba(0, 0, 0, 0.12));
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.05);
 }
 
 .ev-fold--open {
@@ -1347,6 +1350,7 @@
   align-items: center;
   gap: 0.7rem;
   width: 100%;
+  min-height: calc(var(--detail-tile-height, 5.75rem) - 2px);
   padding: 0.9rem 1rem 0.9rem 0.85rem;
   border: none;
   background: none;
@@ -1393,14 +1397,14 @@
 }
 
 .ev-fold__title {
-  font-size: 0.95rem;
-  font-weight: 650;
+  font-size: 1rem;
+  font-weight: 700;
   color: var(--color-text, #1a1a1a);
   line-height: 1.2;
 }
 
 .ev-fold__read {
-  font-size: 0.78rem;
+  font-size: 0.76rem;
   color: var(--color-text-secondary, #666);
   line-height: 1.35;
   overflow: hidden;
@@ -1975,12 +1979,7 @@
     gap: 0.7rem;
   }
 
-  .area-trail__preview {
-    height: 5.5rem;
-  }
-
   .market-trend__preview {
-    height: 5.5rem;
     padding: 0.75rem;
   }
 
