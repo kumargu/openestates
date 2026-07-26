@@ -359,6 +359,8 @@ export function PropertyPage() {
           <EvidenceStack
             key={id}
             evidence={data.evidence}
+            rera={data.rera}
+            googleReviews={data.external_reviews}
             excludeKinds={evidenceExcludeKinds}
           />
 

@@ -1715,8 +1715,7 @@
   font-style: italic;
 }
 
-.ev-water-story,
-.ev-rera-story {
+.ev-water-story {
   margin: 0.25rem 1rem 0.85rem 1.6rem;
 }
 
@@ -1758,15 +1757,13 @@
   font-weight: 820;
 }
 
-.ev-water-story__legend,
-.ev-rera-story__step div div {
+.ev-water-story__legend {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
 }
 
-.ev-water-story__legend span,
-.ev-rera-story__step div div span {
+.ev-water-story__legend span {
   min-width: 0;
   padding: 0.16rem 0.48rem;
   border-radius: 7px;
@@ -1778,42 +1775,93 @@
   overflow-wrap: anywhere;
 }
 
-.ev-rera-story {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
-  gap: 0.55rem;
+.rera-project-facts {
+  margin: 0.2rem 1rem 0.9rem;
 }
 
-.ev-rera-story__step {
+.rera-project-facts__grid {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.55rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 1.25rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.rera-project-facts__group {
   min-width: 0;
-  padding: 0.65rem;
-  border-radius: 10px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.75), rgba(247, 243, 240, 0.74));
-  border: 1px solid var(--color-border, rgba(0, 0, 0, 0.06));
+  padding: 0.8rem 0;
+  border-bottom: 1px solid var(--color-border);
 }
 
-.ev-rera-story__marker {
+.rera-project-facts__group h3 {
+  margin: 0 0 0.45rem;
+  color: var(--color-text-muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.rera-project-facts__group dl {
+  margin: 0;
+}
+
+.rera-project-facts__group dl > div {
   display: grid;
-  place-items: center;
-  width: 1.35rem;
-  height: 1.35rem;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--ev-spine) 14%, white);
-  color: var(--ev-spine);
-  font-size: 0.68rem;
-  font-weight: 850;
+  grid-template-columns: minmax(6.6rem, 0.8fr) minmax(0, 1.2fr);
+  gap: 0.75rem;
+  padding: 0.28rem 0;
 }
 
-.ev-rera-story__step b {
-  display: block;
-  margin-bottom: 0.32rem;
-  color: var(--color-text, #1a1a1a);
-  font-size: 0.8rem;
-  line-height: 1.2;
+.rera-project-facts__group dt,
+.rera-project-facts__group dd {
+  min-width: 0;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.rera-project-facts__group dt {
+  color: var(--color-text-muted);
+}
+
+.rera-project-facts__group dd {
+  margin: 0;
+  color: var(--color-text);
+  font-weight: 680;
+  overflow-wrap: anywhere;
+}
+
+.rera-project-facts__group dd.is-positive {
+  color: var(--color-positive);
+}
+
+.rera-project-facts__group dd.is-watch {
+  color: var(--color-warning);
+}
+
+.rera-project-facts__group dd.is-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 600;
+}
+
+.rera-project-facts__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  padding-top: 0.65rem;
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+}
+
+.rera-project-facts__footer a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  color: var(--color-text-secondary);
+  font-weight: 700;
+  text-decoration: none;
 }
 
 @media (max-width: 720px) {
@@ -1854,8 +1902,12 @@
   }
 
   .ev-water-story,
-  .ev-rera-story {
+  .rera-project-facts {
     margin-left: 1rem;
+  }
+
+  .rera-project-facts__grid {
+    grid-template-columns: 1fr;
   }
 }
 
