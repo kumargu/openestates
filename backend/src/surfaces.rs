@@ -135,7 +135,6 @@ pub struct SceneRelation {
     pub edge_type: String,
     pub relation_class: String,
     pub direct: bool,
-    pub chainable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub distance_m: Option<u32>,
     pub confidence: f32,
@@ -354,7 +353,6 @@ pub fn build_surface_scene_with_focus(
                 edge_type: relation_edge_type(layer_rule),
                 relation_class: layer_rule.relation_class.clone(),
                 direct: true,
-                chainable: layer_rule.chainable,
                 distance_m: candidate.distance_m,
                 confidence: candidate.confidence,
                 receipt_ids: vec![receipt_id.clone()],
@@ -1630,8 +1628,6 @@ mod tests {
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
                     include_related_society_facts: false,
-                    chainable: false,
-                    direct_only: true,
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -1667,7 +1663,6 @@ mod tests {
         );
         assert_eq!(scene.relations[0].relation_class, "risk_externality");
         assert!(scene.relations[0].direct);
-        assert!(!scene.relations[0].chainable);
         assert_eq!(scene.receipts[0].fact_key, "stormwater_drain_nearby");
         assert!(scene.receipts[0].claim.contains("Varthur Rajakaluve"));
         assert!(!scene.receipts[0]
@@ -1740,8 +1735,6 @@ mod tests {
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
                     include_related_society_facts: false,
-                    chainable: false,
-                    direct_only: true,
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -1838,8 +1831,6 @@ mod tests {
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
                     include_related_society_facts: false,
-                    chainable: false,
-                    direct_only: true,
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -1954,8 +1945,6 @@ mod tests {
                     show_review_metrics: None,
                     include_name_markers: Vec::new(),
                     include_related_society_facts: true,
-                    chainable: true,
-                    direct_only: false,
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2036,8 +2025,6 @@ mod tests {
                     show_review_metrics: Some(false),
                     include_name_markers: Vec::new(),
                     include_related_society_facts: false,
-                    chainable: false,
-                    direct_only: true,
                     enabled_by_default: true,
                     rank: Some(1),
                 }],
@@ -2127,8 +2114,6 @@ mod tests {
             show_review_metrics: None,
             include_name_markers: Vec::new(),
             include_related_society_facts: false,
-            chainable: false,
-            direct_only: false,
             enabled_by_default: true,
             rank: Some(1),
         };
@@ -2155,8 +2140,6 @@ mod tests {
             show_review_metrics: None,
             include_name_markers: Vec::new(),
             include_related_society_facts: false,
-            chainable: false,
-            direct_only: true,
             enabled_by_default: true,
             rank: Some(1),
         };

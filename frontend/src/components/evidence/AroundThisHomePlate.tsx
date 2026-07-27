@@ -344,7 +344,7 @@ function AroundThisHomePlateInner({
       <div className="nearby-plate__layers" role="toolbar" aria-label="Nearby story">
         {layers.map((layer) => {
           const on = story.kind === "layer" && story.layer === layer;
-          const label = layerLabel(layer);
+          const label = layerLabel(layer, context);
           const iconOnly = layer === "metro"
             || layer === "schools"
             || layer === "hospitals";
@@ -446,7 +446,7 @@ function AroundThisHomePlateInner({
                           {compactPlaceLabel(place.name)}
                         </span>
                         <span className="nearby-plate__nearest-meta">
-                          {layerLabel(place.layer)}
+                          {layerLabel(place.layer, context)}
                           {typeof place.distance_km === "number"
                             ? ` · ${place.distance_km.toFixed(1)} km`
                             : ""}

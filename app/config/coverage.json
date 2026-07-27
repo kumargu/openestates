@@ -103,11 +103,6 @@
       "path": "app/config/dag/source_adapters/reddit_theme.json",
       "role": "RedditTheme adapter — concern_taxonomy signal map, max confidence 0.45",
       "primitive": "crawl"
-    },
-    {
-      "path": "app/config/product/evidence_sections.json",
-      "role": "Deprecated compatibility copy; use app/config/dag/evidence_sections.json",
-      "primitive": "legacy"
     }
   ],
   "belongs_in_lake_not_config": [

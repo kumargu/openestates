@@ -297,6 +297,7 @@ export type MapOverlayPolygon = {
 
 export type PropertyMapContext = {
   home: MapHomeAnchor;
+  layers?: MapLayerMeta[];
   places: MapPlacePin[];
   proof_focus?: ProofFocus;
   water?: MapWaterContext;
@@ -304,6 +305,13 @@ export type PropertyMapContext = {
   red_flag_lines?: MapOverlayLine[];
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
+};
+
+export type MapLayerMeta = {
+  id: string;
+  label: string;
+  rank?: number;
+  enabledByDefault?: boolean;
 };
 
 export type SurfaceSceneResponse = {
@@ -431,7 +439,6 @@ export type SceneRelation = {
   edgeType: string;
   relationClass: "access" | "risk_externality" | "context" | string;
   direct: boolean;
-  chainable: boolean;
   distanceM?: number;
   confidence: number;
   receiptIds: string[];

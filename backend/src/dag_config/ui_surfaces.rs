@@ -79,10 +79,6 @@ pub struct UiSurfaceLayerRule {
     pub include_name_markers: Vec<String>,
     #[serde(default, rename = "includeRelatedSocietyFacts")]
     pub include_related_society_facts: bool,
-    #[serde(default)]
-    pub chainable: bool,
-    #[serde(default, rename = "directOnly")]
-    pub direct_only: bool,
     #[serde(default = "default_enabled", rename = "enabledByDefault")]
     pub enabled_by_default: bool,
     #[serde(default)]
@@ -154,12 +150,6 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     surface.id, layer.id
                 )));
             }
-            if layer.direct_only && layer.chainable {
-                return Err(DagConfigError::InvalidConfig(format!(
-                    "surface {} layer {} cannot be both directOnly and chainable",
-                    surface.id, layer.id
-                )));
-            }
             if let (Some(max_items), Some(expanded_max_items)) =
                 (layer.max_items, layer.expanded_max_items)
             {
@@ -215,7 +205,7 @@ mod tests {
     }
 
     #[test]
-    fn risk_scene_layers_are_direct_only() {
+    fn risk_scene_layers_use_risk_relation_class() {
         let config = load_ui_surfaces().expect("ui_surfaces.json should load");
         for surface_id in ["approach_road", "flooding"] {
             let surface = config
@@ -224,8 +214,10 @@ mod tests {
                 .find(|surface| surface.id == surface_id)
                 .expect("risk surface exists");
             let scene = surface.scene.as_ref().expect("risk scene rules exist");
-            assert!(scene.layers.iter().all(|layer| layer.direct_only));
-            assert!(scene.layers.iter().all(|layer| !layer.chainable));
+            assert!(scene
+                .layers
+                .iter()
+                .all(|layer| layer.relation_class == "risk_externality"));
         }
     }
 }

@@ -43,6 +43,16 @@ export function propertyMapContextFromSurfaceScene(
       latitude: anchorCoordinates?.latitude,
       longitude: anchorCoordinates?.longitude,
     },
+    layers: scene.layers
+      .map((layer) => ({
+        id: layer.id,
+        label: layer.label,
+        rank: layer.rank,
+        enabledByDefault: layer.enabledByDefault,
+      }))
+      .sort((left, right) =>
+        (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER)
+        || left.label.localeCompare(right.label)),
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,
