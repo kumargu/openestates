@@ -19,6 +19,7 @@
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod area_tracker;
 mod evidence_sections;
 mod fact_registry;
 mod loader;
@@ -28,6 +29,12 @@ mod search_intent;
 mod source_display;
 mod ui_surfaces;
 
+pub use area_tracker::{
+    area_tracker_config, area_tracker_path, load_area_tracker_config,
+    load_area_tracker_config_from_path, AreaTrackerConfigFile, AreaTrackerFallbackConfig,
+    AreaTrackerMetricConfig, AreaTrackerMetricValueType, AreaTrackerSortConfig,
+    AreaTrackerSortDirection,
+};
 pub use evidence_sections::{
     evidence_sections_config, evidence_sections_path, load_evidence_sections,
     load_evidence_sections_from_path, ContextFactDefinition, EvidenceSectionDefinition,

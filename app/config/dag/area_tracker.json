@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "minimum_market_listing_count": 2,
+  "sort": {
+    "metric_id": "listing_count",
+    "direction": "desc"
+  },
+  "fallbacks": {
+    "primary_signal": "Market facts pending",
+    "top_builder": "",
+    "demand_score": 0.0
+  },
+  "metrics": [
+    {
+      "id": "listing_count",
+      "fact_key": "area.market.listing_count",
+      "label": "Listings",
+      "value_type": "count",
+      "api_field": "listing_count"
+    },
+    {
+      "id": "ready_inventory_count",
+      "fact_key": "area.market.ready_inventory_count",
+      "label": "Ready inventory",
+      "value_type": "count",
+      "api_field": "ready_to_move"
+    },
+    {
+      "id": "metro_supported_count",
+      "fact_key": "area.access.metro_supported_count",
+      "label": "Metro-supported homes",
+      "value_type": "count",
+      "api_field": "near_metro"
+    },
+    {
+      "id": "demand_score",
+      "fact_key": "area.discovery.demand_score",
+      "label": "Demand score",
+      "value_type": "score",
+      "api_field": "demand_score"
+    },
+    {
+      "id": "primary_signal",
+      "fact_key": "area.discovery.primary_signal",
+      "label": "Primary signal",
+      "value_type": "text",
+      "api_field": "primary_signal"
+    },
+    {
+      "id": "societies",
+      "fact_key": "area.market.society_count",
+      "label": "Societies",
+      "value_type": "count",
+      "api_field": "societies"
+    }
+  ]
+}
