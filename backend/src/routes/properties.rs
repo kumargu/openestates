@@ -73,12 +73,6 @@ pub struct PropertyDetail {
     /// `source_panels` below is retained as a compatibility field for the
     /// current frontend while it migrates.
     pub evidence: PropertyEvidenceResponse,
-    /// Backward-compatible high-level theme summary retained for existing UI/smoke consumers.
-    pub themes: LegacyThemes,
-    /// Backward-compatible compact tradeoff summary.
-    pub tradeoffs: LegacyTradeoffs,
-    /// Backward-compatible market activity summary.
-    pub market_activity: LegacyMarketActivity,
     pub society: Option<crate::models::Society>,
     pub area: Option<crate::models::AreaProfile>,
     /// Similar properties from locally precomputed society embeddings.
@@ -143,38 +137,6 @@ pub struct PropertyDetail {
     /// Schematic neighborhood plate: home pin, nearby POIs, optional water context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map_context: Option<crate::routes::property_map::PropertyMapContext>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct LegacyThemes {
-    pub value: LegacyTheme,
-    pub commute: LegacyTheme,
-    pub society: LegacyTheme,
-    pub greenery: LegacyTheme,
-    pub risk: LegacyTheme,
-    pub resale: LegacyTheme,
-    pub market: LegacyTheme,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct LegacyTheme {
-    pub label: String,
-    pub summary: String,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct LegacyTradeoffs {
-    pub headline: String,
-    pub strengths: Vec<String>,
-    pub cautions: Vec<String>,
-    pub components: Vec<String>,
-}
-
-#[derive(Serialize, Clone, Debug)]
-pub struct LegacyMarketActivity {
-    pub interest_level: Option<String>,
-    pub days_on_market: u32,
-    pub price_vs_median: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -2741,17 +2703,9 @@ pub async fn get_property(
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
         Some(state.map_overlays.as_ref()),
     );
-    let legacy_themes = build_legacy_themes(&property, area_price_range_low, area_price_range_high);
-    let legacy_tradeoffs = build_legacy_tradeoffs(&property, &legacy_themes);
-    let legacy_market_activity =
-        build_legacy_market_activity(&property, area_price_range_low, area_price_range_high);
-
     Ok(Json(PropertyDetail {
         entity_refs,
         evidence,
-        themes: legacy_themes,
-        tradeoffs: legacy_tradeoffs,
-        market_activity: legacy_market_activity,
         property,
         society,
         area,
@@ -2778,149 +2732,6 @@ pub async fn get_property(
         livability_brief,
         map_context,
     }))
-}
-
-fn build_legacy_themes(
-    property: &crate::models::Property,
-    area_price_range_low: Option<u64>,
-    area_price_range_high: Option<u64>,
-) -> LegacyThemes {
-    let value_score = match (
-        property.price_per_sqft,
-        area_price_range_low,
-        area_price_range_high,
-    ) {
-        (ppsf, Some(low), Some(high)) if ppsf > 0 && high > low => {
-            1.0 - ((ppsf.saturating_sub(low)) as f64 / (high - low) as f64).clamp(0.0, 1.0)
-        }
-        (ppsf, _, _) if ppsf > 0 => 0.55,
-        _ => 0.35,
-    };
-    let commute_score = score_from_inverse_minutes(property.metro_distance_mins, 20);
-    let society_score = property.society_quality_score.unwrap_or(0.55);
-    let greenery_score = property
-        .greenery_score
-        .or(property.open_space_score)
-        .unwrap_or(0.5);
-    let risk_score = 1.0
-        - [
-            property.litigation_risk,
-            property.waterlogging_risk_score,
-            property.airport_noise_score,
-        ]
-        .into_iter()
-        .flatten()
-        .fold(0.0, f64::max)
-        .clamp(0.0, 1.0);
-    let resale_score = property.resale_strength_score.unwrap_or(0.55);
-    let market_score = if property.price > 0 { 0.65 } else { 0.35 };
-
-    LegacyThemes {
-        value: legacy_theme(value_score, "Price position against nearby inventory."),
-        commute: legacy_theme(commute_score, "Metro and access signals from local facts."),
-        society: legacy_theme(society_score, "Society quality and operating evidence."),
-        greenery: legacy_theme(greenery_score, "Open-space and greenery signals."),
-        risk: legacy_theme(risk_score, "Lower risk score is better."),
-        resale: legacy_theme(resale_score, "Resale and demand strength."),
-        market: legacy_theme(market_score, "Listing and market activity context."),
-    }
-}
-
-fn build_legacy_tradeoffs(
-    property: &crate::models::Property,
-    themes: &LegacyThemes,
-) -> LegacyTradeoffs {
-    let mut strengths = Vec::new();
-    let mut cautions = Vec::new();
-    for (name, theme) in [
-        ("value", &themes.value),
-        ("commute", &themes.commute),
-        ("society", &themes.society),
-        ("greenery", &themes.greenery),
-        ("risk", &themes.risk),
-        ("resale", &themes.resale),
-        ("market", &themes.market),
-    ] {
-        if theme.label == "strong" || theme.label == "good" {
-            strengths.push(format!("{name}: {}", theme.summary));
-        } else if theme.label == "weak" {
-            cautions.push(format!("{name}: {}", theme.summary));
-        }
-    }
-    if strengths.is_empty() {
-        strengths.push("Evidence-backed profile is available.".to_string());
-    }
-    if property.price == 0 {
-        cautions.push("Price proof is not available yet.".to_string());
-    }
-    let components = strengths
-        .iter()
-        .chain(cautions.iter())
-        .cloned()
-        .collect::<Vec<_>>();
-
-    LegacyTradeoffs {
-        headline: format!("{} in {}", property.title, property.area),
-        strengths,
-        cautions,
-        components,
-    }
-}
-
-fn build_legacy_market_activity(
-    property: &crate::models::Property,
-    area_price_range_low: Option<u64>,
-    area_price_range_high: Option<u64>,
-) -> LegacyMarketActivity {
-    let price_vs_median = match (
-        property.price_per_sqft,
-        area_price_range_low,
-        area_price_range_high,
-    ) {
-        (ppsf, Some(low), Some(high)) if ppsf > 0 && high >= low => {
-            let median = (low + high) / 2;
-            if median == 0 {
-                None
-            } else if ppsf <= median {
-                Some("at_or_below_area_midpoint".to_string())
-            } else {
-                Some("above_area_midpoint".to_string())
-            }
-        }
-        _ => None,
-    };
-
-    LegacyMarketActivity {
-        interest_level: property.interest_level.clone(),
-        days_on_market: property.days_on_market,
-        price_vs_median,
-    }
-}
-
-fn legacy_theme(score: f64, summary: &str) -> LegacyTheme {
-    LegacyTheme {
-        label: score_label(score).to_string(),
-        summary: summary.to_string(),
-    }
-}
-
-fn score_label(score: f64) -> &'static str {
-    if score >= 0.8 {
-        "strong"
-    } else if score >= 0.6 {
-        "good"
-    } else if score >= 0.4 {
-        "mixed"
-    } else {
-        "weak"
-    }
-}
-
-fn score_from_inverse_minutes(minutes: u32, zero_at_minutes: u32) -> f64 {
-    if minutes == 0 {
-        return 0.5;
-    }
-    (1.0 - (minutes as f64 / zero_at_minutes.max(1) as f64)).clamp(0.0, 1.0)
 }
 
 fn external_reviews_for(

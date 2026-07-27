@@ -211,7 +211,6 @@ export type PropertyDetailResponse = {
     infrastructure_tags: string[];
     community_notes: string;
   } | null;
-  market_activity?: MarketActivityResponse;
   similar_properties: PropertyCard[];
   recommendation_branches?: RecommendationBranch[];
   recommendations?: RecommendationEnvelope;
@@ -545,12 +544,6 @@ export type SellerSummary = {
   documents_provided: string[];
 };
 
-export type PriceVsMedian = {
-  pct_diff: number;
-  verdict: string;
-  verdict_class: string;
-};
-
 export type TransparencyComponent = {
   label: string;
   score: number;
@@ -561,17 +554,6 @@ export type TransparencyScore = {
   overall: number;
   components: TransparencyComponent[];
   explainer: string;
-};
-
-export type MarketActivityResponse = {
-  interest_level: string;
-  saves_last_7d: number | null;
-  offers_last_7d: number | null;
-  days_on_market: number;
-  days_on_market_label: string;
-  interest_label: string;
-  area_trend_summary: string;
-  price_vs_median: PriceVsMedian | null;
 };
 
 export type AreaListItem = {

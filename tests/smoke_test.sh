@@ -163,30 +163,15 @@ if [[ -n "$FIRST_ID" ]]; then
     '.property.id != null' \
     "expected property.id"
 
-  check "Property detail has themes" \
-    "${BASE}/api/properties/${FIRST_ID}" \
-    '.themes | has("value", "commute", "society", "risk")' \
-    "expected themes with value, commute, society, risk"
-
-  check "Property detail has tradeoffs" \
-    "${BASE}/api/properties/${FIRST_ID}" \
-    '.tradeoffs | has("headline", "strengths", "cautions")' \
-    "expected tradeoffs with headline, strengths, cautions"
-
-  check "Property detail has market_activity" \
-    "${BASE}/api/properties/${FIRST_ID}" \
-    '.market_activity | has("interest_level", "days_on_market")' \
-    "expected market_activity with interest_level, days_on_market"
-
   check "Property detail has similar_properties array" \
     "${BASE}/api/properties/${FIRST_ID}" \
     '.similar_properties | type == "array"' \
     "expected similar_properties array"
 
-  check "Theme labels are valid" \
+  check "Property detail omits legacy compatibility fields" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.themes.value.label | IN("strong", "good", "mixed", "weak")' \
-    "expected label in strong/good/mixed/weak"
+    '(. | has("themes") | not) and (. | has("tradeoffs") | not) and (. | has("market_activity") | not)' \
+    "expected legacy themes/tradeoffs/market_activity to be absent"
 
   check "Property evidence returns dynamic sections" \
     "${BASE}/api/properties/${FIRST_ID}/evidence" \
@@ -380,29 +365,29 @@ check "Search results sorted by score descending" \
   '[.results[].match_score] | . as $scores | ($scores == ($scores | sort | reverse))' \
   "expected results sorted by match_score desc"
 
-# ── Property Detail: Full Themes ──
+# ── Property Detail: Canonical Evidence ──
 echo ""
 echo "Property Detail (deep)"
 if [[ -n "$FIRST_ID" ]]; then
-  check "All 7 theme dimensions present" \
+  check "Detail evidence sections are sorted by priority" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.themes | has("value", "commute", "society", "greenery", "risk", "resale", "market")' \
-    "expected all 7 themes"
+    '.evidence.sections | map(.priority) as $p | ($p == ($p | sort))' \
+    "expected evidence sections sorted by priority"
 
-  check "Each theme has label and summary" \
+  check "Detail evidence exposes source lineage" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.themes | to_entries | all(.value | has("label", "summary"))' \
-    "expected each theme to have label and summary"
+    '.evidence.sections | all((.source_types | type == "array") and (.entity_ids | type == "array"))' \
+    "expected evidence sections to expose source_types and entity_ids"
 
-  check "Tradeoffs has components array" \
+  check "Detail source panels are structured when present" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.tradeoffs.components | type == "array"' \
-    "expected tradeoffs.components array"
+    '.source_panels | type == "array" and all(has("title", "items", "missing"))' \
+    "expected structured source_panels array"
 
-  check "Market activity has price_vs_median" \
+  check "Detail has recommendations envelope" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.market_activity | has("price_vs_median")' \
-    "expected price_vs_median field"
+    '.recommendations | has("status", "items")' \
+    "expected recommendations status and items"
 
   check "Property has society or null" \
     "${BASE}/api/properties/${FIRST_ID}" \
