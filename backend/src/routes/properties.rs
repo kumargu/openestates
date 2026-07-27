@@ -2844,6 +2844,19 @@ mod serving_state_tests {
     use crate::serving::{ServingFactRecord, ServingSearchMetadataRecord};
 
     #[test]
+    fn recommendation_cache_key_includes_policy_and_bundle_versions() {
+        let with_bundle = recommendation_cache_key("property-one", Some("bundle-v1"));
+        let without_bundle = recommendation_cache_key("property-one", None);
+
+        assert!(with_bundle.contains("property:property-one"));
+        assert!(with_bundle.contains("bundle:bundle-v1"));
+        assert_eq!(scoring_policy().version, 2);
+        assert!(with_bundle.contains(&format!("policy:{}", scoring_policy().version)));
+        assert!(with_bundle.contains(&format!("engine:{RECOMMENDATION_ENGINE_VERSION}")));
+        assert_ne!(with_bundle, without_bundle);
+    }
+
+    #[test]
     fn search_card_and_property_detail_project_the_same_current_review_facts() {
         let graph = legacy_graph();
         let property = property();

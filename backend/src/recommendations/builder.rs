@@ -10,7 +10,8 @@ use crate::routes::properties::{
 };
 use crate::scoring::{
     score_property_for_surface, scoring_policy, signal_score, CandidateScore, FactAvailability,
-    RecommendationBranchPolicy, ScoredSignal,
+    RecommendationBranchPolicy, RecommendationFallbackBranchPolicy,
+    RecommendationRecallChannelPolicy, RecommendationRecallPolicy, ScoredSignal,
 };
 use crate::serving::{LoadedServingBundle, TantivyRecallHit};
 
@@ -19,8 +20,6 @@ use super::branch::{
 };
 use super::snapshot::{summarize_evidence_sections, EvidenceSnapshot};
 
-const RECALL_LIMIT: usize = 80;
-const TANTIVY_RECALL_LIMIT: usize = 30;
 const RECOMMENDATION_SURFACE: &str = "recommendations";
 
 struct Candidate {
@@ -61,6 +60,8 @@ pub fn build_recommendation_branches(
         area_median_ppsf,
         RECOMMENDATION_SURFACE,
     );
+    let policy = scoring_policy();
+    let recall_policy = &policy.recommendation_recall;
     let candidates = recall_candidates(
         current,
         graph,
@@ -68,6 +69,7 @@ pub fn build_recommendation_branches(
         societies,
         serving_bundle,
         area_median_ppsf,
+        recall_policy,
     );
     if candidates.is_empty() {
         return Vec::new();
@@ -75,7 +77,7 @@ pub fn build_recommendation_branches(
 
     let mut branches = Vec::new();
     let mut used_ids = HashSet::new();
-    for branch_policy in &scoring_policy().recommendation_branches {
+    for branch_policy in ordered_branch_policies(&policy.recommendation_branches) {
         if let Some(branch) = pick_policy_branch(
             branch_policy,
             current,
@@ -89,7 +91,7 @@ pub fn build_recommendation_branches(
         }
     }
 
-    if branches.len() < 3 {
+    if recall_policy.fallback_branch.enabled && branches.len() < recall_policy.target_branch_count {
         fill_with_similar_tradeoffs(
             current,
             current_snapshot,
@@ -97,21 +99,17 @@ pub fn build_recommendation_branches(
             &candidates,
             &mut used_ids,
             &mut branches,
+            &recall_policy.fallback_branch,
+            recall_policy.target_branch_count,
         );
     }
 
-    branches.sort_by(|left, right| {
-        property_review_strength(&right.property)
-            .partial_cmp(&property_review_strength(&left.property))
-            .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| {
-                right
-                    .magnitude
-                    .partial_cmp(&left.magnitude)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
-    });
-    branches.truncate(6);
+    sort_branches(
+        &mut branches,
+        recall_policy,
+        &policy.recommendation_branches,
+    );
+    branches.truncate(recall_policy.branch_limit);
     branches
 }
 
@@ -122,29 +120,57 @@ fn recall_candidates(
     societies: &[Society],
     serving_bundle: Option<&LoadedServingBundle>,
     area_median_ppsf: Option<u64>,
+    recall_policy: &RecommendationRecallPolicy,
 ) -> Vec<Candidate> {
     let mut channels_by_id = HashMap::<String, Vec<RecallChannelHit>>::new();
+    let mut channel_counts = HashMap::<String, usize>::new();
 
     for property in properties {
         if property.id == current.id || !property.is_listable() {
             continue;
         }
-        if property.bhk == current.bhk && same_area(current, property) {
-            add_channel(&mut channels_by_id, &property.id, "same_area_bhk", 1.0);
-        }
-        if property.bhk == current.bhk && alias_area_match(&current.area, &property.area) {
-            add_channel(&mut channels_by_id, &property.id, "area_alias_bhk", 0.85);
-        }
-        if same_price_band(current, property) {
-            add_channel(&mut channels_by_id, &property.id, "price_band", 0.75);
-        }
-        if same_builder_family(current, property) {
-            add_channel(&mut channels_by_id, &property.id, "builder_family", 0.70);
+        for channel in recall_policy
+            .channels
+            .iter()
+            .filter(|channel| channel.enabled)
+        {
+            let matched = match channel.kind.as_str() {
+                "same_area_bhk" => property.bhk == current.bhk && same_area(current, property),
+                "area_alias_bhk" => {
+                    property.bhk == current.bhk && alias_area_match(&current.area, &property.area)
+                }
+                "price_band" => same_price_band(current, property),
+                "builder_family" => same_builder_family(current, property),
+                _ => false,
+            };
+            if matched {
+                add_configured_channel(
+                    &mut channels_by_id,
+                    &mut channel_counts,
+                    &property.id,
+                    channel,
+                    channel.score,
+                );
+            }
         }
     }
 
-    add_serving_graph_recall(current, properties, serving_bundle, &mut channels_by_id);
-    add_tantivy_recall(current, properties, serving_bundle, &mut channels_by_id);
+    add_serving_graph_recall(
+        current,
+        properties,
+        serving_bundle,
+        recall_policy,
+        &mut channels_by_id,
+        &mut channel_counts,
+    );
+    add_tantivy_recall(
+        current,
+        properties,
+        serving_bundle,
+        recall_policy,
+        &mut channels_by_id,
+        &mut channel_counts,
+    );
 
     let mut ordered = channels_by_id.into_iter().collect::<Vec<_>>();
     ordered.sort_by(|(left_id, left_channels), (right_id, right_channels)| {
@@ -156,7 +182,7 @@ fn recall_candidates(
 
     ordered
         .into_iter()
-        .take(RECALL_LIMIT)
+        .take(recall_policy.candidate_limit)
         .filter_map(|(id, channels)| {
             let property = properties.iter().find(|property| property.id == id)?;
             let card = overlay_serving_google_reviews(
@@ -196,18 +222,34 @@ fn add_serving_graph_recall(
     current: &Property,
     properties: &[Property],
     serving_bundle: Option<&LoadedServingBundle>,
+    recall_policy: &RecommendationRecallPolicy,
     channels_by_id: &mut HashMap<String, Vec<RecallChannelHit>>,
+    channel_counts: &mut HashMap<String, usize>,
 ) {
     let Some(bundle) = serving_bundle else {
         return;
     };
+    let channels = channels_for_kind(recall_policy, "serving_graph");
+    if channels.is_empty() {
+        return;
+    }
     let current_society = society_node_id(&current.society_id);
     let current_neighbors = bundle
         .edges
         .iter()
         .filter(|edge| edge.from_entity_id == current_society)
-        .filter(|edge| graph_recall_edge(&edge.edge_type))
-        .map(|edge| (edge.edge_type.as_str(), edge.to_entity_id.as_str()))
+        .filter_map(|edge| {
+            channels
+                .iter()
+                .find(|channel| graph_recall_edge(channel, &edge.edge_type))
+                .map(|channel| {
+                    (
+                        channel.id.as_str(),
+                        edge.edge_type.as_str(),
+                        edge.to_entity_id.as_str(),
+                    )
+                })
+        })
         .collect::<BTreeSet<_>>();
     if current_neighbors.is_empty() {
         return;
@@ -220,12 +262,27 @@ fn add_serving_graph_recall(
         .collect::<HashMap<_, _>>();
 
     for edge in &bundle.edges {
-        if edge.from_entity_id == current_society || !graph_recall_edge(&edge.edge_type) {
+        if edge.from_entity_id == current_society {
             continue;
         }
-        if current_neighbors.contains(&(edge.edge_type.as_str(), edge.to_entity_id.as_str())) {
-            if let Some(property_id) = society_to_property.get(&edge.from_entity_id) {
-                add_channel(channels_by_id, property_id, "serving_graph", 0.68);
+        for channel in &channels {
+            if !graph_recall_edge(channel, &edge.edge_type) {
+                continue;
+            }
+            if current_neighbors.contains(&(
+                channel.id.as_str(),
+                edge.edge_type.as_str(),
+                edge.to_entity_id.as_str(),
+            )) {
+                if let Some(property_id) = society_to_property.get(&edge.from_entity_id) {
+                    add_configured_channel(
+                        channels_by_id,
+                        channel_counts,
+                        property_id,
+                        channel,
+                        channel.score,
+                    );
+                }
             }
         }
     }
@@ -235,13 +292,24 @@ fn add_tantivy_recall(
     current: &Property,
     properties: &[Property],
     serving_bundle: Option<&LoadedServingBundle>,
+    recall_policy: &RecommendationRecallPolicy,
     channels_by_id: &mut HashMap<String, Vec<RecallChannelHit>>,
+    channel_counts: &mut HashMap<String, usize>,
 ) {
     let Some(bundle) = serving_bundle else {
         return;
     };
+    let channels = channels_for_kind(recall_policy, "tantivy_lexical");
+    if channels.is_empty() {
+        return;
+    }
     let query = recommendation_query(current);
-    let Ok(hits) = bundle.recall_index.search(&query, TANTIVY_RECALL_LIMIT) else {
+    let search_limit = channels
+        .iter()
+        .filter_map(|channel| channel.limit)
+        .max()
+        .unwrap_or(recall_policy.candidate_limit);
+    let Ok(hits) = bundle.recall_index.search(&query, search_limit) else {
         return;
     };
     let max_score = hits
@@ -254,7 +322,15 @@ fn add_tantivy_recall(
         let score = f64::from(hit.score.max(0.0) / max_score);
         for property_id in property_ids_for_tantivy_hit(&hit, properties) {
             if property_id != current.id {
-                add_channel(channels_by_id, &property_id, "tantivy_lexical", score);
+                for channel in &channels {
+                    add_configured_channel(
+                        channels_by_id,
+                        channel_counts,
+                        &property_id,
+                        channel,
+                        score * channel.score,
+                    );
+                }
             }
         }
     }
@@ -342,6 +418,8 @@ fn fill_with_similar_tradeoffs(
     candidates: &[Candidate],
     used_ids: &mut HashSet<String>,
     branches: &mut Vec<RecommendationBranch>,
+    fallback_policy: &RecommendationFallbackBranchPolicy,
+    target_branch_count: usize,
 ) {
     let mut remaining = candidates
         .iter()
@@ -355,12 +433,12 @@ fn fill_with_similar_tradeoffs(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
-    for candidate in remaining.into_iter().take(3) {
+    for candidate in remaining.into_iter().take(fallback_policy.max_items) {
         used_ids.insert(candidate.property.id.clone());
         branches.push(RecommendationBranch {
-            branch_id: "similar_tradeoff".to_string(),
-            lens: BranchLens::Proof,
-            headline: "Similar tradeoff".to_string(),
+            branch_id: fallback_policy.id.clone(),
+            lens: BranchLens::from_policy_lens(&fallback_policy.lens),
+            headline: fallback_policy.headline.clone(),
             property: candidate.card.clone(),
             contrast: best_available_contrast(current, current_score, candidate),
             tradeoff: tradeoff_for_candidate(current, current_score, candidate),
@@ -368,7 +446,7 @@ fn fill_with_similar_tradeoffs(
             channels: candidate.channels.clone(),
             magnitude: compass_magnitude(channel_strength(&candidate.channels) as f32 / 2.0),
         });
-        if branches.len() >= 3 {
+        if branches.len() >= target_branch_count {
             break;
         }
     }
@@ -491,6 +569,30 @@ fn add_channel(
     });
 }
 
+fn add_configured_channel(
+    channels_by_id: &mut HashMap<String, Vec<RecallChannelHit>>,
+    channel_counts: &mut HashMap<String, usize>,
+    property_id: &str,
+    channel: &RecommendationRecallChannelPolicy,
+    score: f64,
+) {
+    let already_present = channels_by_id
+        .get(property_id)
+        .is_some_and(|channels| channels.iter().any(|hit| hit.channel == channel.id));
+    if !already_present
+        && channel
+            .limit
+            .is_some_and(|limit| channel_counts.get(&channel.id).copied().unwrap_or(0) >= limit)
+    {
+        return;
+    }
+
+    add_channel(channels_by_id, property_id, &channel.id, score);
+    if !already_present {
+        *channel_counts.entry(channel.id.clone()).or_default() += 1;
+    }
+}
+
 fn channel_strength(channels: &[RecallChannelHit]) -> f64 {
     channels.iter().map(|channel| channel.score).sum::<f64>()
 }
@@ -538,11 +640,11 @@ fn property_review_strength(property: &PropertyCard) -> f64 {
     rating * 100.0 + f64::from(review_count + 1).log10() * 12.0
 }
 
-fn graph_recall_edge(edge_type: &str) -> bool {
-    matches!(
-        edge_type,
-        "in_area" | "served_by_road" | "near_place" | "built_by" | "near_transit"
-    )
+fn graph_recall_edge(channel: &RecommendationRecallChannelPolicy, edge_type: &str) -> bool {
+    channel
+        .edge_types
+        .iter()
+        .any(|configured| configured == edge_type)
 }
 
 fn recommendation_query(current: &Property) -> String {
@@ -566,4 +668,214 @@ fn normalize(value: &str) -> String {
         .filter(|ch| ch.is_ascii_alphanumeric())
         .flat_map(|ch| ch.to_lowercase())
         .collect()
+}
+
+fn channels_for_kind<'a>(
+    policy: &'a RecommendationRecallPolicy,
+    kind: &str,
+) -> Vec<&'a RecommendationRecallChannelPolicy> {
+    policy
+        .channels
+        .iter()
+        .filter(|channel| channel.enabled && channel.kind == kind)
+        .collect()
+}
+
+fn ordered_branch_policies(
+    policies: &[RecommendationBranchPolicy],
+) -> Vec<&RecommendationBranchPolicy> {
+    let mut ordered = policies.iter().enumerate().collect::<Vec<_>>();
+    ordered.sort_by_key(|(index, policy)| (policy.priority, *index));
+    ordered
+        .into_iter()
+        .map(|(_, policy)| policy)
+        .collect::<Vec<_>>()
+}
+
+fn sort_branches(
+    branches: &mut [RecommendationBranch],
+    recall_policy: &RecommendationRecallPolicy,
+    branch_policies: &[RecommendationBranchPolicy],
+) {
+    branches.sort_by(|left, right| {
+        for tie_breaker in &recall_policy.tie_breakers {
+            let ordering = match tie_breaker.as_str() {
+                "review_strength_desc" => property_review_strength(&right.property)
+                    .partial_cmp(&property_review_strength(&left.property))
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                "magnitude_desc" => right
+                    .magnitude
+                    .partial_cmp(&left.magnitude)
+                    .unwrap_or(std::cmp::Ordering::Equal),
+                "branch_priority_asc" => {
+                    branch_priority(&left.branch_id, recall_policy, branch_policies).cmp(
+                        &branch_priority(&right.branch_id, recall_policy, branch_policies),
+                    )
+                }
+                _ => std::cmp::Ordering::Equal,
+            };
+            if ordering != std::cmp::Ordering::Equal {
+                return ordering;
+            }
+        }
+        left.property.id.cmp(&right.property.id)
+    });
+}
+
+fn branch_priority(
+    branch_id: &str,
+    recall_policy: &RecommendationRecallPolicy,
+    branch_policies: &[RecommendationBranchPolicy],
+) -> u32 {
+    if branch_id == recall_policy.fallback_branch.id {
+        return u32::MAX;
+    }
+    branch_policies
+        .iter()
+        .find(|branch| branch.id == branch_id)
+        .map(|branch| branch.priority)
+        .unwrap_or(u32::MAX)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::KgEntityRefs;
+
+    #[test]
+    fn configured_channel_limits_are_enforced() {
+        let channel = RecommendationRecallChannelPolicy {
+            id: "same_area_bhk".to_string(),
+            kind: "same_area_bhk".to_string(),
+            enabled: true,
+            score: 0.5,
+            limit: Some(1),
+            edge_types: Vec::new(),
+        };
+        let mut channels_by_id = HashMap::new();
+        let mut channel_counts = HashMap::new();
+
+        add_configured_channel(
+            &mut channels_by_id,
+            &mut channel_counts,
+            "property-one",
+            &channel,
+            channel.score,
+        );
+        add_configured_channel(
+            &mut channels_by_id,
+            &mut channel_counts,
+            "property-two",
+            &channel,
+            channel.score,
+        );
+
+        assert!(channels_by_id.contains_key("property-one"));
+        assert!(!channels_by_id.contains_key("property-two"));
+    }
+
+    #[test]
+    fn disabled_recall_channels_are_not_executed() {
+        let mut policy = RecommendationRecallPolicy::default();
+        policy.channels = vec![RecommendationRecallChannelPolicy {
+            id: "same_area_bhk".to_string(),
+            kind: "same_area_bhk".to_string(),
+            enabled: false,
+            score: 1.0,
+            limit: None,
+            edge_types: Vec::new(),
+        }];
+
+        assert!(channels_for_kind(&policy, "same_area_bhk").is_empty());
+    }
+
+    #[test]
+    fn branch_priority_tie_breaker_comes_from_policy() {
+        let mut recall_policy = RecommendationRecallPolicy::default();
+        recall_policy.tie_breakers = vec!["branch_priority_asc".to_string()];
+        let branch_policies = vec![branch_policy("second", 2), branch_policy("first", 1)];
+        let mut branches = vec![
+            recommendation_branch("second", "property-second"),
+            recommendation_branch("first", "property-first"),
+        ];
+
+        sort_branches(&mut branches, &recall_policy, &branch_policies);
+
+        assert_eq!(branches[0].branch_id, "first");
+        assert_eq!(branches[1].branch_id, "second");
+    }
+
+    fn branch_policy(id: &str, priority: u32) -> RecommendationBranchPolicy {
+        RecommendationBranchPolicy {
+            id: id.to_string(),
+            primary_signal: "proof_strength".to_string(),
+            min_delta: 0.1,
+            headline: id.to_string(),
+            lens: "proof".to_string(),
+            priority,
+        }
+    }
+
+    fn recommendation_branch(branch_id: &str, property_id: &str) -> RecommendationBranch {
+        RecommendationBranch {
+            branch_id: branch_id.to_string(),
+            lens: BranchLens::Proof,
+            headline: branch_id.to_string(),
+            property: property_card(property_id),
+            contrast: "contrast".to_string(),
+            tradeoff: None,
+            evidence_delta: EvidenceDelta {
+                fact_count: 0,
+                gap_count: 0,
+                confidence_pct: 0,
+                fact_delta: 0,
+                gap_delta: 0,
+            },
+            channels: Vec::new(),
+            magnitude: 0.25,
+        }
+    }
+
+    fn property_card(id: &str) -> PropertyCard {
+        PropertyCard {
+            id: id.to_string(),
+            kg_entity_refs: KgEntityRefs {
+                property_entity_id: format!("property:{id}"),
+                society_entity_id: format!("society:{id}"),
+                area_entity_id: "area:test".to_string(),
+                builder_entity_id: None,
+                source_entity_ids: Vec::new(),
+            },
+            title: id.to_string(),
+            area: "area".to_string(),
+            price: 0,
+            price_per_sqft: 0,
+            bhk: 3,
+            sqft: 0,
+            carpet_area_sqft: 0,
+            super_builtup_sqft: 0,
+            society_name: "society".to_string(),
+            builder_name: "builder".to_string(),
+            hero_image: String::new(),
+            transparency_tags: Vec::new(),
+            description_summary: String::new(),
+            possession_status: String::new(),
+            metro_distance_mins: 0,
+            floor: 0,
+            total_floors: 0,
+            facing: String::new(),
+            google_rating: None,
+            google_review_count: None,
+            google_reviews_url: None,
+            society_land_acres: None,
+            open_space_pct: None,
+            units_per_acre: None,
+            root_source: None,
+            project_status: None,
+            project_status_display: None,
+            home_state_display: None,
+            builder_delivery_display: None,
+            data_freshness: None,
+        }
+    }
 }

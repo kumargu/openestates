@@ -93,6 +93,77 @@ pub struct RecommendationBranchPolicy {
     pub min_delta: f64,
     pub headline: String,
     pub lens: String,
+    #[serde(default)]
+    pub priority: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationRecallPolicy {
+    #[serde(default = "default_recommendation_candidate_limit")]
+    pub candidate_limit: usize,
+    #[serde(default = "default_recommendation_branch_limit")]
+    pub branch_limit: usize,
+    #[serde(default = "default_recommendation_target_branch_count")]
+    pub target_branch_count: usize,
+    #[serde(default)]
+    pub channels: Vec<RecommendationRecallChannelPolicy>,
+    #[serde(default)]
+    pub fallback_branch: RecommendationFallbackBranchPolicy,
+    #[serde(default = "default_recommendation_tie_breakers")]
+    pub tie_breakers: Vec<String>,
+}
+
+impl Default for RecommendationRecallPolicy {
+    fn default() -> Self {
+        Self {
+            candidate_limit: default_recommendation_candidate_limit(),
+            branch_limit: default_recommendation_branch_limit(),
+            target_branch_count: default_recommendation_target_branch_count(),
+            channels: Vec::new(),
+            fallback_branch: RecommendationFallbackBranchPolicy::default(),
+            tie_breakers: default_recommendation_tie_breakers(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationRecallChannelPolicy {
+    pub id: String,
+    pub kind: String,
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_recommendation_channel_score")]
+    pub score: f64,
+    #[serde(default)]
+    pub limit: Option<usize>,
+    #[serde(default)]
+    pub edge_types: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RecommendationFallbackBranchPolicy {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_recommendation_fallback_id")]
+    pub id: String,
+    #[serde(default = "default_recommendation_fallback_headline")]
+    pub headline: String,
+    #[serde(default = "default_recommendation_fallback_lens")]
+    pub lens: String,
+    #[serde(default = "default_recommendation_fallback_max_items")]
+    pub max_items: usize,
+}
+
+impl Default for RecommendationFallbackBranchPolicy {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            id: default_recommendation_fallback_id(),
+            headline: default_recommendation_fallback_headline(),
+            lens: default_recommendation_fallback_lens(),
+            max_items: default_recommendation_fallback_max_items(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -111,6 +182,8 @@ pub struct ScoringPolicyFile {
     pub signals: Vec<ScoringSignalPolicy>,
     #[serde(default)]
     pub surfaces: ScoringSurfaces,
+    #[serde(default)]
+    pub recommendation_recall: RecommendationRecallPolicy,
     #[serde(default)]
     pub recommendation_branches: Vec<RecommendationBranchPolicy>,
 }
@@ -540,6 +613,8 @@ fn text_safety_score(text: &str) -> f64 {
 }
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
+    validate_recommendation_recall_policy(&policy.recommendation_recall)?;
+
     let signal_ids = policy
         .signals
         .iter()
@@ -552,6 +627,10 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
                 branch.id, branch.primary_signal
             )));
         }
+        validate_recommendation_lens(
+            &branch.lens,
+            &format!("recommendation branch {}", branch.id),
+        )?;
     }
 
     let registry = load_fact_registry_index()?;
@@ -578,6 +657,95 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
         }
     }
     Ok(())
+}
+
+fn validate_recommendation_recall_policy(
+    policy: &RecommendationRecallPolicy,
+) -> Result<(), DagConfigError> {
+    if policy.candidate_limit == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation_recall candidate_limit must be greater than zero".to_string(),
+        ));
+    }
+    if policy.branch_limit == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation_recall branch_limit must be greater than zero".to_string(),
+        ));
+    }
+    if policy.target_branch_count > policy.branch_limit {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation_recall target_branch_count cannot exceed branch_limit".to_string(),
+        ));
+    }
+
+    let mut channel_ids = BTreeSet::new();
+    for channel in &policy.channels {
+        if !channel_ids.insert(channel.id.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} is duplicated",
+                channel.id
+            )));
+        }
+        if !matches!(
+            channel.kind.as_str(),
+            "same_area_bhk"
+                | "area_alias_bhk"
+                | "price_band"
+                | "builder_family"
+                | "serving_graph"
+                | "tantivy_lexical"
+        ) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} has unsupported kind {}",
+                channel.id, channel.kind
+            )));
+        }
+        if !(0.0..=1.0).contains(&channel.score) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} score {} is outside 0..1",
+                channel.id, channel.score
+            )));
+        }
+        if channel.limit.is_some_and(|limit| limit == 0) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation recall channel {} limit must be greater than zero",
+                channel.id
+            )));
+        }
+    }
+
+    if policy.fallback_branch.max_items == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "recommendation fallback branch max_items must be greater than zero".to_string(),
+        ));
+    }
+    validate_recommendation_lens(
+        &policy.fallback_branch.lens,
+        "recommendation fallback branch",
+    )?;
+
+    for tie_breaker in &policy.tie_breakers {
+        if !matches!(
+            tie_breaker.as_str(),
+            "review_strength_desc" | "magnitude_desc" | "branch_priority_asc"
+        ) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "recommendation tie breaker {tie_breaker} is unsupported"
+            )));
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_recommendation_lens(lens: &str, context: &str) -> Result<(), DagConfigError> {
+    if matches!(lens, "proof" | "value" | "trust" | "commute") {
+        Ok(())
+    } else {
+        Err(DagConfigError::InvalidConfig(format!(
+            "{context} has unsupported lens {lens}"
+        )))
+    }
 }
 
 fn default_true() -> bool {
@@ -731,6 +899,36 @@ fn default_min_score_with_constraint_only() -> f64 {
 fn default_fact_coverage_threshold() -> f64 {
     25.0
 }
+fn default_recommendation_candidate_limit() -> usize {
+    80
+}
+fn default_recommendation_branch_limit() -> usize {
+    6
+}
+fn default_recommendation_target_branch_count() -> usize {
+    3
+}
+fn default_recommendation_channel_score() -> f64 {
+    1.0
+}
+fn default_recommendation_fallback_id() -> String {
+    "fallback".to_string()
+}
+fn default_recommendation_fallback_headline() -> String {
+    "Fallback".to_string()
+}
+fn default_recommendation_fallback_lens() -> String {
+    "proof".to_string()
+}
+fn default_recommendation_fallback_max_items() -> usize {
+    3
+}
+fn default_recommendation_tie_breakers() -> Vec<String> {
+    ["review_strength_desc", "magnitude_desc"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
 
 #[cfg(test)]
 mod tests {
@@ -741,11 +939,41 @@ mod tests {
         let policy = load_scoring_policy().expect("scoring policy should load");
         assert!(!policy.signals.is_empty());
         assert!(!policy.recommendation_branches.is_empty());
+        assert!(!policy.recommendation_recall.channels.is_empty());
         assert!(policy.missing_data.never_zero_fill);
     }
 
     #[test]
     fn missing_price_does_not_score_as_good_value() {
         assert_eq!(score_price_value(0, Some(10_000)), 0.0);
+    }
+
+    #[test]
+    fn recommendation_recall_policy_validates_channel_metadata() {
+        let mut policy = ScoringPolicyFile {
+            version: 1,
+            engine_version: "test".to_string(),
+            missing_data: MissingDataPolicy::default(),
+            search_ranking: SearchRankingPolicy::default(),
+            fact_groups: BTreeMap::new(),
+            runtime_fact_keys: Vec::new(),
+            signals: Vec::new(),
+            surfaces: ScoringSurfaces::default(),
+            recommendation_recall: RecommendationRecallPolicy::default(),
+            recommendation_branches: Vec::new(),
+        };
+        policy
+            .recommendation_recall
+            .channels
+            .push(RecommendationRecallChannelPolicy {
+                id: "bad_channel".to_string(),
+                kind: "hardcoded_magic".to_string(),
+                enabled: true,
+                score: 1.0,
+                limit: None,
+                edge_types: Vec::new(),
+            });
+
+        assert!(validate_policy(&policy).is_err());
     }
 }
