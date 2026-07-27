@@ -1,31 +1,22 @@
 import type {
-  MapNearbyLayer,
   MapOverlayLine,
   MapPlacePin,
   PropertyMapContext,
+  ProofFocus,
 } from "./types.ts";
 
 export type PlateScaleMode = "nearby" | "area";
 export type PlateStory =
-  | { kind: "essentials" }
-  | { kind: "layer"; layer: MapNearbyLayer }
+  | { kind: "layer"; layer: string }
   | { kind: "water" };
 
 export const PLATE_MAX_MAP_LABEL_LENGTH = 22;
-export const PLATE_LIST_LIMIT = 5;
-export const ESSENTIAL_LAYERS: MapNearbyLayer[] = ["metro", "schools", "hospitals"];
-export const NEARBY_LAYERS: MapNearbyLayer[] = [
-  "metro",
-  "schools",
-  "hospitals",
-  "tech",
-];
 
 /** Muted OSM basemap — no API key. */
 export const NEARBY_MAP_STYLE = "https://tiles.openfreemap.org/styles/positron";
 
 const NEARBY_RADIUS_STEPS_KM = [0.35, 0.5, 0.8, 1.2, 1.8, 2.5] as const;
-const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10] as const;
+const AREA_RADIUS_STEPS_KM = [3, 5, 8, 10, 15] as const;
 const CLUSTER_GAP_KM_NEARBY = 0.08;
 const CLUSTER_GAP_KM_AREA = 0.35;
 /** Keep markers inside the canvas, not glued to the ring edge. */
@@ -37,6 +28,7 @@ export function hasAroundThisHomePlate(context?: PropertyMapContext | null): boo
       context.places.length > 0
       || context.water
       || (context.metro_lines?.length ?? 0) > 0
+      || (context.red_flag_lines?.length ?? 0) > 0
     ),
   );
 }
@@ -86,7 +78,21 @@ export function compactPlaceLabel(name: string): string {
 }
 
 export function placeId(place: MapPlacePin, index = 0): string {
-  return place.place_entity_id ?? `${place.layer}-${place.name}-${index}`;
+  return place.feature_id ?? place.place_entity_id ?? `${place.layer}-${place.name}-${index}`;
+}
+
+export function placeMatchesProofFocus(place: MapPlacePin, focus?: ProofFocus | null): boolean {
+  if (!focus) return false;
+  if (place.layer !== focus.layerId) return false;
+  if (focus.featureId && place.feature_id === focus.featureId) return true;
+  if (focus.entityId && place.place_entity_id === focus.entityId) return true;
+  if (focus.matchedLabel && textContains(place.name, focus.matchedLabel)) return true;
+  if (focus.matchedValue && textContains(focus.matchedValue, place.name)) return true;
+  return false;
+}
+
+function textContains(value: string, needle: string): boolean {
+  return value.toLocaleLowerCase("en-IN").includes(needle.toLocaleLowerCase("en-IN"));
 }
 
 export function resolveHomeAnchor(context: PropertyMapContext): {
@@ -144,37 +150,55 @@ export function placesForStory(
     return [];
   }
 
-  if (story.kind === "layer") {
-    return context.places.filter((place) => place.layer === story.layer);
-  }
-
-  const picked: MapPlacePin[] = [];
-  for (const layer of ESSENTIAL_LAYERS) {
-    const nearest = context.places
-      .filter((place) => place.layer === layer)
-      .slice()
-      .sort((left, right) =>
-        (left.distance_km ?? Number.POSITIVE_INFINITY)
-        - (right.distance_km ?? Number.POSITIVE_INFINITY))[0];
-    if (nearest) picked.push(nearest);
-  }
-  return picked;
+  return context.places.filter((place) => place.layer === story.layer);
 }
 
 export function filterPlacesByScale(
   places: MapPlacePin[],
   scale: PlateScaleMode,
+  focus?: ProofFocus | null,
 ): MapPlacePin[] {
-  // Nearby stays tight like a Strava activity frame — not city-wide.
-  const maxKm = scale === "nearby" ? 1.5 : 10;
-  return places.filter((place) => (place.distance_km ?? 0) <= maxKm
+  const farthestCuratedKm = Math.max(
+    0,
+    ...places
+      .map((place) => place.distance_km)
+      .filter((value): value is number => typeof value === "number" && Number.isFinite(value)),
+  );
+  const maxKm = scale === "nearby" ? Math.max(1.5, Math.min(2.5, farthestCuratedKm)) : 15;
+  return places.filter((place) => placeMatchesProofFocus(place, focus)
+    || (place.distance_km ?? 0) <= maxKm
     || typeof place.distance_km !== "number");
+}
+
+export function scaleForStory(
+  story: PlateStory,
+  focus?: ProofFocus | null,
+  focusedPlaces: MapPlacePin[] = [],
+): PlateScaleMode {
+  if (story.kind === "water") return "area";
+  if (focus && story.layer === focus.layerId) {
+    const focusDistanceKm = typeof focus.distanceM === "number"
+      ? focus.distanceM / 1000
+      : focusedPlaces
+        .filter((place) => placeMatchesProofFocus(place, focus))
+        .map((place) => place.distance_km)
+        .find((distance): distance is number => typeof distance === "number");
+    const nearbyCapKm = NEARBY_RADIUS_STEPS_KM[NEARBY_RADIUS_STEPS_KM.length - 1];
+    if (typeof focusDistanceKm === "number" && focusDistanceKm > nearbyCapKm) {
+      return "area";
+    }
+  }
+  if (story.kind === "layer" && (story.layer === "metro" || story.layer === "tech" || story.layer === "red_flags")) {
+    return "area";
+  }
+  return "nearby";
 }
 
 export function metroStationsAroundHome(
   places: MapPlacePin[],
   home: { latitude: number; longitude: number },
   metroLines: MapOverlayLine[],
+  focus?: ProofFocus | null,
 ): MapPlacePin[] {
   if (places.length <= 2) return places;
 
@@ -212,12 +236,12 @@ export function metroStationsAroundHome(
   }
 
   if (!nearestSegment) {
-    return places
+    return includeFocusedPlaces(places
       .slice()
       .sort((left, right) =>
         (left.distance_km ?? Number.POSITIVE_INFINITY)
         - (right.distance_km ?? Number.POSITIVE_INFINITY))
-      .slice(0, 2);
+      .slice(0, 2), places, focus);
   }
 
   const segment = nearestSegment;
@@ -239,11 +263,27 @@ export function metroStationsAroundHome(
     .filter((item) => item.along >= 0)
     .sort((left, right) => Math.abs(left.along) - Math.abs(right.along))[0];
 
-  if (before && after) return [before.place, after.place];
-  return ranked
+  if (before && after) return includeFocusedPlaces([before.place, after.place], places, focus);
+  return includeFocusedPlaces(ranked
     .sort((left, right) => Math.abs(left.along) - Math.abs(right.along))
     .slice(0, 2)
-    .map((item) => item.place);
+    .map((item) => item.place), places, focus);
+}
+
+function includeFocusedPlaces(
+  selected: MapPlacePin[],
+  allPlaces: MapPlacePin[],
+  focus?: ProofFocus | null,
+): MapPlacePin[] {
+  if (!focus) return selected;
+  const focused = allPlaces.filter((place) => placeMatchesProofFocus(place, focus));
+  const merged = [...selected];
+  for (const place of focused) {
+    if (!merged.some((existing) => placeId(existing) === placeId(place))) {
+      merged.push(place);
+    }
+  }
+  return merged;
 }
 
 export function chooseRadiusKm(
@@ -251,6 +291,7 @@ export function chooseRadiusKm(
   scale: PlateScaleMode,
   home?: { latitude: number; longitude: number },
   overlayCoordinates: [number, number][] = [],
+  focus?: ProofFocus | null,
 ): number {
   const factDistances = places
     .map((place) => place.distance_km)
@@ -278,12 +319,13 @@ export function chooseRadiusKm(
     }
   }
 
-  const needed = Math.max(factFar, mapFar) * VIEWPORT_PADDING;
+  const focusFar = typeof focus?.distanceM === "number" ? focus.distanceM / 1000 : 0;
+  const needed = Math.max(factFar, mapFar, focusFar) * VIEWPORT_PADDING;
   const floor = scale === "nearby" ? 0.35 : 2;
-  const cap = scale === "nearby" ? 2.5 : 10;
-  const target = clamp(needed, floor, cap);
+  const cap = scale === "nearby" ? 2.5 : 15;
+  const target = focusFar > cap ? Math.max(floor, needed) : clamp(needed, floor, cap);
   const steps = scale === "nearby" ? NEARBY_RADIUS_STEPS_KM : AREA_RADIUS_STEPS_KM;
-  return steps.find((step) => step >= target) ?? steps[steps.length - 1];
+  return steps.find((step) => step >= target) ?? target;
 }
 
 export function zoomForRadiusKm(radiusKm: number): number {
@@ -302,7 +344,7 @@ export function zoomForRadiusKm(radiusKm: number): number {
 
 export function buildNumberedPlaces(
   places: MapPlacePin[],
-  limit = PLATE_LIST_LIMIT,
+  limit = places.length,
 ): NumberedPlace[] {
   const withCoords = places
     .filter(
@@ -310,9 +352,6 @@ export function buildNumberedPlaces(
         typeof place.latitude === "number" && typeof place.longitude === "number",
     )
     .slice()
-    .sort((left, right) =>
-      (left.distance_km ?? Number.POSITIVE_INFINITY)
-      - (right.distance_km ?? Number.POSITIVE_INFINITY))
     .slice(0, limit);
 
   return withCoords.map((place, index) => ({
@@ -371,8 +410,13 @@ export function buildPlateViewport(
   scale: PlateScaleMode,
   metroLines: MapOverlayLine[] = [],
   metroExtent: "full" | "nearest" = "full",
+  extraOverlayLines: MapOverlayLine[] = [],
+  focus?: ProofFocus | null,
 ): PlateViewport {
-  let overlayCoordinates = metroLines.flatMap((line) => line.coordinates);
+  let overlayCoordinates = [
+    ...metroLines.flatMap((line) => line.coordinates),
+    ...extraOverlayLines.flatMap((line) => line.coordinates),
+  ];
   if (metroExtent === "nearest" && overlayCoordinates.length > 1) {
     overlayCoordinates = [
       overlayCoordinates.reduce((nearest, candidate) =>
@@ -382,7 +426,7 @@ export function buildPlateViewport(
           : nearest),
     ];
   }
-  const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates);
+  const radiusKm = chooseRadiusKm(places, scale, home, overlayCoordinates, focus);
   return {
     center: home,
     radiusKm,
@@ -391,9 +435,15 @@ export function buildPlateViewport(
   };
 }
 
-export function availableLayers(context: PropertyMapContext): MapNearbyLayer[] {
-  const present = new Set(context.places.map((place) => place.layer));
-  return NEARBY_LAYERS.filter((layer) => present.has(layer));
+export function availableLayers(context: PropertyMapContext): string[] {
+  const layers: string[] = [];
+  for (const place of context.places) {
+    if (!layers.includes(place.layer)) layers.push(place.layer);
+  }
+  if ((context.red_flag_lines?.length ?? 0) > 0 && !layers.includes("red_flags")) {
+    layers.push("red_flags");
+  }
+  return layers;
 }
 
 export function layerLabel(layer: string): string {
@@ -406,7 +456,23 @@ export function layerLabel(layer: string): string {
       return "Hospitals";
     case "tech":
       return "Tech parks";
+    case "fitness":
+      return "Fitness";
+    case "parks":
+      return "Parks";
+    case "lakes":
+      return "Lakes";
+    case "breweries":
+      return "Breweries";
+    case "graveyards":
+      return "Burial grounds";
+    case "red_flags":
+      return "Red flags";
     default:
-      return layer;
+      return layer
+        .split(/[_-]+/)
+        .filter(Boolean)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(" ");
   }
 }

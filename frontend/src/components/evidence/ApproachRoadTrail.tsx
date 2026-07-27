@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { EvidenceSection } from "../../lib/types.ts";
 import { visibleEvidenceSections } from "../../lib/evidence.ts";
 
+/* eslint-disable react-refresh/only-export-components */
+
 type Props = {
   sections: EvidenceSection[];
 };

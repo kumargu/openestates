@@ -53,6 +53,8 @@ The product should make choosing easier, not make browsing endless. Design every
 ### Intent search is the moat
 Search should understand soft intent such as "quiet 3BHK near schools under 2.5Cr" and map it to structured dimensions: price, BHK, society, area, commute, school access, noise, traffic, builder quality, RERA, freshness, and source confidence.
 
+Domain vocabulary is expected, but it belongs in the ontology/config layer. Terms such as `near`, `acres`, `open space`, `hostel`, `tech park`, `graveyard`, or `lake buffer` should map to structured dimensions, fact keys, units, scoring hints, and source priorities through `app/config/dag/`. The search engine should rank generic evidence coverage and scores for those dimensions; it should not grow one-off branches for every new buyer phrase.
+
 ### Receipts beat claims
 Never show confident product language unless it is backed by DAG facts or a clearly marked derived computation from DAG facts. A good result explains itself with source lineage, freshness, and confidence.
 
@@ -145,6 +147,15 @@ Backend endpoints should serve structured views: ranked results, property detail
 ### Search quality must be measurable
 Every new discovery behavior should be testable with fuzzy/user-like queries and expected evidence. Track recall, ranking reasons, source freshness, and whether useless or stale facts leak into responses.
 
+When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
+
+### Search proof is additive focus, not filtering
+Search results and property details must share a structured proof contract for "why this result matched" so detail surfaces can focus the relevant evidence without guessing intent again. A proof focus may choose the initial surface/layer, expand the viewport/list enough to include the matched fact, highlight the matched entity, and show short copy such as `Matched your search`.
+
+Proof focus must never hide facts that already exist. It is an overlay on top of the stable detail payload, not a replacement filter and not a second ranking engine. Direct property visits should render normal default evidence; visits from search may add focus state. If a matched proof is outside a default UI cap or nearby radius, the UI must expand for that proof while preserving the rest of the layer's configured facts.
+
+Do not solve proof handoff with one-off UI branches such as "if hospital then open hospitals" or project/place-specific checks. The contract should be generic: `surface_id`, `layer_id`, `fact_key`, matched entity/source handle, matched label, distance/value, requested constraint, and reason. Components should consume that contract consistently across map layers, RERA/project facts, flooding, transmission lines, lakes, schools, tech parks, reviews, and future surfaces.
+
 ### Config is the control plane — prefer it over hardcoding
 
 OpenEstates behaves like a **document database for product behavior**: most things that can vary should live in versioned JSON under `app/config/`, not in Rust match arms, Python `if` chains, or React component constants.
@@ -160,6 +171,10 @@ data/lake/                     # DAG assets + serving bundles (Parquet)
 
 **Default rule:** if you are about to hardcode a list, threshold, label, skip policy, scoring weight, UI chip, or "new type" branch — **add a config entry instead** and make code load it generically.
 
+Product-engine version of the same rule: adding a new intent, recommendation lens, map layer, detail section, result chip, warning, or positive signal should normally mean adding or adjusting config rows, facts, metadata, source assets, or tests. Rust/TypeScript may add generic machinery such as numeric-constraint evaluation, geo-distance scoring, evidence-strength ranking, tie-break policy, section rendering, or map-layer rendering, but it should not contain project-specific, locality-specific, phrase-specific, or fact-key-specific product behavior.
+
+Hardcoding is allowed only when it is truly structural: route names, API field mapping, parser mechanics, rendering primitives, accessibility labels, or stable protocol contracts. If a hardcoded value changes product meaning, ranking, eligibility, labeling, surfacing, grouping, or visibility, it belongs in config or in DAG facts.
+
 | Belongs in config | Belongs in code |
 |-------------------|-----------------|
 | New leaf `fact_key`, concern bucket, proof label threshold | Loaders, validators, generic iterators |
@@ -167,6 +182,9 @@ data/lake/                     # DAG assets + serving bundles (Parquet)
 | Asset DAG edges, partitions, refresh cadence | Parquet writers, executors, lake key rules |
 | Crawl skip / defer / budget rules | Network I/O, parsing, normalization |
 | UI surface mapping (tile vs detail vs evidence) | Presentational components that render structured views |
+| Recommendation lens labels, weights, eligibility, tie-breakers | Generic rank/merge/explain machinery |
+| Map layer ids, categories, thresholds, warning labels | Generic layer toggles, legends, markers, view-state code |
+| Result chips, detail sections, buyer-facing signal labels | Generic components reading structured API/config |
 
 **Why this matters:**
 - **Expanding is editing JSON**, not redeploying logic — new Reddit concern, new source, new livability theme ≈ new config row.

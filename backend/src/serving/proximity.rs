@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use chrono::{DateTime, Utc};
-use rstar::{RTree, RTreeObject, AABB};
+use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use serde::Deserialize;
 
 use crate::dag_config::{
@@ -52,6 +52,7 @@ struct CategoryMatcher {
     accepted_place_types: Vec<String>,
     name_markers: Vec<String>,
     name_block_markers: Vec<String>,
+    require_name_marker: bool,
     allow_missing_place_types: bool,
 }
 
@@ -96,6 +97,14 @@ impl RTreeObject for IndexedPlace {
     }
 }
 
+impl PointDistance for IndexedPlace {
+    fn distance_2(&self, point: &[f64; 2]) -> f64 {
+        let longitude_delta = self.point[0] - point[0];
+        let latitude_delta = self.point[1] - point[1];
+        longitude_delta.mul_add(longitude_delta, latitude_delta * latitude_delta)
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 struct NearbyPlaceCategoryFile {
     categories: Vec<NearbyPlaceCategory>,
@@ -117,6 +126,8 @@ struct NearbyPlaceCategory {
     name_markers: Vec<String>,
     #[serde(default)]
     name_block_markers: Vec<String>,
+    #[serde(default)]
+    require_name_marker: bool,
     #[serde(default)]
     chainable: Option<bool>,
 }
@@ -156,7 +167,7 @@ pub fn derive_proximity_records(
 
     for target in &target_entities {
         let mut by_fact_key = HashMap::<&str, Vec<NearbyPlaceCandidate<'_>>>::new();
-        for place in candidate_places(target, &places, &place_index, max_distance_km) {
+        for place in nearest_candidate_places(target, &places, &place_index, max_distance_km) {
             let distance_km = haversine_km(
                 target.latitude,
                 target.longitude,
@@ -250,7 +261,7 @@ fn indexed_places(places: &[PlacePoint]) -> RTree<IndexedPlace> {
     )
 }
 
-fn candidate_places<'a>(
+fn nearest_candidate_places<'a>(
     target: &EntityPoint,
     places: &'a [PlacePoint],
     place_index: &RTree<IndexedPlace>,
@@ -261,12 +272,11 @@ fn candidate_places<'a>(
     }
     let lat_delta = km_to_lat_degrees(max_distance_km);
     let lng_delta = km_to_lng_degrees(max_distance_km, target.latitude);
-    let envelope = AABB::from_corners(
-        [target.longitude - lng_delta, target.latitude - lat_delta],
-        [target.longitude + lng_delta, target.latitude + lat_delta],
-    );
+    let max_planar_distance_2 = lat_delta.mul_add(lat_delta, lng_delta * lng_delta);
+    let target_point = [target.longitude, target.latitude];
     place_index
-        .locate_in_envelope_intersecting(&envelope)
+        .nearest_neighbor_iter(&target_point)
+        .take_while(|indexed| indexed.distance_2(&target_point) <= max_planar_distance_2)
         .filter_map(|indexed| places.get(indexed.index))
         .collect()
 }
@@ -476,6 +486,7 @@ fn proximity_fact_spec(
                 accepted_place_types: normalized_values(&category.accepted_place_types),
                 name_markers: normalized_values(&category.name_markers),
                 name_block_markers: normalized_values(&category.name_block_markers),
+                require_name_marker: category.require_name_marker,
                 allow_missing_place_types: category.allow_missing_place_types,
             })
         })
@@ -630,6 +641,13 @@ fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> boo
     {
         return false;
     }
+    let name_marker_match = category
+        .name_markers
+        .iter()
+        .any(|marker| contains_category_text(&place_name, marker));
+    if category.require_name_marker {
+        return name_marker_match;
+    }
 
     let place_types = place
         .place_types
@@ -654,11 +672,7 @@ fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> boo
     {
         return true;
     }
-    if category
-        .name_markers
-        .iter()
-        .any(|marker| contains_category_text(&place_name, marker))
-    {
+    if name_marker_match {
         return true;
     }
     if category.allow_missing_place_types && place_types.is_empty() {
@@ -876,6 +890,40 @@ mod tests {
     }
 
     #[test]
+    fn nearest_candidates_still_emit_facts_by_haversine_distance() {
+        let entities = vec![
+            entity("society:test", "society", "Test Society"),
+            entity("place:hospital:far", "place", "Far Hospital"),
+            entity("place:hospital:near", "place", "Near Hospital"),
+        ];
+        let facts = vec![
+            coord("society:test", "geo.latitude", 12.985711),
+            coord("society:test", "geo.longitude", 77.746842),
+            coord("place:hospital:far", "geo.latitude", 12.995),
+            coord("place:hospital:far", "geo.longitude", 77.756),
+            text("place:hospital:far", "place.name", "Far Hospital"),
+            tags("place:hospital:far", "place.types", &["hospital"]),
+            coord("place:hospital:near", "geo.latitude", 12.986),
+            coord("place:hospital:near", "geo.longitude", 77.747),
+            text("place:hospital:near", "place.name", "Near Hospital"),
+            tags("place:hospital:near", "place.types", &["hospital"]),
+        ];
+        let index = ServingFactIndex::from_records(facts, Vec::new());
+
+        let derived = derive_proximity_records(&entities, &index, &[]).unwrap();
+        let hospital_facts = derived
+            .facts
+            .iter()
+            .filter(|fact| fact.fact_key == "nearby_hospitals")
+            .filter_map(|fact| fact.value_text.as_deref())
+            .collect::<Vec<_>>();
+
+        assert!(hospital_facts.len() >= 2);
+        assert!(hospital_facts[0].contains("Near Hospital"));
+        assert!(hospital_facts[1].contains("Far Hospital"));
+    }
+
+    #[test]
     fn does_not_duplicate_existing_near_place_edges() {
         let entities = vec![
             entity("society:test", "society", "Test Society"),
@@ -966,6 +1014,27 @@ mod tests {
         assert_eq!(spec.max_distance_km, 1.0);
     }
 
+    #[test]
+    fn category_can_require_name_marker_over_google_type() {
+        let matcher = CategoryMatcher {
+            category_aliases: vec!["fitness".to_string()],
+            accepted_place_types: vec!["gym".to_string()],
+            name_markers: vec!["cult".to_string(), "cult fit".to_string()],
+            name_block_markers: Vec::new(),
+            require_name_marker: true,
+            allow_missing_place_types: true,
+        };
+
+        assert!(!place_matches_category(
+            &place_point("Generic Premium Gym", &["gym"]),
+            &matcher
+        ));
+        assert!(place_matches_category(
+            &place_point("Cult Whitefield", &["gym"]),
+            &matcher
+        ));
+    }
+
     fn entity(id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {
         ServingEntityRecord {
             entity_id: id.to_string(),
@@ -973,6 +1042,26 @@ mod tests {
             name: name.to_string(),
             root_source: None,
             searchable_text: name.to_string(),
+        }
+    }
+
+    fn place_point(name: &str, place_types: &[&str]) -> PlacePoint {
+        PlacePoint {
+            point: EntityPoint {
+                entity_id: format!("place:test:{}", name.replace(' ', "-").to_lowercase()),
+                name: name.to_string(),
+                latitude: 12.98,
+                longitude: 77.75,
+                confidence: 0.9,
+                learned_at: Utc.with_ymd_and_hms(2026, 7, 27, 0, 0, 0).unwrap(),
+            },
+            place_types: place_types
+                .iter()
+                .map(|value| (*value).to_string())
+                .collect(),
+            category: None,
+            fallback_match_tokens: HashSet::new(),
+            source_url: None,
         }
     }
 

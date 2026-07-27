@@ -363,10 +363,7 @@
         "external_listing_facts",
         "image_media_facts",
         "home_state_signals",
-        "society_groundwater_potential_facts",
-        "bengaluru_metro_station_facts",
-        "osm_power_line_facts",
-        "stormwater_drain_facts"
+        "bengaluru_metro_station_facts"
       ]
     },
     {

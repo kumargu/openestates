@@ -12,6 +12,15 @@
         "nearby_hospitals",
         "nearby_fitness",
         "nearby_tech_parks",
+        "nearby_public_parks",
+        "nearby_breweries",
+        "nearby_graveyards",
+        "nearby_lakes",
+        "lake_within_250m",
+        "high_voltage_transmission_line_nearby",
+        "high_voltage_transmission_line_place_entity",
+        "stormwater_drain_nearby",
+        "stormwater_drain_place_entity",
         "environment.groundwater_potential_class"
       ],
       "traversal": [
@@ -22,7 +31,182 @@
         "AroundThisHomePlate",
         "search_chip:nearby"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "scene": {
+        "anchor": { "entityRef": "society" },
+        "layers": [
+          {
+            "id": "metro",
+            "label": "Metro",
+            "factKeys": ["nearby_metro_stations"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "train",
+            "sort": "distance",
+            "maxItems": 2,
+            "chainable": true,
+            "enabledByDefault": true,
+            "rank": 1
+          },
+          {
+            "id": "schools",
+            "label": "Schools",
+            "factKeys": ["nearby_schools"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "graduation-cap",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.2,
+            "chainable": true,
+            "enabledByDefault": true,
+            "rank": 2
+          },
+          {
+            "id": "hospitals",
+            "label": "Hospitals",
+            "factKeys": ["nearby_hospitals"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "hospital",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.2,
+            "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
+            "chainable": true,
+            "enabledByDefault": true,
+            "rank": 3
+          },
+          {
+            "id": "tech",
+            "label": "Tech parks",
+            "factKeys": ["nearby_tech_parks"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "briefcase-business",
+            "sort": "distance",
+            "maxItems": 20,
+            "expandedMaxItems": 20,
+            "spreadMinDistanceKm": 2.0,
+            "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
+            "includeRelatedSocietyFacts": true,
+            "chainable": true,
+            "enabledByDefault": true,
+            "rank": 4
+          },
+          {
+            "id": "fitness",
+            "label": "Fitness",
+            "factKeys": ["nearby_fitness"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "dumbbell",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "includeNameMarkers": ["cult", "cult.fit"],
+            "chainable": true,
+            "enabledByDefault": false,
+            "rank": 5
+          },
+          {
+            "id": "parks",
+            "label": "Parks",
+            "factKeys": ["nearby_public_parks"],
+            "edgeTypes": ["near_place"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "pin",
+            "icon": "trees",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "chainable": false,
+            "enabledByDefault": false,
+            "rank": 6
+          },
+          {
+            "id": "lakes",
+            "label": "Lakes",
+            "factKeys": ["nearby_lakes", "lake_within_250m"],
+            "edgeTypes": ["near_place"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "pin",
+            "icon": "waves",
+            "sort": "distance",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "chainable": false,
+            "enabledByDefault": false,
+            "rank": 7
+          },
+          {
+            "id": "breweries",
+            "label": "Breweries",
+            "factKeys": ["nearby_breweries"],
+            "edgeTypes": ["near_place"],
+            "family": "access",
+            "relationClass": "access",
+            "renderKind": "pin",
+            "icon": "beer",
+            "sort": "reviews",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
+            "chainable": true,
+            "enabledByDefault": false,
+            "rank": 8
+          },
+          {
+            "id": "red_flags",
+            "label": "Red flags",
+            "factKeys": [
+              "nearby_graveyards",
+              "high_voltage_transmission_line_nearby",
+              "stormwater_drain_nearby"
+            ],
+            "linkedEntityFactKeys": [
+              "high_voltage_transmission_line_place_entity",
+              "stormwater_drain_place_entity"
+            ],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "pin",
+            "icon": "flag",
+            "sortPriorityFactKeys": [
+              "high_voltage_transmission_line_nearby",
+              "stormwater_drain_nearby",
+              "nearby_graveyards"
+            ],
+            "sort": "distance",
+            "maxItems": 5,
+            "expandedMaxItems": 8,
+            "spreadMinDistanceKm": 1.0,
+            "showReviewMetrics": false,
+            "includeRelatedSocietyFacts": true,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 9
+          }
+        ]
+      }
     },
     {
       "id": "approach_road",
@@ -40,7 +224,38 @@
         "livability_brief:risk",
         "search_chip:approach_road"
       ],
-      "primary_entity": "road_segment"
+      "primary_entity": "road_segment",
+      "scene": {
+        "anchor": { "entityRef": "society" },
+        "layers": [
+          {
+            "id": "approach_traffic",
+            "label": "Traffic",
+            "factKeys": ["risk.approach_road_traffic"],
+            "edgeTypes": ["served_by_road"],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "evidence_list",
+            "maxItems": 2,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 1
+          },
+          {
+            "id": "approach_waterlogging",
+            "label": "Waterlogging",
+            "factKeys": ["risk.approach_road_waterlogging"],
+            "edgeTypes": ["served_by_road"],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "evidence_list",
+            "maxItems": 2,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 2
+          }
+        ]
+      }
     },
     {
       "id": "water_context",
@@ -61,7 +276,50 @@
         "livability_brief:risk",
         "search_chip:water_context"
       ],
-      "primary_entity": "society"
+      "primary_entity": "society",
+      "scene": {
+        "anchor": { "entityRef": "society" },
+        "layers": [
+          {
+            "id": "groundwater",
+            "label": "Groundwater",
+            "factKeys": ["environment.groundwater_potential_class"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "evidence_list",
+            "maxItems": 1,
+            "chainable": false,
+            "enabledByDefault": true,
+            "rank": 1
+          },
+          {
+            "id": "water_bodies",
+            "label": "Water bodies",
+            "factKeys": ["environment.water_body_distance_m", "nearby_lakes", "lake_within_250m"],
+            "edgeTypes": ["near_place"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "pin",
+            "sort": "distance",
+            "maxItems": 2,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 2
+          },
+          {
+            "id": "rainwater",
+            "label": "Rainwater harvesting",
+            "factKeys": ["resilience.rainwater_harvesting_present"],
+            "family": "environment",
+            "relationClass": "context",
+            "renderKind": "evidence_list",
+            "maxItems": 1,
+            "chainable": false,
+            "enabledByDefault": false,
+            "rank": 3
+          }
+        ]
+      }
     },
     {
       "id": "water_supply",
@@ -98,9 +356,9 @@
       "leaf_keys": [
         "risk.approach_road_waterlogging",
         "risk.basement_seepage",
-        "risk.nala_nearby",
-        "risk.open_drain_nearby",
-        "risk.rajakaluve_proximity"
+        "stormwater_drain_nearby",
+        "rajakaluve_nearby",
+        "rajakaluve_encroachment_record"
       ],
       "traversal": [
         "property \u2192 in_society \u2192 society",
@@ -110,7 +368,50 @@
         "livability_brief:risk",
         "search_chip:waterlogging"
       ],
-      "primary_entity": "road_segment"
+      "primary_entity": "road_segment",
+      "scene": {
+        "anchor": { "entityRef": "society" },
+        "layers": [
+          {
+            "id": "road_waterlogging",
+            "label": "Approach road",
+            "factKeys": ["risk.approach_road_waterlogging"],
+            "edgeTypes": ["served_by_road"],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "evidence_list",
+            "maxItems": 2,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 1
+          },
+          {
+            "id": "basement_seepage",
+            "label": "Basement seepage",
+            "factKeys": ["risk.basement_seepage"],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "evidence_list",
+            "maxItems": 2,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 2
+          },
+          {
+            "id": "drains",
+            "label": "Drains",
+            "factKeys": ["stormwater_drain_nearby", "rajakaluve_nearby", "rajakaluve_encroachment_record"],
+            "linkedEntityFactKeys": ["stormwater_drain_place_entity"],
+            "family": "risk",
+            "relationClass": "risk_externality",
+            "renderKind": "line",
+            "maxItems": 3,
+            "directOnly": true,
+            "enabledByDefault": true,
+            "rank": 3
+          }
+        ]
+      }
     },
     {
       "id": "legal_rera",
@@ -195,5 +496,5 @@
       "primary_entity": "society"
     }
   ],
-  "surface_count": 7
+  "surface_count": 8
 }

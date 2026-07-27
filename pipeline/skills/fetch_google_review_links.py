@@ -17,6 +17,7 @@ import urllib.parse
 import urllib.error
 import urllib.request
 import math
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from pipeline.skills.base import BaseSkill, FactSource, SkillCost, SkillResult, SourcedFact
@@ -29,6 +30,7 @@ GOOGLE_PLACES_DETAILS_URL = "https://places.googleapis.com/v1/{}"
 GOOGLE_MAPS_SEARCH_URL = "https://www.google.com/maps/search/"
 EARTH_RADIUS_KM = 6371.0088
 _ORIGIN_LOCATION_CACHE = {}
+_NEARBY_CATEGORY_CONFIG_CACHE = None
 GOOGLE_PLACES_FIELD_MASK = ",".join(
     [
         "places.id",
@@ -647,6 +649,11 @@ def clean_string_list(value: Any) -> List[str]:
 
 
 def nearby_search_radius_meters(category: str) -> int:
+    config = nearby_category_config(category)
+    if config:
+        max_distance_km = parse_float(config.get("max_distance_km"))
+        if max_distance_km and max_distance_km > 0:
+            return int(max_distance_km * 1000)
     normalized = category.replace("-", "_").strip().lower()
     if normalized == "school":
         return 5_000
@@ -668,6 +675,10 @@ def nearby_search_radius_meters(category: str) -> int:
 
 
 def google_place_matches_category(place: dict, category: str) -> bool:
+    config = nearby_category_config(category)
+    if config:
+        return google_place_matches_config(place, config)
+
     normalized = category.replace("-", "_").strip().lower()
     place_types = google_place_types(place)
     name = google_place_display_name(place).lower()
@@ -736,6 +747,9 @@ def google_place_matches_category(place: dict, category: str) -> bool:
 
 
 def nearby_category_label(category: str) -> str:
+    config = nearby_category_config(category)
+    if config:
+        return str(config.get("display_label") or category).replace("Nearby ", "").lower()
     normalized = category.replace("-", "_").strip().lower()
     labels = {
         "school": "school",
@@ -746,6 +760,64 @@ def nearby_category_label(category: str) -> str:
         "tech_park": "tech park office",
     }
     return labels.get(normalized, normalized.replace("_", " "))
+
+
+def google_place_matches_config(place: dict, config: Dict[str, Any]) -> bool:
+    place_types = google_place_types(place)
+    name = google_place_display_name(place).lower()
+    for marker in config.get("name_block_markers") or []:
+        if str(marker).lower() in name:
+            return False
+    name_marker_match = any(
+        str(marker).lower() in name for marker in config.get("name_markers") or []
+    )
+    if config.get("require_name_marker"):
+        return name_marker_match
+    accepted_types = {
+        str(value).replace("-", "_").strip().lower()
+        for value in config.get("accepted_place_types") or []
+    }
+    if accepted_types and place_types & accepted_types:
+        return True
+    if name_marker_match:
+        return True
+    return bool(config.get("allow_missing_place_types")) and not place_types
+
+
+def nearby_category_config(category: str) -> Optional[Dict[str, Any]]:
+    normalized = category.replace("-", "_").strip().lower()
+    for config in nearby_category_configs():
+        aliases = {
+            str(alias).replace("-", "_").strip().lower()
+            for alias in config.get("category_aliases") or []
+        }
+        if normalized in aliases:
+            return config
+    return None
+
+
+def nearby_category_configs() -> List[Dict[str, Any]]:
+    global _NEARBY_CATEGORY_CONFIG_CACHE
+    if _NEARBY_CATEGORY_CONFIG_CACHE is not None:
+        return _NEARBY_CATEGORY_CONFIG_CACHE
+    path = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "config"
+        / "dag"
+        / "nearby_place_categories.json"
+    )
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        _NEARBY_CATEGORY_CONFIG_CACHE = []
+    else:
+        _NEARBY_CATEGORY_CONFIG_CACHE = [
+            config
+            for config in payload.get("categories", [])
+            if isinstance(config, dict) and config.get("category_aliases")
+        ]
+    return _NEARBY_CATEGORY_CONFIG_CACHE
 
 
 def google_place_types(place: dict) -> set:

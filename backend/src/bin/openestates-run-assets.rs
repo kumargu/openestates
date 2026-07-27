@@ -13,8 +13,8 @@ use backend::assets::{
     CURRENT_PROJECT_FACTS_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
     GOOGLE_PLACES_WEEKLY_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
-    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+    OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
@@ -80,12 +80,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .await?;
             AssetSourceInputs::collection_plan(&plan)
         };
-        if resume_manifest.is_none() && !cli.source_entity_ids.is_empty() {
+        if resume_manifest.is_none()
+            && (!cli.source_entity_ids.is_empty() || !cli.source_entity_seed_paths.is_empty())
+        {
             include_scoped_rera_refresh(&mut collection_plan);
         }
-        let source_entities =
+        if !cli.source_collection_asset_ids.is_empty() {
+            restrict_source_collection_plan(&mut collection_plan, &cli.source_collection_asset_ids);
+        }
+        let mut source_entities =
             current_source_entities(&lake, resume_manifest.as_ref(), &cli.source_entity_ids)
                 .await?;
+        source_entities.extend(load_source_entity_seed_files(&cli.source_entity_seed_paths).await?);
+        let source_entities = dedupe_source_entities(source_entities)?;
         let request = SourceInputRequest {
             project_root: project_root.clone(),
             partition: options.partition.clone(),
@@ -135,7 +142,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_source_inputs(source_inputs)
                 .with_forced_assets(force_assets);
             if resume_manifest.is_none()
-                && (!cli.source_entity_ids.is_empty() || cli.scoped_source_inputs)
+                && (!cli.source_entity_ids.is_empty()
+                    || !cli.source_entity_seed_paths.is_empty()
+                    || cli.scoped_source_inputs)
                 && !cli.promote_scoped_current
             {
                 options = options
@@ -224,6 +233,54 @@ fn include_scoped_rera_refresh(collection_plan: &mut SourceInputCollectionPlan) 
     collection_plan.force_assets.dedup();
 }
 
+fn restrict_source_collection_plan(
+    collection_plan: &mut SourceInputCollectionPlan,
+    allowed_assets: &[AssetId],
+) {
+    let mut allowed: BTreeSet<_> = allowed_assets
+        .iter()
+        .map(|asset_id| asset_id.as_str().to_string())
+        .collect();
+    let needs_google_places_companion = add_geospatial_source_companions(&mut allowed);
+    collection_plan
+        .requested_assets
+        .retain(|asset_id| allowed.contains(asset_id.as_str()));
+    collection_plan
+        .force_assets
+        .retain(|asset_id| allowed.contains(asset_id.as_str()));
+    collection_plan
+        .force_refresh_assets
+        .retain(|asset_id| allowed.contains(asset_id.as_str()));
+    if needs_google_places_companion {
+        let google_places = AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID)
+            .expect("valid static Google Places asset ID");
+        collection_plan.requested_assets.push(google_places.clone());
+        collection_plan.force_assets.push(google_places);
+        collection_plan
+            .requested_assets
+            .sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        collection_plan.requested_assets.dedup();
+        collection_plan
+            .force_assets
+            .sort_by(|left, right| left.as_str().cmp(right.as_str()));
+        collection_plan.force_assets.dedup();
+    }
+}
+
+fn add_geospatial_source_companions(allowed_assets: &mut BTreeSet<String>) -> bool {
+    let needs_google_places_companion = [
+        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+        OSM_POWER_LINE_FACTS_ASSET_ID,
+        STORMWATER_DRAIN_FACTS_ASSET_ID,
+    ]
+    .iter()
+    .any(|asset_id| allowed_assets.contains(*asset_id));
+    if needs_google_places_companion {
+        allowed_assets.insert(GOOGLE_PLACES_WEEKLY_ASSET_ID.to_string());
+    }
+    needs_google_places_companion
+}
+
 fn scoped_current_promotion_exclusions() -> Vec<AssetId> {
     let mut exclusions = vec![
         AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)
@@ -237,6 +294,8 @@ fn scoped_current_promotion_exclusions() -> Vec<AssetId> {
             .expect("valid static approach-road asset ID"),
         AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID)
             .expect("valid static groundwater asset ID"),
+        AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).expect("valid static OSM power asset ID"),
+        AssetId::new(STORMWATER_DRAIN_FACTS_ASSET_ID).expect("valid static stormwater asset ID"),
         AssetId::new(BENGALURU_METRO_STATION_FACTS_ASSET_ID).expect("valid static metro asset ID"),
         AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID)
             .expect("valid static current project asset ID"),
@@ -358,6 +417,8 @@ async fn current_source_entities(
                 area: areas.get(mapping.canonical_entity_id.as_str()).cloned(),
                 city: Some("Bengaluru".to_string()),
                 project_key: Some(mapping.project_key),
+                latitude: None,
+                longitude: None,
             });
     }
     if !unmatched.is_empty() {
@@ -368,6 +429,168 @@ async fn current_source_entities(
         .into());
     }
     Ok(seeds.into_values().collect())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(untagged)]
+enum SourceEntitySeedFile {
+    List(Vec<SourceEntitySeed>),
+    Object {
+        source_entities: Option<Vec<SourceEntitySeed>>,
+    },
+}
+
+async fn load_source_entity_seed_files(
+    paths: &[PathBuf],
+) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
+    let mut seeds = Vec::new();
+    for path in paths {
+        let bytes = tokio::fs::read(path).await?;
+        match serde_json::from_slice(&bytes)? {
+            SourceEntitySeedFile::List(mut rows) => seeds.append(&mut rows),
+            SourceEntitySeedFile::Object { source_entities } => {
+                let Some(mut rows) = source_entities else {
+                    return Err(format!(
+                        "source entity seed file {} must contain source_entities",
+                        path.display()
+                    )
+                    .into());
+                };
+                if rows.is_empty() {
+                    return Err(format!(
+                        "source entity seed file {} contains no source_entities",
+                        path.display()
+                    )
+                    .into());
+                }
+                seeds.append(&mut rows);
+            }
+        }
+    }
+    Ok(seeds)
+}
+
+fn dedupe_source_entities(
+    seeds: Vec<SourceEntitySeed>,
+) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
+    let mut by_key = BTreeMap::<String, SourceEntitySeed>::new();
+    for seed in seeds {
+        let key = seed
+            .project_key
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(seed.entity_id.as_str())
+            .to_string();
+        if let Some(existing) = by_key.get(&key) {
+            let merged = merge_source_entity_seed(&key, existing.clone(), seed)?;
+            by_key.insert(key, merged);
+            continue;
+        }
+        by_key.insert(key, seed);
+    }
+    Ok(by_key.into_values().collect())
+}
+
+fn merge_source_entity_seed(
+    key: &str,
+    existing: SourceEntitySeed,
+    incoming: SourceEntitySeed,
+) -> Result<SourceEntitySeed, Box<dyn std::error::Error>> {
+    if existing.entity_id != incoming.entity_id {
+        return Err(format!(
+            "conflicting source entity seed for selector {key}: {} vs {}",
+            existing.entity_id, incoming.entity_id
+        )
+        .into());
+    }
+    let name = merge_required_seed_text(key, "name", existing.name, incoming.name)?;
+    Ok(SourceEntitySeed {
+        entity_id: existing.entity_id,
+        alias_entity_id: merge_optional_seed_text(
+            key,
+            "alias_entity_id",
+            existing.alias_entity_id,
+            incoming.alias_entity_id,
+        )?,
+        name,
+        area: merge_optional_seed_text(key, "area", existing.area, incoming.area)?,
+        city: merge_optional_seed_text(key, "city", existing.city, incoming.city)?,
+        project_key: merge_optional_seed_text(
+            key,
+            "project_key",
+            existing.project_key,
+            incoming.project_key,
+        )?,
+        latitude: merge_optional_seed_coordinate(
+            key,
+            "latitude",
+            existing.latitude,
+            incoming.latitude,
+        )?,
+        longitude: merge_optional_seed_coordinate(
+            key,
+            "longitude",
+            existing.longitude,
+            incoming.longitude,
+        )?,
+    })
+}
+
+fn merge_required_seed_text(
+    key: &str,
+    field: &str,
+    existing: String,
+    incoming: String,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if existing.trim().eq_ignore_ascii_case(incoming.trim()) {
+        return Ok(existing);
+    }
+    Err(format!(
+        "conflicting source entity seed for selector {key}: {field} differs ({existing} vs {incoming})"
+    )
+    .into())
+}
+
+fn merge_optional_seed_text(
+    key: &str,
+    field: &str,
+    existing: Option<String>,
+    incoming: Option<String>,
+) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    match (existing, incoming) {
+        (Some(existing), Some(incoming))
+            if existing.trim().eq_ignore_ascii_case(incoming.trim()) =>
+        {
+            Ok(Some(existing))
+        }
+        (Some(existing), None) => Ok(Some(existing)),
+        (None, Some(incoming)) => Ok(Some(incoming)),
+        (None, None) => Ok(None),
+        (Some(existing), Some(incoming)) => Err(format!(
+            "conflicting source entity seed for selector {key}: {field} differs ({existing} vs {incoming})"
+        )
+        .into()),
+    }
+}
+
+fn merge_optional_seed_coordinate(
+    key: &str,
+    field: &str,
+    existing: Option<f64>,
+    incoming: Option<f64>,
+) -> Result<Option<f64>, Box<dyn std::error::Error>> {
+    match (existing, incoming) {
+        (Some(existing), Some(incoming)) if (existing - incoming).abs() <= 0.0000001 => {
+            Ok(Some(existing))
+        }
+        (Some(existing), None) => Ok(Some(existing)),
+        (None, Some(incoming)) => Ok(Some(incoming)),
+        (None, None) => Ok(None),
+        (Some(existing), Some(incoming)) => Err(format!(
+            "conflicting source entity seed for selector {key}: {field} differs ({existing} vs {incoming})"
+        )
+        .into()),
+    }
 }
 
 #[derive(Default)]
@@ -381,6 +604,8 @@ struct CliOptions {
     source_args: Vec<OsString>,
     source_timeout_seconds: Option<u64>,
     source_entity_ids: Vec<String>,
+    source_entity_seed_paths: Vec<PathBuf>,
+    source_collection_asset_ids: Vec<AssetId>,
     scoped_source_inputs: bool,
     promote_scoped_current: bool,
     only_forced_assets: bool,
@@ -461,6 +686,26 @@ impl CliOptions {
                         return Err("--source-entity requires an entity id".to_string());
                     }
                     options.source_entity_ids.push(value.to_string());
+                }
+                "--source-entity-seeds" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--source-entity-seeds requires a path".to_string())?;
+                    options.source_entity_seed_paths.push(PathBuf::from(value));
+                }
+                "--source-collection-asset" => {
+                    let value = args.next().ok_or_else(|| {
+                        "--source-collection-asset requires an asset id".to_string()
+                    })?;
+                    let asset_id = AssetId::new(value.trim()).map_err(|_| {
+                        format!("--source-collection-asset requires a valid asset id, got: {value}")
+                    })?;
+                    if !AssetSourceInputs::supports_asset(&asset_id) {
+                        return Err(format!(
+                            "--source-collection-asset is not source-collectable: {value}"
+                        ));
+                    }
+                    options.source_collection_asset_ids.push(asset_id);
                 }
                 "--scoped-source-inputs" => {
                     options.scoped_source_inputs = true;
@@ -599,6 +844,8 @@ fn print_help() {
     println!("  --source-arg     Pass one literal argument to the source collector program");
     println!("  --source-timeout-seconds Override the collector timeout (default: 1800)");
     println!("  --source-entity Limit source collection to one entity, alias, or project key");
+    println!("  --source-entity-seeds Add source entities from a JSON file");
+    println!("  --source-collection-asset Restrict source collection to one collectable asset id");
     println!("  --scoped-source-inputs Treat --source-inputs as already scoped to a partial run");
     println!("  --promote-scoped-current Promote scoped source runs to current global outputs");
     println!(
@@ -654,6 +901,108 @@ mod tests {
     }
 
     #[test]
+    fn source_collection_filter_keeps_only_allowed_source_assets() {
+        let mut plan = SourceInputCollectionPlan {
+            requested_assets: vec![
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+            ],
+            force_assets: vec![
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+            ],
+            force_refresh_assets: vec![
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+            ],
+        };
+
+        restrict_source_collection_plan(
+            &mut plan,
+            &[AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()],
+        );
+
+        assert_eq!(
+            plan.requested_assets,
+            vec![AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()]
+        );
+        assert_eq!(
+            plan.force_assets,
+            vec![AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()]
+        );
+        assert_eq!(
+            plan.force_refresh_assets,
+            vec![AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap()]
+        );
+    }
+
+    #[test]
+    fn source_collection_filter_keeps_google_places_for_geospatial_assets() {
+        let mut plan = SourceInputCollectionPlan {
+            requested_assets: vec![
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+            ],
+            force_assets: vec![
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
+            ],
+            force_refresh_assets: Vec::new(),
+        };
+
+        restrict_source_collection_plan(
+            &mut plan,
+            &[AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap()],
+        );
+
+        assert_eq!(
+            plan.requested_assets,
+            vec![
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+            ]
+        );
+        assert_eq!(
+            plan.force_assets,
+            vec![
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn source_collection_filter_adds_google_places_for_geospatial_assets() {
+        let mut plan = SourceInputCollectionPlan {
+            requested_assets: vec![AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap()],
+            force_assets: vec![AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap()],
+            force_refresh_assets: Vec::new(),
+        };
+
+        restrict_source_collection_plan(
+            &mut plan,
+            &[AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap()],
+        );
+
+        assert_eq!(
+            plan.requested_assets,
+            vec![
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+            ]
+        );
+        assert_eq!(
+            plan.force_assets,
+            vec![
+                AssetId::new(GOOGLE_PLACES_WEEKLY_ASSET_ID).unwrap(),
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
+            ]
+        );
+    }
+
+    #[test]
     fn scoped_source_runs_keep_global_canonical_current_pointer() {
         let exclusions = scoped_current_promotion_exclusions();
 
@@ -667,12 +1016,114 @@ mod tests {
                 AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID).unwrap(),
                 AssetId::new(HOME_STATE_SIGNALS_ASSET_ID).unwrap(),
                 AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).unwrap(),
+                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
                 AssetId::new(RERA_LEGAL_FACTS_ASSET_ID).unwrap(),
                 AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
                 AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).unwrap(),
                 AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID).unwrap(),
+                AssetId::new(STORMWATER_DRAIN_FACTS_ASSET_ID).unwrap(),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn source_entity_seed_files_load_object_shape() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("seeds.json");
+        std::fs::write(
+            &path,
+            r#"{
+              "source_entities": [
+                {
+                  "entity_id": "society:rera-6f1049070060d911",
+                  "alias_entity_id": "society:folium-by-sumadhura-phase-i",
+                  "name": "FOLIUM BY SUMADHURA PHASE-I",
+                  "area": "Whitefield",
+                  "city": "Bengaluru",
+                  "project_key": "PRM/KA/RERA/1251/446/PR/280222/004738",
+                  "latitude": 12.9698,
+                  "longitude": 77.75
+                }
+              ]
+            }"#,
+        )
+        .unwrap();
+
+        let seeds = load_source_entity_seed_files(&[path]).await.unwrap();
+
+        assert_eq!(seeds.len(), 1);
+        assert_eq!(seeds[0].name, "FOLIUM BY SUMADHURA PHASE-I");
+        assert_eq!(
+            seeds[0].project_key.as_deref(),
+            Some("PRM/KA/RERA/1251/446/PR/280222/004738")
+        );
+        assert_eq!(seeds[0].latitude, Some(12.9698));
+        assert_eq!(seeds[0].longitude, Some(77.75));
+    }
+
+    #[tokio::test]
+    async fn source_entity_seed_files_fail_closed_on_missing_source_entities() {
+        let temp = tempdir().unwrap();
+        let path = temp.path().join("seeds.json");
+        std::fs::write(&path, r#"{"source_entity": []}"#).unwrap();
+
+        let error = load_source_entity_seed_files(&[path]).await.unwrap_err();
+
+        assert!(error.to_string().contains("must contain source_entities"));
+    }
+
+    #[test]
+    fn source_entity_dedupe_fails_on_conflicting_project_seed() {
+        let left = SourceEntitySeed {
+            entity_id: "society:rera-left".to_string(),
+            alias_entity_id: None,
+            name: "Left".to_string(),
+            area: None,
+            city: Some("Bengaluru".to_string()),
+            project_key: Some("PRM-SAME".to_string()),
+            latitude: None,
+            longitude: None,
+        };
+        let mut right = left.clone();
+        right.entity_id = "society:rera-right".to_string();
+
+        let error = dedupe_source_entities(vec![left, right]).unwrap_err();
+
+        assert!(error.to_string().contains("conflicting source entity seed"));
+    }
+
+    #[test]
+    fn source_entity_dedupe_merges_matching_project_seed_metadata() {
+        let left = SourceEntitySeed {
+            entity_id: "society:rera-folium".to_string(),
+            alias_entity_id: None,
+            name: "FOLIUM BY SUMADHURA PHASE-I".to_string(),
+            area: None,
+            city: Some("Bengaluru".to_string()),
+            project_key: Some("PRM-FOLIUM".to_string()),
+            latitude: None,
+            longitude: None,
+        };
+        let right = SourceEntitySeed {
+            entity_id: "society:rera-folium".to_string(),
+            alias_entity_id: Some("society:folium-by-sumadhura-phase-i".to_string()),
+            name: "Folium By Sumadhura Phase-I".to_string(),
+            area: Some("Whitefield".to_string()),
+            city: Some("bengaluru".to_string()),
+            project_key: Some("PRM-FOLIUM".to_string()),
+            latitude: Some(12.971234567),
+            longitude: Some(77.751234567),
+        };
+
+        let merged = dedupe_source_entities(vec![left, right]).unwrap();
+
+        assert_eq!(merged.len(), 1);
+        assert_eq!(
+            merged[0].alias_entity_id.as_deref(),
+            Some("society:folium-by-sumadhura-phase-i")
+        );
+        assert_eq!(merged[0].area.as_deref(), Some("Whitefield"));
+        assert_eq!(merged[0].latitude, Some(12.971234567));
     }
 
     #[tokio::test]

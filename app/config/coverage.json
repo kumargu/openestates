@@ -10,7 +10,7 @@
     "asset_dag": "app/config/dag/asset_registry.json",
     "enrichment_plans": "app/config/dag/enrichment_targets.json",
     "ui_surfaces": "app/config/dag/ui_surfaces.json — 6 surfaces",
-    "evidence_ui_sections": "app/config/product/evidence_sections.json — 4 property panels",
+    "evidence_ui_sections": "app/config/dag/evidence_sections.json — property evidence panels",
     "discovery_home": "app/config/product/discovery_home.json — shelves + quotes"
   },
   "included_in_app_config": [
@@ -52,6 +52,11 @@
     {
       "path": "app/config/dag/ui_surfaces.json",
       "role": "Buyer UI surface → leaf_keys, traversal, React components",
+      "primitive": "ui"
+    },
+    {
+      "path": "app/config/dag/evidence_sections.json",
+      "role": "Property page evidence panels — presentation variant, fact keys per section",
       "primitive": "ui"
     },
     {
@@ -101,8 +106,8 @@
     },
     {
       "path": "app/config/product/evidence_sections.json",
-      "role": "Property page evidence panels — presentation variant, fact keys per section",
-      "primitive": "ui"
+      "role": "Deprecated compatibility copy; use app/config/dag/evidence_sections.json",
+      "primitive": "legacy"
     }
   ],
   "belongs_in_lake_not_config": [

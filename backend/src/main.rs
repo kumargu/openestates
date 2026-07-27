@@ -78,6 +78,18 @@ async fn main() {
             get(routes::properties::get_property_recommendations),
         )
         .route(
+            "/api/properties/{id}/surfaces/{surface_id}",
+            get(routes::surfaces::get_property_surface),
+        )
+        .route(
+            "/api/properties/{id}/surfaces",
+            get(routes::surfaces::list_property_surfaces),
+        )
+        .route(
+            "/api/properties/surfaces/batch",
+            post(routes::surfaces::get_property_surfaces_batch),
+        )
+        .route(
             "/api/properties/evidence/batch",
             post(routes::properties::get_property_evidence_batch),
         )
@@ -122,6 +134,10 @@ async fn main() {
     println!("  GET /api/health");
     println!("  GET /media/*path");
     println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/recommendations");
+    println!(
+        "  GET /api/properties/{{id}}/surfaces | /api/properties/{{id}}/surfaces/{{surface_id}}"
+    );
+    println!("  POST /api/properties/surfaces/batch");
     println!("  POST /api/properties/evidence/batch");
     println!("  GET /api/areas | /api/areas/tracker | /api/areas/{{id}}");
     println!("  GET /api/discovery");

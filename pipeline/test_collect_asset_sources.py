@@ -15,6 +15,8 @@ from pipeline.collect_asset_sources import (
     collect_environment_groundwater_potential,
     collect_google_nearby_places,
     collect_google_places,
+    collect_osm_power_infrastructure,
+    collect_stormwater_drains,
     groundwater_zones_from_kml,
     collect_reddit_assets,
     collect_rera_registry,
@@ -416,6 +418,280 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "Kadugodi Tree Park",
         )
         self.assertEqual(direct["snapshot_date"], "2026-07-24")
+
+    def test_collect_osm_power_infrastructure_uses_google_place_coordinates(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:prestige-southern-star",
+                    "name": "Prestige Southern Star",
+                    "area": "Akshayanagar",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-SOUTHERN",
+                }
+            ],
+        }
+        google_places = {
+            "records": [
+                {
+                    "entity_id": "society:prestige-southern-star",
+                    "latitude": 12.9000,
+                    "longitude": 77.6000,
+                }
+            ]
+        }
+        overpass = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": 12345,
+                    "tags": {
+                        "power": "line",
+                        "voltage": "220000",
+                        "name": "220 kV test line",
+                    },
+                    "geometry": [
+                        {"lat": 12.8990, "lon": 77.5990},
+                        {"lat": 12.9010, "lon": 77.6010},
+                    ],
+                }
+            ]
+        }
+
+        output = collect_osm_power_infrastructure(
+            request,
+            google_places_input=google_places,
+            fetch=lambda _url, _query: overpass,
+        )
+
+        self.assertEqual(output["snapshot_date"], "2026-07-27")
+        self.assertEqual(len(output["records"]), 1)
+        record = output["records"][0]
+        self.assertEqual(record["entity_id"], "society:prestige-southern-star")
+        self.assertEqual(record["osm_id"], "way/12345")
+        self.assertEqual(record["voltage_kv"], 220.0)
+        self.assertLess(record["distance_meters"], 5.0)
+        self.assertIn("LineString", record["geometry_geojson"])
+
+    def test_collect_osm_power_infrastructure_falls_back_to_subject_queries(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:first",
+                    "name": "First Society",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-FIRST",
+                },
+                {
+                    "entity_id": "society:second",
+                    "name": "Second Society",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-SECOND",
+                },
+            ],
+        }
+        google_places = {
+            "records": [
+                {"entity_id": "society:first", "latitude": 12.9700, "longitude": 77.7500},
+                {"entity_id": "society:second", "latitude": 12.9800, "longitude": 77.7600},
+            ]
+        }
+        overpass = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": 222,
+                    "tags": {"power": "line", "voltage": "220000"},
+                    "geometry": [
+                        {"lat": 12.9695, "lon": 77.7495},
+                        {"lat": 12.9705, "lon": 77.7505},
+                    ],
+                }
+            ]
+        }
+        calls = []
+
+        def fetch(_url, query):
+            calls.append(query)
+            if len(calls) == 1:
+                raise TimeoutError("combined query timed out")
+            return overpass
+
+        output = collect_osm_power_infrastructure(
+            request,
+            google_places_input=google_places,
+            fetch=fetch,
+        )
+
+        self.assertEqual(len(calls), 3)
+        self.assertEqual(len(output["records"]), 1)
+        self.assertEqual(output["records"][0]["entity_id"], "society:first")
+        self.assertIn("records=1", output["source_watermarks"][0]["high_watermark"])
+
+    def test_collect_osm_power_infrastructure_fails_closed_on_partial_subject_failure(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {"entity_id": "society:first", "name": "First Society"},
+                {"entity_id": "society:second", "name": "Second Society"},
+            ],
+        }
+        google_places = {
+            "records": [
+                {"entity_id": "society:first", "latitude": 12.9700, "longitude": 77.7500},
+                {"entity_id": "society:second", "latitude": 12.9800, "longitude": 77.7600},
+            ]
+        }
+        calls = []
+
+        def fetch(_url, _query):
+            calls.append(True)
+            raise TimeoutError("overpass unavailable")
+
+        with self.assertRaisesRegex(ValueError, "failed for 2 of 2 subjects"):
+            collect_osm_power_infrastructure(
+                request,
+                google_places_input=google_places,
+                fetch=fetch,
+            )
+
+        self.assertEqual(len(calls), 3)
+
+    def test_collect_stormwater_drains_emits_rajakaluve_rows(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:whitefield-test",
+                    "name": "Whitefield Test",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-WF",
+                }
+            ],
+        }
+        google_places = {
+            "records": [
+                {
+                    "entity_id": "society:whitefield-test",
+                    "latitude": 12.9700,
+                    "longitude": 77.7500,
+                }
+            ]
+        }
+        overpass = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": 987,
+                    "tags": {
+                        "waterway": "drain",
+                        "name": "Whitefield Rajakaluve",
+                    },
+                    "geometry": [
+                        {"lat": 12.9695, "lon": 77.7495},
+                        {"lat": 12.9705, "lon": 77.7505},
+                    ],
+                }
+            ]
+        }
+
+        output = collect_stormwater_drains(
+            request,
+            google_places_input=google_places,
+            fetch=lambda _url, _query: overpass,
+        )
+
+        self.assertEqual(output["snapshot_date"], "2026-07-27")
+        self.assertEqual(len(output["records"]), 1)
+        record = output["records"][0]
+        self.assertEqual(record["entity_id"], "society:whitefield-test")
+        self.assertEqual(record["drain_id"], "way/987")
+        self.assertEqual(record["drain_type"], "rajakaluve")
+        self.assertEqual(record["hierarchy"], "primary_swd")
+        self.assertLess(record["distance_meters"], 5.0)
+        self.assertIn("LineString", record["geometry_geojson"])
+
+    def test_collect_stormwater_drains_falls_back_only_for_failed_subjects(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:overpass-fails",
+                    "name": "Overpass Fails",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-FAIL",
+                },
+                {
+                    "entity_id": "society:overpass-succeeds",
+                    "name": "Overpass Succeeds",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                    "project_key": "PRM-OK",
+                },
+            ],
+        }
+        google_places = {
+            "records": [
+                {
+                    "entity_id": "society:overpass-fails",
+                    "latitude": 12.9700,
+                    "longitude": 77.7500,
+                },
+                {
+                    "entity_id": "society:overpass-succeeds",
+                    "latitude": 12.9800,
+                    "longitude": 77.7600,
+                },
+            ]
+        }
+        overpass = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": 654,
+                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
+                    "geometry": [
+                        {"lat": 12.9795, "lon": 77.7595},
+                        {"lat": 12.9805, "lon": 77.7605},
+                    ],
+                }
+            ]
+        }
+        calls = []
+
+        def fetch(_url, _query):
+            calls.append(_query)
+            if len(calls) == 1:
+                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
+            return overpass
+
+        fallback_subject_ids = []
+
+        def fallback(subjects, _max_distance, _collector, _planned_at):
+            fallback_subject_ids.extend(subject["entity_id"] for subject in subjects)
+            return []
+
+        with patch("pipeline.collect_asset_sources.google_stormwater_records", fallback):
+            output = collect_stormwater_drains(
+                request,
+                google_places_input=google_places,
+                fetch=fetch,
+            )
+
+        self.assertEqual(fallback_subject_ids, ["society:overpass-fails"])
+        self.assertEqual(len(output["records"]), 1)
+        self.assertEqual(output["records"][0]["entity_id"], "society:overpass-succeeds")
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -1827,6 +2103,46 @@ class CollectAssetSourcesTest(unittest.TestCase):
 
         self.assertEqual(len(records), 1)
         self.assertEqual(records[0]["place_name"], "Example Metro Station")
+
+    def test_google_nearby_does_not_collect_site_office_as_lake(self):
+        nearby = {
+            "places": [
+                {
+                    "id": "places/site-office",
+                    "displayName": {"text": "Prestige Lakeside Habitat Site Office"},
+                    "googleMapsUri": "https://maps.google.com/?cid=site-office",
+                    "location": {"latitude": 12.9720, "longitude": 77.5946},
+                    "primaryType": "lake",
+                    "types": ["lake", "point_of_interest"],
+                },
+                {
+                    "id": "places/lake",
+                    "displayName": {"text": "Varthur Lake"},
+                    "googleMapsUri": "https://maps.google.com/?cid=lake",
+                    "location": {"latitude": 12.9730, "longitude": 77.5946},
+                    "primaryType": "lake",
+                    "types": ["lake"],
+                },
+            ]
+        }
+
+        with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+            with patch(
+                "pipeline.skills.fetch_google_review_links.fetch_google_places_text_search",
+                side_effect=[nearby],
+            ):
+                records = fetch_google_places_nearby_text(
+                    {
+                        "society_name": "Example Green",
+                        "city": "Bengaluru",
+                        "latitude": 12.9716,
+                        "longitude": 77.5946,
+                    },
+                    "lake",
+                )
+
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["place_name"], "Varthur Lake")
 
     def test_collects_exact_rust_source_input_shape(self):
         request = {

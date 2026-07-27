@@ -2,6 +2,7 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use serde::Deserialize;
+use std::collections::HashSet;
 
 use super::loader::{dag_root, load_json, DagConfigError};
 
@@ -12,6 +13,7 @@ pub struct SearchIntentFile {
     pub area_aliases: AreaAliasConfig,
     #[serde(default)]
     pub resolution: SearchResolutionConfig,
+    pub parser: SearchParserConfig,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -47,12 +49,62 @@ pub struct SearchPlaceFamilyAlias {
     pub aliases: Vec<String>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct SearchParserConfig {
+    pub bhk: BhkParserConfig,
+    pub budget: UnitValueParserConfig,
+    pub distance: UnitValueParserConfig,
+    pub relations: RelationParserConfig,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BhkParserConfig {
+    pub unit_aliases: Vec<String>,
+    pub number_words: Vec<NumberWord>,
+    pub min: u32,
+    pub max: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct NumberWord {
+    pub word: String,
+    pub value: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UnitValueParserConfig {
+    pub operators: Vec<String>,
+    pub units: Vec<UnitAliasConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UnitAliasConfig {
+    pub unit: String,
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    pub multiplier: f64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RelationParserConfig {
+    pub aliases: Vec<RelationAliasConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RelationAliasConfig {
+    pub alias: String,
+    #[serde(default)]
+    pub requires_distance_limit: bool,
+}
+
 pub fn search_intent_path() -> std::path::PathBuf {
     dag_root().join("search_intent.json")
 }
 
 pub fn load_search_intent_from_path(path: &Path) -> Result<SearchIntentFile, DagConfigError> {
-    load_json(path)
+    let file: SearchIntentFile = load_json(path)?;
+    validate_search_intent_file(&file)?;
+    Ok(file)
 }
 
 pub fn load_search_intent() -> Result<SearchIntentFile, DagConfigError> {
@@ -76,6 +128,126 @@ pub fn search_resolution_config() -> &'static SearchResolutionConfig {
             .map(|file| file.resolution)
             .unwrap_or_default()
     })
+}
+
+pub fn search_parser_config() -> &'static SearchParserConfig {
+    static CONFIG: OnceLock<SearchParserConfig> = OnceLock::new();
+    CONFIG.get_or_init(|| {
+        load_search_intent()
+            .map(|file| file.parser)
+            .expect("search_intent.json parser config must load and validate")
+    })
+}
+
+fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigError> {
+    validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)
+}
+
+fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
+    if config.bhk.min == 0 || config.bhk.max < config.bhk.min {
+        return Err("parser.bhk min/max must define a positive ascending range".to_string());
+    }
+    validate_aliases(
+        "parser.bhk.unit_aliases",
+        config.bhk.unit_aliases.iter().map(String::as_str),
+    )?;
+    if config.bhk.unit_aliases.is_empty() {
+        return Err("parser.bhk.unit_aliases must not be empty".to_string());
+    }
+    if config.bhk.number_words.is_empty() {
+        return Err("parser.bhk.number_words must not be empty".to_string());
+    }
+    if config.bhk.number_words.iter().any(|entry| {
+        entry.word.trim().is_empty() || entry.value < config.bhk.min || entry.value > config.bhk.max
+    }) {
+        return Err(
+            "parser.bhk.number_words must be non-empty words inside the BHK range".to_string(),
+        );
+    }
+    validate_aliases(
+        "parser.bhk.number_words",
+        config
+            .bhk
+            .number_words
+            .iter()
+            .map(|entry| entry.word.as_str()),
+    )?;
+    validate_unit_value_config("parser.budget", &config.budget, true)?;
+    validate_unit_value_config("parser.distance", &config.distance, true)?;
+    if config.relations.aliases.is_empty() {
+        return Err("parser.relations.aliases must not be empty".to_string());
+    }
+    validate_aliases(
+        "parser.relations.aliases",
+        config
+            .relations
+            .aliases
+            .iter()
+            .map(|entry| entry.alias.as_str()),
+    )?;
+    Ok(())
+}
+
+fn validate_unit_value_config(
+    label: &str,
+    config: &UnitValueParserConfig,
+    require_operators: bool,
+) -> Result<(), String> {
+    if require_operators && config.operators.iter().all(|value| value.trim().is_empty()) {
+        return Err(format!("{label}.operators must not be empty"));
+    }
+    if config.units.is_empty() {
+        return Err(format!("{label}.units must not be empty"));
+    }
+    for unit in &config.units {
+        if unit.unit.trim().is_empty() {
+            return Err(format!("{label}.units contains an empty unit id"));
+        }
+        if unit.aliases.iter().all(|alias| alias.trim().is_empty()) {
+            return Err(format!(
+                "{label}.units.{} aliases must not be empty",
+                unit.unit
+            ));
+        }
+        validate_aliases(
+            &format!("{label}.units.{}.aliases", unit.unit),
+            unit.aliases.iter().map(String::as_str),
+        )?;
+        if !unit.multiplier.is_finite() || unit.multiplier <= 0.0 {
+            return Err(format!(
+                "{label}.units.{} multiplier must be positive and finite",
+                unit.unit
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn validate_aliases<'a>(label: &str, aliases: impl Iterator<Item = &'a str>) -> Result<(), String> {
+    let mut seen = HashSet::new();
+    let mut count = 0;
+    for alias in aliases {
+        count += 1;
+        let normalized = normalize_alias(alias);
+        if normalized.is_empty() {
+            return Err(format!("{label} contains an empty alias"));
+        }
+        if !seen.insert(normalized) {
+            return Err(format!("{label} contains a duplicate alias"));
+        }
+    }
+    if count == 0 {
+        return Err(format!("{label} must not be empty"));
+    }
+    Ok(())
+}
+
+fn normalize_alias(alias: &str) -> String {
+    alias
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_ascii_lowercase()
 }
 
 fn embedded_area_aliases() -> Vec<AreaAliasEntry> {
@@ -185,5 +357,41 @@ mod tests {
             .entries
             .iter()
             .any(|entry| entry.canonical == "Whitefield"));
+    }
+
+    #[test]
+    fn parser_config_is_required_and_validated() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let missing_parser_path = temp_dir.path().join("missing_parser.json");
+        std::fs::write(
+            &missing_parser_path,
+            r#"{
+              "version": 1,
+              "area_aliases": { "entries": [] },
+              "resolution": {}
+            }"#,
+        )
+        .expect("write fixture");
+
+        assert!(load_search_intent_from_path(&missing_parser_path).is_err());
+
+        let invalid_parser_path = temp_dir.path().join("invalid_parser.json");
+        std::fs::write(
+            &invalid_parser_path,
+            r#"{
+              "version": 1,
+              "area_aliases": { "entries": [] },
+              "resolution": {},
+              "parser": {
+                "bhk": { "unit_aliases": [], "number_words": [], "min": 1, "max": 6 },
+                "budget": { "operators": [], "units": [] },
+                "distance": { "operators": ["within"], "units": [] },
+                "relations": { "aliases": [] }
+              }
+            }"#,
+        )
+        .expect("write fixture");
+
+        assert!(load_search_intent_from_path(&invalid_parser_path).is_err());
     }
 }

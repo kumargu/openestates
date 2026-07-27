@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
 import type { EvidenceSection } from "../../lib/types.ts";
 
+/* eslint-disable react-refresh/only-export-components */
+
 const MAX_DOTS = 16;
 
 const TRAIL_PALETTE = [

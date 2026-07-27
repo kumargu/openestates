@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
   PropertyDetailResponse,
   RecommendationResponse,
   RecommendationStatus,
+  SurfaceSceneResponse,
 } from "../lib/types.ts";
-import { getProperty, getPropertyRecommendations } from "../lib/api.ts";
+import {
+  getProperty,
+  getPropertyRecommendations,
+  getPropertySurface,
+  parseProofFocusParam,
+} from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ProjectStatusTag } from "../components/ProjectStatusTag.tsx";
 import { TrustBadge } from "../components/TrustBadge.tsx";
@@ -24,6 +30,7 @@ import {
   isRedundantHomeState,
 } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
+import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
 
 function formatPrice(price: number): string {
   if (price >= 10_000_000) return `${(price / 10_000_000).toFixed(1)} Cr`;
@@ -87,36 +94,54 @@ function buildPropertyJsonLd(p: PropertyDetailResponse["property"]) {
 
 export function PropertyPage() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+
+  if (!id) return <PageState variant="not_found" context="property" message="Property was not found." />;
+
+  const focusParam = searchParams.get("focus");
+  return <PropertyPageBody key={`${id}:${focusParam ?? ""}`} id={id} focusParam={focusParam} />;
+}
+
+function PropertyPageBody({
+  id,
+  focusParam,
+}: {
+  id: string;
+  focusParam: string | null;
+}) {
   const navigate = useNavigate();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] = useState<RecommendationResponse | null>(null);
+  const [aroundThisHomeScene, setAroundThisHomeScene] =
+    useState<SurfaceSceneResponse | null>(null);
   const [recommendationStatus, setRecommendationStatus] =
     useState<RecommendationStatus>("pending");
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
 
   useEffect(() => {
-    if (!id) return;
-    setData(null);
-    setRecommendations(null);
-    setRecommendationStatus("pending");
-    setStatus("loading");
+    let cancelled = false;
 
     getProperty(id)
       .then((d) => {
+        if (cancelled) return;
         setData(d);
         setStatus("ok");
       })
       .catch((err: Error) => {
+        if (cancelled) return;
         setStatus(err.message.includes("404") ? "not_found" : "error");
       });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;
-    if (!propertyId || !id) return;
+    if (!propertyId) return;
     let cancelled = false;
 
-    setRecommendationStatus(data.recommendations?.status ?? "pending");
     getPropertyRecommendations(propertyId)
       .then((response) => {
         if (cancelled) return;
@@ -132,7 +157,26 @@ export function PropertyPage() {
     return () => {
       cancelled = true;
     };
-  }, [data?.property?.id, data?.recommendations?.status, id]);
+  }, [data?.property?.id]);
+
+  useEffect(() => {
+    const propertyId = data?.property?.id;
+    if (!propertyId) return;
+    let cancelled = false;
+
+    const focus = parseProofFocusParam(focusParam);
+    getPropertySurface(propertyId, "around_this_home", focus)
+      .then((scene) => {
+        if (!cancelled) setAroundThisHomeScene(scene);
+      })
+      .catch(() => {
+        if (!cancelled) setAroundThisHomeScene(null);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [data?.property?.id, focusParam]);
 
   if (status === "loading") return (
     <div className="page-container-wide">
@@ -189,11 +233,13 @@ export function PropertyPage() {
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
   const showMarketTrend = hasMarketTrend(detailEvidenceSections);
-  const showNearbyPlate = hasAroundThisHomePlate(data.map_context);
+  const aroundThisHomeContext =
+    propertyMapContextFromSurfaceScene(aroundThisHomeScene, data.map_context);
+  const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
   const evidenceExcludeKinds = [
     ...detailEvidenceExcludeKindsForPlate({
       showNearbyPlate,
-      hasWaterOnPlate: Boolean(showNearbyPlate && data.map_context?.water),
+      hasWaterOnPlate: Boolean(showNearbyPlate && aroundThisHomeContext?.water),
     }),
     ...(showMarketTrend ? ["market"] : []),
   ];
@@ -340,8 +386,8 @@ export function PropertyPage() {
             </dl>
           </aside>
 
-          {showNearbyPlate && data.map_context && (
-            <AroundThisHomePlate context={data.map_context} />
+          {showNearbyPlate && aroundThisHomeContext && (
+            <AroundThisHomePlate context={aroundThisHomeContext} />
           )}
 
           {showApproachTrail && (

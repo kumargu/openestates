@@ -5,6 +5,7 @@ pub mod geo;
 pub mod guard;
 pub mod index;
 pub mod intent;
+pub(crate) mod parser;
 pub mod resolver;
 pub mod schema;
 pub mod semantic;
@@ -28,6 +29,7 @@ pub use text::TextSearch;
 use serde::Serialize;
 
 use crate::models::{AreaProfile, PropertyCard};
+use crate::proof_focus::ProofFocus;
 
 /// One structured reason why a result matched a user preference.
 #[derive(Debug, Clone, Serialize)]
@@ -109,6 +111,9 @@ pub struct SearchResultCard {
     /// Structured match explanation — present when query has preferences.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub match_explanation: Option<MatchExplanation>,
+    /// Generic detail-surface focus handles backed by the same proof reasons.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub proof_focuses: Vec<ProofFocus>,
     /// Reserved for precomputed local similarity scores.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub semantic_score: Option<f64>,

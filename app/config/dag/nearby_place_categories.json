@@ -45,7 +45,8 @@
       "max_distance_km": 3.5,
       "allow_missing_place_types": true,
       "accepted_place_types": ["gym", "fitness_center", "sports_complex"],
-      "name_markers": ["cult", "cult.fit", "gym", "fitness", "crossfit", "yoga", "sports club"]
+      "require_name_marker": true,
+      "name_markers": ["cult", "cult.fit"]
     },
     {
       "fact_key": "nearby_tech_parks",
@@ -56,7 +57,7 @@
       "chainable": true,
       "max_distance_km": 15.0,
       "accepted_place_types": ["business_center", "corporate_office"],
-      "name_markers": ["tech park", "technology park", "it park", "itpb", "itpl", "business park", "tech forest", "office park"],
+      "name_markers": ["tech park", "technology park", "it park", "itpb", "business park", "tech forest", "office park"],
       "name_block_markers": [" road", " bus stop", " metro station"]
     },
     {
@@ -87,22 +88,37 @@
       "fact_key": "nearby_lakes",
       "category_aliases": ["lake", "lakes", "water_body", "water_bodies"],
       "display_label": "Nearby lakes",
-      "answers_preferences": ["nearby", "lake", "lakes", "water body", "red flag"],
-      "relation_class": "risk_externality",
+      "answers_preferences": ["nearby", "lake", "lakes", "water body"],
+      "relation_class": "context",
       "chainable": false,
       "max_distance_km": 1.0,
       "allow_missing_place_types": false,
       "accepted_place_types": ["lake"],
       "name_markers": ["lake", "kere"],
+      "name_block_markers": ["site office", "sales office", "project office"],
       "derived_distance_risks": [
         {
           "fact_key": "lake_within_250m",
           "display_label": "Lake within 250 m",
-          "answers_preferences": ["lake within 250m", "lake buffer", "flooding risk", "red flag"],
+          "answers_preferences": ["lake within 250m", "lake buffer", "nearby lake"],
           "max_distance_km": 0.25,
-          "scoring_weight": 1.1
+          "scoring_weight": 0.7
         }
       ]
+    },
+    {
+      "fact_key": "nearby_breweries",
+      "category_aliases": ["brewery", "breweries", "brewpub", "biergarten", "beer_garden"],
+      "display_label": "Nearby breweries",
+      "answers_preferences": ["nearby", "brewery", "breweries", "beer"],
+      "relation_class": "access",
+      "chainable": true,
+      "max_distance_km": 5.0,
+      "allow_missing_place_types": false,
+      "accepted_place_types": ["bar", "restaurant"],
+      "require_name_marker": true,
+      "name_markers": ["brewery", "brewing", "biergarten", "beer garden"],
+      "name_block_markers": ["wine shop", "liquor store", "restaurant only"]
     }
   ]
 }

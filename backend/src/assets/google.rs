@@ -1561,6 +1561,8 @@ struct NearbyPlaceCategory {
     #[serde(default)]
     name_block_markers: Vec<String>,
     #[serde(default)]
+    require_name_marker: bool,
+    #[serde(default)]
     derived_distance_risks: Vec<NearbyDerivedDistanceRisk>,
 }
 
@@ -1711,6 +1713,13 @@ fn nearby_row_matches_fact_key(
     {
         return false;
     }
+    let name_marker_match = category_config
+        .name_markers
+        .iter()
+        .any(|marker| name.contains(&marker.to_ascii_lowercase()));
+    if category_config.require_name_marker {
+        return name_marker_match;
+    }
     if category_config.allow_missing_place_types && !has_place_types {
         return true;
     }
@@ -1721,10 +1730,7 @@ fn nearby_row_matches_fact_key(
     {
         return true;
     }
-    category_config
-        .name_markers
-        .iter()
-        .any(|marker| name.contains(&marker.to_ascii_lowercase()))
+    name_marker_match
 }
 
 fn nearby_answers_preferences(category_config: &NearbyPlaceCategory) -> Vec<&str> {

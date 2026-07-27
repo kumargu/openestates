@@ -3,12 +3,16 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
+  ProofFocus,
+  PropertySurfacesResponse,
   RecommendationResponse,
   AreaListItem,
   AreaDetail,
   AreaTrackerResponse,
   DiscoveryResponse,
   SearchResponse,
+  SurfaceBatchResponse,
+  SurfaceSceneResponse,
 } from "./types.ts";
 import { getFixtureResponse } from "./dev-fixtures.ts";
 import {
@@ -17,9 +21,13 @@ import {
   isListableProperty,
 } from "./property-filters.ts";
 
-const API_BASE = import.meta.env.VITE_API_BASE
-  ?? (import.meta.env.DEV ? "" : "http://127.0.0.1:4000");
-const ENABLE_DEV_FIXTURES = import.meta.env.VITE_USE_FIXTURE_API === "true";
+const META_ENV = (import.meta as ImportMeta & {
+  env?: Record<string, string | boolean | undefined>;
+}).env ?? {};
+const API_BASE = typeof META_ENV.VITE_API_BASE === "string"
+  ? META_ENV.VITE_API_BASE
+  : "";
+const ENABLE_DEV_FIXTURES = META_ENV.VITE_USE_FIXTURE_API === "true";
 const inFlightSearches = new Map<string, Promise<SearchResponse>>();
 
 type ApiFetchOptions = {
@@ -98,6 +106,62 @@ export function getPropertyRecommendations(id: string): Promise<RecommendationRe
 
 export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+}
+
+export function getPropertySurface(
+  id: string,
+  surfaceId: string,
+  focus?: ProofFocus,
+): Promise<SurfaceSceneResponse> {
+  return fetchJson(propertySurfacePath(id, surfaceId, focus));
+}
+
+export function propertyDetailPath(id: string, focus?: ProofFocus): string {
+  const params = focus ? `?focus=${encodeURIComponent(JSON.stringify(focus))}` : "";
+  return `/property/${encodeURIComponent(id)}${params}`;
+}
+
+export function propertySurfacePath(id: string, surfaceId: string, focus?: ProofFocus): string {
+  const params = focus ? `?focus=${encodeURIComponent(JSON.stringify(focus))}` : "";
+  return `/api/properties/${encodeURIComponent(id)}/surfaces/${encodeURIComponent(surfaceId)}${params}`;
+}
+
+export function parseProofFocusParam(value: string | null): ProofFocus | undefined {
+  if (!value) return undefined;
+  try {
+    const parsed = JSON.parse(value) as Partial<ProofFocus>;
+    if (
+      typeof parsed.surfaceId !== "string"
+      || typeof parsed.layerId !== "string"
+      || typeof parsed.factKey !== "string"
+      || typeof parsed.reason !== "string"
+    ) {
+      return undefined;
+    }
+    return parsed as ProofFocus;
+  } catch {
+    return undefined;
+  }
+}
+
+export function getPropertySurfaces(
+  id: string,
+  surfaceIds: string[] = ["around_this_home"],
+): Promise<PropertySurfacesResponse> {
+  const ids = surfaceIds.join(",");
+  return fetchJson(
+    `/api/properties/${encodeURIComponent(id)}/surfaces?ids=${encodeURIComponent(ids)}`,
+  );
+}
+
+export function getPropertySurfacesBatch(
+  propertyIds: string[],
+  surfaceIds: string[] = ["around_this_home"],
+): Promise<SurfaceBatchResponse> {
+  return postJson("/api/properties/surfaces/batch", {
+    propertyIds,
+    surfaceIds,
+  });
 }
 
 export function getPropertyEvidenceBatch(

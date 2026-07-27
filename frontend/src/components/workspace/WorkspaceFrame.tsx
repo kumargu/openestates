@@ -38,6 +38,10 @@ function activeWorkspaceView(pathname: string): WorkspaceView {
   return "browse";
 }
 
+function sameIds(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((id, index) => id === right[index]);
+}
+
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -64,7 +68,8 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   useEffect(() => {
     function refresh() {
-      setShortlistIds(readShortlistIds());
+      const next = readShortlistIds();
+      setShortlistIds((current) => sameIds(current, next) ? current : next);
     }
     window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);
     window.addEventListener("storage", refresh);
@@ -114,8 +119,9 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
   useEffect(() => {
     if (homeIds.length > 0 && queryIds.length === 0) {
-      const stored = shortlistIds.join(",");
-      if (stored !== homeIds.join(",")) writeShortlistIds(homeIds);
+      if (!sameIds(shortlistIds, homeIds)) {
+        writeShortlistIds(homeIds);
+      }
     }
   }, [homeIds, queryIds.length, shortlistIds]);
 

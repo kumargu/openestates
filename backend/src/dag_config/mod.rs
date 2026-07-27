@@ -11,18 +11,26 @@
 //! | `asset_registry.json` | Pipeline asset DAG | `openestates_registry()` |
 //! | `enrichment_targets.json` | Re-enrichment plans | `openestates-enrich` (pending) |
 //! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
+//! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
 //! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
 //!
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod evidence_sections;
 mod fact_registry;
 mod loader;
 mod resolution;
 mod search_guardrails;
 mod search_intent;
+mod ui_surfaces;
 
+pub use evidence_sections::{
+    evidence_sections_config, evidence_sections_path, load_evidence_sections,
+    load_evidence_sections_from_path, ContextFactDefinition, EvidenceSectionDefinition,
+    EvidenceSectionPresentation,
+};
 pub use fact_registry::{
     fact_registry_path, load_fact_registry, load_fact_registry_from_path, load_fact_registry_index,
     scoring_direction_from_hint, FactRegistryEntry, FactRegistryFile, FactRegistryIndex,
@@ -45,6 +53,12 @@ pub use search_guardrails::{
 };
 pub use search_intent::{
     area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,
-    search_resolution_config, AreaAliasEntry, SearchIntentFile, SearchPlaceFamilyAlias,
-    SearchResolutionConfig,
+    search_parser_config, search_resolution_config, AreaAliasEntry, BhkParserConfig, NumberWord,
+    RelationAliasConfig, RelationParserConfig, SearchIntentFile, SearchParserConfig,
+    SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
+};
+pub use ui_surfaces::{
+    load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,
+    UiSurfaceAnchorConfig, UiSurfaceConfig, UiSurfaceLayerRule, UiSurfaceSceneConfig,
+    UiSurfacesFile,
 };

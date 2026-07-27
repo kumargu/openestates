@@ -1,6 +1,22 @@
 {
   "version": 1,
   "description": "OpenStreetMap power-infrastructure selectors and buyer-facing risk thresholds.",
+  "collector": {
+    "source_id": "openstreetmap_power",
+    "source_type": "OpenStreetMap",
+    "fetch_source": "overpass_power_snapshot",
+    "overpass_url_env": "OPENESTATES_OVERPASS_API_URL",
+    "default_overpass_url": "https://overpass-api.de/api/interpreter",
+    "query_timeout_seconds": 60,
+    "bbox_padding_meters": 500.0,
+    "fallback_to_subject_queries": true,
+    "allow_partial_subject_failures": false,
+    "subject_query_retry_count": 2,
+    "subject_query_retry_delay_seconds": 20.0,
+    "retry_status_codes": [429, 504],
+    "confidence": 0.82,
+    "voltage_query_values": ["66000", "110000", "132000", "220000", "400000", "765000"]
+  },
   "transmission_lines": {
     "fact_key": "high_voltage_transmission_line_nearby",
     "display_label": "High-voltage transmission line nearby",

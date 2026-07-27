@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -26,6 +26,10 @@ use crate::community::{
     community_evidence_from_fact_value, community_pulse_from_summary,
     deterministic_community_summarizer, CommunityPulse,
 };
+use crate::dag_config::{
+    evidence_sections_config, ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
+    EvidenceSectionPresentation,
+};
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
 use crate::livability_brief::{
@@ -39,6 +43,7 @@ use super::enrichment::{
     overlay_project_scale_facts, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
     DataFreshness, ReraInfo,
 };
+use super::property_map::property_map_context_from_surface_scene;
 
 /// GET /api/properties — returns UI-ready property cards.
 pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<PropertyCard>> {
@@ -186,6 +191,9 @@ pub struct SourcePanel {
     pub scope: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub relationship: Option<String>,
+    pub priority: u32,
+    pub constellation: String,
+    pub presentation: EvidencePresentation,
     pub items: Vec<SourceItem>,
     pub missing: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -226,11 +234,7 @@ pub struct SourceAttribution {
     pub learned_at: String,
 }
 
-// Property evidence panel layout — schema in app/config/product/evidence_sections.json.
-const BUYER_CONTEXT_SECTIONS_JSON: &str =
-    include_str!("../../../app/config/product/evidence_sections.json");
 const APPROACH_ROAD_MEDIA_FRAME_LIMIT: usize = 6;
-static BUYER_CONTEXT_DEFINITIONS: OnceLock<Vec<BuyerContextDefinition>> = OnceLock::new();
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct EvidenceMediaStrip {
@@ -559,17 +563,6 @@ fn google_reviews_url_source_item(
     })
 }
 
-fn source_item_with_display_key(
-    graph: &crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    fact_key: &str,
-    display_key: &str,
-    label: &str,
-) -> Option<SourceItem> {
-    let fact = latest_fact(graph, node_id, fact_key)?;
-    source_item_from_fact(node_id, fact, fact_key, display_key, label)
-}
-
 fn source_item_from_fact(
     entity_id: &str,
     fact: &SourcedFact,
@@ -754,6 +747,7 @@ fn serving_multi_source_item(
     projection: &SocietyFactProjection<'_>,
     fact_key: &str,
     label: &str,
+    max_values: usize,
 ) -> Option<SourceItem> {
     let mut values = Vec::<SourceValue>::new();
     for fact in projection.records(fact_key) {
@@ -762,7 +756,7 @@ fn serving_multi_source_item(
                 value: value.trim().to_string(),
                 source_url: fact.source_url.clone(),
                 source_type: fact.source_type.clone(),
-                confidence_pct: confidence_pct(fact.confidence),
+                confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
                 learned_at: fact.learned_at,
             }),
             FactValue::Tags(tags) => {
@@ -775,7 +769,7 @@ fn serving_multi_source_item(
                         value: value.to_string(),
                         source_url: fact.source_url.clone(),
                         source_type: fact.source_type.clone(),
-                        confidence_pct: confidence_pct(fact.confidence),
+                        confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
                         learned_at: fact.learned_at,
                     });
                 }
@@ -791,7 +785,7 @@ fn serving_multi_source_item(
             .then_with(|| left.value.cmp(&right.value))
     });
     values.dedup_by(|left, right| left.value == right.value && left.source_url == right.source_url);
-    values.truncate(source_value_limit(fact_key));
+    values.truncate(max_values);
     if values.is_empty() {
         return None;
     }
@@ -847,10 +841,6 @@ fn serving_multi_source_item(
     })
 }
 
-fn confidence_pct(confidence: f32) -> u8 {
-    (confidence * 100.0).round().clamp(0.0, 100.0) as u8
-}
-
 fn nearby_distance_key(value: &str) -> f64 {
     let Some(open_index) = value.find('(') else {
         return f64::INFINITY;
@@ -863,61 +853,6 @@ fn nearby_distance_key(value: &str) -> f64 {
         .trim()
         .parse::<f64>()
         .unwrap_or(f64::INFINITY)
-}
-
-fn collect_society_source_items(
-    graph: &crate::knowledge::KnowledgeGraph,
-    node_id: &str,
-    projection: Option<&SocietyFactProjection<'_>>,
-    keys: &[(&str, &str)],
-) -> Vec<SourceItem> {
-    keys.iter()
-        .filter_map(|(key, label)| {
-            if key.starts_with("nearby_") {
-                if let Some(item) = projection
-                    .and_then(|projection| serving_multi_source_item(projection, key, label))
-                {
-                    return Some(item);
-                }
-            }
-            projection
-                .and_then(|projection| serving_source_item(projection, key, label))
-                .or_else(|| source_item(graph, node_id, key, label))
-                .or_else(|| {
-                    source_item_aliases(key).iter().find_map(|alias| {
-                        projection
-                            .and_then(|projection| {
-                                serving_source_item_with_display_key(projection, alias, key, label)
-                            })
-                            .or_else(|| {
-                                source_item_with_display_key(graph, node_id, alias, key, label)
-                            })
-                    })
-                })
-        })
-        .collect()
-}
-
-fn section_fact_key_labels(section_kind: &str) -> Vec<(&'static str, &'static str)> {
-    evidence_section_definition(section_kind)
-        .filter(|definition| !definition.facts.is_empty())
-        .map(|definition| {
-            definition
-                .facts
-                .iter()
-                .map(|fact| (fact.key.as_str(), fact.label.as_str()))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn source_value_limit(fact_key: &str) -> usize {
-    buyer_context_definitions()
-        .iter()
-        .flat_map(|definition| definition.facts.iter())
-        .find(|fact| fact.key == fact_key)
-        .and_then(|fact| fact.max_values)
-        .unwrap_or(5)
 }
 
 fn collect_community_evidence_records(
@@ -1217,10 +1152,6 @@ fn collect_community_records_for_keys(
     records
 }
 
-fn source_item_aliases(_key: &str) -> &'static [&'static str] {
-    &[]
-}
-
 fn entity_scope(entity_id: &str) -> &'static str {
     if entity_id.starts_with("property:") {
         "property"
@@ -1434,37 +1365,7 @@ fn evidence_media_source_item(media: &EvidenceMediaStrip) -> SourceItem {
     }
 }
 
-#[derive(Clone, Deserialize)]
-struct ContextFactDefinition {
-    key: String,
-    label: String,
-    scope: String,
-    relationship: String,
-    #[serde(default)]
-    max_values: Option<usize>,
-}
-
-#[derive(Clone, Deserialize)]
-struct BuyerContextDefinition {
-    kind: String,
-    #[serde(default)]
-    priority: u32,
-    #[serde(default)]
-    constellation: String,
-    #[serde(default)]
-    surfaces: Vec<String>,
-    title: String,
-    subtitle: String,
-    scope: String,
-    relationship: String,
-    #[serde(default)]
-    presentation: Option<EvidencePresentation>,
-    #[serde(default)]
-    media: Vec<String>,
-    facts: Vec<ContextFactDefinition>,
-}
-
-fn evidence_section_definition(kind: &str) -> Option<&'static BuyerContextDefinition> {
+fn evidence_section_definition(kind: &str) -> Option<&'static EvidenceSectionDefinition> {
     buyer_context_definitions()
         .iter()
         .find(|definition| definition.kind == kind)
@@ -1478,31 +1379,41 @@ fn default_evidence_presentation() -> EvidencePresentation {
     }
 }
 
-fn buyer_context_definitions() -> &'static [BuyerContextDefinition] {
-    BUYER_CONTEXT_DEFINITIONS
-        .get_or_init(|| {
-            serde_json::from_str(BUYER_CONTEXT_SECTIONS_JSON)
-                .expect("app/config/product/evidence_sections.json should be valid")
-        })
-        .as_slice()
+fn buyer_context_definitions() -> &'static [EvidenceSectionDefinition] {
+    evidence_sections_config().expect("app/config/dag/evidence_sections.json should be valid")
 }
 
-fn build_buyer_context_panels(
+fn build_configured_evidence_panels(
     graph: &crate::knowledge::KnowledgeGraph,
     property: &crate::models::Property,
     projection: Option<&SocietyFactProjection<'_>>,
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
-    buyer_context_definitions()
+    build_configured_evidence_panels_from_definitions(
+        buyer_context_definitions(),
+        graph,
+        property,
+        projection,
+        serving_facts,
+        graph_index,
+    )
+}
+
+fn build_configured_evidence_panels_from_definitions(
+    definitions: &[EvidenceSectionDefinition],
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+    serving_facts: Option<&ServingFactIndex>,
+    graph_index: Option<&crate::graph::GraphIndex>,
+) -> Vec<SourcePanel> {
+    definitions
         .iter()
-        .filter(|definition| {
-            definition
-                .surfaces
-                .iter()
-                .any(|surface| surface == "buyer_context")
-        })
         .filter_map(|definition| {
+            if definition.derived.is_some() {
+                return build_derived_evidence_panel(graph, property, projection, definition);
+            }
             let mut items = collect_buyer_context_items(
                 graph,
                 property,
@@ -1527,13 +1438,76 @@ fn build_buyer_context_panels(
                 subtitle: definition.subtitle.clone(),
                 scope: definition.scope.clone(),
                 relationship: Some(definition.relationship.clone()),
+                priority: definition.priority,
+                constellation: section_constellation_from_definition(definition),
+                presentation: evidence_presentation_from_definition(definition),
                 items,
-                missing: Vec::new(),
+                missing: definition.missing.clone(),
                 media,
                 community_pulse: None,
             })
         })
         .collect()
+}
+
+fn build_derived_evidence_panel(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+    definition: &EvidenceSectionDefinition,
+) -> Option<SourcePanel> {
+    match definition.derived.as_deref()? {
+        "community_pulse" => build_community_pulse_panel(graph, property, projection, definition),
+        _ => None,
+    }
+}
+
+fn build_community_pulse_panel(
+    graph: &crate::knowledge::KnowledgeGraph,
+    property: &crate::models::Property,
+    projection: Option<&SocietyFactProjection<'_>>,
+    definition: &EvidenceSectionDefinition,
+) -> Option<SourcePanel> {
+    let society_id = society_node_id(&property.society_id);
+    let community_records = collect_community_evidence_records(
+        graph,
+        &society_id,
+        Some(property.area.as_str()),
+        projection,
+    );
+    if community_records.is_empty() {
+        return None;
+    }
+
+    let mut pulse = deterministic_community_summarizer()
+        .summarize(&community_records)
+        .into_iter()
+        .next()
+        .map(|summary| community_pulse_from_summary(&summary))?;
+    enrich_community_pulse_source_urls(graph, &society_id, &mut pulse);
+
+    let mut missing = definition.missing.clone();
+    if pulse.positives.is_empty() && pulse.concerns.is_empty() {
+        missing.push("Review themes are still being expanded across sources.".to_string());
+    }
+    if pulse.quotes.is_empty() {
+        missing.push("Review snippets are still being extracted.".to_string());
+    }
+
+    Some(SourcePanel {
+        kind: definition.kind.clone(),
+        title: definition.title.clone(),
+        subtitle: format!("{} · {}", pulse.source_label, pulse.sentiment_band),
+        scope: definition.scope.clone(),
+        relationship: Some(definition.relationship.clone()),
+        priority: definition.priority,
+        constellation: section_constellation_from_definition(definition),
+        presentation: evidence_presentation_from_definition(definition),
+        items: Vec::new(),
+        missing,
+        media: vec![],
+        community_pulse: Some(pulse),
+    })
 }
 
 fn collect_buyer_context_items(
@@ -1565,8 +1539,18 @@ fn collect_buyer_context_items(
                 &fact.label,
             )
             .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label)),
-            _ => projection
-                .and_then(|projection| serving_source_item(projection, &fact.key, &fact.label))
+            _ => fact
+                .max_values
+                .and_then(|max_values| {
+                    projection.and_then(|projection| {
+                        serving_multi_source_item(projection, &fact.key, &fact.label, max_values)
+                    })
+                })
+                .or_else(|| {
+                    projection.and_then(|projection| {
+                        serving_source_item(projection, &fact.key, &fact.label)
+                    })
+                })
                 .or_else(|| source_item(graph, &society_id, &fact.key, &fact.label))
                 .or_else(|| {
                     serving_related_society_source_item(
@@ -1728,120 +1712,15 @@ pub(crate) fn build_source_panels(
     serving_facts: Option<&ServingFactIndex>,
     graph_index: Option<&crate::graph::GraphIndex>,
 ) -> Vec<SourcePanel> {
-    let society_id = society_node_id(&property.society_id);
     let projection =
         serving_facts.map(|facts| SocietyFactProjection::from_index(facts, &property.society_id));
-
-    let mut panels = Vec::new();
-    panels.extend(build_buyer_context_panels(
+    let panels = build_configured_evidence_panels(
         graph,
         property,
         projection.as_ref(),
         serving_facts,
         graph_index,
-    ));
-
-    let rera_items = collect_society_source_items(
-        graph,
-        &society_id,
-        projection.as_ref(),
-        &[
-            ("rera_status", "Status"),
-            ("rera_number", "Registration"),
-            ("rera_completion_date", "Completion"),
-            ("rera_total_land_area_sqm", "Land area"),
-            ("rera_delay_months", "Delay"),
-            ("rera_complaints_count", "Complaints"),
-            ("rera_builder_revocations", "Builder revocations"),
-        ],
     );
-    if !rera_items.is_empty() {
-        panels.push(SourcePanel {
-            kind: "rera".to_string(),
-            title: "RERA".to_string(),
-            subtitle: "Official project registration and delivery record.".to_string(),
-            scope: "society".to_string(),
-            relationship: Some("project registration".to_string()),
-            items: rera_items,
-            missing: vec![],
-            media: vec![],
-            community_pulse: None,
-        });
-    }
-
-    let market_fact_keys = section_fact_key_labels("market");
-    let market_items =
-        collect_society_source_items(graph, &society_id, projection.as_ref(), &market_fact_keys);
-    panels.push(SourcePanel {
-        kind: "market".to_string(),
-        title: "Market trail".to_string(),
-        subtitle: "Pricing, appreciation, and nearby comparable signals.".to_string(),
-        scope: "society".to_string(),
-        relationship: Some("project market trail".to_string()),
-        items: market_items,
-        missing: vec!["Registered resale transaction comps are not linked yet.".to_string()],
-        media: vec![],
-        community_pulse: None,
-    });
-
-    let nearby_fact_keys = section_fact_key_labels("nearby");
-    let nearby_items =
-        collect_society_source_items(graph, &society_id, projection.as_ref(), &nearby_fact_keys);
-    if !nearby_items.is_empty() {
-        panels.push(SourcePanel {
-            kind: "nearby".to_string(),
-            title: "Nearby".to_string(),
-            subtitle: "Map-backed places near the society.".to_string(),
-            scope: "society".to_string(),
-            relationship: Some("nearby map context".to_string()),
-            items: nearby_items,
-            missing: vec![],
-            media: vec![],
-            community_pulse: None,
-        });
-    }
-
-    let community_records = collect_community_evidence_records(
-        graph,
-        &society_id,
-        Some(property.area.as_str()),
-        projection.as_ref(),
-    );
-    let mut community_pulse = if community_records.is_empty() {
-        None
-    } else {
-        deterministic_community_summarizer()
-            .summarize(&community_records)
-            .into_iter()
-            .next()
-            .map(|summary| community_pulse_from_summary(&summary))
-    };
-    if let Some(pulse) = community_pulse.as_mut() {
-        enrich_community_pulse_source_urls(graph, &society_id, pulse);
-    }
-
-    if let Some(pulse) = community_pulse.clone() {
-        let mut community_missing = Vec::new();
-        if pulse.positives.is_empty() && pulse.concerns.is_empty() {
-            community_missing
-                .push("Review themes are still being expanded across sources.".to_string());
-        }
-        if pulse.quotes.is_empty() {
-            community_missing.push("Review snippets are still being extracted.".to_string());
-        }
-
-        panels.push(SourcePanel {
-            kind: "community".to_string(),
-            title: "Community pulse".to_string(),
-            subtitle: format!("{} · {}", pulse.source_label, pulse.sentiment_band),
-            scope: "society".to_string(),
-            relationship: Some("resident and review context".to_string()),
-            items: Vec::new(),
-            missing: community_missing,
-            media: vec![],
-            community_pulse: Some(pulse),
-        });
-    }
 
     panels
         .into_iter()
@@ -1914,7 +1793,7 @@ pub(crate) fn evidence_section_from_panel(
             .collect(),
     );
     if entity_ids.is_empty() {
-        entity_ids = fallback_section_entity_ids(&panel.kind, entity_refs);
+        entity_ids = entity_ids_for_section_scope(&panel.scope, entity_refs);
     }
     let confidence_pct = panel
         .community_pulse
@@ -1927,12 +1806,12 @@ pub(crate) fn evidence_section_from_panel(
         .as_ref()
         .map(|pulse| pulse.paragraph.clone())
         .unwrap_or_else(|| section_summary(&panel));
-    let presentation = evidence_section_presentation(&panel.kind);
-    let constellation = evidence_section_constellation(&panel.kind);
+    let presentation = panel.presentation.clone();
+    let constellation = panel.constellation.clone();
     let header_meta = section_header_meta(&panel, &source_types);
 
     EvidenceSection {
-        priority: evidence_section_priority(&panel.kind),
+        priority: panel.priority,
         kind: panel.kind,
         title: panel.title,
         summary,
@@ -1950,13 +1829,6 @@ pub(crate) fn evidence_section_from_panel(
         media: panel.media,
         community_pulse: panel.community_pulse,
     }
-}
-
-fn evidence_section_constellation(kind: &str) -> String {
-    evidence_section_definition(kind)
-        .map(|definition| definition.constellation.clone())
-        .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| "trust".to_string())
 }
 
 fn section_header_meta(panel: &SourcePanel, source_types: &[String]) -> String {
@@ -2007,16 +1879,32 @@ fn dedup_community_pulse_against_brief(panels: &mut [SourcePanel], brief: &Livab
     }
 }
 
-fn evidence_section_presentation(kind: &str) -> EvidencePresentation {
-    evidence_section_definition(kind)
-        .and_then(|definition| definition.presentation.clone())
+fn section_constellation_from_definition(definition: &EvidenceSectionDefinition) -> String {
+    if definition.constellation.trim().is_empty() {
+        "trust".to_string()
+    } else {
+        definition.constellation.clone()
+    }
+}
+
+fn evidence_presentation_from_definition(
+    definition: &EvidenceSectionDefinition,
+) -> EvidencePresentation {
+    definition
+        .presentation
+        .as_ref()
+        .map(evidence_presentation_from_config)
         .unwrap_or_else(default_evidence_presentation)
 }
 
-fn evidence_section_priority(kind: &str) -> u32 {
-    evidence_section_definition(kind)
-        .map(|definition| definition.priority)
-        .unwrap_or(100)
+fn evidence_presentation_from_config(
+    presentation: &EvidenceSectionPresentation,
+) -> EvidencePresentation {
+    EvidencePresentation {
+        variant: presentation.variant.clone(),
+        density: presentation.density.clone(),
+        max_preview_items: presentation.max_preview_items,
+    }
 }
 
 fn section_confidence_pct(items: &[SourceItem]) -> u8 {
@@ -2069,13 +1957,6 @@ fn primary_section_item(panel: &SourcePanel) -> Option<&SourceItem> {
         }
     }
     panel.items.first()
-}
-
-fn fallback_section_entity_ids(kind: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
-    let scope = evidence_section_definition(kind)
-        .map(|definition| definition.scope.as_str())
-        .unwrap_or("property");
-    entity_ids_for_section_scope(scope, entity_refs)
 }
 
 fn entity_ids_for_section_scope(scope: &str, entity_refs: &KgEntityRefs) -> Vec<String> {
@@ -2667,12 +2548,35 @@ pub async fn get_property(
 
     // Compute confidence score for detail page (uses fact-quality instead of match_quality)
     let confidence_score = compute_confidence_for_detail(Some(&graph), &property.society_id);
-    let map_context = crate::routes::property_map::build_property_map_context(
+    let legacy_map_context = crate::routes::property_map::build_property_map_context(
         &property,
         society.as_ref().map(|society| society.name.as_str()),
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
         Some(state.map_overlays.as_ref()),
     );
+    let map_context = serving_bundle
+        .as_ref()
+        .and_then(|bundle| {
+            let surface = around_this_home_surface_config()?;
+            crate::surfaces::build_surface_scene(
+                &property,
+                society.as_ref().map(|society| society.name.as_str()),
+                entity_refs.clone(),
+                bundle,
+                surface,
+            )
+        })
+        .and_then(|scene| property_map_context_from_surface_scene(&scene))
+        .map(|mut context| {
+            if let Some(legacy) = legacy_map_context.as_ref() {
+                context.water = legacy.water.clone();
+                context.metro_lines = legacy.metro_lines.clone();
+                context.green_patches = legacy.green_patches.clone();
+                context.lakes = legacy.lakes.clone();
+            }
+            context
+        })
+        .or(legacy_map_context);
     Ok(Json(PropertyDetail {
         entity_refs,
         evidence,
@@ -2700,6 +2604,14 @@ pub async fn get_property(
         livability_brief,
         map_context,
     }))
+}
+
+fn around_this_home_surface_config() -> Option<&'static crate::dag_config::UiSurfaceConfig> {
+    ui_surfaces_config()
+        .ok()?
+        .surfaces
+        .iter()
+        .find(|surface| surface.id == "around_this_home")
 }
 
 fn external_reviews_for(
@@ -3339,6 +3251,72 @@ mod serving_state_tests {
             "Schools: Greenwood High (1.2 km, 4.3 rating) +1 more"
         );
         assert!(nearby.missing.is_empty());
+    }
+
+    #[test]
+    fn property_evidence_adds_config_only_section_without_rust_branch() {
+        let mut graph = legacy_graph();
+        graph
+            .nodes
+            .get_mut("society:sample")
+            .expect("fixture society exists")
+            .add_fact(legacy_fact(
+                "test_config_only_signal",
+                FactValue::Text("Config-only proof".to_string()),
+            ));
+        let property = property();
+        let mut definitions = buyer_context_definitions().to_vec();
+        definitions.push(EvidenceSectionDefinition {
+            kind: "test_config_only".to_string(),
+            priority: 33,
+            constellation: "trust".to_string(),
+            surfaces: Vec::new(),
+            title: "Config-only section".to_string(),
+            subtitle: "Test-only section from DAG metadata.".to_string(),
+            scope: "society".to_string(),
+            relationship: "config-only proof".to_string(),
+            derived: None,
+            presentation: Some(EvidenceSectionPresentation {
+                variant: "fact_grid".to_string(),
+                density: "compact".to_string(),
+                max_preview_items: 2,
+            }),
+            media: Vec::new(),
+            missing: Vec::new(),
+            facts: vec![ContextFactDefinition {
+                key: "test_config_only_signal".to_string(),
+                label: "Config-only signal".to_string(),
+                scope: "society".to_string(),
+                relationship: "config-only proof".to_string(),
+                max_values: None,
+            }],
+        });
+
+        let panels = build_configured_evidence_panels_from_definitions(
+            &definitions,
+            &graph,
+            &property,
+            None,
+            None,
+            None,
+        );
+        let response = build_property_evidence_response_from_panels(
+            property.id.clone(),
+            kg_entity_refs_for_property(&property, &graph),
+            None,
+            panels,
+        );
+        let section = response
+            .sections
+            .iter()
+            .find(|section| section.kind == "test_config_only")
+            .expect("config-only section should appear from supplied DAG metadata");
+
+        assert_eq!(section.title, "Config-only section");
+        assert_eq!(section.priority, 33);
+        assert_eq!(section.presentation.variant, "fact_grid");
+        assert_eq!(section.items[0].label, "Config-only signal");
+        assert_eq!(section.summary, "Config-only signal: Config-only proof");
     }
 
     #[test]

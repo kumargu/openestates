@@ -1,7 +1,9 @@
 import { Link } from "react-router-dom";
 import type {
   PropertyCard,
+  ProofFocus,
 } from "../../lib/types.ts";
+import { propertyDetailPath } from "../../lib/api.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
 import { SaveHeartButton } from "../SaveHeartButton.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
@@ -35,11 +37,13 @@ type Props = {
   onQuickView?: (id: string) => void;
   /** Landing/browse surfaces — same card shell, minimal meta. */
   variant?: "default" | "browse";
+  proofFocus?: ProofFocus;
 };
 
 export function LivingEvidenceTile({
   property,
   onQuickView,
+  proofFocus,
 }: Props) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
@@ -65,7 +69,7 @@ export function LivingEvidenceTile({
 
   return (
     <article className="catalog-card">
-      <Link to={`/property/${property.id}`} className="catalog-card__link">
+      <Link to={propertyDetailPath(property.id, proofFocus)} className="catalog-card__link">
         <div className="catalog-card__media">
           <ImageWithFallback
             src={cardImage}

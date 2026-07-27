@@ -30,8 +30,8 @@
     },
     "product": {
       "path": "app/config/product",
-      "files": ["discovery_home.json", "evidence_sections.json"],
-      "purpose": "Landing copy, curated shelves, property evidence panel layout"
+      "files": ["discovery_home.json"],
+      "purpose": "Landing copy and curated shelves; evidence section ownership moved to app/config/dag/evidence_sections.json"
     },
     "coverage": {
       "path": "app/config/coverage.json",
@@ -54,6 +54,6 @@
     "s3_sync": "app/config/lake/sync.json",
     "coverage_audit": "app/config/coverage.json"
   },
-  "legacy_migrate_to_dag": [],
+  "legacy_migrate_to_dag": ["app/config/product/evidence_sections.json"],
   "legacy_import_only": []
 }

@@ -8,14 +8,17 @@ stderr. Durable Parquet writes, lineage, and promotion remain Rust-owned.
 import hashlib
 import json
 import logging
+import math
 import os
 import sys
+import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from urllib.parse import urlencode
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
@@ -80,6 +83,8 @@ EXTERNAL_LISTINGS_WEEKLY = "external_listings_weekly"
 EXTERNAL_IMAGES_WEEKLY = "external_images_weekly"
 SOCIETY_GROUNDWATER_POTENTIAL_FACTS = "society_groundwater_potential_facts"
 BENGALURU_METRO_STATION_FACTS = "bengaluru_metro_station_facts"
+OSM_POWER_LINE_FACTS = "osm_power_line_facts"
+STORMWATER_DRAIN_FACTS = "stormwater_drain_facts"
 GROUNDWATER_KML_URL = (
     "https://data.opencity.in/dataset/035c1d40-8f4e-4780-90c5-ff1ce2281849/"
     "resource/d3ae3603-d786-4782-ae71-a034ad4ebc0b/download/"
@@ -100,6 +105,8 @@ SUPPORTED_ASSETS = frozenset(
         EXTERNAL_IMAGES_WEEKLY,
         SOCIETY_GROUNDWATER_POTENTIAL_FACTS,
         BENGALURU_METRO_STATION_FACTS,
+        OSM_POWER_LINE_FACTS,
+        STORMWATER_DRAIN_FACTS,
     )
 )
 
@@ -189,6 +196,24 @@ def collect_asset_sources(
             record_source_failure(
                 source_failures, [BENGALURU_METRO_STATION_FACTS], error
             )
+    if OSM_POWER_LINE_FACTS in requested:
+        try:
+            output["osm_power_infrastructure"] = collect_osm_power_infrastructure(
+                request,
+                output.get(RERA_REGISTRY_MONTHLY),
+                output.get(GOOGLE_PLACES_WEEKLY),
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [OSM_POWER_LINE_FACTS], error)
+    if STORMWATER_DRAIN_FACTS in requested:
+        try:
+            output["stormwater_drains"] = collect_stormwater_drains(
+                request,
+                output.get(RERA_REGISTRY_MONTHLY),
+                output.get(GOOGLE_PLACES_WEEKLY),
+            )
+        except Exception as error:
+            record_source_failure(source_failures, [STORMWATER_DRAIN_FACTS], error)
     if source_failures:
         output["source_failures"] = source_failures
     return output
@@ -275,6 +300,835 @@ def fetch_overpass_json(url: str, query: str) -> Dict[str, Any]:
     )
     with urlopen(request, timeout=45) as response:
         return json.loads(response.read().decode("utf-8"))
+
+
+def collect_osm_power_infrastructure(
+    request: Dict[str, Any],
+    rera_input: Dict[str, Any] = None,
+    google_places_input: Dict[str, Any] = None,
+    fetch: Callable[[str, str], Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    config = load_dag_config("osm_power_infrastructure.json")
+    policy = config.get("transmission_lines") or {}
+    collector = config.get("collector") or {}
+    subjects = geospatial_society_inputs(request, rera_input, google_places_input)
+    if not subjects:
+        raise ValueError("OSM power collection requires society coordinates")
+
+    max_distance = float(policy.get("max_distance_meters") or 1000.0)
+    accepted_power_values = optional_string_list(policy.get("accepted_power_values")) or ["line"]
+    voltage_values = optional_string_list(collector.get("voltage_query_values"))
+    source_url = collector_url(collector)
+    records, query_hashes = collect_osm_power_records_from_overpass(
+        fetch or fetch_overpass_json,
+        source_url,
+        subjects,
+        max_distance,
+        accepted_power_values,
+        voltage_values,
+        collector,
+        planned_at,
+    )
+    watermark_source = str(collector.get("source_id") or "openstreetmap_power")
+    if not records:
+        watermark_source = "{}_empty".format(watermark_source)
+    return {
+        "snapshot_date": snapshot_date,
+        "records": records,
+        "source_watermarks": [
+            {
+                "source": watermark_source,
+                "high_watermark": "query_sha256:{};records={}".format(
+                    hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
+                    len(records),
+                ),
+            }
+        ],
+    }
+
+
+def collect_stormwater_drains(
+    request: Dict[str, Any],
+    rera_input: Dict[str, Any] = None,
+    google_places_input: Dict[str, Any] = None,
+    fetch: Callable[[str, str], Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    planned_at = normalized_planned_at(request)
+    snapshot_date = partition_values(request).get("dt") or planned_at[:10]
+    config = load_dag_config("stormwater_drain_risk.json")
+    policy = config.get("drains") or {}
+    collector = config.get("collector") or {}
+    subjects = geospatial_society_inputs(request, rera_input, google_places_input)
+    if not subjects:
+        raise ValueError("stormwater drain collection requires society coordinates")
+
+    max_distance = float(policy.get("max_distance_meters") or 250.0)
+    source_url = collector_url(collector)
+    records = []
+    query_hashes = []
+    overpass_failures = []
+    fallback_subjects = []
+    waterway_values = optional_string_list(collector.get("waterway_values")) or [
+        "drain",
+        "ditch",
+        "canal",
+    ]
+    for subject in subjects:
+        bbox = padded_bbox(
+            [subject],
+            max_distance + float(collector.get("bbox_padding_meters") or 0.0),
+        )
+        query = stormwater_overpass_query(
+            bbox,
+            waterway_values,
+            int(collector.get("query_timeout_seconds") or 60),
+        )
+        query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        try:
+            payload = (fetch or fetch_overpass_json)(source_url, query)
+            records.extend(
+                stormwater_records_from_overpass(
+                    payload,
+                    [subject],
+                    max_distance,
+                    query,
+                    collector,
+                    planned_at,
+                )
+            )
+        except Exception as error:
+            overpass_failures.append("{}: {}".format(subject["entity_id"], error))
+            fallback_subjects.append(subject)
+            logger.warning(
+                "Stormwater Overpass collection failed for %s: %s",
+                subject["entity_id"],
+                error,
+            )
+    if overpass_failures:
+        fallback_records = google_stormwater_records(
+            fallback_subjects,
+            max_distance,
+            collector,
+            planned_at,
+        )
+        if fallback_records:
+            records.extend(fallback_records)
+        elif len(overpass_failures) == len(subjects):
+            raise ValueError(
+                "stormwater Overpass failed for all subjects and Google fallback returned no records: {}".format(
+                    "; ".join(overpass_failures[:5])
+                )
+            )
+    records = dedupe_spatial_records(records, "drain_id")
+    watermark_source = str(collector.get("source_id") or "openstreetmap_stormwater")
+    if not records:
+        watermark_source = "{}_empty".format(watermark_source)
+    return {
+        "snapshot_date": snapshot_date,
+        "records": records,
+        "source_watermarks": [
+            {
+                "source": watermark_source,
+                "high_watermark": "query_sha256:{};records={}".format(
+                    hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
+                    len(records),
+                ),
+            }
+        ],
+    }
+
+
+def load_dag_config(filename: str) -> Dict[str, Any]:
+    return json.loads((DAG_ROOT / filename).read_text(encoding="utf-8"))
+
+
+def collector_url(collector: Dict[str, Any]) -> str:
+    env_key = optional_string(collector.get("overpass_url_env"))
+    if env_key:
+        value = optional_string(os.environ.get(env_key))
+        if value:
+            return value
+    return str(collector.get("default_overpass_url") or OVERPASS_API_URL)
+
+
+def collect_osm_power_records_from_overpass(
+    fetch: Callable[[str, str], Dict[str, Any]],
+    source_url: str,
+    subjects: List[Dict[str, Any]],
+    max_distance_meters: float,
+    accepted_power_values: List[str],
+    voltage_values: List[str],
+    collector: Dict[str, Any],
+    planned_at: str,
+) -> Tuple[List[Dict[str, Any]], List[str]]:
+    query_timeout = int(collector.get("query_timeout_seconds") or 60)
+    bbox_padding = float(collector.get("bbox_padding_meters") or 0.0)
+    query_hashes = []
+    combined_query = osm_power_overpass_query(
+        padded_bbox(subjects, max_distance_meters + bbox_padding),
+        accepted_power_values,
+        voltage_values,
+        query_timeout,
+    )
+    query_hashes.append(hashlib.sha256(combined_query.encode("utf-8")).hexdigest())
+    try:
+        payload = fetch(source_url, combined_query)
+        records = osm_power_records_from_overpass(
+            payload,
+            subjects,
+            max_distance_meters,
+            combined_query,
+            collector,
+            planned_at,
+        )
+        return records, query_hashes
+    except Exception as error:
+        if not bool(collector.get("fallback_to_subject_queries", True)):
+            raise
+        logger.warning("OSM power combined Overpass collection failed: %s", error)
+
+    records = []
+    failures = []
+    for subject in subjects:
+        query = osm_power_overpass_query(
+            padded_bbox([subject], max_distance_meters + bbox_padding),
+            accepted_power_values,
+            voltage_values,
+            query_timeout,
+        )
+        query_hashes.append(hashlib.sha256(query.encode("utf-8")).hexdigest())
+        try:
+            payload = fetch_overpass_with_retries(fetch, source_url, query, collector)
+            records.extend(
+                osm_power_records_from_overpass(
+                    payload,
+                    [subject],
+                    max_distance_meters,
+                    query,
+                    collector,
+                    planned_at,
+                )
+            )
+        except Exception as error:
+            failures.append("{}: {}".format(subject["entity_id"], error))
+            logger.warning(
+                "OSM power Overpass collection failed for %s: %s",
+                subject["entity_id"],
+                error,
+            )
+    if failures and (
+        len(failures) == len(subjects)
+        or not bool(collector.get("allow_partial_subject_failures", False))
+    ):
+        raise ValueError(
+            "OSM power Overpass failed for {} of {} subjects: {}".format(
+                len(failures),
+                len(subjects),
+                "; ".join(failures[:5])
+            )
+        )
+    return dedupe_spatial_records(records, "osm_id"), query_hashes
+
+
+def fetch_overpass_with_retries(
+    fetch: Callable[[str, str], Dict[str, Any]],
+    source_url: str,
+    query: str,
+    collector: Dict[str, Any],
+) -> Dict[str, Any]:
+    retry_count = max(0, int(collector.get("subject_query_retry_count") or 0))
+    retry_delay_seconds = max(0.0, float(collector.get("subject_query_retry_delay_seconds") or 0.0))
+    retry_status_codes = {
+        int(code)
+        for code in (collector.get("retry_status_codes") or [])
+        if str(code).strip().isdigit()
+    }
+    attempt = 0
+    while True:
+        try:
+            return fetch(source_url, query)
+        except Exception as error:
+            if attempt >= retry_count or not overpass_error_is_retryable(error, retry_status_codes):
+                raise
+            attempt += 1
+            delay = retry_after_seconds(error) or retry_delay_seconds
+            if delay > 0.0:
+                time.sleep(delay)
+
+
+def overpass_error_is_retryable(error: Exception, retry_status_codes: set) -> bool:
+    if isinstance(error, HTTPError):
+        return error.code in retry_status_codes
+    return False
+
+
+def retry_after_seconds(error: Exception) -> Optional[float]:
+    if not isinstance(error, HTTPError):
+        return None
+    header = error.headers.get("Retry-After") if error.headers else None
+    try:
+        value = float(header) if header else None
+    except ValueError:
+        return None
+    if value is None or value < 0.0:
+        return None
+    return value
+
+
+def osm_power_overpass_query(
+    bbox: Tuple[float, float, float, float],
+    accepted_power_values: List[str],
+    voltage_values: List[str],
+    timeout_seconds: int,
+) -> str:
+    pattern = "|".join(sorted({value for value in accepted_power_values if value}))
+    voltage_pattern = "|".join(sorted({value for value in voltage_values if value}))
+    south, west, north, east = bbox
+    voltage_filter = (
+        '["voltage"~"(^|;)({})(;|$)"]'.format(voltage_pattern)
+        if voltage_pattern
+        else '["voltage"]'
+    )
+    return """
+[out:json][timeout:{timeout}];
+(
+  way["power"~"^({pattern})$"]{voltage_filter}({south:.7f},{west:.7f},{north:.7f},{east:.7f});
+);
+out tags geom;
+""".format(
+        timeout=timeout_seconds,
+        pattern=pattern or "line",
+        voltage_filter=voltage_filter,
+        south=south,
+        west=west,
+        north=north,
+        east=east,
+    ).strip()
+
+
+def stormwater_overpass_query(
+    bbox: Tuple[float, float, float, float],
+    waterway_values: List[str],
+    timeout_seconds: int,
+) -> str:
+    pattern = "|".join(sorted({value for value in waterway_values if value}))
+    south, west, north, east = bbox
+    return """
+[out:json][timeout:{timeout}];
+(
+  way["waterway"~"^({pattern})$"]({south:.7f},{west:.7f},{north:.7f},{east:.7f});
+);
+out tags geom;
+""".format(
+        timeout=timeout_seconds,
+        pattern=pattern or "drain|ditch|canal",
+        south=south,
+        west=west,
+        north=north,
+        east=east,
+    ).strip()
+
+
+def osm_power_records_from_overpass(
+    payload: Dict[str, Any],
+    subjects: List[Dict[str, Any]],
+    max_distance_meters: float,
+    query: str,
+    collector: Dict[str, Any],
+    planned_at: str,
+) -> List[Dict[str, Any]]:
+    records = []
+    for element in overpass_way_elements(payload):
+        tags = element_tags(element)
+        points = element_geometry_points(element)
+        if len(points) < 2:
+            continue
+        geometry_geojson = line_geojson(points)
+        osm_id = osm_element_id(element)
+        voltage_kv = voltage_kv_from_tag(tags.get("voltage"))
+        for subject in subjects:
+            distance_meters, closest = distance_from_subject_to_line(subject, points)
+            if distance_meters > max_distance_meters:
+                continue
+            records.append(
+                {
+                    "entity_id": subject["entity_id"],
+                    "project_key": optional_string(subject.get("project_key")),
+                    "query": subject_query(subject, "power=line"),
+                    "osm_id": osm_id,
+                    "name": optional_string(tags.get("name") or tags.get("operator")),
+                    "power": optional_string(tags.get("power")) or "line",
+                    "voltage_kv": voltage_kv,
+                    "distance_meters": distance_meters,
+                    "subject_latitude": subject["latitude"],
+                    "subject_longitude": subject["longitude"],
+                    "latitude": closest["latitude"],
+                    "longitude": closest["longitude"],
+                    "geometry_geojson": geometry_geojson,
+                    "source_tags": tags,
+                    "source_url": osm_source_url(element),
+                    "confidence": float(collector.get("confidence") or 0.82),
+                    "fetched_at": planned_at,
+                    "fetch_source": str(collector.get("fetch_source") or "overpass_power_snapshot"),
+                }
+            )
+    return dedupe_spatial_records(records, "osm_id")
+
+
+def google_stormwater_records(
+    subjects: List[Dict[str, Any]],
+    max_distance_meters: float,
+    collector: Dict[str, Any],
+    planned_at: str,
+) -> List[Dict[str, Any]]:
+    from pipeline.skills.fetch_google_review_links import (
+        fetch_google_places_text_search,
+        google_maps_search_url,
+        google_place_display_name,
+        google_place_location,
+        google_places_api_key,
+        parse_float,
+        parse_int,
+    )
+
+    api_key = google_places_api_key()
+    if not api_key:
+        raise ValueError("GOOGLE_PLACES_API_KEY is required for stormwater fallback")
+    markers = optional_string_list(collector.get("rajakaluve_name_markers"))
+    query_labels = optional_string_list(collector.get("google_fallback_queries")) or [
+        "rajakaluve",
+        "stormwater drain",
+    ]
+    records = []
+    for subject in subjects:
+        for label in query_labels:
+            query = "{} near {}".format(label, subject_query(subject, "").strip())
+            payload = fetch_google_places_text_search(
+                query,
+                api_key,
+                max_result_count=3,
+                location_bias={
+                    "latitude": subject["latitude"],
+                    "longitude": subject["longitude"],
+                },
+                radius_meters=max_distance_meters,
+            )
+            for place in payload.get("places") or []:
+                if not isinstance(place, dict):
+                    continue
+                name = optional_string(google_place_display_name(place))
+                if not name or not any(marker in name.lower() for marker in markers):
+                    continue
+                location = google_place_location(place)
+                if not location:
+                    continue
+                points = [
+                    {
+                        "latitude": location["latitude"] - 0.00001,
+                        "longitude": location["longitude"],
+                    },
+                    {
+                        "latitude": location["latitude"] + 0.00001,
+                        "longitude": location["longitude"],
+                    },
+                ]
+                distance_meters, closest = distance_from_subject_to_line(subject, points)
+                if distance_meters > max_distance_meters:
+                    continue
+                place_id = optional_string(place.get("id")) or hashlib.sha256(
+                    "{}:{}:{}".format(name, location["latitude"], location["longitude"]).encode(
+                        "utf-8"
+                    )
+                ).hexdigest()[:16]
+                records.append(
+                    {
+                        "entity_id": subject["entity_id"],
+                        "project_key": optional_string(subject.get("project_key")),
+                        "query": query,
+                        "drain_id": "google/{}".format(place_id),
+                        "name": name,
+                        "drain_type": "rajakaluve",
+                        "hierarchy": stormwater_hierarchy({"name": name}, collector),
+                        "distance_meters": distance_meters,
+                        "intersects_property": distance_meters <= 1.0,
+                        "subject_latitude": subject["latitude"],
+                        "subject_longitude": subject["longitude"],
+                        "latitude": closest["latitude"],
+                        "longitude": closest["longitude"],
+                        "geometry_geojson": line_geojson(points),
+                        "encroachment_record": None,
+                        "source_tags": {
+                            "google_place_id": place_id,
+                            "rating": str(parse_float(place.get("rating")) or ""),
+                            "user_rating_count": str(parse_int(place.get("userRatingCount")) or ""),
+                        },
+                        "source_url": optional_string(place.get("googleMapsUri"))
+                        or google_maps_search_url(query, place_id),
+                        "source_type": "Google",
+                        "confidence": float(collector.get("google_fallback_confidence") or 0.62),
+                        "fetched_at": planned_at,
+                        "fetch_source": "google_places_text_search_stormwater_fallback",
+                    }
+                )
+    return dedupe_spatial_records(records, "drain_id")
+
+
+def stormwater_records_from_overpass(
+    payload: Dict[str, Any],
+    subjects: List[Dict[str, Any]],
+    max_distance_meters: float,
+    query: str,
+    collector: Dict[str, Any],
+    planned_at: str,
+) -> List[Dict[str, Any]]:
+    records = []
+    for element in overpass_way_elements(payload):
+        tags = element_tags(element)
+        points = element_geometry_points(element)
+        if len(points) < 2:
+            continue
+        drain_type = stormwater_drain_type(tags, collector)
+        geometry_geojson = line_geojson(points)
+        drain_id = osm_element_id(element)
+        for subject in subjects:
+            distance_meters, closest = distance_from_subject_to_line(subject, points)
+            if distance_meters > max_distance_meters:
+                continue
+            records.append(
+                {
+                    "entity_id": subject["entity_id"],
+                    "project_key": optional_string(subject.get("project_key")),
+                    "query": subject_query(subject, "stormwater drain"),
+                    "drain_id": drain_id,
+                    "name": optional_string(tags.get("name") or tags.get("waterway")),
+                    "drain_type": drain_type,
+                    "hierarchy": stormwater_hierarchy(tags, collector),
+                    "distance_meters": distance_meters,
+                    "intersects_property": distance_meters <= 1.0,
+                    "subject_latitude": subject["latitude"],
+                    "subject_longitude": subject["longitude"],
+                    "latitude": closest["latitude"],
+                    "longitude": closest["longitude"],
+                    "geometry_geojson": geometry_geojson,
+                    "encroachment_record": optional_string(tags.get("encroachment")),
+                    "source_tags": tags,
+                    "source_url": osm_source_url(element),
+                    "source_type": str(collector.get("source_type") or "OpenStreetMap"),
+                    "confidence": float(collector.get("confidence") or 0.74),
+                    "fetched_at": planned_at,
+                    "fetch_source": str(collector.get("fetch_source") or "overpass_stormwater_snapshot"),
+                }
+            )
+    return dedupe_spatial_records(records, "drain_id")
+
+
+def geospatial_society_inputs(
+    request: Dict[str, Any],
+    rera_input: Dict[str, Any] = None,
+    google_places_input: Dict[str, Any] = None,
+) -> List[Dict[str, Any]]:
+    by_entity = {}
+    profile_facts = rera_detail_facts_by_entity_for_keys(
+        rera_input,
+        {"geo.latitude", "geo.longitude"},
+    )
+    google_coordinates = google_place_coordinates_by_entity(google_places_input)
+    for seed in request.get("source_entities", []):
+        if not isinstance(seed, dict):
+            continue
+        entity_id = optional_string(seed.get("entity_id"))
+        name = optional_string(seed.get("name"))
+        if not entity_id or not name:
+            continue
+        fact_values = profile_facts.get(entity_id, {})
+        latitude = optional_float(seed.get("latitude"))
+        longitude = optional_float(seed.get("longitude"))
+        if latitude is None:
+            latitude = optional_float(fact_values.get("geo.latitude"))
+        if longitude is None:
+            longitude = optional_float(fact_values.get("geo.longitude"))
+        google_point = google_coordinates.get(entity_id, {})
+        if latitude is None:
+            latitude = optional_float(google_point.get("latitude"))
+        if longitude is None:
+            longitude = optional_float(google_point.get("longitude"))
+        if latitude is None or longitude is None:
+            continue
+        by_entity[entity_id] = {
+            "entity_id": entity_id,
+            "project_key": optional_string(seed.get("project_key")),
+            "name": name,
+            "area": optional_string(seed.get("area")),
+            "city": optional_string(seed.get("city")) or "Bengaluru",
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+    return sorted(by_entity.values(), key=lambda row: row["entity_id"])
+
+
+def google_place_coordinates_by_entity(
+    google_places_input: Dict[str, Any] = None,
+) -> Dict[str, Dict[str, Any]]:
+    coordinates = {}
+    if not google_places_input:
+        return coordinates
+    for record in google_places_input.get("records") or []:
+        entity_id = optional_string(record.get("entity_id"))
+        latitude = optional_float(record.get("latitude"))
+        longitude = optional_float(record.get("longitude"))
+        if not entity_id or latitude is None or longitude is None:
+            continue
+        coordinates[entity_id] = {
+            "latitude": latitude,
+            "longitude": longitude,
+        }
+    return coordinates
+
+
+def rera_detail_facts_by_entity_for_keys(
+    rera_input: Dict[str, Any], fact_keys: set
+) -> Dict[str, Dict[str, Any]]:
+    by_entity = {}
+    if not rera_input:
+        return by_entity
+    for fact in rera_input.get("detail_facts") or []:
+        entity_id = optional_string(fact.get("entity_id"))
+        fact_key = optional_string(fact.get("fact_key"))
+        if not entity_id or fact_key not in fact_keys:
+            continue
+        value = fact_value_data(fact)
+        if value is not None:
+            by_entity.setdefault(entity_id, {})[fact_key] = value
+    return by_entity
+
+
+def overpass_way_elements(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    elements = payload.get("elements") if isinstance(payload, dict) else None
+    if not isinstance(elements, list):
+        raise ValueError("Overpass response must contain an elements list")
+    return [
+        element
+        for element in elements
+        if isinstance(element, dict) and element.get("type") == "way"
+    ]
+
+
+def element_tags(element: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        str(key): str(value)
+        for key, value in (element.get("tags") or {}).items()
+        if optional_string(value)
+    }
+
+
+def element_geometry_points(element: Dict[str, Any]) -> List[Dict[str, float]]:
+    points = []
+    for point in element.get("geometry") or []:
+        latitude = optional_float(point.get("lat")) if isinstance(point, dict) else None
+        longitude = optional_float(point.get("lon")) if isinstance(point, dict) else None
+        if latitude is None or longitude is None:
+            continue
+        points.append({"latitude": latitude, "longitude": longitude})
+    return points
+
+
+def line_geojson(points: List[Dict[str, float]]) -> str:
+    return json.dumps(
+        {
+            "type": "LineString",
+            "coordinates": [
+                [point["longitude"], point["latitude"]]
+                for point in points
+            ],
+        },
+        separators=(",", ":"),
+    )
+
+
+def osm_element_id(element: Dict[str, Any]) -> str:
+    return "{}/{}".format(element.get("type") or "way", element.get("id"))
+
+
+def osm_source_url(element: Dict[str, Any]) -> str:
+    return "https://www.openstreetmap.org/{}".format(osm_element_id(element))
+
+
+def voltage_kv_from_tag(value: Any) -> Optional[float]:
+    text = optional_string(value)
+    if not text:
+        return None
+    voltages = []
+    for token in split_tag_list(text):
+        normalized = token.lower().replace("kv", "").strip()
+        try:
+            voltage = float(normalized)
+        except ValueError:
+            continue
+        if voltage > 1000:
+            voltage /= 1000.0
+        voltages.append(voltage)
+    return max(voltages) if voltages else None
+
+
+def stormwater_drain_type(tags: Dict[str, str], collector: Dict[str, Any]) -> str:
+    text = " ".join(
+        optional_string(tags.get(key)) or ""
+        for key in ("name", "waterway", "description", "local_name")
+    ).lower()
+    if any(marker in text for marker in optional_string_list(collector.get("rajakaluve_name_markers"))):
+        return "rajakaluve"
+    waterway = (optional_string(tags.get("waterway")) or "").lower()
+    if waterway in ("drain", "ditch"):
+        return "stormwater_drain"
+    if waterway == "canal":
+        return "primary_swd"
+    return "stormwater_drain"
+
+
+def stormwater_hierarchy(tags: Dict[str, str], collector: Dict[str, Any]) -> Optional[str]:
+    text = " ".join(
+        optional_string(tags.get(key)) or ""
+        for key in ("name", "description", "local_name")
+    ).lower()
+    for rule in collector.get("hierarchy_name_markers") or []:
+        if not isinstance(rule, dict):
+            continue
+        hierarchy = optional_string(rule.get("hierarchy"))
+        markers = optional_string_list(rule.get("markers"))
+        if hierarchy and any(marker in text for marker in markers):
+            return hierarchy
+    return None
+
+
+def padded_bbox(
+    subjects: List[Dict[str, Any]], padding_meters: float
+) -> Tuple[float, float, float, float]:
+    latitudes = [float(subject["latitude"]) for subject in subjects]
+    longitudes = [float(subject["longitude"]) for subject in subjects]
+    center_latitude = sum(latitudes) / len(latitudes)
+    latitude_delta = padding_meters / 111_320.0
+    longitude_delta = padding_meters / max(1.0, 111_320.0 * math.cos(math.radians(center_latitude)))
+    return (
+        min(latitudes) - latitude_delta,
+        min(longitudes) - longitude_delta,
+        max(latitudes) + latitude_delta,
+        max(longitudes) + longitude_delta,
+    )
+
+
+def distance_from_subject_to_line(
+    subject: Dict[str, Any],
+    points: List[Dict[str, float]],
+) -> Tuple[float, Dict[str, float]]:
+    origin_latitude = float(subject["latitude"])
+    origin_longitude = float(subject["longitude"])
+    projected = [
+        project_point(point["latitude"], point["longitude"], origin_latitude, origin_longitude)
+        for point in points
+    ]
+    best_distance = None
+    best_projected = None
+    for start, end in zip(projected, projected[1:]):
+        distance, closest = point_segment_distance((0.0, 0.0), start, end)
+        if best_distance is None or distance < best_distance:
+            best_distance = distance
+            best_projected = closest
+    if best_distance is None or best_projected is None:
+        first = points[0]
+        return haversine_meters(origin_latitude, origin_longitude, first["latitude"], first["longitude"]), first
+    return best_distance, unproject_point(best_projected[0], best_projected[1], origin_latitude, origin_longitude)
+
+
+def project_point(
+    latitude: float,
+    longitude: float,
+    origin_latitude: float,
+    origin_longitude: float,
+) -> Tuple[float, float]:
+    meters_per_degree_latitude = 111_320.0
+    meters_per_degree_longitude = meters_per_degree_latitude * math.cos(math.radians(origin_latitude))
+    return (
+        (longitude - origin_longitude) * meters_per_degree_longitude,
+        (latitude - origin_latitude) * meters_per_degree_latitude,
+    )
+
+
+def unproject_point(
+    x: float,
+    y: float,
+    origin_latitude: float,
+    origin_longitude: float,
+) -> Dict[str, float]:
+    meters_per_degree_latitude = 111_320.0
+    meters_per_degree_longitude = meters_per_degree_latitude * math.cos(math.radians(origin_latitude))
+    return {
+        "latitude": origin_latitude + y / meters_per_degree_latitude,
+        "longitude": origin_longitude + x / meters_per_degree_longitude,
+    }
+
+
+def point_segment_distance(
+    point: Tuple[float, float],
+    start: Tuple[float, float],
+    end: Tuple[float, float],
+) -> Tuple[float, Tuple[float, float]]:
+    px, py = point
+    sx, sy = start
+    ex, ey = end
+    dx = ex - sx
+    dy = ey - sy
+    length_sq = dx * dx + dy * dy
+    if length_sq == 0:
+        closest = start
+    else:
+        t = max(0.0, min(1.0, ((px - sx) * dx + (py - sy) * dy) / length_sq))
+        closest = (sx + t * dx, sy + t * dy)
+    distance = math.hypot(px - closest[0], py - closest[1])
+    return distance, closest
+
+
+def haversine_meters(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_meters = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = (
+        math.sin(delta_phi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    )
+    return radius_meters * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def subject_query(subject: Dict[str, Any], target: str) -> str:
+    parts = []
+    if optional_string(target):
+        parts.append(target)
+    parts.extend(["around", str(subject.get("name") or subject.get("entity_id"))])
+    for key in ("area", "city"):
+        value = optional_string(subject.get(key))
+        if value:
+            parts.append(value)
+    return " ".join(parts)
+
+
+def dedupe_spatial_records(records: List[Dict[str, Any]], feature_key: str) -> List[Dict[str, Any]]:
+    deduped = {}
+    for record in records:
+        key = (record.get("entity_id"), record.get(feature_key))
+        existing = deduped.get(key)
+        if existing is None or record["distance_meters"] < existing["distance_meters"]:
+            deduped[key] = record
+    return sorted(
+        deduped.values(),
+        key=lambda record: (
+            str(record.get("entity_id") or ""),
+            float(record.get("distance_meters") or 0.0),
+            str(record.get(feature_key) or ""),
+        ),
+    )
 
 
 def bengaluru_metro_stations_from_overpass(
@@ -724,7 +1578,7 @@ def collect_google_nearby_places(
     inputs = society_inputs or {}
     fetch = nearby_fetch or fetch_google_places_nearby_text
     records = []  # type: List[Dict[str, Any]]
-    categories = ("school", "metro", "hospital", "fitness", "tech_park")
+    categories = google_nearby_collection_categories()
 
     for slug, input_data in sorted(inputs.items()):
         for category in categories:
@@ -794,15 +1648,45 @@ def nearby_query(input_data: Dict[str, Any], category: str) -> str:
 
 
 def nearby_category_label(category: str) -> str:
+    config = nearby_category_config(category)
+    if config:
+        return str(config.get("display_label") or category).replace("Nearby ", "").lower()
+    return category.replace("-", "_").strip().lower().replace("_", " ")
+
+
+def google_nearby_collection_categories() -> Tuple[str, ...]:
+    categories = []
+    for category in nearby_category_configs():
+        aliases = category.get("category_aliases") or []
+        if aliases:
+            categories.append(str(aliases[0]))
+    return tuple(categories)
+
+
+def nearby_category_config(category: str) -> Optional[Dict[str, Any]]:
     normalized = category.replace("-", "_").strip().lower()
-    labels = {
-        "school": "school",
-        "metro": "metro station",
-        "hospital": "hospital",
-        "fitness": "gym fitness",
-        "tech_park": "tech park office",
-    }
-    return labels.get(normalized, normalized.replace("_", " "))
+    for config in nearby_category_configs():
+        aliases = {
+            str(alias).replace("-", "_").strip().lower()
+            for alias in config.get("category_aliases") or []
+        }
+        if normalized in aliases:
+            return config
+    return None
+
+
+def nearby_category_configs() -> List[Dict[str, Any]]:
+    try:
+        payload = json.loads(
+            (DAG_ROOT / "nearby_place_categories.json").read_text(encoding="utf-8")
+        )
+    except (OSError, json.JSONDecodeError):
+        return []
+    return [
+        category
+        for category in payload.get("categories", [])
+        if isinstance(category, dict) and category.get("category_aliases")
+    ]
 
 
 def google_society_inputs(

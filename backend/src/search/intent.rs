@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{analyzer, schema};
+use super::{analyzer, parser, schema};
 
 /// Parsed intent from a natural-language search query.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -85,11 +85,12 @@ use crate::dag_config::area_alias_entries;
 /// Parse a natural-language search query into structured intent.
 pub fn parse_intent(query: &str) -> SearchIntent {
     let q = query.to_lowercase();
+    let parsed_slots = parser::parse_query_slots(&q);
 
     let excluded_areas = detect_excluded_areas(&q);
     let area = detect_area(&q, &excluded_areas);
-    let bhk = detect_bhk(&q);
-    let budget_max = detect_budget(&q);
+    let bhk = parsed_slots.bhk.as_ref().map(|slot| slot.value);
+    let budget_max = parsed_slots.budget_max.as_ref().map(|slot| slot.value);
     let hard_constraints = detect_hard_constraints(&q);
     let positive_preferences = detect_positive_preferences(&q, bhk);
     let accepted_tradeoffs = detect_accepted_tradeoffs(&q);
@@ -174,127 +175,6 @@ fn area_alias_is_excluded(q: &str, alias: &str) -> bool {
     patterns
         .iter()
         .any(|pattern| query_contains_pattern(q, pattern))
-}
-
-fn detect_bhk(q: &str) -> Option<u32> {
-    // Match patterns like "3bhk", "3 bhk", "3-bhk", "3 BHK"
-    let bytes = q.as_bytes();
-    for (i, &b) in bytes.iter().enumerate() {
-        if b.is_ascii_digit() {
-            let digit = (b - b'0') as u32;
-            if (1..=6).contains(&digit) {
-                // Look ahead for "bhk" possibly with a separator
-                let rest = &q[i + 1..];
-                if rest.starts_with("bhk") || rest.starts_with(" bhk") || rest.starts_with("-bhk") {
-                    return Some(digit);
-                }
-            }
-        }
-    }
-    None
-}
-
-fn detect_budget(q: &str) -> Option<u64> {
-    // Patterns: "under 1.5cr", "below 80L", "under 1cr", "budget 90 lakhs"
-    let q = q.replace(',', "");
-    let tokens: Vec<&str> = q.split_whitespace().collect();
-
-    for i in 0..tokens.len() {
-        let is_budget_prefix = matches!(
-            tokens[i],
-            "under" | "undr" | "below" | "budget" | "max" | "within" | "upto" | "up"
-        );
-        if !is_budget_prefix {
-            continue;
-        }
-        // Try to parse the next token(s) as amount
-        if let Some(amount) = parse_amount(&tokens[i + 1..]) {
-            return Some(amount);
-        }
-    }
-
-    // Also try standalone patterns like "1.5cr" without prefix
-    for token in &tokens {
-        if let Some(amount) = parse_single_amount(token) {
-            let token = clean_amount_token(token);
-            // Only use standalone if it looks like a budget (has cr/l/lakh suffix)
-            if token.ends_with("cr")
-                || token.ends_with("crore")
-                || token.ends_with("crores")
-                || token.ends_with('l')
-                || token.ends_with("lakh")
-                || token.ends_with("lakhs")
-            {
-                return Some(amount);
-            }
-        }
-    }
-
-    None
-}
-
-fn parse_amount(tokens: &[&str]) -> Option<u64> {
-    if tokens.is_empty() {
-        return None;
-    }
-
-    // Try "1.5 cr", "80 lakhs", "1.5cr"
-    let first = clean_amount_token(tokens[0]);
-
-    // Case: "1.5cr" or "80L" (number + suffix in one token)
-    if let Some(amount) = parse_single_amount(&first) {
-        return Some(amount);
-    }
-
-    // Case: "1.5 cr" or "80 lakhs" (number then suffix)
-    if tokens.len() >= 2 {
-        if let Ok(num) = first.parse::<f64>() {
-            let suffix = clean_amount_token(tokens[1]);
-            if suffix.starts_with("cr") {
-                return Some((num * 10_000_000.0) as u64);
-            } else if suffix.starts_with("l") {
-                return Some((num * 100_000.0) as u64);
-            }
-        }
-    }
-
-    None
-}
-
-fn parse_single_amount(token: &str) -> Option<u64> {
-    // "1.5cr" -> 15_000_000, "80l" -> 8_000_000
-    let token = clean_amount_token(token);
-    if token.len() < 2 {
-        return None;
-    }
-
-    let (num_part, suffix) = if let Some(stripped) = token.strip_suffix("crores") {
-        (stripped, "cr")
-    } else if let Some(stripped) = token.strip_suffix("crore") {
-        (stripped, "cr")
-    } else if let Some(stripped) = token.strip_suffix("cr") {
-        (stripped, "cr")
-    } else if let Some(stripped) = token.strip_suffix("lakhs") {
-        (stripped, "l")
-    } else if let Some(stripped) = token.strip_suffix("lakh") {
-        (stripped, "l")
-    } else {
-        let stripped = token.strip_suffix('l')?;
-        (stripped, "l")
-    };
-
-    let num: f64 = num_part.parse().ok()?;
-    match suffix {
-        "cr" => Some((num * 10_000_000.0) as u64),
-        "l" => Some((num * 100_000.0) as u64),
-        _ => None,
-    }
-}
-
-fn clean_amount_token(token: &str) -> String {
-    token
-        .trim_matches(|ch: char| ch.is_ascii_punctuation() && ch != '+' && ch != '-')
-        .to_ascii_lowercase()
 }
 
 fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
@@ -682,6 +562,57 @@ mod tests {
         let intent = parse_intent("3bhk in whitefield");
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    }
+
+    #[test]
+    fn bhk_parser_tolerates_repeated_whitespace() {
+        let intent = parse_intent("1  bhk near manipal  hospital within 3 km");
+
+        assert_eq!(intent.bhk, Some(1));
+    }
+
+    #[test]
+    fn parser_regressions_keep_expected_public_intent_slots() {
+        let cases = [
+            (
+                "1 bhk near manipal hospital within 3 km",
+                Some(1),
+                None,
+                None,
+            ),
+            ("2 bhk near manipal within 3 km", Some(2), None, None),
+            (
+                "3bhk near bagmane tech park whitefield",
+                Some(3),
+                Some("Whitefield"),
+                None,
+            ),
+            ("3bhk near tech park", Some(3), None, None),
+            (
+                "large society near hospital under 2cr",
+                None,
+                None,
+                Some(20_000_000),
+            ),
+        ];
+
+        for (query, expected_bhk, expected_area, expected_budget) in cases {
+            let intent = parse_intent(query);
+            assert_eq!(intent.bhk, expected_bhk, "{query}");
+            assert_eq!(intent.area.as_deref(), expected_area, "{query}");
+            assert_eq!(intent.budget_max, expected_budget, "{query}");
+        }
+    }
+
+    #[test]
+    fn parser_supports_configured_number_words_and_up_to_budget() {
+        let intent = parse_intent("three bhk up to 80 lakhs near school");
+
+        assert_eq!(intent.bhk, Some(3));
+        assert_eq!(intent.budget_max, Some(8_000_000));
+        assert!(intent
+            .preferences
+            .contains(&"social infrastructure".to_string()));
     }
 
     #[test]

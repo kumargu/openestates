@@ -7,6 +7,8 @@ import {
   type AreaSentiment,
 } from "../lib/areaSentiments.ts";
 
+/* eslint-disable react-refresh/only-export-components */
+
 /** Match Area Tracker: show a row once we have at least 2 priced listings. */
 const MIN_SAMPLES = 2;
 const MAX_DOTS = 36;

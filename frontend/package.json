@@ -4,11 +4,13 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
+    "dev": "node ./node_modules/vite/bin/vite.js",
+    "build": "tsc -b && node ./node_modules/vite/bin/vite.js build",
     "lint": "eslint .",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
-    "preview": "vite preview"
+    "test:smoke": "node --experimental-strip-types --test tests/*.smoke.test.ts",
+    "smoke": "npm run build && npm run test:smoke",
+    "preview": "node ./node_modules/vite/bin/vite.js preview"
   },
   "dependencies": {
     "maplibre-gl": "^5.24.0",

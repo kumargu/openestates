@@ -11,7 +11,7 @@ use super::{
     hydrate_tantivy_index, read_edges_parquet, read_embeddings_parquet, read_entities_parquet,
     read_facts_parquet, read_search_metadata_parquet, ParquetReadError, ServingBundleManifest,
     ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityRecord, ServingFactIndex,
-    TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    SpatialServingIndex, TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -31,6 +31,7 @@ pub struct LoadedServingBundle {
     pub recall_index: TantivyRecallIndex,
     pub fact_index: ServingFactIndex,
     pub geo_index: GeoSearchIndex,
+    pub spatial_index: SpatialServingIndex,
     pub semantic_embeddings: Vec<ServingEmbeddingRecord>,
     pub cache_dir: PathBuf,
 }
@@ -82,6 +83,7 @@ impl ServingBundleLoader {
         let fact_index = load_fact_index(&self.lake, &manifest).await?;
         let graph_index = GraphIndex::from_serving_edges(&edges);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
+        let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         let semantic_embeddings = load_semantic_embeddings(&self.lake, &manifest).await?;
         Ok(Some(LoadedServingBundle {
             manifest,
@@ -91,6 +93,7 @@ impl ServingBundleLoader {
             recall_index,
             fact_index,
             geo_index,
+            spatial_index,
             semantic_embeddings,
             cache_dir,
         }))
