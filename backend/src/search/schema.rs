@@ -13,7 +13,7 @@ use super::intent::{
 #[cfg(test)]
 pub const SQM_PER_ACRE: f64 = 4046.8564224;
 
-use crate::dag_config::{dag_root, load_json};
+use crate::dag_config::{dag_root, hard_constraint_dimensions, load_json};
 
 /// Search schema format version carried in serving bundles.
 pub const SEARCH_SCHEMA_VERSION: u32 = 2;
@@ -638,8 +638,18 @@ pub fn source_priority_for_preference(preference: &str) -> Vec<String> {
 pub fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
     let tokens = constraint_tokens(q);
     let mut constraints = Vec::new();
+    let enabled_dimensions = hard_constraint_dimensions()
+        .iter()
+        .map(|dimension| dimension.field.as_str())
+        .collect::<Vec<_>>();
 
     for schema in &registry().numeric_constraints {
+        if !enabled_dimensions
+            .iter()
+            .any(|dimension| schema.dimension.eq_ignore_ascii_case(dimension))
+        {
+            continue;
+        }
         for unit in &schema.query_units {
             if let Some((value, raw_text)) = detect_min_unit_value(&tokens, unit) {
                 constraints.push(HardConstraint {

@@ -264,9 +264,79 @@
       ]
     }
   },
+  "area_exclusion_prefixes": [
+    "not",
+    "not in",
+    "avoid",
+    "exclude",
+    "excluding",
+    "except",
+    "outside"
+  ],
+  "negated_prefixes": [
+    "not interested in",
+    "not looking for",
+    "do not want",
+    "don't want",
+    "dont want",
+    "no need for",
+    "without",
+    "avoid",
+    "not an",
+    "not a",
+    "not",
+    "no"
+  ],
+  "preference_key_derivations": {
+    "bhk": [
+      {
+        "generic_keys": [
+          "listing_price_per_sqft_range"
+        ],
+        "bhk_values": [1, 2, 3, 4],
+        "derived_key_template": "{key}_{bhk}bhk"
+      },
+      {
+        "generic_keys": [
+          "listing_price_range",
+          "listing_source_url"
+        ],
+        "bhk_values": [1, 3, 4],
+        "derived_key_template": "{key}_{bhk}bhk"
+      },
+      {
+        "generic_keys": [
+          "listing_price",
+          "listing_area_sqft"
+        ],
+        "bhk_values": [3, 4],
+        "derived_key_template": "{key}_{bhk}bhk"
+      }
+    ]
+  },
+  "conflict_key_policy": {
+    "excluded_exact": [
+      "price_per_sqft",
+      "pricing_insight",
+      "legal.litigation",
+      "legal_risk",
+      "litigation_risk",
+      "resident_sentiment",
+      "google_review_snippets",
+      "sentiment_summary"
+    ]
+  },
   "hard_constraint_dimensions": [
     {
       "field": "land_area",
+      "registry_ref": "app/config/dag/fact_registry.json numeric_constraints"
+    },
+    {
+      "field": "home_age_years",
+      "registry_ref": "app/config/dag/fact_registry.json numeric_constraints"
+    },
+    {
+      "field": "open_area_pct",
       "registry_ref": "app/config/dag/fact_registry.json numeric_constraints"
     }
   ]

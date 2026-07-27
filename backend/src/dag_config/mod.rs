@@ -54,10 +54,14 @@ pub use search_guardrails::{
     SearchGuidanceTemplate, StructuredSignalScores, TooShortGuardrailConfig, WeightedTermGroup,
 };
 pub use search_intent::{
-    area_alias_entries, load_search_intent, load_search_intent_from_path, search_intent_path,
-    search_parser_config, search_resolution_config, AreaAliasEntry, BhkParserConfig, NumberWord,
-    RelationAliasConfig, RelationParserConfig, SearchIntentFile, SearchParserConfig,
-    SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
+    area_alias_entries, area_exclusion_prefixes, bhk_fact_key_derivations,
+    conflict_excluded_exact_keys, hard_constraint_dimensions, load_search_intent,
+    load_search_intent_from_path, negated_prefixes, search_intent_path, search_parser_config,
+    search_resolution_config, AreaAliasEntry, BhkFactKeyDerivationConfig, BhkParserConfig,
+    ConflictKeyPolicyConfig, HardConstraintDimensionConfig, NumberWord,
+    PreferenceKeyDerivationConfig, RelationAliasConfig, RelationParserConfig, SearchIntentFile,
+    SearchParserConfig, SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig,
+    UnitValueParserConfig,
 };
 pub use source_display::{
     load_source_display_policy, load_source_display_policy_from_path, source_display_metadata,

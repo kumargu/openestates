@@ -4,6 +4,8 @@ use std::sync::OnceLock;
 use serde::Deserialize;
 use std::collections::HashSet;
 
+use super::evidence_sections::load_evidence_sections;
+use super::fact_registry::load_fact_registry_index;
 use super::loader::{dag_root, load_json, DagConfigError};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -14,6 +16,16 @@ pub struct SearchIntentFile {
     #[serde(default)]
     pub resolution: SearchResolutionConfig,
     pub parser: SearchParserConfig,
+    #[serde(default)]
+    pub area_exclusion_prefixes: Vec<String>,
+    #[serde(default)]
+    pub negated_prefixes: Vec<String>,
+    #[serde(default)]
+    pub preference_key_derivations: PreferenceKeyDerivationConfig,
+    #[serde(default)]
+    pub conflict_key_policy: ConflictKeyPolicyConfig,
+    #[serde(default)]
+    pub hard_constraint_dimensions: Vec<HardConstraintDimensionConfig>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
@@ -97,6 +109,51 @@ pub struct RelationAliasConfig {
     pub requires_distance_limit: bool,
 }
 
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct PreferenceKeyDerivationConfig {
+    #[serde(default)]
+    pub bhk: Vec<BhkFactKeyDerivationConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct BhkFactKeyDerivationConfig {
+    #[serde(default)]
+    pub generic_keys: Vec<String>,
+    #[serde(default)]
+    pub bhk_values: Vec<u32>,
+    pub derived_key_template: String,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+pub struct ConflictKeyPolicyConfig {
+    #[serde(default)]
+    pub excluded_exact: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct HardConstraintDimensionConfig {
+    pub field: String,
+    #[serde(default)]
+    pub registry_ref: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct ScoringRuntimeFactKeysFile {
+    #[serde(default)]
+    runtime_fact_keys: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Default)]
+struct FactRegistryNumericConstraintsFile {
+    #[serde(default)]
+    numeric_constraints: Vec<NumericConstraintDimensionRef>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NumericConstraintDimensionRef {
+    dimension: String,
+}
+
 pub fn search_intent_path() -> std::path::PathBuf {
     dag_root().join("search_intent.json")
 }
@@ -114,9 +171,67 @@ pub fn load_search_intent() -> Result<SearchIntentFile, DagConfigError> {
 pub fn area_alias_entries() -> &'static [AreaAliasEntry] {
     static ENTRIES: OnceLock<Vec<AreaAliasEntry>> = OnceLock::new();
     ENTRIES
-        .get_or_init(|| match load_search_intent() {
-            Ok(file) if !file.area_aliases.entries.is_empty() => file.area_aliases.entries,
-            _ => embedded_area_aliases(),
+        .get_or_init(|| {
+            load_search_intent()
+                .expect("search_intent.json area aliases must load and validate")
+                .area_aliases
+                .entries
+        })
+        .as_slice()
+}
+
+pub fn area_exclusion_prefixes() -> &'static [String] {
+    static PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
+    PREFIXES
+        .get_or_init(|| {
+            load_search_intent()
+                .expect("search_intent.json area exclusion prefixes must load and validate")
+                .area_exclusion_prefixes
+        })
+        .as_slice()
+}
+
+pub fn negated_prefixes() -> &'static [String] {
+    static PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
+    PREFIXES
+        .get_or_init(|| {
+            load_search_intent()
+                .expect("search_intent.json negated prefixes must load and validate")
+                .negated_prefixes
+        })
+        .as_slice()
+}
+
+pub fn bhk_fact_key_derivations() -> &'static [BhkFactKeyDerivationConfig] {
+    static DERIVATIONS: OnceLock<Vec<BhkFactKeyDerivationConfig>> = OnceLock::new();
+    DERIVATIONS
+        .get_or_init(|| {
+            load_search_intent()
+                .expect("search_intent.json BHK derivations must load and validate")
+                .preference_key_derivations
+                .bhk
+        })
+        .as_slice()
+}
+
+pub fn conflict_excluded_exact_keys() -> &'static [String] {
+    static KEYS: OnceLock<Vec<String>> = OnceLock::new();
+    KEYS.get_or_init(|| {
+        load_search_intent()
+            .expect("search_intent.json conflict key policy must load and validate")
+            .conflict_key_policy
+            .excluded_exact
+    })
+    .as_slice()
+}
+
+pub fn hard_constraint_dimensions() -> &'static [HardConstraintDimensionConfig] {
+    static DIMENSIONS: OnceLock<Vec<HardConstraintDimensionConfig>> = OnceLock::new();
+    DIMENSIONS
+        .get_or_init(|| {
+            load_search_intent()
+                .expect("search_intent.json hard constraint dimensions must load and validate")
+                .hard_constraint_dimensions
         })
         .as_slice()
 }
@@ -140,7 +255,8 @@ pub fn search_parser_config() -> &'static SearchParserConfig {
 }
 
 fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigError> {
-    validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)
+    validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)?;
+    validate_search_intent_runtime(file).map_err(DagConfigError::InvalidConfig)
 }
 
 fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
@@ -250,94 +366,117 @@ fn normalize_alias(alias: &str) -> String {
         .to_ascii_lowercase()
 }
 
-fn embedded_area_aliases() -> Vec<AreaAliasEntry> {
-    vec![
-        AreaAliasEntry {
-            canonical: "Whitefield".to_string(),
-            aliases: vec![
-                "whitefield".into(),
-                "wf".into(),
-                "kadugodi".into(),
-                "varthur".into(),
-                "itpl".into(),
-                "hope farm".into(),
-                "kundalahalli".into(),
-                "pattandur agrahara".into(),
-                "brookefield".into(),
-                "nallurhalli".into(),
-                "hagadur".into(),
-            ],
-        },
-        AreaAliasEntry {
-            canonical: "Sarjapur Road".to_string(),
-            aliases: vec![
-                "sarjapur".into(),
-                "sarjapur road".into(),
-                "sjr".into(),
-                "doddakannelli".into(),
-                "carmelaram".into(),
-            ],
-        },
-        AreaAliasEntry {
-            canonical: "Bellandur".to_string(),
-            aliases: vec![
-                "bellandur".into(),
-                "outer ring road".into(),
-                "orr bellandur".into(),
-            ],
-        },
-        AreaAliasEntry {
-            canonical: "HSR Layout".to_string(),
-            aliases: vec![
-                "hsr".into(),
-                "hsr layout".into(),
-                "agara".into(),
-                "sector 1 hsr".into(),
-                "sector 2 hsr".into(),
-            ],
-        },
-        AreaAliasEntry {
-            canonical: "North Bengaluru".to_string(),
-            aliases: vec![
-                "north bangalore".into(),
-                "north bengaluru".into(),
-                "north blr".into(),
-                "devanahalli".into(),
-                "hebbal".into(),
-                "yelahanka".into(),
-                "thanisandra".into(),
-                "jakkur".into(),
-            ],
-        },
-        AreaAliasEntry {
-            canonical: "Electronic City".to_string(),
-            aliases: vec!["electronic city".into(), "ec".into(), "ecity".into()],
-        },
-        AreaAliasEntry {
-            canonical: "Koramangala".to_string(),
-            aliases: vec!["koramangala".into(), "koramangala 5th block".into()],
-        },
-        AreaAliasEntry {
-            canonical: "Marathahalli".to_string(),
-            aliases: vec!["marathahalli".into(), "marathon halli".into()],
-        },
-        AreaAliasEntry {
-            canonical: "Indiranagar".to_string(),
-            aliases: vec!["indiranagar".into(), "indira nagar".into()],
-        },
-        AreaAliasEntry {
-            canonical: "Jayanagar".to_string(),
-            aliases: vec!["jayanagar".into(), "jaya nagar".into()],
-        },
-        AreaAliasEntry {
-            canonical: "Bannerghatta Road".to_string(),
-            aliases: vec![
-                "bannerghatta".into(),
-                "bannerghatta road".into(),
-                "btm".into(),
-            ],
-        },
-    ]
+fn validate_search_intent_runtime(file: &SearchIntentFile) -> Result<(), String> {
+    validate_aliases(
+        "area_exclusion_prefixes",
+        file.area_exclusion_prefixes.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "negated_prefixes",
+        file.negated_prefixes.iter().map(String::as_str),
+    )?;
+    validate_aliases(
+        "conflict_key_policy.excluded_exact",
+        file.conflict_key_policy
+            .excluded_exact
+            .iter()
+            .map(String::as_str),
+    )?;
+
+    let registry = load_fact_registry_index().map_err(|err| err.to_string())?;
+    let known_search_keys = known_search_fact_keys().map_err(|err| err.to_string())?;
+    for (index, derivation) in file.preference_key_derivations.bhk.iter().enumerate() {
+        if derivation.generic_keys.is_empty() {
+            return Err(format!(
+                "preference_key_derivations.bhk[{index}].generic_keys must not be empty"
+            ));
+        }
+        if derivation.bhk_values.is_empty() {
+            return Err(format!(
+                "preference_key_derivations.bhk[{index}].bhk_values must not be empty"
+            ));
+        }
+        if derivation
+            .bhk_values
+            .iter()
+            .any(|value| *value < file.parser.bhk.min || *value > file.parser.bhk.max)
+        {
+            return Err(format!(
+                "preference_key_derivations.bhk[{index}].bhk_values must be inside parser.bhk range"
+            ));
+        }
+        if !derivation.derived_key_template.contains("{key}")
+            || !derivation.derived_key_template.contains("{bhk}")
+        {
+            return Err(format!(
+                "preference_key_derivations.bhk[{index}].derived_key_template must contain {{key}} and {{bhk}}"
+            ));
+        }
+        for key in &derivation.generic_keys {
+            if key.trim().is_empty() {
+                return Err(format!(
+                    "preference_key_derivations.bhk[{index}] contains an empty generic key"
+                ));
+            }
+            for bhk in &derivation.bhk_values {
+                let derived = derivation
+                    .derived_key_template
+                    .replace("{key}", key)
+                    .replace("{bhk}", &bhk.to_string());
+                if registry.lookup(&derived).is_none() && !known_search_keys.contains(&derived) {
+                    return Err(format!(
+                        "preference_key_derivations.bhk[{index}] derives unknown fact key {derived}"
+                    ));
+                }
+            }
+        }
+    }
+
+    if file.hard_constraint_dimensions.is_empty() {
+        return Err("hard_constraint_dimensions must not be empty".to_string());
+    }
+    validate_aliases(
+        "hard_constraint_dimensions.field",
+        file.hard_constraint_dimensions
+            .iter()
+            .map(|dimension| dimension.field.as_str()),
+    )?;
+    let configured_numeric_dimensions =
+        configured_numeric_constraint_dimensions().map_err(|err| err.to_string())?;
+    for dimension in &file.hard_constraint_dimensions {
+        if !configured_numeric_dimensions
+            .iter()
+            .any(|configured| configured.eq_ignore_ascii_case(&dimension.field))
+        {
+            return Err(format!(
+                "hard_constraint_dimensions references unknown numeric constraint dimension {}",
+                dimension.field
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn known_search_fact_keys() -> Result<HashSet<String>, DagConfigError> {
+    let mut keys = HashSet::new();
+    let scoring_path = dag_root().join("scoring_policy.json");
+    let scoring: ScoringRuntimeFactKeysFile = load_json(&scoring_path)?;
+    keys.extend(scoring.runtime_fact_keys);
+    for section in load_evidence_sections()? {
+        keys.extend(section.facts.into_iter().map(|fact| fact.key));
+    }
+    Ok(keys)
+}
+
+fn configured_numeric_constraint_dimensions() -> Result<HashSet<String>, DagConfigError> {
+    let path = dag_root().join("fact_registry.json");
+    let registry: FactRegistryNumericConstraintsFile = load_json(&path)?;
+    Ok(registry
+        .numeric_constraints
+        .into_iter()
+        .map(|constraint| constraint.dimension)
+        .collect())
 }
 
 #[cfg(test)]
@@ -393,5 +532,80 @@ mod tests {
         .expect("write fixture");
 
         assert!(load_search_intent_from_path(&invalid_parser_path).is_err());
+    }
+
+    #[test]
+    fn parser_runtime_rejects_invalid_derivation_templates_and_dimensions() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let invalid_template_path = temp_dir.path().join("invalid_template.json");
+        std::fs::write(
+            &invalid_template_path,
+            search_intent_fixture(
+                r#""preference_key_derivations": {
+                    "bhk": [{
+                      "generic_keys": ["listing_price"],
+                      "bhk_values": [3],
+                      "derived_key_template": "listing_price_static"
+                    }]
+                  }"#,
+                r#""hard_constraint_dimensions": [{ "field": "land_area" }]"#,
+            ),
+        )
+        .expect("write fixture");
+        assert!(load_search_intent_from_path(&invalid_template_path).is_err());
+
+        let invalid_dimension_path = temp_dir.path().join("invalid_dimension.json");
+        std::fs::write(
+            &invalid_dimension_path,
+            search_intent_fixture(
+                r#""preference_key_derivations": {
+                    "bhk": [{
+                      "generic_keys": ["listing_price"],
+                      "bhk_values": [3],
+                      "derived_key_template": "{key}_{bhk}bhk"
+                    }]
+                  }"#,
+                r#""hard_constraint_dimensions": [{ "field": "made_up_dimension" }]"#,
+            ),
+        )
+        .expect("write fixture");
+        assert!(load_search_intent_from_path(&invalid_dimension_path).is_err());
+    }
+
+    fn search_intent_fixture(derivations: &str, dimensions: &str) -> String {
+        format!(
+            r#"{{
+              "version": 1,
+              "area_aliases": {{
+                "entries": [{{
+                  "canonical": "Whitefield",
+                  "aliases": ["whitefield"]
+                }}]
+              }},
+              "resolution": {{}},
+              "parser": {{
+                "bhk": {{
+                  "unit_aliases": ["bhk"],
+                  "number_words": [{{ "word": "three", "value": 3 }}],
+                  "min": 1,
+                  "max": 6
+                }},
+                "budget": {{
+                  "operators": ["under"],
+                  "units": [{{ "unit": "crore", "aliases": ["cr"], "multiplier": 10000000.0 }}]
+                }},
+                "distance": {{
+                  "operators": ["within"],
+                  "units": [{{ "unit": "km", "aliases": ["km"], "multiplier": 1.0 }}]
+                }},
+                "relations": {{ "aliases": [{{ "alias": "near" }}] }}
+              }},
+              "area_exclusion_prefixes": ["not"],
+              "negated_prefixes": ["not"],
+              "conflict_key_policy": {{ "excluded_exact": ["price_per_sqft"] }},
+              {derivations},
+              {dimensions}
+            }}"#
+        )
     }
 }
