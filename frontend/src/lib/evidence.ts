@@ -3,6 +3,7 @@ import type {
   PropertyCard,
   PropertyEvidenceResponse,
   SearchResultItem,
+  SourceDisplayMetadata,
   SourceItem,
 } from "./types.ts";
 
@@ -230,14 +231,14 @@ export function summarizeEvidence(
     }
     return sum + section.items.length;
   }, 0);
-  const sourceTypes = humanizeSourceTypes([
-    ...new Set(sections.flatMap((section) => {
-      if (section.community_pulse) {
-        return [section.community_pulse.source_label.replace(/ review$/i, "")];
-      }
-      return section.source_types;
-    })),
-  ]).slice(0, 4);
+  const sourceDisplays = sections.flatMap((section) => section.source_displays ?? []);
+  const sourceTypes = (
+    sourceDisplays.length > 0
+      ? humanizeSourceDisplays(sourceDisplays)
+      : humanizeSourceTypes([
+          ...new Set(sections.flatMap((section) => section.source_types)),
+        ])
+  ).slice(0, 4);
 
   return {
     factCount,
@@ -249,30 +250,54 @@ export function summarizeEvidence(
 
 const INTERNAL_SOURCE_TYPES = new Set(["computed", "manual", "system"]);
 
-function isBuyerVisibleSource(sourceType: string | undefined): boolean {
+function legacyBuyerVisibleSource(sourceType: string | undefined): boolean {
   if (!sourceType) return false;
   const lowered = sourceType.trim().toLowerCase();
   return lowered.includes("rera") || lowered.includes("google");
 }
 
 /** Hide pipeline source types from buyer-facing UI. */
-export function displaySourceType(sourceType: string | undefined): string | null {
+export function displaySourceType(
+  sourceType: string | undefined,
+  sourceDisplay?: SourceDisplayMetadata,
+): string | null {
+  if (sourceDisplay) return sourceDisplay.buyerVisible ? sourceDisplay.label : null;
   if (!sourceType) return null;
   const lowered = sourceType.trim().toLowerCase();
   if (INTERNAL_SOURCE_TYPES.has(lowered)) return null;
-  if (!isBuyerVisibleSource(sourceType)) return null;
+  if (!legacyBuyerVisibleSource(sourceType)) return null;
   if (lowered === "rera") return "RERA";
   if (lowered.includes("google")) return "Google";
   return sourceType;
 }
 
-export function canShowBuyerSource(sourceType: string | undefined): boolean {
-  return isBuyerVisibleSource(sourceType);
+export function canShowBuyerSource(
+  sourceType: string | undefined,
+  sourceDisplay?: SourceDisplayMetadata,
+): boolean {
+  return sourceDisplay?.buyerVisible ?? legacyBuyerVisibleSource(sourceType);
+}
+
+export function canShowSourceProvenance(
+  sourceType: string | undefined,
+  sourceDisplay?: SourceDisplayMetadata,
+): boolean {
+  return sourceDisplay?.provenanceVisible ?? legacyBuyerVisibleSource(sourceType);
+}
+
+export function humanizeSourceDisplays(displays: SourceDisplayMetadata[]): string[] {
+  return [
+    ...new Set(
+      displays
+        .filter((display) => display.buyerVisible)
+        .map((display) => display.label),
+    ),
+  ];
 }
 
 export function humanizeSourceTypes(types: string[]): string[] {
   return types
-    .map(displaySourceType)
+    .map((sourceType) => displaySourceType(sourceType))
     .filter((value): value is string => value !== null);
 }
 

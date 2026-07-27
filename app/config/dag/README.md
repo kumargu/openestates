@@ -14,6 +14,7 @@ Control plane for the OpenEstates graph and pipeline. **Schemas only — no enti
 | `ui_surfaces.json` | ui | Maps buyer surfaces (approach road, flooding…) → leaf_keys + components |
 | `evidence_sections.json` | ui | Property detail evidence sections: metadata, presentation, fact keys, derived section modes |
 | `search_intent.json` | search | Buyer archetypes; area alias migration target |
+| `source_display_policy.json` | ui | Buyer-facing source labels and provenance visibility |
 | `crawl_policies/*.json` | crawl | Per-source skip rules, cadence, isolated workers |
 | `source_adapters/` | pipeline | (pending) One adapter contract per external source |
 

@@ -19,6 +19,7 @@
     "scoring_policy.json",
     "search_guardrails.json",
     "search_intent.json",
+    "source_display_policy.json",
     "source_adapters/",
     "ui_surfaces.json"
   ],
@@ -32,7 +33,7 @@
   "agent_routing": {
     "add_leaf": "concern_taxonomy.json + fact_registry.json",
     "add_entity_type": "ontology.json",
-    "add_source": "source_adapters/ + resolution_policies.json",
+    "add_source": "source_adapters/ + resolution_policies.json + source_display_policy.json",
     "add_crawl_asset": "asset_registry.json + crawl_policies/",
     "enrich_leaf": "enrichment_targets.json",
     "add_ui_surface": "ui_surfaces.json",

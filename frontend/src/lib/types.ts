@@ -458,6 +458,7 @@ export type SceneReceipt = {
   factKey: string;
   claim: string;
   sourceType: string;
+  sourceDisplay?: SourceDisplayMetadata;
   sourceUrl?: string;
   learnedAt: string;
   confidence: number;
@@ -567,9 +568,16 @@ export type SourceItem = {
   relationship?: string;
   values?: string[];
   source_type: string;
+  source_display?: SourceDisplayMetadata;
   source_url?: string;
   attributions?: SourceAttribution[];
   learned_at: string;
+};
+
+export type SourceDisplayMetadata = {
+  label: string;
+  buyerVisible: boolean;
+  provenanceVisible: boolean;
 };
 
 export type EvidenceMediaFrame = {
@@ -605,6 +613,7 @@ export type SourceAttribution = {
   value: string;
   source_url?: string;
   source_type: string;
+  source_display?: SourceDisplayMetadata;
   learned_at: string;
 };
 
@@ -619,6 +628,7 @@ export type EvidenceSection = {
   constellation?: EvidenceConstellation;
   header_meta?: string;
   source_types: string[];
+  source_displays?: SourceDisplayMetadata[];
   entity_ids: string[];
   presentation?: EvidencePresentation;
   items: SourceItem[];
@@ -645,6 +655,7 @@ export type LivabilityBrief = {
 export type CommunityPulseQuote = {
   text: string;
   source_type: string;
+  source_display?: SourceDisplayMetadata;
   source_url?: string;
   polarity: "positive" | "concern" | "neutral" | string;
 };

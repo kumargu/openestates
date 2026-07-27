@@ -12,6 +12,7 @@
 //! | `enrichment_targets.json` | Re-enrichment plans | `openestates-enrich` (pending) |
 //! | `ui_surfaces.json` | UI surface → leaves | Frontend/API mappers |
 //! | `evidence_sections.json` | Property evidence section metadata | Property detail API |
+//! | `source_display_policy.json` | Source labels + visibility | Property detail API |
 //! | `search_intent.json` | Buyer archetypes | Search intent (migration pending) |
 //! | `crawl_policies/*.json` | Crawl skip/cadence | Python collectors |
 //!
@@ -24,6 +25,7 @@ mod loader;
 mod resolution;
 mod search_guardrails;
 mod search_intent;
+mod source_display;
 mod ui_surfaces;
 
 pub use evidence_sections::{
@@ -56,6 +58,11 @@ pub use search_intent::{
     search_parser_config, search_resolution_config, AreaAliasEntry, BhkParserConfig, NumberWord,
     RelationAliasConfig, RelationParserConfig, SearchIntentFile, SearchParserConfig,
     SearchPlaceFamilyAlias, SearchResolutionConfig, UnitAliasConfig, UnitValueParserConfig,
+};
+pub use source_display::{
+    load_source_display_policy, load_source_display_policy_from_path, source_display_metadata,
+    source_display_policy, source_display_policy_path, source_feedback_label_for_types,
+    SourceDisplayDefault, SourceDisplayMetadata, SourceDisplayPolicyFile, SourceDisplayRule,
 };
 pub use ui_surfaces::{
     load_ui_surfaces, load_ui_surfaces_from_path, ui_surfaces_config, ui_surfaces_path,

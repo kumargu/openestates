@@ -1,5 +1,5 @@
 import type { CommunityPulse } from "../../lib/types.ts";
-import { canShowBuyerSource, displaySourceType } from "../../lib/evidence.ts";
+import { canShowSourceProvenance, displaySourceType } from "../../lib/evidence.ts";
 import { TrendDownIcon, TrendIcon } from "./EvidenceIcons.tsx";
 
 type Props = {
@@ -17,7 +17,8 @@ export function CommunityPulseCard({ pulse }: Props) {
   const concernQuotes = pulse.quotes.filter((quote) => quote.polarity === "concern");
   const neutralQuotes = pulse.quotes.filter((quote) => quote.polarity === "neutral");
   const buyerVisibleSourceUrls = pulse.source_urls.filter((url) =>
-    pulse.quotes.some((quote) => quote.source_url === url && canShowBuyerSource(quote.source_type)));
+    pulse.quotes.some((quote) =>
+      quote.source_url === url && canShowSourceProvenance(quote.source_type, quote.source_display)));
 
   return (
     <div className="community-pulse">
@@ -70,10 +71,10 @@ export function CommunityPulseCard({ pulse }: Props) {
               </div>
               <footer>
                 <span>{polarityLabel(quote.polarity)}</span>
-                {displaySourceType(quote.source_type) && (
-                  <span>{displaySourceType(quote.source_type)}</span>
+                {displaySourceType(quote.source_type, quote.source_display) && (
+                  <span>{displaySourceType(quote.source_type, quote.source_display)}</span>
                 )}
-                {quote.source_url && canShowBuyerSource(quote.source_type) && (
+                {quote.source_url && canShowSourceProvenance(quote.source_type, quote.source_display) && (
                   <a href={quote.source_url} target="_blank" rel="noreferrer">
                     Source
                   </a>

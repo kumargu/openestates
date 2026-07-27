@@ -6,7 +6,7 @@ import type {
   PropertyEvidenceResponse,
   ReraInfo,
 } from "../../lib/types.ts";
-import { canShowBuyerSource, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
+import { canShowBuyerSource, canShowSourceProvenance, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
 import { reraFactCount, reraFactGroups } from "../../lib/reraProjectFacts.ts";
 import {
   LinkIcon,
@@ -54,24 +54,16 @@ function structuredReraSection(): EvidenceSection {
 }
 
 function canShowItemSource(item: SourceItem): boolean {
-  const sourceType = item.source_type.trim().toLowerCase();
-  if (sourceType.includes("rera")) return true;
-  if (!sourceType.includes("google")) return false;
-  const key = item.key?.toLowerCase() ?? "";
-  const label = item.label.toLowerCase();
-  const relationship = item.relationship?.toLowerCase() ?? "";
-  return key.includes("review")
-    || label.includes("review")
-    || relationship.includes("review");
+  return canShowBuyerSource(item.source_type, item.source_display);
 }
 
 function itemSourceUrl(item: SourceItem): string | undefined {
-  if (!canShowItemSource(item)) return undefined;
+  if (!canShowSourceProvenance(item.source_type, item.source_display)) return undefined;
   if (item.source_url) {
     return item.source_url;
   }
   return item.attributions?.find((attribution) =>
-    canShowBuyerSource(attribution.source_type) && attribution.source_url)?.source_url;
+    canShowSourceProvenance(attribution.source_type, attribution.source_display) && attribution.source_url)?.source_url;
 }
 
 function isHttpUrl(value: string): boolean {
@@ -146,14 +138,16 @@ function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
 
 function FactRow({ item }: { item: SourceItem }) {
   const url = itemSourceUrl(item);
-  const sourceLabel = canShowItemSource(item) ? displaySourceType(item.source_type) : null;
+  const sourceLabel = canShowItemSource(item)
+    ? displaySourceType(item.source_type, item.source_display)
+    : null;
   const values = item.values
     ?.filter((value) => Boolean(value) && (canShowItemSource(item) || !httpUrlFrom(value)))
     ?? [];
   const hasValue = values.length > 0 || (item.value && item.value.trim().length > 0);
   if (!hasValue) return null;
   const valueUrl = item.value ? httpUrlFrom(item.value) : null;
-  const canLinkValue = canShowItemSource(item);
+  const canLinkValue = canShowSourceProvenance(item.source_type, item.source_display);
 
   return (
     <div className="ev-fact">

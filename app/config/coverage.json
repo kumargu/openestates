@@ -10,6 +10,7 @@
     "asset_dag": "app/config/dag/asset_registry.json",
     "enrichment_plans": "app/config/dag/enrichment_targets.json",
     "ui_surfaces": "app/config/dag/ui_surfaces.json — 6 surfaces",
+    "source_display_policy": "app/config/dag/source_display_policy.json — buyer-visible source labels and provenance",
     "evidence_ui_sections": "app/config/dag/evidence_sections.json — property evidence panels",
     "discovery_home": "app/config/product/discovery_home.json — shelves + quotes"
   },
@@ -57,6 +58,11 @@
     {
       "path": "app/config/dag/evidence_sections.json",
       "role": "Property page evidence panels — presentation variant, fact keys per section",
+      "primitive": "ui"
+    },
+    {
+      "path": "app/config/dag/source_display_policy.json",
+      "role": "Buyer-facing source labels, source visibility, and provenance visibility",
       "primitive": "ui"
     },
     {

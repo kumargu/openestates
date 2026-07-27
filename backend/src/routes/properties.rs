@@ -27,8 +27,8 @@ use crate::community::{
     deterministic_community_summarizer, CommunityPulse,
 };
 use crate::dag_config::{
-    evidence_sections_config, ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
-    EvidenceSectionPresentation,
+    evidence_sections_config, source_display_metadata, ui_surfaces_config, ContextFactDefinition,
+    EvidenceSectionDefinition, EvidenceSectionPresentation, SourceDisplayMetadata,
 };
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
@@ -214,6 +214,7 @@ pub struct SourceItem {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<String>,
     pub source_type: String,
+    pub source_display: SourceDisplayMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -229,6 +230,7 @@ pub struct SourceAttribution {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub source_type: String,
+    pub source_display: SourceDisplayMetadata,
     #[serde(skip_serializing)]
     pub confidence_pct: u8,
     pub learned_at: String,
@@ -311,6 +313,8 @@ pub struct EvidenceSection {
     pub header_meta: String,
     pub confidence_pct: u8,
     pub source_types: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_displays: Vec<SourceDisplayMetadata>,
     pub entity_ids: Vec<String>,
     pub presentation: EvidencePresentation,
     pub items: Vec<SourceItem>,
@@ -540,6 +544,7 @@ fn google_reviews_url_source_item(
 ) -> Option<SourceItem> {
     let node = graph.get_node(node_id)?;
     let url = google_reviews_url_from_facts(&node.facts, &node.name)?;
+    let source_type = "Google".to_string();
     Some(SourceItem {
         entity_id: node_id.to_string(),
         key: key.to_string(),
@@ -548,7 +553,8 @@ fn google_reviews_url_source_item(
         scope: entity_scope(node_id).to_string(),
         relationship: None,
         values: Vec::new(),
-        source_type: "Google".to_string(),
+        source_display: source_display_metadata(&source_type),
+        source_type,
         source_url: Some(url),
         attributions: Vec::new(),
         confidence_pct: 60,
@@ -617,6 +623,7 @@ fn source_item_from_fact(
     if is_low_signal_source_value(display_key, &value) {
         return None;
     }
+    let source_type = format!("{:?}", fact.source.source_type);
     Some(SourceItem {
         entity_id: entity_id.to_string(),
         key: display_key.to_string(),
@@ -625,7 +632,8 @@ fn source_item_from_fact(
         scope: entity_scope(entity_id).to_string(),
         relationship: None,
         values,
-        source_type: format!("{:?}", fact.source.source_type),
+        source_display: source_display_metadata(&source_type),
+        source_type,
         source_url: fact.source.url.clone(),
         attributions: Vec::new(),
         confidence_pct: (fact.confidence * 100.0).round().clamp(0.0, 100.0) as u8,
@@ -726,6 +734,7 @@ fn source_item_from_serving_fact(
         scope: entity_scope(&fact.entity_id).to_string(),
         relationship: None,
         values,
+        source_display: source_display_metadata(&fact.source_type),
         source_type: fact.source_type.clone(),
         source_url: fact.source_url.clone(),
         attributions: Vec::new(),
@@ -806,6 +815,7 @@ fn serving_multi_source_item(
         .map(|value| SourceAttribution {
             value: value.value.clone(),
             source_url: value.source_url.clone(),
+            source_display: source_display_metadata(&value.source_type),
             source_type: value.source_type.clone(),
             confidence_pct: value.confidence_pct,
             learned_at: value.learned_at.to_rfc3339(),
@@ -833,6 +843,7 @@ fn serving_multi_source_item(
         scope: "society".to_string(),
         relationship: None,
         values: item_values,
+        source_display: source_display_metadata(&first.source_type),
         source_type: first.source_type,
         source_url: first.source_url,
         attributions,
@@ -1345,6 +1356,7 @@ fn evidence_media_source_item(media: &EvidenceMediaStrip) -> SourceItem {
         .map(|frame| frame.label.clone())
         .collect::<Vec<_>>();
 
+    let source_type = "Google".to_string();
     SourceItem {
         entity_id: "road_segment:approach-road".to_string(),
         key: format!("{}_available", media.kind),
@@ -1353,7 +1365,8 @@ fn evidence_media_source_item(media: &EvidenceMediaStrip) -> SourceItem {
         scope: "road_segment".to_string(),
         relationship: Some("gate approach".to_string()),
         values,
-        source_type: "Google".to_string(),
+        source_display: source_display_metadata(&source_type),
+        source_type,
         source_url,
         attributions: Vec::new(),
         confidence_pct: if media.coverage_quality == "strong" {
@@ -1783,8 +1796,15 @@ pub(crate) fn evidence_section_from_panel(
             .items
             .iter()
             .map(|item| item.source_type.clone())
+            .chain(
+                panel
+                    .community_pulse
+                    .iter()
+                    .flat_map(|pulse| pulse.quotes.iter().map(|quote| quote.source_type.clone())),
+            )
             .collect(),
     );
+    let source_displays = unique_source_displays(&source_types);
     let mut entity_ids = unique_sorted(
         panel
             .items
@@ -1822,6 +1842,7 @@ pub(crate) fn evidence_section_from_panel(
         header_meta,
         confidence_pct,
         source_types,
+        source_displays,
         entity_ids,
         items: panel.items,
         presentation,
@@ -1846,6 +1867,26 @@ fn section_header_meta(panel: &SourcePanel, source_types: &[String]) -> String {
     } else {
         format!("{fact_count} facts · {}", source_types.join(", "))
     }
+}
+
+fn unique_source_displays(source_types: &[String]) -> Vec<SourceDisplayMetadata> {
+    let mut displays = source_types
+        .iter()
+        .map(|source_type| source_display_metadata(source_type))
+        .collect::<Vec<_>>();
+    displays.sort_by(|left, right| {
+        right
+            .buyer_visible
+            .cmp(&left.buyer_visible)
+            .then_with(|| right.provenance_visible.cmp(&left.provenance_visible))
+            .then_with(|| left.label.cmp(&right.label))
+    });
+    displays.dedup_by(|left, right| {
+        left.label == right.label
+            && left.buyer_visible == right.buyer_visible
+            && left.provenance_visible == right.provenance_visible
+    });
+    displays
 }
 
 fn source_item_has_display_value(item: &SourceItem) -> bool {
@@ -3430,6 +3471,7 @@ mod serving_state_tests {
             relationship: None,
             values: Vec::new(),
             source_type: "ExternalListing".to_string(),
+            source_display: source_display_metadata("ExternalListing"),
             source_url: None,
             attributions: Vec::new(),
             confidence_pct: 90,
