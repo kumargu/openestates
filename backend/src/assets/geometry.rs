@@ -1,16 +1,6 @@
-use std::collections::HashMap;
 use std::fmt;
 
-use arrow::array::{Array, Float64Array, StringArray};
-use bytes::Bytes;
 use geojson::{GeoJson, Geometry, Value};
-use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
-
-use crate::assets::{
-    AssetId, AssetMaterializationStore, AssetPartition, KgViewManifest, KG_SOCIETY_VIEW_ASSET_ID,
-};
-use crate::lake::{LakeError, LakeKey, LakeStore};
-use crate::parquet_data::VALUE_NUMBER_COLUMN;
 
 const EARTH_RADIUS_METERS: f64 = 6_371_000.0;
 
@@ -70,19 +60,9 @@ fn validate_geometry_value(
         Value::MultiPoint(points) | Value::LineString(points) => {
             validate_path(points, subject, saw_coordinate)
         }
-        Value::MultiLineString(lines) | Value::Polygon(lines) => {
-            validate_paths(lines, subject, saw_coordinate)
-        }
-        Value::MultiPolygon(polygons) => {
-            let mut min_distance = None;
-            for polygon in polygons {
-                min_distance = min_optional_distance(
-                    min_distance,
-                    validate_paths(polygon, subject, saw_coordinate)?,
-                );
-            }
-            Ok(min_distance)
-        }
+        Value::MultiLineString(lines) => validate_paths(lines, subject, saw_coordinate),
+        Value::Polygon(_) => Err(GeometryValidationError::UnsupportedGeometry("Polygon")),
+        Value::MultiPolygon(_) => Err(GeometryValidationError::UnsupportedGeometry("MultiPolygon")),
         Value::GeometryCollection(geometries) => {
             let mut min_distance = None;
             for geometry in geometries {
@@ -207,6 +187,7 @@ pub enum GeometryValidationError {
     InvalidGeoJson(String),
     EmptyGeometry,
     InvalidCoordinate,
+    UnsupportedGeometry(&'static str),
     DistanceMismatch {
         expected_meters: f64,
         computed_meters: f64,
@@ -220,6 +201,9 @@ impl fmt::Display for GeometryValidationError {
             Self::InvalidGeoJson(err) => write!(f, "invalid GeoJSON: {err}"),
             Self::EmptyGeometry => write!(f, "GeoJSON geometry has no coordinates"),
             Self::InvalidCoordinate => write!(f, "GeoJSON geometry has invalid coordinates"),
+            Self::UnsupportedGeometry(kind) => {
+                write!(f, "GeoJSON geometry type {kind} is not supported for distance validation")
+            }
             Self::DistanceMismatch {
                 expected_meters,
                 computed_meters,
@@ -233,108 +217,3 @@ impl fmt::Display for GeometryValidationError {
 }
 
 impl std::error::Error for GeometryValidationError {}
-
-pub async fn current_kg_subject_points(
-    lake: &LakeStore,
-) -> Result<HashMap<String, (f64, f64)>, LakeError> {
-    let materializations = AssetMaterializationStore::new(lake.clone());
-    let asset_id =
-        AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).expect("KG society view asset id is valid");
-    let record = match materializations
-        .current_record(&asset_id, &AssetPartition::global())
-        .await
-    {
-        Ok(record) => record,
-        Err(err) if err.is_not_found() => return Ok(HashMap::new()),
-        Err(err) => return Err(err),
-    };
-    let Some(manifest_artifact) = record
-        .artifacts
-        .iter()
-        .find(|artifact| artifact.content_type == "application/json")
-    else {
-        return Err(LakeError::InvalidMetadata(
-            "KG society view current record has no manifest artifact".to_string(),
-        ));
-    };
-    let manifest_key = LakeKey::new(manifest_artifact.key.clone()).map_err(LakeError::Key)?;
-    let manifest: KgViewManifest = lake.get_json(&manifest_key).await?;
-    let fact_key = LakeKey::new(manifest.fact_parquet_key).map_err(LakeError::Key)?;
-    let fact_bytes = lake.get_bytes(&fact_key).await?;
-    read_subject_points_from_kg_facts(fact_bytes)
-}
-
-fn read_subject_points_from_kg_facts(
-    bytes: Vec<u8>,
-) -> Result<HashMap<String, (f64, f64)>, LakeError> {
-    let mut by_entity = HashMap::<String, (Option<f64>, Option<f64>)>::new();
-    let reader = ParquetRecordBatchReaderBuilder::try_new(Bytes::from(bytes))
-        .map_err(|err| LakeError::InvalidMetadata(format!("invalid KG fact parquet: {err}")))?
-        .build()
-        .map_err(|err| LakeError::InvalidMetadata(format!("invalid KG fact parquet: {err}")))?;
-    for batch in reader {
-        let batch = batch
-            .map_err(|err| LakeError::InvalidMetadata(format!("invalid KG fact batch: {err}")))?;
-        let entity_id = string_column(&batch, "entity_id")?;
-        let fact_key = string_column(&batch, "fact_key")?;
-        let value_number = float64_column(&batch, VALUE_NUMBER_COLUMN)?;
-        for row in 0..batch.num_rows() {
-            if entity_id.is_null(row) || fact_key.is_null(row) || value_number.is_null(row) {
-                continue;
-            }
-            let key = fact_key.value(row);
-            if key != "geo.latitude" && key != "geo.longitude" {
-                continue;
-            }
-            let value = value_number.value(row);
-            let entry = by_entity
-                .entry(entity_id.value(row).to_string())
-                .or_insert((None, None));
-            match key {
-                "geo.latitude" if valid_latitude(value) => entry.0 = Some(value),
-                "geo.longitude" if valid_longitude(value) => entry.1 = Some(value),
-                _ => {}
-            }
-        }
-    }
-    Ok(by_entity
-        .into_iter()
-        .filter_map(|(entity_id, (latitude, longitude))| Some((entity_id, (latitude?, longitude?))))
-        .collect())
-}
-
-fn string_column<'a>(
-    batch: &'a arrow::record_batch::RecordBatch,
-    name: &str,
-) -> Result<&'a StringArray, LakeError> {
-    let index = batch.schema().index_of(name).map_err(|err| {
-        LakeError::InvalidMetadata(format!("missing KG fact column {name}: {err}"))
-    })?;
-    batch
-        .column(index)
-        .as_any()
-        .downcast_ref::<StringArray>()
-        .ok_or_else(|| LakeError::InvalidMetadata(format!("KG fact column {name} is not Utf8")))
-}
-
-fn float64_column<'a>(
-    batch: &'a arrow::record_batch::RecordBatch,
-    name: &str,
-) -> Result<&'a Float64Array, LakeError> {
-    let index = batch.schema().index_of(name).map_err(|err| {
-        LakeError::InvalidMetadata(format!("missing KG fact column {name}: {err}"))
-    })?;
-    batch
-        .column(index)
-        .as_any()
-        .downcast_ref::<Float64Array>()
-        .ok_or_else(|| LakeError::InvalidMetadata(format!("KG fact column {name} is not Float64")))
-}
-
-fn valid_latitude(value: f64) -> bool {
-    value.is_finite() && (-90.0..=90.0).contains(&value)
-}
-
-fn valid_longitude(value: f64) -> bool {
-    value.is_finite() && (-180.0..=180.0).contains(&value)
-}

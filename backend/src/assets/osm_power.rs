@@ -7,12 +7,11 @@ use sha2::{Digest, Sha256};
 
 use crate::dag_config::{dag_root, load_json, DagConfigError};
 use crate::knowledge::FactValue;
-use crate::lake::{LakeError, LakeStore};
+use crate::lake::LakeStore;
 
 use super::{
-    geometry::{current_kg_subject_points, validate_geojson_geometry},
-    MaterializationRecord, ReraAssetError, SkillFactAnnotationRecord, SkillFactRecord,
-    SkillFactsInput, SourceWatermark,
+    geometry::validate_geojson_geometry, MaterializationRecord, ReraAssetError,
+    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
 };
 
 pub const OSM_POWER_LINE_FACTS_ASSET_ID: &str = "osm_power_line_facts";
@@ -267,13 +266,10 @@ pub async fn canonicalize_osm_power_infrastructure_input(
                 .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
         })
         .collect::<std::collections::HashMap<_, _>>();
-    let subject_points = current_kg_subject_points(lake).await?;
-
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
         if canonical_ids.contains(record.entity_id.as_str()) {
-            fill_subject_point_from_kg(&mut record, &subject_points);
             records.push(record);
             continue;
         }
@@ -294,24 +290,10 @@ pub async fn canonicalize_osm_power_infrastructure_input(
             continue;
         };
         record.entity_id = entity_id.to_string();
-        fill_subject_point_from_kg(&mut record, &subject_points);
         records.push(record);
     }
     resolved.records = records;
     Ok(resolved)
-}
-
-fn fill_subject_point_from_kg(
-    record: &mut OsmPowerLineObservationRecord,
-    subject_points: &std::collections::HashMap<String, (f64, f64)>,
-) {
-    if record.subject_latitude.is_some() && record.subject_longitude.is_some() {
-        return;
-    }
-    if let Some((latitude, longitude)) = subject_points.get(&record.entity_id).copied() {
-        record.subject_latitude = Some(latitude);
-        record.subject_longitude = Some(longitude);
-    }
 }
 
 fn push_society_transmission_fact(
@@ -487,15 +469,15 @@ fn validate_input(input: &OsmPowerInfrastructureInput) -> Result<(), OsmPowerAss
                 record.osm_id
             )));
         }
-        let subject = optional_subject_point(
+        let subject = required_subject_point(
             record.subject_latitude,
             record.subject_longitude,
             &record.osm_id,
         )?;
         validate_geojson_geometry(
             &record.geometry_geojson,
-            subject,
-            subject.map(|_| record.distance_meters),
+            Some(subject),
+            Some(record.distance_meters),
         )
         .map_err(|err| {
             OsmPowerAssetError::InvalidInput(format!(
@@ -592,18 +574,17 @@ fn valid_coordinate(latitude: f64, longitude: f64) -> bool {
         && (-180.0..=180.0).contains(&longitude)
 }
 
-fn optional_subject_point(
+fn required_subject_point(
     latitude: Option<f64>,
     longitude: Option<f64>,
     record_id: &str,
-) -> Result<Option<(f64, f64)>, OsmPowerAssetError> {
+) -> Result<(f64, f64), OsmPowerAssetError> {
     match (latitude, longitude) {
         (Some(latitude), Some(longitude)) if valid_coordinate(latitude, longitude) => {
-            Ok(Some((latitude, longitude)))
+            Ok((latitude, longitude))
         }
-        (None, None) => Ok(None),
         _ => Err(OsmPowerAssetError::InvalidInput(format!(
-            "OSM power row {record_id} has invalid subject coordinates"
+            "OSM power row {record_id} requires valid subject coordinates"
         ))),
     }
 }
@@ -668,7 +649,6 @@ pub enum OsmPowerAssetError {
     InvalidInput(String),
     Json(serde_json::Error),
     Canonical(ReraAssetError),
-    Lake(LakeError),
 }
 
 impl fmt::Display for OsmPowerAssetError {
@@ -678,7 +658,6 @@ impl fmt::Display for OsmPowerAssetError {
             Self::InvalidInput(message) => write!(f, "invalid OSM power input: {message}"),
             Self::Json(err) => write!(f, "OSM power JSON error: {err}"),
             Self::Canonical(err) => write!(f, "OSM power canonical society lookup failed: {err}"),
-            Self::Lake(err) => write!(f, "OSM power lake read failed: {err}"),
         }
     }
 }
@@ -700,74 +679,5 @@ impl From<serde_json::Error> for OsmPowerAssetError {
 impl From<ReraAssetError> for OsmPowerAssetError {
     fn from(value: ReraAssetError) -> Self {
         Self::Canonical(value)
-    }
-}
-
-impl From<LakeError> for OsmPowerAssetError {
-    fn from(value: LakeError) -> Self {
-        Self::Lake(value)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::collections::{BTreeMap, HashMap};
-
-    use chrono::{TimeZone, Utc};
-
-    use super::*;
-
-    #[test]
-    fn subject_point_backfill_uses_canonical_kg_coordinates_when_missing() {
-        let mut record = test_record(None, None);
-        let subject_points = HashMap::from([(
-            "society:canonical".to_string(),
-            (12.985711_f64, 77.746842_f64),
-        )]);
-
-        fill_subject_point_from_kg(&mut record, &subject_points);
-
-        assert_eq!(record.subject_latitude, Some(12.985711));
-        assert_eq!(record.subject_longitude, Some(77.746842));
-    }
-
-    #[test]
-    fn subject_point_backfill_preserves_source_coordinates() {
-        let mut record = test_record(Some(12.9), Some(77.7));
-        let subject_points = HashMap::from([(
-            "society:canonical".to_string(),
-            (12.985711_f64, 77.746842_f64),
-        )]);
-
-        fill_subject_point_from_kg(&mut record, &subject_points);
-
-        assert_eq!(record.subject_latitude, Some(12.9));
-        assert_eq!(record.subject_longitude, Some(77.7));
-    }
-
-    fn test_record(
-        subject_latitude: Option<f64>,
-        subject_longitude: Option<f64>,
-    ) -> OsmPowerLineObservationRecord {
-        OsmPowerLineObservationRecord {
-            entity_id: "society:canonical".to_string(),
-            project_key: None,
-            query: "power around canonical".to_string(),
-            osm_id: "way/test".to_string(),
-            name: Some("Test line".to_string()),
-            power: "line".to_string(),
-            voltage_kv: Some(220.0),
-            distance_meters: 10.0,
-            subject_latitude,
-            subject_longitude,
-            latitude: 12.9858,
-            longitude: 77.7469,
-            geometry_geojson: r#"{"type":"Point","coordinates":[77.7469,12.9858]}"#.to_string(),
-            source_tags: BTreeMap::new(),
-            source_url: None,
-            confidence: 0.9,
-            fetched_at: Utc.with_ymd_and_hms(2026, 7, 27, 0, 0, 0).unwrap(),
-            fetch_source: "test".to_string(),
-        }
     }
 }

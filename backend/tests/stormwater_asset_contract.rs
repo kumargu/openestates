@@ -21,10 +21,10 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
                 name: Some("Varthur Rajakaluve".to_string()),
                 drain_type: "rajakaluve".to_string(),
                 hierarchy: Some("primary_swd".to_string()),
-                distance_meters: 42.0,
+                distance_meters: 0.0,
                 intersects_property: false,
-                subject_latitude: None,
-                subject_longitude: None,
+                subject_latitude: Some(12.941),
+                subject_longitude: Some(77.746),
                 latitude: 12.941,
                 longitude: 77.746,
                 geometry_geojson:
@@ -51,10 +51,10 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
                 name: Some("Tagged primary drain".to_string()),
                 drain_type: "primary_swd".to_string(),
                 hierarchy: Some("primary_swd".to_string()),
-                distance_meters: 80.0,
+                distance_meters: 0.0,
                 intersects_property: false,
-                subject_latitude: None,
-                subject_longitude: None,
+                subject_latitude: Some(12.943),
+                subject_longitude: Some(77.748),
                 latitude: 12.943,
                 longitude: 77.748,
                 geometry_geojson:
@@ -83,8 +83,8 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
                 hierarchy: Some("tertiary_swd".to_string()),
                 distance_meters: 600.0,
                 intersects_property: false,
-                subject_latitude: None,
-                subject_longitude: None,
+                subject_latitude: Some(12.9446),
+                subject_longitude: Some(77.75),
                 latitude: 12.95,
                 longitude: 77.75,
                 geometry_geojson:
@@ -110,7 +110,7 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
         fact.entity_id == "society:green-acre-whitefield"
             && fact.fact_key == "stormwater_drain_nearby"
             && fact.value_json.contains("Varthur Rajakaluve")
-            && fact.value_json.contains("severity: high")
+            && fact.value_json.contains("severity: critical")
     }));
     assert!(facts.facts.iter().any(|fact| {
         fact.entity_id == "society:green-acre-whitefield"
@@ -192,9 +192,33 @@ fn stormwater_drain_facts_reject_invalid_geometry_and_distance_mismatch() {
         snapshot_date: "2026-07-27".to_string(),
         records: vec![StormwaterDrainObservationRecord {
             distance_meters: 5_000.0,
-            ..base
+            ..base.clone()
         }],
         source_watermarks: Vec::new(),
     };
     assert!(stormwater_drain_facts_input(&wrong_distance, "test-run").is_err());
+
+    let missing_subject = StormwaterDrainRiskInput {
+        snapshot_date: "2026-07-27".to_string(),
+        records: vec![StormwaterDrainObservationRecord {
+            subject_latitude: None,
+            subject_longitude: None,
+            ..base.clone()
+        }],
+        source_watermarks: Vec::new(),
+    };
+    assert!(stormwater_drain_facts_input(&missing_subject, "test-run").is_err());
+
+    let polygon = StormwaterDrainRiskInput {
+        snapshot_date: "2026-07-27".to_string(),
+        records: vec![StormwaterDrainObservationRecord {
+            distance_meters: 0.0,
+            geometry_geojson:
+                r#"{"type":"Polygon","coordinates":[[[77.745,12.94],[77.747,12.94],[77.747,12.942],[77.745,12.94]]]}"#
+                    .to_string(),
+            ..base
+        }],
+        source_watermarks: Vec::new(),
+    };
+    assert!(stormwater_drain_facts_input(&polygon, "test-run").is_err());
 }
