@@ -23,6 +23,7 @@ data/context_graphs/
 # Environment
 .env
 .env.local
+.env.local.*
 
 # ChatGPT browser session (Playwright)
 pipeline/.chatgpt_session/

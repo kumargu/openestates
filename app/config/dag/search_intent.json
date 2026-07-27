@@ -141,6 +141,129 @@
       }
     ]
   },
+  "parser": {
+    "bhk": {
+      "unit_aliases": [
+        "bhk"
+      ],
+      "number_words": [
+        {
+          "word": "one",
+          "value": 1
+        },
+        {
+          "word": "two",
+          "value": 2
+        },
+        {
+          "word": "three",
+          "value": 3
+        },
+        {
+          "word": "four",
+          "value": 4
+        },
+        {
+          "word": "five",
+          "value": 5
+        },
+        {
+          "word": "six",
+          "value": 6
+        }
+      ],
+      "min": 1,
+      "max": 6
+    },
+    "budget": {
+      "operators": [
+        "under",
+        "undr",
+        "below",
+        "budget",
+        "max",
+        "within",
+        "upto",
+        "up to"
+      ],
+      "units": [
+        {
+          "unit": "crore",
+          "aliases": [
+            "cr",
+            "crore",
+            "crores"
+          ],
+          "multiplier": 10000000.0
+        },
+        {
+          "unit": "lakh",
+          "aliases": [
+            "l",
+            "lakh",
+            "lakhs"
+          ],
+          "multiplier": 100000.0
+        }
+      ]
+    },
+    "distance": {
+      "operators": [
+        "within",
+        "under",
+        "below",
+        "max",
+        "upto",
+        "up to",
+        "less than",
+        "inside",
+        "limit"
+      ],
+      "units": [
+        {
+          "unit": "km",
+          "aliases": [
+            "km",
+            "kms",
+            "kilometer",
+            "kilometers"
+          ],
+          "multiplier": 1.0
+        },
+        {
+          "unit": "m",
+          "aliases": [
+            "m",
+            "meter",
+            "meters",
+            "metre",
+            "metres"
+          ],
+          "multiplier": 0.001
+        }
+      ]
+    },
+    "relations": {
+      "aliases": [
+        {
+          "alias": "near"
+        },
+        {
+          "alias": "nearby"
+        },
+        {
+          "alias": "near by"
+        },
+        {
+          "alias": "within",
+          "requires_distance_limit": true
+        },
+        {
+          "alias": "close to"
+        }
+      ]
+    }
+  },
   "hard_constraint_dimensions": [
     {
       "field": "land_area",

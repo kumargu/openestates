@@ -11,12 +11,12 @@ use super::{
     ExternalListingsWeeklyInput, GoogleNearbyPlacesWeeklyInput, GooglePlacesWeeklyInput,
     PlanReason, RedditThreadSnapshotRecord, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
     SkillFactRecord, SourceWatermark, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
-    STORMWATER_DRAIN_FACTS_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
+    OSM_POWER_LINE_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 /// Control-plane input for source executors.
@@ -143,6 +143,20 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             false,
         );
+        for raw_asset_id in [
+            SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            OSM_POWER_LINE_FACTS_ASSET_ID,
+            STORMWATER_DRAIN_FACTS_ASSET_ID,
+        ] {
+            add_raw_companion(
+                &mut requested_assets,
+                &mut force_assets,
+                plan.run_entries()
+                    .any(|entry| entry.asset_id.as_str() == CURRENT_PROJECT_FACTS_ASSET_ID),
+                raw_asset_id,
+                false,
+            );
+        }
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
         force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -201,6 +215,22 @@ impl AssetSourceInputs {
             EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
             true,
         );
+        for raw_asset_id in [
+            SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            OSM_POWER_LINE_FACTS_ASSET_ID,
+            STORMWATER_DRAIN_FACTS_ASSET_ID,
+        ] {
+            add_raw_companion(
+                &mut requested_assets,
+                &mut force_assets,
+                manifest.steps.iter().any(|step| {
+                    step.asset_id.as_str() == CURRENT_PROJECT_FACTS_ASSET_ID
+                        && step_needs_replay(step)
+                }),
+                raw_asset_id,
+                true,
+            );
+        }
         requested_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
         requested_assets.dedup();
         force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -323,6 +353,25 @@ mod tests {
             collection_plan.requested_assets,
             vec![AssetId::new(GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID).unwrap()]
         );
+    }
+
+    #[test]
+    fn resumed_current_project_facts_request_required_red_flag_source_inputs() {
+        let plan = test_plan([test_run_entry(CURRENT_PROJECT_FACTS_ASSET_ID)]);
+        let mut manifest = AssetDagRunManifest::from_plan_with_version(&plan, "resume-required");
+        manifest.steps[0].status = AssetRunStepStatus::Blocked;
+
+        let collection_plan = AssetSourceInputs::resume_collection_plan(&manifest);
+
+        for asset_id in [
+            SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+            OSM_POWER_LINE_FACTS_ASSET_ID,
+            STORMWATER_DRAIN_FACTS_ASSET_ID,
+        ] {
+            let asset_id = AssetId::new(asset_id).unwrap();
+            assert!(collection_plan.requested_assets.contains(&asset_id));
+            assert!(collection_plan.force_assets.contains(&asset_id));
+        }
     }
 
     fn test_plan(entries: impl IntoIterator<Item = AssetPlanEntry>) -> AssetDagPlan {

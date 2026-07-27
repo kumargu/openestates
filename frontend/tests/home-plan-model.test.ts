@@ -136,6 +136,17 @@ test("baseline exposes only the five editable money inputs", () => {
   assert.equal(inputs.equityReturn, 10);
 });
 
+test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
+  const inputs = buildBaselinePlanInputs(33_100_000);
+
+  assert.equal(
+    inputs.monthlySipThousands + inputs.currentRentThousands,
+    inputs.monthlyEmiThousands,
+  );
+  assert.ok(inputs.monthlySipThousands > 0);
+  assert.ok(inputs.monthlyEmiThousands > inputs.currentRentThousands);
+});
+
 test("monthly SIP grows only the rent and invest path", () => {
   const without = calculateProjection({ ...ready, monthlySipThousands: 0 });
   const withSip = calculateProjection({ ...ready, monthlySipThousands: 20 });

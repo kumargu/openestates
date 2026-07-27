@@ -1,10 +1,11 @@
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::dag_config::search_resolution_config;
+use crate::dag_config::{search_resolution_config, ui_surfaces_config};
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{KgEntityRefs, Property, Society};
+use crate::proof_focus::ProofFocus;
 use crate::routes::enrichment::{
     area_node_id, enrich_property_card, property_node_id, society_node_id,
 };
@@ -179,6 +180,7 @@ impl TextSearch {
             || !negative_preferences.is_empty()
             || !intent.hard_constraints.is_empty()
             || has_geo_query;
+        let proof_focus_targets = proof_focus_targets();
         let candidate_ids = merged_candidate_ids(
             search_index.map(|index| index.recall_ids(query, intent)),
             extra_candidate_ids,
@@ -220,6 +222,12 @@ impl TextSearch {
                     }
                 }
 
+                let named_place_evidence = geo_query.and_then(|query| {
+                    serving_facts
+                        .and_then(|facts| serving_named_place_evidence(facts, &p.society_id, query))
+                        .or_else(|| query.evidence_for_society(&p.society_id).map(Into::into))
+                });
+
                 // Soft constraint: area — exact match keeps full score,
                 // nearby/sub-area match gets a penalty instead of exclusion.
                 let (area_penalty, area_match_kind): (f64, Option<AreaMatchKind>) =
@@ -235,6 +243,11 @@ impl TextSearch {
                             (
                                 schema::ranking_policy().graph_area_score_penalty,
                                 Some(AreaMatchKind::Graph),
+                            )
+                        } else if named_place_evidence.is_some() {
+                            (
+                                schema::ranking_policy().nearby_area_score_penalty,
+                                Some(AreaMatchKind::NamedPlace),
                             )
                         } else {
                             return None; // unrelated area: exclude
@@ -264,25 +277,41 @@ impl TextSearch {
 
                 // Boost for preference alignment — collect structured reasons
                 let mut match_reasons: Vec<MatchReason> = Vec::new();
+                let mut proof_focuses: Vec<ProofFocus> = Vec::new();
                 let mut pref_coverage: Vec<PreferenceCoverage> = Vec::new();
                 let mut graph_count: usize = 0;
                 let mut total_facts_consulted: usize = 0;
                 let mut positive_evidence_score = 0.0;
+                let mut primary_intent_score: f64 = 0.0;
 
                 for evidence in hard_constraint_matches {
                     total_facts_consulted += 1;
                     graph_count += 1;
                     score += evidence.score_delta;
+                    primary_intent_score += evidence_intent_score(&evidence);
                     reasons.push(evidence.reason.clone());
                     match_reasons.push(MatchReason {
                         preference: evidence.preference.clone(),
                         fact_key: evidence.fact_key.clone(),
-                        display: evidence.display,
+                        display: evidence.display.clone(),
                         score: evidence.normalized_score,
                         confidence: evidence.confidence,
-                        source_type: evidence.source_type,
-                        scoring_method: evidence.scoring_method,
+                        source_type: evidence.source_type.clone(),
+                        scoring_method: evidence.scoring_method.clone(),
                     });
+                    push_proof_focus(
+                        &mut proof_focuses,
+                        &proof_focus_targets,
+                        ProofFocusCandidate {
+                            fact_key: &evidence.fact_key,
+                            matched_label: None,
+                            matched_value: Some(&evidence.display),
+                            requested_constraint: Some(&evidence.preference),
+                            entity_id: None,
+                            distance_m: None,
+                            reason: &evidence.reason,
+                        },
+                    );
                     pref_coverage.push(PreferenceCoverage {
                         preference: evidence.preference,
                         status: "matched".into(),
@@ -290,26 +319,37 @@ impl TextSearch {
                     });
                 }
 
-                if let Some(evidence) = geo_query.and_then(|query| {
-                    serving_facts
-                        .and_then(|facts| serving_named_place_evidence(facts, &p.society_id, query))
-                        .or_else(|| query.evidence_for_society(&p.society_id).map(Into::into))
-                }) {
+                if let Some(evidence) = named_place_evidence {
                     total_facts_consulted += 1;
                     graph_count += 1;
                     score += evidence.score_delta;
                     positive_evidence_score += evidence.score_delta.max(0.0);
+                    primary_intent_score += named_place_intent_score(&evidence);
                     let preference = format!("near {}", evidence.place_name);
-                    reasons.push(evidence.display.clone());
+                    let focus_reason = format!("matched {}", preference);
+                    reasons.push(format!("{}: {}", preference, evidence.display));
                     match_reasons.push(MatchReason {
                         preference: preference.clone(),
                         fact_key: evidence.fact_key.clone(),
-                        display: evidence.display,
+                        display: evidence.display.clone(),
                         score: evidence.normalized_score,
                         confidence: evidence.confidence,
-                        source_type: evidence.source_type,
-                        scoring_method: evidence.scoring_method,
+                        source_type: evidence.source_type.clone(),
+                        scoring_method: evidence.scoring_method.clone(),
                     });
+                    push_proof_focus(
+                        &mut proof_focuses,
+                        &proof_focus_targets,
+                        ProofFocusCandidate {
+                            fact_key: &evidence.fact_key,
+                            matched_label: Some(&evidence.place_name),
+                            matched_value: Some(&evidence.display),
+                            requested_constraint: Some(&preference),
+                            entity_id: Some(&evidence.place_entity_id),
+                            distance_m: distance_m(evidence.distance_km),
+                            reason: &focus_reason,
+                        },
+                    );
                     pref_coverage.push(PreferenceCoverage {
                         preference,
                         status: if evidence.normalized_score > 0.5 {
@@ -346,15 +386,30 @@ impl TextSearch {
 
                             // Normalize score to 0-1 range (graph scores are 0-2)
                             let norm_score = (gs / 2.0).min(1.0);
+                            primary_intent_score += norm_score * f64::from(detail.confidence);
                             match_reasons.push(MatchReason {
                                 preference: pref.clone(),
                                 fact_key: detail.fact_key.clone(),
-                                display: detail.display,
+                                display: detail.display.clone(),
                                 score: norm_score,
                                 confidence: detail.confidence,
-                                source_type: detail.source_type,
+                                source_type: detail.source_type.clone(),
                                 scoring_method: "graph".into(),
                             });
+                            let focus_reason = format!("matches preference: {}", pref);
+                            push_proof_focus(
+                                &mut proof_focuses,
+                                &proof_focus_targets,
+                                ProofFocusCandidate {
+                                    fact_key: &detail.fact_key,
+                                    matched_label: None,
+                                    matched_value: Some(&detail.display),
+                                    requested_constraint: Some(pref),
+                                    entity_id: None,
+                                    distance_m: None,
+                                    reason: &focus_reason,
+                                },
+                            );
                             pref_coverage.push(PreferenceCoverage {
                                 preference: pref.clone(),
                                 status: if norm_score > 0.5 {
@@ -380,17 +435,31 @@ impl TextSearch {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
                             positive_evidence_score += evidence.score_delta.max(0.0);
+                            primary_intent_score += evidence_intent_score(&evidence);
                             reasons.push(evidence.reason.clone());
 
                             match_reasons.push(MatchReason {
                                 preference: pref.clone(),
                                 fact_key: evidence.fact_key.clone(),
-                                display: evidence.display,
+                                display: evidence.display.clone(),
                                 score: evidence.normalized_score,
                                 confidence: evidence.confidence,
-                                source_type: evidence.source_type,
-                                scoring_method: evidence.scoring_method,
+                                source_type: evidence.source_type.clone(),
+                                scoring_method: evidence.scoring_method.clone(),
                             });
+                            push_proof_focus(
+                                &mut proof_focuses,
+                                &proof_focus_targets,
+                                ProofFocusCandidate {
+                                    fact_key: &evidence.fact_key,
+                                    matched_label: None,
+                                    matched_value: Some(&evidence.display),
+                                    requested_constraint: Some(pref),
+                                    entity_id: None,
+                                    distance_m: None,
+                                    reason: &evidence.reason,
+                                },
+                            );
                             pref_coverage.push(PreferenceCoverage {
                                 preference: pref.clone(),
                                 status: if evidence.normalized_score > 0.5 {
@@ -416,17 +485,31 @@ impl TextSearch {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
                             positive_evidence_score += evidence.score_delta.max(0.0);
+                            primary_intent_score += evidence_intent_score(&evidence);
                             reasons.push(evidence.reason.clone());
 
                             match_reasons.push(MatchReason {
                                 preference: pref.clone(),
                                 fact_key: evidence.fact_key.clone(),
-                                display: evidence.display,
+                                display: evidence.display.clone(),
                                 score: evidence.normalized_score,
                                 confidence: evidence.confidence,
-                                source_type: evidence.source_type,
-                                scoring_method: evidence.scoring_method,
+                                source_type: evidence.source_type.clone(),
+                                scoring_method: evidence.scoring_method.clone(),
                             });
+                            push_proof_focus(
+                                &mut proof_focuses,
+                                &proof_focus_targets,
+                                ProofFocusCandidate {
+                                    fact_key: &evidence.fact_key,
+                                    matched_label: None,
+                                    matched_value: Some(&evidence.display),
+                                    requested_constraint: Some(pref),
+                                    entity_id: None,
+                                    distance_m: None,
+                                    reason: &evidence.reason,
+                                },
+                            );
                             pref_coverage.push(PreferenceCoverage {
                                 preference: pref.clone(),
                                 status: if evidence.normalized_score > 0.5 {
@@ -466,14 +549,28 @@ impl TextSearch {
                             match_reasons.push(MatchReason {
                                 preference: format!("avoid {}", pref),
                                 fact_key: evidence.fact_key.clone(),
-                                display: evidence.display,
+                                display: evidence.display.clone(),
                                 score: evidence.normalized_score,
                                 confidence: evidence.confidence,
-                                source_type: evidence.source_type,
-                                scoring_method: evidence.scoring_method,
+                                source_type: evidence.source_type.clone(),
+                                scoring_method: evidence.scoring_method.clone(),
                             });
+                            let requested_constraint = format!("avoid {}", pref);
+                            push_proof_focus(
+                                &mut proof_focuses,
+                                &proof_focus_targets,
+                                ProofFocusCandidate {
+                                    fact_key: &evidence.fact_key,
+                                    matched_label: None,
+                                    matched_value: Some(&evidence.display),
+                                    requested_constraint: Some(&requested_constraint),
+                                    entity_id: None,
+                                    distance_m: None,
+                                    reason: &evidence.reason,
+                                },
+                            );
                             pref_coverage.push(PreferenceCoverage {
-                                preference: format!("avoid {}", pref),
+                                preference: requested_constraint,
                                 status: coverage_status.to_string(),
                                 fact_key: Some(evidence.fact_key),
                             });
@@ -497,14 +594,28 @@ impl TextSearch {
                             match_reasons.push(MatchReason {
                                 preference: format!("avoid {}", pref),
                                 fact_key: evidence.fact_key.clone(),
-                                display: evidence.display,
+                                display: evidence.display.clone(),
                                 score: evidence.normalized_score,
                                 confidence: evidence.confidence,
-                                source_type: evidence.source_type,
-                                scoring_method: evidence.scoring_method,
+                                source_type: evidence.source_type.clone(),
+                                scoring_method: evidence.scoring_method.clone(),
                             });
+                            let requested_constraint = format!("avoid {}", pref);
+                            push_proof_focus(
+                                &mut proof_focuses,
+                                &proof_focus_targets,
+                                ProofFocusCandidate {
+                                    fact_key: &evidence.fact_key,
+                                    matched_label: None,
+                                    matched_value: Some(&evidence.display),
+                                    requested_constraint: Some(&requested_constraint),
+                                    entity_id: None,
+                                    distance_m: None,
+                                    reason: &evidence.reason,
+                                },
+                            );
                             pref_coverage.push(PreferenceCoverage {
-                                preference: format!("avoid {}", pref),
+                                preference: requested_constraint,
                                 status: coverage_status.to_string(),
                                 fact_key: Some(evidence.fact_key),
                             });
@@ -643,10 +754,13 @@ impl TextSearch {
                             compute_confidence_from_serving_facts(facts, &p.society_id, gdp)
                         })
                     });
+                let review_quality_score = review_quality_score(&card);
 
                 Some(RankedSearchResult {
                     ranking_score: normalized,
+                    primary_intent_score,
                     evidence_strength,
+                    review_quality_score,
                     named_society_match,
                     ordinal,
                     result: SearchResultCard {
@@ -655,6 +769,7 @@ impl TextSearch {
                         match_label,
                         match_reason,
                         match_explanation,
+                        proof_focuses,
                         semantic_score,
                         confidence_score,
                     },
@@ -663,8 +778,8 @@ impl TextSearch {
             .collect();
 
         results.sort_by(|a, b| {
-            b.ranking_score
-                .partial_cmp(&a.ranking_score)
+            b.primary_intent_score
+                .partial_cmp(&a.primary_intent_score)
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| b.named_society_match.cmp(&a.named_society_match))
                 .then_with(|| {
@@ -672,6 +787,7 @@ impl TextSearch {
                         .partial_cmp(&a.evidence_strength)
                         .unwrap_or(Ordering::Equal)
                 })
+                .then_with(|| compare_score_and_review(a, b))
                 .then_with(|| {
                     b.result
                         .semantic_score
@@ -688,15 +804,133 @@ impl TextSearch {
 struct RankedSearchResult {
     result: SearchResultCard,
     ranking_score: f64,
+    primary_intent_score: f64,
     evidence_strength: f64,
+    review_quality_score: f64,
     named_society_match: bool,
     ordinal: usize,
+}
+
+fn compare_score_and_review(a: &RankedSearchResult, b: &RankedSearchResult) -> Ordering {
+    b.ranking_score
+        .partial_cmp(&a.ranking_score)
+        .unwrap_or(Ordering::Equal)
+        .then_with(|| {
+            b.review_quality_score
+                .partial_cmp(&a.review_quality_score)
+                .unwrap_or(Ordering::Equal)
+        })
+}
+
+#[derive(Debug, Clone)]
+struct ProofFocusTarget {
+    surface_id: String,
+    layer_id: String,
+    fact_key: String,
+}
+
+struct ProofFocusCandidate<'a> {
+    fact_key: &'a str,
+    matched_label: Option<&'a str>,
+    matched_value: Option<&'a str>,
+    requested_constraint: Option<&'a str>,
+    entity_id: Option<&'a str>,
+    distance_m: Option<u32>,
+    reason: &'a str,
+}
+
+fn proof_focus_targets() -> Vec<ProofFocusTarget> {
+    let Ok(config) = ui_surfaces_config() else {
+        return Vec::new();
+    };
+    let mut targets = Vec::new();
+    for surface in &config.surfaces {
+        let Some(scene) = surface.scene.as_ref() else {
+            continue;
+        };
+        for layer in &scene.layers {
+            for fact_key in layer
+                .fact_keys
+                .iter()
+                .chain(layer.linked_entity_fact_keys.iter())
+            {
+                if targets.iter().any(|target: &ProofFocusTarget| {
+                    target.surface_id == surface.id
+                        && target.layer_id == layer.id
+                        && target.fact_key.eq_ignore_ascii_case(fact_key)
+                }) {
+                    continue;
+                }
+                targets.push(ProofFocusTarget {
+                    surface_id: surface.id.clone(),
+                    layer_id: layer.id.clone(),
+                    fact_key: fact_key.to_string(),
+                });
+            }
+        }
+    }
+    targets
+}
+
+fn push_proof_focus(
+    focuses: &mut Vec<ProofFocus>,
+    targets: &[ProofFocusTarget],
+    candidate: ProofFocusCandidate<'_>,
+) {
+    for target in targets
+        .iter()
+        .filter(|target| target.fact_key.eq_ignore_ascii_case(candidate.fact_key))
+    {
+        if focuses.iter().any(|existing| {
+            existing.surface_id == target.surface_id
+                && existing.layer_id == target.layer_id
+                && existing.fact_key.eq_ignore_ascii_case(candidate.fact_key)
+                && existing.entity_id.as_deref() == candidate.entity_id
+                && existing.matched_label.as_deref() == candidate.matched_label
+                && existing.requested_constraint.as_deref() == candidate.requested_constraint
+        }) {
+            continue;
+        }
+
+        focuses.push(ProofFocus {
+            surface_id: target.surface_id.clone(),
+            layer_id: target.layer_id.clone(),
+            fact_key: candidate.fact_key.to_string(),
+            entity_id: candidate.entity_id.map(str::to_string),
+            feature_id: None,
+            receipt_id: None,
+            matched_label: candidate
+                .matched_label
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string),
+            matched_value: candidate
+                .matched_value
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string),
+            requested_constraint: candidate
+                .requested_constraint
+                .filter(|value| !value.trim().is_empty())
+                .map(str::to_string),
+            distance_m: candidate.distance_m,
+            reason: candidate.reason.to_string(),
+        });
+    }
+}
+
+fn distance_m(distance_km: f64) -> Option<u32> {
+    distance_km
+        .is_finite()
+        .then(|| (distance_km * 1000.0).round())
+        .filter(|meters| *meters >= 0.0 && *meters <= u32::MAX as f64)
+        .map(|meters| meters as u32)
 }
 
 impl From<geo::HaversineEvidence> for NamedPlaceEvidence {
     fn from(evidence: geo::HaversineEvidence) -> Self {
         Self {
+            place_entity_id: evidence.place_entity_id,
             place_name: evidence.place_name,
+            distance_km: evidence.distance_km,
             fact_key: geo::DISTANCE_TO_PLACE_FACT_KEY.to_string(),
             display: evidence.display,
             normalized_score: evidence.normalized_score,
@@ -805,7 +1039,9 @@ struct EvidenceMatch {
 }
 
 struct NamedPlaceEvidence {
+    place_entity_id: String,
     place_name: String,
+    distance_km: f64,
     fact_key: String,
     display: String,
     normalized_score: f64,
@@ -902,7 +1138,9 @@ fn named_place_serving_fact_evidence(
     }
 
     Some(NamedPlaceEvidence {
+        place_entity_id: place.entity_id.clone(),
         place_name: place.name.clone(),
+        distance_km,
         fact_key: fact.fact_key.clone(),
         display: format!("{distance_km:.1} km from {}", place.name),
         normalized_score,
@@ -997,6 +1235,37 @@ fn evidence_strength(explanation: Option<&MatchExplanation>) -> f64 {
             .map(|reason| reason.score * f64::from(reason.confidence))
             .sum()
     })
+}
+
+fn evidence_intent_score(evidence: &EvidenceMatch) -> f64 {
+    evidence.normalized_score.clamp(0.0, 1.0) * f64::from(evidence.confidence.clamp(0.0, 1.0))
+}
+
+fn named_place_intent_score(evidence: &NamedPlaceEvidence) -> f64 {
+    evidence.normalized_score.clamp(0.0, 1.0) * f64::from(evidence.confidence.clamp(0.0, 1.0))
+}
+
+fn review_quality_score(card: &crate::models::PropertyCard) -> f64 {
+    let policy = schema::ranking_policy();
+    let total_weight = policy.review_rating_weight.max(0.0) + policy.review_count_weight.max(0.0);
+    if total_weight <= 0.0 {
+        return 0.0;
+    }
+
+    let rating_score = card
+        .google_rating
+        .filter(|rating| rating.is_finite())
+        .map(|rating| (rating / 5.0).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+    let count_divisor = policy.review_count_log_divisor.max(1.0);
+    let review_count_score = card
+        .google_review_count
+        .map(|count| (f64::from(count).ln_1p() / count_divisor).clamp(0.0, 1.0))
+        .unwrap_or(0.0);
+
+    (rating_score * policy.review_rating_weight.max(0.0)
+        + review_count_score * policy.review_count_weight.max(0.0))
+        / total_weight
 }
 
 fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
@@ -2540,6 +2809,7 @@ enum AreaMatchKind {
     Exact,
     Nearby,
     Graph,
+    NamedPlace,
 }
 
 fn build_match_reason(
@@ -2550,11 +2820,16 @@ fn build_match_reason(
 ) -> String {
     let mut parts = Vec::new();
 
+    if let Some(named_place_reason) = named_place_match_reason(reasons) {
+        parts.push(named_place_reason);
+    }
+
     if let Some(ref area) = intent.area {
         match area_match_kind {
             Some(AreaMatchKind::Nearby) => {
                 parts.push(format!("Near {} ({})", area, property_area));
             }
+            Some(AreaMatchKind::NamedPlace) => {}
             Some(AreaMatchKind::Exact | AreaMatchKind::Graph) | None => {
                 parts.push(format!("Matches {}", area));
             }
@@ -2598,6 +2873,17 @@ fn build_match_reason(
     } else {
         parts.join(", ")
     }
+}
+
+fn named_place_match_reason(reasons: &[String]) -> Option<String> {
+    reasons.iter().find_map(|reason| {
+        let (preference, _) = reason.split_once(':')?;
+        let preference = preference.trim();
+        preference
+            .strip_prefix("near ")
+            .filter(|place| !place.trim().is_empty())
+            .map(|place| format!("Near {}", place.trim()))
+    })
 }
 
 fn preference_was_matched(reasons: &[String], preference: &str) -> bool {
@@ -4484,6 +4770,328 @@ mod tests {
     }
 
     #[test]
+    fn named_place_intent_expands_area_recall_and_ranks_proximity_first() {
+        let properties = vec![
+            local_property(
+                "whitefield-keyword",
+                "Whitefield",
+                "whitefield-keyword",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "near-office-park",
+                "Hoodi",
+                "near-office-park",
+                3,
+                20_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let entities = vec![serving_entity(
+            "place:google:example-office-park",
+            "place",
+            "Example Office Park",
+        )];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "near-office-park",
+                    "nearby_tech_parks",
+                    FactValue::Text("Nearby tech parks: Example Office Park (0.6 km)".to_string()),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:example-office-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.99),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:example-office-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.71),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![serving_metadata(
+                "near-office-park",
+                "nearby_tech_parks",
+                vec!["tech parks", "office access", "social infrastructure"],
+                "TextMatch",
+                1.2,
+                Vec::new(),
+            )],
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("3bhk near example office park whitefield")
+            .expect("query should resolve the named office park");
+        let intent =
+            crate::search::intent::parse_intent("3bhk near example office park whitefield");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                None,
+                None,
+                Some(&geo_query),
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "3bhk near example office park whitefield",
+                &intent,
+                None,
+            );
+
+        assert_eq!(
+            results[0].card.id, "near-office-park",
+            "named-place proximity should outrank exact locality text matches"
+        );
+        assert!(
+            results[0].match_reason.contains("Near Example Office Park"),
+            "card reason should surface the primary named-place intent: {}",
+            results[0].match_reason
+        );
+        assert!(
+            !results[0].match_reason.contains("Near Whitefield"),
+            "named-place recall should not invent an area-proximity claim: {}",
+            results[0].match_reason
+        );
+        let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
+        assert!(
+            reasons.iter().any(|reason| {
+                reason.preference == "near Example Office Park"
+                    && reason.fact_key == "nearby_tech_parks"
+                    && reason.display.contains("Example Office Park")
+            }),
+            "top result should explain the named-place evidence: {:?}",
+            reasons
+        );
+    }
+
+    #[test]
+    fn review_quality_breaks_ties_after_named_place_intent_fit() {
+        let properties = vec![
+            local_property(
+                "lower-reviewed-fit",
+                "Whitefield",
+                "lower-reviewed-fit",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "better-reviewed-fit",
+                "Whitefield",
+                "better-reviewed-fit",
+                3,
+                20_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let entities = vec![serving_entity(
+            "place:google:example-office-park",
+            "place",
+            "Example Office Park",
+        )];
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "lower-reviewed-fit",
+                    "nearby_tech_parks",
+                    FactValue::Text("Nearby tech parks: Example Office Park (0.8 km)".to_string()),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "lower-reviewed-fit",
+                    "google_rating",
+                    FactValue::Numeric(3.8),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "lower-reviewed-fit",
+                    "google_review_count",
+                    FactValue::Numeric(80.0),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "better-reviewed-fit",
+                    "nearby_tech_parks",
+                    FactValue::Text("Nearby tech parks: Example Office Park (0.8 km)".to_string()),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "better-reviewed-fit",
+                    "google_rating",
+                    FactValue::Numeric(4.6),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "better-reviewed-fit",
+                    "google_review_count",
+                    FactValue::Numeric(500.0),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:example-office-park",
+                    "geo.latitude",
+                    FactValue::Numeric(12.99),
+                    "Google",
+                    0.9,
+                ),
+                serving_entity_fact(
+                    "place:google:example-office-park",
+                    "geo.longitude",
+                    FactValue::Numeric(77.71),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            vec![
+                serving_metadata(
+                    "lower-reviewed-fit",
+                    "nearby_tech_parks",
+                    vec!["tech parks", "office access", "social infrastructure"],
+                    "TextMatch",
+                    1.2,
+                    Vec::new(),
+                ),
+                serving_metadata(
+                    "better-reviewed-fit",
+                    "nearby_tech_parks",
+                    vec!["tech parks", "office access", "social infrastructure"],
+                    "TextMatch",
+                    1.2,
+                    Vec::new(),
+                ),
+            ],
+        );
+        let geo_index = geo::GeoSearchIndex::from_serving_bundle(&entities, &serving_facts);
+        let geo_query = geo_index
+            .query("3bhk near example office park whitefield")
+            .expect("query should resolve the named office park");
+        let intent =
+            crate::search::intent::parse_intent("3bhk near example office park whitefield");
+
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                None,
+                None,
+                Some(&geo_query),
+                Some(&serving_facts),
+                &society_names,
+                &[],
+                "3bhk near example office park whitefield",
+                &intent,
+                None,
+            );
+
+        assert_eq!(
+            results[0].card.id, "better-reviewed-fit",
+            "review quality should break ties once named-place intent fit is equal"
+        );
+        assert_eq!(results[0].card.google_rating, Some(4.6));
+        assert_eq!(results[0].card.google_review_count, Some(500));
+    }
+
+    #[test]
+    fn broad_text_queries_rank_text_fit_before_review_quality() {
+        let properties = vec![
+            local_property(
+                "keyword-fit",
+                "Whitefield",
+                "keyword-fit",
+                3,
+                18_000_000,
+                0,
+                0.2,
+            ),
+            local_property(
+                "highly-reviewed",
+                "Whitefield",
+                "highly-reviewed",
+                3,
+                20_000_000,
+                0,
+                0.2,
+            ),
+        ];
+        let society_names = local_society_names(&properties);
+        let serving_facts = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "keyword-fit",
+                    "google_rating",
+                    FactValue::Numeric(3.6),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "keyword-fit",
+                    "google_review_count",
+                    FactValue::Numeric(30.0),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "highly-reviewed",
+                    "google_rating",
+                    FactValue::Numeric(4.8),
+                    "Google",
+                    0.9,
+                ),
+                serving_fact(
+                    "highly-reviewed",
+                    "google_review_count",
+                    FactValue::Numeric(600.0),
+                    "Google",
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+        let intent = crate::search::intent::parse_intent("keyword 3bhk whitefield");
+
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "keyword 3bhk whitefield",
+            &intent,
+            None,
+        );
+
+        assert_eq!(
+            results[0].card.id, "keyword-fit",
+            "broad text fit should rank before review quality when no primary intent evidence exists"
+        );
+        assert_eq!(results[1].card.id, "highly-reviewed");
+    }
+
+    #[test]
     fn nearby_place_fact_without_distance_does_not_prove_proximity() {
         let properties = vec![local_property(
             "undistanced-metro",
@@ -4985,6 +5593,99 @@ mod tests {
             .iter()
             .any(|reason| reason.scoring_method == "rera-proof"
                 && reason.fact_key == "rera_total_land_area_sqm"));
+    }
+
+    #[test]
+    fn multi_intent_query_ranks_candidates_that_satisfy_more_structured_intents() {
+        let acreage_only = local_property(
+            "acreage-only",
+            "Whitefield",
+            "acreage-only",
+            3,
+            18_000_000,
+            8,
+            0.2,
+        );
+        let open_space_fit = local_property(
+            "open-space-fit",
+            "Whitefield",
+            "open-space-fit",
+            3,
+            20_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![acreage_only, open_space_fit];
+        let society_names = local_society_names(&properties);
+        let mut graph = KnowledgeGraph::new();
+        add_society_facts(
+            &mut graph,
+            "acreage-only",
+            vec![
+                rera_numeric_fact("rera_total_land_area_sqm", 12.0 * SQM_PER_ACRE),
+                rera_numeric_fact("project_open_area_pct", 70.0),
+            ],
+        );
+        add_society_facts(
+            &mut graph,
+            "open-space-fit",
+            vec![
+                rera_numeric_fact("rera_total_land_area_sqm", 12.0 * SQM_PER_ACRE),
+                rera_numeric_fact("project_open_area_pct", 85.0),
+                preference_fact(
+                    "open_space_score",
+                    FactValue::Numeric(0.85),
+                    vec!["greenery", "open space"],
+                    ScoringDirection::HigherIsBetter,
+                    1.2,
+                    vec![0.8, 0.6],
+                ),
+            ],
+        );
+
+        let query = "3bhk whitefield above 10 acres with 80% open space";
+        let intent = crate::search::intent::parse_intent(query);
+        assert!(
+            intent
+                .positive_preferences
+                .iter()
+                .any(|preference| preference.raw_text == "greenery"),
+            "open-space wording should map to the generic greenery/open-space preference: {:?}",
+            intent.positive_preferences
+        );
+
+        let results = TextSearch::search_with_intent(
+            &properties,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            Some(&graph),
+        );
+
+        assert_eq!(
+            results[0].card.id, "open-space-fit",
+            "candidate satisfying both acreage and numeric open-space intent should rank first"
+        );
+        assert_eq!(
+            results.len(),
+            1,
+            "projects below the requested open-space percentage should be filtered out"
+        );
+        let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
+        assert!(
+            reasons.iter().any(|reason| {
+                reason.preference == "above 10 acres"
+                    && reason.fact_key == "rera_total_land_area_sqm"
+            }) && reasons.iter().any(|reason| {
+                reason.preference == "above 80 percent"
+                    && reason.fact_key == "project_open_area_pct"
+            }) && reasons.iter().any(|reason| {
+                reason.preference == "greenery" && reason.fact_key == "open_space_score"
+            }),
+            "top result should explain both structured intents: {:?}",
+            reasons
+        );
     }
 
     #[test]

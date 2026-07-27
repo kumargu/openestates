@@ -23,7 +23,11 @@ export function readShortlistIds(): string[] {
 export function writeShortlistIds(ids: string[]): string[] {
   const next = [...new Set(ids.map((id) => id.trim()).filter(Boolean))]
     .slice(0, MAX_SHORTLIST_HOMES);
-  window.localStorage.setItem(SHORTLIST_STORAGE_KEY, next.join(","));
+  const nextValue = next.join(",");
+  if (window.localStorage.getItem(SHORTLIST_STORAGE_KEY) === nextValue) {
+    return next;
+  }
+  window.localStorage.setItem(SHORTLIST_STORAGE_KEY, nextValue);
   window.dispatchEvent(new CustomEvent(SHORTLIST_CHANGED_EVENT, { detail: next }));
   return next;
 }

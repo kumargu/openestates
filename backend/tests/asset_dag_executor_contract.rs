@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs::File;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
@@ -10,12 +11,15 @@ use backend::assets::{
     AssetDagExecutor, AssetDagExecutorError, AssetDefinition, AssetId, AssetMaterializationStore,
     AssetPartition, AssetRegistry, AssetRunAttempt, AssetRunManifestStore, AssetRunStepStatus,
     AssetSourceInputs, AssetStage, CanonicalSocietyMaterializer, CostTier, DagRunStatus,
-    ExternalImageObservationRecord, ExternalImagesWeeklyInput, ExternalListingObservationRecord,
-    ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput,
-    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, MaterializationId, MaterializationRecord,
-    RedditThreadSnapshotRecord, RedditThreadsDailyInput, RefreshCadence, ReraProjectSnapshotRecord,
-    ReraRegistryMaterializer, ReraRegistryMonthlyInput, SkillFactAnnotationRecord,
-    SkillFactMaterializer, SkillFactRecord, SkillFactsInput, SourceWatermark, TrustTier,
+    EnvironmentGroundwaterPotentialInput, EnvironmentGroundwaterPotentialZone,
+    EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
+    GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    MaterializationId, MaterializationRecord, OsmPowerInfrastructureInput,
+    OsmPowerLineObservationRecord, RedditThreadSnapshotRecord, RedditThreadsDailyInput,
+    RefreshCadence, ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
+    SkillFactAnnotationRecord, SkillFactMaterializer, SkillFactRecord, SkillFactsInput,
+    SourceWatermark, StormwaterDrainObservationRecord, StormwaterDrainRiskInput, TrustTier,
     APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
     CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -73,6 +77,9 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         IMAGE_MEDIA_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
+        backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+        backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID,
+        backend::assets::STORMWATER_DRAIN_FACTS_ASSET_ID,
         APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
         CURRENT_PROJECT_FACTS_ASSET_ID,
         KG_SOCIETY_VIEW_ASSET_ID,
@@ -125,6 +132,27 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         )
         .await
         .unwrap();
+    let groundwater_record = store
+        .current_record(
+            &asset_id(backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID),
+            &AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    let osm_power_record = store
+        .current_record(
+            &asset_id(backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID),
+            &AssetPartition::global(),
+        )
+        .await
+        .unwrap();
+    let stormwater_record = store
+        .current_record(
+            &asset_id(backend::assets::STORMWATER_DRAIN_FACTS_ASSET_ID),
+            &AssetPartition::global(),
+        )
+        .await
+        .unwrap();
     let current_project_facts_record = store
         .current_record(
             &asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
@@ -137,10 +165,11 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
         .contains(&current_project_facts_record.materialization_id));
     for parent in [
         &upstreams["rera_legal_facts"].materialization_id,
-        &upstreams[backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID]
-            .materialization_id,
         &upstreams[backend::assets::BENGALURU_METRO_STATION_FACTS_ASSET_ID].materialization_id,
         &home_state_record.materialization_id,
+        &groundwater_record.materialization_id,
+        &osm_power_record.materialization_id,
+        &stormwater_record.materialization_id,
         &nearby_facts_record.materialization_id,
         &listing_facts_record.materialization_id,
         &image_facts_record.materialization_id,
@@ -182,7 +211,7 @@ async fn executor_runs_kg_and_serving_assets_with_dag_lineage() {
             .iter()
             .filter(|step| step.status == AssetRunStepStatus::Skipped)
             .count(),
-        9
+        6
     );
 }
 
@@ -231,6 +260,9 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         IMAGE_MEDIA_FACTS_ASSET_ID,
         BUILDER_RERA_AGGREGATES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
+        backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
+        backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID,
+        backend::assets::STORMWATER_DRAIN_FACTS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
@@ -240,7 +272,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         KG_SOCIETY_VIEW_ASSET_ID,
         SEARCH_SERVING_BUNDLE_ASSET_ID,
     ];
-    assert_eq!(report.manifest.planned_count, expected_assets.len() + 4);
+    assert_eq!(report.manifest.planned_count, expected_assets.len() + 1);
     assert_eq!(report.executed_assets.len(), expected_assets.len());
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
@@ -445,7 +477,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
     assert_eq!(report.manifest.planned_count, 21);
-    assert_eq!(report.executed_assets.len(), 17);
+    assert_eq!(report.executed_assets.len(), 20);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -1167,7 +1199,6 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
-            asset_id(CURRENT_PROJECT_FACTS_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
@@ -1848,10 +1879,97 @@ fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
             }],
             source_watermarks: Vec::new(),
         }),
-        environment_groundwater_potential: None,
+        environment_groundwater_potential: Some(EnvironmentGroundwaterPotentialInput {
+            snapshot_date: "2026-07-13".to_string(),
+            source_url: "https://example.com/groundwater.kml".to_string(),
+            zones: vec![EnvironmentGroundwaterPotentialZone {
+                zone_id: "zone-good".to_string(),
+                groundwater_potential_class: "Good".to_string(),
+                rings: vec![vec![
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.50,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.70,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 13.05,
+                        longitude: 77.70,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 13.05,
+                        longitude: 77.50,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.50,
+                    },
+                ]],
+                source_fields: Default::default(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
         bengaluru_metro_stations: None,
-        osm_power_infrastructure: None,
-        stormwater_drains: None,
+        osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![OsmPowerLineObservationRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                query: "power=line around Green Acre Whitefield".to_string(),
+                osm_id: "way/fixture-power".to_string(),
+                name: Some("220 kV fixture line".to_string()),
+                power: "line".to_string(),
+                voltage_kv: Some(220.0),
+                distance_meters: 0.0,
+                subject_latitude: Some(12.96),
+                subject_longitude: Some(77.58),
+                latitude: 12.96,
+                longitude: 77.58,
+                geometry_geojson:
+                    r#"{"type":"LineString","coordinates":[[77.579,12.959],[77.581,12.961]]}"#
+                        .to_string(),
+                source_tags: BTreeMap::from([
+                    ("power".to_string(), "line".to_string()),
+                    ("voltage".to_string(), "220000".to_string()),
+                ]),
+                source_url: Some("https://www.openstreetmap.org/way/fixture-power".to_string()),
+                confidence: 0.82,
+                fetched_at: now + Duration::minutes(2),
+                fetch_source: "mock_overpass_power".to_string(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
+        stormwater_drains: Some(StormwaterDrainRiskInput {
+            snapshot_date: "2026-07-13".to_string(),
+            records: vec![StormwaterDrainObservationRecord {
+                entity_id: "society:green-acre-whitefield".to_string(),
+                project_key: Some("PRM/KA/RERA/1251/446/PR/130726/008888".to_string()),
+                query: "stormwater drain around Green Acre Whitefield".to_string(),
+                drain_id: "way/fixture-drain".to_string(),
+                name: Some("Fixture Rajakaluve".to_string()),
+                drain_type: "rajakaluve".to_string(),
+                hierarchy: Some("primary_swd".to_string()),
+                distance_meters: 0.0,
+                intersects_property: false,
+                subject_latitude: Some(12.96),
+                subject_longitude: Some(77.58),
+                latitude: 12.96,
+                longitude: 77.58,
+                geometry_geojson:
+                    r#"{"type":"LineString","coordinates":[[77.579,12.959],[77.581,12.961]]}"#
+                        .to_string(),
+                encroachment_record: None,
+                source_tags: BTreeMap::from([("waterway".to_string(), "drain".to_string())]),
+                source_url: Some("https://www.openstreetmap.org/way/fixture-drain".to_string()),
+                source_type: Some("OpenStreetMap".to_string()),
+                confidence: 0.74,
+                fetched_at: now + Duration::minutes(2),
+                fetch_source: "mock_overpass_stormwater".to_string(),
+            }],
+            source_watermarks: Vec::new(),
+        }),
     }
 }
 

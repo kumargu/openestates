@@ -20,7 +20,7 @@ const DEFAULT_COMMAND_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const DEFAULT_MAX_STDOUT_BYTES: usize = 16 * 1024 * 1024;
 
 /// Typed control-plane request sent to an external source collector.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceInputRequest {
     pub project_root: PathBuf,
     pub partition: AssetPartition,
@@ -33,7 +33,7 @@ pub struct SourceInputRequest {
     pub source_entities: Vec<SourceEntitySeed>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct SourceEntitySeed {
     pub entity_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -45,6 +45,10 @@ pub struct SourceEntitySeed {
     pub city: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub project_key: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub latitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub longitude: Option<f64>,
 }
 
 /// Loads ephemeral source records for one asset DAG run.

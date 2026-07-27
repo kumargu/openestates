@@ -767,10 +767,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
         .with_optional_dependency("external_listing_facts")
         .with_optional_dependency("image_media_facts")
         .with_optional_dependency("home_state_signals")
-        .with_optional_dependency("society_groundwater_potential_facts")
-        .with_optional_dependency("bengaluru_metro_station_facts")
-        .with_optional_dependency("osm_power_line_facts")
-        .with_optional_dependency("stormwater_drain_facts"),
+        .with_optional_dependency("bengaluru_metro_station_facts"),
         asset(
             "kg_society_view",
             AssetStage::Gold,

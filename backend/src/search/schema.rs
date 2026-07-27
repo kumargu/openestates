@@ -174,6 +174,10 @@ pub struct SearchRankingPolicy {
     pub named_place_zero_score_km: f64,
     #[serde(default = "default_named_place_score_weight")]
     pub named_place_score_weight: f64,
+    #[serde(default = "default_named_place_distinctive_token_max_place_count")]
+    pub named_place_distinctive_token_max_place_count: usize,
+    #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
+    pub named_place_distinctive_token_max_place_ratio: f64,
     #[serde(default = "default_min_score_with_positive_evidence")]
     pub min_score_with_positive_evidence: f64,
     #[serde(default = "default_max_score_with_positive_evidence")]
@@ -208,6 +212,10 @@ impl Default for SearchRankingPolicy {
             named_place_full_score_km: default_named_place_full_score_km(),
             named_place_zero_score_km: default_named_place_zero_score_km(),
             named_place_score_weight: default_named_place_score_weight(),
+            named_place_distinctive_token_max_place_count:
+                default_named_place_distinctive_token_max_place_count(),
+            named_place_distinctive_token_max_place_ratio:
+                default_named_place_distinctive_token_max_place_ratio(),
             min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
             max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
             min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
@@ -287,6 +295,14 @@ fn default_named_place_zero_score_km() -> f64 {
 
 fn default_named_place_score_weight() -> f64 {
     2.0
+}
+
+fn default_named_place_distinctive_token_max_place_count() -> usize {
+    3
+}
+
+fn default_named_place_distinctive_token_max_place_ratio() -> f64 {
+    0.15
 }
 
 fn default_min_score_with_positive_evidence() -> f64 {

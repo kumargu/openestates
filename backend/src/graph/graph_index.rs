@@ -13,22 +13,29 @@ pub struct WalkStep {
 pub struct GraphIndex {
     edges_from: HashMap<(String, String), Vec<String>>,
     edges_to: HashMap<(String, String), Vec<String>>,
+    edges_out: HashMap<String, Vec<(String, String)>>,
 }
 
 impl GraphIndex {
     pub fn from_serving_edges(edges: &[ServingEdgeRecord]) -> Self {
         let mut index = Self::default();
         for edge in edges {
+            let edge_type = edge_type_key(&edge.edge_type);
             index
                 .edges_from
-                .entry((edge.from_entity_id.clone(), edge.edge_type.clone()))
+                .entry((edge.from_entity_id.clone(), edge_type.clone()))
                 .or_default()
                 .push(edge.to_entity_id.clone());
             index
                 .edges_to
-                .entry((edge.to_entity_id.clone(), edge.edge_type.clone()))
+                .entry((edge.to_entity_id.clone(), edge_type))
                 .or_default()
                 .push(edge.from_entity_id.clone());
+            index
+                .edges_out
+                .entry(edge.from_entity_id.clone())
+                .or_default()
+                .push((edge_type_key(&edge.edge_type), edge.to_entity_id.clone()));
         }
         index
     }
@@ -43,13 +50,14 @@ impl GraphIndex {
 
         for edge_type in hops.iter().take(max_depth) {
             let mut next = Vec::new();
+            let edge_type_key = edge_type_key(edge_type);
             for from_id in &frontier {
-                let key = (from_id.clone(), (*edge_type).to_string());
+                let key = (from_id.clone(), edge_type_key.clone());
                 if let Some(targets) = self.edges_from.get(&key) {
                     for to_id in targets {
                         steps.push(WalkStep {
                             from_entity_id: from_id.clone(),
-                            edge_type: (*edge_type).to_string(),
+                            edge_type: edge_type_key.clone(),
                             to_entity_id: to_id.clone(),
                         });
                         next.push(to_id.clone());
@@ -86,18 +94,19 @@ impl GraphIndex {
             }
 
             for edge_type in allowed_edges {
-                let key = (from_id.clone(), (*edge_type).to_string());
+                let edge_type_key = edge_type_key(edge_type);
+                let key = (from_id.clone(), edge_type_key.clone());
                 let Some(targets) = self.edges_from.get(&key) else {
                     continue;
                 };
                 for to_id in targets {
-                    let edge_key = (from_id.clone(), (*edge_type).to_string(), to_id.clone());
+                    let edge_key = (from_id.clone(), edge_type_key.clone(), to_id.clone());
                     if !visited_edges.insert(edge_key) {
                         continue;
                     }
                     steps.push(WalkStep {
                         from_entity_id: from_id.clone(),
-                        edge_type: (*edge_type).to_string(),
+                        edge_type: edge_type_key.clone(),
                         to_entity_id: to_id.clone(),
                     });
                     if visited_nodes.insert(to_id.clone()) {
@@ -109,6 +118,31 @@ impl GraphIndex {
 
         steps
     }
+
+    pub fn targets_out(&self, anchor: &str, edge_types: &[&str]) -> Vec<String> {
+        if edge_types.is_empty() {
+            return Vec::new();
+        }
+        let allowed_edges = edge_types
+            .iter()
+            .map(|edge_type| edge_type_key(edge_type))
+            .collect::<HashSet<_>>();
+        let mut targets = Vec::new();
+        let mut seen = HashSet::new();
+        let Some(edges) = self.edges_out.get(anchor) else {
+            return Vec::new();
+        };
+        for (edge_type, entity_id) in edges {
+            if allowed_edges.contains(edge_type) && seen.insert(entity_id.clone()) {
+                targets.push(entity_id.clone());
+            }
+        }
+        targets
+    }
+}
+
+fn edge_type_key(edge_type: &str) -> String {
+    edge_type.trim().to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -170,5 +204,73 @@ mod tests {
         assert_eq!(steps[0].to_entity_id, "area:whitefield");
         assert_eq!(steps[1].to_entity_id, "place:metro");
         assert!(steps.iter().all(|step| step.edge_type != "built_by"));
+    }
+
+    #[test]
+    fn targets_out_deduplicates_and_normalizes_edge_types() {
+        let edges = vec![
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "near_place".to_string(),
+                to_entity_id: "place:metro".to_string(),
+                confidence: 0.9,
+                source_type: "test".to_string(),
+            },
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "NEAR_PLACE".to_string(),
+                to_entity_id: "place:metro".to_string(),
+                confidence: 0.8,
+                source_type: "test".to_string(),
+            },
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "served_by_road".to_string(),
+                to_entity_id: "road:one".to_string(),
+                confidence: 0.9,
+                source_type: "test".to_string(),
+            },
+        ];
+
+        let index = GraphIndex::from_serving_edges(&edges);
+
+        assert_eq!(
+            index.targets_out("society:one", &["Near_Place"]),
+            vec!["place:metro"]
+        );
+    }
+
+    #[test]
+    fn targets_out_preserves_serving_edge_order_across_edge_types() {
+        let edges = vec![
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "served_by_road".to_string(),
+                to_entity_id: "road:one".to_string(),
+                confidence: 0.9,
+                source_type: "test".to_string(),
+            },
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "near_place".to_string(),
+                to_entity_id: "place:metro".to_string(),
+                confidence: 0.9,
+                source_type: "test".to_string(),
+            },
+            ServingEdgeRecord {
+                from_entity_id: "society:one".to_string(),
+                edge_type: "served_by_road".to_string(),
+                to_entity_id: "road:two".to_string(),
+                confidence: 0.9,
+                source_type: "test".to_string(),
+            },
+        ];
+
+        let index = GraphIndex::from_serving_edges(&edges);
+
+        assert_eq!(
+            index.targets_out("society:one", &["near_place", "served_by_road"]),
+            vec!["road:one", "place:metro", "road:two"]
+        );
     }
 }

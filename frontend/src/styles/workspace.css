@@ -13,6 +13,7 @@
 }
 
 .workspace-view {
+  grid-column: 2;
   min-width: 0;
   min-height: 100vh;
   background: #fdfcfb;
@@ -23,10 +24,12 @@
 }
 
 .workspace-sidebar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
   z-index: 20;
   display: flex;
+  width: var(--workspace-sidebar-width);
   min-width: 0;
   height: 100vh;
   flex-direction: column;
@@ -34,6 +37,10 @@
   overflow: hidden;
   border-right: 1px solid rgba(38, 35, 32, 0.07);
   background: #f4f2ef;
+  backface-visibility: hidden;
+  contain: layout paint style;
+  isolation: isolate;
+  transform: translateZ(0);
 }
 
 .workspace-sidebar__brand-row {
@@ -889,6 +896,10 @@
     display: block;
     padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
     scroll-padding-bottom: calc(4.35rem + env(safe-area-inset-bottom));
+  }
+
+  .workspace-view {
+    grid-column: auto;
   }
 
   .workspace-sidebar,

@@ -254,6 +254,7 @@ export type MapHomeAnchor = {
 };
 
 export type MapPlacePin = {
+  feature_id?: string;
   place_entity_id?: string;
   layer: MapNearbyLayer | string;
   name: string;
@@ -297,11 +298,180 @@ export type MapOverlayPolygon = {
 export type PropertyMapContext = {
   home: MapHomeAnchor;
   places: MapPlacePin[];
+  proof_focus?: ProofFocus;
   water?: MapWaterContext;
   metro_lines?: MapOverlayLine[];
+  red_flag_lines?: MapOverlayLine[];
   green_patches?: MapOverlayPolygon[];
   lakes?: MapOverlayPolygon[];
 };
+
+export type SurfaceSceneResponse = {
+  contractVersion: 1;
+  surfaceId: string;
+  propertyId: string;
+  servingBundleVersion?: string;
+  entityRefs: KgEntityRefs;
+  anchor: SceneAnchor;
+  viewport: SceneViewport;
+  proofFocus?: ProofFocus;
+  layers: SceneLayer[];
+  features: SceneFeature[];
+  relations: SceneRelation[];
+  callouts: SceneCallout[];
+  receipts: SceneReceipt[];
+  fillRate: SceneFillRate;
+  gaps: SceneGap[];
+};
+
+export type ProofFocus = {
+  surfaceId: string;
+  layerId: string;
+  factKey: string;
+  entityId?: string;
+  featureId?: string;
+  receiptId?: string;
+  matchedLabel?: string;
+  matchedValue?: string;
+  requestedConstraint?: string;
+  distanceM?: number;
+  reason: string;
+};
+
+export type PropertySurfacesResponse = {
+  contractVersion: 1;
+  propertyId: string;
+  scenes: SurfaceSceneResponse[];
+  missing: SurfaceSceneMissing[];
+};
+
+export type SurfaceSceneMissing = {
+  surfaceId: string;
+  reason: string;
+};
+
+export type SurfaceBatchResponse = {
+  contractVersion: 1;
+  items: PropertySurfacesResponse[];
+};
+
+export type SceneAnchor = {
+  entityId: string;
+  label: string;
+  area?: string;
+  geometry?: SceneGeometry;
+  coordinateQuality: SceneCoordinateQuality;
+};
+
+export type SceneViewport = {
+  center?: [number, number];
+  bounds?: SceneBounds;
+  radiusM?: number;
+};
+
+export type SceneBounds = {
+  west: number;
+  south: number;
+  east: number;
+  north: number;
+};
+
+export type SceneLayer = {
+  id: string;
+  label: string;
+  family: "access" | "risk" | "environment" | "market" | "context" | string;
+  renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
+  relationClass: "access" | "risk_externality" | "context" | string;
+  enabledByDefault: boolean;
+  rank: number;
+  availableCount: number;
+  shownCount: number;
+  fillState: SceneFillState;
+};
+
+export type SceneFeature = {
+  id: string;
+  entityId?: string;
+  layerId: string;
+  kind: string;
+  label: string;
+  shortLabel?: string;
+  geometry: SceneGeometry;
+  coordinateQuality: SceneCoordinateQuality;
+  metrics?: SceneMetrics;
+  display: SceneFeatureDisplay;
+  confidence: number;
+  receiptIds: string[];
+};
+
+export type SceneGeometry =
+  | { type: "Point"; coordinates: [number, number] }
+  | { type: "LineString"; coordinates: [number, number][] }
+  | { type: "Polygon"; coordinates: [number, number][][] };
+
+export type SceneCoordinateQuality = "exact" | "derived" | "approximate" | "missing";
+
+export type SceneMetrics = {
+  distanceM?: number;
+  travelTimeMin?: number;
+  rating?: number;
+  reviewCount?: number;
+  severity?: "low" | "medium" | "high" | string;
+};
+
+export type SceneFeatureDisplay = {
+  tone: "positive" | "neutral" | "caution" | "risk";
+  icon?: string;
+  priority: number;
+};
+
+export type SceneRelation = {
+  fromId: string;
+  toId: string;
+  edgeType: string;
+  relationClass: "access" | "risk_externality" | "context" | string;
+  direct: boolean;
+  chainable: boolean;
+  distanceM?: number;
+  confidence: number;
+  receiptIds: string[];
+};
+
+export type SceneCallout = {
+  id: string;
+  tone: "positive" | "neutral" | "caution" | "risk";
+  label: string;
+  featureIds: string[];
+  receiptIds: string[];
+};
+
+export type SceneReceipt = {
+  id: string;
+  entityId: string;
+  factKey: string;
+  claim: string;
+  sourceType: string;
+  sourceUrl?: string;
+  learnedAt: string;
+  confidence: number;
+  scope?: string;
+};
+
+export type SceneFillRate = {
+  filledLayers: number;
+  partialLayers: number;
+  emptyLayers: number;
+  shownFeatures: number;
+  availableFeatures: number;
+  value: number;
+};
+
+export type SceneGap = {
+  layerId: string;
+  fillState: SceneFillState;
+};
+
+export type SceneFillState = "filled" | "partial" | "empty";
 
 /**
  * Knowledge Graph entity references exposed by property/search/detail APIs.
@@ -700,6 +870,7 @@ export type SearchResultItem = PropertyCard & {
   match_label: string;
   match_reason: string;
   match_explanation?: MatchExplanation;
+  proof_focuses?: ProofFocus[];
   semantic_score?: number;
   confidence_score?: ConfidenceScore;
 };

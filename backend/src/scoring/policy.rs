@@ -155,6 +155,20 @@ pub struct SearchRankingPolicy {
     pub named_place_zero_score_km: f64,
     #[serde(default = "default_named_place_score_weight")]
     pub named_place_score_weight: f64,
+    #[serde(default = "default_named_place_distinctive_token_max_place_count")]
+    pub named_place_distinctive_token_max_place_count: usize,
+    #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
+    pub named_place_distinctive_token_max_place_ratio: f64,
+    #[serde(default = "default_named_place_generic_tokens")]
+    pub named_place_generic_tokens: Vec<String>,
+    #[serde(default = "default_named_place_query_stopwords")]
+    pub named_place_query_stopwords: Vec<String>,
+    #[serde(default = "default_review_rating_weight")]
+    pub review_rating_weight: f64,
+    #[serde(default = "default_review_count_weight")]
+    pub review_count_weight: f64,
+    #[serde(default = "default_review_count_log_divisor")]
+    pub review_count_log_divisor: f64,
     #[serde(default = "default_min_score_with_positive_evidence")]
     pub min_score_with_positive_evidence: f64,
     #[serde(default = "default_max_score_with_positive_evidence")]
@@ -189,6 +203,15 @@ impl Default for SearchRankingPolicy {
             named_place_full_score_km: default_named_place_full_score_km(),
             named_place_zero_score_km: default_named_place_zero_score_km(),
             named_place_score_weight: default_named_place_score_weight(),
+            named_place_distinctive_token_max_place_count:
+                default_named_place_distinctive_token_max_place_count(),
+            named_place_distinctive_token_max_place_ratio:
+                default_named_place_distinctive_token_max_place_ratio(),
+            named_place_generic_tokens: default_named_place_generic_tokens(),
+            named_place_query_stopwords: default_named_place_query_stopwords(),
+            review_rating_weight: default_review_rating_weight(),
+            review_count_weight: default_review_count_weight(),
+            review_count_log_divisor: default_review_count_log_divisor(),
             min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
             max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
             min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
@@ -622,6 +645,76 @@ fn default_named_place_zero_score_km() -> f64 {
 }
 fn default_named_place_score_weight() -> f64 {
     2.0
+}
+fn default_named_place_distinctive_token_max_place_count() -> usize {
+    3
+}
+fn default_named_place_distinctive_token_max_place_ratio() -> f64 {
+    0.15
+}
+fn default_named_place_generic_tokens() -> Vec<String> {
+    [
+        "the",
+        "and",
+        "school",
+        "academy",
+        "hospital",
+        "metro",
+        "station",
+        "park",
+        "road",
+        "tech",
+        "technology",
+        "business",
+        "office",
+        "bengaluru",
+        "bangalore",
+        "whitefield",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+fn default_named_place_query_stopwords() -> Vec<String> {
+    [
+        "near",
+        "a",
+        "an",
+        "in",
+        "at",
+        "from",
+        "to",
+        "with",
+        "within",
+        "km",
+        "kms",
+        "kilometer",
+        "kilometers",
+        "m",
+        "meter",
+        "meters",
+        "metre",
+        "metres",
+        "bhk",
+        "flat",
+        "apartment",
+        "home",
+        "homes",
+        "property",
+        "properties",
+    ]
+    .into_iter()
+    .map(str::to_string)
+    .collect()
+}
+fn default_review_rating_weight() -> f64 {
+    0.75
+}
+fn default_review_count_weight() -> f64 {
+    0.25
+}
+fn default_review_count_log_divisor() -> f64 {
+    8.0
 }
 fn default_min_score_with_positive_evidence() -> f64 {
     0.2

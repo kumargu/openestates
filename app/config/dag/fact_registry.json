@@ -6105,10 +6105,10 @@
     },
     {
       "fact_key": "risk.commercial_noise",
-      "bucket": "externalities",
+      "bucket": "environment",
       "label": "nearby commercial noise",
-      "lens": "risk",
-      "polarity": "concern",
+      "lens": "environment",
+      "polarity": "neutral",
       "scopes": [
         "area",
         "society"
@@ -6135,10 +6135,10 @@
     },
     {
       "fact_key": "risk.construction_dust",
-      "bucket": "externalities",
+      "bucket": "environment",
       "label": "construction dust and noise",
-      "lens": "risk",
-      "polarity": "concern",
+      "lens": "environment",
+      "polarity": "neutral",
       "scopes": [
         "area",
         "society"
@@ -6402,9 +6402,9 @@
     },
     {
       "fact_key": "nearby_lakes",
-      "bucket": "externalities",
+      "bucket": "environment",
       "label": "nearby lakes",
-      "lens": "risk",
+      "lens": "environment",
       "polarity": "neutral",
       "scopes": [
         "society"
@@ -6429,10 +6429,10 @@
     },
     {
       "fact_key": "lake_within_250m",
-      "bucket": "externalities",
+      "bucket": "environment",
       "label": "lake within 250 m",
-      "lens": "risk",
-      "polarity": "concern",
+      "lens": "environment",
+      "polarity": "neutral",
       "scopes": [
         "society"
       ],
@@ -6444,8 +6444,7 @@
       "answers_preferences": [
         "lake within 250m",
         "lake buffer",
-        "flooding risk",
-        "red flag"
+        "nearby lake"
       ],
       "never_default": true,
       "source_types": [
@@ -6454,7 +6453,7 @@
       "display_template": "lake within 250 m: {value}",
       "scoring_hint": {
         "direction": "text_match",
-        "weight": 1.1
+        "weight": 0.7
       }
     },
     {

@@ -87,6 +87,7 @@ const MONTHS_IN_YEAR = 12;
 const LAKH = 100_000;
 
 const DEFAULT_MONTHLY_EMI_THOUSANDS = 90;
+const MIN_DEFAULT_MONTHLY_SIP_THOUSANDS = 35;
 
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
@@ -97,14 +98,19 @@ export function buildBaselinePlanInputs(
     20,
     Math.round((propertyPriceInr * 0.032 / MONTHS_IN_YEAR) / 1_000 / 5) * 5,
   );
-  // Keep the rent-path cash out aligned with the buy EMI by default.
+  // Keep the rent-path cash out aligned with the buy EMI by default, while
+  // preserving a visible SIP even when the estimated rent is high.
+  const monthlyEmiThousands = Math.max(
+    DEFAULT_MONTHLY_EMI_THOUSANDS,
+    estimatedRentThousands + MIN_DEFAULT_MONTHLY_SIP_THOUSANDS,
+  );
   const monthlySipThousands = Math.max(
     0,
-    DEFAULT_MONTHLY_EMI_THOUSANDS - estimatedRentThousands,
+    monthlyEmiThousands - estimatedRentThousands,
   );
   return {
     propertyPriceLakh,
-    monthlyEmiThousands: DEFAULT_MONTHLY_EMI_THOUSANDS,
+    monthlyEmiThousands,
     loanRate: 7.5,
     currentRentThousands: estimatedRentThousands,
     equityReturn: 10,

@@ -2474,12 +2474,7 @@ fn should_skip_missing_optional_source_input(
         return false;
     }
     match asset_id.as_str() {
-        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID => {
-            source_inputs.environment_groundwater_potential.is_none()
-        }
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
-        OSM_POWER_LINE_FACTS_ASSET_ID => source_inputs.osm_power_infrastructure.is_none(),
-        STORMWATER_DRAIN_FACTS_ASSET_ID => source_inputs.stormwater_drains.is_none(),
         _ => false,
     }
 }
@@ -2497,9 +2492,6 @@ fn should_skip_missing_source_input(asset_id: &AssetId, source_inputs: &AssetSou
         GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID => source_inputs.google_nearby_places_weekly.is_none(),
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID => source_inputs.external_listings_weekly.is_none(),
         EXTERNAL_IMAGES_WEEKLY_ASSET_ID => source_inputs.external_images_weekly.is_none(),
-        SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID => {
-            source_inputs.environment_groundwater_potential.is_none()
-        }
         BENGALURU_METRO_STATION_FACTS_ASSET_ID => source_inputs.bengaluru_metro_stations.is_none(),
         _ => false,
     }
@@ -2694,14 +2686,14 @@ mod tests {
     }
 
     #[test]
-    fn osm_power_line_facts_skip_when_optional_source_input_is_missing() {
+    fn required_red_flag_source_inputs_do_not_skip_when_missing() {
         for asset_id in [
             OSM_POWER_LINE_FACTS_ASSET_ID,
             STORMWATER_DRAIN_FACTS_ASSET_ID,
         ] {
             let asset_id = AssetId::new(asset_id).unwrap();
 
-            assert!(should_skip_missing_optional_source_input(
+            assert!(!should_skip_missing_optional_source_input(
                 &asset_id,
                 &AssetSourceInputs::default()
             ));

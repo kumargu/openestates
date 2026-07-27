@@ -391,9 +391,10 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
     : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
 
   const renderTile = (result: SearchResultItem) => (
-    <LivingEvidenceTile
-      property={result}
-      onQuickView={setPanelPropertyId}
+      <LivingEvidenceTile
+        property={result}
+        onQuickView={setPanelPropertyId}
+      proofFocus={result.proof_focuses?.find((focus) => focus.surfaceId === "around_this_home")}
     />
   );
 

@@ -16,6 +16,7 @@ export type AroundThisHomeMapProps = {
   selectedId: string | null;
   viewport: PlateViewport;
   metroLines: MapOverlayLine[];
+  redFlagLines: MapOverlayLine[];
   showMetroLines: boolean;
   nearestMetroDistanceKm?: number;
   water?: MapWaterContext | null;
@@ -73,9 +74,38 @@ function markerGlyph(layer?: string): string {
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M12 8v8M8 12h8"/></svg>`;
     case "tech":
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 7h2m2 0h2M9 11h2m2 0h2M9 15h6"/></svg>`;
+    case "red_flags":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 20V5"/><path d="M7 5.4h8.8l-1.4 3 1.4 3H7"/></svg>`;
+    case "lakes":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14c2 1.8 4 1.8 6 0s4-1.8 6 0 4 1.8 6 0"/><path d="M4 18c2 1.8 4 1.8 6 0s4-1.8 6 0 4 1.8 6 0"/></svg>`;
+    case "breweries":
+      return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 8h9v10a3 3 0 0 1-3 3h-3a3 3 0 0 1-3-3V8Z"/><path d="M16 11h2a2 2 0 0 1 0 4h-2"/><path d="M8 5h7"/></svg>`;
     default:
       return `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10Z"/><circle cx="12" cy="11" r="2"/></svg>`;
   }
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function placePopupHtml(place: NumberedPlace): string {
+  const meta = [
+    typeof place.distance_km === "number" ? `${place.distance_km.toFixed(1)} km` : null,
+    place.layer !== "red_flags" && typeof place.rating === "number" ? `${place.rating.toFixed(1)} rating` : null,
+    place.layer !== "red_flags" && typeof place.review_count === "number" ? `${place.review_count} reviews` : null,
+    place.note ?? null,
+  ].filter(Boolean).join(" · ");
+  return `
+    <div class="nearby-map-popup__body">
+      <strong>${escapeHtml(place.name)}</strong>
+      ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+    </div>
+  `;
 }
 
 function metroBadgeEl(name: string): HTMLDivElement {
@@ -111,7 +141,13 @@ function emptyCollection() {
   return { type: "FeatureCollection" as const, features: [] as Array<Record<string, unknown>> };
 }
 
-function linesToFeatureCollection(lines: MapOverlayLine[]) {
+function linesToFeatureCollection(
+  lines: MapOverlayLine[],
+  options: {
+    color?: string;
+    label?: (line: MapOverlayLine) => string;
+  } = {},
+) {
   return {
     type: "FeatureCollection" as const,
     features: lines.map((line) => ({
@@ -119,7 +155,8 @@ function linesToFeatureCollection(lines: MapOverlayLine[]) {
       properties: {
         id: line.id,
         name: line.name,
-        color: metroLineColor(line.name),
+        label: options.label?.(line) ?? line.name,
+        color: options.color ?? metroLineColor(line.name),
       },
       geometry: {
         type: "LineString" as const,
@@ -127,6 +164,17 @@ function linesToFeatureCollection(lines: MapOverlayLine[]) {
       },
     })),
   };
+}
+
+function redFlagLineLabel(line: MapOverlayLine): string {
+  const normalized = line.name.toLowerCase();
+  if (normalized.includes("transmission") || normalized.includes("voltage")) {
+    return "Transmission line";
+  }
+  if (normalized.includes("drain") || normalized.includes("stormwater")) {
+    return "Stormwater drain";
+  }
+  return "Red flag";
 }
 
 function metroLineColor(name: string): string {
@@ -320,6 +368,80 @@ function ensureOverlayLayers(map: MapLibreMap) {
         "line-opacity": 0.95,
       },
     });
+    map.addLayer({
+      id: "oe-metro-lines-label",
+      type: "symbol",
+      source: "oe-metro-lines",
+      layout: {
+        "symbol-placement": "line",
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-letter-spacing": 0,
+        "text-padding": 10,
+        "text-rotation-alignment": "map",
+      },
+      paint: {
+        "text-color": "#375a83",
+        "text-halo-color": "rgba(255, 255, 255, 0.92)",
+        "text-halo-width": 1.6,
+      },
+    });
+  }
+
+  if (!map.getSource("oe-red-flag-lines")) {
+    map.addSource("oe-red-flag-lines", {
+      type: "geojson",
+      data: emptyCollection(),
+    });
+    map.addLayer({
+      id: "oe-red-flag-lines-casing",
+      type: "line",
+      source: "oe-red-flag-lines",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": "rgba(255, 255, 255, 0.92)",
+        "line-width": 7,
+        "line-opacity": 0.96,
+      },
+    });
+    map.addLayer({
+      id: "oe-red-flag-lines",
+      type: "line",
+      source: "oe-red-flag-lines",
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": ["get", "color"],
+        "line-width": 4.6,
+        "line-dasharray": [1.4, 1],
+        "line-opacity": 0.96,
+      },
+    });
+    map.addLayer({
+      id: "oe-red-flag-lines-label",
+      type: "symbol",
+      source: "oe-red-flag-lines",
+      layout: {
+        "symbol-placement": "line",
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-letter-spacing": 0,
+        "text-padding": 12,
+        "text-rotation-alignment": "map",
+      },
+      paint: {
+        "text-color": "#9a2634",
+        "text-halo-color": "rgba(255, 255, 255, 0.94)",
+        "text-halo-width": 1.8,
+      },
+    });
   }
 }
 
@@ -342,6 +464,7 @@ export function AroundThisHomeMap({
   selectedId,
   viewport,
   metroLines,
+  redFlagLines,
   showMetroLines,
   nearestMetroDistanceKm,
   water,
@@ -478,6 +601,14 @@ export function AroundThisHomeMap({
         "oe-metro-lines",
         linesToFeatureCollection(showMetroLines ? metroLines : []),
       );
+      setSourceData(
+        map,
+        "oe-red-flag-lines",
+        linesToFeatureCollection(redFlagLines, {
+          color: "#c93f3f",
+          label: redFlagLineLabel,
+        }),
+      );
     };
 
     if (styleReadyRef.current || map.isStyleLoaded()) {
@@ -485,7 +616,7 @@ export function AroundThisHomeMap({
       return;
     }
     map.once("load", syncOverlays);
-  }, [home, metroLines, showMetroLines, viewport.radiusKm, water, waterTint]);
+  }, [home, metroLines, redFlagLines, showMetroLines, viewport.radiusKm, water, waterTint]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -533,6 +664,18 @@ export function AroundThisHomeMap({
         layer: place.layer,
         name: place.name,
       });
+      const popup = new maplibregl.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 18,
+        className: "nearby-map-popup",
+      })
+        .setLngLat([place.longitude, place.latitude])
+        .setHTML(placePopupHtml(place));
+      element.addEventListener("mouseenter", () => popup.addTo(map));
+      element.addEventListener("mouseleave", () => popup.remove());
+      element.addEventListener("focus", () => popup.addTo(map));
+      element.addEventListener("blur", () => popup.remove());
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         onSelectPlaceRef.current(place.id);

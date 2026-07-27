@@ -130,6 +130,37 @@ export function SoftWaterIcon(props: SoftIconProps) {
   );
 }
 
+/** Lakes — nearby water body context. */
+export function SoftLakeIcon(props: SoftIconProps) {
+  return (
+    <SoftBadge {...props} tone={props.tone ?? "teal"}>
+      <path d="M4 13.2c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0" />
+      <path d="M4 17.2c2 1.5 4 1.5 6 0s4-1.5 6 0 4 1.5 6 0" />
+    </SoftBadge>
+  );
+}
+
+/** Breweries — strict named brewery and biergarten layer. */
+export function SoftBreweryIcon(props: SoftIconProps) {
+  return (
+    <SoftBadge {...props} tone={props.tone ?? "amber"}>
+      <path d="M7 8h8.5v9.3a3 3 0 0 1-3 3H10a3 3 0 0 1-3-3z" />
+      <path d="M15.5 11h2.2a2.1 2.1 0 0 1 0 4.2h-2.2" />
+      <path d="M8 5.2h6.5" />
+    </SoftBadge>
+  );
+}
+
+/** Red flags — inspection flag for external risk signals. */
+export function SoftRedFlagIcon(props: SoftIconProps) {
+  return (
+    <SoftBadge {...props} tone={props.tone ?? "rose"}>
+      <path d="M6.5 20V5" />
+      <path d="M7 5.4h8.8l-1.4 3 1.4 3H7" />
+    </SoftBadge>
+  );
+}
+
 /** Usable space — soft floor plan. */
 export function SoftSpaceIcon(props: SoftIconProps) {
   return (
@@ -177,7 +208,7 @@ export function SoftNearbyIcon({
   kind,
   size = 32,
 }: {
-  kind: "essentials" | "metro" | "schools" | "hospitals" | "tech" | "water" | string;
+  kind: "essentials" | "metro" | "schools" | "hospitals" | "tech" | "water" | "red_flags" | string;
   size?: number;
 }) {
   switch (kind) {
@@ -193,6 +224,12 @@ export function SoftNearbyIcon({
       return <SoftTechIcon size={size} />;
     case "water":
       return <SoftWaterIcon size={size} />;
+    case "lakes":
+      return <SoftLakeIcon size={size} />;
+    case "breweries":
+      return <SoftBreweryIcon size={size} />;
+    case "red_flags":
+      return <SoftRedFlagIcon size={size} />;
     default:
       return <SoftEssentialsIcon size={size} />;
   }

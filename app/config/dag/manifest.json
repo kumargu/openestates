@@ -11,6 +11,7 @@
     "concern_taxonomy.json",
     "compaction_policies.json",
     "crawl_policies/",
+    "evidence_sections.json",
     "enrichment_targets.json",
     "fact_registry.json",
     "ontology.json",

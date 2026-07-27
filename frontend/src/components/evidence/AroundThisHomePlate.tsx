@@ -18,8 +18,10 @@ import {
   filterPlacesByScale,
   layerLabel,
   metroStationsAroundHome,
+  placeMatchesProofFocus,
   placesForStory,
   resolveHomeAnchor,
+  scaleForStory,
   zoomForRadiusKm,
   type PlateScaleMode,
   type PlateStory,
@@ -124,26 +126,93 @@ type AroundThisHomePlateProps = {
   context: PropertyMapContext;
 };
 
+type AroundThisHomePlateInnerProps = {
+  context: PropertyMapContext;
+  layers: string[];
+};
+
 const DEFAULT_WATER_SCOPE_RADIUS_KM = 3;
 
+function redFlagLineTitle(name: string): string {
+  const normalized = name.toLowerCase();
+  if (normalized.includes("transmission") || normalized.includes("voltage")) {
+    return "High-voltage transmission line";
+  }
+  if (normalized.includes("drain") || normalized.includes("stormwater")) {
+    return "Stormwater drain";
+  }
+  return "Red flag";
+}
+
+type RedFlagLineSummary = {
+  id: string;
+  title: string;
+  sourceType: string;
+  count: number;
+};
+
 export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
-  const layers = availableLayers(context);
+  const layers = useMemo(() => availableLayers(context), [context]);
+  const focus = context.proof_focus;
+  const focusKey = focus
+    ? [
+      focus.surfaceId,
+      focus.layerId,
+      focus.factKey,
+      focus.featureId,
+      focus.entityId,
+      focus.matchedLabel,
+      focus.distanceM,
+    ].filter(Boolean).join("|")
+    : null;
+
+  return (
+    <AroundThisHomePlateInner
+      key={`${context.home.name}:${focusKey ?? "default"}`}
+      context={context}
+      layers={layers}
+    />
+  );
+}
+
+function AroundThisHomePlateInner({
+  context,
+  layers,
+}: AroundThisHomePlateInnerProps) {
   const home = resolveHomeAnchor(context);
-  const [scale, setScale] = useState<PlateScaleMode>("nearby");
-  const [story, setStory] = useState<PlateStory>({ kind: "essentials" });
+  const focus = context.proof_focus;
+  const focusedStory = useMemo(
+    () => focus && layers.includes(focus.layerId)
+      ? { kind: "layer" as const, layer: focus.layerId }
+      : null,
+    [focus, layers],
+  );
+  const defaultStory: PlateStory = layers[0]
+    ? { kind: "layer", layer: layers[0] }
+    : { kind: "water" };
+  const [scale, setScale] = useState<PlateScaleMode>(() =>
+    scaleForStory(focusedStory ?? defaultStory, focus, context.places));
+  const [story, setStory] = useState<PlateStory>(() =>
+    focusedStory ?? defaultStory);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [openedClusterId, setOpenedClusterId] = useState<string | null>(null);
 
   const storyPlaces = useMemo(() => {
     const forStory = placesForStory(context, story);
-    const filtered = filterPlacesByScale(forStory, scale);
+    const filtered = filterPlacesByScale(forStory, scale, focus);
     if (story.kind === "layer" && story.layer === "metro" && home) {
-      return metroStationsAroundHome(filtered, home, context.metro_lines ?? []);
+      return metroStationsAroundHome(filtered, home, context.metro_lines ?? [], focus);
     }
     return filtered;
-  }, [context, home, story, scale]);
+  }, [context, home, story, scale, focus]);
 
   const numbered = useMemo(() => buildNumberedPlaces(storyPlaces), [storyPlaces]);
+  const focusedPlace = useMemo(
+    () => focus
+      ? numbered.find((place) => placeMatchesProofFocus(place, focus)) ?? null
+      : null,
+    [focus, numbered],
+  );
 
   const { singles, clusters } = useMemo(() => {
     if (openedClusterId) {
@@ -152,9 +221,37 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     return clusterClosePlaces(numbered, scale);
   }, [numbered, openedClusterId, scale]);
 
-  const showMetroLines = (context.metro_lines?.length ?? 0) > 0;
   const metroFocused = story.kind === "layer" && story.layer === "metro";
+  const redFlagsFocused = story.kind === "layer" && story.layer === "red_flags";
+  const activeRedFlagLines = useMemo(
+    () => redFlagsFocused ? context.red_flag_lines ?? [] : [],
+    [context.red_flag_lines, redFlagsFocused],
+  );
   const waterFocused = story.kind === "water";
+  const activeMetroLines = useMemo(
+    () => context.metro_lines ?? [],
+    [context.metro_lines],
+  );
+  const showMetroLines = activeMetroLines.length > 0;
+  const redFlagLineSummaries = useMemo(() => {
+    const summaries = new Map<string, RedFlagLineSummary>();
+    for (const line of activeRedFlagLines) {
+      const title = redFlagLineTitle(line.name);
+      const key = `${title}:${line.source_type}`;
+      const current = summaries.get(key);
+      if (current) {
+        current.count += 1;
+      } else {
+        summaries.set(key, {
+          id: key,
+          title,
+          sourceType: line.source_type,
+          count: 1,
+        });
+      }
+    }
+    return [...summaries.values()];
+  }, [activeRedFlagLines]);
   const nearestMetroDistanceKm = useMemo(
     () => context.places
       .filter((place) => place.layer === "metro" && typeof place.distance_km === "number")
@@ -181,7 +278,7 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
         home,
         [],
         "area",
-        context.metro_lines ?? [],
+        activeMetroLines,
         "nearest",
       );
       const radiusKm = Math.max(
@@ -199,13 +296,16 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
       home,
       numbered,
       showMetroLines ? "area" : scale,
-      context.metro_lines ?? [],
+      activeMetroLines,
       "nearest",
+      activeRedFlagLines,
+      focus,
     );
-  }, [context.metro_lines, context.water?.scope_radius_km, home, numbered, scale, showMetroLines, waterFocused]);
+  }, [activeMetroLines, activeRedFlagLines, context.water?.scope_radius_km, focus, home, numbered, scale, showMetroLines, waterFocused]);
 
   const selected =
     numbered.find((place) => place.id === selectedId)
+    ?? focusedPlace
     ?? numbered[0]
     ?? null;
 
@@ -213,13 +313,7 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
     setStory(next);
     setSelectedId(null);
     setOpenedClusterId(null);
-    if (next.kind === "water") {
-      setScale("area");
-    } else if (next.kind === "layer" && next.layer === "metro") {
-      setScale("area");
-    } else {
-      setScale("nearby");
-    }
+    setScale(scaleForStory(next, focus, context.places));
   }
 
   function selectPlace(id: string) {
@@ -248,15 +342,6 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
       </div>
 
       <div className="nearby-plate__layers" role="toolbar" aria-label="Nearby story">
-        <button
-          type="button"
-          className={`nearby-plate__chip${story.kind === "essentials" ? " is-active" : ""}`}
-          aria-pressed={story.kind === "essentials"}
-          onClick={() => selectStory({ kind: "essentials" })}
-        >
-          <SoftNearbyIcon kind="essentials" />
-          Essentials
-        </button>
         {layers.map((layer) => {
           const on = story.kind === "layer" && story.layer === layer;
           const label = layerLabel(layer);
@@ -308,7 +393,8 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                 clusters={clusters}
                 selectedId={selected?.id ?? null}
                 viewport={viewport}
-                metroLines={context.metro_lines ?? []}
+                metroLines={activeMetroLines}
+                redFlagLines={activeRedFlagLines}
                 showMetroLines={showMetroLines}
                 nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
                 water={context.water}
@@ -323,8 +409,26 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
             </div>
           )}
 
-          {!waterFocused && numbered.length > 0 && (
+          {redFlagsFocused && (redFlagLineSummaries.length > 0 || numbered.length > 0) && (
             <ol className="nearby-plate__nearest" aria-label="Nearby places">
+              {redFlagLineSummaries.map((summary) => (
+                <li key={summary.id} className="nearby-plate__nearest-item">
+                  <div className="nearby-plate__nearest-row nearby-plate__nearest-row--static">
+                    <span className="nearby-plate__nearest-icon">
+                      <SoftNearbyIcon kind="red_flags" size={28} />
+                    </span>
+                    <span className="nearby-plate__nearest-copy">
+                      <span className="nearby-plate__nearest-name">
+                        {summary.title}
+                      </span>
+                      <span className="nearby-plate__nearest-meta">
+                        {summary.sourceType}
+                        {summary.count > 1 ? ` · ${summary.count} segments` : ""}
+                      </span>
+                    </span>
+                  </div>
+                </li>
+              ))}
               {numbered.map((place) => {
                 const isSelected = selected?.id === place.id;
                 return (
@@ -346,10 +450,10 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
                           {typeof place.distance_km === "number"
                             ? ` · ${place.distance_km.toFixed(1)} km`
                             : ""}
-                          {typeof place.rating === "number"
+                          {place.layer !== "red_flags" && typeof place.rating === "number"
                             ? ` · ${place.rating.toFixed(1)}`
                             : ""}
-                          {typeof place.review_count === "number"
+                          {place.layer !== "red_flags" && typeof place.review_count === "number"
                             ? ` · ${place.review_count} reviews`
                             : ""}
                         </span>
