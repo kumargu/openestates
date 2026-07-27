@@ -75,11 +75,18 @@ pub struct SceneBounds {
 pub struct SceneLayer {
     pub id: String,
     pub label: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
+    pub tone: DisplayTone,
     pub family: String,
     pub render_kind: String,
     pub relation_class: String,
+    pub scale_mode: String,
+    pub priority: u32,
+    pub show_review_metrics: bool,
     pub enabled_by_default: bool,
     pub rank: u32,
+    pub features: Vec<String>,
     pub available_count: usize,
     pub shown_count: usize,
     pub fill_state: FillState,
@@ -271,6 +278,10 @@ pub fn build_surface_scene_with_focus(
 
     for (layer_index, layer_rule) in scene_config.layers.iter().enumerate() {
         let layer_rank = layer_rule.rank.unwrap_or((layer_index as u32) + 1);
+        let layer_icon = icon_for_layer(layer_rule);
+        let layer_tone = tone_for_layer(layer_rule);
+        let show_review_metrics = layer_rule.show_review_metrics.unwrap_or(true);
+        let mut layer_feature_ids = Vec::new();
         let mut candidates = features_for_layer(
             layer_rule,
             property,
@@ -333,6 +344,7 @@ pub fn build_surface_scene_with_focus(
                     .replace(':', "-")
             );
             let receipt_id = candidate.receipt.id.clone();
+            layer_feature_ids.push(feature_id.clone());
             if requested_focus.is_some_and(|focus| candidate_matches_focus(&candidate, focus)) {
                 if let Some(focus) = requested_focus {
                     let mut focus = focus.clone();
@@ -373,12 +385,12 @@ pub fn build_surface_scene_with_focus(
                 metrics: Some(SceneMetrics {
                     distance_m: candidate.distance_m,
                     travel_time_min: None,
-                    rating: if layer_rule.show_review_metrics.unwrap_or(true) {
+                    rating: if show_review_metrics {
                         candidate.rating
                     } else {
                         None
                     },
-                    review_count: if layer_rule.show_review_metrics.unwrap_or(true) {
+                    review_count: if show_review_metrics {
                         candidate.review_count
                     } else {
                         None
@@ -386,8 +398,8 @@ pub fn build_surface_scene_with_focus(
                     severity: None,
                 }),
                 display: SceneFeatureDisplay {
-                    tone: tone_for_layer(layer_rule),
-                    icon: icon_for_layer(layer_rule),
+                    tone: layer_tone,
+                    icon: layer_icon.clone(),
                     priority: layer_rank,
                 },
                 confidence: candidate.confidence,
@@ -397,11 +409,17 @@ pub fn build_surface_scene_with_focus(
         layers.push(SceneLayer {
             id: layer_rule.id.clone(),
             label: layer_rule.label.clone(),
+            icon: layer_icon,
+            tone: layer_tone,
             family: layer_rule.family.clone(),
             render_kind: layer_rule.render_kind.clone(),
             relation_class: layer_rule.relation_class.clone(),
+            scale_mode: scale_mode_for_layer(layer_rule).to_string(),
+            priority: layer_rank,
+            show_review_metrics,
             enabled_by_default: layer_rule.enabled_by_default,
             rank: layer_rank,
+            features: layer_feature_ids,
             available_count,
             shown_count,
             fill_state,
@@ -1373,10 +1391,33 @@ fn relation_edge_type(layer_rule: &UiSurfaceLayerRule) -> String {
 }
 
 fn tone_for_layer(layer_rule: &UiSurfaceLayerRule) -> DisplayTone {
+    if let Some(tone) = layer_rule.tone.as_deref() {
+        match tone {
+            "positive" => return DisplayTone::Positive,
+            "neutral" => return DisplayTone::Neutral,
+            "caution" => return DisplayTone::Caution,
+            "risk" => return DisplayTone::Risk,
+            _ => {}
+        }
+    }
     match layer_rule.relation_class.as_str() {
         "risk_externality" => DisplayTone::Risk,
         "access" => DisplayTone::Positive,
         _ => DisplayTone::Neutral,
+    }
+}
+
+fn scale_mode_for_layer(layer_rule: &UiSurfaceLayerRule) -> &'static str {
+    if let Some(scale_mode) = layer_rule.scale_mode.as_deref() {
+        match scale_mode {
+            "nearby" => return "nearby",
+            "area" => return "area",
+            _ => {}
+        }
+    }
+    match layer_rule.relation_class.as_str() {
+        "risk_externality" => "area",
+        _ => "nearby",
     }
 }
 
@@ -1626,6 +1667,8 @@ mod tests {
                     relation_class: "risk_externality".to_string(),
                     render_kind: "line".to_string(),
                     icon: None,
+                    tone: None,
+                    scale_mode: None,
                     sort: None,
                     max_items: Some(2),
                     expanded_max_items: None,
@@ -1733,6 +1776,8 @@ mod tests {
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
                     icon: Some("flag".to_string()),
+                    tone: None,
+                    scale_mode: None,
                     sort: Some("distance".to_string()),
                     max_items: Some(1),
                     expanded_max_items: None,
@@ -1829,6 +1874,8 @@ mod tests {
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
                     icon: Some("flag".to_string()),
+                    tone: None,
+                    scale_mode: None,
                     sort: Some("distance".to_string()),
                     max_items: Some(1),
                     expanded_max_items: None,
@@ -1943,6 +1990,8 @@ mod tests {
                     relation_class: "access".to_string(),
                     render_kind: "pin".to_string(),
                     icon: Some("briefcase-business".to_string()),
+                    tone: None,
+                    scale_mode: None,
                     sort: Some("distance".to_string()),
                     max_items: Some(8),
                     expanded_max_items: None,
@@ -2023,6 +2072,8 @@ mod tests {
                     relation_class: "risk_externality".to_string(),
                     render_kind: "pin".to_string(),
                     icon: Some("flag".to_string()),
+                    tone: None,
+                    scale_mode: None,
                     sort: Some("distance".to_string()),
                     max_items: Some(5),
                     expanded_max_items: None,
@@ -2112,6 +2163,8 @@ mod tests {
             relation_class: "context".to_string(),
             render_kind: "evidence_list".to_string(),
             icon: None,
+            tone: None,
+            scale_mode: None,
             sort: None,
             max_items: Some(1),
             expanded_max_items: None,
@@ -2138,6 +2191,8 @@ mod tests {
             relation_class: "risk_externality".to_string(),
             render_kind: "evidence_list".to_string(),
             icon: None,
+            tone: None,
+            scale_mode: None,
             sort: None,
             max_items: Some(2),
             expanded_max_items: None,

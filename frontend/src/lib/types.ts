@@ -310,6 +310,12 @@ export type PropertyMapContext = {
 export type MapLayerMeta = {
   id: string;
   label: string;
+  icon?: string;
+  tone?: "positive" | "neutral" | "caution" | "risk" | string;
+  scaleMode?: "nearby" | "area" | string;
+  priority?: number;
+  showReviewMetrics?: boolean;
+  features?: string[];
   rank?: number;
   enabledByDefault?: boolean;
 };
@@ -387,11 +393,17 @@ export type SceneBounds = {
 export type SceneLayer = {
   id: string;
   label: string;
+  icon?: string;
+  tone: "positive" | "neutral" | "caution" | "risk" | string;
   family: "access" | "risk" | "environment" | "market" | "context" | string;
   renderKind: "pin" | "line" | "polygon" | "corridor" | "evidence_list" | string;
   relationClass: "access" | "risk_externality" | "context" | string;
+  scaleMode: "nearby" | "area" | string;
+  priority: number;
+  showReviewMetrics: boolean;
   enabledByDefault: boolean;
   rank: number;
+  features: string[];
   availableCount: number;
   shownCount: number;
   fillState: SceneFillState;
