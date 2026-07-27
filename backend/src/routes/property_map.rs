@@ -931,7 +931,6 @@ mod tests {
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: String::new(),
-            seller_id: None,
         }
     }
 

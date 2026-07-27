@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
-use crate::models::{KgEntityRefs, PropertyCard, SellerSummary};
+use crate::models::{KgEntityRefs, PropertyCard};
 use crate::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
     RecommendationEnvelope, RecommendationResponse, RecommendationStatus,
@@ -34,7 +34,7 @@ use crate::livability_brief::{
 };
 
 use super::enrichment::{
-    enrich_area, enrich_property_card_with_sellers, enrich_society, extract_area_intelligence,
+    enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
     overlay_project_scale_facts, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
     DataFreshness, ReraInfo,
@@ -46,14 +46,13 @@ pub async fn list_properties(State(state): State<Arc<AppState>>) -> Json<Vec<Pro
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
     let societies = state.societies.read().await;
-    let sellers = state.sellers.read().await;
     let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
 
     let cards: Vec<PropertyCard> = properties
         .iter()
         .filter(|property| property.is_listable())
         .map(|p| {
-            let card = enrich_property_card_with_sellers(p, &societies, &graph, &sellers);
+            let card = enrich_property_card(p, &societies, &graph);
             overlay_serving_google_reviews(card, &p.society_id, serving_facts)
         })
         .collect();
@@ -96,9 +95,6 @@ pub struct PropertyDetail {
     pub area_price_range_low: Option<u64>,
     /// Highest price_per_sqft among properties in the same area.
     pub area_price_range_high: Option<u64>,
-    /// Seller info for buyer-facing display (no email/phone).
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seller: Option<SellerSummary>,
     /// Number of buyers who have expressed interest.
     pub interest_count: usize,
     /// Where the society data originally came from: "rera", "seller", "discovered", "legacy"
@@ -2368,7 +2364,6 @@ pub async fn get_property_recommendations(
     }
 
     let graph = state.knowledge.read().await;
-    let sellers = state.sellers.read().await;
     let areas = state.areas.read().await;
     let societies = state.societies.read().await;
     let evidence = build_property_evidence_response(&graph, &property, serving_bundle.as_deref());
@@ -2379,7 +2374,6 @@ pub async fn get_property_recommendations(
         graph: &graph,
         properties: &properties,
         societies: &societies,
-        sellers: &sellers,
         serving_bundle: serving_bundle.as_deref(),
         area_median_ppsf,
     });
@@ -2457,10 +2451,6 @@ pub async fn get_property(
         enrich_area(ap, &graph);
     }
 
-    // Hold a read lock on sellers — no clone needed, just borrow for the
-    // duration of this request.
-    let sellers_guard = state.sellers.read().await;
-
     // Find similar properties via local embedding similarity on the society node,
     // then fill with same-area same-BHK homes so the page still has alternatives
     // when society embeddings are sparse.
@@ -2482,8 +2472,7 @@ pub async fn get_property(
                     && !seen.contains(&p.id)
             }) {
                 seen.insert(prop.id.clone());
-                let card =
-                    enrich_property_card_with_sellers(prop, &societies, &graph, &sellers_guard);
+                let card = enrich_property_card(prop, &societies, &graph);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2508,8 +2497,7 @@ pub async fn get_property(
             area_props.sort_by_key(|p| p.price_per_sqft.abs_diff(property.price_per_sqft.max(1)));
             for prop in area_props.into_iter().take(6 - similar.len()) {
                 seen.insert(prop.id.clone());
-                let card =
-                    enrich_property_card_with_sellers(prop, &societies, &graph, &sellers_guard);
+                let card = enrich_property_card(prop, &societies, &graph);
                 similar.push(overlay_serving_google_reviews(
                     card,
                     &prop.society_id,
@@ -2554,21 +2542,6 @@ pub async fn get_property(
         } else {
             (None, None)
         }
-    };
-
-    // Look up seller for this property.
-    // Pick first verified seller, then highest completeness.
-    let seller = {
-        let mut matching: Vec<_> = sellers_guard
-            .iter()
-            .filter(|s| s.property_ids.contains(&property.id))
-            .collect();
-        matching.sort_by(|a, b| {
-            b.verified
-                .cmp(&a.verified)
-                .then_with(|| b.completeness_pct().cmp(&a.completeness_pct()))
-        });
-        matching.first().map(|s| s.to_summary())
     };
 
     // Read interest count from JSONL file.
@@ -2714,7 +2687,6 @@ pub async fn get_property(
         transparency_score,
         area_price_range_low,
         area_price_range_high,
-        seller,
         interest_count,
         root_source,
         project_status_display,
@@ -3738,7 +3710,6 @@ mod serving_state_tests {
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: String::new(),
-            seller_id: None,
         }
     }
 }

@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 
 use crate::discovery::DiscoveryConfig;
 use crate::knowledge::KnowledgeGraph;
-use crate::models::{AreaProfile, Property, Seller, Society};
+use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::search::{SearchIndex, SemanticEmbedder, SemanticSearchIndex};
 use crate::serving::LoadedServingBundle;
@@ -28,7 +28,6 @@ pub struct AppState {
     pub recommendation_cache: RwLock<std::collections::HashMap<String, RecommendationResponse>>,
     pub areas: RwLock<Vec<AreaProfile>>,
     pub societies: RwLock<Vec<Society>>,
-    pub sellers: RwLock<Vec<Seller>>,
     /// Product-facing discovery copy and shelf metadata from app/config/product/discovery_home.json.
     pub discovery_config: DiscoveryConfig,
     /// Offline city map overlays (metro / parks / lakes) clipped per property detail.
@@ -44,12 +43,4 @@ pub struct AppState {
     /// Global rate limiter for POST /api/interests: (window_start, count_in_window).
     /// Resets every 60 seconds. Max 60 requests per window.
     pub interest_rate_limiter: RwLock<(std::time::Instant, u32)>,
-    /// Monotonic counter for generating collision-free registration draft IDs.
-    pub registration_counter: AtomicU64,
-    /// Global rate limiter for POST /api/registrations: (window_start, count_in_window).
-    /// Resets every 60 seconds. Max 30 requests per window.
-    pub registration_rate_limiter: RwLock<(std::time::Instant, u32)>,
-    /// Global rate limiter for POST /api/registrations/{id}/publish: (window_start, count_in_window).
-    /// Resets every 60 seconds. Max 10 requests per window (tighter than registration creation).
-    pub publish_rate_limiter: RwLock<(std::time::Instant, u32)>,
 }

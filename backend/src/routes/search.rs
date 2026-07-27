@@ -111,7 +111,6 @@ pub async fn search_properties(
         let properties = state.properties.read().await;
         let search_index = state.search_index.read().await;
         let semantic_index = state.semantic_index.read().await;
-        let sellers = state.sellers.read().await;
 
         SearchEngine {
             properties: &properties,
@@ -122,7 +121,6 @@ pub async fn search_properties(
             society_names: &society_names,
             societies: &societies,
             graph: Some(&graph),
-            sellers: &sellers,
         }
         .search(&query)
     };
@@ -1637,7 +1635,6 @@ mod tests {
             description_summary: "Test property".into(),
             transparency_tags: vec![],
             source_reference: "test".into(),
-            seller_id: None,
         };
 
         let properties = vec![prop];

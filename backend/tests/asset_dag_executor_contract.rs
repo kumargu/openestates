@@ -609,7 +609,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(Vec::new()),
         societies: RwLock::new(societies),
-        sellers: RwLock::new(Vec::new()),
         discovery_config: backend::discovery::load_discovery_config(),
         map_overlays: Arc::new(backend::routes::map_overlays::CityMapOverlays::default()),
         knowledge: Arc::new(RwLock::new(mock_graph())),
@@ -617,9 +616,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
-        registration_counter: AtomicU64::new(0),
-        registration_rate_limiter: RwLock::new((Instant::now(), 0)),
-        publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     });
     let response = search_properties(
         State(state),
@@ -1610,7 +1606,6 @@ fn search_property(id: &str, society_id: &str, society_name: &str) -> Property {
         description_summary: "Proof-first search fixture".to_string(),
         transparency_tags: Vec::new(),
         source_reference: "asset-dag-product-proof".to_string(),
-        seller_id: None,
     }
 }
 

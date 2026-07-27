@@ -435,7 +435,6 @@ mod tests {
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),
-            seller_id: None,
         }
     }
 }

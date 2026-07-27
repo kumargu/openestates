@@ -1,5 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
@@ -16,7 +16,7 @@ use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
-use crate::models::{AreaProfile, Property, Seller, Society};
+use crate::models::{AreaProfile, Property, Society};
 #[cfg(feature = "fastembed")]
 use crate::search::FastEmbedSemanticEmbedder;
 use crate::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
@@ -88,24 +88,11 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         semantic_index.model_id()
     );
 
-    // --- Sellers ---
-    let sellers_path = project_root
-        .join("data")
-        .join("sellers")
-        .join("sellers.json");
-    let sellers: Vec<Seller> = if sellers_path.exists() {
-        load_json_direct::<Vec<Seller>>(&sellers_path)
-    } else {
-        println!("WARN: No sellers.json found at {}", sellers_path.display());
-        Vec::new()
-    };
-
     println!(
-        "Loaded {} properties, {} areas, {} societies, {} sellers",
+        "Loaded {} properties, {} areas, {} societies",
         properties.len(),
         areas.len(),
-        societies.len(),
-        sellers.len()
+        societies.len()
     );
 
     println!("Request-time AI disabled: search uses only local serving bundle data");
@@ -121,7 +108,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(areas),
         societies: RwLock::new(societies),
-        sellers: RwLock::new(sellers),
         discovery_config,
         map_overlays,
         knowledge: Arc::new(RwLock::new(graph)),
@@ -129,9 +115,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
         interest_rate_limiter: RwLock::new((Instant::now(), 0)),
-        registration_counter: AtomicU64::new(0),
-        registration_rate_limiter: RwLock::new((Instant::now(), 0)),
-        publish_rate_limiter: RwLock::new((Instant::now(), 0)),
     }
 }
 
@@ -442,7 +425,7 @@ fn representative_property_from_serving_society(
         .and_then(|entity| entity.root_source.as_deref())
         .unwrap_or("serving_bundle");
     let mut transparency_tags = vec![
-        format!("Source: {root_source}"),
+        format!("Source: {}", root_source_display_label(root_source)),
         "Fresh area scan".to_string(),
     ];
     if latest_bool(Some(rows), "rera_registered").unwrap_or(false) {
@@ -500,7 +483,6 @@ fn representative_property_from_serving_society(
             .unwrap_or_else(|| format!("{society_name} in {area}")),
         transparency_tags,
         source_reference: format!("search_serving_bundle:{bundle_version}"),
-        seller_id: None,
     }
 }
 
@@ -630,7 +612,10 @@ fn property_from_serving_entity(
     let root_source = entity.root_source.as_deref().unwrap_or("serving_bundle");
     let mut transparency_tags = latest_tags(rows, "transparency_tags").unwrap_or_default();
     if transparency_tags.is_empty() {
-        transparency_tags.push(format!("Source: {root_source}"));
+        transparency_tags.push(format!(
+            "Source: {}",
+            root_source_display_label(root_source)
+        ));
         transparency_tags.push("Lake indexed".to_string());
     }
     let possession_status = latest_text(rows, "possession_status")
@@ -698,7 +683,6 @@ fn property_from_serving_entity(
         description_summary,
         transparency_tags,
         source_reference: format!("search_serving_bundle:{bundle_version}"),
-        seller_id: latest_text(rows, "seller_id").filter(|value| !value.trim().is_empty()),
     }
 }
 
@@ -1380,14 +1364,6 @@ pub fn properties_from_graph(graph: &KnowledgeGraph) -> Vec<Property> {
                         s
                     }
                 },
-                seller_id: {
-                    let s: String = fact_text(node, "seller_id").into();
-                    if s.is_empty() {
-                        None
-                    } else {
-                        Some(s)
-                    }
-                },
             }
         })
         .collect()
@@ -1707,12 +1683,15 @@ fn fact_tags(node: &knowledge::node::Node, key: &str) -> FactTags {
     FactTags(tags)
 }
 
-/// Direct file read fallback (sync).
-fn load_json_direct<T: serde::de::DeserializeOwned>(path: &PathBuf) -> T {
-    let content = std::fs::read_to_string(path)
-        .unwrap_or_else(|e| panic!("Failed to read {}: {}", path.display(), e));
-    serde_json::from_str(&content)
-        .unwrap_or_else(|e| panic!("Failed to parse {}: {}", path.display(), e))
+fn root_source_display_label(root_source: &str) -> &'static str {
+    match root_source {
+        "seller" => "Self-reported",
+        "rera" => "RERA",
+        "discovered" => "Discovery",
+        "legacy" => "Legacy",
+        "serving_bundle" => "Serving bundle",
+        _ => "Serving bundle",
+    }
 }
 
 #[cfg(test)]
@@ -2306,7 +2285,6 @@ mod tests {
             .transparency_tags
             .contains(&"Discovered via Search".to_string()));
         assert!(p.greenery_score.is_none());
-        assert!(p.seller_id.is_none());
     }
 
     #[test]

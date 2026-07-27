@@ -413,7 +413,7 @@ impl SearchWorld {
 
     fn run(&self, query: &str) -> Vec<SearchResultCard> {
         let intent = parse_intent(query);
-        TextSearch::search_with_index_and_intent_and_sellers(
+        TextSearch::search_with_index_and_intent(
             &self.properties,
             Some(&self.index),
             &self.society_names,
@@ -421,7 +421,6 @@ impl SearchWorld {
             query,
             &intent,
             Some(&self.graph),
-            &[],
         )
     }
 
@@ -431,7 +430,7 @@ impl SearchWorld {
         serving_facts: &ServingFactIndex,
     ) -> Vec<SearchResultCard> {
         let intent = parse_intent(query);
-        TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+        TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
             &self.properties,
             Some(&self.index),
             None,
@@ -441,7 +440,6 @@ impl SearchWorld {
             query,
             &intent,
             Some(&self.graph),
-            &[],
         )
     }
 
@@ -747,7 +745,6 @@ fn property(id: &str, area: &str, society_id: &str, bhk: u32, price: u64) -> Pro
         description_summary: "Local quality harness listing".to_string(),
         transparency_tags: Vec::new(),
         source_reference: "search-quality-contract".to_string(),
-        seller_id: None,
     }
 }
 

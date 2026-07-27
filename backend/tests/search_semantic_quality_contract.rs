@@ -1035,7 +1035,7 @@ impl MockSearchWorld {
             .search_index
             .property_scores_for_semantic_hits(&semantic_hits);
         let candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
-        TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+        TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
             &self.properties,
             Some(&self.search_index),
             Some(&candidate_ids),
@@ -1047,7 +1047,6 @@ impl MockSearchWorld {
             query,
             &intent,
             None,
-            &[],
         )
     }
 }
@@ -1095,7 +1094,6 @@ fn property(id: &str, description_summary: &str) -> Property {
         description_summary: description_summary.to_string(),
         transparency_tags: Vec::new(),
         source_reference: "semantic-quality-contract".to_string(),
-        seller_id: None,
     }
 }
 

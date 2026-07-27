@@ -36,7 +36,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     project_status_display: "Ready to move",
     home_state_display: "Delivered · 5-10 yrs old",
     builder_delivery_display: "Strong delivery record",
-    data_freshness: freshness(142, 54, { rera: 24, seller: 11, reviews: 19 }),
+    data_freshness: freshness(142, 54, { rera: 24, self_reported: 11, reviews: 19 }),
   },
   {
     id: "fixture-samadhura-capitol-3bhk",
@@ -49,7 +49,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     society_name: "Samadhura Capitol Residences",
     builder_name: "Samadhura",
     hero_image: null,
-    transparency_tags: ["Below median", "Verified seller", "Floor plan visible"],
+    transparency_tags: ["Below median", "Plan visible", "RERA rooted"],
     description_summary: "Efficient resale option near the corridor with strong price discipline.",
     possession_status: "ready",
     metro_distance_mins: 8,
@@ -63,7 +63,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     project_status_display: "Ready to move",
     home_state_display: "Delivered · 1-5 yrs old",
     builder_delivery_display: "On-time pattern",
-    data_freshness: freshness(96, 38, { rera: 18, seller: 8, reviews: 12 }),
+    data_freshness: freshness(96, 38, { rera: 18, reviews: 12 }),
   },
   {
     id: "fixture-vaswani-starlight-3bhk",
@@ -76,7 +76,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     society_name: "Vaswani Starlight",
     builder_name: "Vaswani",
     hero_image: null,
-    transparency_tags: ["Seller source", "Risk review", "Negotiation required"],
+    transparency_tags: ["Self-reported", "Risk review", "Negotiation required"],
     description_summary: "Premium ask with stronger due-diligence needs before visit.",
     possession_status: "under_construction",
     metro_distance_mins: 15,
@@ -90,7 +90,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     project_status_display: "Under construction",
     home_state_display: "Under construction",
     builder_delivery_display: "Verify handover",
-    data_freshness: freshness(42, 91, { seller: 12, discovery: 18 }),
+    data_freshness: freshness(42, 91, { self_reported: 12, discovery: 18 }),
   },
   {
     id: "fixture-sobha-royal-pavilion-4bhk",
@@ -198,7 +198,7 @@ const fixturePropertyRows: Array<Omit<PropertyCard, "kg_entity_refs">> = [
     project_status_display: "Ready to move",
     home_state_display: "Delivered · 10+ yrs old",
     builder_delivery_display: "Established society",
-    data_freshness: freshness(38, 110, { seller: 9, reviews: 20 }),
+    data_freshness: freshness(38, 110, { self_reported: 9, reviews: 20 }),
   },
   {
     id: "fixture-karle-zenith-3bhk",
@@ -565,7 +565,7 @@ function makeMatchExplanation(property: PropertyCard, intent: ReturnType<typeof 
       : null,
     property.root_source === "rera"
       ? reason("trust", "root_source", "Listing has an RERA-rooted source chain.", 0.88)
-      : reason("trust", "root_source", "Seller-sourced listing needs source-chain verification.", 0.55),
+      : reason("trust", "root_source", "Self-reported listing needs source-chain verification.", 0.55),
   ].filter((value): value is ReturnType<typeof reason> => value !== null);
 
   return {
@@ -707,7 +707,7 @@ function confidenceFor(property: PropertyCard) {
         dimension: "Source chain",
         score: high ? 0.9 : 0.55,
         weight: 0.35,
-        explanation: high ? "RERA-rooted source chain." : "Seller source needs verification.",
+        explanation: high ? "RERA-rooted source chain." : "Self-reported source needs verification.",
       },
       {
         dimension: "Market support",

@@ -4,9 +4,9 @@ use std::collections::HashMap;
 use crate::dag_config::search_resolution_config;
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
-use crate::models::{KgEntityRefs, Property, Seller, Society};
+use crate::models::{KgEntityRefs, Property, Society};
 use crate::routes::enrichment::{
-    area_node_id, enrich_property_card_with_sellers, property_node_id, society_node_id,
+    area_node_id, enrich_property_card, property_node_id, society_node_id,
 };
 use crate::routes::search::graph_preference_score_for_keys;
 use crate::serving::{
@@ -38,7 +38,7 @@ impl TextSearch {
     /// When `graph` is provided, preference scoring uses the graph's self-describing
     /// `answers_preferences` + `scoring_hint` metadata. Falls back to hardcoded
     /// scoring when the graph doesn't have relevant facts.
-    #[allow(dead_code)] // Convenience wrapper used by tests — prod code calls search_with_intent_and_sellers
+    #[allow(dead_code)] // Convenience wrapper used by tests — prod code calls search_with_intent.
     pub fn search_with_intent(
         properties: &[Property],
         society_names: &std::collections::HashMap<String, String>,
@@ -47,28 +47,7 @@ impl TextSearch {
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
-        Self::search_with_intent_and_sellers(
-            properties,
-            society_names,
-            societies,
-            query,
-            intent,
-            graph,
-            &[],
-        )
-    }
-
-    /// Intent-based search with seller trust data for completeness boost and card enrichment.
-    pub fn search_with_intent_and_sellers(
-        properties: &[Property],
-        society_names: &std::collections::HashMap<String, String>,
-        societies: &[Society],
-        query: &str,
-        intent: &SearchIntent,
-        graph: Option<&KnowledgeGraph>,
-        sellers: &[Seller],
-    ) -> Vec<SearchResultCard> {
-        Self::search_with_index_and_intent_and_sellers(
+        Self::search_with_index_and_intent(
             properties,
             None,
             society_names,
@@ -76,13 +55,12 @@ impl TextSearch {
             query,
             intent,
             graph,
-            sellers,
         )
     }
 
     /// Indexed local recall followed by deterministic ranking and explanation.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_index_and_intent_and_sellers(
+    pub fn search_with_index_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         society_names: &std::collections::HashMap<String, String>,
@@ -90,9 +68,8 @@ impl TextSearch {
         query: &str,
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
-        sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
-        Self::search_with_index_and_extra_recall_and_intent_and_sellers(
+        Self::search_with_index_and_extra_recall_and_intent(
             properties,
             search_index,
             None,
@@ -101,13 +78,12 @@ impl TextSearch {
             query,
             intent,
             graph,
-            sellers,
         )
     }
 
     /// Indexed local recall plus optional serving-bundle recall, followed by deterministic ranking.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_index_and_extra_recall_and_intent_and_sellers(
+    pub fn search_with_index_and_extra_recall_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
@@ -116,9 +92,8 @@ impl TextSearch {
         query: &str,
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
-        sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
-        Self::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+        Self::search_with_index_extra_recall_serving_facts_and_intent(
             properties,
             search_index,
             extra_candidate_ids,
@@ -128,7 +103,6 @@ impl TextSearch {
             query,
             intent,
             graph,
-            sellers,
         )
     }
 
@@ -138,7 +112,7 @@ impl TextSearch {
     /// read-optimized overlay for recently materialized DAG facts that have not
     /// yet been folded back into per-entity KG JSON files.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
+    pub fn search_with_index_extra_recall_serving_facts_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
@@ -148,9 +122,8 @@ impl TextSearch {
         query: &str,
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
-        sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
-        Self::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+        Self::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
             properties,
             search_index,
             extra_candidate_ids,
@@ -162,7 +135,6 @@ impl TextSearch {
             query,
             intent,
             graph,
-            sellers,
         )
     }
 
@@ -171,7 +143,7 @@ impl TextSearch {
     /// `semantic_scores` may widen recall and gently influence ordering, but
     /// never creates proof claims or preference coverage on its own.
     #[allow(clippy::too_many_arguments)]
-    pub fn search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+    pub fn search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
         properties: &[Property],
         search_index: Option<&SearchIndex>,
         extra_candidate_ids: Option<&[String]>,
@@ -183,7 +155,6 @@ impl TextSearch {
         query: &str,
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
-        sellers: &[Seller],
     ) -> Vec<SearchResultCard> {
         if !intent.unsupported_inventory_types.is_empty() {
             return Vec::new();
@@ -596,7 +567,7 @@ impl TextSearch {
                 // Use shared enrichment — same PropertyCard as /api/properties.
                 // graph is always Some in practice (search always has KG access).
                 let mut card = if let Some(g) = graph {
-                    enrich_property_card_with_sellers(p, societies, g, sellers)
+                    enrich_property_card(p, societies, g)
                 } else {
                     // Fallback without graph — build minimal card
                     crate::models::PropertyCard {
@@ -632,10 +603,6 @@ impl TextSearch {
                         society_land_acres: None,
                         open_space_pct: None,
                         units_per_acre: None,
-                        seller_id: p.seller_id.clone(),
-                        seller_completeness_pct: None,
-                        documents_provided: Vec::new(),
-                        seller_verified: None,
                         root_source: None,
                         project_status: None,
                         project_status_display: None,
@@ -651,17 +618,8 @@ impl TextSearch {
 
                 // Normalize score to 0.0–1.0 range (rough normalization)
                 let max_possible = 15.0; // approximate ceiling
-                let mut normalized = (score / max_possible).min(1.0);
+                let normalized = (score / max_possible).min(1.0);
 
-                // Seller completeness boost — multiplicative so low-score properties
-                // don't get disproportionately lifted (0.10 → 0.105, not 0.15).
-                if let Some(pct) = card.seller_completeness_pct {
-                    if pct >= 70 {
-                        normalized = (normalized * 1.05).min(1.0);
-                    } else if pct >= 42 {
-                        normalized = (normalized * 1.02).min(1.0);
-                    }
-                }
                 let evidence_strength = evidence_strength(match_explanation.as_ref());
                 let mut display_score = (normalized * 100.0).round() / 100.0;
                 if normalized > 0.0 && display_score == 0.0 {
@@ -2326,7 +2284,7 @@ fn compute_source_quality(node: &Option<&Node>) -> (f64, String) {
     if let Some(n) = node {
         match n.root_source {
             Some(RootSource::Rera) => (1.0, "RERA verified source".to_string()),
-            Some(RootSource::Seller) => (0.6, "Seller-listed data".to_string()),
+            Some(RootSource::Seller) => (0.6, "Self-reported source".to_string()),
             Some(RootSource::Discovered) => (
                 0.5,
                 "Discovered via search, verification pending".to_string(),
@@ -3159,7 +3117,6 @@ mod tests {
             description_summary: "Local test listing".to_string(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),
-            seller_id: None,
         }
     }
 
@@ -3465,7 +3422,7 @@ mod tests {
         let index = crate::search::SearchIndex::build(&properties);
         let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
 
-        let results = TextSearch::search_with_index_and_intent_and_sellers(
+        let results = TextSearch::search_with_index_and_intent(
             &properties,
             Some(&index),
             &society_names,
@@ -3473,7 +3430,6 @@ mod tests {
             "3BHK Whitefield under 2Cr",
             &intent,
             None,
-            &[],
         );
 
         let ids: Vec<&str> = results
@@ -3512,7 +3468,7 @@ mod tests {
         let index = crate::search::SearchIndex::build(&properties);
         let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
 
-        let results = TextSearch::search_with_index_and_intent_and_sellers(
+        let results = TextSearch::search_with_index_and_intent(
             &properties,
             Some(&index),
             &society_names,
@@ -3520,7 +3476,6 @@ mod tests {
             "3BHK Whitefield under 2Cr",
             &intent,
             None,
-            &[],
         );
 
         let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
@@ -3580,7 +3535,7 @@ mod tests {
         ];
         let intent = crate::search::intent::parse_intent("3BHK Whitefield under 2Cr");
 
-        let results = TextSearch::search_with_index_and_extra_recall_and_intent_and_sellers(
+        let results = TextSearch::search_with_index_and_extra_recall_and_intent(
             &properties,
             Some(&stale_local_index),
             Some(&serving_candidate_ids),
@@ -3589,7 +3544,6 @@ mod tests {
             "3BHK Whitefield under 2Cr",
             &intent,
             None,
-            &[],
         );
 
         let ids: Vec<&str> = results.iter().map(|r| r.card.id.as_str()).collect();
@@ -3830,19 +3784,17 @@ mod tests {
             social_keys
         );
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "near metro whitefield",
-                &intent,
-                None,
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "near metro whitefield",
+            &intent,
+            None,
+        );
 
         assert_eq!(results[0].card.id, "nearby-metro-fit");
         assert_eq!(results[0].match_label, "Good match");
@@ -3940,19 +3892,17 @@ mod tests {
         );
         let intent = crate::search::intent::parse_intent("near metro whitefield");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "near metro whitefield",
-                &intent,
-                None,
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "near metro whitefield",
+            &intent,
+            None,
+        );
 
         assert_eq!(results[0].card.id, "close-metro");
         assert!(
@@ -4055,7 +4005,7 @@ mod tests {
         let intent = crate::search::intent::parse_intent("3bhk near Kadugodi Tree Park");
 
         let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                 &properties,
                 None,
                 Some(&geo_candidate_ids),
@@ -4067,7 +4017,6 @@ mod tests {
                 "3bhk near Kadugodi Tree Park",
                 &intent,
                 None,
-                &[],
             );
 
         assert_eq!(results[0].card.id, "close-to-kadugodi");
@@ -4189,7 +4138,7 @@ mod tests {
             let intent = crate::search::intent::parse_intent(query);
 
             let results =
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                     &properties,
                     None,
                     Some(&geo_candidate_ids),
@@ -4201,7 +4150,6 @@ mod tests {
                     query,
                     &intent,
                     None,
-                    &[],
                 );
 
             assert_eq!(results[0].card.id, "close-home", "query: {query}");
@@ -4316,7 +4264,7 @@ mod tests {
         let intent = crate::search::intent::parse_intent("whitefield home near deens academy");
 
         let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                 &properties,
                 None,
                 Some(&geo_candidate_ids),
@@ -4328,7 +4276,6 @@ mod tests {
                 "whitefield home near deens academy",
                 &intent,
                 None,
-                &[],
             );
 
         assert_eq!(results[0].card.id, "waterford");
@@ -4505,7 +4452,7 @@ mod tests {
             crate::search::intent::parse_intent("apartment near gopalan national school hoodi");
 
         let results =
-            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                 &properties,
                 None,
                 Some(&geo_candidate_ids),
@@ -4517,7 +4464,6 @@ mod tests {
                 "apartment near gopalan national school hoodi",
                 &intent,
                 None,
-                &[],
             );
 
         assert_eq!(results[0].card.id, "school-fit");
@@ -4568,19 +4514,17 @@ mod tests {
         );
         let intent = crate::search::intent::parse_intent("near metro whitefield");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "near metro whitefield",
-                &intent,
-                None,
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "near metro whitefield",
+            &intent,
+            None,
+        );
 
         let reasons = results[0]
             .match_explanation
@@ -4655,19 +4599,17 @@ mod tests {
             intent.positive_preferences
         );
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                Some(&serving_facts),
-                &society_names,
-                &[],
-                "3bhk whitefield with good reviews",
-                &intent,
-                None,
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(&serving_facts),
+            &society_names,
+            &[],
+            "3bhk whitefield with good reviews",
+            &intent,
+            None,
+        );
 
         let reasons = &results[0].match_explanation.as_ref().unwrap().reasons;
         assert!(
@@ -4735,19 +4677,17 @@ mod tests {
             intent.negative_preferences
         );
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                None,
-                &society_names,
-                &[],
-                "3bhk whitefield avoid waterlogging and traffic",
-                &intent,
-                Some(&graph),
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            None,
+            &society_names,
+            &[],
+            "3bhk whitefield avoid waterlogging and traffic",
+            &intent,
+            Some(&graph),
+        );
 
         let explanation = results[0].match_explanation.as_ref().unwrap();
         assert!(
@@ -4821,19 +4761,17 @@ mod tests {
         let intent =
             crate::search::intent::parse_intent("3bhk whitefield avoid waterlogging and traffic");
 
-        let results =
-            TextSearch::search_with_index_extra_recall_serving_facts_and_intent_and_sellers(
-                &properties,
-                None,
-                None,
-                None,
-                &society_names,
-                &[],
-                "3bhk whitefield avoid waterlogging and traffic",
-                &intent,
-                Some(&graph),
-                &[],
-            );
+        let results = TextSearch::search_with_index_extra_recall_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            None,
+            &society_names,
+            &[],
+            "3bhk whitefield avoid waterlogging and traffic",
+            &intent,
+            Some(&graph),
+        );
 
         assert_eq!(results.len(), 2);
         assert_eq!(
@@ -5358,7 +5296,7 @@ mod tests {
 
         assert_eq!(intent.excluded_areas, vec!["Electronic City".to_string()]);
 
-        let results = TextSearch::search_with_index_and_intent_and_sellers(
+        let results = TextSearch::search_with_index_and_intent(
             &properties,
             Some(&index),
             &society_names,
@@ -5366,7 +5304,6 @@ mod tests {
             query,
             &intent,
             None,
-            &[],
         );
 
         assert!(
@@ -5404,7 +5341,7 @@ mod tests {
             vec!["plot".to_string(), "villa".to_string()]
         );
 
-        let results = TextSearch::search_with_index_and_intent_and_sellers(
+        let results = TextSearch::search_with_index_and_intent(
             &properties,
             Some(&index),
             &society_names,
@@ -5412,7 +5349,6 @@ mod tests {
             query,
             &intent,
             None,
-            &[],
         );
 
         assert!(
@@ -5439,20 +5375,20 @@ mod tests {
         let extra_candidate_ids = vec!["semantic-only".to_string()];
         let intent = crate::search::intent::parse_intent("good reviews from actual residents");
 
-        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-            &properties,
-            None,
-            Some(&extra_candidate_ids),
-            Some(&semantic_scores),
-            None,
-            None,
-            &society_names,
-            &[],
-            "good reviews from actual residents",
-            &intent,
-            None,
-            &[],
-        );
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                Some(&extra_candidate_ids),
+                Some(&semantic_scores),
+                None,
+                None,
+                &society_names,
+                &[],
+                "good reviews from actual residents",
+                &intent,
+                None,
+            );
 
         assert_eq!(results.len(), 1);
         assert_eq!(results[0].semantic_score, Some(0.92));
@@ -5494,20 +5430,20 @@ mod tests {
             "peaceful 3bhk for my parents close to hospital not too much traffic",
         );
 
-        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-            &properties,
-            None,
-            Some(&extra_candidate_ids),
-            Some(&semantic_scores),
-            None,
-            None,
-            &society_names,
-            &[],
-            "peaceful 3bhk for my parents close to hospital not too much traffic",
-            &intent,
-            None,
-            &[],
-        );
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                Some(&extra_candidate_ids),
+                Some(&semantic_scores),
+                None,
+                None,
+                &society_names,
+                &[],
+                "peaceful 3bhk for my parents close to hospital not too much traffic",
+                &intent,
+                None,
+            );
 
         assert_eq!(results[0].card.id, "semantic-fit");
         assert_eq!(results[0].semantic_score, Some(0.84));
@@ -5586,20 +5522,20 @@ mod tests {
         ];
         let intent = crate::search::intent::parse_intent("quiet 3bhk avoid traffic");
 
-        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-            &properties,
-            None,
-            Some(&extra_candidate_ids),
-            Some(&semantic_scores),
-            None,
-            None,
-            &society_names,
-            &[],
-            "quiet 3bhk avoid traffic",
-            &intent,
-            Some(&graph),
-            &[],
-        );
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                Some(&extra_candidate_ids),
+                Some(&semantic_scores),
+                None,
+                None,
+                &society_names,
+                &[],
+                "quiet 3bhk avoid traffic",
+                &intent,
+                Some(&graph),
+            );
 
         assert_eq!(results[0].card.id, "proved-but-risky");
         let explanation = results[0]
