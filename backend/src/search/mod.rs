@@ -157,10 +157,4 @@ pub struct SearchResponse {
     /// Early guardrail guidance for vague, unsupported, or off-topic queries.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub search_guidance: Option<SearchGuidance>,
-    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discovery_status: Option<String>,
-    /// Deprecated: request-time discovery is disabled; kept temporarily for API compatibility.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub discovery_count: Option<usize>,
 }

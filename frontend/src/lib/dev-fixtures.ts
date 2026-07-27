@@ -431,8 +431,6 @@ function searchFixtureProperties(query: string): SearchResponse {
       nodes_consulted: areaContext ? 4 : 2,
       learning_gaps: ["Live backend unavailable; showing local product-review fixtures."],
     },
-    discovery_status: "fixture_fallback",
-    discovery_count: 0,
   };
 }
 

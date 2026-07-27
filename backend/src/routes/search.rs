@@ -63,8 +63,6 @@ pub async fn search_properties(
             search_diagnostics: None,
             relaxations: Vec::new(),
             search_guidance: None,
-            discovery_status: None,
-            discovery_count: None,
         });
     }
 
@@ -95,8 +93,6 @@ pub async fn search_properties(
                 search_diagnostics: None,
                 relaxations: Vec::new(),
                 search_guidance: Some(guarded.guidance),
-                discovery_status: None,
-                discovery_count: None,
             });
         }
     }
@@ -219,8 +215,6 @@ pub async fn search_properties(
         search_diagnostics: include_diagnostics.then_some(search_diagnostics),
         relaxations,
         search_guidance: (total_results == 0).then(no_results_guidance),
-        discovery_status: None,
-        discovery_count: None,
     })
 }
 

@@ -119,9 +119,6 @@ pub struct PropertyDetail {
     /// Other locally tracked projects tied to the same builder/promoter name.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub builder_portfolio: Option<BuilderPortfolio>,
-    /// Source-backed facts grouped for the detail page.
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub source_panels: Vec<SourcePanel>,
     /// Data freshness — how recently and richly the society data was updated
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
@@ -2725,7 +2722,6 @@ pub async fn get_property(
         project_status,
         builder_trust,
         builder_portfolio,
-        source_panels,
         data_freshness,
         confidence_score,
         external_reviews,

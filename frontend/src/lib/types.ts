@@ -232,10 +232,8 @@ export type PropertyDetailResponse = {
     zero_revocations?: boolean;
   };
   builder_portfolio?: BuilderPortfolio;
-  source_panels?: SourcePanel[];
   data_freshness?: DataFreshness;
   confidence_score?: ConfidenceScore;
-  /** Backend-shaped dynamic evidence cards — prefer over source_panels. */
   evidence?: PropertyEvidenceResponse;
   external_reviews?: {
     google_rating?: number;
@@ -765,8 +763,6 @@ export type SearchResponse = {
   total_results: number;
   knowledge_context: KnowledgeContext | null;
   search_guidance?: SearchGuidance | null;
-  discovery_status?: string;
-  discovery_count?: number;
 };
 
 export type ReraInfo = {

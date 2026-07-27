@@ -379,10 +379,10 @@ if [[ -n "$FIRST_ID" ]]; then
     '.evidence.sections | all((.source_types | type == "array") and (.entity_ids | type == "array"))' \
     "expected evidence sections to expose source_types and entity_ids"
 
-  check "Detail source panels are structured when present" \
+  check "Detail omits source panel compatibility payload" \
     "${BASE}/api/properties/${FIRST_ID}" \
-    '.source_panels | type == "array" and all(has("title", "items", "missing"))' \
-    "expected structured source_panels array"
+    'has("source_panels") | not' \
+    "expected source_panels compatibility payload to be absent"
 
   check "Detail has recommendations envelope" \
     "${BASE}/api/properties/${FIRST_ID}" \
