@@ -347,8 +347,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
   const totalCount = useBackendResults ? searchResponse.total_results : hasQuery ? 0 : filtered.length;
-  const discoveryStatus = useBackendResults ? searchResponse.discovery_status : null;
-  const discoveryCount = useBackendResults ? searchResponse.discovery_count : null;
   const intent = useBackendResults ? searchResponse.intent : null;
   const searchGuidance = useBackendResults ? searchResponse.search_guidance : null;
   const containerClass = "inline-results-shell";
@@ -416,30 +414,6 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
           ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} found for "${query}".`
           : `Showing ${totalCount} ${totalCount === 1 ? "property" : "properties"}.`}
       </div>
-
-      {/* Deprecated compatibility banner; backend no longer performs request-time discovery. */}
-      {discoveryStatus === "discovered_new" && discoveryCount && discoveryCount > 0 && (
-        <div
-          className="section-card"
-          style={{
-            padding: "0.85rem 1.25rem",
-            marginBottom: "1.25rem",
-            background: "linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%)",
-            border: "1px solid #bbf7d0",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-            <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#15803d" }}>
-              {discoveryCount} new {discoveryCount === 1 ? "match" : "matches"}
-            </span>
-          </div>
-        </div>
-      )}
 
       {/* Area context bar — shown when backend search returns area info */}
       {areaContext && <AreaContextBar ctx={areaContext} />}

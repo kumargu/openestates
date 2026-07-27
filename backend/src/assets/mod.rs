@@ -14,6 +14,7 @@ pub mod compaction;
 pub mod environment;
 pub mod executor;
 pub mod fan_in;
+pub mod geometry;
 pub mod google;
 pub mod home_state;
 pub mod kg_view;

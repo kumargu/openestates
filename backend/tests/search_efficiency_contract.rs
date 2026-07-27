@@ -38,7 +38,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
     );
 
     let started = Instant::now();
-    let results = TextSearch::search_with_index_and_intent_and_sellers(
+    let results = TextSearch::search_with_index_and_intent(
         &properties,
         Some(&index),
         &society_names,
@@ -46,7 +46,6 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
         query,
         &intent,
         None,
-        &[],
     );
     let elapsed = started.elapsed();
 
@@ -82,7 +81,7 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
     );
 
     let started = Instant::now();
-    let results = TextSearch::search_with_index_and_intent_and_sellers(
+    let results = TextSearch::search_with_index_and_intent(
         &properties,
         Some(&index),
         &society_names,
@@ -90,7 +89,6 @@ fn unsupported_inventory_query_short_circuits_large_mock_corpus() {
         query,
         &intent,
         None,
-        &[],
     );
     let elapsed = started.elapsed();
 
@@ -173,20 +171,20 @@ fn semantic_recall_bridges_buyer_language_without_claiming_proof() {
         "semantic recall should map parent/peaceful language to senior, quiet, and hospital text: {semantic_scores:?}"
     );
 
-    let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-        &properties,
-        Some(&index),
-        Some(&semantic_candidate_ids),
-        Some(&semantic_scores),
-        None,
-        None,
-        &society_names,
-        &[],
-        query,
-        &intent,
-        None,
-        &[],
-    );
+    let results =
+        TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+            &properties,
+            Some(&index),
+            Some(&semantic_candidate_ids),
+            Some(&semantic_scores),
+            None,
+            None,
+            &society_names,
+            &[],
+            query,
+            &intent,
+            None,
+        );
 
     assert_eq!(results[0].card.id, "senior-healthcare-fit");
     assert!(
@@ -224,20 +222,20 @@ fn semantic_plus_text_search_pipeline_stays_under_latency_budget() {
         let semantic_hits = semantic_index.search(query, &embedder, 128);
         let semantic_scores = index.property_scores_for_semantic_hits(&semantic_hits);
         let semantic_candidate_ids = semantic_scores.keys().cloned().collect::<Vec<_>>();
-        let results = TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
-            &properties,
-            Some(&index),
-            Some(&semantic_candidate_ids),
-            Some(&semantic_scores),
-            None,
-            None,
-            &society_names,
-            &[],
-            query,
-            &intent,
-            None,
-            &[],
-        );
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                Some(&index),
+                Some(&semantic_candidate_ids),
+                Some(&semantic_scores),
+                None,
+                None,
+                &society_names,
+                &[],
+                query,
+                &intent,
+                None,
+            );
         let elapsed = started.elapsed();
 
         assert!(
@@ -368,6 +366,5 @@ fn property_with_description(
         description_summary: description_summary.to_string(),
         transparency_tags: Vec::new(),
         source_reference: "search-efficiency-contract".to_string(),
-        seller_id: None,
     }
 }

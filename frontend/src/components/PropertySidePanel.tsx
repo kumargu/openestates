@@ -127,11 +127,8 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
           {card.transparency_tags.length > 0 && (
             <div className="side-panel-hero-tags">
               {card.transparency_tags.slice(0, 3).map((tag) => {
-                const isSellerRegistered = tag === "seller-registered";
                 const isVerificationPending = tag === "verification-pending";
-                const tagStyle = isSellerRegistered
-                  ? { background: "rgba(251, 191, 36, 0.85)", color: "#78350f" }
-                  : isVerificationPending
+                const tagStyle = isVerificationPending
                   ? { background: "rgba(156, 163, 175, 0.85)", color: "#fff" }
                   : undefined;
                 return (

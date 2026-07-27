@@ -10,8 +10,8 @@ use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
 
 use super::{
-    MaterializationRecord, ReraAssetError, SkillFactAnnotationRecord, SkillFactRecord,
-    SkillFactsInput, SourceWatermark,
+    geometry::validate_geojson_geometry, MaterializationRecord, ReraAssetError,
+    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
 };
 
 pub const OSM_POWER_LINE_FACTS_ASSET_ID: &str = "osm_power_line_facts";
@@ -39,6 +39,10 @@ pub struct OsmPowerLineObservationRecord {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub voltage_kv: Option<f64>,
     pub distance_meters: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_latitude: Option<f64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subject_longitude: Option<f64>,
     pub latitude: f64,
     pub longitude: f64,
     pub geometry_geojson: String,
@@ -262,7 +266,6 @@ pub async fn canonicalize_osm_power_infrastructure_input(
                 .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
         })
         .collect::<std::collections::HashMap<_, _>>();
-
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
@@ -466,6 +469,22 @@ fn validate_input(input: &OsmPowerInfrastructureInput) -> Result<(), OsmPowerAss
                 record.osm_id
             )));
         }
+        let subject = required_subject_point(
+            record.subject_latitude,
+            record.subject_longitude,
+            &record.osm_id,
+        )?;
+        validate_geojson_geometry(
+            &record.geometry_geojson,
+            Some(subject),
+            Some(record.distance_meters),
+        )
+        .map_err(|err| {
+            OsmPowerAssetError::InvalidInput(format!(
+                "OSM power row {} has invalid geometry: {err}",
+                record.osm_id
+            ))
+        })?;
         if !record.confidence.is_finite() || !(0.0..=1.0).contains(&record.confidence) {
             return Err(OsmPowerAssetError::InvalidInput(format!(
                 "OSM power row {} has invalid confidence",
@@ -553,6 +572,21 @@ fn valid_coordinate(latitude: f64, longitude: f64) -> bool {
         && longitude.is_finite()
         && (-90.0..=90.0).contains(&latitude)
         && (-180.0..=180.0).contains(&longitude)
+}
+
+fn required_subject_point(
+    latitude: Option<f64>,
+    longitude: Option<f64>,
+    record_id: &str,
+) -> Result<(f64, f64), OsmPowerAssetError> {
+    match (latitude, longitude) {
+        (Some(latitude), Some(longitude)) if valid_coordinate(latitude, longitude) => {
+            Ok((latitude, longitude))
+        }
+        _ => Err(OsmPowerAssetError::InvalidInput(format!(
+            "OSM power row {record_id} requires valid subject coordinates"
+        ))),
+    }
 }
 
 fn power_watermarks(input: &OsmPowerInfrastructureInput) -> Vec<SourceWatermark> {

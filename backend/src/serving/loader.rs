@@ -8,10 +8,10 @@ use crate::assets::{
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
 use super::{
-    derive_proximity_records, hydrate_tantivy_index, read_edges_parquet, read_embeddings_parquet,
-    read_entities_parquet, read_facts_parquet, read_search_metadata_parquet, ParquetReadError,
-    ServingBundleManifest, ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityRecord,
-    ServingFactIndex, TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    hydrate_tantivy_index, read_edges_parquet, read_embeddings_parquet, read_entities_parquet,
+    read_facts_parquet, read_search_metadata_parquet, ParquetReadError, ServingBundleManifest,
+    ServingEdgeRecord, ServingEmbeddingRecord, ServingEntityRecord, ServingFactIndex,
+    TantivyIndexError, TantivyRecallIndex, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 use crate::graph::GraphIndex;
 use crate::search::geo::GeoSearchIndex;
@@ -78,8 +78,8 @@ impl ServingBundleLoader {
 
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
         let entities = load_entities(&self.lake, &manifest).await?;
-        let mut edges = load_edges(&self.lake, &manifest).await?;
-        let fact_index = load_fact_index(&self.lake, &manifest, &entities, &mut edges).await?;
+        let edges = load_edges(&self.lake, &manifest).await?;
+        let fact_index = load_fact_index(&self.lake, &manifest).await?;
         let graph_index = GraphIndex::from_serving_edges(&edges);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let semantic_embeddings = load_semantic_embeddings(&self.lake, &manifest).await?;
@@ -129,8 +129,6 @@ async fn load_edges(
 async fn load_fact_index(
     lake: &LakeStore,
     manifest: &ServingBundleManifest,
-    entities: &[ServingEntityRecord],
-    edges: &mut Vec<ServingEdgeRecord>,
 ) -> Result<ServingFactIndex, ServingBundleLoadError> {
     let fact_key =
         LakeKey::new(manifest.fact_parquet_key.clone()).map_err(ServingBundleLoadError::Key)?;
@@ -138,13 +136,8 @@ async fn load_fact_index(
         .map_err(ServingBundleLoadError::Key)?;
     let fact_bytes = lake.get_bytes(&fact_key).await?;
     let search_metadata_bytes = lake.get_bytes(&search_metadata_key).await?;
-    let mut facts = read_facts_parquet(&fact_bytes)?;
-    let mut search_metadata = read_search_metadata_parquet(&search_metadata_bytes)?;
-    let base_index = ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-    let derived = derive_proximity_records(entities, &base_index, edges);
-    facts.extend(derived.facts);
-    search_metadata.extend(derived.search_metadata);
-    edges.extend(derived.edges);
+    let facts = read_facts_parquet(&fact_bytes)?;
+    let search_metadata = read_search_metadata_parquet(&search_metadata_bytes)?;
     Ok(ServingFactIndex::from_records(facts, search_metadata))
 }
 

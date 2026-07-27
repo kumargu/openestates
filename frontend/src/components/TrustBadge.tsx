@@ -1,6 +1,6 @@
 /**
  * TrustBadge — shows data provenance as a colored pill.
- * Green for RERA-verified, amber for discovered/pending, yellow for seller-listed.
+ * Green for RERA-verified, amber for discovered/pending, yellow for self-reported.
  * Renders nothing for "legacy" or undefined root_source.
  */
 
@@ -27,7 +27,7 @@ const BADGE_CONFIG: Record<string, { label: string; bg: string; color: string; b
     icon: "clock",
   },
   seller: {
-    label: "Seller Listed",
+    label: "Self-reported",
     bg: "#fefce8",
     color: "#854d0e",
     border: "#fde68a",

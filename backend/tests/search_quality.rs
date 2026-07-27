@@ -51,7 +51,7 @@ fn run_search(
     graph: &knowledge::KnowledgeGraph,
 ) -> Vec<backend::search::SearchResultCard> {
     let intent = parse_intent(query);
-    TextSearch::search_with_index_and_intent_and_sellers(
+    TextSearch::search_with_index_and_intent(
         properties,
         Some(search_index),
         society_names,
@@ -59,7 +59,6 @@ fn run_search(
         query,
         &intent,
         Some(graph),
-        &[],
     )
 }
 

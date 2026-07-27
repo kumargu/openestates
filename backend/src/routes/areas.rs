@@ -353,7 +353,6 @@ mod tests {
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: String::new(),
-            seller_id: None,
         };
         let mut second_property = property.clone();
         second_property.id = "p2".to_string();

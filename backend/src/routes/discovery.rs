@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::discovery::{DiscoveryConfig, DiscoveryShelfConfig};
 use crate::models::{Property, PropertyCard};
-use crate::routes::enrichment::enrich_property_card_with_sellers;
+use crate::routes::enrichment::enrich_property_card;
 use crate::routes::properties::overlay_serving_google_reviews;
 use crate::state::AppState;
 
@@ -57,14 +57,13 @@ pub async fn discovery_home(State(state): State<Arc<AppState>>) -> Json<Discover
     let graph = state.knowledge.read().await;
     let properties = state.properties.read().await;
     let societies = state.societies.read().await;
-    let sellers = state.sellers.read().await;
     let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
 
     let candidates: Vec<DiscoveryCandidate> = properties
         .iter()
         .filter(|property| property.is_listable())
         .map(|property| {
-            let card = enrich_property_card_with_sellers(property, &societies, &graph, &sellers);
+            let card = enrich_property_card(property, &societies, &graph);
             let card = overlay_serving_google_reviews(card, &property.society_id, serving_facts);
             DiscoveryCandidate {
                 property: property.clone(),

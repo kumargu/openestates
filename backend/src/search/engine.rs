@@ -5,7 +5,7 @@ use serde::Serialize;
 
 use crate::dag_config::search_resolution_config;
 use crate::knowledge::KnowledgeGraph;
-use crate::models::{Property, Seller, Society};
+use crate::models::{Property, Society};
 use crate::serving::{LoadedServingBundle, TantivyRecallHit};
 
 use super::geo;
@@ -30,7 +30,6 @@ pub struct SearchEngine<'a> {
     pub society_names: &'a HashMap<String, String>,
     pub societies: &'a [Society],
     pub graph: Option<&'a KnowledgeGraph>,
-    pub sellers: &'a [Seller],
 }
 
 #[derive(Debug, Clone)]
@@ -273,7 +272,7 @@ impl<'a> SearchEngine<'a> {
             {
                 Vec::new()
             } else {
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                     self.properties,
                     None,
                     recall_set.ranking_candidate_ids.as_deref(),
@@ -285,7 +284,6 @@ impl<'a> SearchEngine<'a> {
                     query,
                     &intent,
                     ranking_graph,
-                    self.sellers,
                 )
             }
         });
@@ -380,7 +378,7 @@ impl<'a> SearchEngine<'a> {
                 extra_candidate_ids.unwrap_or_default().to_vec(),
             );
             let results =
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent_and_sellers(
+                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
                     self.properties,
                     None,
                     ranking_candidate_ids.as_deref(),
@@ -392,7 +390,6 @@ impl<'a> SearchEngine<'a> {
                     query,
                     &relaxed_intent,
                     ranking_graph,
-                    self.sellers,
                 );
             if !results.is_empty() {
                 return Some((results, applied));

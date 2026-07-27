@@ -2,8 +2,8 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::dag_config::area_alias_entries;
 use crate::knowledge::graph::KnowledgeGraph;
-use crate::models::{Property, PropertyCard, Seller, Society};
-use crate::routes::enrichment::{enrich_property_card_with_sellers, society_node_id};
+use crate::models::{Property, PropertyCard, Society};
+use crate::routes::enrichment::{enrich_property_card, society_node_id};
 use crate::routes::properties::{
     build_source_panels, evidence_section_from_panel, overlay_serving_google_reviews,
     PropertyEvidenceResponse,
@@ -37,7 +37,6 @@ pub struct RecommendationBranchInputs<'a> {
     pub graph: &'a KnowledgeGraph,
     pub properties: &'a [Property],
     pub societies: &'a [Society],
-    pub sellers: &'a [Seller],
     pub serving_bundle: Option<&'a LoadedServingBundle>,
     pub area_median_ppsf: Option<u64>,
 }
@@ -51,7 +50,6 @@ pub fn build_recommendation_branches(
         graph,
         properties,
         societies,
-        sellers,
         serving_bundle,
         area_median_ppsf,
     } = inputs;
@@ -68,7 +66,6 @@ pub fn build_recommendation_branches(
         graph,
         properties,
         societies,
-        sellers,
         serving_bundle,
         area_median_ppsf,
     );
@@ -123,7 +120,6 @@ fn recall_candidates(
     graph: &KnowledgeGraph,
     properties: &[Property],
     societies: &[Society],
-    sellers: &[Seller],
     serving_bundle: Option<&LoadedServingBundle>,
     area_median_ppsf: Option<u64>,
 ) -> Vec<Candidate> {
@@ -164,7 +160,7 @@ fn recall_candidates(
         .filter_map(|(id, channels)| {
             let property = properties.iter().find(|property| property.id == id)?;
             let card = overlay_serving_google_reviews(
-                enrich_property_card_with_sellers(property, societies, graph, sellers),
+                enrich_property_card(property, societies, graph),
                 &property.society_id,
                 serving_bundle.map(|bundle| &bundle.fact_index),
             );

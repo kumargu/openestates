@@ -46,10 +46,6 @@ export type PropertyCard = {
   units_per_acre?: number;
   /** Delivery-record category supplied by a future DAG-backed buyer-surface view. */
   builder_category?: "A" | "B" | "C";
-  seller_id?: string;
-  seller_completeness_pct?: number;
-  documents_provided?: string[];
-  seller_verified?: boolean;
   root_source?: string;
   project_status?: string;
   project_status_display?: string;
@@ -169,7 +165,6 @@ export type PropertyDetailResponse = {
     description_summary: string;
     transparency_tags: string[];
     source_reference: string;
-    seller_id?: string;
   };
   /**
    * The same graph handle set as `property.kg_entity_refs` on result cards.
@@ -211,7 +206,6 @@ export type PropertyDetailResponse = {
     infrastructure_tags: string[];
     community_notes: string;
   } | null;
-  market_activity?: MarketActivityResponse;
   similar_properties: PropertyCard[];
   recommendation_branches?: RecommendationBranch[];
   recommendations?: RecommendationEnvelope;
@@ -220,7 +214,6 @@ export type PropertyDetailResponse = {
   transparency_score?: TransparencyScore;
   area_price_range_low?: number;
   area_price_range_high?: number;
-  seller?: SellerSummary;
   interest_count?: number;
   root_source?: string;
   project_status_display?: string;
@@ -233,10 +226,8 @@ export type PropertyDetailResponse = {
     zero_revocations?: boolean;
   };
   builder_portfolio?: BuilderPortfolio;
-  source_panels?: SourcePanel[];
   data_freshness?: DataFreshness;
   confidence_score?: ConfidenceScore;
-  /** Backend-shaped dynamic evidence cards — prefer over source_panels. */
   evidence?: PropertyEvidenceResponse;
   external_reviews?: {
     google_rating?: number;
@@ -323,7 +314,7 @@ export type PropertyMapContext = {
  *
  * How to use it well:
  * - Use `property_entity_id` when the UI needs listing-specific facts such as
- *   BHK, carpet area, price, seller source, or per-listing market activity.
+ *   BHK, carpet area, price, self-reported source, or per-listing market activity.
  * - Use `society_entity_id` for project/society evidence such as RERA facts,
  *   Google review facts, nearby places, amenities, complaints, community pulse,
  *   and builder relationships.
@@ -536,21 +527,6 @@ export type BuilderProjectRecord = {
   current: boolean;
 };
 
-export type SellerSummary = {
-  id: string;
-  name: string;
-  verified: boolean;
-  completeness_pct: number;
-  property_prompt?: string;
-  documents_provided: string[];
-};
-
-export type PriceVsMedian = {
-  pct_diff: number;
-  verdict: string;
-  verdict_class: string;
-};
-
 export type TransparencyComponent = {
   label: string;
   score: number;
@@ -561,17 +537,6 @@ export type TransparencyScore = {
   overall: number;
   components: TransparencyComponent[];
   explainer: string;
-};
-
-export type MarketActivityResponse = {
-  interest_level: string;
-  saves_last_7d: number | null;
-  offers_last_7d: number | null;
-  days_on_market: number;
-  days_on_market_label: string;
-  interest_label: string;
-  area_trend_summary: string;
-  price_vs_median: PriceVsMedian | null;
 };
 
 export type AreaListItem = {
@@ -783,8 +748,6 @@ export type SearchResponse = {
   total_results: number;
   knowledge_context: KnowledgeContext | null;
   search_guidance?: SearchGuidance | null;
-  discovery_status?: string;
-  discovery_count?: number;
 };
 
 export type ReraInfo = {

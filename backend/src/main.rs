@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use axum::extract::State;
-use axum::routing::{get, post, put};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use backend::recommendations::RECOMMENDATION_ENGINE_VERSION;
 use backend::scoring::scoring_policy;
@@ -92,38 +92,12 @@ async fn main() {
             get(routes::societies::search_societies),
         )
         .route("/api/societies/{slug}", get(routes::societies::get_society))
-        // Seller endpoints
-        .route("/api/sellers", get(routes::sellers::list_sellers))
-        .route("/api/sellers/{id}", get(routes::sellers::get_seller))
-        .route(
-            "/api/sellers/{id}/dashboard",
-            get(routes::sellers::get_seller_dashboard),
-        )
         // Interest endpoints
         .route("/api/interests", post(routes::interests::express_interest))
         .route(
             "/api/properties/{id}/interests/count",
             get(routes::interests::get_interest_count),
         )
-        // Registration endpoints
-        .route(
-            "/api/registrations",
-            post(routes::registration::create_registration),
-        )
-        .route(
-            "/api/registrations/{id}",
-            get(routes::registration::get_registration),
-        )
-        .route(
-            "/api/registrations/{id}/step/{step_num}",
-            put(routes::registration::update_registration_step),
-        )
-        .route(
-            "/api/registrations/{id}/publish",
-            post(routes::registration::publish_registration),
-        )
-        // Claims endpoint
-        .route("/api/claims", post(routes::claims::submit_claim))
         // Sitemap endpoint
         .route("/api/sitemap.xml", get(routes::sitemap::sitemap_xml))
         // Admin endpoints
@@ -153,11 +127,8 @@ async fn main() {
     println!("  GET /api/discovery");
     println!("  GET /api/search?q=...");
     println!("  GET /api/societies/search?q=... | /api/societies/{{slug}}");
-    println!("  GET /api/sellers | /api/sellers/{{id}} | /api/sellers/{{id}}/dashboard");
     println!("  POST /api/interests");
     println!("  GET /api/properties/{{id}}/interests/count");
-    println!("  POST /api/registrations | GET /api/registrations/{{id}} | PUT /api/registrations/{{id}}/step/{{n}} | POST /api/registrations/{{id}}/publish");
-    println!("  POST /api/claims");
     println!("  GET  /api/sitemap.xml");
     println!("  POST /api/admin/serving-bundle/reload");
     println!("  GET  /api/admin/asset-runs/current");

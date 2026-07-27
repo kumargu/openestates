@@ -60,8 +60,6 @@ pub struct Property {
     pub description_summary: String,
     pub transparency_tags: Vec<String>,
     pub source_reference: String,
-    #[serde(default)]
-    pub seller_id: Option<String>,
 }
 
 impl Property {
@@ -124,15 +122,6 @@ pub struct PropertyCard {
     /// Derived homes-per-acre project density from typed RERA units and land area.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub units_per_acre: Option<f64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seller_id: Option<String>,
-    /// Seller trust fields — populated from seller data when available.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seller_completeness_pct: Option<u32>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub documents_provided: Vec<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub seller_verified: Option<bool>,
     /// Where the society data originally came from: "rera", "seller", "discovered", "legacy"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub root_source: Option<String>,

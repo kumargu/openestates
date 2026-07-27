@@ -1,8 +1,12 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
+use rstar::{RTree, RTreeObject, AABB};
+use serde::Deserialize;
 
-use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint, FactRegistryEntry};
+use crate::dag_config::{
+    dag_root, load_fact_registry_index, load_json, scoring_direction_from_hint, FactRegistryEntry,
+};
 use crate::knowledge::FactValue;
 use crate::search::geo::haversine_km;
 use crate::search::{analyzer, schema};
@@ -27,12 +31,28 @@ pub struct DerivedProximityRecords {
 struct ProximityFactSpec {
     fact_key: String,
     max_distance_km: f64,
-    match_tokens: HashSet<String>,
     display_template: Option<String>,
     answers_preferences: Vec<String>,
     scoring_direction: Option<String>,
     scoring_weight: Option<f32>,
     scoring_thresholds: Vec<f64>,
+    matcher: ProximityMatcher,
+    chainable: bool,
+}
+
+#[derive(Debug, Clone)]
+enum ProximityMatcher {
+    Category(CategoryMatcher),
+    Tokens(HashSet<String>),
+}
+
+#[derive(Debug, Clone)]
+struct CategoryMatcher {
+    category_aliases: Vec<String>,
+    accepted_place_types: Vec<String>,
+    name_markers: Vec<String>,
+    name_block_markers: Vec<String>,
+    allow_missing_place_types: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -42,12 +62,15 @@ struct EntityPoint {
     latitude: f64,
     longitude: f64,
     confidence: f32,
+    learned_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
 struct PlacePoint {
     point: EntityPoint,
-    match_tokens: HashSet<String>,
+    place_types: Vec<String>,
+    category: Option<String>,
+    fallback_match_tokens: HashSet<String>,
     source_url: Option<String>,
 }
 
@@ -59,28 +82,81 @@ struct NearbyPlaceCandidate<'a> {
     confidence: f32,
 }
 
+#[derive(Debug, Clone)]
+struct IndexedPlace {
+    point: [f64; 2],
+    index: usize,
+}
+
+impl RTreeObject for IndexedPlace {
+    type Envelope = AABB<[f64; 2]>;
+
+    fn envelope(&self) -> Self::Envelope {
+        AABB::from_point(self.point)
+    }
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NearbyPlaceCategoryFile {
+    categories: Vec<NearbyPlaceCategory>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct NearbyPlaceCategory {
+    fact_key: String,
+    #[serde(default)]
+    relation_class: Option<String>,
+    #[serde(default)]
+    category_aliases: Vec<String>,
+    max_distance_km: f64,
+    #[serde(default)]
+    allow_missing_place_types: bool,
+    #[serde(default)]
+    accepted_place_types: Vec<String>,
+    #[serde(default)]
+    name_markers: Vec<String>,
+    #[serde(default)]
+    name_block_markers: Vec<String>,
+    #[serde(default)]
+    chainable: Option<bool>,
+}
+
+impl NearbyPlaceCategoryFile {
+    fn category_for_fact_key(&self, fact_key: &str) -> Option<&NearbyPlaceCategory> {
+        self.categories
+            .iter()
+            .find(|category| category.fact_key == fact_key)
+    }
+}
+
 pub fn derive_proximity_records(
     entities: &[ServingEntityRecord],
     fact_index: &ServingFactIndex,
     existing_edges: &[ServingEdgeRecord],
-) -> DerivedProximityRecords {
-    let specs = proximity_fact_specs();
+) -> Result<DerivedProximityRecords, crate::dag_config::DagConfigError> {
+    let specs = proximity_fact_specs()?;
     if specs.is_empty() {
-        return DerivedProximityRecords::default();
+        return Ok(DerivedProximityRecords::default());
     }
     let target_entities = target_entity_points(entities, fact_index);
     let places = place_points(entities, fact_index);
     if target_entities.is_empty() || places.is_empty() {
-        return DerivedProximityRecords::default();
+        return Ok(DerivedProximityRecords::default());
     }
 
     let existing_mentions = existing_nearby_mentions(fact_index, &specs);
     let mut output = DerivedProximityRecords::default();
     let mut seen_edges = existing_near_place_edges(existing_edges);
+    let place_index = indexed_places(&places);
+    let max_distance_km = specs
+        .iter()
+        .map(|spec| spec.max_distance_km)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .fold(0.0_f64, f64::max);
 
     for target in &target_entities {
         let mut by_fact_key = HashMap::<&str, Vec<NearbyPlaceCandidate<'_>>>::new();
-        for place in &places {
+        for place in candidate_places(target, &places, &place_index, max_distance_km) {
             let distance_km = haversine_km(
                 target.latitude,
                 target.longitude,
@@ -125,10 +201,12 @@ pub fn derive_proximity_records(
                             .any(|name| place_names_compatible(name, &candidate.place.point.name))
                     });
 
-                if seen_edges.insert((
-                    target.entity_id.clone(),
-                    candidate.place.point.entity_id.clone(),
-                )) {
+                if candidate.spec.chainable
+                    && seen_edges.insert((
+                        target.entity_id.clone(),
+                        candidate.place.point.entity_id.clone(),
+                    ))
+                {
                     output.edges.push(ServingEdgeRecord {
                         from_entity_id: target.entity_id.clone(),
                         edge_type: NEAR_PLACE_EDGE.to_string(),
@@ -148,7 +226,7 @@ pub fn derive_proximity_records(
         }
     }
 
-    output
+    Ok(output)
 }
 
 fn existing_near_place_edges(existing_edges: &[ServingEdgeRecord]) -> HashSet<(String, String)> {
@@ -157,6 +235,49 @@ fn existing_near_place_edges(existing_edges: &[ServingEdgeRecord]) -> HashSet<(S
         .filter(|edge| edge.edge_type.eq_ignore_ascii_case(NEAR_PLACE_EDGE))
         .map(|edge| (edge.from_entity_id.clone(), edge.to_entity_id.clone()))
         .collect()
+}
+
+fn indexed_places(places: &[PlacePoint]) -> RTree<IndexedPlace> {
+    RTree::bulk_load(
+        places
+            .iter()
+            .enumerate()
+            .map(|(index, place)| IndexedPlace {
+                point: [place.point.longitude, place.point.latitude],
+                index,
+            })
+            .collect(),
+    )
+}
+
+fn candidate_places<'a>(
+    target: &EntityPoint,
+    places: &'a [PlacePoint],
+    place_index: &RTree<IndexedPlace>,
+    max_distance_km: f64,
+) -> Vec<&'a PlacePoint> {
+    if max_distance_km <= 0.0 {
+        return Vec::new();
+    }
+    let lat_delta = km_to_lat_degrees(max_distance_km);
+    let lng_delta = km_to_lng_degrees(max_distance_km, target.latitude);
+    let envelope = AABB::from_corners(
+        [target.longitude - lng_delta, target.latitude - lat_delta],
+        [target.longitude + lng_delta, target.latitude + lat_delta],
+    );
+    place_index
+        .locate_in_envelope_intersecting(&envelope)
+        .filter_map(|indexed| places.get(indexed.index))
+        .collect()
+}
+
+fn km_to_lat_degrees(distance_km: f64) -> f64 {
+    distance_km / 110.574
+}
+
+fn km_to_lng_degrees(distance_km: f64, latitude: f64) -> f64 {
+    let latitude_scale = latitude.to_radians().cos().abs().max(0.01);
+    distance_km / (111.320 * latitude_scale)
 }
 
 fn derived_nearby_fact(
@@ -175,7 +296,7 @@ fn derived_nearby_fact(
         source_url: candidate.place.source_url.clone(),
         model: Some(DERIVED_MODEL.to_string()),
         skill_id: None,
-        learned_at: Utc::now(),
+        learned_at: latest_datetime(society.learned_at, candidate.place.point.learned_at),
     }
 }
 
@@ -238,10 +359,13 @@ fn place_points(
             let point = entity_point_from_rows(&entity.entity_id, &entity.name, rows)?;
             let place_types = text_tags(rows, "place.types");
             let category = text_fact(rows, "place.category");
-            let match_tokens = place_match_tokens(&point.name, &place_types, category.as_deref());
+            let fallback_match_tokens =
+                place_match_tokens(&point.name, &place_types, category.as_deref());
             Some(PlacePoint {
                 point,
-                match_tokens,
+                place_types,
+                category,
+                fallback_match_tokens,
                 source_url: best_source_url(rows),
             })
         })
@@ -255,32 +379,49 @@ fn is_place_entity(entity: &ServingEntityRecord, rows: &ServingEntityFactRows) -
         || has_fact_key(rows, "place.category")
 }
 
-fn proximity_fact_specs() -> Vec<ProximityFactSpec> {
+fn proximity_fact_specs() -> Result<Vec<ProximityFactSpec>, crate::dag_config::DagConfigError> {
     let policy = schema::ranking_policy();
     let registry = load_fact_registry_index().ok();
-    let mut specs = policy
-        .geo_distance_fact_keys
-        .iter()
-        .filter_map(|fact_key| {
-            let registry_entry = registry
-                .as_ref()
-                .and_then(|index| index.lookup(fact_key))
-                .cloned();
-            proximity_fact_spec(fact_key, policy.named_place_zero_score_km, registry_entry)
-        })
-        .collect::<Vec<_>>();
+    let category_config = load_nearby_place_category_config()?;
+    let mut specs = Vec::new();
+    for fact_key in &policy.geo_distance_fact_keys {
+        let registry_entry = registry
+            .as_ref()
+            .and_then(|index| index.lookup(fact_key))
+            .cloned();
+        let Some(category) = category_config.category_for_fact_key(fact_key) else {
+            return Err(crate::dag_config::DagConfigError::InvalidConfig(format!(
+                "geo distance fact key {fact_key} is missing from nearby_place_categories.json"
+            )));
+        };
+        if let Some(spec) = proximity_fact_spec(
+            fact_key,
+            policy.named_place_zero_score_km,
+            registry_entry,
+            Some(category),
+        ) {
+            specs.push(spec);
+        }
+    }
     remove_cross_category_tokens(&mut specs);
-    specs
+    Ok(specs
         .into_iter()
-        .filter(|spec| !spec.match_tokens.is_empty())
-        .collect()
+        .filter(|spec| match &spec.matcher {
+            ProximityMatcher::Category(_) => true,
+            ProximityMatcher::Tokens(tokens) => !tokens.is_empty(),
+        })
+        .collect())
 }
 
 fn proximity_fact_spec(
     fact_key: &str,
-    max_distance_km: f64,
+    fallback_max_distance_km: f64,
     registry_entry: Option<FactRegistryEntry>,
+    category: Option<&NearbyPlaceCategory>,
 ) -> Option<ProximityFactSpec> {
+    let max_distance_km = category
+        .map(|category| category.max_distance_km)
+        .unwrap_or(fallback_max_distance_km);
     if !max_distance_km.is_finite() || max_distance_km <= 0.0 {
         return None;
     }
@@ -294,7 +435,7 @@ fn proximity_fact_spec(
             seed_text.push(template.clone());
         }
     }
-    let match_tokens = token_set(seed_text.join(" "));
+    let fallback_match_tokens = token_set(seed_text.join(" "));
     let fallback_preference = readable_key(fact_key);
     let (
         display_template,
@@ -328,29 +469,83 @@ fn proximity_fact_spec(
                 Vec::new(),
             )
         });
+    let matcher = category
+        .map(|category| {
+            ProximityMatcher::Category(CategoryMatcher {
+                category_aliases: normalized_values(&category.category_aliases),
+                accepted_place_types: normalized_values(&category.accepted_place_types),
+                name_markers: normalized_values(&category.name_markers),
+                name_block_markers: normalized_values(&category.name_block_markers),
+                allow_missing_place_types: category.allow_missing_place_types,
+            })
+        })
+        .unwrap_or(ProximityMatcher::Tokens(fallback_match_tokens));
     Some(ProximityFactSpec {
         fact_key: fact_key.to_string(),
         max_distance_km,
-        match_tokens,
         display_template,
         answers_preferences,
         scoring_direction,
         scoring_weight,
         scoring_thresholds,
+        matcher,
+        chainable: category.map(category_chainable).unwrap_or(true),
     })
+}
+
+fn category_chainable(category: &NearbyPlaceCategory) -> bool {
+    if category
+        .relation_class
+        .as_deref()
+        .is_some_and(|value| value.eq_ignore_ascii_case("risk_externality"))
+    {
+        return false;
+    }
+    category.chainable.unwrap_or(true)
 }
 
 fn remove_cross_category_tokens(specs: &mut [ProximityFactSpec]) {
     let mut token_counts = HashMap::<String, usize>::new();
     for spec in specs.iter() {
-        for token in &spec.match_tokens {
-            *token_counts.entry(token.clone()).or_default() += 1;
+        if let ProximityMatcher::Tokens(tokens) = &spec.matcher {
+            for token in tokens {
+                *token_counts.entry(token.clone()).or_default() += 1;
+            }
         }
     }
     for spec in specs {
-        spec.match_tokens
-            .retain(|token| token_counts.get(token).copied().unwrap_or_default() == 1);
+        if let ProximityMatcher::Tokens(tokens) = &mut spec.matcher {
+            tokens.retain(|token| token_counts.get(token).copied().unwrap_or_default() == 1);
+        }
     }
+}
+
+fn load_nearby_place_category_config(
+) -> Result<NearbyPlaceCategoryFile, crate::dag_config::DagConfigError> {
+    load_json(&dag_root().join("nearby_place_categories.json"))
+}
+
+fn normalized_values(values: &[String]) -> Vec<String> {
+    values
+        .iter()
+        .map(|value| normalize_category_key(value))
+        .filter(|value| !value.is_empty())
+        .collect()
+}
+
+fn normalize_category_key(value: &str) -> String {
+    value.trim().to_ascii_lowercase().replace([' ', '-'], "_")
+}
+
+fn normalize_category_text(value: &str) -> String {
+    value.trim().to_ascii_lowercase()
+}
+
+fn contains_category_text(haystack: &str, needle: &str) -> bool {
+    if needle.trim().is_empty() {
+        return false;
+    }
+    haystack.contains(&needle.replace('_', " ")) || haystack.replace(' ', "_").contains(needle)
 }
 
 fn non_empty_or(values: Vec<String>, fallback: String) -> Vec<String> {
@@ -383,6 +578,7 @@ fn entity_point_from_rows(
         latitude: latitude.value,
         longitude: longitude.value,
         confidence: latitude.confidence.min(longitude.confidence),
+        learned_at: latest_datetime(latitude.learned_at, longitude.learned_at),
     })
 }
 
@@ -390,6 +586,7 @@ fn entity_point_from_rows(
 struct CoordinateValue {
     value: f64,
     confidence: f32,
+    learned_at: DateTime<Utc>,
 }
 
 fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<CoordinateValue> {
@@ -401,17 +598,76 @@ fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<Coord
                 numeric_value(&fact.value).map(|value| CoordinateValue {
                     value,
                     confidence: fact.confidence,
+                    learned_at: fact.learned_at,
                 })
             })
             .max_by(|left, right| left.confidence.total_cmp(&right.confidence))
     })
 }
 
+fn latest_datetime(left: DateTime<Utc>, right: DateTime<Utc>) -> DateTime<Utc> {
+    left.max(right)
+}
+
 fn place_matches_spec(place: &PlacePoint, spec: &ProximityFactSpec) -> bool {
-    if spec.match_tokens.is_empty() || place.match_tokens.is_empty() {
+    match &spec.matcher {
+        ProximityMatcher::Category(category) => place_matches_category(place, category),
+        ProximityMatcher::Tokens(tokens) => {
+            if tokens.is_empty() || place.fallback_match_tokens.is_empty() {
+                return false;
+            }
+            tokens.is_subset(&place.fallback_match_tokens)
+        }
+    }
+}
+
+fn place_matches_category(place: &PlacePoint, category: &CategoryMatcher) -> bool {
+    let place_name = normalize_category_text(&place.point.name);
+    if category
+        .name_block_markers
+        .iter()
+        .any(|blocked| contains_category_text(&place_name, blocked))
+    {
         return false;
     }
-    spec.match_tokens.is_subset(&place.match_tokens)
+
+    let place_types = place
+        .place_types
+        .iter()
+        .map(|value| normalize_category_key(value))
+        .collect::<HashSet<_>>();
+    let place_category = place.category.as_deref().map(normalize_category_key);
+
+    if let Some(place_category) = place_category.as_ref() {
+        if category
+            .category_aliases
+            .iter()
+            .any(|alias| alias == place_category)
+        {
+            return true;
+        }
+    }
+    if category
+        .accepted_place_types
+        .iter()
+        .any(|accepted| place_types.contains(accepted))
+    {
+        return true;
+    }
+    if category
+        .name_markers
+        .iter()
+        .any(|marker| contains_category_text(&place_name, marker))
+    {
+        return true;
+    }
+    if category.allow_missing_place_types && place_types.is_empty() {
+        return category
+            .category_aliases
+            .iter()
+            .any(|alias| contains_category_text(&place_name, alias));
+    }
+    false
 }
 
 fn existing_nearby_mentions(
@@ -589,7 +845,7 @@ mod tests {
         ];
         let index = ServingFactIndex::from_records(facts, Vec::new());
 
-        let derived = derive_proximity_records(&entities, &index, &[]);
+        let derived = derive_proximity_records(&entities, &index, &[]).unwrap();
 
         assert!(derived.facts.iter().any(|fact| {
             fact.entity_id == "society:test"
@@ -646,13 +902,68 @@ mod tests {
         }];
         let index = ServingFactIndex::from_records(facts, Vec::new());
 
-        let derived = derive_proximity_records(&entities, &index, &existing_edges);
+        let derived = derive_proximity_records(&entities, &index, &existing_edges).unwrap();
 
         assert!(!derived.edges.iter().any(|edge| {
             edge.from_entity_id == "society:test"
                 && edge.edge_type == NEAR_PLACE_EDGE
                 && edge.to_entity_id == "place:generic:medical"
         }));
+    }
+
+    #[test]
+    fn uses_category_radius_policy_instead_of_global_named_place_radius() {
+        let entities = vec![
+            entity("society:test", "society", "Test Society"),
+            entity("place:tech:far-but-valid", "place", "Valid Tech Park"),
+            entity("place:park:too-far", "place", "Too Far Public Park"),
+        ];
+        let facts = vec![
+            coord("society:test", "geo.latitude", 12.985711),
+            coord("society:test", "geo.longitude", 77.746842),
+            coord("place:tech:far-but-valid", "geo.latitude", 12.985711),
+            coord("place:tech:far-but-valid", "geo.longitude", 77.84),
+            text("place:tech:far-but-valid", "place.name", "Valid Tech Park"),
+            tags(
+                "place:tech:far-but-valid",
+                "place.types",
+                &["corporate_office"],
+            ),
+            coord("place:park:too-far", "geo.latitude", 12.985711),
+            coord("place:park:too-far", "geo.longitude", 77.786),
+            text("place:park:too-far", "place.name", "Too Far Public Park"),
+            tags("place:park:too-far", "place.types", &["park"]),
+        ];
+        let index = ServingFactIndex::from_records(facts, Vec::new());
+
+        let derived = derive_proximity_records(&entities, &index, &[]).unwrap();
+
+        assert!(derived.facts.iter().any(|fact| {
+            fact.entity_id == "society:test"
+                && fact.fact_key == "nearby_tech_parks"
+                && fact
+                    .value_text
+                    .as_deref()
+                    .is_some_and(|text| text.contains("Valid Tech Park"))
+        }));
+        assert!(!derived.facts.iter().any(|fact| {
+            fact.entity_id == "society:test"
+                && fact.fact_key == "nearby_public_parks"
+                && fact
+                    .value_text
+                    .as_deref()
+                    .is_some_and(|text| text.contains("Too Far Public Park"))
+        }));
+    }
+
+    #[test]
+    fn risk_externality_categories_are_direct_only() {
+        let config = load_nearby_place_category_config().unwrap();
+        let category = config.category_for_fact_key("nearby_lakes").unwrap();
+        let spec = proximity_fact_spec("nearby_lakes", 5.0, None, Some(category)).unwrap();
+
+        assert!(!spec.chainable);
+        assert_eq!(spec.max_distance_km, 1.0);
     }
 
     fn entity(id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {

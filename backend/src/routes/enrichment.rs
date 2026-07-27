@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use crate::knowledge::edge::Relation;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
-use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Seller, Society};
+use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Society};
 use crate::serving::{ServingFactIndex, SocietyFactProjection};
 
 // ---------------------------------------------------------------------------
@@ -560,17 +560,6 @@ pub fn enrich_property_card(
     societies: &[Society],
     graph: &KnowledgeGraph,
 ) -> PropertyCard {
-    enrich_property_card_with_sellers(p, societies, graph, &[])
-}
-
-/// Enrich a Property into a PropertyCard with KG data and seller trust fields.
-/// When sellers slice is non-empty, populates completeness, documents, and verified status.
-pub fn enrich_property_card_with_sellers(
-    p: &Property,
-    societies: &[Society],
-    graph: &KnowledgeGraph,
-    sellers: &[Seller],
-) -> PropertyCard {
     let society_name = societies
         .iter()
         .find(|s| to_slug(&s.id) == to_slug(&p.society_id))
@@ -591,22 +580,6 @@ pub fn enrich_property_card_with_sellers(
     } else {
         p.hero_image.clone()
     };
-
-    // Look up seller trust fields if seller_id is set and sellers are provided
-    let (seller_completeness_pct, documents_provided, seller_verified) =
-        if let Some(ref seller_id) = p.seller_id {
-            if let Some(seller) = sellers.iter().find(|s| s.id == *seller_id) {
-                (
-                    Some(seller.completeness_pct()),
-                    seller.documents_provided.clone(),
-                    Some(seller.verified),
-                )
-            } else {
-                (None, Vec::new(), None)
-            }
-        } else {
-            (None, Vec::new(), None)
-        };
 
     // Extract root_source and project_status from the society KG node
     let (root_source, project_status, project_status_display) =
@@ -661,10 +634,6 @@ pub fn enrich_property_card_with_sellers(
         society_land_acres: None,
         open_space_pct: None,
         units_per_acre: None,
-        seller_id: p.seller_id.clone(),
-        seller_completeness_pct,
-        documents_provided,
-        seller_verified,
         root_source,
         project_status,
         project_status_display,
