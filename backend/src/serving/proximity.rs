@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
 use crate::dag_config::{load_fact_registry_index, scoring_direction_from_hint, FactRegistryEntry};
 use crate::knowledge::FactValue;
@@ -42,6 +42,7 @@ struct EntityPoint {
     latitude: f64,
     longitude: f64,
     confidence: f32,
+    learned_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -175,7 +176,7 @@ fn derived_nearby_fact(
         source_url: candidate.place.source_url.clone(),
         model: Some(DERIVED_MODEL.to_string()),
         skill_id: None,
-        learned_at: Utc::now(),
+        learned_at: latest_datetime(society.learned_at, candidate.place.point.learned_at),
     }
 }
 
@@ -383,6 +384,7 @@ fn entity_point_from_rows(
         latitude: latitude.value,
         longitude: longitude.value,
         confidence: latitude.confidence.min(longitude.confidence),
+        learned_at: latest_datetime(latitude.learned_at, longitude.learned_at),
     })
 }
 
@@ -390,6 +392,7 @@ fn entity_point_from_rows(
 struct CoordinateValue {
     value: f64,
     confidence: f32,
+    learned_at: DateTime<Utc>,
 }
 
 fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<CoordinateValue> {
@@ -401,10 +404,15 @@ fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<Coord
                 numeric_value(&fact.value).map(|value| CoordinateValue {
                     value,
                     confidence: fact.confidence,
+                    learned_at: fact.learned_at,
                 })
             })
             .max_by(|left, right| left.confidence.total_cmp(&right.confidence))
     })
+}
+
+fn latest_datetime(left: DateTime<Utc>, right: DateTime<Utc>) -> DateTime<Utc> {
+    left.max(right)
 }
 
 fn place_matches_spec(place: &PlacePoint, spec: &ProximityFactSpec) -> bool {
