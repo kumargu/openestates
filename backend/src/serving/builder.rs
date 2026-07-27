@@ -16,6 +16,7 @@ use super::parquet::{
     write_edges_parquet, write_entities_parquet, write_facts_parquet,
     write_search_metadata_parquet, ParquetWriteError,
 };
+use super::proximity::derive_proximity_records;
 use super::tantivy_index::{TantivyIndexError, TantivyRecallIndex};
 use super::{
     BundleArtifact, BundleArtifactKind, ServingBundleManifest, ServingBundleSchema,
@@ -57,9 +58,6 @@ impl ServingBundleBuilder {
         let search_metadata =
             serving_search_metadata_records(&current_facts, &current_annotations)?;
         let edges = serving_edge_records(&records.edges);
-        if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
-            eprintln!("preference coverage report skipped: {err}");
-        }
         self.build_from_serving_records(entities, facts, search_metadata, edges, bundle_version)
             .await
     }
@@ -67,13 +65,22 @@ impl ServingBundleBuilder {
     async fn build_from_serving_records(
         &self,
         entities: Vec<ServingEntityRecord>,
-        facts: Vec<ServingFactRecord>,
-        search_metadata: Vec<ServingSearchMetadataRecord>,
-        edges: Vec<ServingEdgeRecord>,
+        mut facts: Vec<ServingFactRecord>,
+        mut search_metadata: Vec<ServingSearchMetadataRecord>,
+        mut edges: Vec<ServingEdgeRecord>,
         bundle_version: impl Into<String>,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
         let mut artifacts = Vec::new();
+        let base_index =
+            super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
+        let derived = derive_proximity_records(&entities, &base_index, &edges)?;
+        facts.extend(derived.facts);
+        search_metadata.extend(derived.search_metadata);
+        edges.extend(derived.edges);
+        if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
+            eprintln!("preference coverage report skipped: {err}");
+        }
 
         let entity_key =
             AssetPathBuilder::serving_bundle_key(&bundle_version, "entities/part-00000.parquet");
