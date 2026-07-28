@@ -14,6 +14,11 @@ import {
   placeMatchesProofFocus,
   scaleForStory,
 } from "../src/lib/nearbyPlateProjection.ts";
+import {
+  canShowBuyerSource,
+  canShowSourceProvenance,
+  displaySourceType,
+} from "../src/lib/evidence.ts";
 import { resolveBuyerProjectStatus } from "../src/lib/projectStatus.ts";
 import { propertySceneImageAt } from "../src/lib/propertyScene.ts";
 import { propertyMapContextFromSurfaceScene } from "../src/lib/surfaceSceneProjection.ts";
@@ -26,6 +31,26 @@ const emptyMapContext: PropertyMapContext = {
   },
   places: [],
 };
+
+test("source display metadata drives buyer-visible source labels", () => {
+  const visible = { label: "Open Registry", buyerVisible: true, provenanceVisible: true };
+  assert.equal(displaySourceType("NewPublicSource", visible), "Open Registry");
+  assert.equal(canShowBuyerSource("NewPublicSource", visible), true);
+  assert.equal(canShowSourceProvenance("NewPublicSource", visible), true);
+});
+
+test("source display metadata hides internal sources without TS source switches", () => {
+  const hidden = { label: "Computed", buyerVisible: false, provenanceVisible: false };
+  assert.equal(displaySourceType("Computed", hidden), null);
+  assert.equal(canShowBuyerSource("Computed", hidden), false);
+  assert.equal(canShowSourceProvenance("Computed", hidden), false);
+});
+
+test("source display keeps legacy RERA and Google visible for older payloads", () => {
+  assert.equal(displaySourceType("Rera"), "RERA");
+  assert.equal(displaySourceType("GoogleReview"), "Google");
+  assert.equal(canShowBuyerSource("Computed"), false);
+});
 
 test("proof focus URL contract round-trips through detail and surface paths", () => {
   const focus: ProofFocus = {

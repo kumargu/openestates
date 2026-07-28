@@ -4,7 +4,9 @@ use chrono::{DateTime, Utc};
 use geojson::{GeoJson, Value as GeoJsonValue};
 use serde::Serialize;
 
-use crate::dag_config::{UiSurfaceConfig, UiSurfaceLayerRule};
+use crate::dag_config::{
+    source_display_metadata, SourceDisplayMetadata, UiSurfaceConfig, UiSurfaceLayerRule,
+};
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
@@ -159,6 +161,7 @@ pub struct SceneReceipt {
     pub fact_key: String,
     pub claim: String,
     pub source_type: String,
+    pub source_display: SourceDisplayMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub learned_at: DateTime<Utc>,
@@ -748,16 +751,18 @@ fn feature_candidate_from_fact(
     let review_count = place
         .and_then(|place| place.review_count)
         .or(parsed.review_count);
+    let source_type = if fact.source_type.trim().is_empty() {
+        "Unknown".to_string()
+    } else {
+        fact.source_type.clone()
+    };
     let receipt = SceneReceipt {
         id: receipt_id(fact, source.index),
         entity_id: fact.entity_id.clone(),
         fact_key: fact.fact_key.clone(),
         claim,
-        source_type: if fact.source_type.trim().is_empty() {
-            "Unknown".to_string()
-        } else {
-            fact.source_type.clone()
-        },
+        source_display: source_display_metadata(&source_type),
+        source_type,
         source_url: fact.source_url.clone(),
         learned_at: fact.learned_at,
         confidence: fact.confidence,

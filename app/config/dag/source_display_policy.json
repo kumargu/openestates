@@ -1,0 +1,59 @@
+{
+  "version": 1,
+  "default": {
+    "label": "Source",
+    "feedbackLabel": "Community",
+    "buyerVisible": false,
+    "provenanceVisible": false
+  },
+  "sources": [
+    {
+      "id": "rera",
+      "aliases": [],
+      "label": "RERA",
+      "feedbackLabel": "RERA",
+      "buyerVisible": true,
+      "provenanceVisible": true
+    },
+    {
+      "id": "google",
+      "aliases": ["GooglePlaces", "GooglePlacePhotos"],
+      "label": "Google",
+      "feedbackLabel": "Google review",
+      "buyerVisible": true,
+      "provenanceVisible": true
+    },
+    {
+      "id": "openstreetmap",
+      "aliases": ["osm"],
+      "label": "OpenStreetMap",
+      "feedbackLabel": "OpenStreetMap",
+      "buyerVisible": true,
+      "provenanceVisible": true
+    },
+    {
+      "id": "opencity",
+      "aliases": ["open-data", "government"],
+      "label": "OpenCity",
+      "feedbackLabel": "OpenCity",
+      "buyerVisible": true,
+      "provenanceVisible": true
+    },
+    {
+      "id": "computed",
+      "aliases": ["Manual", "System", "OpenEstates"],
+      "label": "OpenEstates",
+      "feedbackLabel": "Community",
+      "buyerVisible": false,
+      "provenanceVisible": false
+    },
+    {
+      "id": "reddit",
+      "aliases": ["RedditTheme"],
+      "label": "Reddit",
+      "feedbackLabel": "Reddit",
+      "buyerVisible": false,
+      "provenanceVisible": false
+    }
+  ]
+}

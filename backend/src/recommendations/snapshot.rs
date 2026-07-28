@@ -58,6 +58,7 @@ mod tests {
             header_meta: "1 facts · Google".to_string(),
             confidence_pct: 80,
             source_types: vec!["Google".to_string()],
+            source_displays: vec![crate::dag_config::source_display_metadata("Google")],
             entity_ids: vec!["society:sample".to_string()],
             presentation: crate::routes::properties::EvidencePresentation {
                 variant: "fact_list".to_string(),
@@ -76,6 +77,7 @@ mod tests {
                     source_url: None,
                     attributions: Vec::new(),
                     source_type: "Google".to_string(),
+                    source_display: crate::dag_config::source_display_metadata("Google"),
                     confidence_pct: 80,
                     learned_at: String::new(),
                 })

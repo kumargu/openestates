@@ -12,6 +12,10 @@ use std::hash::{Hash, Hasher};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::dag_config::{
+    source_display_metadata, source_feedback_label_for_types, SourceDisplayMetadata,
+};
+
 /// Target length for buyer-facing community pulse paragraphs.
 pub const COMMUNITY_PARAGRAPH_MAX_WORDS: usize = 85;
 
@@ -19,6 +23,7 @@ pub const COMMUNITY_PARAGRAPH_MAX_WORDS: usize = 85;
 pub struct CommunityPulseQuote {
     pub text: String,
     pub source_type: String,
+    pub source_display: SourceDisplayMetadata,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_url: Option<String>,
     pub polarity: String,
@@ -597,22 +602,12 @@ pub(crate) fn compose_community_paragraph(input: &CommunitySummaryInput<'_>) -> 
 }
 
 pub fn source_label_for_types(source_types: &[String]) -> String {
-    let set = source_types.iter().cloned().collect::<BTreeSet<_>>();
-    source_label_for_type_set(&set)
+    source_feedback_label_for_types(source_types)
 }
 
 fn source_label_for_type_set(source_types: &BTreeSet<String>) -> String {
-    if source_types.is_empty() {
-        "Community".to_string()
-    } else if source_types.len() == 1 && source_types.contains("Google") {
-        "Google review".to_string()
-    } else if source_types.len() == 1 && source_types.contains("Reddit") {
-        "Reddit".to_string()
-    } else if source_types.contains("Google") {
-        "Google review".to_string()
-    } else {
-        "Community".to_string()
-    }
+    let source_types = source_types.iter().cloned().collect::<Vec<_>>();
+    source_feedback_label_for_types(&source_types)
 }
 
 pub fn sentiment_band_from_rating(rating: f64) -> &'static str {
@@ -692,6 +687,7 @@ fn bucket_review_quotes(
             CommunityPulseQuote {
                 text: text.clone(),
                 source_type: source_type.clone(),
+                source_display: source_display_metadata(&source_type),
                 source_url: source_url.clone(),
                 polarity,
             }
