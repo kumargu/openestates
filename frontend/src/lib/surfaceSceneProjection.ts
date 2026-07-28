@@ -47,6 +47,12 @@ export function propertyMapContextFromSurfaceScene(
       .map((layer) => ({
         id: layer.id,
         label: layer.label,
+        icon: layer.icon,
+        tone: layer.tone,
+        scaleMode: layer.scaleMode,
+        priority: layer.priority,
+        showReviewMetrics: layer.showReviewMetrics,
+        features: layer.features,
         rank: layer.rank,
         enabledByDefault: layer.enabledByDefault,
       }))

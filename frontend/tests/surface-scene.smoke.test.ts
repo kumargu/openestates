@@ -38,11 +38,17 @@ test("surface scene payload can drive the around-this-home plate", () => {
       {
         id: "metro",
         label: "Metro",
+        icon: "train",
+        tone: "positive",
         family: "access",
         renderKind: "pin",
         relationClass: "access",
+        scaleMode: "nearby",
+        priority: 1,
+        showReviewMetrics: true,
         enabledByDefault: true,
         rank: 1,
+        features: ["around_this_home:metro:place-metro"],
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",
@@ -50,11 +56,17 @@ test("surface scene payload can drive the around-this-home plate", () => {
       {
         id: "schools",
         label: "Schools",
+        icon: "graduation-cap",
+        tone: "positive",
         family: "access",
         renderKind: "pin",
         relationClass: "access",
+        scaleMode: "nearby",
+        priority: 2,
+        showReviewMetrics: true,
         enabledByDefault: true,
         rank: 2,
+        features: ["around_this_home:schools:place-school"],
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",
@@ -139,6 +151,9 @@ test("surface scene payload can drive the around-this-home plate", () => {
   assert.ok(context);
   assert.equal(hasAroundThisHomePlate(context), true);
   assert.deepEqual(availableLayers(context), ["metro", "schools"]);
+  assert.equal(context.layers?.[0]?.icon, "train");
+  assert.equal(context.layers?.[0]?.scaleMode, "nearby");
+  assert.deepEqual(context.layers?.[0]?.features, ["around_this_home:metro:place-metro"]);
 
   const home = resolveHomeAnchor(context);
   assert.deepEqual(home, {
@@ -181,11 +196,17 @@ test("surface scene line features do not break legacy point projection", () => {
       {
         id: "drains",
         label: "Drains",
+        icon: "flag",
+        tone: "risk",
         family: "risk",
         renderKind: "line",
         relationClass: "risk_externality",
+        scaleMode: "area",
+        priority: 1,
+        showReviewMetrics: false,
         enabledByDefault: true,
         rank: 1,
+        features: ["flooding:drains:place-stormwater-drain-one"],
         availableCount: 1,
         shownCount: 1,
         fillState: "filled",

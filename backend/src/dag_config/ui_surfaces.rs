@@ -66,6 +66,10 @@ pub struct UiSurfaceLayerRule {
     #[serde(default)]
     pub icon: Option<String>,
     #[serde(default)]
+    pub tone: Option<String>,
+    #[serde(default, rename = "scaleMode")]
+    pub scale_mode: Option<String>,
+    #[serde(default)]
     pub sort: Option<String>,
     #[serde(default, rename = "maxItems")]
     pub max_items: Option<usize>,
@@ -144,6 +148,22 @@ fn validate_ui_surfaces(config: &UiSurfacesFile) -> Result<(), DagConfigError> {
                     surface.id
                 )));
             }
+            if let Some(tone) = layer.tone.as_deref() {
+                if !matches!(tone, "positive" | "neutral" | "caution" | "risk") {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} has unsupported tone {tone}",
+                        surface.id, layer.id
+                    )));
+                }
+            }
+            if let Some(scale_mode) = layer.scale_mode.as_deref() {
+                if !matches!(scale_mode, "nearby" | "area") {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "surface {} layer {} has unsupported scaleMode {scale_mode}",
+                        surface.id, layer.id
+                    )));
+                }
+            }
             if layer.fact_keys.is_empty() && layer.edge_types.is_empty() {
                 return Err(DagConfigError::InvalidConfig(format!(
                     "surface {} layer {} has no factKeys or edgeTypes",
@@ -219,5 +239,47 @@ mod tests {
                 .iter()
                 .all(|layer| layer.relation_class == "risk_externality"));
         }
+    }
+
+    #[test]
+    fn ui_surfaces_reject_invalid_layer_display_metadata() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("ui_surfaces.json");
+
+        std::fs::write(&path, invalid_layer_display_config("\"tone\": \"loud\","))
+            .expect("write temp config");
+        assert!(load_ui_surfaces_from_path(&path).is_err());
+
+        std::fs::write(
+            &path,
+            invalid_layer_display_config("\"scaleMode\": \"regional\","),
+        )
+        .expect("write temp config");
+        assert!(load_ui_surfaces_from_path(&path).is_err());
+    }
+
+    fn invalid_layer_display_config(display_override: &str) -> String {
+        format!(
+            r#"{{
+              "version": 1,
+              "surfaces": [{{
+                "id": "around_this_home",
+                "title": "Around this home",
+                "scene": {{
+                  "anchor": {{ "entityRef": "society" }},
+                  "layers": [{{
+                    "id": "metro",
+                    "label": "Metro",
+                    "factKeys": ["nearby_metro_stations"],
+                    "family": "access",
+                    "relationClass": "access",
+                    "renderKind": "pin",
+                    {display_override}
+                    "maxItems": 3
+                  }}]
+                }}
+              }}]
+            }}"#
+        )
     }
 }
