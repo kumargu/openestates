@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Baseline product-semantic hardcoding audit for DAG convergence.
+"""Warning-only product-semantic hardcoding audit for DAG convergence.
 
-This M0 harness is warning-only. It intentionally scans code, config, docs,
-and tests, then classifies findings so later milestones can distinguish runtime
-product semantics from structural code, test fixtures, and known migration debt.
+This harness is warning-only. It intentionally scans code, config, docs, and
+tests, then classifies findings so reviewers can distinguish runtime product
+semantics from structural code, test fixtures, and known migration debt.
 """
 
 from __future__ import annotations
@@ -36,6 +36,7 @@ DEFAULT_SCAN_ROOTS = (
 )
 
 REQUIRED_CONFIG_FILES = (
+    "app/config/dag/area_tracker.json",
     "app/config/dag/search_intent.json",
     "app/config/dag/search_guardrails.json",
     "app/config/dag/nearby_place_categories.json",
@@ -44,6 +45,7 @@ REQUIRED_CONFIG_FILES = (
     "app/config/dag/scoring_policy.json",
     "app/config/dag/fact_registry.json",
     "app/config/dag/resolution_policies.json",
+    "app/config/dag/source_display_policy.json",
     "app/config/dag/manifest.json",
 )
 
@@ -149,6 +151,7 @@ CATEGORY_PRIORITY = {
     "policy constants": 0,
     "policy keys": 0,
     "warning/red-flag terms": 0,
+    "area tracker product terms": 0,
     "source labels": 1,
     "map layer names": 2,
     "recommendation branch names": 3,
@@ -200,6 +203,14 @@ ARRAY_POLICY_LITERAL = re.compile(
 
 RUNTIME_POLICY_EXTENSIONS = {".rs", ".ts", ".tsx", ".py"}
 
+APPROVED_LOCATION_NOTES = (
+    "`app/config/dag`",
+    "tests and fixtures",
+    "rendering primitives where labels/icons are structural",
+    "docs",
+)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -245,6 +256,7 @@ def collect_terms(root: Path) -> list[Term]:
     dag = root / "app" / "config" / "dag"
     terms: set[Term] = set()
 
+    add_area_tracker_terms(terms, read_json(dag / "area_tracker.json"))
     add_search_intent_terms(terms, read_json(dag / "search_intent.json"))
     add_policy_terms(terms, read_json(dag / "search_guardrails.json"), "search guardrails")
     add_nearby_category_terms(terms, read_json(dag / "nearby_place_categories.json"))
@@ -253,6 +265,7 @@ def collect_terms(root: Path) -> list[Term]:
     add_scoring_policy_terms(terms, read_json(dag / "scoring_policy.json"))
     add_fact_registry_terms(terms, read_json(dag / "fact_registry.json"))
     add_policy_terms(terms, read_json(dag / "resolution_policies.json"), "resolution policies")
+    add_policy_terms(terms, read_json(dag / "source_display_policy.json"), "source labels")
     add_manifest_terms(terms, read_json(dag / "manifest.json"))
     add_source_terms(terms, dag / "source_adapters")
     add_source_terms(terms, dag / "source_scopes")
@@ -267,7 +280,9 @@ def collect_terms(root: Path) -> list[Term]:
 
 def dedupe_terms(terms: set[Term]) -> list[Term]:
     by_value: dict[str, Term] = {}
-    for term in terms:
+    for term in sorted(
+        terms, key=lambda item: (item.value, category_rank(item.category), item.category)
+    ):
         current = by_value.get(term.value)
         if current is None or category_rank(term.category) < category_rank(current.category):
             by_value[term.value] = term
@@ -330,6 +345,18 @@ def add_policy_terms(terms: set[Term], value: object, category: str) -> None:
         for key, item in value.items():
             add_term(terms, key, "policy keys")
             add_policy_terms(terms, item, category)
+
+
+def add_area_tracker_terms(terms: set[Term], data: object) -> None:
+    if not isinstance(data, dict):
+        return
+    add_policy_terms(terms, data.get("fallbacks"), "area tracker product terms")
+    add_policy_terms(terms, data.get("sort"), "area tracker product terms")
+    for metric in data.get("metrics", []):
+        if not isinstance(metric, dict):
+            continue
+        for key in ("id", "fact_key", "label", "api_field", "value_type"):
+            add_nested_strings(terms, metric.get(key), "area tracker product terms")
 
 
 def add_search_intent_terms(terms: set[Term], data: object) -> None:
@@ -662,6 +689,7 @@ def print_markdown(root: Path, terms: list[Term], findings: list[Finding], max_f
     print(f"- Root: `{root}`")
     print(f"- Config-derived terms: {len(terms)}")
     print(f"- Findings: {len(findings)}")
+    print(f"- Approved locations: {', '.join(APPROVED_LOCATION_NOTES)}")
     print()
     print("## Summary By Classification")
     print()

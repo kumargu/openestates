@@ -25,15 +25,21 @@ The repo already has substantial config-backed search semantics in `app/config/d
 
 ## Review Command
 
-Run:
+Run the broad DAG convergence audit:
 
 ```bash
-python3 scripts/audit_search_hardcoding.py
+python3 scripts/audit_dag_convergence.py --max-findings 0
 ```
 
-The command is warning-only. It derives scan terms from DAG config and scans Rust/TypeScript for buyer/product vocabulary outside approved config, test, and rendering locations. It should stay non-blocking until false positives are reviewed.
+The compatibility command below delegates to the same broad audit:
 
-Current warning baseline from this pass:
+```bash
+python3 scripts/audit_search_hardcoding.py --max-findings 0
+```
+
+The command is warning-only. It derives scan terms from DAG config and scans Rust, TypeScript, Python, config, docs, and tests for buyer/product vocabulary outside approved config, test, and rendering locations. It should stay non-blocking until false positives are reviewed.
+
+Historical search-only baseline from this pass, before M7 broadened the compatibility command:
 
 ```text
 Config-derived terms: 78
