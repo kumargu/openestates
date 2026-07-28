@@ -640,6 +640,10 @@ pub fn enrich_property_card(
         home_state_display: None,
         builder_delivery_display,
         data_freshness,
+        floor_plan_preview_url: None,
+        plan_carpet_area_sqft: None,
+        plan_sale_area_sqft: None,
+        plan_configuration_type: None,
     }
 }
 

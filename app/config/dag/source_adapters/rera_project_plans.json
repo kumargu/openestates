@@ -1,0 +1,46 @@
+{
+  "_comment": "Buyer-facing RERA project plans. Offline brochure/site rendering produces preview refs and unit area facts. Request paths never download or OCR PDFs.",
+  "version": 1,
+  "source_id": "rera_project_plans",
+  "source_type": "Rera",
+  "trust_tier": "root",
+  "max_confidence": 0.9,
+  "request_path_policy": {
+    "allow_runtime_downloads": false,
+    "allow_runtime_pdf_parsing": false,
+    "allow_runtime_image_conversion": false,
+    "required_join_phase": "dag_materialization"
+  },
+  "serving_fact_key": "media.project_plan_frames",
+  "artifact_kinds": {
+    "site_overview": {
+      "buyer_surface": "property_detail",
+      "policy": "one_optimized_preview_only",
+      "exclude": ["technical_bbmp_site_sheet", "sanction_plan_bundle"]
+    },
+    "floor_plan": {
+      "buyer_surface": ["property_detail", "compare_floor_plan_mode"],
+      "policy": "one_representative_preview_per_configuration",
+      "required_fields": [
+        "configuration_type",
+        "bedroom_count",
+        "preview_url",
+        "carpet_area_sqft",
+        "sale_area_sqft"
+      ]
+    }
+  },
+  "promoted_fact_keys": [
+    "media.project_plan_frames",
+    "floor_plan_asset_count",
+    "site_plan_asset_count",
+    "available_configurations",
+    "has_1bhk",
+    "has_2bhk",
+    "has_3bhk",
+    "has_4bhk"
+  ],
+  "do_not_promote_fact_keys": [
+    "brochure_available"
+  ]
+}

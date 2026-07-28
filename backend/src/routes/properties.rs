@@ -135,6 +135,9 @@ pub struct PropertyDetail {
     /// Schematic neighborhood plate: home pin, nearby POIs, optional water context.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub map_context: Option<crate::routes::property_map::PropertyMapContext>,
+    /// Buyer-facing site overview + floor plans (RERA brochure promotions).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plans: Option<crate::plans::ProjectPlansView>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -2577,6 +2580,11 @@ pub async fn get_property(
             context
         })
         .or(legacy_map_context);
+    let plans = crate::plans::project_plans_for_society(
+        &entity_refs.society_entity_id,
+        &property.society_id,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    );
     Ok(Json(PropertyDetail {
         entity_refs,
         evidence,
@@ -2603,6 +2611,7 @@ pub async fn get_property(
         external_reviews,
         livability_brief,
         map_context,
+        plans,
     }))
 }
 
@@ -2648,23 +2657,23 @@ pub(crate) fn overlay_serving_google_reviews(
     society_id: &str,
     serving_facts: Option<&ServingFactIndex>,
 ) -> PropertyCard {
-    let Some(serving_facts) = serving_facts else {
-        return card;
-    };
-    let fallback = GoogleReviewEvidence {
-        rating: card.google_rating,
-        review_count: card.google_review_count,
-        reviews_url: card.google_reviews_url.clone(),
-    };
-    let evidence = SocietyFactProjection::from_index(serving_facts, society_id)
-        .project_google_reviews(fallback);
-    card.google_rating = evidence.rating;
-    card.google_review_count = evidence.review_count;
-    card.google_reviews_url = evidence.reviews_url;
-    card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
-        .project_home_state()
-        .display;
-    overlay_project_scale_facts(&mut card, serving_facts, society_id);
+    if let Some(serving_facts) = serving_facts {
+        let fallback = GoogleReviewEvidence {
+            rating: card.google_rating,
+            review_count: card.google_review_count,
+            reviews_url: card.google_reviews_url.clone(),
+        };
+        let evidence = SocietyFactProjection::from_index(serving_facts, society_id)
+            .project_google_reviews(fallback);
+        card.google_rating = evidence.rating;
+        card.google_review_count = evidence.review_count;
+        card.google_reviews_url = evidence.reviews_url;
+        card.home_state_display = SocietyFactProjection::from_index(serving_facts, society_id)
+            .project_home_state()
+            .display;
+        overlay_project_scale_facts(&mut card, serving_facts, society_id);
+    }
+    crate::plans::overlay_project_plans_on_card(&mut card, society_id, serving_facts);
     card
 }
 

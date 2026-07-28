@@ -140,6 +140,18 @@ pub struct PropertyCard {
     /// Data freshness — how recent and rich the underlying data is
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data_freshness: Option<DataFreshness>,
+    /// Representative floor-plan preview for this listing's BHK (compare-ready).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub floor_plan_preview_url: Option<String>,
+    /// Plan carpet area (sqft) for the matched configuration.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_carpet_area_sqft: Option<u32>,
+    /// Plan sale / super built-up area (sqft) for usable-space compare.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_sale_area_sqft: Option<u32>,
+    /// Matched configuration label, e.g. "3BHK".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub plan_configuration_type: Option<String>,
 }
 
 /// Minimal entity identity bundle attached to property/search/detail responses.

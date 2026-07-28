@@ -720,6 +720,10 @@ impl TextSearch {
                         home_state_display: None,
                         builder_delivery_display: None,
                         data_freshness: None,
+                        floor_plan_preview_url: None,
+                        plan_carpet_area_sqft: None,
+                        plan_sale_area_sqft: None,
+                        plan_configuration_type: None,
                     }
                 };
                 if let Some(serving_facts) = serving_facts {
@@ -968,6 +972,7 @@ pub(crate) fn enrich_card_from_serving_facts(
         .project_home_state()
         .display;
     crate::routes::enrichment::overlay_project_scale_facts(card, serving_facts, society_id);
+    crate::plans::overlay_project_plans_on_card(card, society_id, Some(serving_facts));
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {

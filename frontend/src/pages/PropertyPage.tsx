@@ -23,6 +23,7 @@ import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/
 import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import { ProjectPlansShelf, hasProjectPlans } from "../components/property/ProjectPlansShelf.tsx";
 import { BuilderHealthPanel } from "../components/property/BuilderHealthPanel.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import {
@@ -257,6 +258,7 @@ function PropertyPageBody({
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
+  const showProjectPlans = hasProjectPlans(data.plans);
   const recommendationBranches = recommendations?.items ?? data.recommendation_branches ?? [];
   const recommendationRuntimeLabel = [
     recommendations?.engine_version ?? data.recommendations?.engine_version,
@@ -392,6 +394,10 @@ function PropertyPageBody({
 
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
+          )}
+
+          {showProjectPlans && data.plans && (
+            <ProjectPlansShelf plans={data.plans} />
           )}
 
           {showLivabilityBrief && data.livability_brief && (

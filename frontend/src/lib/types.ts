@@ -48,6 +48,14 @@ export type PropertyCard = {
   builder_category?: "A" | "B" | "C";
   root_source?: string;
   project_status?: string;
+  /** Representative floor-plan preview for this listing BHK. */
+  floor_plan_preview_url?: string;
+  /** Plan carpet area for the matched configuration. */
+  plan_carpet_area_sqft?: number;
+  /** Plan sale area for usable-space compare. */
+  plan_sale_area_sqft?: number;
+  /** Matched configuration label, e.g. 3BHK. */
+  plan_configuration_type?: string;
   project_status_display?: string;
   home_state_display?: string;
   builder_delivery_display?: string;
@@ -237,6 +245,47 @@ export type PropertyDetailResponse = {
   livability_brief?: LivabilityBrief;
   /** Schematic neighborhood plate projected from nearby + water facts. */
   map_context?: PropertyMapContext;
+  /** Site overview + floor plans promoted from RERA brochure pages. */
+  plans?: ProjectPlansView;
+};
+
+export type SiteOverviewPlan = {
+  artifact_id: string;
+  label: string;
+  preview_url: string;
+  thumbnail_url?: string;
+  source_url?: string;
+  page?: number;
+  confidence: number;
+};
+
+export type FloorPlanVariant = {
+  id: string;
+  artifact_id: string;
+  configuration_type: string;
+  unit_type_label?: string;
+  bedroom_count: number;
+  tab_label: string;
+  title: string;
+  preview_url: string;
+  thumbnail_url?: string;
+  source_url?: string;
+  page?: number;
+  carpet_area_sqft?: number;
+  carpet_area_sqm?: number;
+  sale_area_sqft?: number;
+  sale_area_sqm?: number;
+  usable_area_ratio?: number;
+  confidence: number;
+};
+
+export type ProjectPlansView = {
+  provider: string;
+  coverage_quality: string;
+  source_url?: string;
+  registration_number?: string;
+  site_overview?: SiteOverviewPlan;
+  floor_plans: FloorPlanVariant[];
 };
 
 export type MapNearbyLayer =
