@@ -23,8 +23,10 @@ import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/
 import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
+import { ProjectPlansShelf, hasProjectPlans } from "../components/property/ProjectPlansShelf.tsx";
 import { BuilderHealthPanel } from "../components/property/BuilderHealthPanel.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
+import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import {
   detailEvidenceExcludeKindsForPlate,
   isRedundantHomeState,
@@ -257,6 +259,7 @@ function PropertyPageBody({
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
+  const showProjectPlans = hasProjectPlans(data.plans);
   const recommendationBranches = recommendations?.items ?? data.recommendation_branches ?? [];
   const recommendationRuntimeLabel = [
     recommendations?.engine_version ?? data.recommendations?.engine_version,
@@ -276,49 +279,63 @@ function PropertyPageBody({
         {p.hero_image && <meta property="og:image" content={p.hero_image} />}
         <script type="application/ld+json">{JSON.stringify(buildPropertyJsonLd(p))}</script>
       </Helmet>
-      <button
-        onClick={() => {
-          if (window.history.length > 1) {
-            navigate(-1);
-          } else {
-            navigate("/");
-          }
-        }}
-        className="back-link property-brief-back"
-      >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-        Back
-      </button>
-
       <section className="property-brief-hero">
-        <PropertySceneCard
-          title={p.title}
-          societyName={society?.name}
-          heroImage={p.hero_image}
-          images={p.images}
-          societyId={p.society_id}
-          chips={[
-            { label: "Area", value: p.area },
-            ...(hasKnownNumber(p.metro_distance_mins)
-              ? [{ label: "Metro", value: `${p.metro_distance_mins} min` }]
-              : []),
-          ]}
-        />
-
         <div className="property-brief-copy">
-          <h1>
-            {p.title}
-          </h1>
-          <p className="property-brief-location">
-            {society?.name ? `${society.name} · ` : ""}{p.area}, {p.city}
-          </p>
-
-          <div className="property-brief-price-row">
-            <strong>{formatPrice(p.price)}</strong>
-            {pricePerSqftLabel && <span>{pricePerSqftLabel}</span>}
+          <div className="property-brief-heading">
+            <div>
+              <h1>{p.title}</h1>
+              <p className="property-brief-location">
+                {society?.name ? `${society.name} · ` : ""}{p.area}, {p.city}
+              </p>
+            </div>
+            <div className="property-brief-actions" aria-label="Property actions">
+              <button
+                type="button"
+                className="property-action-link"
+                onClick={() => void navigator.clipboard?.writeText(window.location.href)}
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
+                  <path d="M12 16V4" />
+                  <path d="m7 9 5-5 5 5" />
+                </svg>
+                <span>Share</span>
+              </button>
+              <SaveHeartButton propertyId={p.id} className="property-action-link property-action-save" label="Save" />
+            </div>
           </div>
+
+          <div className="property-brief-summary">
+            <div>
+              <strong>{formatPrice(p.price)}</strong>
+              {pricePerSqftLabel && <span>{pricePerSqftLabel}</span>}
+            </div>
+            <div>
+              <strong>{p.bhk} BHK</strong>
+              {sizeLabel && <span>{sizeLabel} carpet</span>}
+            </div>
+            <button
+              type="button"
+              className="property-plan-cta"
+              onClick={() => navigate(`/property/${p.id}/plan`)}
+            >
+              Can I comfortably afford this?
+            </button>
+          </div>
+
+          <PropertySceneCard
+            title={p.title}
+            societyName={society?.name}
+            heroImage={p.hero_image}
+            images={p.images}
+            societyId={p.society_id}
+            chips={[
+              { label: "Area", value: p.area },
+              ...(hasKnownNumber(p.metro_distance_mins)
+                ? [{ label: "Metro", value: `${p.metro_distance_mins} min` }]
+                : []),
+            ]}
+          />
 
           <div className="property-proof-strip">
             <TrustBadge rootSource={data.root_source} compact />
@@ -392,6 +409,10 @@ function PropertyPageBody({
 
           {showApproachTrail && (
             <ApproachRoadTrail sections={detailEvidenceSections} />
+          )}
+
+          {showProjectPlans && data.plans && (
+            <ProjectPlansShelf plans={data.plans} />
           )}
 
           {showLivabilityBrief && data.livability_brief && (

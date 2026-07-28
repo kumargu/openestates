@@ -6603,7 +6603,37 @@
         "direction": "text_match",
         "weight": 0.9
       }
+    },
+    {
+      "fact_key": "media.project_plan_frames",
+      "bucket": "layout_space",
+      "label": "project plans",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "floor plan",
+        "site plan",
+        "unit plan",
+        "brochure plan"
+      ],
+      "answers_preferences": [
+        "floor plan",
+        "site overview",
+        "layout"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Rera"
+      ],
+      "display_template": "project plans available",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.4
+      }
     }
   ],
-  "fact_count": 103
+  "fact_count": 104
 }

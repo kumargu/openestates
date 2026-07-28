@@ -17,6 +17,7 @@ type WorkspaceSidebarProps = {
   compareHref: string;
   activeView: WorkspaceView;
   collapsed: boolean;
+  reduced: boolean;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -58,10 +59,10 @@ function workspaceNavItems(
   const detailHref = focusedId ? `/property/${focusedId}` : "/";
   const planHref = focusedId ? `/property/${focusedId}/plan` : "/";
   return [
-    { view: "browse" as const, label: "Home", icon: "browse" as const, to: "/" },
-    { view: "home" as const, label: "Detail", icon: "home" as const, to: detailHref },
+    { view: "browse" as const, label: "Discover", icon: "browse" as const, to: "/" },
+    { view: "home" as const, label: "Property", icon: "home" as const, to: detailHref },
     { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref },
-    { view: "plan" as const, label: "EMI Plan", icon: "plan" as const, to: planHref },
+    { view: "plan" as const, label: "Financial plan", icon: "plan" as const, to: planHref },
   ].map((item) => ({
     ...item,
     active: item.view === activeView,
@@ -90,12 +91,12 @@ export function WorkspaceSidebar({
   compareHref,
   activeView,
   collapsed,
+  reduced,
   onToggle,
   onFocus,
   onRemove,
 }: WorkspaceSidebarProps) {
   const navItems = workspaceNavItems(focusedId, compareHref, activeView);
-  const canRemove = homes.length > 2;
   const [showAllHomes, setShowAllHomes] = useState(false);
   const previewHomes = homes.slice(0, 4);
   const focusedHome = homes.find((home) => home.id === focusedId);
@@ -105,7 +106,7 @@ export function WorkspaceSidebar({
   const visibleHomes = showAllHomes ? homes : previewHomes;
 
   return (
-    <aside className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}`}>
+    <aside className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}>
       <div className="workspace-sidebar__brand-row">
         <Link to="/" className="workspace-sidebar__brand" aria-label="OpenEstates home">
           <span>O</span>
@@ -114,8 +115,9 @@ export function WorkspaceSidebar({
         <button
           type="button"
           className="workspace-sidebar__toggle"
-          aria-label={collapsed ? "Expand workspace sidebar" : "Collapse workspace sidebar"}
+          aria-label={reduced ? "Shortlist opens after you save a home" : collapsed ? "Expand shortlist sidebar" : "Collapse shortlist sidebar"}
           aria-expanded={!collapsed}
+          disabled={reduced}
           onClick={onToggle}
         >
           <span className={collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"}>
@@ -124,7 +126,7 @@ export function WorkspaceSidebar({
         </button>
       </div>
 
-      <nav className="workspace-sidebar__nav" aria-label="Workspace">
+      <nav className="workspace-sidebar__nav" aria-label="Buyer workspace">
         {navItems.map((item) => (
           <Link
             key={item.label}
@@ -147,6 +149,12 @@ export function WorkspaceSidebar({
             <span>{homes.length}</span>
           </div>
           <div className="workspace-sidebar__shortlist-list">
+            {visibleHomes.length === 0 && (
+              <div className="workspace-sidebar__empty">
+                <strong>Your shortlist is empty</strong>
+                <p>Save homes you want to investigate or compare.</p>
+              </div>
+            )}
             {visibleHomes.map((home) => {
               const name = societyLabel(home);
               const state = homeStateHint(home);
@@ -167,17 +175,15 @@ export function WorkspaceSidebar({
                     </span>
                     {state && <em>{state}</em>}
                   </button>
-                  {canRemove && (
-                    <button
-                      type="button"
-                      className="workspace-sidebar__home-remove"
-                      aria-label={`Remove ${name} from shortlist`}
-                      title="Remove"
-                      onClick={() => onRemove(home.id)}
-                    >
-                      ×
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className="workspace-sidebar__home-remove"
+                    aria-label={`Remove ${name} from shortlist`}
+                    title="Remove"
+                    onClick={() => onRemove(home.id)}
+                  >
+                    ×
+                  </button>
                 </div>
               );
             })}
@@ -195,9 +201,9 @@ export function WorkspaceSidebar({
         </section>
       )}
 
-      <div className="workspace-sidebar__footer">
+      <div className="workspace-sidebar__footer" aria-hidden="true">
         <span>OE</span>
-        {!collapsed && <p>Workspace</p>}
+        {!collapsed && <p>Your shortlist</p>}
       </div>
     </aside>
   );

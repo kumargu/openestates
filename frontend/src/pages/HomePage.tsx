@@ -10,13 +10,10 @@ import { LandingPicksSection } from "../components/LandingPicksSection.tsx";
 const HERO_PROMISE = "Tell us the life you want. We'll help you find the right home.";
 
 const ROTATING_WORDS = [
-  "transparent homes",
-  "honest pricing",
-  "trusted societies",
-  "clear tradeoffs",
-  "your EMI plan",
-  "buy vs rent tradeoffs",
-  "EMI with a calculator",
+  "homes you can verify",
+  "risks you should know",
+  "prices with context",
+  "tradeoffs explained",
 ];
 
 function RotatingText() {

@@ -39,6 +39,13 @@ Work like a thoughtful product-minded senior engineer. Your job is disciplined c
 
 You are allowed to suggest deleting or deprecating anything no longer aligned with v2.
 
+### GitHub publishing policy
+
+- Never push directly to `main` or any shared remote branch.
+- When changes need to leave the local machine, create a branch and open a pull request.
+- If local work is already committed on `main`, do not push it; create a branch from that commit and open a PR instead.
+- Treat direct pushes as explicitly disallowed unless the user overrides this policy in the same turn.
+
 ---
 
 ## 2. Product Theme
