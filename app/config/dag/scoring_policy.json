@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "engine_version": "scoring-v1",
   "missing_data": {
     "default_behavior": "skip",
@@ -220,41 +220,105 @@
       ]
     }
   },
+  "recommendation_recall": {
+    "candidate_limit": 80,
+    "branch_limit": 6,
+    "target_branch_count": 3,
+    "channels": [
+      {
+        "id": "same_area_bhk",
+        "kind": "same_area_bhk",
+        "enabled": true,
+        "score": 1.0
+      },
+      {
+        "id": "area_alias_bhk",
+        "kind": "area_alias_bhk",
+        "enabled": true,
+        "score": 0.85
+      },
+      {
+        "id": "price_band",
+        "kind": "price_band",
+        "enabled": true,
+        "score": 0.75
+      },
+      {
+        "id": "builder_family",
+        "kind": "builder_family",
+        "enabled": true,
+        "score": 0.7
+      },
+      {
+        "id": "serving_graph",
+        "kind": "serving_graph",
+        "enabled": true,
+        "score": 0.68,
+        "edge_types": [
+          "in_area",
+          "served_by_road",
+          "near_place",
+          "built_by",
+          "near_transit"
+        ]
+      },
+      {
+        "id": "tantivy_lexical",
+        "kind": "tantivy_lexical",
+        "enabled": true,
+        "score": 1.0,
+        "limit": 30
+      }
+    ],
+    "fallback_branch": {
+      "enabled": true,
+      "id": "similar_tradeoff",
+      "headline": "Similar tradeoff",
+      "lens": "proof",
+      "max_items": 3
+    },
+    "tie_breakers": ["review_strength_desc", "magnitude_desc"]
+  },
   "recommendation_branches": [
     {
       "id": "better_value",
       "primary_signal": "price_value",
       "min_delta": 0.12,
       "headline": "Better value",
-      "lens": "value"
+      "lens": "value",
+      "priority": 1
     },
     {
       "id": "stronger_proof",
       "primary_signal": "proof_strength",
       "min_delta": 0.15,
       "headline": "More receipts",
-      "lens": "proof"
+      "lens": "proof",
+      "priority": 2
     },
     {
       "id": "easier_access",
       "primary_signal": "access_strength",
       "min_delta": 0.1,
       "headline": "Easier access",
-      "lens": "commute"
+      "lens": "commute",
+      "priority": 3
     },
     {
       "id": "safer_timeline",
       "primary_signal": "legal_timeline_safety",
       "min_delta": 0.1,
       "headline": "Safer file",
-      "lens": "trust"
+      "lens": "trust",
+      "priority": 4
     },
     {
       "id": "better_living_fit",
       "primary_signal": "living_fit",
       "min_delta": 0.12,
       "headline": "Better day-to-day fit",
-      "lens": "proof"
+      "lens": "proof",
+      "priority": 5
     }
   ]
 }
