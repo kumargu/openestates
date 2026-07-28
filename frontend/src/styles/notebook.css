@@ -55,6 +55,57 @@
   font-size: 0.9rem;
 }
 
+.workspace-document .notion-cover {
+  height: 104px;
+}
+
+.workspace-mode-tabs {
+  display: inline-flex;
+  gap: 0.18rem;
+  width: fit-content;
+  max-width: min(900px, calc(100% - 2rem));
+  margin: 1.1rem 0 0.35rem max(1.35rem, calc((100% - 900px) / 2 + 1.35rem));
+  padding: 0.18rem;
+  border: 1px solid rgba(50, 38, 30, 0.08);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 2px rgba(40, 30, 20, 0.035);
+}
+
+.workspace-mode-tabs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-height: 2rem;
+  padding: 0 0.72rem;
+  border-radius: 8px;
+  color: #756b62;
+  font-size: 0.78rem;
+  font-weight: 680;
+  text-decoration: none;
+}
+
+.workspace-mode-tabs a:hover {
+  color: #2c2824;
+  background: rgba(38, 35, 32, 0.04);
+}
+
+.workspace-mode-tabs a.is-active {
+  color: #2c2824;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(40, 30, 20, 0.08);
+}
+
+.workspace-mode-tabs span {
+  min-width: 1.1rem;
+  padding: 0.08rem 0.32rem;
+  border-radius: 999px;
+  background: rgba(91, 127, 176, 0.12);
+  color: #2f4f72;
+  font-size: 0.62rem;
+  text-align: center;
+}
+
 .notion-toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -729,6 +780,101 @@
   font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
+}
+
+.workspace-compare-view {
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  padding: 1.35rem clamp(1rem, 3vw, 2.2rem) 3rem;
+}
+
+.workspace-compare-view__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(900px, 100%);
+  margin: 0 auto;
+}
+
+.workspace-compare-view__head span,
+.workspace-compare-empty > span {
+  color: #8f837a;
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.workspace-compare-view__head h2,
+.workspace-compare-empty h2 {
+  margin: 0.28rem 0 0;
+  color: #2c2824;
+  font-size: clamp(1.45rem, 2.7vw, 2.15rem);
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.workspace-compare-view__head p,
+.workspace-compare-empty p {
+  margin: 0.42rem 0 0;
+  color: #756b62;
+  font-size: 0.8rem;
+}
+
+.workspace-compare-view__head button,
+.workspace-compare-empty a {
+  flex: 0 0 auto;
+  border: 1px solid rgba(50, 38, 30, 0.1);
+  border-radius: 999px;
+  background: #fff;
+  color: #2f4f72;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.workspace-compare-view__head button {
+  padding: 0.44rem 0.76rem;
+  cursor: pointer;
+}
+
+.workspace-compare-empty a {
+  display: inline-flex;
+  margin-top: 1rem;
+  padding: 0.48rem 0.8rem;
+}
+
+.workspace-compare-view .compare-editorial {
+  width: min(100%, 70rem);
+  margin: 1.6rem auto 0;
+}
+
+.workspace-compare-loading {
+  display: grid;
+  gap: 1rem;
+  width: min(900px, 100%);
+  margin: 2rem auto 0;
+}
+
+.workspace-compare-loading div {
+  height: 8rem;
+  border-radius: 12px;
+  background: linear-gradient(90deg, #eeeae6 25%, #f7f4f0 37%, #eeeae6 63%);
+  background-size: 400% 100%;
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+.workspace-compare-loading div:first-child {
+  height: 4.5rem;
+}
+
+.workspace-compare-empty {
+  width: min(900px, calc(100% - 2rem));
+  margin: 2.25rem auto 0;
+  padding: 1.5rem 0 2.5rem;
 }
 
 /* Quiet property pins (shared) */

@@ -1,16 +1,34 @@
 import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
-import { Link } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
-import { getProperties } from "../lib/api.ts";
+import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { getProperties, getProperty } from "../lib/api.ts";
 import {
   ASSIGNABLE_NOTEBOOK_LABELS,
   labelDef,
   type NotebookLabelId,
   type NotebookNote,
 } from "../lib/notebook.ts";
-import type { PropertyCard } from "../lib/types.ts";
+import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
+
+const MAX_WORKSPACE_COMPARE_HOMES = 4;
+
+type WorkspaceMode = "notes" | "compare";
+type CompareStatus = "idle" | "loading" | "ready" | "error";
+
+type CompareState = {
+  key: string;
+  status: CompareStatus;
+  details: PropertyDetailResponse[];
+};
+
+function parseComparedIds(value: string | null): string[] {
+  if (!value) return [];
+  return [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
+    .slice(0, MAX_WORKSPACE_COMPARE_HOMES);
+}
 
 function societyLabel(home: PropertyCard | undefined, id: string): string {
   if (!home) return id.slice(0, 12);
@@ -40,6 +58,18 @@ function noteIcon(note: NotebookNote): string {
   if (labels.includes("price") || labels.includes("emi")) return "₹";
   if (note.kind === "handwritten") return "✏️";
   return "📌";
+}
+
+function workspaceMode(pathname: string): WorkspaceMode {
+  return pathname === "/workspace/compare" ? "compare" : "notes";
+}
+
+function workspaceCompareHref(ids: string[], focusId?: string): string {
+  if (ids.length < 2) return "/workspace/compare";
+  const params = new URLSearchParams();
+  params.set("ids", ids.slice(0, MAX_WORKSPACE_COMPARE_HOMES).join(","));
+  if (focusId) params.set("focus", focusId);
+  return `/workspace/compare?${params.toString()}`;
 }
 
 function LabelPicker({
@@ -99,7 +129,10 @@ function LabelPicker({
   );
 }
 
-export function NotebookPage() {
+export function WorkspacePage() {
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const mode = workspaceMode(location.pathname);
   const {
     notes,
     propertyIds,
@@ -111,6 +144,12 @@ export function NotebookPage() {
     removeNote,
   } = useNotebook();
   const [homes, setHomes] = useState<PropertyCard[]>([]);
+  const [compareState, setCompareState] = useState<CompareState>({
+    key: "",
+    status: "idle",
+    details: [],
+  });
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -126,6 +165,27 @@ export function NotebookPage() {
     () => new Map(homes.map((home) => [home.id, home])),
     [homes],
   );
+  const requestedCompareIds = useMemo(
+    () => parseComparedIds(searchParams.get("ids")),
+    [searchParams],
+  );
+  const activeCompareIds = useMemo(
+    () => requestedCompareIds.length > 0
+      ? requestedCompareIds
+      : compareIds.slice(0, MAX_WORKSPACE_COMPARE_HOMES),
+    [compareIds, requestedCompareIds],
+  );
+  const selectedHomes = useMemo(
+    () => activeCompareIds
+      .map((id) => byId.get(id))
+      .filter((home): home is PropertyCard => Boolean(home)),
+    [activeCompareIds, byId],
+  );
+  const compareKey = selectedHomes.map((home) => home.id).join(",");
+  const compareHref = workspaceCompareHref(
+    activeCompareIds,
+    searchParams.get("focus") ?? selectedHomes[0]?.id,
+  );
 
   const visible = useMemo(
     () => [...notes]
@@ -139,18 +199,53 @@ export function NotebookPage() {
     addHandwritten({ propertyId, text, labels });
   }
 
+  useEffect(() => {
+    if (mode !== "compare") return undefined;
+    if (selectedHomes.length < 2) {
+      setCompareState({ key: compareKey, status: "idle", details: [] });
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    setCompareState({ key: compareKey, status: "loading", details: [] });
+    Promise.allSettled(
+      selectedHomes.map((home) => getProperty(home.id, { signal: controller.signal })),
+    )
+      .then((results) => {
+        if (controller.signal.aborted) return;
+        const details = results
+          .filter((result): result is PromiseFulfilledResult<PropertyDetailResponse> =>
+            result.status === "fulfilled"
+          )
+          .map((result) => result.value);
+        setCompareState({ key: compareKey, status: "ready", details });
+      })
+      .catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setCompareState({ key: compareKey, status: "error", details: [] });
+      });
+
+    return () => controller.abort();
+  }, [compareKey, mode, selectedHomes]);
+
+  function copyComparisonLink() {
+    const href = workspaceCompareHref(activeCompareIds, searchParams.get("focus") ?? selectedHomes[0]?.id);
+    void navigator.clipboard.writeText(`${window.location.origin}${href}`)
+      .then(() => setCopied(true));
+  }
+
   return (
-    <div className="notion-page">
+    <div className="notion-page workspace-document">
       <Helmet>
-        <title>Notebook | OpenEstates</title>
+        <title>Workspace | OpenEstates</title>
         <meta name="robots" content="noindex" />
       </Helmet>
 
       <div className="notion-cover" aria-hidden="true" />
 
       <header className="notion-title-block">
-        <div className="notion-emoji" aria-hidden="true">📓</div>
-        <h1>Home notebook</h1>
+        <div className="notion-emoji" aria-hidden="true">▦</div>
+        <h1>Workspace</h1>
         <p className="notion-subtitle">
           {propertyIds.length} home{propertyIds.length === 1 ? "" : "s"}
           {" · "}
@@ -158,12 +253,39 @@ export function NotebookPage() {
         </p>
       </header>
 
+      <nav className="workspace-mode-tabs" aria-label="Workspace views">
+        <Link
+          to="/workspace"
+          className={mode === "notes" ? "is-active" : undefined}
+          aria-current={mode === "notes" ? "page" : undefined}
+        >
+          Notes
+        </Link>
+        <Link
+          to={compareHref}
+          className={mode === "compare" ? "is-active" : undefined}
+          aria-current={mode === "compare" ? "page" : undefined}
+        >
+          Compare
+          {activeCompareIds.length > 0 && <span>{activeCompareIds.length}</span>}
+        </Link>
+      </nav>
+
       {propertyIds.length === 0 ? (
         <div className="notion-empty">
-          <h2>Empty notebook</h2>
-          <p>Hover a place on the map and tap the bookmark — or write a line below once you pin a home.</p>
+          <h2>Empty workspace</h2>
+          <p>Save a home or add a note from a property page to start your decision workspace.</p>
           <Link to="/">Discover homes</Link>
         </div>
+      ) : mode === "compare" ? (
+        <CompareWorkspaceView
+          selectedHomes={selectedHomes}
+          catalog={homes}
+          details={compareState.key === compareKey ? compareState.details : []}
+          status={compareState.key === compareKey ? compareState.status : "loading"}
+          copied={copied}
+          onCopy={copyComparisonLink}
+        />
       ) : (
         <EditorialView
           propertyIds={propertyIds}
@@ -178,6 +300,72 @@ export function NotebookPage() {
         />
       )}
     </div>
+  );
+}
+
+function CompareWorkspaceView({
+  selectedHomes,
+  catalog,
+  details,
+  status,
+  copied,
+  onCopy,
+}: {
+  selectedHomes: PropertyCard[];
+  catalog: PropertyCard[];
+  details: PropertyDetailResponse[];
+  status: CompareStatus;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  if (selectedHomes.length < 2) {
+    return (
+      <section className="workspace-compare-empty">
+        <span>Compare</span>
+        <h2>Add one more home to compare.</h2>
+        <p>Use the compare toggle beside saved homes in Notes. The workspace keeps the same notes and labels when you switch views.</p>
+        <Link to="/workspace">Back to notes</Link>
+      </section>
+    );
+  }
+
+  if (status === "error") {
+    return (
+      <section className="workspace-compare-empty">
+        <span>Compare</span>
+        <h2>Comparison is unavailable.</h2>
+        <p>Property details could not be loaded for this comparison.</p>
+        <Link to="/workspace">Back to notes</Link>
+      </section>
+    );
+  }
+
+  return (
+    <section className="workspace-compare-view" aria-label="Compare saved homes">
+      <header className="workspace-compare-view__head">
+        <div>
+          <span>Side by side</span>
+          <h2>Same shortlist. Sharper tradeoffs.</h2>
+          <p>Compare uses the saved labels that stay decision-worthy.</p>
+        </div>
+        <button type="button" onClick={onCopy}>
+          {copied ? "Link copied" : "Share"}
+        </button>
+      </header>
+
+      {status === "loading" ? (
+        <div className="workspace-compare-loading" aria-label="Loading comparison">
+          <div />
+          <div />
+        </div>
+      ) : (
+        <SocietyComparisonMatrix
+          selectedHomes={selectedHomes}
+          catalog={catalog}
+          details={details}
+        />
+      )}
+    </section>
   );
 }
 

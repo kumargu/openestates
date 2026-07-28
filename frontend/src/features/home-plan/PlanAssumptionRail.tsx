@@ -1,4 +1,5 @@
 import { type PlanInputs } from "./model.ts";
+import { useEffect, useState } from "react";
 
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
@@ -24,7 +25,7 @@ function PlanInput({
   value,
   min,
   max,
-  step,
+  step: _step,
   prefix,
   suffix,
   note,
@@ -40,23 +41,55 @@ function PlanInput({
   note: string;
   onChange: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [editing, value]);
+
+  function normalizeDraft(raw: string): string {
+    const compact = raw.replace(/[^\d.]/g, "");
+    const [head, ...tail] = compact.split(".");
+    const integer = head.replace(/^0+(?=\d)/, "") || (compact.startsWith(".") ? "" : "0");
+    const decimal = tail.length > 0 ? `.${tail.join("")}` : "";
+    return `${integer}${decimal}`;
+  }
+
+  function parseInput(raw: string): number | null {
+    if (!raw.trim()) return min;
+    const next = Number(raw);
+    if (!Number.isFinite(next)) return null;
+    const bounded = Math.max(min, next);
+    return max === undefined ? bounded : Math.min(max, bounded);
+  }
+
   return (
     <label className="home-plan-inline-input">
       <span>{label}</span>
       <div>
         {prefix && <b>{prefix}</b>}
         <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
+          type="text"
+          inputMode="decimal"
+          value={editing ? draft : String(value)}
           onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) {
-              const bounded = Math.max(min, next);
-              onChange(max === undefined ? bounded : Math.min(max, bounded));
-            }
+            const nextDraft = normalizeDraft(event.target.value);
+            setDraft(nextDraft);
+            const next = parseInput(nextDraft);
+            if (next != null) onChange(next);
+          }}
+          onFocus={(event) => {
+            setEditing(true);
+            setDraft(String(value));
+            event.currentTarget.select();
+          }}
+          onBlur={(event) => {
+            const next = parseInput(event.currentTarget.value);
+            const committed = next ?? value;
+            setEditing(false);
+            setDraft(String(committed));
+            if (committed !== value) onChange(committed);
           }}
         />
         <b>{suffix}</b>

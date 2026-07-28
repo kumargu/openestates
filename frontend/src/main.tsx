@@ -21,8 +21,7 @@ import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
-const ComparePage = lazy(() => import("./pages/ComparePage.tsx").then(m => ({ default: m.ComparePage })));
-const NotebookPage = lazy(() => import("./pages/NotebookPage.tsx").then(m => ({ default: m.NotebookPage })));
+const WorkspacePage = lazy(() => import("./pages/WorkspacePage.tsx").then(m => ({ default: m.WorkspacePage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -40,6 +39,12 @@ function ResultsRedirect() {
   const [params] = useSearchParams();
   const query = params.get("q")?.trim();
   return <Navigate to={query ? `/?q=${encodeURIComponent(query)}` : "/"} replace />;
+}
+
+function LegacyWorkspaceRedirect({ mode }: { mode: "notes" | "compare" }) {
+  const { search } = useLocation();
+  const target = mode === "compare" ? `/workspace/compare${search}` : `/workspace${search}`;
+  return <Navigate to={target} replace />;
 }
 
 export function App() {
@@ -77,8 +82,10 @@ export function App() {
                   <Route path="/results" element={<ResultsRedirect />} />
                   <Route path="/property/:id" element={<PropertyPage />} />
                   <Route path="/property/:id/plan" element={<HomePlanPage />} />
-                  <Route path="/notebook" element={<NotebookPage />} />
-                  <Route path="/compare" element={<ComparePage />} />
+                  <Route path="/workspace" element={<WorkspacePage />} />
+                  <Route path="/workspace/compare" element={<WorkspacePage />} />
+                  <Route path="/notebook" element={<LegacyWorkspaceRedirect mode="notes" />} />
+                  <Route path="/compare" element={<LegacyWorkspaceRedirect mode="compare" />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
               </Suspense>

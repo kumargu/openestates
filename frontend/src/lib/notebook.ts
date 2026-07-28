@@ -267,11 +267,13 @@ function readRawState(): NotebookState {
 export function readNotebook(): NotebookState {
   const state = readRawState();
   const shortlist = readShortlistIds();
-  if (shortlist.length === 0) return state;
+  const propertyIds = [...new Set([...shortlist, ...state.propertyIds])];
+  if (shortlist.length === 0 && propertyIds.length === state.propertyIds.length) return state;
   return {
     ...state,
+    propertyIds,
     compareIds: shortlist
-      .filter((id) => state.propertyIds.includes(id))
+      .filter((id) => propertyIds.includes(id))
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
   };
 }
@@ -479,5 +481,5 @@ export function compareHrefFromNotebook(state = readNotebook(), focusId?: string
   if (state.compareIds.length < 2) return null;
   const ids = state.compareIds;
   const focus = focusId && ids.includes(focusId) ? focusId : ids[0];
-  return `/compare?ids=${encodeURIComponent(ids.join(","))}&focus=${encodeURIComponent(focus)}`;
+  return `/workspace/compare?ids=${encodeURIComponent(ids.join(","))}&focus=${encodeURIComponent(focus)}`;
 }
