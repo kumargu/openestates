@@ -27,6 +27,7 @@ function routePropertyId(pathname: string): string | null {
 }
 
 function activeWorkspaceView(pathname: string): WorkspaceView {
+  if (pathname === "/notebook") return "notebook";
   if (pathname === "/compare") return "compare";
   if (/^\/property\/[^/]+\/plan$/.test(pathname)) return "plan";
   if (/^\/property\/[^/]+$/.test(pathname)) return "home";

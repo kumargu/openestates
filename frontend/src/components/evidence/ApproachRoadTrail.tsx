@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { EvidenceSection } from "../../lib/types.ts";
 import { visibleEvidenceSections } from "../../lib/evidence.ts";
+import { NotebookCommentAnchor } from "../notebook/NotebookCommentAnchor.tsx";
 
 /* eslint-disable react-refresh/only-export-components */
 
 type Props = {
+  propertyId: string;
   sections: EvidenceSection[];
 };
 
@@ -43,7 +45,7 @@ export function hasApproachRoadTrail(sections: EvidenceSection[]): boolean {
   return trailFrames(section).length > 0;
 }
 
-export function ApproachRoadTrail({ sections }: Props) {
+export function ApproachRoadTrail({ propertyId, sections }: Props) {
   const section = approachRoadSection(sections);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -149,8 +151,17 @@ export function ApproachRoadTrail({ sections }: Props) {
               </button>
             </div>
 
-            <div className="area-trail__hero" aria-live="polite">
+            <div
+              className="area-trail__hero notebook-comment-surface"
+              aria-live="polite"
+            >
               <img src={hero.image_url} alt={`Approach road: ${hero.label}`} />
+              <NotebookCommentAnchor
+                propertyId={propertyId}
+                labels={["approach"]}
+                detail={hero.label}
+                source="Approach road"
+              />
               <span>{hero.label}</span>
             </div>
 

@@ -1,6 +1,7 @@
 import "./index.css";
 import "./styles/evidence.css";
 import "./styles/property-scene.css";
+import "./styles/notebook.css";
 import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -14,12 +15,14 @@ import {
 import { HelmetProvider, Helmet } from "react-helmet-async";
 import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
+import { NotebookToast } from "./components/notebook/NotebookToast.tsx";
 import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
 const ComparePage = lazy(() => import("./pages/ComparePage.tsx").then(m => ({ default: m.ComparePage })));
+const NotebookPage = lazy(() => import("./pages/NotebookPage.tsx").then(m => ({ default: m.NotebookPage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
 /** Scroll to top and move focus to main content on route change */
@@ -74,6 +77,7 @@ export function App() {
                   <Route path="/results" element={<ResultsRedirect />} />
                   <Route path="/property/:id" element={<PropertyPage />} />
                   <Route path="/property/:id/plan" element={<HomePlanPage />} />
+                  <Route path="/notebook" element={<NotebookPage />} />
                   <Route path="/compare" element={<ComparePage />} />
                   <Route path="*" element={<NotFoundPage />} />
                 </Routes>
@@ -81,6 +85,7 @@ export function App() {
             </ErrorBoundary>
           </main>
         </WorkspaceFrame>
+        <NotebookToast />
         <OfflineToast />
       </BrowserRouter>
     </HelmetProvider>

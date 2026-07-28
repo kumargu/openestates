@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
+import { useNotebook } from "../hooks/useNotebook.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
@@ -21,6 +22,7 @@ import {
   isExplicitlyReadyStatus,
   parsePlanDate,
 } from "../features/home-plan/financeEngine.ts";
+import { buildPlanSnapshotNote } from "../features/home-plan/planSnapshot.ts";
 
 function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfile {
   const asOfDate = new Date().toISOString().slice(0, 10);
@@ -76,6 +78,7 @@ export function HomePlanPage() {
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
+  const { isPinned, toggleFact } = useNotebook();
 
   useEffect(() => {
     if (!id) return;
@@ -113,6 +116,15 @@ export function HomePlanPage() {
   const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
   const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
   const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
+  const planSnapshot = buildPlanSnapshotNote({
+    propertyId: id,
+    inputs,
+    projection,
+    activeYear,
+    activePoint,
+    extraEmisPerYear,
+  });
+  const snapshotSaved = isPinned(planSnapshot.catalogKey);
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
     setInputs((current) => current ? { ...current, [key]: value } : current);
@@ -123,6 +135,18 @@ export function HomePlanPage() {
     setExtraEmisPerYear(0);
     setPinnedYear(null);
     setPreviewYear(null);
+  };
+
+  const savePlanSnapshot = () => {
+    toggleFact({
+      propertyId: id,
+      catalogKey: planSnapshot.catalogKey,
+      title: planSnapshot.title,
+      detail: planSnapshot.detail,
+      source: planSnapshot.source,
+      labels: planSnapshot.labels,
+      kind: "plan",
+    });
   };
 
   return (
@@ -151,6 +175,20 @@ export function HomePlanPage() {
               buyWins={buyWins}
               advantage={advantage}
               aside={<PlanWhisper />}
+              action={(
+                <button
+                  type="button"
+                  className={`home-plan-snapshot-button${snapshotSaved ? " is-saved" : ""}`}
+                  aria-pressed={snapshotSaved}
+                  onClick={savePlanSnapshot}
+                >
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M7 7.5h10M7 11h7" />
+                    <path d="M5.8 4.5h12.4A2.8 2.8 0 0 1 21 7.3v6.4a2.8 2.8 0 0 1-2.8 2.8H13l-4.7 3.2v-3.2H5.8A2.8 2.8 0 0 1 3 13.7V7.3a2.8 2.8 0 0 1 2.8-2.8Z" />
+                  </svg>
+                  {snapshotSaved ? "Snapshot saved" : "Save snapshot"}
+                </button>
+              )}
             />
 
             <PlanAssumptionRail

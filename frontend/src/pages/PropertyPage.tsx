@@ -404,11 +404,15 @@ function PropertyPageBody({
           </aside>
 
           {showNearbyPlate && aroundThisHomeContext && (
-            <AroundThisHomePlate context={aroundThisHomeContext} />
+            <AroundThisHomePlate propertyId={id} context={aroundThisHomeContext} />
           )}
 
           {showApproachTrail && (
-            <ApproachRoadTrail sections={detailEvidenceSections} />
+            <ApproachRoadTrail propertyId={id} sections={detailEvidenceSections} />
+          )}
+
+          {showProjectPlans && data.plans && (
+            <ProjectPlansShelf propertyId={id} plans={data.plans} />
           )}
 
           {showProjectPlans && data.plans && (
@@ -425,6 +429,7 @@ function PropertyPageBody({
 
           <EvidenceStack
             key={id}
+            propertyId={id}
             evidence={data.evidence}
             rera={data.rera}
             googleReviews={data.external_reviews}

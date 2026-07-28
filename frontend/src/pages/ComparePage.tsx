@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useSearchParams } from "react-router-dom";
-import { SocietyComparisonChart } from "../components/compare/SocietyComparisonChart.tsx";
-import { getProperties } from "../lib/api.ts";
-import type { PropertyCard } from "../lib/types.ts";
+import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { getProperties, getProperty } from "../lib/api.ts";
+import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/workspace.css";
 
-const MAX_COMPARE_HOMES = 10;
+const MAX_COMPARE_HOMES = 4;
 
 type LoadStatus = "loading" | "ready" | "error" | "empty";
 
@@ -15,6 +15,7 @@ type CompareLoadState = {
   status: LoadStatus;
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
+  details: PropertyDetailResponse[];
 };
 
 function parseComparedIds(value: string): string[] {
@@ -75,6 +76,7 @@ export function ComparePage() {
     status: "loading",
     selectedHomes: [],
     catalog: [],
+    details: [],
   });
   const [copied, setCopied] = useState(false);
 
@@ -82,7 +84,7 @@ export function ComparePage() {
     const controller = new AbortController();
 
     getProperties({ signal: controller.signal })
-      .then((properties) => {
+      .then(async (properties) => {
         const byId = new Map(properties.map((property) => [property.id, property]));
         const requestedHomes = requestedIds
           .map((id) => byId.get(id))
@@ -95,15 +97,27 @@ export function ComparePage() {
             status: "empty",
             selectedHomes,
             catalog: properties,
+            details: [],
           });
           return;
         }
+
+        const detailResults = await Promise.allSettled(
+          selectedHomes.map((home) => getProperty(home.id, { signal: controller.signal })),
+        );
+        if (controller.signal.aborted) return;
+        const details = detailResults
+          .filter((result): result is PromiseFulfilledResult<PropertyDetailResponse> =>
+            result.status === "fulfilled"
+          )
+          .map((result) => result.value);
 
         setLoadState({
           requestKey,
           status: "ready",
           selectedHomes,
           catalog: properties,
+          details,
         });
 
         const selectedIds = selectedHomes.map((property) => property.id).join(",");
@@ -121,6 +135,7 @@ export function ComparePage() {
           status: "error",
           selectedHomes: [],
           catalog: [],
+          details: [],
         });
       });
 
@@ -131,6 +146,7 @@ export function ComparePage() {
   const status = isCurrentRequest ? loadState.status : "loading";
   const selectedHomes = isCurrentRequest ? loadState.selectedHomes : [];
   const catalog = isCurrentRequest ? loadState.catalog : [];
+  const details = isCurrentRequest ? loadState.details : [];
 
   if (status === "loading") return <CompareLoading />;
   if (status === "error" || status === "empty") {
@@ -167,13 +183,16 @@ export function ComparePage() {
       <div className="compare-workspace__content">
         <header className="compare-workspace__intro">
           <div>
+            <span>Side by side</span>
             <h1>Same budget. Different tradeoffs.</h1>
+            <p>Saved notes beside the facts that stay comparable.</p>
           </div>
         </header>
 
-        <SocietyComparisonChart
+        <SocietyComparisonMatrix
           selectedHomes={selectedHomes}
           catalog={catalog}
+          details={details}
         />
       </div>
     </div>

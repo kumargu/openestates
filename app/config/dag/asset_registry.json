@@ -44,6 +44,21 @@
       }
     },
     {
+      "id": "rera_project_plan_frames",
+      "stage": "silver",
+      "description": "RERA-only project plan frame facts and preview refs materialized from offline document artifacts.",
+      "dependencies": [
+        "rera_legal_facts",
+        "canonical_society_nodes"
+      ],
+      "refresh": "on_change",
+      "cost_tier": "free",
+      "trust_tier": "root",
+      "partition_policy": {
+        "kind": "global"
+      }
+    },
+    {
       "id": "google_places_weekly",
       "stage": "raw",
       "description": "Weekly Google Maps place and review metadata with navigable source links.",
@@ -322,6 +337,7 @@
       "description": "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
       "dependencies": [
         "rera_legal_facts",
+        "rera_project_plan_frames",
         "google_review_facts",
         "google_nearby_place_facts",
         "external_listing_facts",
@@ -362,6 +378,7 @@
         "google_nearby_place_facts",
         "external_listing_facts",
         "image_media_facts",
+        "rera_project_plan_frames",
         "home_state_signals",
         "bengaluru_metro_station_facts"
       ]

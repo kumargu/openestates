@@ -1,0 +1,751 @@
+import { useMemo } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useNotebook } from "../../hooks/useNotebook.ts";
+import { floorPlanForBhk, type FloorPlanComparePlan } from "../../lib/floor-plan-compare.ts";
+import {
+  labelDef,
+  labelsForNearbyPlace,
+  type NotebookLabelId,
+  type NotebookNote,
+} from "../../lib/notebook.ts";
+import type { MapPlacePin, PropertyCard, PropertyDetailResponse, PropertyMapContext } from "../../lib/types.ts";
+
+type SocietyColumn = {
+  key: string;
+  name: string;
+  area: string;
+  propertyId: string;
+  selectedIds: Set<string>;
+  listings: PropertyCard[];
+};
+
+type CanonicalRowId =
+  | "projectScale"
+  | "homeState";
+
+type CanonicalRow = {
+  id: CanonicalRowId;
+  label: string;
+  scope: "bhk" | "society";
+  value: (listings: PropertyCard[]) => string | null;
+  noteLabels: NotebookLabelId[];
+};
+
+type NoteRow = {
+  id: NoteGroupId;
+  label: string;
+  icon: string;
+  section: "Access" | "Risks" | "Money" | "Reference";
+  rank: number;
+};
+
+type CompareItemOrigin = "backend" | "note";
+
+type CompareItem = {
+  id: string;
+  title: string;
+  detail?: string;
+  source?: string;
+  labels: NotebookLabelId[];
+  origin: CompareItemOrigin;
+};
+
+type NoteGroupId =
+  | "nearby_under_1km"
+  | "nearby_under_3km"
+  | "nearby_under_5km"
+  | "access_notes"
+  | "commute_anchors"
+  | "red_flags"
+  | "water"
+  | "approach"
+  | "money"
+  | "layout"
+  | "reference";
+
+type NoteGroupDef = {
+  id: NoteGroupId;
+  label: string;
+  icon: string;
+  section: NoteRow["section"];
+  rank: number;
+};
+
+const NOTE_GROUPS: NoteGroupDef[] = [
+  { id: "nearby_under_1km", label: "Nearby under 1 km", icon: "⌖", section: "Access", rank: 10 },
+  { id: "nearby_under_3km", label: "Nearby under 3 km", icon: "⌖", section: "Access", rank: 20 },
+  { id: "nearby_under_5km", label: "Nearby under 5 km", icon: "⌖", section: "Access", rank: 30 },
+  { id: "access_notes", label: "Daily access", icon: "⌁", section: "Access", rank: 40 },
+  { id: "commute_anchors", label: "Commute anchors", icon: "↔", section: "Access", rank: 50 },
+  { id: "red_flags", label: "Red flags", icon: "!", section: "Risks", rank: 10 },
+  { id: "water", label: "Water and flood", icon: "~", section: "Risks", rank: 20 },
+  { id: "approach", label: "Approach", icon: "→", section: "Risks", rank: 30 },
+  { id: "money", label: "Money notes", icon: "₹", section: "Money", rank: 10 },
+  { id: "layout", label: "Plan and layout", icon: "□", section: "Reference", rank: 10 },
+  { id: "reference", label: "Other notes", icon: "·", section: "Reference", rank: 99 },
+];
+
+const NOTE_GROUP_BY_ID = new Map(NOTE_GROUPS.map((group) => [group.id, group]));
+
+function societyKey(property: PropertyCard): string {
+  return property.society_name?.trim().toLocaleLowerCase()
+    || property.title.trim().toLocaleLowerCase();
+}
+
+function buildSocietyColumns(
+  selectedHomes: PropertyCard[],
+  catalog: PropertyCard[],
+): SocietyColumn[] {
+  const selectedKeys = [...new Set(selectedHomes.map(societyKey))];
+  return selectedKeys.map((key) => {
+    const selected = selectedHomes.filter((home) => societyKey(home) === key);
+    const matching = catalog.filter((home) => societyKey(home) === key);
+    const listings = matching.length > 0 ? matching : selected;
+    const representative = selected[0] ?? listings[0];
+    return {
+      key,
+      name: representative.society_name?.trim() || representative.title,
+      area: representative.area,
+      propertyId: representative.id,
+      selectedIds: new Set(selected.map((home) => home.id)),
+      listings,
+    };
+  });
+}
+
+function formatPrice(price: number): string {
+  if (price >= 10_000_000) {
+    return `₹${(price / 10_000_000).toFixed(2).replace(/0+$/, "").replace(/\.$/, "")} Cr`;
+  }
+  if (price >= 100_000) {
+    return `₹${(price / 100_000).toFixed(1).replace(/\.0$/, "")} L`;
+  }
+  return `₹${Math.round(price).toLocaleString("en-IN")}`;
+}
+
+function numericRange(
+  listings: PropertyCard[],
+  read: (listing: PropertyCard) => number | null,
+  format: (value: number) => string,
+): string | null {
+  const values = listings
+    .map(read)
+    .filter((value): value is number => value != null && value > 0);
+  if (values.length === 0) return null;
+  const low = Math.min(...values);
+  const high = Math.max(...values);
+  return low === high ? format(low) : `${format(low)}–${format(high)}`;
+}
+
+function usableSqft(property: PropertyCard): number | null {
+  return property.plan_carpet_area_sqft
+    ?? property.carpet_area_sqft
+    ?? property.plan_sale_area_sqft
+    ?? property.super_builtup_sqft
+    ?? property.sqft
+    ?? null;
+}
+
+function mostCommon(values: string[]): string | null {
+  if (values.length === 0) return null;
+  const counts = new Map<string, number>();
+  for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] ?? null;
+}
+
+function homeState(listings: PropertyCard[]): string | null {
+  const raw = mostCommon(
+    listings
+      .map((listing) =>
+        listing.home_state_display
+        || listing.project_status_display
+        || listing.possession_status
+      )
+      .filter(Boolean),
+  );
+  if (!raw) return null;
+  const normalized = raw.toLowerCase().replace(/[_-]+/g, " ");
+  if (normalized.includes("delivered") || normalized.includes("ready")) return "Delivered";
+  if (normalized.includes("delay")) return "Delayed";
+  if (normalized.includes("construction")) return "Under construction";
+  return raw;
+}
+
+function projectScale(listings: PropertyCard[]): string | null {
+  const land = numericRange(
+    listings,
+    (listing) => listing.society_land_acres ?? null,
+    (value) => `${value.toFixed(1).replace(/\.0$/, "")} acres`,
+  );
+  const density = numericRange(
+    listings,
+    (listing) => listing.units_per_acre ?? null,
+    (value) => `${Math.round(value)} homes / acre`,
+  );
+  const openSpace = numericRange(
+    listings,
+    (listing) => listing.open_space_pct ?? null,
+    (value) => `${value.toFixed(1).replace(/\.0$/, "")}% open`,
+  );
+  const parts = [land, density, openSpace].filter(Boolean);
+  return parts.length > 0 ? parts.join(" · ") : null;
+}
+
+function homeHeaderSummary(listings: PropertyCard[]): string[] {
+  const price = numericRange(listings, (listing) => listing.price, formatPrice);
+  const sqft = numericRange(
+    listings,
+    usableSqft,
+    (value) => `${Math.round(value).toLocaleString("en-IN")} sqft`,
+  );
+  const pricePerSqft = numericRange(
+    listings,
+    (listing) => listing.price_per_sqft,
+    (value) => `₹${Math.round(value).toLocaleString("en-IN")}/sqft`,
+  );
+  return [price, sqft, pricePerSqft].filter((item): item is string => item != null);
+}
+
+function formatSqft(value: number | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return `${Math.round(value).toLocaleString("en-IN")} sqft`;
+}
+
+function formatUsableRatio(value: number | undefined): string | null {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
+  return `${Math.round(value * 100)}%`;
+}
+
+const CANONICAL_ROWS: CanonicalRow[] = [
+  {
+    id: "projectScale",
+    label: "Project scale",
+    scope: "society",
+    value: projectScale,
+    noteLabels: ["open-space"],
+  },
+  {
+    id: "homeState",
+    label: "Home state",
+    scope: "society",
+    value: homeState,
+    noteLabels: [],
+  },
+];
+
+const CANONICAL_NOTE_LABELS = new Set(
+  CANONICAL_ROWS.flatMap((row) => row.noteLabels),
+);
+
+function noteCompareGroup(note: Pick<NotebookNote, "labels">): NoteGroupId | null {
+  const labels = note.labels;
+  if (labels.some((label) => label.endsWith("_under_1km"))) return "nearby_under_1km";
+  if (labels.some((label) => label.endsWith("_under_3km"))) return "nearby_under_3km";
+  if (labels.some((label) => label.endsWith("_under_5km"))) return "nearby_under_5km";
+  if (labels.includes("transmission") || labels.includes("risk")) return "red_flags";
+  if (labels.includes("water")) return "water";
+  if (labels.includes("approach")) return "approach";
+  if (labels.includes("down-payment") || labels.includes("emi") || labels.includes("price")) return "money";
+  if (labels.includes("layout")) return "layout";
+  if (labels.includes("metro") || labels.includes("tech_parks") || labels.includes("commute")) {
+    return "commute_anchors";
+  }
+  if (labels.includes("schools") || labels.includes("hospitals")) return "access_notes";
+  if (labels.some((label) => ["legal", "community", "visit", "other"].includes(label))) return "reference";
+  return labels.length > 0 ? "reference" : null;
+}
+
+function notesForColumn(
+  column: SocietyColumn,
+  notes: NotebookNote[],
+  catalogById: Map<string, PropertyCard>,
+): NotebookNote[] {
+  return notes.filter((note) => {
+    const property = catalogById.get(note.propertyId);
+    return property
+      ? societyKey(property) === column.key
+      : column.selectedIds.has(note.propertyId);
+  });
+}
+
+function detailForColumn(
+  column: SocietyColumn,
+  detailById: Map<string, PropertyDetailResponse>,
+): PropertyDetailResponse | undefined {
+  for (const selectedId of column.selectedIds) {
+    const detail = detailById.get(selectedId);
+    if (detail) return detail;
+  }
+  return column.listings
+    .map((listing) => detailById.get(listing.id))
+    .find((detail): detail is PropertyDetailResponse => Boolean(detail));
+}
+
+function compareContextForColumn(
+  column: SocietyColumn,
+  detailById: Map<string, PropertyDetailResponse>,
+): PropertyMapContext | null {
+  return detailForColumn(column, detailById)?.map_context ?? null;
+}
+
+function labelClass(label: NotebookLabelId): string {
+  return `compare-tag compare-tag--${label.replace(/[^a-z0-9-]/g, "-")}`;
+}
+
+function labelIcon(label: NotebookLabelId): string {
+  if (label.startsWith("hospitals")) return "+";
+  if (label.startsWith("schools")) return "A";
+  if (label.startsWith("metro")) return "M";
+  if (label === "tech_parks") return "T";
+  if (label === "water") return "~";
+  if (label === "risk" || label === "transmission") return "!";
+  if (label === "approach") return "→";
+  if (label === "price" || label === "emi" || label === "down-payment") return "₹";
+  if (label === "layout") return "□";
+  if (label === "legal") return "§";
+  return "·";
+}
+
+function displayItemLabels(item: Pick<CompareItem, "labels">): NotebookLabelId[] {
+  const bucket = item.labels.find((label) => label.includes("_under_"));
+  const primary = item.labels.find((label) => !label.includes("_under_"));
+  return [primary, bucket].filter((label): label is NotebookLabelId => Boolean(label)).slice(0, 2);
+}
+
+function CanonicalRowIcon({ id }: { id: CanonicalRowId }) {
+  if (id === "projectScale") {
+    return (
+      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+        <path d="M4.5 18.5h15M6.5 16V8.5h3V16M10.5 16V5.5h3V16M14.5 16v-5.5h3V16" />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
+      <path d="M12 7v5l3 2" />
+      <path d="M20 12a8 8 0 1 1-2.35-5.65" />
+      <path d="M18.5 4.5v3.8h-3.8" />
+    </svg>
+  );
+}
+
+function statusClassName(value: string): string {
+  const normalized = value.toLocaleLowerCase("en-IN");
+  if (normalized.includes("delivered") || normalized.includes("ready")) {
+    return "compare-property-status compare-property-status--good";
+  }
+  if (normalized.includes("delay")) {
+    return "compare-property-status compare-property-status--risk";
+  }
+  return "compare-property-status compare-property-status--neutral";
+}
+
+function CanonicalValue({ row, value }: { row: CanonicalRow; value: string }) {
+  if (row.id === "projectScale") {
+    const parts = value.split(" · ").filter(Boolean);
+    return (
+      <div className="compare-property-pills">
+        {parts.map((part) => (
+          <span key={part}>{part}</span>
+        ))}
+      </div>
+    );
+  }
+
+  return <strong className={statusClassName(value)}>{value}</strong>;
+}
+
+function CompareHomeHeader({
+  column,
+  index,
+  summary = [],
+}: {
+  column: SocietyColumn;
+  index: number;
+  summary?: string[];
+}) {
+  return (
+    <Link
+      className="compare-editorial__home"
+      to={`/property/${encodeURIComponent(column.propertyId)}`}
+    >
+      <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
+      <strong>{column.name}</strong>
+      <span>{column.area}</span>
+      {summary.length > 0 && (
+        <small>{summary.join(" · ")}</small>
+      )}
+      <em>Open home ↗</em>
+    </Link>
+  );
+}
+
+function noteToCompareItem(note: NotebookNote): CompareItem {
+  return {
+    id: note.id,
+    title: note.title,
+    detail: note.detail,
+    source: note.source,
+    labels: note.labels,
+    origin: "note",
+  };
+}
+
+function distanceLabel(place: MapPlacePin): string | null {
+  if (typeof place.distance_km !== "number" || !Number.isFinite(place.distance_km)) {
+    return null;
+  }
+  return `${place.distance_km.toFixed(1).replace(/\.0$/, "")} km`;
+}
+
+function nearbyPlaceCompareItem(place: MapPlacePin, index: number): CompareItem | null {
+  const labels = labelsForNearbyPlace(place.layer, place.distance_km);
+  if (!noteCompareGroup({ labels })) return null;
+  const distance = distanceLabel(place);
+  return {
+    id: `${place.feature_id ?? place.place_entity_id ?? place.layer}-${place.name}-${index}`,
+    title: place.name,
+    detail: distance ?? undefined,
+    source: place.source_type,
+    labels,
+    origin: "backend",
+  };
+}
+
+function backendCompareItems(context: PropertyMapContext | null): CompareItem[] {
+  if (!context) return [];
+  return context.places
+    .map(nearbyPlaceCompareItem)
+    .filter((item): item is CompareItem => item !== null)
+    .sort((left, right) => {
+      const leftBucket = left.labels.find((label) => label.includes("_under_")) ?? "";
+      const rightBucket = right.labels.find((label) => label.includes("_under_")) ?? "";
+      return leftBucket.localeCompare(rightBucket) || left.title.localeCompare(right.title);
+    });
+}
+
+function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): CompareItem[] {
+  const seen = new Set<string>();
+  const merged: CompareItem[] = [];
+  for (const item of [...backendItems, ...notes.map(noteToCompareItem)]) {
+    const key = `${item.title.toLocaleLowerCase("en-IN")}::${[...item.labels].sort().join("|")}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(item);
+  }
+  return merged;
+}
+
+function CompareNote({ item }: { item: CompareItem }) {
+  const labels = displayItemLabels(item);
+  return (
+    <div className={`compare-note compare-note--${item.origin}`}>
+      {labels[0] && (
+        <b aria-hidden="true">{labelIcon(labels[0])}</b>
+      )}
+      <span>{item.title}</span>
+      {(item.detail || item.source) && (
+        <small>{item.detail || item.source}</small>
+      )}
+      {labels.length > 0 && (
+        <div className="compare-note__labels" aria-label="Saved labels">
+          {labels.map((label) => (
+            <span key={label} className={labelClass(label)}>
+              {labelDef(label).title}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FloorPlanMetrics({ plan }: { plan: FloorPlanComparePlan }) {
+  const carpet = formatSqft(plan.carpetAreaSqft);
+  const sale = formatSqft(plan.saleAreaSqft);
+  const usable = formatUsableRatio(plan.usableAreaRatio);
+  const metrics = [
+    carpet ? ["Carpet", carpet] : null,
+    sale ? ["Sale", sale] : null,
+    usable ? ["Usable", usable] : null,
+  ].filter((metric): metric is [string, string] => metric !== null);
+
+  if (metrics.length === 0) return null;
+  return (
+    <dl>
+      {metrics.map(([label, value]) => (
+        <div key={label}>
+          <dt>{label}</dt>
+          <dd>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function SocietyFactCard({
+  rows,
+  listings,
+  items,
+}: {
+  rows: CanonicalRow[];
+  listings: PropertyCard[];
+  items: CompareItem[];
+}) {
+  const visible = rows
+    .map((row) => ({
+      row,
+      value: row.value(listings),
+      attached: items.filter((item) =>
+        item.origin === "note"
+        && item.labels.some((label) => row.noteLabels.includes(label))
+      ),
+    }))
+    .filter((item) => item.value || item.attached.length > 0);
+
+  if (visible.length === 0) {
+    return <article className="compare-fact-card is-empty" aria-hidden="true" />;
+  }
+
+  return (
+    <article className="compare-fact-card">
+      {visible.map((item) => (
+        <div key={item.row.id} className="compare-fact-card__row">
+          <span className="compare-fact-card__icon">
+            <CanonicalRowIcon id={item.row.id} />
+          </span>
+          <span className="compare-fact-card__label">{item.row.label}</span>
+          {item.value && <CanonicalValue row={item.row} value={item.value} />}
+          {item.attached.slice(0, 2).map((attached) => (
+            <CompareNote key={attached.id} item={attached} />
+          ))}
+        </div>
+      ))}
+    </article>
+  );
+}
+
+function FloorPlanCompareStrip({
+  columns,
+  activeBhk,
+}: {
+  columns: SocietyColumn[];
+  activeBhk: number;
+}) {
+  const planRows = columns.map((column) => ({
+    column,
+    plan: floorPlanForBhk(column.listings, activeBhk),
+  }));
+  if (!planRows.some((row) => row.plan !== null)) return null;
+
+  return (
+    <section className="compare-floor-plans" aria-label={`${activeBhk} BHK floor plans`}>
+      <header>
+        <span>{activeBhk} BHK plans</span>
+      </header>
+      <div className={`compare-floor-plans__grid compare-floor-plans__grid--homes-${columns.length}`}>
+        {planRows.map((row) => (
+          <figure key={row.column.key} className="compare-floor-plan">
+            <div className="compare-floor-plan__image">
+              {row.plan ? (
+                <img
+                  src={row.plan.previewUrl}
+                  alt={`${row.column.name} ${row.plan.configurationType ?? `${activeBhk} BHK`} floor plan`}
+                />
+              ) : (
+                <span aria-hidden="true">—</span>
+              )}
+            </div>
+            <figcaption>
+              <strong title={row.column.name}>{row.column.name}</strong>
+              {row.plan?.configurationType && <span>{row.plan.configurationType}</span>}
+            </figcaption>
+            {row.plan && <FloorPlanMetrics plan={row.plan} />}
+          </figure>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function SocietyComparisonMatrix({
+  selectedHomes,
+  catalog,
+  details,
+}: {
+  selectedHomes: PropertyCard[];
+  catalog: PropertyCard[];
+  details: PropertyDetailResponse[];
+}) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { notes } = useNotebook();
+  const columns = useMemo(
+    () => buildSocietyColumns(selectedHomes, catalog),
+    [catalog, selectedHomes],
+  );
+  const catalogById = useMemo(
+    () => new Map(catalog.map((property) => [property.id, property])),
+    [catalog],
+  );
+  const detailById = useMemo(
+    () => new Map(details.map((detail) => [detail.property.id, detail])),
+    [details],
+  );
+  const availableBhks = [...new Set(columns.flatMap((column) =>
+    column.listings.map((listing) => listing.bhk)
+  ))].sort((left, right) => left - right);
+  const requestedBhk = Number(searchParams.get("bhk"));
+  const preferredBhk = selectedHomes[0]?.bhk;
+  const activeBhk = availableBhks.includes(requestedBhk)
+    ? requestedBhk
+    : preferredBhk != null && availableBhks.includes(preferredBhk)
+      ? preferredBhk
+      : availableBhks[0] ?? 0;
+
+  const columnNotes = useMemo(
+    () => new Map(columns.map((column) => [
+      column.key,
+      notesForColumn(column, notes, catalogById),
+    ])),
+    [catalogById, columns, notes],
+  );
+  const columnItems = useMemo(
+    () => new Map(columns.map((column) => {
+      const context = compareContextForColumn(column, detailById);
+      const backendItems = backendCompareItems(context);
+      const noteItems = columnNotes.get(column.key) ?? [];
+      return [column.key, mergeCompareItems(backendItems, noteItems)];
+    })),
+    [columnNotes, columns, detailById],
+  );
+
+  const noteRows = useMemo(() => {
+    const groups = new Set<NoteGroupId>();
+    for (const column of columns) {
+      for (const item of columnItems.get(column.key) ?? []) {
+        const group = noteCompareGroup(item);
+        if (
+          group
+          && !item.labels.some((label) => CANONICAL_NOTE_LABELS.has(label))
+        ) {
+          groups.add(group);
+        }
+      }
+    }
+    return [...groups]
+      .map((id): NoteRow => {
+        const group = NOTE_GROUP_BY_ID.get(id) ?? NOTE_GROUP_BY_ID.get("reference");
+        return {
+          id,
+          label: group?.label ?? id,
+          icon: group?.icon ?? "·",
+          section: group?.section ?? "Reference",
+          rank: group?.rank ?? 99,
+        };
+      })
+      .sort((left, right) =>
+        left.section.localeCompare(right.section)
+        || left.rank - right.rank
+        || left.label.localeCompare(right.label)
+      );
+  }, [columnItems, columns]);
+
+  function setBhk(bhk: number) {
+    const next = new URLSearchParams(searchParams);
+    next.set("bhk", String(bhk));
+    setSearchParams(next, { replace: true });
+  }
+
+  const canonicalSections = [
+    { title: "Society", rows: CANONICAL_ROWS.filter((row) => row.scope === "society") },
+  ];
+  const noteSections = ["Access", "Risks", "Money", "Reference"] as const;
+
+  return (
+    <section className="compare-editorial" aria-label="Side-by-side home comparison">
+      <header className="compare-editorial__controls">
+        <div className="compare-editorial__bhk" role="group" aria-label="Filter by BHK">
+          {availableBhks.map((bhk) => (
+            <button
+              key={bhk}
+              type="button"
+              className={bhk === activeBhk ? "is-active" : ""}
+              aria-pressed={bhk === activeBhk}
+              onClick={() => setBhk(bhk)}
+            >
+              {bhk} BHK
+            </button>
+          ))}
+        </div>
+      </header>
+
+      <FloorPlanCompareStrip columns={columns} activeBhk={activeBhk} />
+
+      <div className="compare-topics">
+        <div className={`compare-topics__homes compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
+          {columns.map((column, index) => (
+            <CompareHomeHeader
+              key={column.key}
+              column={column}
+              index={index}
+              summary={homeHeaderSummary(column.listings.filter((listing) => listing.bhk === activeBhk))}
+            />
+          ))}
+        </div>
+
+        {canonicalSections.map((section) => (
+          <section key={section.title} className="compare-topics__group compare-topics__group--facts">
+            <h2>{section.title}</h2>
+            <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
+              {columns.map((column) => (
+                <SocietyFactCard
+                  key={column.key}
+                  rows={section.rows}
+                  listings={column.listings}
+                  items={columnItems.get(column.key) ?? []}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+
+        {noteSections.map((section) => {
+          const rows = noteRows.filter((row) => row.section === section);
+          if (rows.length === 0) return null;
+          return (
+            <section key={section} className="compare-topics__group">
+              <h2>{section}</h2>
+              {rows.map((row) => (
+                <article key={row.id} className="compare-theme">
+                  <header className="compare-theme__head">
+                    <span className="compare-topics__label-icon" aria-hidden="true">
+                      {row.icon}
+                    </span>
+                    <strong>{row.label}</strong>
+                  </header>
+                  <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
+                    {columns.map((column) => {
+                      const matching = (columnItems.get(column.key) ?? []).filter(
+                        (item) => noteCompareGroup(item) === row.id,
+                      );
+                      return (
+                        <div
+                          key={column.key}
+                          className={`compare-theme__cell${matching.length === 0 ? " is-empty" : ""}`}
+                        >
+                          {matching.slice(0, 4).map((item) => (
+                            <CompareNote key={item.id} item={item} />
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </article>
+              ))}
+            </section>
+          );
+        })}
+      </div>
+    </section>
+  );
+}

@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import type { ProjectPlansView } from "../../lib/types.ts";
+import { NotebookCommentAnchor } from "../notebook/NotebookCommentAnchor.tsx";
 
 type Props = {
+  propertyId: string;
   plans: ProjectPlansView;
 };
 
@@ -15,7 +17,7 @@ export function hasProjectPlans(plans: ProjectPlansView | null | undefined): boo
   return Boolean(plans.site_overview?.preview_url) || plans.floor_plans.length > 0;
 }
 
-export function ProjectPlansShelf({ plans }: Props) {
+export function ProjectPlansShelf({ propertyId, plans }: Props) {
   const floorPlans = plans.floor_plans;
   const [activeId, setActiveId] = useState(floorPlans[0]?.id ?? "");
   const active = useMemo(
@@ -34,19 +36,24 @@ export function ProjectPlansShelf({ plans }: Props) {
       <div className="project-plans__header">
         <div>
           <p className="project-plans__kicker">Floor plans</p>
-          <h2>Layouts by bedroom type</h2>
+          <h2>Plans</h2>
         </div>
-        <p className="project-plans__lede">
-          Carpet and sale areas kept separate so usable space is easy to compare.
-        </p>
       </div>
 
       {plans.site_overview?.preview_url && (
         <figure className="project-plans__site">
-          <img
-            src={plans.site_overview.preview_url}
-            alt={plans.site_overview.label || "Site overview"}
-          />
+          <div className="project-plans__image-anchor notebook-comment-surface">
+            <img
+              src={plans.site_overview.preview_url}
+              alt={plans.site_overview.label || "Site overview"}
+            />
+            <NotebookCommentAnchor
+              propertyId={propertyId}
+              labels={["layout"]}
+              detail={plans.site_overview.label || "Site overview"}
+              source="Plans"
+            />
+          </div>
           <figcaption>
             <span>{plans.site_overview.label || "Site overview"}</span>
             {plans.site_overview.source_url && (
@@ -76,8 +83,14 @@ export function ProjectPlansShelf({ plans }: Props) {
           </div>
 
           <div className="project-plans__body">
-            <div className="project-plans__visual">
+            <div className="project-plans__visual notebook-comment-surface">
               <img src={active.preview_url} alt={active.title} />
+              <NotebookCommentAnchor
+                propertyId={propertyId}
+                labels={["layout"]}
+                detail={active.title}
+                source="Floor plan"
+              />
             </div>
             <div className="project-plans__meta">
               <h3>{active.title}</h3>

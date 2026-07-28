@@ -1,6 +1,7 @@
 import type { ReraInfo } from "../../lib/types.ts";
 import { reraFactGroups } from "../../lib/reraProjectFacts.ts";
 import { LinkIcon } from "./EvidenceIcons.tsx";
+import { NotebookCommentAnchor } from "../notebook/NotebookCommentAnchor.tsx";
 
 function formatFreshness(value?: string): string | null {
   if (!value) return null;
@@ -23,20 +24,34 @@ function httpUrl(value?: string): string | null {
   }
 }
 
-export function ReraProjectFacts({ rera }: { rera: ReraInfo }) {
+export function ReraProjectFacts({
+  rera,
+  propertyId,
+}: {
+  rera: ReraInfo;
+  propertyId?: string;
+}) {
   const groups = reraFactGroups(rera);
   const freshness = formatFreshness(rera.last_verified);
   const sourceUrl = httpUrl(rera.rera_portal_url);
 
   return (
-    <div className="rera-project-facts" aria-label="RERA project facts">
+    <div className="rera-project-facts notebook-comment-surface" aria-label="RERA project facts">
+      {propertyId && (
+        <NotebookCommentAnchor
+          propertyId={propertyId}
+          labels={["legal"]}
+          detail="RERA"
+          source="RERA"
+        />
+      )}
       <div className="rera-project-facts__grid">
         {groups.map((group) => (
           <section key={group.id} className="rera-project-facts__group">
             <h3>{group.label}</h3>
             <dl>
               {group.rows.map((row) => (
-                <div key={`${group.id}-${row.label}`}>
+                <div key={`${group.id}-${row.label}`} className="rera-project-facts__row">
                   <dt>{row.label}</dt>
                   <dd
                     className={[
@@ -44,7 +59,7 @@ export function ReraProjectFacts({ rera }: { rera: ReraInfo }) {
                       row.code ? "is-code" : "",
                     ].filter(Boolean).join(" ")}
                   >
-                    {row.value}
+                    <span>{row.value}</span>
                   </dd>
                 </div>
               ))}

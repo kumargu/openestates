@@ -40,8 +40,9 @@ use crate::livability_brief::{
 use super::enrichment::{
     enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
-    overlay_project_scale_facts, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
-    DataFreshness, ReraInfo,
+    overlay_project_scale_facts, rera_affidavit_only_visible, rera_document_groups,
+    society_node_id, units_per_acre, AreaIntelligence, BuilderTrust, DataFreshness,
+    ReraComplaintScopeSummary, ReraDocumentManifestItem, ReraInfo,
 };
 use super::property_map::property_map_context_from_surface_scene;
 
@@ -2744,6 +2745,36 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_numeric("rera_complaints_resolved_pct") {
         info.complaints_resolved_pct = Some(fact.value);
     }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_count") {
+        info.project_complaints_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_open_count") {
+        info.project_complaints_open_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_disposed_count") {
+        info.project_complaints_disposed_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_count") {
+        info.promoter_complaints_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_open_count") {
+        info.promoter_complaints_open_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_disposed_count") {
+        info.promoter_complaints_disposed_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_complaint_summary_manifest") {
+        info.complaint_summaries =
+            parse_rera_projection_json::<Vec<ReraComplaintScopeSummary>>(&fact.value)
+                .unwrap_or_default();
+    }
+    if let Some(fact) = projection.latest_text("rera_document_manifest") {
+        info.document_manifest =
+            parse_rera_projection_json::<Vec<ReraDocumentManifestItem>>(&fact.value)
+                .unwrap_or_default();
+        info.document_groups = rera_document_groups(&info.document_manifest);
+        info.affidavit_only_visible = rera_affidavit_only_visible(&info.document_manifest);
+    }
     if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
         info.builder_total_projects = projected_i32(fact.value);
     }
@@ -2782,6 +2813,10 @@ fn rera_info_for(
         .map(|timestamp| timestamp.to_rfc3339())
         .or(info.last_verified);
     Some(info)
+}
+
+fn parse_rera_projection_json<T: serde::de::DeserializeOwned>(value: &str) -> Option<T> {
+    serde_json::from_str(value).ok()
 }
 
 fn projected_i32(value: f64) -> Option<i32> {

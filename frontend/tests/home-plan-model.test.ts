@@ -6,6 +6,7 @@ import {
   calculateLoanJourney,
   calculateProjection,
 } from "../src/features/home-plan/model.ts";
+import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import {
   isExplicitlyReadyStatus,
   FIXED_HOME_GROWTH_RATE,
@@ -115,6 +116,34 @@ test("extra EMIs pull the loan-free marker forward", () => {
   assert.ok(base.loanFreeYear !== null);
   assert.ok(prepaid.loanFreeYear !== null);
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
+});
+
+test("plan snapshot captures assumptions and inspected outcome", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 180,
+    currentRentThousands: 55,
+    monthlySipThousands: 40,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs, 3);
+  const activeYear = 12;
+  const note = buildPlanSnapshotNote({
+    propertyId: "prop-one",
+    inputs,
+    projection,
+    activeYear,
+    activePoint: projection.points[activeYear],
+    extraEmisPerYear: 3,
+  });
+
+  assert.equal(note.source, "Plan snapshot");
+  assert.deepEqual(note.labels, ["finance", "emi", "down-payment", "price"]);
+  assert.match(note.title, /EMI, loan closes in/);
+  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /rent \+ .* SIP/);
+  assert.match(note.detail, /home is projected at/);
+  assert.match(note.catalogKey, /^plan:prop-one:12:/);
 });
 
 test("rent rises by the fixed yearly assumption", () => {

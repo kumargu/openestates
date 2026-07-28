@@ -29,6 +29,9 @@ import {
 } from "../../lib/nearbyPlateProjection.ts";
 import { SoftNearbyIcon } from "../ui/SoftIcons.tsx";
 import type { AroundThisHomeMapProps } from "./AroundThisHomeMap.tsx";
+import { NotebookPinButton } from "../notebook/NotebookPinButton.tsx";
+import { labelsForNearbyPlace, labelsForRedFlagLine } from "../../lib/notebook.ts";
+import { useNotebook } from "../../hooks/useNotebook.ts";
 
 const loadAroundThisHomeMap = async () => {
   const module = await import("./AroundThisHomeMap.tsx");
@@ -123,10 +126,12 @@ class NearbyMapBoundary extends Component<
 }
 
 type AroundThisHomePlateProps = {
+  propertyId: string;
   context: PropertyMapContext;
 };
 
 type AroundThisHomePlateInnerProps = {
+  propertyId: string;
   context: PropertyMapContext;
   layers: string[];
 };
@@ -151,7 +156,7 @@ type RedFlagLineSummary = {
   count: number;
 };
 
-export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
+export function AroundThisHomePlate({ propertyId, context }: AroundThisHomePlateProps) {
   const layers = useMemo(() => availableLayers(context), [context]);
   const focus = context.proof_focus;
   const focusKey = focus
@@ -169,6 +174,7 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
   return (
     <AroundThisHomePlateInner
       key={`${context.home.name}:${focusKey ?? "default"}`}
+      propertyId={propertyId}
       context={context}
       layers={layers}
     />
@@ -176,9 +182,11 @@ export function AroundThisHomePlate({ context }: AroundThisHomePlateProps) {
 }
 
 function AroundThisHomePlateInner({
+  propertyId,
   context,
   layers,
 }: AroundThisHomePlateInnerProps) {
+  const { notes, toggleFact } = useNotebook();
   const home = resolveHomeAnchor(context);
   const focus = context.proof_focus;
   const focusedStory = useMemo(
@@ -308,6 +316,9 @@ function AroundThisHomePlateInner({
     ?? focusedPlace
     ?? numbered[0]
     ?? null;
+  const activePlace = numbered.find((place) => place.id === selectedId)
+    ?? focusedPlace
+    ?? null;
 
   function selectStory(next: PlateStory) {
     setStory(next);
@@ -328,6 +339,27 @@ function AroundThisHomePlateInner({
 
   const showWater = Boolean(context.water && waterFocused);
   const canRenderMap = Boolean(home);
+  const pinnedPlaceIds = useMemo(
+    () => notes
+      .filter((note) => note.propertyId === propertyId && note.catalogKey.startsWith(`nearby:${propertyId}:`))
+      .map((note) => note.catalogKey.slice(`nearby:${propertyId}:`.length)),
+    [notes, propertyId],
+  );
+
+  function rememberPlace(place: (typeof numbered)[number]) {
+    toggleFact({
+      propertyId,
+      catalogKey: `nearby:${propertyId}:${place.id}`,
+      title: compactPlaceLabel(place.name),
+      labels: labelsForNearbyPlace(place.layer, place.distance_km),
+      detail: [
+        layerLabel(place.layer, context),
+        typeof place.distance_km === "number" ? `${place.distance_km.toFixed(1)} km` : null,
+      ].filter(Boolean).join(" · "),
+      source: "Around this home",
+      kind: "fact",
+    });
+  }
 
   return (
     <section className="nearby-plate" aria-label="Around this home">
@@ -399,13 +431,43 @@ function AroundThisHomePlateInner({
                 nearestMetroDistanceKm={metroFocused ? nearestMetroDistanceKm : undefined}
                 water={context.water}
                 waterTint={showWater}
+                pinnedPlaceIds={pinnedPlaceIds}
                 onSelectPlace={selectPlace}
                 onSelectCluster={selectCluster}
+                onRememberPlace={rememberPlace}
               />
             </NearbyMapBoundary>
           ) : (
             <div className="nearby-plate__empty-map">
               <p>Map unavailable</p>
+            </div>
+          )}
+
+          {!redFlagsFocused && !waterFocused && activePlace && (
+            <div className="nearby-plate__selected" aria-live="polite">
+              <div className="nearby-plate__selected-copy">
+                <strong>{compactPlaceLabel(activePlace.name)}</strong>
+                <span>
+                  {layerLabel(activePlace.layer, context)}
+                  {typeof activePlace.distance_km === "number"
+                    ? ` · ${activePlace.distance_km.toFixed(1)} km`
+                    : ""}
+                </span>
+              </div>
+              <NotebookPinButton
+                propertyId={propertyId}
+                catalogKey={`nearby:${propertyId}:${activePlace.id}`}
+                title={compactPlaceLabel(activePlace.name)}
+                labels={labelsForNearbyPlace(activePlace.layer, activePlace.distance_km)}
+                detail={[
+                  layerLabel(activePlace.layer, context),
+                  typeof activePlace.distance_km === "number"
+                    ? `${activePlace.distance_km.toFixed(1)} km`
+                    : null,
+                ].filter(Boolean).join(" · ")}
+                source="Around this home"
+                kind="fact"
+              />
             </div>
           )}
 
@@ -427,6 +489,18 @@ function AroundThisHomePlateInner({
                       </span>
                     </span>
                   </div>
+                  <NotebookPinButton
+                    propertyId={propertyId}
+                    catalogKey={`nearby-line:${propertyId}:${summary.id}`}
+                    title={summary.title}
+                    labels={labelsForRedFlagLine(summary.title)}
+                    detail={[
+                      summary.sourceType,
+                      summary.count > 1 ? `${summary.count} segments` : null,
+                    ].filter(Boolean).join(" · ")}
+                    source="Around this home"
+                    kind="fact"
+                  />
                 </li>
               ))}
               {numbered.map((place) => {
@@ -459,6 +533,20 @@ function AroundThisHomePlateInner({
                         </span>
                       </span>
                     </button>
+                    <NotebookPinButton
+                      propertyId={propertyId}
+                      catalogKey={`nearby:${propertyId}:${place.id}`}
+                      title={compactPlaceLabel(place.name)}
+                      labels={labelsForNearbyPlace(place.layer, place.distance_km)}
+                      detail={[
+                        layerLabel(place.layer, context),
+                        typeof place.distance_km === "number"
+                          ? `${place.distance_km.toFixed(1)} km`
+                          : null,
+                      ].filter(Boolean).join(" · ")}
+                      source="Around this home"
+                      kind="fact"
+                    />
                   </li>
                 );
               })}
@@ -467,15 +555,26 @@ function AroundThisHomePlateInner({
 
           {waterFocused && context.water && (
             <div className="nearby-plate__water-card">
-              <strong>{context.water.groundwater_class} groundwater potential</strong>
-              <span>
-                Area context for this society, not a borewell or water-supply reading.
-              </span>
-              <div className="nearby-plate__water-actions">
+              <div className="nearby-plate__water-card-main">
+                <strong>{context.water.groundwater_class} groundwater potential</strong>
                 <span>
-                  Around {(context.water.scope_radius_km ?? DEFAULT_WATER_SCOPE_RADIUS_KM).toFixed(0)} km
+                  Area context for this society, not a borewell or water-supply reading.
                 </span>
+                <div className="nearby-plate__water-actions">
+                  <span>
+                    Around {(context.water.scope_radius_km ?? DEFAULT_WATER_SCOPE_RADIUS_KM).toFixed(0)} km
+                  </span>
+                </div>
               </div>
+              <NotebookPinButton
+                propertyId={propertyId}
+                catalogKey={`water:${propertyId}:${context.water.groundwater_class}`}
+                title={`${context.water.groundwater_class} groundwater`}
+                labels={["water"]}
+                detail={`Around ${(context.water.scope_radius_km ?? DEFAULT_WATER_SCOPE_RADIUS_KM).toFixed(0)} km`}
+                source="Around this home"
+                kind="fact"
+              />
             </div>
           )}
         </div>

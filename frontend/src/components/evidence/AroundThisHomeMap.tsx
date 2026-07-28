@@ -21,8 +21,10 @@ export type AroundThisHomeMapProps = {
   nearestMetroDistanceKm?: number;
   water?: MapWaterContext | null;
   waterTint: boolean;
+  pinnedPlaceIds?: string[];
   onSelectPlace: (id: string) => void;
   onSelectCluster: (cluster: PlaceCluster) => void;
+  onRememberPlace?: (place: NumberedPlace) => void;
 };
 
 function markerEl(
@@ -93,7 +95,7 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function placePopupHtml(place: NumberedPlace): string {
+function placePopupHtml(place: NumberedPlace, pinned: boolean): string {
   const meta = [
     typeof place.distance_km === "number" ? `${place.distance_km.toFixed(1)} km` : null,
     place.layer !== "red_flags" && typeof place.rating === "number" ? `${place.rating.toFixed(1)} rating` : null,
@@ -102,8 +104,27 @@ function placePopupHtml(place: NumberedPlace): string {
   ].filter(Boolean).join(" · ");
   return `
     <div class="nearby-map-popup__body">
-      <strong>${escapeHtml(place.name)}</strong>
-      ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+      <div class="nearby-map-popup__copy">
+        <strong>${escapeHtml(place.name)}</strong>
+        ${meta ? `<span>${escapeHtml(meta)}</span>` : ""}
+      </div>
+      <button
+        type="button"
+        class="nearby-map-popup__pin${pinned ? " is-filled" : ""}"
+        data-notebook-pin="${escapeHtml(place.id)}"
+        aria-label="${pinned ? "Remove note" : "Add note"}"
+        title="${pinned ? "Remove note" : "Add note"}"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
+          <path
+            d="M6.2 5.4h11.6A2.7 2.7 0 0 1 20.5 8v5.8a2.7 2.7 0 0 1-2.7 2.7H13l-4.4 3.1v-3.1H6.2a2.7 2.7 0 0 1-2.7-2.7V8a2.7 2.7 0 0 1 2.7-2.6Z"
+            fill="${pinned ? "currentColor" : "none"}"
+            stroke="currentColor"
+            stroke-width="1.7"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </button>
     </div>
   `;
 }
@@ -469,8 +490,10 @@ export function AroundThisHomeMap({
   nearestMetroDistanceKm,
   water,
   waterTint,
+  pinnedPlaceIds = [],
   onSelectPlace,
   onSelectCluster,
+  onRememberPlace,
 }: AroundThisHomeMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -479,6 +502,8 @@ export function AroundThisHomeMap({
   const viewportCenterRef = useRef(viewport.center);
   const onSelectPlaceRef = useRef(onSelectPlace);
   const onSelectClusterRef = useRef(onSelectCluster);
+  const onRememberPlaceRef = useRef(onRememberPlace);
+  const pinnedPlaceIdsRef = useRef(new Set(pinnedPlaceIds));
 
   useEffect(() => {
     viewportCenterRef.current = viewport.center;
@@ -487,7 +512,12 @@ export function AroundThisHomeMap({
   useEffect(() => {
     onSelectPlaceRef.current = onSelectPlace;
     onSelectClusterRef.current = onSelectCluster;
-  }, [onSelectPlace, onSelectCluster]);
+    onRememberPlaceRef.current = onRememberPlace;
+  }, [onSelectPlace, onSelectCluster, onRememberPlace]);
+
+  useEffect(() => {
+    pinnedPlaceIdsRef.current = new Set(pinnedPlaceIds);
+  }, [pinnedPlaceIds]);
 
   const selectedPlace = useMemo(
     () => places.find((place) => place.id === selectedId) ?? places[0] ?? null,
@@ -671,11 +701,76 @@ export function AroundThisHomeMap({
         className: "nearby-map-popup",
       })
         .setLngLat([place.longitude, place.latitude])
-        .setHTML(placePopupHtml(place));
-      element.addEventListener("mouseenter", () => popup.addTo(map));
-      element.addEventListener("mouseleave", () => popup.remove());
-      element.addEventListener("focus", () => popup.addTo(map));
-      element.addEventListener("blur", () => popup.remove());
+        .setHTML(placePopupHtml(place, pinnedPlaceIdsRef.current.has(place.id)));
+
+      let hideTimer: number | undefined;
+      let lastPointerPinAt = 0;
+      const showPopup = () => {
+        window.clearTimeout(hideTimer);
+        popup.setHTML(placePopupHtml(place, pinnedPlaceIdsRef.current.has(place.id)));
+        popup.addTo(map);
+        bindPopupControls();
+      };
+      const keepPopupOpen = () => {
+        window.clearTimeout(hideTimer);
+      };
+      const hidePopup = () => {
+        hideTimer = window.setTimeout(() => {
+          const root = popup.getElement();
+          if (
+            root?.matches(":hover")
+            || root?.contains(document.activeElement)
+            || element.matches(":hover")
+          ) {
+            return;
+          }
+          popup.remove();
+        }, 360);
+      };
+      const togglePopupPin = (event: Event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        window.clearTimeout(hideTimer);
+        const nextPinned = !pinnedPlaceIdsRef.current.has(place.id);
+        if (nextPinned) pinnedPlaceIdsRef.current.add(place.id);
+        else pinnedPlaceIdsRef.current.delete(place.id);
+        onRememberPlaceRef.current?.(place);
+        popup.setHTML(placePopupHtml(place, nextPinned));
+        bindPopupControls();
+      };
+      const bindPopupControls = () => {
+        const root = popup.getElement();
+        if (!root) return;
+        if (root.dataset.oeNotebookBound !== "true") {
+          root.dataset.oeNotebookBound = "true";
+          root.addEventListener("pointerenter", keepPopupOpen);
+          root.addEventListener("pointerleave", hidePopup);
+          root.addEventListener("focusin", keepPopupOpen);
+          root.addEventListener("focusout", hidePopup);
+        }
+        const pin = root.querySelector<HTMLButtonElement>("[data-notebook-pin]");
+        if (!pin || pin.dataset.oeNotebookBound === "true") return;
+        pin.dataset.oeNotebookBound = "true";
+        pin.addEventListener("pointerdown", (event) => {
+          lastPointerPinAt = window.performance.now();
+          togglePopupPin(event);
+        });
+        pin.addEventListener("click", (event) => {
+          if (window.performance.now() - lastPointerPinAt < 400) {
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
+          togglePopupPin(event);
+        });
+      };
+
+      popup.on("open", bindPopupControls);
+
+      element.addEventListener("pointerenter", showPopup);
+      element.addEventListener("pointerleave", hidePopup);
+      element.addEventListener("focus", showPopup);
+      element.addEventListener("blur", hidePopup);
       element.addEventListener("click", (event) => {
         event.stopPropagation();
         onSelectPlaceRef.current(place.id);
@@ -693,6 +788,7 @@ export function AroundThisHomeMap({
     selectedId,
     selectedPlace?.id,
     showMetroLines,
+    pinnedPlaceIds,
   ]);
 
   return (

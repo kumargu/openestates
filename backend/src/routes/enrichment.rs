@@ -1,10 +1,10 @@
 //! Shared enrichment functions used by all routes that return property/society/area data.
 //! Single source of truth: every route that returns these types calls these functions.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::knowledge::edge::Relation;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
@@ -35,6 +35,16 @@ pub struct ReraInfo {
     pub cost_per_unit_inr: Option<f64>,
     pub complaints_count: Option<i32>,
     pub complaints_resolved_pct: Option<f64>,
+    pub project_complaints_count: Option<i32>,
+    pub project_complaints_open_count: Option<i32>,
+    pub project_complaints_disposed_count: Option<i32>,
+    pub promoter_complaints_count: Option<i32>,
+    pub promoter_complaints_open_count: Option<i32>,
+    pub promoter_complaints_disposed_count: Option<i32>,
+    pub complaint_summaries: Vec<ReraComplaintScopeSummary>,
+    pub document_manifest: Vec<ReraDocumentManifestItem>,
+    pub document_groups: Vec<ReraDocumentGroupSummary>,
+    pub affidavit_only_visible: Option<bool>,
     pub builder_total_projects: Option<i32>,
     pub builder_revocations: Option<i32>,
     pub builder_states: Vec<String>,
@@ -45,6 +55,62 @@ pub struct ReraInfo {
     pub lat_lng: Option<String>,
     pub rera_portal_url: Option<String>,
     pub last_verified: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraComplaintScopeSummary {
+    #[serde(default)]
+    pub scope: String,
+    #[serde(default)]
+    pub total_count_from_tab_label: Option<i32>,
+    #[serde(default)]
+    pub row_count_parsed: i32,
+    #[serde(default)]
+    pub disposed_count: i32,
+    #[serde(default)]
+    pub open_count: i32,
+    #[serde(default)]
+    pub theme_counts: HashMap<String, i32>,
+    #[serde(default)]
+    pub sample_subjects: Vec<String>,
+    #[serde(default)]
+    pub confidence: f64,
+    #[serde(default)]
+    pub validation_notes: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraDocumentManifestItem {
+    #[serde(default)]
+    pub artifact_id: String,
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub source_url: Option<String>,
+    #[serde(default)]
+    pub source_tab: Option<String>,
+    #[serde(default)]
+    pub source_field_label: Option<String>,
+    #[serde(default)]
+    pub document_group: String,
+    #[serde(default)]
+    pub buyer_visibility: Option<String>,
+    #[serde(default)]
+    pub preview_policy: Option<String>,
+    #[serde(default)]
+    pub configuration_type: Option<String>,
+    #[serde(default)]
+    pub bedroom_count: Option<f64>,
+    #[serde(default)]
+    pub confidence: Option<f64>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraDocumentGroupSummary {
+    pub group: String,
+    pub count: i32,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -91,6 +157,34 @@ fn get_numeric_fact(facts: &[SourcedFact], key: &str) -> Option<f64> {
             FactValue::Numeric(n) => Some(*n),
             _ => None,
         })
+}
+
+fn parse_rera_json<T: serde::de::DeserializeOwned>(value: &str) -> Option<T> {
+    serde_json::from_str(value).ok()
+}
+
+pub fn rera_document_groups(
+    manifest: &[ReraDocumentManifestItem],
+) -> Vec<ReraDocumentGroupSummary> {
+    let mut counts = BTreeMap::<String, i32>::new();
+    for item in manifest {
+        let group = item.document_group.trim();
+        if group.is_empty() {
+            continue;
+        }
+        *counts.entry(group.to_string()).or_insert(0) += 1;
+    }
+    counts
+        .into_iter()
+        .map(|(group, count)| ReraDocumentGroupSummary { group, count })
+        .collect()
+}
+
+pub fn rera_affidavit_only_visible(manifest: &[ReraDocumentManifestItem]) -> Option<bool> {
+    if manifest.is_empty() {
+        return None;
+    }
+    Some(manifest.iter().all(|item| item.kind == "affidavit"))
 }
 
 fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
@@ -215,6 +309,12 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
     let total_land_area_sqm = get_numeric_fact(facts, "rera_total_land_area_sqm");
     let total_land_area_acres = total_land_area_sqm.map(|sqm| sqm / 4_046.856_422_4);
     let units_per_acre = units_per_acre(total_units, total_land_area_acres);
+    let document_manifest = get_text_fact(facts, "rera_document_manifest")
+        .and_then(|value| parse_rera_json::<Vec<ReraDocumentManifestItem>>(&value))
+        .unwrap_or_default();
+    let complaint_summaries = get_text_fact(facts, "rera_complaint_summary_manifest")
+        .and_then(|value| parse_rera_json::<Vec<ReraComplaintScopeSummary>>(&value))
+        .unwrap_or_default();
 
     Some(ReraInfo {
         registered,
@@ -237,6 +337,31 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         cost_per_unit_inr: None,
         complaints_count: get_numeric_fact(facts, "rera_complaints_count").map(|n| n as i32),
         complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
+        project_complaints_count: get_numeric_fact(facts, "rera_project_complaints_count")
+            .map(|n| n as i32),
+        project_complaints_open_count: get_numeric_fact(facts, "rera_project_complaints_open_count")
+            .map(|n| n as i32),
+        project_complaints_disposed_count: get_numeric_fact(
+            facts,
+            "rera_project_complaints_disposed_count",
+        )
+        .map(|n| n as i32),
+        promoter_complaints_count: get_numeric_fact(facts, "rera_promoter_complaints_count")
+            .map(|n| n as i32),
+        promoter_complaints_open_count: get_numeric_fact(
+            facts,
+            "rera_promoter_complaints_open_count",
+        )
+        .map(|n| n as i32),
+        promoter_complaints_disposed_count: get_numeric_fact(
+            facts,
+            "rera_promoter_complaints_disposed_count",
+        )
+        .map(|n| n as i32),
+        complaint_summaries,
+        document_groups: rera_document_groups(&document_manifest),
+        affidavit_only_visible: rera_affidavit_only_visible(&document_manifest),
+        document_manifest,
         builder_total_projects: builder_projects,
         builder_revocations: get_numeric_fact(facts, "rera_builder_revocations").map(|n| n as i32),
         builder_states,

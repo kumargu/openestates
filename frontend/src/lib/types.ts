@@ -996,6 +996,16 @@ export type ReraInfo = {
   cost_per_unit_inr?: number;
   complaints_count?: number;
   complaints_resolved_pct?: number;
+  project_complaints_count?: number;
+  project_complaints_open_count?: number;
+  project_complaints_disposed_count?: number;
+  promoter_complaints_count?: number;
+  promoter_complaints_open_count?: number;
+  promoter_complaints_disposed_count?: number;
+  complaint_summaries?: ReraComplaintScopeSummary[];
+  document_manifest?: ReraDocumentManifestItem[];
+  document_groups?: ReraDocumentGroupSummary[];
+  affidavit_only_visible?: boolean;
   builder_total_projects?: number;
   builder_revocations?: number;
   builder_states?: string[];
@@ -1006,6 +1016,38 @@ export type ReraInfo = {
   lat_lng?: string;
   rera_portal_url?: string;
   last_verified?: string;
+};
+
+export type ReraComplaintScopeSummary = {
+  scope: string;
+  total_count_from_tab_label?: number;
+  row_count_parsed: number;
+  disposed_count: number;
+  open_count: number;
+  theme_counts: Record<string, number>;
+  sample_subjects: string[];
+  confidence: number;
+  validation_notes: string[];
+};
+
+export type ReraDocumentManifestItem = {
+  artifact_id: string;
+  kind: string;
+  label: string;
+  source_url?: string;
+  source_tab?: string;
+  source_field_label?: string;
+  document_group: string;
+  buyer_visibility?: string;
+  preview_policy?: string;
+  configuration_type?: string;
+  bedroom_count?: number;
+  confidence?: number;
+};
+
+export type ReraDocumentGroupSummary = {
+  group: string;
+  count: number;
 };
 
 export type AreaIntelligence = {

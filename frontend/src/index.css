@@ -3319,9 +3319,14 @@ body {
   background: #fff;
 }
 
+.project-plans__image-anchor {
+  position: relative;
+}
+
 .project-plans__site img {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 7;
   max-height: 220px;
   object-fit: cover;
   object-position: center;
@@ -3377,6 +3382,7 @@ body {
 }
 
 .project-plans__visual {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: 0.9rem;
@@ -3386,6 +3392,7 @@ body {
 .project-plans__visual img {
   display: block;
   width: 100%;
+  aspect-ratio: 4 / 3;
   max-height: 420px;
   object-fit: contain;
   background: #f7f5f1;
@@ -3886,6 +3893,7 @@ body {
     max-width: calc(100dvw - 3rem);
     min-width: 0;
   }
+
 }
 
 @media (prefers-reduced-motion: reduce) {

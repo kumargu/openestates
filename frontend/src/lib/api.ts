@@ -96,8 +96,8 @@ export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]
   return fetchJson<PropertyCard[]>("/api/properties", options).then(filterListableProperties);
 }
 
-export function getProperty(id: string): Promise<PropertyDetailResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}`);
+export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}`, options);
 }
 
 export function getPropertyRecommendations(id: string): Promise<RecommendationResponse> {

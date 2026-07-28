@@ -554,6 +554,15 @@ pub fn default_openestates_registry() -> AssetRegistry {
             TrustTier::Root,
         ),
         asset(
+            "rera_project_plan_frames",
+            AssetStage::Silver,
+            "RERA-only project plan frame facts and preview refs materialized from offline document artifacts.",
+            &["rera_legal_facts", "canonical_society_nodes"],
+            RefreshCadence::OnChange,
+            CostTier::Free,
+            TrustTier::Root,
+        ),
+        asset(
             "google_places_weekly",
             AssetStage::Raw,
             "Weekly Google Maps place and review metadata with navigable source links.",
@@ -734,6 +743,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "Compacted current project fact rows for fast KG view and serving-bundle materialization. Graph-shaped assets stay as direct KG dependencies.",
             &[
                 "rera_legal_facts",
+                "rera_project_plan_frames",
                 "google_review_facts",
                 "google_nearby_place_facts",
                 "external_listing_facts",
@@ -762,6 +772,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             DependencyFanInPolicy::AllCurrentPartitions,
         )
         .with_dependency_fan_in_policy("image_media_facts", DependencyFanInPolicy::AllCurrentPartitions)
+        .with_optional_dependency("rera_project_plan_frames")
         .with_optional_dependency("google_review_facts")
         .with_optional_dependency("google_nearby_place_facts")
         .with_optional_dependency("external_listing_facts")

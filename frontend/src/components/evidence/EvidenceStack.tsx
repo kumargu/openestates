@@ -17,6 +17,7 @@ import { CommunityPulseCard } from "./CommunityPulseCard.tsx";
 import { ReraProjectFacts } from "./ReraProjectFacts.tsx";
 
 type StackProps = {
+  propertyId?: string;
   evidence: PropertyEvidenceResponse | undefined;
   rera?: ReraInfo | null;
   googleReviews?: {
@@ -144,7 +145,11 @@ function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value?.trim())))];
 }
 
-function FactRow({ item }: { item: SourceItem }) {
+function FactRow({
+  item,
+}: {
+  item: SourceItem;
+}) {
   const url = itemSourceUrl(item);
   const sourceLabel = canShowItemSource(item) ? displaySourceType(item.source_type) : null;
   const values = item.values
@@ -154,7 +159,6 @@ function FactRow({ item }: { item: SourceItem }) {
   if (!hasValue) return null;
   const valueUrl = item.value ? httpUrlFrom(item.value) : null;
   const canLinkValue = canShowItemSource(item);
-
   return (
     <div className="ev-fact">
       <span className="ev-fact__icon"><IconForLabel label={item.label} /></span>
@@ -232,21 +236,35 @@ function EvidenceMediaStripView({ strip }: { strip: EvidenceMediaStrip }) {
   );
 }
 
-function FactGridBody({ facts }: { facts: SourceItem[] }) {
+function FactGridBody({
+  facts,
+}: {
+  facts: SourceItem[];
+}) {
   return (
     <div className="ev-fold__facts ev-fold__facts--grid">
       {facts.map((item) => (
-        <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
+        <FactRow
+          key={`${item.entity_id}-${item.label}`}
+          item={item}
+        />
       ))}
     </div>
   );
 }
 
-function FactListBody({ facts }: { facts: SourceItem[] }) {
+function FactListBody({
+  facts,
+}: {
+  facts: SourceItem[];
+}) {
   return (
     <div className="ev-fold__facts">
       {facts.map((item) => (
-        <FactRow key={`${item.entity_id}-${item.label}`} item={item} />
+        <FactRow
+          key={`${item.entity_id}-${item.label}`}
+          item={item}
+        />
       ))}
     </div>
   );
@@ -300,11 +318,8 @@ function useSectionContent(section: EvidenceSection) {
     max_preview_items: 4,
   };
   const variant = presentation.variant;
-  const FactBody = variant === "fact_grid" || variant === "risk_grid"
-    ? FactGridBody
-    : FactListBody;
 
-  return { constellation, facts, media, presentation, variant, FactBody };
+  return { constellation, facts, media, presentation, variant };
 }
 
 function closedSectionSignal(
@@ -369,22 +384,56 @@ function closedSectionSignal(
 }
 
 function EvidenceFold({
+  propertyId,
   section,
   rera,
   googleReviews,
   open,
   onToggle,
 }: {
+  propertyId?: string;
   section: EvidenceSection;
   rera?: ReraInfo | null;
   googleReviews?: StackProps["googleReviews"];
   open: boolean;
   onToggle: () => void;
 }) {
-  const { constellation, facts, media, presentation, variant, FactBody } = useSectionContent(section);
+  const { constellation, facts, media, presentation, variant } = useSectionContent(section);
   const signal = closedSectionSignal(section, facts, rera, googleReviews);
   const count = section.kind === "rera" && rera ? reraFactCount(rera) : sectionTileCount(section);
   const panelId = `evidence-${section.kind}`;
+  const FactBody = variant === "fact_grid" || variant === "risk_grid"
+    ? FactGridBody
+    : FactListBody;
+
+  const inner = (
+    <>
+      {section.kind !== "rera" && (section.summary || section.subtitle) && (
+        <p className="ev-fold__lead">
+          {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
+        </p>
+      )}
+      {variant === "story" && section.community_pulse ? (
+        <CommunityPulseCard pulse={section.community_pulse} />
+      ) : section.kind === "rera" && rera ? (
+        <ReraProjectFacts rera={rera} propertyId={propertyId} />
+      ) : section.kind === "water_context" ? (
+        <WaterResilienceStory facts={facts} />
+      ) : (
+        <>
+          {section.community_pulse && (
+            <CommunityPulseCard pulse={section.community_pulse} />
+          )}
+          {media.length > 0 && media.map((strip) => (
+            <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
+          ))}
+          {facts.length > 0 && (
+            <FactBody facts={facts} />
+          )}
+        </>
+      )}
+    </>
+  );
 
   return (
     <div
@@ -414,28 +463,7 @@ function EvidenceFold({
 
       <div id={panelId} className="ev-fold__wrap">
         <div className="ev-fold__inner">
-          {section.kind !== "rera" && (section.summary || section.subtitle) && (
-            <p className="ev-fold__lead">
-              {section.community_pulse ? section.subtitle : (section.summary || section.subtitle)}
-            </p>
-          )}
-          {variant === "story" && section.community_pulse ? (
-            <CommunityPulseCard pulse={section.community_pulse} />
-          ) : section.kind === "rera" && rera ? (
-            <ReraProjectFacts rera={rera} />
-          ) : section.kind === "water_context" ? (
-            <WaterResilienceStory facts={facts} />
-          ) : (
-            <>
-              {section.community_pulse && (
-                <CommunityPulseCard pulse={section.community_pulse} />
-              )}
-              {media.length > 0 && media.map((strip) => (
-                <EvidenceMediaStripView key={`${section.kind}-${strip.kind}`} strip={strip} />
-              ))}
-              {facts.length > 0 && <FactBody facts={facts} />}
-            </>
-          )}
+          {inner}
         </div>
       </div>
     </div>
@@ -461,6 +489,7 @@ function hasRenderableContent(section: EvidenceSection): boolean {
 }
 
 export function EvidenceStack({
+  propertyId,
   evidence,
   rera,
   googleReviews,
@@ -498,6 +527,7 @@ export function EvidenceStack({
           return (
             <EvidenceFold
               key={key}
+              propertyId={propertyId}
               section={section}
               rera={rera}
               googleReviews={googleReviews}
