@@ -262,7 +262,7 @@ Combine signals upward only when independent sources agree. For example, STP pro
    - `resident_risk_mentions`
 5. Add these assets to `current_project_facts` fan-in and optional dependencies.
 6. Add `area_risk_radar` as a gold summary asset or render directly from facts in `kg_society_view`.
-7. Add UI surface entries in `ui_surfaces.json` and `app/config/product/evidence_sections.json`.
+7. Add UI surface entries in `ui_surfaces.json` and `app/config/dag/evidence_sections.json`.
 8. Render the first buyer-facing panel using existing `EvidenceStack` patterns.
 9. Add tests:
    - config loader validates new keys
@@ -287,4 +287,3 @@ Prefer user-problem names over source-specific names:
 - Which official flood/land-use layers are reliable enough for Bengaluru v1?
 - Should `area_risk_radar` be a gold asset, or should the backend assemble sections generically from `ui_surfaces.json`?
 - Should cemetery/crematorium proximity be opt-in/collapsed by default because it is sensitive and preference-dependent?
-

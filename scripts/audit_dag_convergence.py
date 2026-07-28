@@ -93,9 +93,7 @@ TEST_PATH_MARKERS = (
     "__tests__",
 )
 
-KNOWN_DEBT_PATHS = {
-    "app/config/product/evidence_sections.json",
-}
+KNOWN_DEBT_PATHS = set()
 
 KNOWN_DEBT_DOC_MARKERS = (
     "dag_convergence",

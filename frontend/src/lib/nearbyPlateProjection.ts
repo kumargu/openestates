@@ -436,6 +436,15 @@ export function buildPlateViewport(
 }
 
 export function availableLayers(context: PropertyMapContext): string[] {
+  if (context.layers && context.layers.length > 0) {
+    const present = new Set(context.places.map((place) => place.layer));
+    if ((context.red_flag_lines?.length ?? 0) > 0) {
+      present.add("red_flags");
+    }
+    return context.layers
+      .filter((layer) => present.has(layer.id))
+      .map((layer) => layer.id);
+  }
   const layers: string[] = [];
   for (const place of context.places) {
     if (!layers.includes(place.layer)) layers.push(place.layer);
@@ -446,7 +455,9 @@ export function availableLayers(context: PropertyMapContext): string[] {
   return layers;
 }
 
-export function layerLabel(layer: string): string {
+export function layerLabel(layer: string, context?: Pick<PropertyMapContext, "layers">): string {
+  const configured = context?.layers?.find((candidate) => candidate.id === layer);
+  if (configured?.label) return configured.label;
   switch (layer) {
     case "metro":
       return "Metro";

@@ -171,7 +171,7 @@ Good places for variation:
 - `app/config/dag/scoring_policy.json`: scoring policy.
 - `app/config/dag/search_intent.json`: intent mapping.
 - `app/config/dag/ui_surfaces.json`: where facts surface.
-- `app/config/product/evidence_sections.json`: product evidence layout.
+- `app/config/dag/evidence_sections.json`: property evidence layout.
 
 Bad patterns:
 
@@ -285,4 +285,3 @@ git grep --cached -n -I -E '(AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{35}|BEGIN (RSA|O
 6. Keep buyer UI copy calm and free of internal implementation language.
 7. Verify with the smallest meaningful build/test/smoke command.
 8. Update this memory when architecture or workflow changes.
-

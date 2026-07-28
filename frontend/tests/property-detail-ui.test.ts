@@ -394,6 +394,12 @@ test("around-this-home layer discovery follows returned scene layers", () => {
   assert.equal(layerLabel("lakes"), "Lakes");
   assert.equal(layerLabel("red_flags"), "Red flags");
   assert.equal(layerLabel("stormwater_drains"), "Stormwater Drains");
+  assert.equal(
+    layerLabel("stormwater_drains", {
+      layers: [{ id: "stormwater_drains", label: "Drain lines" }],
+    }),
+    "Drain lines",
+  );
 });
 
 test("around-this-home exposes line-only red flags as a layer", () => {

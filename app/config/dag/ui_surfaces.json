@@ -46,7 +46,6 @@
             "icon": "train",
             "sort": "distance",
             "maxItems": 2,
-            "chainable": true,
             "enabledByDefault": true,
             "rank": 1
           },
@@ -63,7 +62,6 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.2,
-            "chainable": true,
             "enabledByDefault": true,
             "rank": 2
           },
@@ -81,7 +79,6 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.2,
             "includeNameMarkers": ["hospital", "hospitals", "medical", "clinic", "health", "maternity"],
-            "chainable": true,
             "enabledByDefault": true,
             "rank": 3
           },
@@ -100,7 +97,6 @@
             "spreadMinDistanceKm": 2.0,
             "includeNameMarkers": ["tech park", "technology park", "business park", "tech forest", "office park", "it park", "itpb"],
             "includeRelatedSocietyFacts": true,
-            "chainable": true,
             "enabledByDefault": true,
             "rank": 4
           },
@@ -118,7 +114,6 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "includeNameMarkers": ["cult", "cult.fit"],
-            "chainable": true,
             "enabledByDefault": false,
             "rank": 5
           },
@@ -135,7 +130,6 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
-            "chainable": false,
             "enabledByDefault": false,
             "rank": 6
           },
@@ -152,7 +146,6 @@
             "maxItems": 5,
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
-            "chainable": false,
             "enabledByDefault": false,
             "rank": 7
           },
@@ -170,7 +163,6 @@
             "expandedMaxItems": 8,
             "spreadMinDistanceKm": 1.0,
             "includeNameMarkers": ["brewery", "brewing", "biergarten", "beer garden"],
-            "chainable": true,
             "enabledByDefault": false,
             "rank": 8
           },
@@ -201,7 +193,6 @@
             "spreadMinDistanceKm": 1.0,
             "showReviewMetrics": false,
             "includeRelatedSocietyFacts": true,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 9
           }
@@ -237,7 +228,6 @@
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
             "maxItems": 2,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 1
           },
@@ -250,7 +240,6 @@
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
             "maxItems": 2,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 2
           }
@@ -288,7 +277,6 @@
             "relationClass": "context",
             "renderKind": "evidence_list",
             "maxItems": 1,
-            "chainable": false,
             "enabledByDefault": true,
             "rank": 1
           },
@@ -302,7 +290,6 @@
             "renderKind": "pin",
             "sort": "distance",
             "maxItems": 2,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 2
           },
@@ -314,7 +301,6 @@
             "relationClass": "context",
             "renderKind": "evidence_list",
             "maxItems": 1,
-            "chainable": false,
             "enabledByDefault": false,
             "rank": 3
           }
@@ -381,7 +367,6 @@
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
             "maxItems": 2,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 1
           },
@@ -393,7 +378,6 @@
             "relationClass": "risk_externality",
             "renderKind": "evidence_list",
             "maxItems": 2,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 2
           },
@@ -406,7 +390,6 @@
             "relationClass": "risk_externality",
             "renderKind": "line",
             "maxItems": 3,
-            "directOnly": true,
             "enabledByDefault": true,
             "rank": 3
           }
