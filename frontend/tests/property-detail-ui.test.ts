@@ -5,6 +5,7 @@ import {
   propertyDetailPath,
   propertySurfacePath,
 } from "../src/lib/api.ts";
+import { areaTrackerMetric } from "../src/lib/area-tracker.ts";
 import {
   availableLayers,
   filterPlacesByScale,
@@ -50,6 +51,42 @@ test("source display keeps legacy RERA and Google visible for older payloads", (
   assert.equal(displaySourceType("Rera"), "RERA");
   assert.equal(displaySourceType("GoogleReview"), "Google");
   assert.equal(canShowBuyerSource("Computed"), false);
+});
+
+test("area tracker metric metadata supports config-only metrics", () => {
+  const definition = {
+    id: "walkability",
+    fact_key: "area.discovery.walkability",
+    label: "Walkability",
+    value_type: "score" as const,
+  };
+  const metric = areaTrackerMetric({
+    id: "whitefield",
+    name: "Whitefield",
+    city: "Bengaluru",
+    listing_count: 2,
+    avg_price_per_sqft: 15000,
+    price_min: 10000000,
+    price_max: 20000000,
+    bhks: [3],
+    ready_to_move: 1,
+    near_metro: 2,
+    top_builder: "",
+    societies: 1,
+    median_price_per_sqft: 14000,
+    price_range_per_sqft: { low: 10000, high: 18000 },
+    trend_direction: "up",
+    primary_signal: "Market facts pending",
+    demand_score: 0,
+    recent_searches: 0,
+    evidence_gap_count: 0,
+    sample_size: 2,
+    last_updated: "2026-07-17T00:00:00Z",
+    metrics: [{ ...definition, value: 0.82 }],
+  }, definition);
+
+  assert.equal(metric?.label, "Walkability");
+  assert.equal(metric?.value, 0.82);
 });
 
 test("proof focus URL contract round-trips through detail and surface paths", () => {

@@ -764,6 +764,24 @@ export type AreaDetail = {
   community_notes: string;
 };
 
+export type AreaTrackerMetricValueType = "count" | "score" | "text";
+
+export type AreaTrackerMetricDefinition = {
+  id: string;
+  fact_key: string;
+  label: string;
+  value_type: AreaTrackerMetricValueType;
+  api_field?: string;
+};
+
+export type AreaTrackerMetricValue = {
+  id: string;
+  label: string;
+  value_type: AreaTrackerMetricValueType;
+  api_field?: string;
+  value: number | string | boolean | null;
+};
+
 export type AreaTrackerMarket = {
   id: string;
   name: string;
@@ -790,12 +808,14 @@ export type AreaTrackerMarket = {
   evidence_gap_count: number;
   sample_size: number;
   last_updated: string;
+  metrics?: AreaTrackerMetricValue[];
 };
 
 export type AreaTrackerResponse = {
   generated_at: string;
   total_areas: number;
   total_listings: number;
+  metric_definitions?: AreaTrackerMetricDefinition[];
   markets: AreaTrackerMarket[];
 };
 

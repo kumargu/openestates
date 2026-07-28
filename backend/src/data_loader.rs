@@ -7,15 +7,15 @@ use std::time::Instant;
 use tokio::sync::RwLock;
 
 use crate::dag_config::{
-    better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
-    ResolutionPoliciesFile,
+    area_tracker_config, better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
+    AreaTrackerMetricValueType, ResolutionPoliciesFile,
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
 use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
-use crate::models::area_profile::{PriceRange, RedditSignals};
+use crate::models::area_profile::{AreaTrackerMetrics, PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Society};
 #[cfg(feature = "fastembed")]
 use crate::search::FastEmbedSemanticEmbedder;
@@ -124,7 +124,7 @@ pub fn runtime_snapshot_from_serving_bundle(
 ) -> RuntimeServingSnapshot {
     let properties = properties_from_serving_bundle(&bundle);
     let societies = societies_from_serving_bundle(&bundle);
-    let areas = areas_from_serving_properties(&properties);
+    let areas = areas_from_serving_bundle(&bundle, &properties);
     let search_index = SearchIndex::build(&properties);
     let semantic_index = semantic_index_from_bundle(&bundle, embedder, &properties);
 
@@ -698,6 +698,93 @@ pub fn societies_from_serving_bundle(bundle: &LoadedServingBundle) -> Vec<Societ
     societies
 }
 
+pub fn areas_from_serving_bundle(
+    bundle: &LoadedServingBundle,
+    properties: &[Property],
+) -> Vec<AreaProfile> {
+    let mut areas = bundle
+        .entities
+        .iter()
+        .filter(|entity| entity.entity_type == "area")
+        .map(|entity| area_from_serving_entity(entity, &bundle.fact_index))
+        .collect::<Vec<_>>();
+    let mut seen_area_keys = areas
+        .iter()
+        .map(|area| normalize_area_key(&area.name))
+        .collect::<BTreeSet<_>>();
+    for area in areas_from_serving_properties(properties) {
+        if seen_area_keys.insert(normalize_area_key(&area.name)) {
+            areas.push(area);
+        }
+    }
+    areas.sort_by(|left, right| left.name.cmp(&right.name));
+    areas
+}
+
+fn area_from_serving_entity(
+    entity: &ServingEntityRecord,
+    fact_index: &ServingFactIndex,
+) -> AreaProfile {
+    let rows = fact_index.entity(&entity.entity_id);
+    let low = latest_raw_numeric(rows, "price_range_per_sqft_low")
+        .or_else(|| latest_raw_numeric(rows, "price_per_sqft_low"))
+        .unwrap_or(0.0)
+        .round()
+        .max(0.0) as u64;
+    let high = latest_raw_numeric(rows, "price_range_per_sqft_high")
+        .or_else(|| latest_raw_numeric(rows, "price_per_sqft_high"))
+        .unwrap_or(0.0)
+        .round()
+        .max(0.0) as u64;
+    AreaProfile {
+        id: strip_entity_prefix(&entity.entity_id, "area:"),
+        name: entity.name.clone(),
+        city: latest_raw_text(rows, "city").unwrap_or_else(|| "Bengaluru".to_string()),
+        median_price_per_sqft: latest_raw_numeric(rows, "median_price_per_sqft")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u64,
+        price_range_per_sqft: PriceRange { low, high },
+        trend_direction: latest_raw_text(rows, "trend_direction")
+            .or_else(|| latest_raw_text(rows, "price_trend"))
+            .unwrap_or_default(),
+        trend_summary: latest_raw_text(rows, "trend_summary").unwrap_or_default(),
+        metro_access_summary: latest_raw_text(rows, "metro_details")
+            .or_else(|| latest_raw_text(rows, "metro_access"))
+            .unwrap_or_default(),
+        airport_noise_summary: latest_raw_text(rows, "airport_noise_summary").unwrap_or_default(),
+        traffic_summary: latest_raw_text(rows, "traffic")
+            .or_else(|| latest_raw_text(rows, "traffic_reality"))
+            .unwrap_or_default(),
+        waterlogging_summary: latest_raw_text(rows, "waterlogging")
+            .or_else(|| latest_raw_text(rows, "waterlogging_risk"))
+            .or_else(|| latest_raw_text(rows, "waterlogging_detail"))
+            .unwrap_or_default(),
+        livability_summary: latest_raw_text(rows, "livability")
+            .or_else(|| latest_raw_text(rows, "livability_summary"))
+            .or_else(|| latest_raw_text(rows, "area_vibe"))
+            .unwrap_or_default(),
+        externality_tags: latest_raw_tags(rows, "externality_tags").unwrap_or_default(),
+        infrastructure_tags: latest_raw_tags(rows, "infrastructure_tags")
+            .or_else(|| latest_raw_tags(rows, "upcoming_infra"))
+            .unwrap_or_default(),
+        reddit_signals: RedditSignals {
+            decision_drivers: latest_raw_tags(rows, "reddit_decision_drivers").unwrap_or_default(),
+            recurring_concerns: latest_raw_tags(rows, "reddit_concerns").unwrap_or_default(),
+            sentiment_label: latest_raw_text(rows, "reddit_sentiment").unwrap_or_default(),
+            last_updated: String::new(),
+        },
+        community_notes: latest_raw_text(rows, "community_notes").unwrap_or_default(),
+        sample_size: latest_raw_numeric(rows, "sample_size")
+            .unwrap_or(0.0)
+            .round()
+            .max(0.0) as u32,
+        last_updated: latest_raw_text(rows, "last_updated")
+            .unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+        tracker_metrics: area_tracker_metrics_from_serving_rows(rows),
+    }
+}
+
 fn society_from_serving_entity(
     entity: &ServingEntityRecord,
     fact_index: &ServingFactIndex,
@@ -822,6 +909,7 @@ fn areas_from_serving_properties(properties: &[Property]) -> Vec<AreaProfile> {
                 .iter()
                 .find_map(|property| (!property.city.is_empty()).then_some(property.city.clone()))
                 .unwrap_or_else(|| "Bengaluru".to_string());
+            let tracker_metrics = area_tracker_metrics_from_properties(&properties);
             AreaProfile {
                 id: format!("area-{}", slug(&area)),
                 name: area,
@@ -846,9 +934,56 @@ fn areas_from_serving_properties(properties: &[Property]) -> Vec<AreaProfile> {
                 community_notes: String::new(),
                 sample_size: properties.len() as u32,
                 last_updated: chrono::Utc::now().to_rfc3339(),
+                tracker_metrics: Some(tracker_metrics),
             }
         })
         .collect()
+}
+
+fn area_tracker_metrics_from_properties(properties: &[&Property]) -> AreaTrackerMetrics {
+    let listing_count = properties.len();
+    let price_min = properties
+        .iter()
+        .filter(|property| property.price > 0)
+        .map(|property| property.price)
+        .min();
+    let price_max = properties
+        .iter()
+        .filter(|property| property.price > 0)
+        .map(|property| property.price)
+        .max();
+    let bhks = properties
+        .iter()
+        .map(|property| property.bhk)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect::<Vec<_>>();
+    let ready_inventory_count = properties
+        .iter()
+        .filter(|property| property.possession_status == "ready")
+        .count();
+    let metro_supported_count = properties
+        .iter()
+        .filter(|property| property.metro_distance_mins <= 15)
+        .count();
+    let societies = properties
+        .iter()
+        .map(|property| property.society_id.as_str())
+        .collect::<BTreeSet<_>>()
+        .len();
+
+    AreaTrackerMetrics {
+        listing_count: Some(listing_count),
+        avg_price_per_sqft: Some(average_price_per_sqft(properties)),
+        price_min,
+        price_max,
+        bhks,
+        ready_inventory_count: Some(ready_inventory_count),
+        metro_supported_count: Some(metro_supported_count),
+        top_builder: top_builder(properties),
+        societies: Some(societies),
+        ..AreaTrackerMetrics::default()
+    }
 }
 
 fn median_u64(values: &[u64]) -> Option<u64> {
@@ -856,6 +991,45 @@ fn median_u64(values: &[u64]) -> Option<u64> {
         return None;
     }
     Some(values[values.len() / 2])
+}
+
+fn average_price_per_sqft(properties: &[&Property]) -> u64 {
+    let priced = properties
+        .iter()
+        .filter(|property| property.price_per_sqft > 0)
+        .collect::<Vec<_>>();
+    if priced.is_empty() {
+        return 0;
+    }
+    let total = priced
+        .iter()
+        .map(|property| property.price_per_sqft)
+        .sum::<u64>();
+    ((total as f64 / priced.len() as f64).round()) as u64
+}
+
+fn top_builder(properties: &[&Property]) -> Option<String> {
+    let mut first_seen = HashMap::<&str, usize>::new();
+    let mut counts = HashMap::<&str, usize>::new();
+    for (index, property) in properties.iter().enumerate() {
+        if property.builder_name.trim().is_empty() {
+            continue;
+        }
+        first_seen.entry(&property.builder_name).or_insert(index);
+        *counts.entry(&property.builder_name).or_insert(0) += 1;
+    }
+
+    counts
+        .into_iter()
+        .max_by(|(left_name, left_count), (right_name, right_count)| {
+            left_count.cmp(right_count).then_with(|| {
+                first_seen
+                    .get(right_name)
+                    .unwrap_or(&usize::MAX)
+                    .cmp(first_seen.get(left_name).unwrap_or(&usize::MAX))
+            })
+        })
+        .map(|(name, _)| name.to_string())
 }
 
 fn market_pricing_for_serving_property(
@@ -1070,6 +1244,75 @@ fn latest_confidence(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Op
     latest_fact(rows, fact_key).map(|fact| fact.confidence)
 }
 
+fn latest_raw_fact<'a>(
+    rows: Option<&'a ServingEntityFactRows>,
+    fact_key: &str,
+) -> Option<&'a crate::serving::ServingFactRecord> {
+    rows?
+        .facts
+        .iter()
+        .filter(|fact| fact.fact_key == fact_key)
+        .max_by(|left, right| {
+            left.confidence
+                .partial_cmp(&right.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| left.learned_at.cmp(&right.learned_at))
+        })
+}
+
+fn latest_raw_text(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<String> {
+    latest_raw_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Text(value) if !value.trim().is_empty() => Some(value.trim().to_string()),
+        FactValue::Numeric(value) if value.is_finite() => Some(value.to_string()),
+        FactValue::Bool(value) => Some(value.to_string()),
+        FactValue::Score { value, .. } if value.is_finite() => Some(value.to_string()),
+        FactValue::Tags(values) if !values.is_empty() => Some(values.join(", ")),
+        _ => None,
+    })
+}
+
+fn latest_raw_numeric(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f64> {
+    latest_raw_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Numeric(value) if value.is_finite() => Some(*value),
+        FactValue::Score { value, .. } if value.is_finite() => Some(*value),
+        _ => None,
+    })
+}
+
+fn latest_raw_usize(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<usize> {
+    latest_raw_numeric(rows, fact_key)
+        .and_then(|value| (value.is_finite() && value >= 0.0).then_some(value.round() as usize))
+}
+
+fn latest_raw_f32(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<f32> {
+    latest_raw_numeric(rows, fact_key)
+        .and_then(|value| (value.is_finite() && value >= 0.0).then_some(value as f32))
+}
+
+fn latest_raw_tags(rows: Option<&ServingEntityFactRows>, fact_key: &str) -> Option<Vec<String>> {
+    latest_raw_fact(rows, fact_key).and_then(|fact| match &fact.value {
+        FactValue::Tags(values) => Some(
+            values
+                .iter()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>(),
+        )
+        .filter(|values| !values.is_empty()),
+        FactValue::Text(value) if !value.trim().is_empty() => Some(vec![value.trim().to_string()]),
+        _ => None,
+    })
+}
+
+fn normalize_area_key(value: &str) -> String {
+    value
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 fn slug(value: &str) -> String {
     let mut output = String::new();
     let mut pending_dash = false;
@@ -1206,9 +1449,123 @@ fn areas_from_graph(graph: &KnowledgeGraph) -> Vec<AreaProfile> {
                 community_notes: fact_text(node, "community_notes").into(),
                 sample_size: 0,
                 last_updated: node.updated_at.to_rfc3339(),
+                tracker_metrics: area_tracker_metrics_from_area_node(node),
             }
         })
         .collect()
+}
+
+fn area_tracker_metrics_from_area_node(node: &knowledge::node::Node) -> Option<AreaTrackerMetrics> {
+    let config = area_tracker_config();
+    let metric_key = |api_field: &str| {
+        config
+            .metrics
+            .iter()
+            .find(|metric| metric.api_field.as_deref() == Some(api_field))
+            .map(|metric| metric.fact_key.as_str())
+    };
+
+    let mut metrics = AreaTrackerMetrics::default();
+    metrics.listing_count = metric_key("listing_count").and_then(|key| fact_usize(node, key));
+    metrics.ready_inventory_count =
+        metric_key("ready_to_move").and_then(|key| fact_usize(node, key));
+    metrics.metro_supported_count = metric_key("near_metro").and_then(|key| fact_usize(node, key));
+    metrics.demand_score = metric_key("demand_score").and_then(|key| fact_f32(node, key));
+    metrics.primary_signal =
+        metric_key("primary_signal").and_then(|key| fact_optional_text(node, key));
+    metrics.societies = metric_key("societies").and_then(|key| fact_usize(node, key));
+    for metric in &config.metrics {
+        if metric.api_field.is_some() {
+            continue;
+        }
+        if let Some(value) = area_tracker_metric_value_from_fact(node, metric) {
+            metrics.extra_metrics.insert(metric.id.clone(), value);
+        }
+    }
+
+    let has_configured_fact = metrics.listing_count.is_some()
+        || metrics.ready_inventory_count.is_some()
+        || metrics.metro_supported_count.is_some()
+        || metrics.demand_score.is_some()
+        || metrics.primary_signal.is_some()
+        || metrics.societies.is_some()
+        || !metrics.extra_metrics.is_empty();
+    has_configured_fact.then_some(metrics)
+}
+
+fn area_tracker_metrics_from_serving_rows(
+    rows: Option<&ServingEntityFactRows>,
+) -> Option<AreaTrackerMetrics> {
+    let config = area_tracker_config();
+    let metric_key = |api_field: &str| {
+        config
+            .metrics
+            .iter()
+            .find(|metric| metric.api_field.as_deref() == Some(api_field))
+            .map(|metric| metric.fact_key.as_str())
+    };
+
+    let mut metrics = AreaTrackerMetrics::default();
+    metrics.listing_count = metric_key("listing_count").and_then(|key| latest_raw_usize(rows, key));
+    metrics.ready_inventory_count =
+        metric_key("ready_to_move").and_then(|key| latest_raw_usize(rows, key));
+    metrics.metro_supported_count =
+        metric_key("near_metro").and_then(|key| latest_raw_usize(rows, key));
+    metrics.demand_score = metric_key("demand_score").and_then(|key| latest_raw_f32(rows, key));
+    metrics.primary_signal =
+        metric_key("primary_signal").and_then(|key| latest_raw_text(rows, key));
+    metrics.societies = metric_key("societies").and_then(|key| latest_raw_usize(rows, key));
+    for metric in &config.metrics {
+        if metric.api_field.is_some() {
+            continue;
+        }
+        if let Some(value) = area_tracker_metric_value_from_serving_fact(rows, metric) {
+            metrics.extra_metrics.insert(metric.id.clone(), value);
+        }
+    }
+
+    let has_configured_fact = metrics.listing_count.is_some()
+        || metrics.ready_inventory_count.is_some()
+        || metrics.metro_supported_count.is_some()
+        || metrics.demand_score.is_some()
+        || metrics.primary_signal.is_some()
+        || metrics.societies.is_some()
+        || !metrics.extra_metrics.is_empty();
+    has_configured_fact.then_some(metrics)
+}
+
+fn area_tracker_metric_value_from_fact(
+    node: &knowledge::node::Node,
+    metric: &crate::dag_config::AreaTrackerMetricConfig,
+) -> Option<serde_json::Value> {
+    match metric.value_type {
+        AreaTrackerMetricValueType::Count => {
+            fact_usize(node, &metric.fact_key).map(serde_json::Value::from)
+        }
+        AreaTrackerMetricValueType::Score => {
+            fact_f32(node, &metric.fact_key).map(serde_json::Value::from)
+        }
+        AreaTrackerMetricValueType::Text => {
+            fact_optional_text(node, &metric.fact_key).map(serde_json::Value::from)
+        }
+    }
+}
+
+fn area_tracker_metric_value_from_serving_fact(
+    rows: Option<&ServingEntityFactRows>,
+    metric: &crate::dag_config::AreaTrackerMetricConfig,
+) -> Option<serde_json::Value> {
+    match metric.value_type {
+        AreaTrackerMetricValueType::Count => {
+            latest_raw_usize(rows, &metric.fact_key).map(serde_json::Value::from)
+        }
+        AreaTrackerMetricValueType::Score => {
+            latest_raw_f32(rows, &metric.fact_key).map(serde_json::Value::from)
+        }
+        AreaTrackerMetricValueType::Text => {
+            latest_raw_text(rows, &metric.fact_key).map(serde_json::Value::from)
+        }
+    }
 }
 
 /// Derive Property structs from KG property nodes.
@@ -1666,6 +2023,20 @@ fn optional_fact_numeric(node: &knowledge::node::Node, key: &str) -> Option<f64>
     })
 }
 
+fn fact_usize(node: &knowledge::node::Node, key: &str) -> Option<usize> {
+    optional_fact_numeric(node, key)
+        .and_then(|value| (value.is_finite() && value >= 0.0).then_some(value.round() as usize))
+}
+
+fn fact_f32(node: &knowledge::node::Node, key: &str) -> Option<f32> {
+    optional_fact_numeric(node, key)
+        .and_then(|value| (value.is_finite() && value >= 0.0).then_some(value as f32))
+}
+
+fn fact_optional_text(node: &knowledge::node::Node, key: &str) -> Option<String> {
+    fact_text(node, key).into_option()
+}
+
 fn fact_confidence(node: &knowledge::node::Node, key: &str) -> f32 {
     node.get_fact(key).map(|f| f.confidence).unwrap_or(0.0)
 }
@@ -1950,6 +2321,61 @@ mod tests {
     }
 
     #[test]
+    fn serving_area_entity_populates_tracker_metrics_from_configured_facts() {
+        let entity = ServingEntityRecord {
+            entity_id: "area:whitefield".to_string(),
+            entity_type: "area".to_string(),
+            name: "Whitefield".to_string(),
+            root_source: Some("computed".to_string()),
+            searchable_text: String::new(),
+        };
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "area:whitefield",
+                    "area.market.listing_count",
+                    FactValue::Numeric(2.0),
+                    0.9,
+                ),
+                serving_fact(
+                    "area:whitefield",
+                    "area.market.ready_inventory_count",
+                    FactValue::Numeric(1.0),
+                    0.9,
+                ),
+                serving_fact(
+                    "area:whitefield",
+                    "area.access.metro_supported_count",
+                    FactValue::Numeric(2.0),
+                    0.9,
+                ),
+                serving_fact(
+                    "area:whitefield",
+                    "area.discovery.demand_score",
+                    FactValue::Numeric(0.24),
+                    0.9,
+                ),
+                serving_fact(
+                    "area:whitefield",
+                    "area.discovery.primary_signal",
+                    FactValue::Text("metro".to_string()),
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let area = area_from_serving_entity(&entity, &fact_index);
+        let metrics = area.tracker_metrics.as_ref().expect("tracker metrics");
+
+        assert_eq!(metrics.listing_count, Some(2));
+        assert_eq!(metrics.ready_inventory_count, Some(1));
+        assert_eq!(metrics.metro_supported_count, Some(2));
+        assert_eq!(metrics.demand_score, Some(0.24));
+        assert_eq!(metrics.primary_signal.as_deref(), Some("metro"));
+    }
+
+    #[test]
     fn serving_society_listing_creates_representative_property_without_source_scan() {
         let entities = vec![ServingEntityRecord {
             entity_id: "society:prestige-elm-park".to_string(),
@@ -2138,6 +2564,21 @@ mod tests {
         node
     }
 
+    fn make_area_node_with_tracker_facts(slug: &str, name: &str) -> Node {
+        let mut node = make_area_node(slug, name);
+        node.add_facts(vec![
+            SourcedFact::manual("area.market.listing_count", FactValue::Numeric(2.0)),
+            SourcedFact::manual("area.market.ready_inventory_count", FactValue::Numeric(1.0)),
+            SourcedFact::manual("area.access.metro_supported_count", FactValue::Numeric(2.0)),
+            SourcedFact::manual("area.discovery.demand_score", FactValue::Numeric(0.24)),
+            SourcedFact::manual(
+                "area.discovery.primary_signal",
+                FactValue::Text("metro".to_string()),
+            ),
+        ]);
+        node
+    }
+
     #[test]
     fn test_societies_from_graph() {
         let mut graph = KnowledgeGraph::new();
@@ -2176,6 +2617,24 @@ mod tests {
         assert_eq!(a.metro_access_summary, "operational");
         // livability_summary falls back to area_vibe
         assert_eq!(a.livability_summary, "Tech hub");
+    }
+
+    #[test]
+    fn area_tracker_metrics_load_from_configured_area_facts() {
+        let mut graph = KnowledgeGraph::new();
+        graph.add_node(make_area_node_with_tracker_facts(
+            "whitefield",
+            "Whitefield",
+        ));
+        graph.rebuild_indexes();
+
+        let areas = areas_from_graph(&graph);
+        let metrics = areas[0].tracker_metrics.as_ref().expect("tracker metrics");
+        assert_eq!(metrics.listing_count, Some(2));
+        assert_eq!(metrics.ready_inventory_count, Some(1));
+        assert_eq!(metrics.metro_supported_count, Some(2));
+        assert_eq!(metrics.demand_score, Some(0.24));
+        assert_eq!(metrics.primary_signal.as_deref(), Some("metro"));
     }
 
     #[test]
