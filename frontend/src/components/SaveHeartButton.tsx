@@ -8,9 +8,10 @@ import {
 type SaveHeartButtonProps = {
   propertyId: string;
   className?: string;
+  label?: string;
 };
 
-export function SaveHeartButton({ propertyId, className = "" }: SaveHeartButtonProps) {
+export function SaveHeartButton({ propertyId, className = "", label }: SaveHeartButtonProps) {
   const [saved, setSaved] = useState(() => isShortlisted(propertyId));
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export function SaveHeartButton({ propertyId, className = "" }: SaveHeartButtonP
           strokeLinejoin="round"
         />
       </svg>
+      {label && <span>{label}</span>}
     </button>
   );
 }

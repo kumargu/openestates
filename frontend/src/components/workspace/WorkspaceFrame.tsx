@@ -2,10 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProperties } from "../../lib/api.ts";
 import {
-  defaultComparedHomes,
   FOCUS_STORAGE_KEY,
-  MAX_SHORTLIST_HOMES,
-  normalizeComparedSocieties,
   parseShortlistIds,
   readShortlistIds,
   SHORTLIST_CHANGED_EVENT,
@@ -18,8 +15,6 @@ import {
 } from "./WorkspaceSidebar.tsx";
 import "../../styles/workspace.css";
 
-const DEFAULT_WORKSPACE_HOMES = 3;
-const MIN_WORKSPACE_SOCIETIES = 2;
 const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
 
 type WorkspaceFrameProps = {
@@ -84,46 +79,17 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     const availableIds = new Set(properties.map((property) => property.id));
     const hasExplicitSelection = queryIds.length > 0;
     const stored = shortlistIds.filter((id) => availableIds.has(id));
-    const requested = hasExplicitSelection
+    return hasExplicitSelection
       ? queryIds.filter((id) => availableIds.has(id))
       : stored;
-    let next = requested;
-
-    if (next.length === 0 && !hasExplicitSelection) {
-      next = defaultComparedHomes(properties, DEFAULT_WORKSPACE_HOMES)
-        .map((property) => property.id);
-    } else {
-      const byId = new Map(properties.map((property) => [property.id, property]));
-      const selectedHomes = next
-        .map((id) => byId.get(id))
-        .filter((property): property is PropertyCard => Boolean(property));
-      next = normalizeComparedSocieties(
-        selectedHomes,
-        properties,
-        MIN_WORKSPACE_SOCIETIES,
-        MAX_SHORTLIST_HOMES,
-      ).map((property) => property.id);
-    }
-
-    if (
-      propertyId
-      && availableIds.has(propertyId)
-      && !next.includes(propertyId)
-      && !hasExplicitSelection
-    ) {
-      next = [propertyId, ...next].slice(0, MAX_SHORTLIST_HOMES);
-    }
-
-    return next;
-  }, [properties, propertyId, queryIds, shortlistIds]);
+  }, [properties, queryIds, shortlistIds]);
 
   useEffect(() => {
-    if (homeIds.length > 0 && queryIds.length === 0) {
-      if (!sameIds(shortlistIds, homeIds)) {
-        writeShortlistIds(homeIds);
-      }
+    if (properties.length === 0) return;
+    if (queryIds.length === 0 && !sameIds(shortlistIds, homeIds)) {
+      writeShortlistIds(homeIds);
     }
-  }, [homeIds, queryIds.length, shortlistIds]);
+  }, [homeIds, properties.length, queryIds.length, shortlistIds]);
 
   const homes = useMemo(() => {
     const byId = new Map(properties.map((property) => [property.id, property]));
@@ -145,6 +111,12 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
   }, [focusedId]);
 
+  useEffect(() => {
+    if (homes.length === 0) return;
+    setCollapsed(false);
+    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
+  }, [homes.length]);
+
   const idsValue = homes.map((home) => home.id).join(",");
   const compareHref = idsValue
     ? `/compare?ids=${encodeURIComponent(idsValue)}&focus=${encodeURIComponent(focusedId)}`
@@ -159,8 +131,13 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
     if (activeView === "compare") {
       const next = new URLSearchParams(location.search);
-      next.set("ids", nextIds.join(","));
+      if (nextIds.length > 0) {
+        next.set("ids", nextIds.join(","));
+      } else {
+        next.delete("ids");
+      }
       if (focus) next.set("focus", focus);
+      else next.delete("focus");
       navigate(`/compare?${next.toString()}`, { replace: true });
       return;
     }
@@ -201,21 +178,24 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   }
 
   function removeHome(propertyIdToRemove: string) {
-    if (homes.length <= MIN_WORKSPACE_SOCIETIES) return;
     const nextIds = homes
       .map((home) => home.id)
       .filter((id) => id !== propertyIdToRemove);
     writeSelection(nextIds);
   }
 
+  const reducedBeforeDecision = homes.length === 0 && queryIds.length === 0;
+  const sidebarCollapsed = collapsed || reducedBeforeDecision;
+
   return (
-    <div className={`workspace-shell${collapsed ? " workspace-shell--collapsed" : ""}`}>
+    <div className={`workspace-shell${sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
       <WorkspaceSidebar
         homes={homes}
         focusedId={focusedId}
         compareHref={compareHref}
         activeView={activeView}
-        collapsed={collapsed}
+        collapsed={sidebarCollapsed}
+        reduced={reducedBeforeDecision}
         onToggle={toggleSidebar}
         onFocus={focusHome}
         onRemove={removeHome}

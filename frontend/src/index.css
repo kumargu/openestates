@@ -2977,8 +2977,20 @@ body {
   box-shadow: none;
 }
 
+.property-brief-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  margin-bottom: 1.15rem;
+}
+
+.property-brief-heading > div:first-child {
+  min-width: 0;
+}
+
 .property-brief-copy h1 {
-  margin: 0.9rem 0 0.35rem;
+  margin: 0.2rem 0 0.35rem;
   max-width: 100%;
   font-size: clamp(1.7rem, 1.3rem + 1.4vw, 2.45rem);
   line-height: 1.08;
@@ -3011,6 +3023,87 @@ body {
 .property-brief-price-row span {
   color: var(--color-text-secondary);
   font-size: 0.86rem;
+}
+
+.property-brief-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.85rem;
+  margin-top: 0.25rem;
+}
+
+.property-action-link {
+  display: inline-flex;
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.38rem;
+  padding: 0 0.1rem;
+  border: 0;
+  background: transparent;
+  color: var(--color-text);
+  font-family: inherit;
+  font-size: 0.83rem;
+  font-weight: 740;
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+  cursor: pointer;
+}
+
+.property-action-link:hover {
+  color: var(--color-cool-deep);
+}
+
+.property-action-link svg {
+  flex: 0 0 auto;
+}
+
+.property-action-save.is-saved {
+  color: #c45b4a;
+}
+
+.property-brief-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.8rem 1.1rem;
+  margin-bottom: 1rem;
+}
+
+.property-brief-summary > div {
+  display: grid;
+  gap: 0.12rem;
+  min-width: 7rem;
+}
+
+.property-brief-summary strong {
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 780;
+}
+
+.property-brief-summary span {
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 620;
+}
+
+.property-plan-cta {
+  min-height: 2.25rem;
+  padding: 0 0.85rem;
+  border: 1px solid rgba(91, 127, 176, 0.26);
+  border-radius: 8px;
+  background: var(--color-cool-soft);
+  color: var(--color-cool-deep);
+  font-family: inherit;
+  font-size: 0.76rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.property-plan-cta:hover {
+  border-color: rgba(91, 127, 176, 0.44);
+  background: rgba(91, 127, 176, 0.16);
 }
 
 .property-proof-strip {
@@ -3843,6 +3936,14 @@ body {
 
   .property-brief-copy {
     padding: 1.25rem;
+  }
+
+  .property-brief-actions {
+    align-items: stretch;
+  }
+
+  .property-plan-cta {
+    flex: 1 1 11rem;
   }
 
   .property-brief-copy h1 {
