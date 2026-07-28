@@ -80,7 +80,10 @@ pub enum BuyerArchetype {
 /// Known area names and their aliases.
 /// Includes landmark/station names that map to the canonical area.
 ///
-use crate::dag_config::area_alias_entries;
+use crate::dag_config::{
+    area_alias_entries, area_exclusion_prefixes, bhk_fact_key_derivations,
+    conflict_excluded_exact_keys, negated_prefixes,
+};
 ///
 /// Parse a natural-language search query into structured intent.
 pub fn parse_intent(query: &str) -> SearchIntent {
@@ -163,18 +166,9 @@ fn detect_excluded_areas(q: &str) -> Vec<String> {
 }
 
 fn area_alias_is_excluded(q: &str, alias: &str) -> bool {
-    let patterns = [
-        format!("not {}", alias),
-        format!("not in {}", alias),
-        format!("avoid {}", alias),
-        format!("exclude {}", alias),
-        format!("excluding {}", alias),
-        format!("except {}", alias),
-        format!("outside {}", alias),
-    ];
-    patterns
+    area_exclusion_prefixes()
         .iter()
-        .any(|pattern| query_contains_pattern(q, pattern))
+        .any(|prefix| query_contains_pattern(q, &format!("{} {}", prefix.trim(), alias)))
 }
 
 fn detect_hard_constraints(q: &str) -> Vec<HardConstraint> {
@@ -228,22 +222,25 @@ fn detect_positive_preferences(q: &str, bhk: Option<u32>) -> Vec<PreferenceSigna
 }
 
 fn apply_bhk_fact_key_derivations(bhk: Option<u32>, signal: &mut PreferenceSignal) {
-    let Some(bhk) = bhk.filter(|value| (1..=5).contains(value)) else {
+    let Some(bhk) = bhk else {
         return;
     };
 
-    let generic_keys = [
-        "listing",
-        "listing_price",
-        "listing_price_range",
-        "listing_price_per_sqft_range",
-        "listing_area_sqft",
-        "listing_source_url",
-    ];
     let keys = signal.expanded_keys.clone();
-    for key in keys {
-        if generic_keys.iter().any(|generic| key == *generic) {
-            merge_expanded_keys(signal, &[format!("{key}_{bhk}bhk")]);
+    for derivation in bhk_fact_key_derivations() {
+        if !derivation.bhk_values.contains(&bhk) {
+            continue;
+        }
+        for key in &keys {
+            if derivation.generic_keys.iter().any(|generic| key == generic) {
+                merge_expanded_keys(
+                    signal,
+                    &[derivation
+                        .derived_key_template
+                        .replace("{key}", key)
+                        .replace("{bhk}", &bhk.to_string())],
+                );
+            }
         }
     }
 }
@@ -384,17 +381,9 @@ fn preferences_conflict(positive: &PreferenceSignal, negative: &PreferenceSignal
 }
 
 fn is_specific_conflict_key(key: &str) -> bool {
-    !matches!(
-        key,
-        "price_per_sqft"
-            | "pricing_insight"
-            | "legal.litigation"
-            | "legal_risk"
-            | "litigation_risk"
-            | "resident_sentiment"
-            | "google_review_snippets"
-            | "sentiment_summary"
-    )
+    !conflict_excluded_exact_keys()
+        .iter()
+        .any(|excluded| excluded.eq_ignore_ascii_case(key))
 }
 
 fn detect_accepted_tradeoffs(q: &str) -> Vec<String> {
@@ -521,23 +510,8 @@ fn exact_pattern_match_ranges(q: &str, pattern: &str) -> Vec<(usize, usize)> {
 }
 
 fn match_has_negated_prefix(q: &str, start: usize) -> bool {
-    const NEGATED_PREFIXES: &[&str] = &[
-        "not interested in",
-        "not looking for",
-        "do not want",
-        "don't want",
-        "dont want",
-        "no need for",
-        "without",
-        "avoid",
-        "not an",
-        "not a",
-        "not",
-        "no",
-    ];
-
     let prefix = q[..start].trim_end_matches(|ch: char| ch.is_ascii_whitespace() || ch == ',');
-    NEGATED_PREFIXES
+    negated_prefixes()
         .iter()
         .any(|phrase| prefix_ends_with_phrase(prefix, phrase))
 }
