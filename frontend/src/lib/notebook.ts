@@ -96,7 +96,7 @@ export const NOTEBOOK_LABELS: NotebookLabelDef[] = [
   { id: "risk", title: "Risk", compareJoin: true, compareGroup: "red_flags" },
   { id: "transmission", title: "High-tension line", compareJoin: true, compareGroup: "red_flags" },
   { id: "approach", title: "Approach road", compareJoin: true, compareGroup: "approach" },
-  { id: "open-space", title: "Open space", compareJoin: true },
+  { id: "open-space", title: "Open space", compareJoin: true, compareGroup: "open_spaces" },
   { id: "price", title: "Price proof", compareJoin: true, compareGroup: "money" },
   { id: "layout", title: "Layout", compareJoin: true, compareGroup: "layout" },
   { id: "down-payment", title: "Down payment", compareJoin: true, compareGroup: "money" },
