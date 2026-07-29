@@ -1501,14 +1501,14 @@
   display: flex;
   grid-column: 2;
   flex-wrap: wrap;
-  gap: 0.32rem;
-  margin-top: 0.42rem;
+  gap: 0.36rem;
+  margin-top: 0.46rem;
 }
 
 .compare-note__labels .compare-tag {
-  min-height: 1.45rem;
-  padding: 0 0.48rem;
-  font-size: 0.56rem;
+  min-height: 1.6rem;
+  padding: 0 0.66rem;
+  font-size: 0.6rem;
 }
 
 @keyframes compare-page-in {

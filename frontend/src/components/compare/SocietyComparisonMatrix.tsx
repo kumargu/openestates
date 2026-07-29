@@ -296,8 +296,9 @@ function labelClass(label: NotebookLabelId): string {
 
 function displayItemLabels(item: Pick<CompareItem, "labels">): NotebookLabelId[] {
   const bucket = item.labels.find((label) => label.includes("_under_"));
-  const primary = item.labels.find((label) => !label.includes("_under_"));
-  return [primary, bucket].filter((label): label is NotebookLabelId => Boolean(label)).slice(0, 2);
+  if (bucket) return [bucket];
+  const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
+  return primary ? [primary] : [];
 }
 
 function CanonicalRowIcon({ id }: { id: CanonicalRowId }) {
