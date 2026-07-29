@@ -380,6 +380,7 @@
 .notion-pill--transmission { background: #f3d9d6; color: #7a3228; }
 .notion-pill--community { background: #e8e6f0; color: #4a4560; }
 .notion-pill--metro,
+.notion-pill--tech-parks,
 .notion-pill--tech_parks { background: #e2eee8; color: #2f5c4a; }
 .notion-pill--visit,
 .notion-pill--other,
@@ -1423,6 +1424,7 @@
 .notebook-tag--transmission { background: #f3d9d6; color: #7a3228; }
 .notebook-tag--community { background: #e8e6f0; color: #4a4560; }
 .notebook-tag--metro,
+.notebook-tag--tech-parks,
 .notebook-tag--tech_parks { background: #e2eee8; color: #2f5c4a; }
 .notebook-tag--visit,
 .notebook-tag--other { background: #ececec; color: #555; }
