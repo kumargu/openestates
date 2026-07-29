@@ -7,6 +7,7 @@ import {
   labelsForNearbyPlace,
   type NotebookLabelId,
   type NotebookNote,
+  type NotebookNoteKind,
 } from "../../lib/notebook.ts";
 import { LabelVisualIcon } from "../../lib/LabelVisualIcon.tsx";
 import {
@@ -52,8 +53,29 @@ type CompareItem = {
   title: string;
   detail?: string;
   source?: string;
+  catalogKey?: string;
+  noteKind?: NotebookNoteKind;
   labels: NotebookLabelId[];
   origin: CompareItemOrigin;
+};
+
+type CompareEvidenceKind = "map_place" | "note";
+
+type CompareEvidence = {
+  id: string;
+  title: string;
+  detail?: string;
+  origin: CompareItemOrigin;
+  kind: CompareEvidenceKind;
+  labels: NotebookLabelId[];
+  primaryLabel: NotebookLabelId;
+  group: NoteGroupId;
+  noteId?: string;
+};
+
+type CompareEvidenceCluster = {
+  label: NotebookLabelId;
+  items: CompareEvidence[];
 };
 
 type NoteGroupId =
@@ -307,17 +329,6 @@ function labelPillClass(label: NotebookLabelId, extra = ""): string {
   return `notion-pill notion-pill--${labelClassToken(label)} compare-label-pill${extra ? ` ${extra}` : ""}`;
 }
 
-type CompareDisplayTag = {
-  key: string;
-  label: string;
-  classLabel: NotebookLabelId;
-};
-
-type CompareItemCluster = {
-  label: NotebookLabelId;
-  items: CompareItem[];
-};
-
 function displayIconLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
   const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
   if (bucket) return labelBaseId(bucket);
@@ -325,18 +336,18 @@ function displayIconLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | 
   return primary ?? null;
 }
 
-function displayItemTags(item: Pick<CompareItem, "labels" | "origin">): CompareDisplayTag[] {
+function displayItemLabel(item: Pick<CompareItem, "labels" | "origin">): NotebookLabelId | null {
   const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
   if (bucket) {
-    if (item.origin !== "note") return [];
+    if (item.origin !== "note") return null;
     const base = labelBaseId(bucket);
-    return [{ key: base, label: labelDef(base).title, classLabel: base }];
+    return base;
   }
   const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
-  return primary ? [{ key: primary, label: labelDef(primary).title, classLabel: primary }] : [];
+  return primary ?? null;
 }
 
-function itemClusterLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
+function primaryCompareLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
   const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
   return bucket ? labelBaseId(bucket) : displayIconLabel(item);
 }
@@ -346,7 +357,7 @@ function itemDistanceKm(item: Pick<CompareItem, "detail">): number {
   return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
 }
 
-function compareMapItem(left: CompareItem, right: CompareItem): number {
+function compareEvidenceDistance(left: Pick<CompareEvidence | CompareItem, "labels" | "detail">, right: Pick<CompareEvidence | CompareItem, "labels" | "detail">): number {
   const leftDistanceLimit = Math.min(
     ...left.labels.map((label) => labelDistanceLimitKm(label) ?? Number.POSITIVE_INFINITY),
   );
@@ -355,18 +366,79 @@ function compareMapItem(left: CompareItem, right: CompareItem): number {
   );
   return leftDistanceLimit - rightDistanceLimit
     || itemDistanceKm(left) - itemDistanceKm(right)
+}
+
+function compareEvidence(left: CompareEvidence, right: CompareEvidence): number {
+  return compareEvidenceDistance(left, right)
     || left.title.localeCompare(right.title);
 }
 
-function compareItemClusters(items: CompareItem[]): CompareItemCluster[] {
-  const grouped = new Map<NotebookLabelId, CompareItem[]>();
-  for (const item of [...items].sort(compareMapItem)) {
-    const label = itemClusterLabel(item) ?? "other";
+function normalizeCompareEvidence(item: CompareItem): CompareEvidence | null {
+  const group = noteCompareGroup(item);
+  const primaryLabel = primaryCompareLabel(item);
+  if (!group || !primaryLabel) return null;
+  return {
+    id: item.id,
+    title: item.title,
+    detail: item.detail || item.source,
+    origin: item.origin,
+    kind: isMapPlaceEvidence(item) ? "map_place" : "note",
+    labels: item.labels,
+    primaryLabel,
+    group,
+    noteId: item.origin === "note" ? item.id : undefined,
+  };
+}
+
+function isMapPlaceEvidence(item: CompareItem): boolean {
+  if (item.origin === "backend") return true;
+  if (item.noteKind && item.noteKind !== "fact") return false;
+  if (item.catalogKey?.startsWith("nearby:")) return true;
+  if (item.source === "Around this home") return true;
+  return item.labels.some((label) => labelDistanceLimitKm(label) != null);
+}
+
+function normalizeCompareEvidences(items: CompareItem[], hiddenLabels: Set<NotebookLabelId>): CompareEvidence[] {
+  const byKey = new Map<string, CompareEvidence>();
+  for (const item of items) {
+    if (isCanonicalAttachedNote(item)) continue;
+    const evidence = normalizeCompareEvidence(item);
+    if (!evidence || hiddenLabels.has(evidence.primaryLabel)) continue;
+    const key = `${evidence.group}::${evidence.primaryLabel}::${evidence.title.toLocaleLowerCase("en-IN")}`;
+    const existing = byKey.get(key);
+    if (!existing || (existing.origin === "note" && evidence.origin === "backend")) {
+      byKey.set(key, evidence);
+    }
+  }
+  return [...byKey.values()].sort(compareEvidence);
+}
+
+function labelsRepresentedBy(label: NotebookLabelId, evidence: CompareEvidence): NotebookLabelId[] {
+  return evidence.labels.filter((item) =>
+    item === label || labelBaseId(item) === label
+  );
+}
+
+function removeEvidenceLabels(
+  evidence: CompareEvidence,
+  label: NotebookLabelId,
+  onRemoveLabel: (noteId: string, label: NotebookLabelId) => void,
+) {
+  if (!evidence.noteId) return;
+  for (const representedLabel of labelsRepresentedBy(label, evidence)) {
+    onRemoveLabel(evidence.noteId, representedLabel);
+  }
+}
+
+function compareEvidenceClusters(items: CompareEvidence[]): CompareEvidenceCluster[] {
+  const grouped = new Map<NotebookLabelId, CompareEvidence[]>();
+  for (const item of [...items].sort(compareEvidence)) {
+    const label = item.primaryLabel;
     grouped.set(label, [...(grouped.get(label) ?? []), item]);
   }
   return [...grouped.entries()]
     .sort((left, right) =>
-      compareMapItem(left[1][0], right[1][0])
+      compareEvidence(left[1][0], right[1][0])
       || labelDef(left[0]).title.localeCompare(labelDef(right[0]).title)
     )
     .map(([label, groupItems]) => ({ label, items: groupItems }));
@@ -461,6 +533,8 @@ function noteToCompareItem(note: NotebookNote): CompareItem {
     title: note.title,
     detail: note.detail,
     source: note.source,
+    catalogKey: note.catalogKey,
+    noteKind: note.kind,
     labels: note.labels,
     origin: "note",
   };
@@ -492,7 +566,10 @@ function backendCompareItems(context: PropertyMapContext | null): CompareItem[] 
   return context.places
     .map(nearbyPlaceCompareItem)
     .filter((item): item is CompareItem => item !== null)
-    .sort(compareMapItem);
+    .sort((left, right) =>
+      compareEvidenceDistance(left, right)
+      || left.title.localeCompare(right.title)
+    );
 }
 
 function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): CompareItem[] {
@@ -507,92 +584,145 @@ function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): 
   return merged;
 }
 
-function CompareNote({
-  item,
+function CompareEvidenceNote({
+  evidence,
   onRemoveLabel,
 }: {
-  item: CompareItem;
+  evidence: CompareEvidence;
   onRemoveLabel?: (noteId: string, label: NotebookLabelId) => void;
 }) {
-  const iconLabel = displayIconLabel(item);
-  const tags = displayItemTags(item);
-  const canRemoveLabel = item.origin === "note" && Boolean(onRemoveLabel);
+  const label = displayItemLabel(evidence);
+  const canRemoveLabel = evidence.origin === "note" && Boolean(evidence.noteId) && Boolean(onRemoveLabel) && Boolean(label);
   return (
-    <div className={`compare-note compare-note--${item.origin}`}>
-      {iconLabel && (
+    <div className={`compare-note compare-note--${evidence.origin}`}>
+      {label && (
         <b aria-hidden="true">
-          <LabelVisualIcon id={iconLabel} size={18} />
+          <LabelVisualIcon id={label} size={18} />
         </b>
       )}
-      <span>{item.title}</span>
-      {(item.detail || item.source) && (
-        <small>{item.detail || item.source}</small>
+      <span>{evidence.title}</span>
+      {evidence.detail && (
+        <small>{evidence.detail}</small>
       )}
-      {tags.length > 0 && (
+      {label && (
         <div className="compare-note__labels" aria-label="Saved labels">
-          {tags.map((tag) => canRemoveLabel ? (
+          {canRemoveLabel ? (
             <button
-              key={tag.key}
               type="button"
-              className={labelPillClass(tag.classLabel, "compare-label-pill--button")}
+              className={labelPillClass(label, "compare-label-pill--button")}
               title="Remove label"
-              onClick={() => onRemoveLabel?.(item.id, tag.classLabel)}
+              onClick={() => onRemoveLabel && removeEvidenceLabels(evidence, label, onRemoveLabel)}
             >
-              <LabelVisualIcon id={tag.classLabel} size={18} />
-              {tag.label}
+              <LabelVisualIcon id={label} size={18} />
+              {labelDef(label).title}
             </button>
           ) : (
-            <span key={tag.key} className={labelPillClass(tag.classLabel, "compare-label-pill--readonly")}>
-              <LabelVisualIcon id={tag.classLabel} size={18} />
-              {tag.label}
+            <span className={labelPillClass(label, "compare-label-pill--readonly")}>
+              <LabelVisualIcon id={label} size={18} />
+              {labelDef(label).title}
             </span>
-          ))}
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function CompactCompareItem({ item }: { item: CompareItem }) {
+function CompactCompareItem({
+  item,
+  onRemoveLabel,
+}: {
+  item: CompareEvidence;
+  onRemoveLabel?: (noteId: string, label: NotebookLabelId) => void;
+}) {
   return (
     <span className="compare-compact-item">
       <strong>{item.title}</strong>
       {item.detail && <small>{item.detail}</small>}
+      {item.origin === "note" && item.noteId && onRemoveLabel && (
+        <button
+          type="button"
+          className="compare-compact-item__remove"
+          aria-label={`Remove ${labelDef(item.primaryLabel).title} label from ${item.title}`}
+          onClick={() => removeEvidenceLabels(item, item.primaryLabel, onRemoveLabel)}
+        >
+          ×
+        </button>
+      )}
     </span>
   );
 }
 
 function GroupedCompareCell({
-  items,
+  evidences,
   onRemoveLabel,
+  onHideLabel,
 }: {
-  items: CompareItem[];
+  evidences: CompareEvidence[];
   onRemoveLabel?: (noteId: string, label: NotebookLabelId) => void;
+  onHideLabel: (label: NotebookLabelId) => void;
 }) {
-  if (items.length === 0) {
+  if (evidences.length === 0) {
     return <div className="compare-theme__cell is-empty" />;
   }
 
-  const mapItems = items.filter((item) => item.origin === "backend");
-  const noteItems = items.filter((item) => item.origin !== "backend");
-  const clusters = compareItemClusters(mapItems);
+  const compactItems = evidences.filter((item) => item.kind === "map_place");
+  const noteItems = evidences.filter((item) => item.kind === "note");
+  const clusters = compareEvidenceClusters(compactItems);
   return (
     <div className="compare-theme__cell compare-theme__cell--grouped">
       {clusters.map((cluster) => (
         <div key={cluster.label} className="compare-item-cluster">
-          <span className={labelPillClass(cluster.label, "compare-item-cluster__label compare-label-pill--readonly")}>
-            <LabelVisualIcon id={cluster.label} size={18} />
-            {labelDef(cluster.label).title}
-          </span>
+          <div className="compare-item-cluster__head">
+            <span className={labelPillClass(cluster.label, "compare-item-cluster__label compare-label-pill--readonly")}>
+              <LabelVisualIcon id={cluster.label} size={18} />
+              {labelDef(cluster.label).title}
+            </span>
+            <button
+              type="button"
+              className="compare-label-hide"
+              aria-label={`Hide ${labelDef(cluster.label).title} from compare`}
+              onClick={() => onHideLabel(cluster.label)}
+            >
+              ×
+            </button>
+          </div>
           <div className="compare-compact-items">
             {cluster.items.map((item) => (
-              <CompactCompareItem key={item.id} item={item} />
+              <CompactCompareItem key={item.id} item={item} onRemoveLabel={onRemoveLabel} />
             ))}
           </div>
         </div>
       ))}
       {noteItems.map((item) => (
-        <CompareNote key={item.id} item={item} onRemoveLabel={onRemoveLabel} />
+        <CompareEvidenceNote key={item.id} evidence={item} onRemoveLabel={onRemoveLabel} />
+      ))}
+    </div>
+  );
+}
+
+function HiddenCompareLabels({
+  labels,
+  onShow,
+}: {
+  labels: NotebookLabelId[];
+  onShow: (label: NotebookLabelId) => void;
+}) {
+  if (labels.length === 0) return null;
+  return (
+    <div className="compare-hidden-labels" aria-label="Hidden compare labels">
+      <span>Hidden</span>
+      {labels.map((label) => (
+        <button
+          key={label}
+          type="button"
+          className={labelPillClass(label, "compare-label-pill--button")}
+          onClick={() => onShow(label)}
+        >
+          <LabelVisualIcon id={label} size={18} />
+          {labelDef(label).title}
+          <small>Restore</small>
+        </button>
       ))}
     </div>
   );
@@ -656,9 +786,12 @@ function SocietyFactCard({
           </span>
           <span className="compare-fact-card__label">{item.row.label}</span>
           {item.value && <CanonicalValue row={item.row} value={item.value} />}
-          {item.attached.slice(0, 2).map((attached) => (
-            <CompareNote key={attached.id} item={attached} onRemoveLabel={onRemoveLabel} />
-          ))}
+          {item.attached.slice(0, 2).map((attached) => {
+            const evidence = normalizeCompareEvidence(attached);
+            return evidence ? (
+              <CompareEvidenceNote key={attached.id} evidence={evidence} onRemoveLabel={onRemoveLabel} />
+            ) : null;
+          })}
         </div>
       ))}
     </article>
@@ -722,7 +855,12 @@ export function SocietyComparisonMatrix({
   onRemoveNoteLabel?: (noteId: string, label: NotebookLabelId) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { notes } = useNotebook();
+  const {
+    notes,
+    hiddenCompareLabels,
+    hideCompareLabel,
+    showCompareLabel,
+  } = useNotebook();
   const columns = useMemo(
     () => buildSocietyColumns(selectedHomes, catalog),
     [catalog, selectedHomes],
@@ -762,18 +900,23 @@ export function SocietyComparisonMatrix({
     })),
     [columnNotes, columns, detailById],
   );
+  const hiddenLabelSet = useMemo(
+    () => new Set(hiddenCompareLabels),
+    [hiddenCompareLabels],
+  );
+  const columnEvidences = useMemo(
+    () => new Map(columns.map((column) => [
+      column.key,
+      normalizeCompareEvidences(columnItems.get(column.key) ?? [], hiddenLabelSet),
+    ])),
+    [columnItems, columns, hiddenLabelSet],
+  );
 
   const noteRows = useMemo(() => {
     const groups = new Set<NoteGroupId>();
     for (const column of columns) {
-      for (const item of columnItems.get(column.key) ?? []) {
-        const group = noteCompareGroup(item);
-        if (
-          group
-          && !(item.origin === "note" && item.labels.some((label) => CANONICAL_NOTE_LABELS.has(label)))
-        ) {
-          groups.add(group);
-        }
+      for (const evidence of columnEvidences.get(column.key) ?? []) {
+        groups.add(evidence.group);
       }
     }
     return [...groups]
@@ -792,7 +935,7 @@ export function SocietyComparisonMatrix({
         || left.rank - right.rank
         || left.label.localeCompare(right.label)
       );
-  }, [columnItems, columns]);
+  }, [columnEvidences, columns]);
 
   function setBhk(bhk: number) {
     const next = new URLSearchParams(searchParams);
@@ -822,6 +965,7 @@ export function SocietyComparisonMatrix({
           ))}
         </div>
       </header>
+      <HiddenCompareLabels labels={hiddenCompareLabels} onShow={showCompareLabel} />
 
       <FloorPlanCompareStrip columns={columns} activeBhk={activeBhk} />
 
@@ -871,14 +1015,15 @@ export function SocietyComparisonMatrix({
                   </header>
                   <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
                     {columns.map((column) => {
-                      const matching = (columnItems.get(column.key) ?? []).filter(
-                        (item) => noteCompareGroup(item) === row.id && !isCanonicalAttachedNote(item),
+                      const matching = (columnEvidences.get(column.key) ?? []).filter(
+                        (evidence) => evidence.group === row.id,
                       );
                       return (
                         <GroupedCompareCell
                           key={column.key}
-                          items={matching}
+                          evidences={matching}
                           onRemoveLabel={onRemoveNoteLabel}
+                          onHideLabel={hideCompareLabel}
                         />
                       );
                     })}

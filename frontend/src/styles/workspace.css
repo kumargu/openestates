@@ -814,7 +814,7 @@
   margin-top: 0.55rem;
   color: var(--color-cool-deep);
   font-style: normal;
-  opacity: 0;
+  opacity: 0.68;
 }
 
 .compare-editorial__home:hover em,
@@ -1476,6 +1476,14 @@
   outline: none;
 }
 
+.compare-label-pill small {
+  margin-left: 0.1rem;
+  color: currentColor;
+  font-size: 0.55rem;
+  font-weight: 650;
+  opacity: 0.62;
+}
+
 .compare-note__labels .compare-label-pill.notion-pill {
   min-height: 1.62rem;
   padding: 0 0.58rem;
@@ -1493,10 +1501,65 @@
   min-width: 0;
 }
 
+.compare-item-cluster__head {
+  display: flex;
+  align-items: center;
+  gap: 0.34rem;
+  min-width: 0;
+}
+
 .compare-item-cluster__label.compare-label-pill.notion-pill {
   min-height: 1.72rem;
   padding: 0 0.68rem 0 0.5rem;
   font-size: 0.62rem;
+}
+
+.compare-label-hide {
+  display: inline-flex;
+  width: 1.22rem;
+  height: 1.22rem;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.76);
+  color: #9a9088;
+  cursor: pointer;
+  font-size: 0.82rem;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    opacity 150ms ease;
+}
+
+.compare-item-cluster:hover .compare-label-hide,
+.compare-item-cluster:focus-within .compare-label-hide {
+  opacity: 1;
+}
+
+.compare-label-hide:hover,
+.compare-label-hide:focus-visible {
+  border-color: rgba(38, 35, 32, 0.24);
+  color: #4f453d;
+  outline: none;
+}
+
+.compare-hidden-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.42rem;
+  align-items: center;
+  margin-top: 0.85rem;
+}
+
+.compare-hidden-labels > span {
+  color: #9a9088;
+  font-size: 0.58rem;
+  font-weight: 760;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
 }
 
 .compare-compact-items {
@@ -1537,6 +1600,29 @@
   content: "·";
   margin-right: 0.28rem;
   color: #b7aca2;
+}
+
+.compare-compact-item__remove {
+  display: inline-flex;
+  width: 1rem;
+  height: 1rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #aaa098;
+  cursor: pointer;
+  font-size: 0.78rem;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.compare-compact-item__remove:hover,
+.compare-compact-item__remove:focus-visible {
+  background: rgba(38, 35, 32, 0.06);
+  color: #4f453d;
+  outline: none;
 }
 
 @keyframes compare-page-in {

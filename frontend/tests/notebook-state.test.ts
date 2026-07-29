@@ -31,7 +31,9 @@ Object.defineProperty(globalThis, "window", {
 const {
   NOTEBOOK_STORAGE_KEY,
   addNotebookCommandBlock,
+  hideNotebookCompareLabel,
   readNotebook,
+  showNotebookCompareLabel,
   toggleNotebookCompareId,
   updateNotebookNote,
 } = await import("../src/lib/notebook.ts");
@@ -68,6 +70,31 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("compare labels can be hidden and restored without changing notes", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "School nearby",
+      kind: "fact",
+      catalogKey: "map:school",
+      labels: ["schools"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const hidden = hideNotebookCompareLabel("schools");
+  assert.deepEqual(hidden.hiddenCompareLabels, ["schools"]);
+  assert.deepEqual(hidden.notes[0].labels, ["schools"]);
+
+  const restored = showNotebookCompareLabel("schools");
+  assert.deepEqual(restored.hiddenCompareLabels, []);
+  assert.deepEqual(restored.notes[0].labels, ["schools"]);
 });
 
 test("slash command blocks append and remain editable", () => {

@@ -7,12 +7,14 @@ import {
   addNotebookNoteLabel,
   addSelectionNote,
   anchorNotebookProperty,
+  hideNotebookCompareLabel,
   isCatalogPinned,
   readNotebook,
   removeNotebookNote,
   removeNotebookNoteLabel,
   removeNotebookProperty,
   setNotebookNoteLabels,
+  showNotebookCompareLabel,
   toggleCatalogNote,
   toggleNotebookCompareId,
   updateNotebookNote,
@@ -26,12 +28,15 @@ function isNotebookState(value: unknown): value is NotebookState {
   const candidate = value as Partial<NotebookState>;
   return Array.isArray(candidate.propertyIds)
     && Array.isArray(candidate.notes)
-    && Array.isArray(candidate.compareIds);
+    && Array.isArray(candidate.compareIds)
+    && (candidate.hiddenCompareLabels == null || Array.isArray(candidate.hiddenCompareLabels));
 }
 
 export function useNotebook() {
   const [state, setState] = useState<NotebookState>(() =>
-    typeof window === "undefined" ? { propertyIds: [], notes: [], compareIds: [] } : readNotebook(),
+    typeof window === "undefined"
+      ? { propertyIds: [], notes: [], compareIds: [], hiddenCompareLabels: [] }
+      : readNotebook(),
   );
 
   useEffect(() => {
@@ -92,6 +97,14 @@ export function useNotebook() {
     setState(toggleNotebookCompareId(propertyId));
   }, []);
 
+  const hideCompareLabel = useCallback((label: NotebookLabelId) => {
+    setState(hideNotebookCompareLabel(label));
+  }, []);
+
+  const showCompareLabel = useCallback((label: NotebookLabelId) => {
+    setState(showNotebookCompareLabel(label));
+  }, []);
+
   const removeProperty = useCallback((propertyId: string) => {
     setState(removeNotebookProperty(propertyId));
   }, []);
@@ -110,6 +123,7 @@ export function useNotebook() {
     notes: state.notes,
     propertyIds: state.propertyIds,
     compareIds: state.compareIds,
+    hiddenCompareLabels: state.hiddenCompareLabels ?? [],
     isPinned: (catalogKey: string) => isCatalogPinned(catalogKey, state),
     toggleFact,
     rememberSelection,
@@ -121,6 +135,8 @@ export function useNotebook() {
     addNoteLabel,
     removeNoteLabel,
     toggleCompare,
+    hideCompareLabel,
+    showCompareLabel,
     removeProperty,
     anchorProperty,
     notesFor,

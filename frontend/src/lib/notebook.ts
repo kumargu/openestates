@@ -75,6 +75,7 @@ export type NotebookState = {
   propertyIds: string[];
   notes: NotebookNote[];
   compareIds: string[];
+  hiddenCompareLabels: NotebookLabelId[];
 };
 
 /** Catalog — expand later via config; keep frontend-deterministic for MVP. */
@@ -131,7 +132,7 @@ export const ASSIGNABLE_NOTEBOOK_LABELS: NotebookLabelId[] = [
   "other",
 ];
 
-const EMPTY: NotebookState = { propertyIds: [], notes: [], compareIds: [] };
+const EMPTY: NotebookState = { propertyIds: [], notes: [], compareIds: [], hiddenCompareLabels: [] };
 const LABEL_BY_ID = new Map(NOTEBOOK_LABELS.map((item) => [item.id, item]));
 
 function emit(state: NotebookState) {
@@ -340,6 +341,9 @@ function readRawState(): NotebookState {
       propertyIds: Array.isArray(parsed.propertyIds) ? parsed.propertyIds.filter(Boolean) : [],
       notes,
       compareIds: Array.isArray(parsed.compareIds) ? parsed.compareIds.filter(Boolean) : [],
+      hiddenCompareLabels: Array.isArray(parsed.hiddenCompareLabels)
+        ? parsed.hiddenCompareLabels.filter((item): item is NotebookLabelId => typeof item === "string")
+        : [],
     };
   } catch {
     return EMPTY;
@@ -367,6 +371,7 @@ export function writeNotebook(state: NotebookState): NotebookState {
     compareIds: state.compareIds
       .filter((id) => state.propertyIds.includes(id))
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
+    hiddenCompareLabels: [...new Set(state.hiddenCompareLabels ?? [])],
   };
   window.localStorage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify(next));
   emit(next);
@@ -598,6 +603,23 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
   return writeNotebook({ ...withProp, compareIds });
 }
 
+export function hideNotebookCompareLabel(label: NotebookLabelId): NotebookState {
+  const state = readNotebook();
+  if (state.hiddenCompareLabels.includes(label)) return state;
+  return writeNotebook({
+    ...state,
+    hiddenCompareLabels: [...state.hiddenCompareLabels, label],
+  });
+}
+
+export function showNotebookCompareLabel(label: NotebookLabelId): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({
+    ...state,
+    hiddenCompareLabels: state.hiddenCompareLabels.filter((item) => item !== label),
+  });
+}
+
 export function removeNotebookProperty(propertyId: string): NotebookState {
   const state = readNotebook();
   writeShortlistIds(readShortlistIds().filter((id) => id !== propertyId));
@@ -605,6 +627,7 @@ export function removeNotebookProperty(propertyId: string): NotebookState {
     propertyIds: state.propertyIds.filter((id) => id !== propertyId),
     notes: state.notes.filter((n) => n.propertyId !== propertyId),
     compareIds: state.compareIds.filter((id) => id !== propertyId),
+    hiddenCompareLabels: state.hiddenCompareLabels,
   });
 }
 
