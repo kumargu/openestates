@@ -14,7 +14,7 @@ import type {
   SearchResultItem,
 } from "../lib/types.ts";
 import { getProperties, searchProperties } from "../lib/api.ts";
-import type { MatchResult } from "../lib/search.ts";
+import { searchResultReasonLabels, type MatchResult } from "../lib/search.ts";
 import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { addRecentSearch } from "../lib/recent-searches.ts";
@@ -391,9 +391,10 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
     : `Browse ${totalCount} proof-backed homes on OpenEstates.`;
 
   const renderTile = (result: SearchResultItem) => (
-      <LivingEvidenceTile
-        property={result}
-        onQuickView={setPanelPropertyId}
+    <LivingEvidenceTile
+      property={result}
+      onQuickView={setPanelPropertyId}
+      matchLabels={hasQuery ? searchResultReasonLabels(result) : []}
       proofFocus={result.proof_focuses?.find((focus) => focus.surfaceId === "around_this_home")}
     />
   );

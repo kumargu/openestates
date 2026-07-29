@@ -38,12 +38,15 @@ type Props = {
   /** Landing/browse surfaces — same card shell, minimal meta. */
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
+  matchLabels?: string[];
 };
 
 export function LivingEvidenceTile({
   property,
   onQuickView,
+  variant = "default",
   proofFocus,
+  matchLabels = [],
 }: Props) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
@@ -68,7 +71,7 @@ export function LivingEvidenceTile({
   };
 
   return (
-    <article className="catalog-card">
+    <article className={`catalog-card${variant === "browse" ? " catalog-card--browse" : ""}`}>
       <Link to={propertyDetailPath(property.id, proofFocus)} className="catalog-card__link">
         <div className="catalog-card__media">
           <ImageWithFallback
@@ -112,6 +115,15 @@ export function LivingEvidenceTile({
               </span>
             ) : null}
           </div>
+          {matchLabels.length > 0 && (
+            <div className="catalog-card__signals" aria-label="Search match">
+              {matchLabels.slice(0, 2).map((label) => (
+                <span key={label} className="catalog-card__signal">
+                  {label}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       </Link>
     </article>

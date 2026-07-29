@@ -6,6 +6,12 @@ export type LandingPick = {
   property: PropertyCard;
 };
 
+export type LandingPickRail = {
+  id: string;
+  title: string;
+  picks: LandingPick[];
+};
+
 function hasGoogleRating(
   property: PropertyCard,
 ): property is PropertyCard & { google_rating: number } {
@@ -65,4 +71,44 @@ export function topGoogleRatedPerArea(
   }
 
   return picks;
+}
+
+export function landingPickRails(
+  properties: PropertyCard[],
+  areaTracker: AreaTrackerResponse | null,
+  maxPerRail = 7,
+): LandingPickRail[] {
+  const listable = filterListableProperties(properties);
+  const rails: LandingPickRail[] = [];
+  const topRated = [...listable]
+    .filter(hasGoogleRating)
+    .sort(compareGoogleRank)
+    .slice(0, maxPerRail)
+    .map((property) => ({ area: property.area, property }));
+
+  if (topRated.length > 0) {
+    rails.push({
+      id: "top-rated",
+      title: "Top-rated homes in Bengaluru",
+      picks: topRated,
+    });
+  }
+
+  const areaNames = areaNamesForLandingPicks(areaTracker, properties).slice(0, 4);
+  for (const area of areaNames) {
+    const picks = listable
+      .filter((property) => property.area === area)
+      .sort(compareGoogleRank)
+      .slice(0, maxPerRail)
+      .map((property) => ({ area, property }));
+
+    if (picks.length < 2) continue;
+    rails.push({
+      id: `area-${area.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+      title: `Popular homes in ${area}`,
+      picks,
+    });
+  }
+
+  return rails.slice(0, 5);
 }

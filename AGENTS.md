@@ -98,6 +98,8 @@ Do not over-explain with long in-app text. Keep quotes and captions short, premi
 ### Buyer UI copy — no internal annotations
 Buyer-facing UI must never read like agent notes, pipeline status, or how-to chrome for the implementer.
 
+Buyer UI should feel modern and edited. Do not add labels, headings, captions, helper text, counts, or badges unless they remove real ambiguity or help the next decision. If the same fact is already visible in a card, table, chart, or nearby heading, do not repeat it above or beside the element. Prefer one strong surface over stacked explanations such as kicker + title + subtitle + chip saying the same thing.
+
 **Never put on product surfaces:**
 - Interaction tutorials ("click a lower image to bring it forward", "pick a layer to read…")
 - Pipeline / enrichment jargon ("enrichment queued", "still enriching", "zone geometry not drawn", "source-backed")

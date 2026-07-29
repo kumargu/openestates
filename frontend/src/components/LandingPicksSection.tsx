@@ -1,5 +1,5 @@
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
-import { topGoogleRatedPerArea, areaNamesForLandingPicks } from "../lib/landing-picks.ts";
+import { landingPickRails } from "../lib/landing-picks.ts";
 import type { AreaTrackerResponse, PropertyCard } from "../lib/types.ts";
 
 export type LandingPicksSectionProps = {
@@ -13,26 +13,27 @@ export function LandingPicksSection({
   areaTracker,
   maxPicks = 12,
 }: LandingPicksSectionProps) {
-  const areaNames = areaNamesForLandingPicks(areaTracker, properties);
-  const picks = topGoogleRatedPerArea(properties, areaNames).slice(0, maxPicks);
+  const rails = landingPickRails(properties, areaTracker, Math.min(maxPicks, 7));
 
-  if (picks.length === 0) return null;
+  if (rails.length === 0) return null;
 
   return (
-    <section className="home-picks-section" aria-label="Top-rated homes by area">
+    <section className="home-picks-section" aria-label="Home picks">
       <div className="home-picks-section__inner">
-        <div className="home-picks-section__head">
-          <span className="home-picks-section__kicker">From the market map</span>
-          <h2 className="home-picks-section__title">Top-rated in each area</h2>
-        </div>
-        <div className="results-grid home-picks-section__grid">
-          {picks.map(({ area, property }) => (
-            <div key={`${area}-${property.id}`} className="home-picks-section__item">
-              <span className="home-picks-section__area">{area}</span>
-              <LivingEvidenceTile property={property} variant="browse" />
+        {rails.map((rail) => (
+          <section key={rail.id} className="home-picks-rail" aria-label={rail.title}>
+            <div className="home-picks-rail__head">
+              <h3>{rail.title}</h3>
             </div>
-          ))}
-        </div>
+            <div className="home-picks-rail__scroller">
+              {rail.picks.map(({ area, property }) => (
+                <div key={`${rail.id}-${area}-${property.id}`} className="home-picks-section__item">
+                  <LivingEvidenceTile property={property} variant="browse" />
+                </div>
+              ))}
+            </div>
+          </section>
+        ))}
       </div>
     </section>
   );

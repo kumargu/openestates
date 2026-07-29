@@ -7,13 +7,13 @@ import { SearchExperience as InlineSearchExperience } from "./SearchExperience.t
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingPicksSection } from "../components/LandingPicksSection.tsx";
 
-const HERO_PROMISE = "Tell us the life you want. We'll help you find the right home.";
+const HERO_PROMISE = "Tell us the life you want. We'll show homes with receipts.";
 
 const ROTATING_WORDS = [
-  "homes you can verify",
-  "risks you should know",
-  "prices with context",
-  "tradeoffs explained",
+  "verified homes",
+  "known risks",
+  "price context",
+  "clear tradeoffs",
 ];
 
 function RotatingText() {
@@ -32,15 +32,7 @@ function RotatingText() {
   }, []);
 
   return (
-    <span
-      style={{
-        display: "inline-block",
-        transition: "opacity 0.4s ease, transform 0.4s ease",
-        opacity: fading ? 0 : 1,
-        transform: fading ? "translateY(8px)" : "translateY(0)",
-        color: "var(--color-accent)",
-      }}
-    >
+    <span className={`home-hero__rotating${fading ? " home-hero__rotating--fading" : ""}`}>
       {ROTATING_WORDS[index]}
     </span>
   );
@@ -54,6 +46,13 @@ const SEARCH_EXAMPLES = [
   "Low commute-pain home near Whitefield tech parks under 1.8Cr",
   "Premium 4BHK in Hebbal with RERA proof and low traffic",
   "Value flat with good resale near ORR, delivered on time",
+];
+
+const SEARCH_SUGGESTIONS = [
+  { label: "Low commute", query: "Low commute-pain home near Whitefield tech parks" },
+  { label: "Family-friendly", query: "Family-friendly 3BHK near good schools" },
+  { label: "Strong proof", query: "Homes with strong RERA proof and good Google reviews" },
+  { label: "Under 2.5Cr", query: "3BHK under 2.5Cr with good resale" },
 ];
 
 const GHOST_ROTATE_MS = 3400;
@@ -174,31 +173,18 @@ export function HomePage() {
       >
         <div className="home-hero__wash" aria-hidden="true" />
 
-        <div className="fade-up" style={{ textAlign: "center", maxWidth: "720px" }}>
+        <div className="fade-up home-hero__copy">
           <h1 className="home-hero__title">
             Discover{" "}
             <RotatingText />
           </h1>
         </div>
 
-        <p
-          className="fade-up fade-up-delay-1"
-          style={{
-            fontSize: "clamp(1.05rem, 0.95rem + 0.5vw, 1.35rem)",
-            color: "#666",
-            maxWidth: "520px",
-            textAlign: "center",
-            margin: "0 0 3rem",
-            lineHeight: 1.7,
-          }}
-        >
+        <p className="fade-up fade-up-delay-1 home-hero__promise">
           {HERO_PROMISE}
         </p>
 
         {/* Search bar */}
-        <p className="fade-up fade-up-delay-1 home-hero__kicker">
-          Describe what you're looking for
-        </p>
         <form
           onSubmit={handleSearch}
           className={`home-composer fade-up fade-up-delay-1${searchFocused ? " home-composer--focused" : ""}`}
@@ -248,6 +234,19 @@ export function HomePage() {
           </div>
         </form>
 
+        <div className="fade-up fade-up-delay-2 home-search-suggestions" aria-label="Suggested searches">
+          {SEARCH_SUGGESTIONS.map((suggestion) => (
+            <button
+              key={suggestion.label}
+              type="button"
+              className="home-search-suggestion"
+              onClick={() => commitSearch(suggestion.query)}
+            >
+              {suggestion.label}
+            </button>
+          ))}
+        </div>
+
         {/* Error banner — non-blocking */}
         {loadError && (
           <div className="home-error-banner fade-up fade-up-delay-2">
@@ -258,19 +257,9 @@ export function HomePage() {
             </svg>
             <span>Market data temporarily unavailable. Search still works.</span>
             <button
+              type="button"
               onClick={() => window.location.reload()}
-              style={{
-                background: "none",
-                border: "1px solid rgba(146,64,14,0.3)",
-                color: "#92400e",
-                padding: "0.25rem 0.75rem",
-                borderRadius: "6px",
-                fontSize: "0.78rem",
-                cursor: "pointer",
-                fontFamily: "inherit",
-                marginLeft: "0.5rem",
-                whiteSpace: "nowrap",
-              }}
+              className="home-error-banner__retry"
             >
               Retry
             </button>
@@ -321,6 +310,8 @@ export function HomePage() {
           properties={properties}
           areaTracker={areaTracker}
           onSearch={commitSearch}
+          maxMarkets={4}
+          subheading="Compare asking bands before opening homes."
         />
       )}
     </div>
