@@ -325,6 +325,22 @@ function trendSummary(rows: MarketTrailRow[]): string {
   return `${formatTotalPrice(Math.min(...lows))}-${formatTotalPrice(Math.max(...highs)).replace("₹", "")}`;
 }
 
+export function MarketTrendContent({ sections }: { sections: EvidenceSection[] }) {
+  const section = marketSection(sections);
+  const rows = useMemo(
+    () => (section ? deriveMarketTrailRows(section) : []),
+    [section],
+  );
+
+  if (!section || rows.length === 0) return null;
+
+  return (
+    <div className="market-trend__chart price-bands">
+      <MarketTrendChart rows={rows} />
+    </div>
+  );
+}
+
 export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
   const section = marketSection(sections);
   const rows = useMemo(
@@ -374,9 +390,7 @@ export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
             <strong>BHK price bands</strong>
             <p>Asking ranges by BHK.</p>
           </div>
-          <div className="market-trend__chart price-bands">
-            <MarketTrendChart rows={rows} />
-          </div>
+          <MarketTrendContent sections={sections} />
         </div>
       )}
     </section>
