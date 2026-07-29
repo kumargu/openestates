@@ -3,6 +3,8 @@ import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Helmet } from "react-helmet-async";
 import type {
   DetailSignal,
+  DecisionCheckSummary,
+  DecisionLabel,
   EvidenceSection,
   ExternalReviewCard,
   PropertyCard,
@@ -184,6 +186,8 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     home_state_display: data.home_state_display,
     builder_delivery_display: data.builder_trust?.delivery_display,
     data_freshness: data.data_freshness,
+    decision_labels: data.decision_labels,
+    decision_check_summary: data.decision_check_summary,
   };
 }
 
@@ -453,18 +457,112 @@ function PropertyPhotoMosaic({
 
 function PopupActionButton({
   label,
+  caption,
+  tone,
   onClick,
 }: {
   label: string;
+  caption?: string;
+  tone?: string;
   onClick: () => void;
 }) {
   return (
-    <button type="button" className="property-popup-action" onClick={onClick} aria-haspopup="dialog">
-      <strong>{label}</strong>
+    <button
+      type="button"
+      className={`property-popup-action${tone ? ` property-popup-action--${tone}` : ""}`}
+      onClick={onClick}
+      aria-haspopup="dialog"
+    >
+      <span>
+        <strong>{label}</strong>
+        {caption && <small>{caption}</small>}
+      </span>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="m9 18 6-6-6-6" />
       </svg>
     </button>
+  );
+}
+
+function safeNotebookLabels(label: DecisionLabel): string[] {
+  const labels = label.notebookLabels?.filter(Boolean) ?? [];
+  return labels.length > 0 ? labels.slice(0, 4) : [label.key];
+}
+
+function projectCheckTags(summary: DecisionCheckSummary): DecisionLabel[] {
+  const seen = new Set<string>();
+  const labels = (summary.groups ?? [])
+    .flatMap((group) => group.labels)
+    .concat(summary.primaryLabels ?? []);
+  return labels.filter((label) => {
+    if (seen.has(label.key)) return false;
+    seen.add(label.key);
+    return true;
+  });
+}
+
+function ProjectCheckTag({
+  label,
+  propertyId,
+}: {
+  label: DecisionLabel;
+  propertyId: string;
+}) {
+  return (
+    <div className={`property-check-tag property-check-tag--${label.severity}`}>
+      <span className="property-check-tag__icon">
+        <LabelVisualIcon id={label.visualId || label.key} size={17} />
+      </span>
+      <span className="property-check-tag__label">{label.label}</span>
+      <NotebookCommentAnchor
+        propertyId={propertyId}
+        labels={safeNotebookLabels(label)}
+        detail={label.label}
+        source="RERA"
+        className="property-check-tag__note"
+      />
+    </div>
+  );
+}
+
+function ProjectChecksContent({
+  summary,
+  propertyId,
+}: {
+  summary: DecisionCheckSummary;
+  propertyId: string;
+}) {
+  const tags = projectCheckTags(summary);
+  return (
+    <div className="property-checks">
+      {(summary.registrationNumber || summary.registryUrl) && (
+        <div className="property-checks__registry">
+          {summary.registrationNumber && (
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard?.writeText(summary.registrationNumber ?? "")}
+              title="Copy registration number"
+            >
+              {summary.registrationNumber}
+            </button>
+          )}
+          {summary.registryUrl && (
+            <a href={summary.registryUrl} target="_blank" rel="noreferrer" aria-label="Open RERA">
+              Open
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M7 17 17 7" />
+                <path d="M8 7h9v9" />
+              </svg>
+            </a>
+          )}
+        </div>
+      )}
+      <div className="property-check-tags" aria-label="RERA facts">
+        {tags.map((label) => (
+          <ProjectCheckTag key={label.key} label={label} propertyId={propertyId} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -733,6 +831,7 @@ function PropertyPageBody({
     useState<RecommendationStatus>("pending");
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
   const [marketOpen, setMarketOpen] = useState(false);
+  const [projectChecksOpen, setProjectChecksOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -901,6 +1000,8 @@ function PropertyPageBody({
     ?.trim();
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
   const displayTitle = displayName(p.title);
+  const projectChecks = data.decision_check_summary;
+  const showProjectChecks = Boolean(projectChecks);
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -948,18 +1049,6 @@ function PropertyPageBody({
             source="Property detail"
             className="property-action-note"
           />
-          <button
-            type="button"
-            className="property-action-link"
-            onClick={() => void navigator.clipboard?.writeText(window.location.href)}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7" />
-              <path d="M12 16V4" />
-              <path d="m7 9 5-5 5 5" />
-            </svg>
-            <span>Share</span>
-          </button>
         </div>
       </section>
 
@@ -978,8 +1067,8 @@ function PropertyPageBody({
           )}
         </section>
 
-        {(showApproachTrail || showMarketTrend) && (
-          <section className="property-popup-row" aria-label="Area and price details">
+        {(showApproachTrail || showMarketTrend || showProjectChecks) && (
+          <section className="property-popup-row" aria-label="Home details">
             {showApproachTrail && (
               <ApproachRoadTrail propertyId={id} sections={detailEvidenceSections} variant="compact" />
             )}
@@ -987,6 +1076,13 @@ function PropertyPageBody({
               <PopupActionButton
                 label="Price ranges"
                 onClick={() => setMarketOpen(true)}
+              />
+            )}
+            {projectChecks && (
+              <PopupActionButton
+                label={projectChecks.tileLabel}
+                tone={projectChecks.tone}
+                onClick={() => setProjectChecksOpen(true)}
               />
             )}
           </section>
@@ -1009,6 +1105,11 @@ function PropertyPageBody({
       {marketOpen && (
         <CleanDialog title="Price ranges" onClose={() => setMarketOpen(false)}>
           <MarketTrendContent sections={detailEvidenceSections} />
+        </CleanDialog>
+      )}
+      {projectChecksOpen && projectChecks && (
+        <CleanDialog title="RERA" onClose={() => setProjectChecksOpen(false)}>
+          <ProjectChecksContent summary={projectChecks} propertyId={p.id} />
         </CleanDialog>
       )}
     </div>

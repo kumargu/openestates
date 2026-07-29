@@ -16,6 +16,7 @@
     "fact_registry.json",
     "ontology.json",
     "resolution_policies.json",
+    "rera_decision_labels.json",
     "scoring_policy.json",
     "search_guardrails.json",
     "search_intent.json",

@@ -21,6 +21,7 @@
 mod evidence_sections;
 mod fact_registry;
 mod loader;
+mod rera_decision_labels;
 mod resolution;
 mod search_guardrails;
 mod search_intent;
@@ -40,6 +41,12 @@ pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
     load_json, load_manifest, set_project_dag_root, AssetRegistryFile, CrawlPolicyFile,
     DagConfigError, DagManifest,
+};
+pub use rera_decision_labels::{
+    load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,
+    rera_decision_labels_path, ReraDecisionLabelCondition, ReraDecisionLabelDefinition,
+    ReraDecisionLabelGroupDefinition, ReraDecisionLabelSource, ReraDecisionLabelSummaryConfig,
+    ReraDecisionLabelsFile,
 };
 pub use resolution::{
     better_source_type, better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,

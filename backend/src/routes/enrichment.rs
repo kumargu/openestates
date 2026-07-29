@@ -1110,6 +1110,8 @@ pub fn enrich_property_card(
         plan_carpet_area_sqft: None,
         plan_sale_area_sqft: None,
         plan_configuration_type: None,
+        decision_labels: Vec::new(),
+        decision_check_summary: None,
     }
 }
 

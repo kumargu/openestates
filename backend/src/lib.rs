@@ -2,6 +2,7 @@ pub mod assets;
 pub mod community;
 pub mod dag_config;
 pub mod data_loader;
+pub mod decision_labels;
 pub mod discovery;
 pub mod graph;
 pub mod knowledge;

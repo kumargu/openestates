@@ -6,6 +6,7 @@ use axum::http::StatusCode;
 use axum::Json;
 use serde::{Deserialize, Serialize};
 
+use crate::decision_labels::{DecisionCheckSummary, DecisionLabel};
 use crate::models::{KgEntityRefs, PropertyCard};
 use crate::recommendations::{
     build_recommendation_branches, RecommendationBranch, RecommendationBranchInputs,
@@ -95,6 +96,12 @@ pub struct PropertyDetail {
     /// `/api/properties/{id}/rera` remains the async boundary for future files.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera_dossier: Option<ReraDossier>,
+    /// Config-derived labels intended for notes and compare surfaces.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decision_labels: Vec<DecisionLabel>,
+    /// Grouped project-check read model for the buyer-facing detail page.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_check_summary: Option<DecisionCheckSummary>,
     /// Area intelligence from Reddit and other sources (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_intelligence: Option<AreaIntelligence>,
@@ -1643,10 +1650,10 @@ fn build_community_pulse_panel(
 
     let mut missing = definition.missing.clone();
     if pulse.positives.is_empty() && pulse.concerns.is_empty() {
-        missing.push("Review themes are still being expanded across sources.".to_string());
+        missing.push("Review themes are limited.".to_string());
     }
     if pulse.quotes.is_empty() {
-        missing.push("Review snippets are still being extracted.".to_string());
+        missing.push("Review snippets are limited.".to_string());
     }
 
     Some(SourcePanel {
@@ -2084,7 +2091,7 @@ fn section_summary(panel: &SourcePanel) -> String {
         return media.caption.clone();
     }
     if panel.subtitle.trim().is_empty() {
-        "Evidence will appear here once source-backed facts are promoted.".to_string()
+        "Details not ready yet.".to_string()
     } else {
         truncate_summary(&panel.subtitle, 96)
     }
@@ -2553,6 +2560,21 @@ pub async fn get_property(
     let rera_dossier = rera
         .as_ref()
         .map(|info| rera_dossier_for_property(&property.id, &property.society_id, info.clone()));
+    let (decision_labels, decision_check_summary) =
+        if let Some(serving_bundle) = serving_bundle.as_ref() {
+            (
+                crate::decision_labels::rera_decision_labels_for_society(
+                    &serving_bundle.fact_index,
+                    &property.society_id,
+                ),
+                crate::decision_labels::rera_decision_check_summary_for_society(
+                    &serving_bundle.fact_index,
+                    &property.society_id,
+                ),
+            )
+        } else {
+            (Vec::new(), None)
+        };
 
     // Extract area intelligence from the area's KG node
     let area_intelligence = extract_area_intelligence(&graph, &property.area);
@@ -2752,6 +2774,8 @@ pub async fn get_property(
         recommendations,
         rera,
         rera_dossier,
+        decision_labels,
+        decision_check_summary,
         area_intelligence,
         transparency_score,
         area_price_range_low,
@@ -3120,6 +3144,13 @@ pub(crate) fn overlay_serving_google_reviews(
             .project_home_state()
             .display;
         overlay_project_scale_facts(&mut card, serving_facts, society_id);
+        card.decision_labels =
+            crate::decision_labels::rera_decision_labels_for_society(serving_facts, society_id);
+        card.decision_check_summary =
+            crate::decision_labels::rera_decision_check_summary_for_society(
+                serving_facts,
+                society_id,
+            );
     }
     crate::plans::overlay_project_plans_on_card(&mut card, society_id, serving_facts);
     card
