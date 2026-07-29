@@ -3722,6 +3722,16 @@ body {
   border-top: 1px solid var(--color-border);
 }
 
+.property-signal-section {
+  padding-top: 1.15rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.property-signal-section + .property-google-reviews {
+  padding-top: 0;
+  border-top: 0;
+}
+
 .property-google-reviews .property-section-line h2 {
   font-size: clamp(1.05rem, 0.94rem + 0.42vw, 1.32rem);
   font-weight: 820;
@@ -3779,8 +3789,8 @@ body {
   display: flex;
   gap: 0.55rem;
   overflow-x: auto;
-  padding: 0.2rem 0 1rem;
-  margin: -0.15rem 0 1rem;
+  padding: 0 0 1rem;
+  margin: 0 0 1rem;
   border-bottom: 1px solid var(--color-border);
   scrollbar-width: none;
 }

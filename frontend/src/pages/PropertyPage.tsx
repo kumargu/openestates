@@ -116,6 +116,25 @@ function detailSignalPills(signals: DetailSignal[] | undefined): DetailSignal[] 
   return (signals ?? []).filter((signal) => signal.label.trim()).slice(0, 8);
 }
 
+function PropertySignalPills({ signals }: { signals: DetailSignal[] | undefined }) {
+  const signalPills = detailSignalPills(signals);
+  if (signalPills.length === 0) return null;
+
+  return (
+    <section className="property-signal-section" aria-label="Nearby and resident highlights">
+      <div className="property-signal-pills">
+        {signalPills.map((signal) => (
+          <span key={signal.key} className="property-signal-pill">
+            <LabelVisualIcon id={signal.icon || signal.key} size={22} />
+            <strong>{signal.label}</strong>
+            {typeof signal.count === "number" && <em>{signal.count}</em>}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function cleanAreaToken(value: string): string {
   return value
     .toLowerCase()
@@ -476,7 +495,6 @@ function GoogleReviewsSection({
     }));
   const reviewSourceCards = reviews?.reviews?.length ? reviews.reviews : fallbackCards;
   const reviewCards = fitReviewCards(reviewSourceCards);
-  const signalPills = detailSignalPills(data.detail_signals);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
     : "Show more Google reviews";
@@ -491,18 +509,6 @@ function GoogleReviewsSection({
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
       </div>
-
-      {signalPills.length > 0 && (
-        <div className="property-signal-pills" aria-label="Review and nearby highlights">
-          {signalPills.map((signal) => (
-            <span key={signal.key} className="property-signal-pill">
-              <LabelVisualIcon id={signal.icon || signal.key} size={22} />
-              <strong>{signal.label}</strong>
-              {typeof signal.count === "number" && <em>{signal.count}</em>}
-            </span>
-          ))}
-        </div>
-      )}
 
       {reviewCards.length > 0 && (
         <div className="property-review-grid">
@@ -985,6 +991,8 @@ function PropertyPageBody({
             )}
           </section>
         )}
+
+        <PropertySignalPills signals={data.detail_signals} />
 
         <GoogleReviewsSection data={data} reviewSections={reviewsSections} />
 
