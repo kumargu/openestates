@@ -3718,59 +3718,111 @@ body {
   border-top: 1px solid var(--color-border);
 }
 
-.property-review-snippets {
+.property-review-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
-  gap: 1.25rem 2.5rem;
-  margin-bottom: 0.85rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2.25rem 4.25rem;
+  max-height: 34rem;
+  overflow: hidden;
 }
 
-.property-review-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem 1.5rem;
-  margin: -0.2rem 0 1rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.property-review-strip span {
-  display: inline-grid;
-  gap: 0.1rem;
-  min-width: min(8rem, 100%);
-}
-
-.property-review-strip strong {
-  color: var(--color-text);
-  font-size: 1rem;
-  font-weight: 780;
-  line-height: 1.25;
-}
-
-.property-review-strip em {
-  color: var(--color-text-secondary);
-  font-size: 0.74rem;
-  font-style: normal;
-  font-weight: 720;
-  line-height: 1.2;
-}
-
-.property-review-snippets article {
+.property-review-card {
   min-width: 0;
 }
 
-.property-review-snippets p {
-  margin: 0;
-  color: var(--color-text);
-  font-size: 0.95rem;
-  line-height: 1.55;
+.property-review-card header {
+  display: grid;
+  grid-template-columns: 3rem minmax(0, 1fr);
+  gap: 0.8rem;
+  align-items: center;
+  margin-bottom: 0.7rem;
 }
 
-.property-review-placeholder {
-  margin: 0;
+.property-review-avatar {
+  display: grid;
+  width: 3rem;
+  height: 3rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #f1ede8;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 820;
+}
+
+.property-review-avatar--positive {
+  background: #e7f3ec;
+  color: #1f7a4d;
+}
+
+.property-review-avatar--concern {
+  background: #f8e8e4;
+  color: #b34235;
+}
+
+.property-review-card strong,
+.property-review-card em {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.property-review-card strong {
+  color: var(--color-text);
+  font-size: 0.98rem;
+  font-weight: 820;
+  line-height: 1.2;
+}
+
+.property-review-card em,
+.property-review-card__meta {
   color: var(--color-text-secondary);
-  font-size: 0.9rem;
-  line-height: 1.45;
+  font-size: 0.86rem;
+  font-style: normal;
+  line-height: 1.35;
+}
+
+.property-review-card__meta {
+  margin: 0 0 0.35rem;
+}
+
+.property-review-card__meta span {
+  color: var(--color-text);
+  font-size: 0.72rem;
+  letter-spacing: -0.02em;
+}
+
+.property-review-card > p:not(.property-review-card__meta) {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  line-height: 1.48;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+.property-review-more {
+  display: inline-flex;
+  align-items: center;
+  min-height: 3.15rem;
+  margin-top: 2rem;
+  padding: 0 1.45rem;
+  border-radius: 12px;
+  background: #f2f2f2;
+  color: var(--color-text);
+  font-size: 0.96rem;
+  font-weight: 820;
+  text-decoration: none;
+}
+
+.property-review-more:hover,
+.property-review-more:focus-visible {
+  background: #eaeaea;
+  outline: none;
 }
 
 .property-review-evidence {
@@ -4088,8 +4140,10 @@ body {
     grid-template-columns: 1fr;
   }
 
-  .property-review-strip {
-    gap: 0.55rem 0.9rem;
+  .property-review-grid {
+    grid-template-columns: minmax(0, 1fr);
+    max-height: 38rem;
+    gap: 1.8rem;
   }
 
   .property-nearby-rail__scroller {

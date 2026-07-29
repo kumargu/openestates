@@ -80,6 +80,11 @@ async fn google_place_snapshot_materializes_raw_parquet_and_derives_linked_facts
         fact.fact_key == "google_review_snippets"
             && fact.value_json.contains("Well maintained campus")
     }));
+    assert!(facts.facts.iter().any(|fact| {
+        fact.fact_key == "google_review_cards"
+            && fact.value_json.contains("Well maintained campus")
+            && fact.value_json.contains("helpful_count")
+    }));
     assert!(!facts
         .facts
         .iter()

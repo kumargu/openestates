@@ -242,12 +242,24 @@ export type PropertyDetailResponse = {
     google_rating?: number;
     google_review_count?: number;
     google_reviews_url?: string;
+    reviews?: ExternalReviewCard[];
   };
   livability_brief?: LivabilityBrief;
   /** Schematic neighborhood plate projected from nearby + water facts. */
   map_context?: PropertyMapContext;
   /** Site overview + floor plans promoted from RERA brochure pages. */
   plans?: ProjectPlansView;
+};
+
+export type ExternalReviewCard = {
+  id: string;
+  source: string;
+  author?: string;
+  rating?: number;
+  date_label?: string;
+  helpful_count?: number;
+  text: string;
+  tone: "positive" | "concern" | "neutral";
 };
 
 export type SiteOverviewPlan = {

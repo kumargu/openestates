@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom"
 import { Helmet } from "react-helmet-async";
 import type {
   EvidenceSection,
+  ExternalReviewCard,
   PropertyCard,
   PropertyDetailResponse,
   RecommendationResponse,
@@ -435,21 +436,24 @@ function GoogleReviewsSection({
   const rating = formatGoogleRating(reviews?.google_rating);
   const reviewCount = formatReviewCount(reviews?.google_review_count);
   const communityPulse = reviewSections.find((section) => section.community_pulse)?.community_pulse;
-  const snippets = [
-    society?.review_summary,
-    ...(society?.common_positives?.slice(0, 2).map((theme) => `Residents mention ${theme}.`) ?? []),
-    ...(society?.common_complaints?.slice(0, 2).map((theme) => `Watch for ${theme}.`) ?? []),
+  const fallbackCards: ExternalReviewCard[] = [
     communityPulse?.paragraph,
     ...(communityPulse?.quotes?.slice(0, 2).map((quote) => quote.text) ?? []),
-  ].filter((value): value is string => Boolean(value?.trim())).map((value) => reviewSnippetCopy(value)).slice(0, 3);
-  const reviewFacts = [
-    rating ? { label: "Rating", value: rating } : null,
-    reviewCount ? { label: "Reviews", value: reviewCount.replace(" Google ", " ") } : null,
-    society?.maintenance_sentiment ? { label: "Maintenance", value: society.maintenance_sentiment } : null,
-    society?.common_complaints?.[0] ? { label: "Watch", value: society.common_complaints[0] } : null,
-  ].filter((item): item is { label: string; value: string } => item !== null).slice(0, 4);
+  ]
+    .filter((value): value is string => Boolean(value?.trim()))
+    .map((value, index) => ({
+      id: `review-fallback-${index}`,
+      source: "Google",
+      author: "Google reviewer",
+      text: reviewSnippetCopy(value),
+      tone: "neutral" as const,
+    }));
+  const reviewCards = (reviews?.reviews?.length ? reviews.reviews : fallbackCards).slice(0, 6);
+  const reviewButtonLabel = reviewCount
+    ? `Show all ${reviewCount.replace(" Google ", " ")}`
+    : "Show more Google reviews";
 
-  if (!googleUrl && snippets.length === 0 && reviewFacts.length === 0 && reviewSections.length === 0) return null;
+  if (!googleUrl && reviewCards.length === 0 && !rating) return null;
 
   return (
     <section className="property-google-reviews" aria-labelledby="property-google-reviews-title">
@@ -458,33 +462,39 @@ function GoogleReviewsSection({
           {rating ? `★ ${rating}` : "Google reviews"}
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
-        {googleUrl && (
-          <a href={googleUrl} target="_blank" rel="noreferrer">Show all reviews</a>
-        )}
       </div>
 
-      {reviewFacts.length > 0 && (
-        <div className="property-review-strip" aria-label="Review signals">
-          {reviewFacts.map((fact) => (
-            <span key={fact.label}>
-              <strong>{fact.value}</strong>
-              <em>{fact.label}</em>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {snippets.length > 0 && (
-        <div className="property-review-snippets">
-          {snippets.map((snippet) => (
-            <article key={snippet}>
-              <p>{snippet}</p>
+      {reviewCards.length > 0 && (
+        <div className="property-review-grid">
+          {reviewCards.map((review) => (
+            <article key={review.id} className="property-review-card">
+              <header>
+                <span className={`property-review-avatar property-review-avatar--${review.tone}`}>
+                  {(review.author || "G").trim().charAt(0).toUpperCase()}
+                </span>
+                <span>
+                  {review.author && <strong>{review.author}</strong>}
+                  <em>{review.source}</em>
+                </span>
+              </header>
+              {(review.rating || review.date_label) && (
+                <p className="property-review-card__meta">
+                  {review.rating && <span>{"★".repeat(Math.round(review.rating))}</span>}
+                  {review.rating && review.date_label && " · "}
+                  {review.date_label}
+                </p>
+              )}
+              <p>{review.text}</p>
             </article>
           ))}
         </div>
       )}
 
-      <p className="property-review-placeholder">Reddit discussions will appear here when available.</p>
+      {googleUrl && (
+        <a className="property-review-more" href={googleUrl} target="_blank" rel="noreferrer">
+          {reviewButtonLabel}
+        </a>
+      )}
     </section>
   );
 }

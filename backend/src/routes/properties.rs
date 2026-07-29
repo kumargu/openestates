@@ -240,6 +240,54 @@ pub struct ExternalReviews {
     pub google_review_count: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub google_reviews_url: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reviews: Vec<ExternalReviewCard>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ExternalReviewCard {
+    pub id: String,
+    pub source: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub date_label: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub helpful_count: Option<u32>,
+    pub text: String,
+    pub tone: ReviewTone,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum ReviewTone {
+    Positive,
+    Concern,
+    Neutral,
+}
+
+#[derive(Deserialize)]
+struct StructuredGoogleReview {
+    text: String,
+    #[serde(default)]
+    author: Option<String>,
+    #[serde(default)]
+    rating: Option<f64>,
+    #[serde(default)]
+    date_label: Option<String>,
+    #[serde(default)]
+    published_at: Option<String>,
+    #[serde(default)]
+    helpful_count: Option<u32>,
+}
+
+struct RankedReview {
+    card: ExternalReviewCard,
+    helpful_count: u32,
+    recency_score: i64,
+    source_order: usize,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -2719,6 +2767,207 @@ fn around_this_home_surface_config() -> Option<&'static crate::dag_config::UiSur
         .find(|surface| surface.id == "around_this_home")
 }
 
+fn google_review_cards_for(
+    society_id: &str,
+    serving_facts: Option<&ServingFactIndex>,
+) -> Vec<ExternalReviewCard> {
+    let Some(serving_facts) = serving_facts else {
+        return Vec::new();
+    };
+    let projection = SocietyFactProjection::from_index(serving_facts, society_id);
+    let mut ranked = Vec::new();
+
+    for fact in projection.records("google_review_cards") {
+        let values = match &fact.value {
+            FactValue::Tags(values) => values.as_slice(),
+            _ => continue,
+        };
+        for (index, value) in values.iter().enumerate() {
+            let Ok(review) = serde_json::from_str::<StructuredGoogleReview>(value) else {
+                continue;
+            };
+            let text = clean_review_text(&review.text);
+            if text.is_empty() {
+                continue;
+            }
+            let helpful_count = review.helpful_count.unwrap_or(0);
+            let recency_score = review
+                .published_at
+                .as_deref()
+                .and_then(review_date_score)
+                .unwrap_or_else(|| fact.learned_at.timestamp());
+            ranked.push(RankedReview {
+                card: ExternalReviewCard {
+                    id: review_card_id(&text, ranked.len()),
+                    source: "Google".to_string(),
+                    author: review.author.and_then(clean_optional_review_text),
+                    rating: review.rating.filter(|rating| (0.0..=5.0).contains(rating)),
+                    date_label: review
+                        .date_label
+                        .and_then(clean_optional_review_text)
+                        .or(review.published_at),
+                    helpful_count: review.helpful_count,
+                    tone: review_tone(review.rating, &text),
+                    text,
+                },
+                helpful_count,
+                recency_score,
+                source_order: index,
+            });
+        }
+    }
+
+    if ranked.is_empty() {
+        for fact in projection.records("google_review_snippets") {
+            let values = match &fact.value {
+                FactValue::Tags(values) => values.as_slice(),
+                _ => continue,
+            };
+            for (index, value) in values.iter().enumerate() {
+                let text = clean_review_text(value);
+                if text.is_empty() {
+                    continue;
+                }
+                ranked.push(RankedReview {
+                    card: ExternalReviewCard {
+                        id: review_card_id(&text, ranked.len()),
+                        source: "Google".to_string(),
+                        author: Some("Google reviewer".to_string()),
+                        rating: None,
+                        date_label: None,
+                        helpful_count: None,
+                        tone: review_tone(None, &text),
+                        text,
+                    },
+                    helpful_count: 0,
+                    recency_score: fact.learned_at.timestamp(),
+                    source_order: index,
+                });
+            }
+        }
+    }
+
+    ranked.sort_by(|left, right| {
+        right
+            .helpful_count
+            .cmp(&left.helpful_count)
+            .then_with(|| right.recency_score.cmp(&left.recency_score))
+            .then_with(|| left.source_order.cmp(&right.source_order))
+            .then_with(|| left.card.text.cmp(&right.card.text))
+    });
+    balanced_review_cards(ranked, 6)
+}
+
+fn balanced_review_cards(ranked: Vec<RankedReview>, limit: usize) -> Vec<ExternalReviewCard> {
+    let mut selected = ranked
+        .iter()
+        .take(limit)
+        .map(|item| item.card.clone())
+        .collect::<Vec<_>>();
+    let has_positive = selected
+        .iter()
+        .any(|review| review.tone == ReviewTone::Positive);
+    let has_concern = selected
+        .iter()
+        .any(|review| review.tone == ReviewTone::Concern);
+    if has_positive && !has_concern {
+        if let Some(concern) = ranked
+            .iter()
+            .find(|item| item.card.tone == ReviewTone::Concern)
+            .map(|item| item.card.clone())
+        {
+            if selected.len() >= limit {
+                selected.pop();
+            }
+            selected.push(concern);
+        }
+    }
+    selected
+}
+
+fn clean_review_text(value: &str) -> String {
+    value
+        .replace('\n', " ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .trim()
+        .to_string()
+}
+
+fn clean_optional_review_text(value: String) -> Option<String> {
+    let cleaned = clean_review_text(&value);
+    (!cleaned.is_empty()).then_some(cleaned)
+}
+
+fn review_date_score(value: &str) -> Option<i64> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|date| date.timestamp())
+        .ok()
+        .or_else(|| {
+            chrono::NaiveDate::parse_from_str(value, "%Y-%m-%d")
+                .ok()
+                .and_then(|date| date.and_hms_opt(0, 0, 0))
+                .map(|date| date.and_utc().timestamp())
+        })
+}
+
+fn review_tone(rating: Option<f64>, text: &str) -> ReviewTone {
+    if let Some(rating) = rating {
+        if rating < 4.0 {
+            return ReviewTone::Concern;
+        }
+        if rating >= 4.0 {
+            return ReviewTone::Positive;
+        }
+    }
+    let normalized = text.to_ascii_lowercase();
+    if [
+        "traffic",
+        "noise",
+        "water",
+        "smell",
+        "seepage",
+        "maintenance",
+        "parking",
+        "delay",
+        "bad",
+        "poor",
+        "issue",
+        "problem",
+    ]
+    .iter()
+    .any(|term| normalized.contains(term))
+    {
+        ReviewTone::Concern
+    } else if [
+        "good",
+        "great",
+        "excellent",
+        "well maintained",
+        "clean",
+        "spacious",
+        "greenery",
+        "amenities",
+        "peaceful",
+    ]
+    .iter()
+    .any(|term| normalized.contains(term))
+    {
+        ReviewTone::Positive
+    } else {
+        ReviewTone::Neutral
+    }
+}
+
+fn review_card_id(text: &str, index: usize) -> String {
+    use std::hash::{Hash, Hasher};
+
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    text.hash(&mut hasher);
+    format!("google-review-{index}-{:x}", hasher.finish())
+}
+
 fn external_reviews_for(
     society_id: &str,
     society: Option<&crate::models::Society>,
@@ -2740,11 +2989,13 @@ fn external_reviews_for(
                 .project_google_reviews(fallback.clone())
         })
         .unwrap_or(fallback);
+    let reviews = google_review_cards_for(society_id, serving_facts);
 
-    (!evidence.is_empty()).then_some(ExternalReviews {
+    (!evidence.is_empty() || !reviews.is_empty()).then_some(ExternalReviews {
         google_rating: evidence.rating,
         google_review_count: evidence.review_count,
         google_reviews_url: evidence.reviews_url,
+        reviews,
     })
 }
 
@@ -3395,6 +3646,58 @@ mod serving_state_tests {
             detail.google_reviews_url.as_deref(),
             Some("https://example.com/legacy")
         );
+    }
+
+    #[test]
+    fn property_detail_review_cards_rank_helpful_recent_reviews_and_keep_concerns() {
+        let graph = legacy_graph();
+        let serving = ServingFactIndex::from_records(
+            vec![serving_fact(
+                "google_review_cards",
+                FactValue::Tags(vec![
+                    serde_json::json!({
+                        "author": "Newest Low Signal",
+                        "rating": 5.0,
+                        "published_at": "2026-07-20",
+                        "date_label": "July 2026",
+                        "helpful_count": 1,
+                        "text": "Good greenery and clubhouse."
+                    })
+                    .to_string(),
+                    serde_json::json!({
+                        "author": "Most Helpful",
+                        "rating": 5.0,
+                        "published_at": "2026-06-20",
+                        "date_label": "June 2026",
+                        "helpful_count": 18,
+                        "text": "Well maintained campus with clean common areas."
+                    })
+                    .to_string(),
+                    serde_json::json!({
+                        "author": "Concerned Resident",
+                        "rating": 3.0,
+                        "published_at": "2026-07-18",
+                        "date_label": "July 2026",
+                        "helpful_count": 2,
+                        "text": "Traffic near the approach road is still a problem."
+                    })
+                    .to_string(),
+                ]),
+                20,
+            )],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let detail = external_reviews_for("sample", Some(&society()), &graph, Some(&serving))
+            .expect("review cards should be exposed");
+
+        assert_eq!(detail.reviews.len(), 3);
+        assert_eq!(detail.reviews[0].author.as_deref(), Some("Most Helpful"));
+        assert!(detail
+            .reviews
+            .iter()
+            .any(|review| review.tone == ReviewTone::Concern
+                && review.author.as_deref() == Some("Concerned Resident")));
     }
 
     #[test]
