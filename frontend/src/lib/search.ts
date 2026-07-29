@@ -4,6 +4,8 @@
  * This file only contains display formatting helpers.
  */
 
+import type { MatchReason, SearchResultItem } from "./types.ts";
+
 export type MatchLabel =
   | "Strong match"
   | "Good match"
@@ -62,9 +64,77 @@ export function displayMatchReason(
   return fallback ?? null;
 }
 
+export function searchResultReasonLabels(
+  result: Pick<
+    SearchResultItem,
+    "match_reason" | "match_explanation" | "title" | "society_name" | "builder_name"
+  >,
+): string[] {
+  const labels: string[] = [];
+
+  for (const reason of result.match_explanation?.reasons ?? []) {
+    pushUniqueLabel(labels, compactExplanationLabel(reason));
+    if (labels.length >= 2) return labels;
+  }
+
+  const displayReason = displayMatchReason(result.match_reason);
+  for (const part of displayReason?.split(/\s*[;·,]\s*/) ?? []) {
+    if (isNameOnlyReason(part, result)) continue;
+    pushUniqueLabel(labels, compactReasonPart(part));
+    if (labels.length >= 2) return labels;
+  }
+
+  return labels;
+}
+
 export function friendlyMatchLabel(label: string): string {
   const normalized = label.trim().toLowerCase();
   if (normalized === "weak match") return "Partial fit";
   if (normalized === "partial match") return "Partial fit";
   return label;
+}
+
+function compactExplanationLabel(reason: MatchReason): string | null {
+  if (reason.score <= 0) return null;
+  const preference = reason.preference.trim();
+  if (!preference) return null;
+  return compactLabel(preference);
+}
+
+function compactReasonPart(part: string): string | null {
+  const trimmed = part.trim();
+  if (!trimmed) return null;
+  return compactLabel(trimmed.replace(/^matches\s+/i, ""));
+}
+
+function compactLabel(value: string): string {
+  const cleaned = value
+    .replace(/^avoid\s+/i, "Avoid ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = cleaned.split(" ");
+  const short = words.length > 4 ? words.slice(0, 4).join(" ") : cleaned;
+  return short.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function pushUniqueLabel(labels: string[], label: string | null) {
+  if (!label) return;
+  if (labels.some((existing) => existing.toLowerCase() === label.toLowerCase())) return;
+  labels.push(label);
+}
+
+function isNameOnlyReason(
+  reason: string,
+  result: Pick<SearchResultItem, "title" | "society_name" | "builder_name">,
+): boolean {
+  const match = reason.match(/^matched\s+'([^']+)'\s+in\s+(title|society|builder)$/i);
+  if (!match) return false;
+  const token = match[1]?.toLowerCase() ?? "";
+  const field = match[2]?.toLowerCase();
+  const value = field === "builder"
+    ? result.builder_name
+    : field === "society"
+      ? result.society_name
+      : result.title;
+  return value.toLowerCase().includes(token);
 }

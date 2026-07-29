@@ -265,6 +265,7 @@ impl TextSearch {
                     .unwrap_or("");
                 let named_society_match =
                     query_mentions_resolvable_society(&query_lower, society_name);
+                let name_prefix_score = query_name_prefix_score(&terms, &p.title, society_name);
 
                 // Base text score
                 let (mut score, mut reasons) = if terms.is_empty() {
@@ -763,6 +764,7 @@ impl TextSearch {
                 Some(RankedSearchResult {
                     ranking_score: normalized,
                     primary_intent_score,
+                    name_prefix_score,
                     evidence_strength,
                     review_quality_score,
                     named_society_match,
@@ -787,6 +789,11 @@ impl TextSearch {
                 .unwrap_or(Ordering::Equal)
                 .then_with(|| b.named_society_match.cmp(&a.named_society_match))
                 .then_with(|| {
+                    b.name_prefix_score
+                        .partial_cmp(&a.name_prefix_score)
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| {
                     b.evidence_strength
                         .partial_cmp(&a.evidence_strength)
                         .unwrap_or(Ordering::Equal)
@@ -809,6 +816,7 @@ struct RankedSearchResult {
     result: SearchResultCard,
     ranking_score: f64,
     primary_intent_score: f64,
+    name_prefix_score: f64,
     evidence_strength: f64,
     review_quality_score: f64,
     named_society_match: bool,
@@ -1287,6 +1295,43 @@ fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
     // It can decide which plausible candidate to inspect first, but proof facts
     // still dominate explanations and final ranking.
     (score * ranking.semantic_candidate_fit_weight).min(ranking.semantic_candidate_fit_cap)
+}
+
+fn query_name_prefix_score(query_terms: &[String], title: &str, society_name: &str) -> f64 {
+    if query_terms.is_empty() {
+        return 0.0;
+    }
+
+    let title_tokens = analyzer::search_tokens(title, schema::scoring_stopwords());
+    let society_tokens = analyzer::search_tokens(society_name, schema::scoring_stopwords());
+    name_prefix_score_for_tokens(query_terms, &society_tokens)
+        .max(name_prefix_score_for_tokens(query_terms, &title_tokens))
+}
+
+fn name_prefix_score_for_tokens(query_terms: &[String], candidate_tokens: &[String]) -> f64 {
+    if query_terms.is_empty() || candidate_tokens.is_empty() {
+        return 0.0;
+    }
+
+    let mut best: f64 = 0.0;
+    for start in 0..candidate_tokens.len() {
+        let mut matched = 0usize;
+        for (offset, query_term) in query_terms.iter().enumerate() {
+            let Some(candidate_token) = candidate_tokens.get(start + offset) else {
+                break;
+            };
+            if query_term == candidate_token
+                || candidate_token.starts_with(query_term)
+                || query_term.starts_with(candidate_token)
+            {
+                matched += 1;
+                continue;
+            }
+            break;
+        }
+        best = best.max(matched as f64 / query_terms.len() as f64);
+    }
+    best
 }
 
 fn structured_intent_terms(intent: &SearchIntent) -> Vec<String> {
@@ -6345,5 +6390,65 @@ mod tests {
             "3bhk in whitefield",
             "in"
         ));
+    }
+
+    #[test]
+    fn project_name_prefix_match_ranks_before_looser_brand_match() {
+        let waterford = local_property(
+            "prestige-waterford-3bhk",
+            "Whitefield",
+            "prestige-waterford",
+            3,
+            25_000_000,
+            8,
+            0.2,
+        );
+        let lakeside = local_property(
+            "prestige-lakeside-3bhk",
+            "Whitefield",
+            "prestige-lakeside-habitat",
+            3,
+            25_000_000,
+            8,
+            0.2,
+        );
+        let properties = vec![lakeside, waterford];
+        let mut society_names = std::collections::HashMap::new();
+        society_names.insert(
+            "prestige-lakeside-habitat".to_string(),
+            "Prestige Lakeside Habitat".to_string(),
+        );
+        society_names.insert(
+            "prestige-waterford".to_string(),
+            "Prestige Waterford".to_string(),
+        );
+        let extra_candidate_ids = vec![
+            "prestige-lakeside-3bhk".to_string(),
+            "prestige-waterford-3bhk".to_string(),
+        ];
+        let mut semantic_scores = std::collections::HashMap::new();
+        semantic_scores.insert("prestige-lakeside-3bhk".to_string(), 0.95);
+        semantic_scores.insert("prestige-waterford-3bhk".to_string(), 0.20);
+        let query = "prestige water";
+        let intent = crate::search::intent::parse_intent(query);
+
+        let results =
+            TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                &properties,
+                None,
+                Some(&extra_candidate_ids),
+                Some(&semantic_scores),
+                None,
+                None,
+                &society_names,
+                &[],
+                query,
+                &intent,
+                None,
+            );
+
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].card.id, "prestige-waterford-3bhk");
+        assert_eq!(results[1].card.id, "prestige-lakeside-3bhk");
     }
 }
