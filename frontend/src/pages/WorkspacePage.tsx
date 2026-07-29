@@ -166,7 +166,6 @@ export function WorkspacePage() {
     status: "idle",
     details: [],
   });
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -245,12 +244,6 @@ export function WorkspacePage() {
     return () => controller.abort();
   }, [compareKey, mode, selectedHomes]);
 
-  function copyComparisonLink() {
-    const href = workspaceCompareHref(activeCompareIds, searchParams.get("focus") ?? selectedHomes[0]?.id);
-    void navigator.clipboard.writeText(`${window.location.origin}${href}`)
-      .then(() => setCopied(true));
-  }
-
   function removeCompareHomes(propertyIdsToRemove: string[]) {
     const removeSet = new Set(propertyIdsToRemove);
     const nextIds = activeCompareIds.filter((id) => !removeSet.has(id));
@@ -320,8 +313,6 @@ export function WorkspacePage() {
           catalog={homes}
           details={compareState.key === compareKey ? compareState.details : []}
           status={compareState.key === compareKey ? compareState.status : "loading"}
-          copied={copied}
-          onCopy={copyComparisonLink}
           onRemoveHome={removeCompareHomes}
           onRemoveNoteLabel={removeNoteLabel}
         />
@@ -349,8 +340,6 @@ function CompareWorkspaceView({
   catalog,
   details,
   status,
-  copied,
-  onCopy,
   onRemoveHome,
   onRemoveNoteLabel,
 }: {
@@ -358,8 +347,6 @@ function CompareWorkspaceView({
   catalog: PropertyCard[];
   details: PropertyDetailResponse[];
   status: CompareStatus;
-  copied: boolean;
-  onCopy: () => void;
   onRemoveHome: (propertyIds: string[]) => void;
   onRemoveNoteLabel: (noteId: string, label: NotebookLabelId) => void;
 }) {
@@ -389,13 +376,8 @@ function CompareWorkspaceView({
     <section className="workspace-compare-view" aria-label="Compare saved homes">
       <header className="workspace-compare-view__head">
         <div>
-          <span>Side by side</span>
-          <h2>Same shortlist. Sharper tradeoffs.</h2>
-          <p>Compare uses the saved labels that stay decision-worthy.</p>
+          <h2>Sharper tradeoffs.</h2>
         </div>
-        <button type="button" onClick={onCopy}>
-          {copied ? "Link copied" : "Share"}
-        </button>
       </header>
 
       {status === "loading" ? (
