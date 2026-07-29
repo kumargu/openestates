@@ -1,5 +1,6 @@
 import type {
   MapOverlayLine,
+  MapLayerMeta,
   MapPlacePin,
   PropertyMapContext,
   SceneFeature,
@@ -34,6 +35,7 @@ export function propertyMapContextFromSurfaceScene(
     ...(fallback?.red_flag_lines ?? []).filter((line) =>
       !redFlagLines.some((candidate) => candidate.id === line.id)),
   ];
+  const layers = mergedLayers(scene, fallback, mergedRedFlagLines);
 
   return {
     home: {
@@ -43,16 +45,7 @@ export function propertyMapContextFromSurfaceScene(
       latitude: anchorCoordinates?.latitude,
       longitude: anchorCoordinates?.longitude,
     },
-    layers: scene.layers
-      .map((layer) => ({
-        id: layer.id,
-        label: layer.label,
-        rank: layer.rank,
-        enabledByDefault: layer.enabledByDefault,
-      }))
-      .sort((left, right) =>
-        (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER)
-        || left.label.localeCompare(right.label)),
+    layers,
     places,
     proof_focus: scene.proofFocus,
     water: fallback?.water,
@@ -61,6 +54,41 @@ export function propertyMapContextFromSurfaceScene(
     green_patches: fallback?.green_patches,
     lakes: fallback?.lakes,
   };
+}
+
+function mergedLayers(
+  scene: SurfaceSceneResponse,
+  fallback: PropertyMapContext | null | undefined,
+  redFlagLines: MapOverlayLine[],
+): MapLayerMeta[] {
+  const byId = new Map<string, MapLayerMeta>();
+  const addLayer = (layer: MapLayerMeta) => {
+    if (!byId.has(layer.id)) byId.set(layer.id, layer);
+  };
+
+  for (const layer of scene.layers) {
+    addLayer({
+      id: layer.id,
+      label: layer.label,
+      rank: layer.rank,
+      enabledByDefault: layer.enabledByDefault,
+    });
+  }
+  for (const layer of fallback?.layers ?? []) {
+    addLayer(layer);
+  }
+  if (redFlagLines.length > 0) {
+    addLayer({
+      id: "red_flags",
+      label: "Red flags",
+      rank: 9,
+      enabledByDefault: true,
+    });
+  }
+
+  return [...byId.values()].sort((left, right) =>
+    (left.rank ?? Number.MAX_SAFE_INTEGER) - (right.rank ?? Number.MAX_SAFE_INTEGER)
+    || left.label.localeCompare(right.label));
 }
 
 function samePlacePin(left: MapPlacePin, right: MapPlacePin): boolean {

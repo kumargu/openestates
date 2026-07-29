@@ -218,6 +218,7 @@ export type PropertyDetailResponse = {
   recommendation_branches?: RecommendationBranch[];
   recommendations?: RecommendationEnvelope;
   rera?: ReraInfo;
+  rera_dossier?: ReraDossier;
   area_intelligence?: AreaIntelligence;
   transparency_score?: TransparencyScore;
   area_price_range_low?: number;
@@ -996,6 +997,16 @@ export type ReraInfo = {
   cost_per_unit_inr?: number;
   complaints_count?: number;
   complaints_resolved_pct?: number;
+  project_complaints_count?: number;
+  project_complaints_open_count?: number;
+  project_complaints_disposed_count?: number;
+  promoter_complaints_count?: number;
+  promoter_complaints_open_count?: number;
+  promoter_complaints_disposed_count?: number;
+  complaint_summaries?: ReraComplaintScopeSummary[];
+  document_manifest?: ReraDocumentManifestItem[];
+  document_groups?: ReraDocumentGroupSummary[];
+  affidavit_only_visible?: boolean;
   builder_total_projects?: number;
   builder_revocations?: number;
   builder_states?: string[];
@@ -1006,6 +1017,127 @@ export type ReraInfo = {
   lat_lng?: string;
   rera_portal_url?: string;
   last_verified?: string;
+  decision_cards?: ReraDecisionCard[];
+};
+
+export type ReraDossier = {
+  property_id: string;
+  society_id: string;
+  summary_cards: ReraDecisionCard[];
+  compare_items: ReraCompareItem[];
+  complaint_sections: ReraComplaintSection[];
+  document_sections: ReraDocumentSection[];
+  timeline: ReraTimeline;
+  legal_checks: ReraLegalCheck[];
+  source: ReraDossierSource;
+};
+
+export type ReraCompareItem = {
+  key: string;
+  label: string;
+  value: string;
+  tone: "positive" | "watch" | "neutral" | string;
+  labels: string[];
+  source_card_id?: string;
+};
+
+export type ReraComplaintSection = {
+  scope: string;
+  label: string;
+  total: number;
+  open: number;
+  disposed: number;
+  top_themes: ReraComplaintTheme[];
+  fine_theme_counts: Record<string, number>;
+  sample_subjects: string[];
+  confidence: number;
+  validation_notes: string[];
+};
+
+export type ReraComplaintTheme = {
+  label: string;
+  count: number;
+};
+
+export type ReraDocumentSection = {
+  group: string;
+  label: string;
+  count: number;
+  kinds: string[];
+  preview_available_count: number;
+  hidden_count: number;
+};
+
+export type ReraTimeline = {
+  start_date?: string;
+  original_completion_date?: string;
+  completion_date?: string;
+  delay_months?: number;
+};
+
+export type ReraLegalCheck = {
+  key: string;
+  label: string;
+  value: string;
+  tone: "positive" | "watch" | "neutral" | string;
+};
+
+export type ReraDossierSource = {
+  registered: boolean;
+  registration_number?: string;
+  status?: string;
+  portal_url?: string;
+  last_verified?: string;
+};
+
+export type ReraDecisionCard = {
+  id: string;
+  title: string;
+  detail: string;
+  tone: "positive" | "watch" | "neutral" | string;
+  source: string;
+  labels: string[];
+  facts: Record<string, unknown>;
+  actions: ReraDecisionAction[];
+  confidence: number;
+  validation_notes: string[];
+};
+
+export type ReraDecisionAction = {
+  kind: string;
+  label: string;
+};
+
+export type ReraComplaintScopeSummary = {
+  scope: string;
+  total_count_from_tab_label?: number;
+  row_count_parsed: number;
+  disposed_count: number;
+  open_count: number;
+  theme_counts: Record<string, number>;
+  sample_subjects: string[];
+  confidence: number;
+  validation_notes: string[];
+};
+
+export type ReraDocumentManifestItem = {
+  artifact_id: string;
+  kind: string;
+  label: string;
+  source_url?: string;
+  source_tab?: string;
+  source_field_label?: string;
+  document_group: string;
+  buyer_visibility?: string;
+  preview_policy?: string;
+  configuration_type?: string;
+  bedroom_count?: number;
+  confidence?: number;
+};
+
+export type ReraDocumentGroupSummary = {
+  group: string;
+  count: number;
 };
 
 export type AreaIntelligence = {

@@ -74,6 +74,10 @@ async fn main() {
             get(routes::properties::get_property_evidence),
         )
         .route(
+            "/api/properties/{id}/rera",
+            get(routes::properties::get_property_rera),
+        )
+        .route(
             "/api/properties/{id}/recommendations",
             get(routes::properties::get_property_recommendations),
         )
@@ -133,7 +137,7 @@ async fn main() {
     println!("Routes:");
     println!("  GET /api/health");
     println!("  GET /media/*path");
-    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/recommendations");
+    println!("  GET /api/properties | /api/properties/{{id}} | /api/properties/{{id}}/evidence | /api/properties/{{id}}/rera | /api/properties/{{id}}/recommendations");
     println!(
         "  GET /api/properties/{{id}}/surfaces | /api/properties/{{id}}/surfaces/{{surface_id}}"
     );

@@ -8,7 +8,7 @@ use crate::dag_config::{UiSurfaceConfig, UiSurfaceLayerRule};
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
-use crate::related_societies::related_society_entity_ids;
+use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
 use crate::serving::{LoadedServingBundle, ServingEntityFactRows, ServingFactRecord};
 
@@ -606,7 +606,11 @@ fn features_for_layer(
         .collect::<HashSet<_>>();
     let mut row_entity_ids = vec![anchor_entity_id.to_string()];
     if layer_rule.include_related_society_facts {
-        row_entity_ids.extend(related_society_entity_ids(property, &bundle.fact_index));
+        row_entity_ids.extend(related_society_entity_ids_with_entities(
+            property,
+            &bundle.fact_index,
+            &bundle.entities,
+        ));
     }
     row_entity_ids.sort();
     row_entity_ids.dedup();
@@ -1969,6 +1973,138 @@ mod tests {
         assert_eq!(scene.features.len(), 1);
         assert_eq!(scene.features[0].label, "Bagmane Tech Park");
         assert_eq!(scene.receipts[0].entity_id, "society:rera-one");
+    }
+
+    #[test]
+    fn surface_scene_includes_related_rera_red_flags_matched_by_entity_name() {
+        let entities = vec![
+            serving_entity("society:society-one", "society", "One Society"),
+            serving_entity("society:rera-one", "society", "One Society"),
+            serving_entity(
+                "place:transmission-line:one",
+                "place",
+                "High voltage transmission line",
+            ),
+        ];
+        let facts = vec![
+            serving_fact(
+                "society:society-one",
+                "geo.latitude",
+                FactValue::Numeric(12.94),
+                None,
+            ),
+            serving_fact(
+                "society:society-one",
+                "geo.longitude",
+                FactValue::Numeric(77.745),
+                None,
+            ),
+            serving_fact(
+                "society:rera-one",
+                "high_voltage_transmission_line_nearby",
+                FactValue::Text("Transmission line (91 m, 66 kV, severity: high)".to_string()),
+                None,
+            ),
+            serving_fact(
+                "society:rera-one",
+                "high_voltage_transmission_line_place_entity",
+                FactValue::Text("place:transmission-line:one".to_string()),
+                None,
+            ),
+            serving_fact(
+                "place:transmission-line:one",
+                "geo.latitude",
+                FactValue::Numeric(12.941),
+                None,
+            ),
+            serving_fact(
+                "place:transmission-line:one",
+                "geo.longitude",
+                FactValue::Numeric(77.746),
+                None,
+            ),
+            serving_fact(
+                "place:transmission-line:one",
+                "geo.geometry_geojson",
+                FactValue::Text(
+                    r#"{"type":"LineString","coordinates":[[77.745,12.94],[77.747,12.942]]}"#
+                        .to_string(),
+                ),
+                None,
+            ),
+        ];
+        let bundle = loaded_bundle(entities, facts);
+        let surface = UiSurfaceConfig {
+            id: "around_this_home".to_string(),
+            title: "Around this home".to_string(),
+            kicker: None,
+            leaf_keys: Vec::new(),
+            traversal: Vec::new(),
+            components: Vec::new(),
+            primary_entity: Some("society".to_string()),
+            scene: Some(crate::dag_config::UiSurfaceSceneConfig {
+                anchor: crate::dag_config::UiSurfaceAnchorConfig {
+                    entity_ref: "society".to_string(),
+                },
+                layers: vec![UiSurfaceLayerRule {
+                    id: "red_flags".to_string(),
+                    label: "Red flags".to_string(),
+                    fact_keys: vec!["high_voltage_transmission_line_nearby".to_string()],
+                    edge_types: Vec::new(),
+                    linked_entity_fact_keys: vec![
+                        "high_voltage_transmission_line_place_entity".to_string()
+                    ],
+                    sort_priority_fact_keys: Vec::new(),
+                    family: "risk".to_string(),
+                    relation_class: "risk_externality".to_string(),
+                    render_kind: "line".to_string(),
+                    icon: Some("flag".to_string()),
+                    sort: Some("distance".to_string()),
+                    max_items: Some(5),
+                    expanded_max_items: None,
+                    spread_min_distance_km: None,
+                    show_review_metrics: Some(false),
+                    include_name_markers: Vec::new(),
+                    include_related_society_facts: true,
+                    enabled_by_default: true,
+                    rank: Some(1),
+                }],
+            }),
+        };
+
+        let scene = build_surface_scene(
+            &sample_property(),
+            Some("One Society"),
+            KgEntityRefs {
+                property_entity_id: "property:one".to_string(),
+                society_entity_id: "society:society-one".to_string(),
+                area_entity_id: "area:whitefield".to_string(),
+                builder_entity_id: None,
+                source_entity_ids: Vec::new(),
+            },
+            &bundle,
+            &surface,
+        )
+        .expect("scene should build");
+
+        assert_eq!(scene.layers[0].id, "red_flags");
+        assert_eq!(scene.layers[0].available_count, 1);
+        assert_eq!(scene.features.len(), 1);
+        assert_eq!(
+            scene.features[0].entity_id.as_deref(),
+            Some("place:transmission-line:one")
+        );
+        assert_eq!(
+            scene.features[0].geometry,
+            SceneGeometry::LineString {
+                coordinates: vec![[77.745, 12.94], [77.747, 12.942]]
+            }
+        );
+        assert_eq!(scene.receipts[0].entity_id, "society:rera-one");
+        assert_eq!(
+            scene.receipts[0].fact_key,
+            "high_voltage_transmission_line_nearby"
+        );
     }
 
     #[test]

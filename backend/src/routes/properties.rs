@@ -40,8 +40,9 @@ use crate::livability_brief::{
 use super::enrichment::{
     enrich_area, enrich_property_card, enrich_society, extract_area_intelligence,
     extract_builder_trust, extract_data_freshness, extract_rera_info, kg_entity_refs_for_property,
-    overlay_project_scale_facts, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
-    DataFreshness, ReraInfo,
+    overlay_project_scale_facts, rera_affidavit_only_visible, rera_decision_cards,
+    rera_document_groups, society_node_id, units_per_acre, AreaIntelligence, BuilderTrust,
+    DataFreshness, ReraComplaintScopeSummary, ReraDecisionCard, ReraDocumentManifestItem, ReraInfo,
 };
 use super::property_map::property_map_context_from_surface_scene;
 
@@ -90,6 +91,10 @@ pub struct PropertyDetail {
     /// RERA regulatory data from the knowledge graph (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rera: Option<ReraInfo>,
+    /// Buyer-facing RERA dossier. This keeps first paint rich while
+    /// `/api/properties/{id}/rera` remains the async boundary for future files.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rera_dossier: Option<ReraDossier>,
     /// Area intelligence from Reddit and other sources (None if not yet enriched).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub area_intelligence: Option<AreaIntelligence>,
@@ -138,6 +143,93 @@ pub struct PropertyDetail {
     /// Buyer-facing site overview + floor plans (RERA brochure promotions).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plans: Option<crate::plans::ProjectPlansView>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraDossier {
+    pub property_id: String,
+    pub society_id: String,
+    pub summary_cards: Vec<ReraDecisionCard>,
+    pub compare_items: Vec<ReraCompareItem>,
+    pub complaint_sections: Vec<ReraComplaintSection>,
+    pub document_sections: Vec<ReraDocumentSection>,
+    pub timeline: ReraTimeline,
+    pub legal_checks: Vec<ReraLegalCheck>,
+    pub source: ReraDossierSource,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraCompareItem {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+    pub tone: String,
+    pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_card_id: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraComplaintSection {
+    pub scope: String,
+    pub label: String,
+    pub total: i32,
+    pub open: i32,
+    pub disposed: i32,
+    pub top_themes: Vec<ReraComplaintTheme>,
+    pub fine_theme_counts: std::collections::BTreeMap<String, i32>,
+    pub sample_subjects: Vec<String>,
+    pub confidence: f64,
+    pub validation_notes: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraComplaintTheme {
+    pub label: String,
+    pub count: i32,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraDocumentSection {
+    pub group: String,
+    pub label: String,
+    pub count: i32,
+    pub kinds: Vec<String>,
+    pub preview_available_count: i32,
+    pub hidden_count: i32,
+}
+
+#[derive(Serialize, Clone, Debug, Default)]
+pub struct ReraTimeline {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub start_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub original_completion_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub completion_date: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub delay_months: Option<i32>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraLegalCheck {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+    pub tone: String,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraDossierSource {
+    pub registered: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_number: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub status: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub portal_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_verified: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -2398,6 +2490,9 @@ pub async fn get_property(
         &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
+    let rera_dossier = rera
+        .as_ref()
+        .map(|info| rera_dossier_for_property(&property.id, &property.society_id, info.clone()));
 
     // Extract area intelligence from the area's KG node
     let area_intelligence = extract_area_intelligence(&graph, &property.area);
@@ -2595,6 +2690,7 @@ pub async fn get_property(
         recommendation_branches: Vec::new(),
         recommendations,
         rera,
+        rera_dossier,
         area_intelligence,
         transparency_score,
         area_price_range_low,
@@ -2677,6 +2773,415 @@ pub(crate) fn overlay_serving_google_reviews(
     card
 }
 
+fn rera_group_buyer_label(group: &str) -> String {
+    let normalized = group.trim().to_ascii_lowercase().replace(['_', '-'], " ");
+    if normalized.contains("plan") {
+        "Plans".to_string()
+    } else if normalized.contains("approval") || normalized.contains("noc") {
+        "Approvals/NOCs".to_string()
+    } else if normalized.contains("legal") || normalized.contains("land") {
+        "Land files".to_string()
+    } else if normalized.contains("promoter") || normalized.contains("financial") {
+        "Promoter financials".to_string()
+    } else if normalized.contains("affidavit") {
+        "Affidavits".to_string()
+    } else if normalized.contains("buyer") || normalized.contains("agreement") {
+        "Buyer templates".to_string()
+    } else if normalized.is_empty() {
+        "Other files".to_string()
+    } else {
+        normalized
+            .split_whitespace()
+            .map(|part| {
+                let mut chars = part.chars();
+                match chars.next() {
+                    Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                    None => String::new(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+fn rera_scope_label(scope: &str) -> String {
+    match scope.trim().to_ascii_lowercase().as_str() {
+        "project" => "Project complaints".to_string(),
+        "promoter" => "Promoter complaints".to_string(),
+        other if !other.is_empty() => format!("{other} complaints"),
+        _ => "Complaints".to_string(),
+    }
+}
+
+fn rera_rollup_theme(theme: &str) -> String {
+    let normalized = theme.trim().to_ascii_lowercase();
+    if normalized.contains("refund") || normalized.contains("money") {
+        "Refund / money back".to_string()
+    } else if normalized.contains("delay")
+        || normalized.contains("possession")
+        || normalized.contains("completion")
+    {
+        "Delay / possession".to_string()
+    } else if normalized.contains("legal")
+        || normalized.contains("title")
+        || normalized.contains("litigation")
+        || normalized.contains("land")
+    {
+        "Legal / land".to_string()
+    } else if normalized.contains("payment")
+        || normalized.contains("demand")
+        || normalized.contains("interest")
+    {
+        "Payment demand".to_string()
+    } else if normalized.contains("amenit") || normalized.contains("maintenance") {
+        "Amenities / upkeep".to_string()
+    } else if normalized.contains("quality") || normalized.contains("defect") {
+        "Quality".to_string()
+    } else if normalized.contains("builder") || normalized.contains("conduct") {
+        "Builder conduct".to_string()
+    } else if normalized.is_empty() {
+        "Other".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn rera_complaint_sections(info: &ReraInfo) -> Vec<ReraComplaintSection> {
+    let mut sections: Vec<ReraComplaintSection> = info
+        .complaint_summaries
+        .iter()
+        .map(|summary| {
+            let mut fine = std::collections::BTreeMap::new();
+            let mut rolled = std::collections::BTreeMap::<String, i32>::new();
+            for (theme, count) in &summary.theme_counts {
+                if *count <= 0 {
+                    continue;
+                }
+                fine.insert(theme.clone(), *count);
+                *rolled.entry(rera_rollup_theme(theme)).or_insert(0) += *count;
+            }
+            let mut top_themes: Vec<ReraComplaintTheme> = rolled
+                .into_iter()
+                .map(|(label, count)| ReraComplaintTheme { label, count })
+                .collect();
+            top_themes.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.label.cmp(&b.label)));
+            let total = summary
+                .total_count_from_tab_label
+                .unwrap_or(summary.row_count_parsed);
+            ReraComplaintSection {
+                scope: summary.scope.clone(),
+                label: rera_scope_label(&summary.scope),
+                total,
+                open: summary.open_count,
+                disposed: summary.disposed_count,
+                top_themes: top_themes.into_iter().take(4).collect(),
+                fine_theme_counts: fine,
+                sample_subjects: summary.sample_subjects.iter().take(3).cloned().collect(),
+                confidence: summary.confidence,
+                validation_notes: summary.validation_notes.clone(),
+            }
+        })
+        .collect();
+    sections.sort_by(|a, b| {
+        let a_rank = if a.scope == "project" { 0 } else { 1 };
+        let b_rank = if b.scope == "project" { 0 } else { 1 };
+        a_rank.cmp(&b_rank).then_with(|| b.total.cmp(&a.total))
+    });
+    sections
+}
+
+fn rera_document_sections(info: &ReraInfo) -> Vec<ReraDocumentSection> {
+    let mut by_group: std::collections::BTreeMap<String, Vec<&ReraDocumentManifestItem>> =
+        std::collections::BTreeMap::new();
+    for item in &info.document_manifest {
+        let group = if item.document_group.trim().is_empty() {
+            "other".to_string()
+        } else {
+            item.document_group.clone()
+        };
+        by_group.entry(group).or_default().push(item);
+    }
+    if by_group.is_empty() {
+        for group in &info.document_groups {
+            by_group.entry(group.group.clone()).or_default();
+        }
+    }
+    by_group
+        .into_iter()
+        .map(|(group, items)| {
+            let mut kinds: Vec<String> = items
+                .iter()
+                .map(|item| item.kind.trim())
+                .filter(|kind| !kind.is_empty())
+                .map(str::to_string)
+                .collect();
+            kinds.sort();
+            kinds.dedup();
+            let preview_available_count = items
+                .iter()
+                .filter(|item| {
+                    matches!(
+                        item.preview_policy.as_deref(),
+                        Some("preview") | Some("thumbnail") | Some("inline")
+                    )
+                })
+                .count() as i32;
+            let hidden_count = items
+                .iter()
+                .filter(|item| matches!(item.buyer_visibility.as_deref(), Some("hidden")))
+                .count() as i32;
+            ReraDocumentSection {
+                group: group.clone(),
+                label: rera_group_buyer_label(&group),
+                count: items.len() as i32,
+                kinds,
+                preview_available_count,
+                hidden_count,
+            }
+        })
+        .filter(|section| section.count > 0)
+        .collect()
+}
+
+fn format_rera_number(value: f64, suffix: &str) -> String {
+    if (value.fract()).abs() < 0.05 {
+        format!("{}{suffix}", value.round() as i64)
+    } else {
+        format!("{value:.1}{suffix}")
+    }
+}
+
+fn push_rera_compare(
+    items: &mut Vec<ReraCompareItem>,
+    key: &str,
+    label: &str,
+    value: Option<String>,
+    tone: &str,
+    labels: Vec<&str>,
+    source_card_id: Option<&str>,
+) {
+    if let Some(value) = value.filter(|value| !value.trim().is_empty()) {
+        items.push(ReraCompareItem {
+            key: key.to_string(),
+            label: label.to_string(),
+            value,
+            tone: tone.to_string(),
+            labels: labels.into_iter().map(str::to_string).collect(),
+            source_card_id: source_card_id.map(str::to_string),
+        });
+    }
+}
+
+fn rera_compare_items(
+    info: &ReraInfo,
+    complaints: &[ReraComplaintSection],
+) -> Vec<ReraCompareItem> {
+    let mut items = Vec::new();
+    push_rera_compare(
+        &mut items,
+        "registration",
+        "RERA registration",
+        info.registration_number.as_ref().map(|number| {
+            format!(
+                "{}{}",
+                number,
+                info.status
+                    .as_ref()
+                    .map(|s| format!(" · {s}"))
+                    .unwrap_or_default()
+            )
+        }),
+        if info.registered {
+            "positive"
+        } else {
+            "neutral"
+        },
+        vec!["legal"],
+        Some("registration"),
+    );
+    push_rera_compare(
+        &mut items,
+        "delay_months",
+        "Delivery movement",
+        info.delay_months
+            .filter(|months| *months > 0)
+            .map(|months| format!("{months} months")),
+        "watch",
+        vec!["legal", "risk"],
+        Some("delivery_movement"),
+    );
+    let complaint_total: i32 = complaints.iter().map(|section| section.total).sum();
+    push_rera_compare(
+        &mut items,
+        "complaints",
+        "RERA complaints",
+        (complaint_total > 0).then(|| format!("{complaint_total} recorded")),
+        "watch",
+        vec!["legal", "risk"],
+        Some("complaints_project"),
+    );
+    push_rera_compare(
+        &mut items,
+        "documents",
+        "Official files",
+        (!info.document_manifest.is_empty()).then(|| {
+            let group_count = info.document_groups.len();
+            format!(
+                "{} files · {} groups",
+                info.document_manifest.len(),
+                group_count
+            )
+        }),
+        "neutral",
+        vec!["legal", "layout"],
+        Some("official_files"),
+    );
+    push_rera_compare(
+        &mut items,
+        "density",
+        "Project density",
+        info.units_per_acre
+            .map(|value| format_rera_number(value, " homes/acre")),
+        "neutral",
+        vec!["open-space"],
+        Some("project_scale"),
+    );
+    push_rera_compare(
+        &mut items,
+        "open_area",
+        "Open area",
+        info.open_area_pct
+            .map(|value| format_rera_number(value, "%")),
+        "neutral",
+        vec!["open-space"],
+        Some("project_scale"),
+    );
+    push_rera_compare(
+        &mut items,
+        "land_litigation",
+        "Land litigation",
+        info.land_litigation
+            .map(|value| if value { "Recorded" } else { "Not recorded" }.to_string()),
+        if info.land_litigation == Some(true) {
+            "watch"
+        } else {
+            "positive"
+        },
+        vec!["legal", "risk"],
+        Some("legal_follow_up"),
+    );
+    items
+}
+
+fn rera_legal_checks(info: &ReraInfo) -> Vec<ReraLegalCheck> {
+    let mut checks = Vec::new();
+    if let Some(value) = info.land_litigation {
+        checks.push(ReraLegalCheck {
+            key: "land_litigation".to_string(),
+            label: "Land litigation".to_string(),
+            value: if value { "Recorded" } else { "Not recorded" }.to_string(),
+            tone: if value { "watch" } else { "positive" }.to_string(),
+        });
+    }
+    if let Some(value) = info.has_mortgage {
+        checks.push(ReraLegalCheck {
+            key: "mortgage".to_string(),
+            label: "Mortgage".to_string(),
+            value: if value { "Reported" } else { "Not reported" }.to_string(),
+            tone: if value { "watch" } else { "positive" }.to_string(),
+        });
+    }
+    if let Some(value) = info.has_borrowing {
+        checks.push(ReraLegalCheck {
+            key: "borrowing".to_string(),
+            label: "Borrowing".to_string(),
+            value: if value { "Reported" } else { "Not reported" }.to_string(),
+            tone: if value { "watch" } else { "positive" }.to_string(),
+        });
+    }
+    if let Some(bank) = info
+        .escrow_bank
+        .as_ref()
+        .filter(|bank| !bank.trim().is_empty())
+    {
+        checks.push(ReraLegalCheck {
+            key: "escrow_bank".to_string(),
+            label: "Escrow bank".to_string(),
+            value: bank.clone(),
+            tone: "neutral".to_string(),
+        });
+    }
+    checks
+}
+
+fn rera_dossier_for_property(property_id: &str, society_id: &str, info: ReraInfo) -> ReraDossier {
+    let complaint_sections = rera_complaint_sections(&info);
+    let document_sections = rera_document_sections(&info);
+    let compare_items = rera_compare_items(&info, &complaint_sections);
+    let legal_checks = rera_legal_checks(&info);
+    ReraDossier {
+        property_id: property_id.to_string(),
+        society_id: society_id.to_string(),
+        summary_cards: info.decision_cards.clone(),
+        compare_items,
+        complaint_sections,
+        document_sections,
+        timeline: ReraTimeline {
+            start_date: info.start_date.clone(),
+            original_completion_date: info.original_completion_date.clone(),
+            completion_date: info.completion_date.clone(),
+            delay_months: info.delay_months,
+        },
+        legal_checks,
+        source: ReraDossierSource {
+            registered: info.registered,
+            registration_number: info.registration_number.clone(),
+            status: info.status.clone(),
+            portal_url: info.rera_portal_url.clone(),
+            last_verified: info.last_verified.clone(),
+        },
+    }
+}
+
+/// GET /api/properties/:id/rera — returns a buyer-facing RERA dossier. This is
+/// intentionally separate from generic evidence so the UI can treat regulatory
+/// records like Google/Reddit review surfaces: own loading state, own notebook
+/// pins, own future async document fetches.
+pub async fn get_property_rera(
+    State(state): State<Arc<AppState>>,
+    Path(id): Path<String>,
+) -> Result<Json<ReraDossier>, (StatusCode, Json<ErrorResponse>)> {
+    let serving_bundle = state.serving_bundle.read().await.clone();
+    let properties = state.properties.read().await;
+    let property = find_property_by_request_id(&properties, &id).ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "property_not_found".to_string(),
+            }),
+        )
+    })?;
+    let graph = state.knowledge.read().await;
+    let rera = rera_info_for(
+        &property.society_id,
+        &graph,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
+    )
+    .ok_or_else(|| {
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                error: "rera_not_found".to_string(),
+            }),
+        )
+    })?;
+    Ok(Json(rera_dossier_for_property(
+        &property.id,
+        &property.society_id,
+        rera,
+    )))
+}
+
 fn rera_info_for(
     society_id: &str,
     graph: &crate::knowledge::KnowledgeGraph,
@@ -2688,7 +3193,11 @@ fn rera_info_for(
     };
     let projection = SocietyFactProjection::from_index(serving_facts, society_id);
     let has_serving_rera = projection.latest_bool("rera_registered").is_some()
-        || projection.latest_text("rera_number").is_some();
+        || projection.latest_text("rera_number").is_some()
+        || projection
+            .latest_text("rera_complaint_summary_manifest")
+            .is_some()
+        || projection.latest_text("rera_document_manifest").is_some();
     if !has_serving_rera {
         return fallback;
     }
@@ -2744,6 +3253,36 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_numeric("rera_complaints_resolved_pct") {
         info.complaints_resolved_pct = Some(fact.value);
     }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_count") {
+        info.project_complaints_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_open_count") {
+        info.project_complaints_open_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_project_complaints_disposed_count") {
+        info.project_complaints_disposed_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_count") {
+        info.promoter_complaints_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_open_count") {
+        info.promoter_complaints_open_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_numeric("rera_promoter_complaints_disposed_count") {
+        info.promoter_complaints_disposed_count = projected_i32(fact.value);
+    }
+    if let Some(fact) = projection.latest_text("rera_complaint_summary_manifest") {
+        info.complaint_summaries =
+            parse_rera_projection_json::<Vec<ReraComplaintScopeSummary>>(&fact.value)
+                .unwrap_or_default();
+    }
+    if let Some(fact) = projection.latest_text("rera_document_manifest") {
+        info.document_manifest =
+            parse_rera_projection_json::<Vec<ReraDocumentManifestItem>>(&fact.value)
+                .unwrap_or_default();
+        info.document_groups = rera_document_groups(&info.document_manifest);
+        info.affidavit_only_visible = rera_affidavit_only_visible(&info.document_manifest);
+    }
     if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
         info.builder_total_projects = projected_i32(fact.value);
     }
@@ -2781,7 +3320,12 @@ fn rera_info_for(
         .latest_learned_at_with_prefix("rera_")
         .map(|timestamp| timestamp.to_rfc3339())
         .or(info.last_verified);
+    info.decision_cards = rera_decision_cards(&info);
     Some(info)
+}
+
+fn parse_rera_projection_json<T: serde::de::DeserializeOwned>(value: &str) -> Option<T> {
+    serde_json::from_str(value).ok()
 }
 
 fn projected_i32(value: f64) -> Option<i32> {
@@ -2870,6 +3414,57 @@ mod serving_state_tests {
                     FactValue::Numeric(112_652.0),
                     10,
                 ),
+                serving_fact("rera_delay_months", FactValue::Numeric(12.0), 10),
+                serving_fact(
+                    "rera_complaint_summary_manifest",
+                    FactValue::Text(
+                        serde_json::json!([
+                            {
+                                "scope": "project",
+                                "total_count_from_tab_label": 15,
+                                "row_count_parsed": 15,
+                                "disposed_count": 9,
+                                "open_count": 6,
+                                "theme_counts": {
+                                    "refund": 9,
+                                    "cancellation": 3,
+                                    "agreement_payment": 2
+                                },
+                                "sample_subjects": ["Refund after cancellation"],
+                                "confidence": 0.88,
+                                "validation_notes": []
+                            }
+                        ])
+                        .to_string(),
+                    ),
+                    10,
+                ),
+                serving_fact(
+                    "rera_document_manifest",
+                    FactValue::Text(
+                        serde_json::json!([
+                            {
+                                "artifact_id": "site-1",
+                                "kind": "site_plan",
+                                "label": "Site plan",
+                                "document_group": "plans",
+                                "buyer_visibility": "buyer_visible",
+                                "preview_policy": "preview_allowed"
+                            },
+                            {
+                                "artifact_id": "khata-1",
+                                "kind": "khata",
+                                "label": "Khata",
+                                "document_group": "legal_land",
+                                "buyer_visibility": "buyer_visible",
+                                "preview_policy": "list_only"
+                            }
+                        ])
+                        .to_string(),
+                    ),
+                    10,
+                ),
+                serving_fact("rera_has_mortgage", FactValue::Bool(true), 10),
             ],
             Vec::<ServingSearchMetadataRecord>::new(),
         );
@@ -2886,6 +3481,26 @@ mod serving_state_tests {
             detail.last_verified.as_deref(),
             Some("1970-01-01T00:00:10+00:00")
         );
+        let card_titles = detail
+            .decision_cards
+            .iter()
+            .map(|card| card.title.as_str())
+            .collect::<Vec<_>>();
+        assert!(card_titles.contains(&"Delivery moved by 12 months"));
+        assert!(
+            card_titles.contains(&"Mostly money back / refund complaints"),
+            "expected rolled-up complaint title in {card_titles:?}"
+        );
+        assert!(card_titles.contains(&"Official files available"));
+        assert!(card_titles.contains(&"Legal follow-up needed"));
+        let complaints = detail
+            .decision_cards
+            .iter()
+            .find(|card| card.id == "complaints_project")
+            .expect("complaint decision card should exist");
+        assert_eq!(complaints.labels, vec!["legal", "risk"]);
+        assert_eq!(complaints.facts["total"], 15);
+        assert_eq!(complaints.facts["fine_theme_counts"]["refund"], 9);
     }
 
     #[test]

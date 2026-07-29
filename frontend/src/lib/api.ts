@@ -3,6 +3,7 @@ import type {
   PropertyDetailResponse,
   PropertyEvidenceBatchResponse,
   PropertyEvidenceResponse,
+  ReraDossier,
   ProofFocus,
   PropertySurfacesResponse,
   RecommendationResponse,
@@ -96,8 +97,8 @@ export function getProperties(options?: ApiFetchOptions): Promise<PropertyCard[]
   return fetchJson<PropertyCard[]>("/api/properties", options).then(filterListableProperties);
 }
 
-export function getProperty(id: string): Promise<PropertyDetailResponse> {
-  return fetchJson(`/api/properties/${encodeURIComponent(id)}`);
+export function getProperty(id: string, options?: ApiFetchOptions): Promise<PropertyDetailResponse> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}`, options);
 }
 
 export function getPropertyRecommendations(id: string): Promise<RecommendationResponse> {
@@ -106,6 +107,10 @@ export function getPropertyRecommendations(id: string): Promise<RecommendationRe
 
 export function getPropertyEvidence(id: string): Promise<PropertyEvidenceResponse> {
   return fetchJson(`/api/properties/${encodeURIComponent(id)}/evidence`);
+}
+
+export function getPropertyRera(id: string): Promise<ReraDossier> {
+  return fetchJson(`/api/properties/${encodeURIComponent(id)}/rera`);
 }
 
 export function getPropertySurface(

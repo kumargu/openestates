@@ -1,20 +1,20 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
+import { useNotebook } from "../../hooks/useNotebook.ts";
 
 type WorkspaceIconName =
   | "browse"
   | "home"
-  | "compare"
+  | "notebook"
   | "plan"
   | "chevron";
 
-export type WorkspaceView = "browse" | "home" | "compare" | "plan";
+export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "plan";
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
   focusedId: string;
-  compareHref: string;
   activeView: WorkspaceView;
   collapsed: boolean;
   reduced: boolean;
@@ -42,8 +42,12 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
   if (name === "home") {
     return <svg {...common}><path d="m4 10 8-6 8 6v9H4z" /><path d="M9 19v-6h6v6" /></svg>;
   }
-  if (name === "compare") {
-    return <svg {...common}><path d="M7 4v16M17 4v16M4 8l3-3 3 3M14 16l3 3 3-3" /></svg>;
+  if (name === "notebook") {
+    return (
+      <svg {...common}>
+        <path d="M7 3.5h8.5A2.5 2.5 0 0 1 18 6v14.2l-5.2-2.6L7.5 20.2V6A2.5 2.5 0 0 1 10 3.5" />
+      </svg>
+    );
   }
   if (name === "plan") {
     return <svg {...common}><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" /></svg>;
@@ -53,7 +57,6 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
 
 function workspaceNavItems(
   focusedId: string,
-  compareHref: string,
   activeView: WorkspaceView,
 ) {
   const detailHref = focusedId ? `/property/${focusedId}` : "/";
@@ -61,7 +64,7 @@ function workspaceNavItems(
   return [
     { view: "browse" as const, label: "Discover", icon: "browse" as const, to: "/" },
     { view: "home" as const, label: "Property", icon: "home" as const, to: detailHref },
-    { view: "compare" as const, label: "Compare", icon: "compare" as const, to: compareHref },
+    { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace" },
     { view: "plan" as const, label: "Financial plan", icon: "plan" as const, to: planHref },
   ].map((item) => ({
     ...item,
@@ -88,7 +91,6 @@ function homeStateHint(home: PropertyCard): string | null {
 export function WorkspaceSidebar({
   homes,
   focusedId,
-  compareHref,
   activeView,
   collapsed,
   reduced,
@@ -96,8 +98,10 @@ export function WorkspaceSidebar({
   onFocus,
   onRemove,
 }: WorkspaceSidebarProps) {
-  const navItems = workspaceNavItems(focusedId, compareHref, activeView);
+  const navItems = workspaceNavItems(focusedId, activeView);
   const [showAllHomes, setShowAllHomes] = useState(false);
+  const { notes } = useNotebook();
+  const noteCount = notes.length;
   const previewHomes = homes.slice(0, 4);
   const focusedHome = homes.find((home) => home.id === focusedId);
   if (focusedHome && !previewHomes.some((home) => home.id === focusedHome.id)) {
@@ -137,7 +141,9 @@ export function WorkspaceSidebar({
           >
             <WorkspaceIcon name={item.icon} />
             {!collapsed && <span>{item.label}</span>}
-            {!collapsed && item.view === "compare" && <em>{homes.length}</em>}
+            {!collapsed && item.view === "notebook" && noteCount > 0 && (
+              <em className="workspace-sidebar__note-count">{noteCount}</em>
+            )}
           </Link>
         ))}
       </nav>

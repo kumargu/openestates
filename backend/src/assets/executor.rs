@@ -22,18 +22,18 @@ use super::{
     KgSocietyViewMaterializeError, KgSocietyViewMaterializer, KgViewManifest, KgViewRecords,
     MaterializationId, MaterializationRecord, MediaAssetError, MediaAssetMaterializer,
     OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
-    ProjectEnrichmentMaterializer, ReraAssetError, ReraRegistryMaterializer, RunManifestError,
-    SkillFactMaterializeError, SkillFactMaterializer, SkillFactsInput, SourceWatermark,
-    StormwaterAssetError, TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
-    BENGALURU_METRO_STATION_FACTS_ASSET_ID, BUILDER_RERA_AGGREGATES_ASSET_ID,
-    CANONICAL_SOCIETY_NODES_ASSET_ID, CURRENT_PROJECT_FACTS_ASSET_ID,
-    EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID,
-    KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
-    RERA_REGISTRY_MONTHLY_ASSET_ID, SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
-    STORMWATER_DRAIN_FACTS_ASSET_ID,
+    ProjectEnrichmentMaterializer, ReraAssetError, ReraPlanFramesAssetError,
+    ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
+    SkillFactsInput, SourceWatermark, StormwaterAssetError, TransitAssetError,
+    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+    GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACE_FACTS_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID,
+    IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 
 const DEFAULT_ASSET_EXECUTION_TIMEOUT_MS: u64 = 45 * 60 * 1_000;
@@ -1160,6 +1160,10 @@ impl BuiltInAssetExecutorRegistry {
             BuiltInAssetExecutor::ReraLegalFacts,
         );
         executors.insert(
+            static_asset_id(RERA_PROJECT_PLAN_FRAMES_ASSET_ID),
+            BuiltInAssetExecutor::ReraProjectPlanFrames,
+        );
+        executors.insert(
             static_asset_id(GOOGLE_PLACES_WEEKLY_ASSET_ID),
             BuiltInAssetExecutor::GooglePlacesWeekly,
         );
@@ -1244,6 +1248,7 @@ enum BuiltInAssetExecutor {
     ReraRegistryMonthly,
     CanonicalSocietyNodes,
     ReraLegalFacts,
+    ReraProjectPlanFrames,
     GooglePlacesWeekly,
     GoogleReviewFacts,
     GoogleNearbyPlacesWeekly,
@@ -1345,6 +1350,15 @@ impl BuiltInAssetExecutor {
                     context.run_id,
                 )
                 .await?;
+                let record = execute_skill_fact_asset(context, &input).await?;
+                Ok(ExecutedAsset::SkillFacts(record))
+            }
+            Self::ReraProjectPlanFrames => {
+                ensure_global_partition(context.asset_id, context.asset_partition)?;
+                let input = super::rera_project_plan_frames_input(
+                    &context.run_id.to_string(),
+                    context.options.planned_at,
+                )?;
                 let record = execute_skill_fact_asset(context, &input).await?;
                 Ok(ExecutedAsset::SkillFacts(record))
             }
@@ -2092,6 +2106,7 @@ pub enum AssetDagExecutorError {
     Stormwater(StormwaterAssetError),
     CurrentProjectFacts(CurrentProjectFactsError),
     Rera(ReraAssetError),
+    ReraPlanFrames(ReraPlanFramesAssetError),
     CanonicalNodes(super::CanonicalNodesError),
     NoExecutor {
         asset_id: AssetId,
@@ -2191,6 +2206,9 @@ impl fmt::Display for AssetDagExecutorError {
             }
             Self::SkillFact(err) => write!(f, "skill fact source execution failed: {err}"),
             Self::Rera(err) => write!(f, "RERA asset execution failed: {err}"),
+            Self::ReraPlanFrames(err) => {
+                write!(f, "RERA project plan asset execution failed: {err}")
+            }
             Self::CanonicalNodes(err) => write!(f, "canonical nodes asset execution failed: {err}"),
             Self::NoExecutor { asset_id } => {
                 write!(f, "no executor registered for planned asset {asset_id}")
@@ -2423,6 +2441,12 @@ impl From<SkillFactMaterializeError> for AssetDagExecutorError {
 impl From<ReraAssetError> for AssetDagExecutorError {
     fn from(err: ReraAssetError) -> Self {
         Self::Rera(err)
+    }
+}
+
+impl From<ReraPlanFramesAssetError> for AssetDagExecutorError {
+    fn from(err: ReraPlanFramesAssetError) -> Self {
+        Self::ReraPlanFrames(err)
     }
 }
 

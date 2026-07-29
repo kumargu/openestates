@@ -1,3 +1,4 @@
+import json
 import unittest
 
 from pipeline.skills.fetch_rera import (
@@ -132,6 +133,220 @@ class FetchReraSkillTest(unittest.TestCase):
         )
         self.assertEqual(facts["has_2bhk"].value, {"type": "Bool", "data": True})
         self.assertEqual(facts["has_3bhk"].value, {"type": "Bool", "data": True})
+
+    def test_parse_brochure_documents_as_candidates_not_floor_plans(self):
+        html = """
+        <div id="home" class="tab-pane">Promoter Details</div>
+        <div id="menu1" class="tab-pane">
+          Project Type : Residential
+          <p>Project Brochure 14-04-2022
+            <a href="/download_jc?DOC_ID=abc">Godrej Splendour Brochure.pdf</a>
+          </p>
+          <p>3 GROUND FLOOR PLAN
+            <a href="/download_jc?DOC_ID=def">3GROUND FLOOR PLAN.pdf</a>
+          </p>
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            promoter_name="Godrej",
+            project_name="Godrej Splendour",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="",
+            original_completion_date="",
+            numeric_id="9197",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+        artifacts = {artifact.document_kind: artifact for artifact in detail.document_artifacts}
+
+        self.assertIn("brochure", artifacts)
+        self.assertEqual(facts["brochure_asset_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["floor_plan_asset_count"].value, {"type": "Numeric", "data": 1})
+        manifest = facts["rera_plan_artifact_manifest"].value["data"]
+        self.assertIn('"kind":"brochure"', manifest)
+
+    def test_parse_uploaded_document_manifest_from_rera_labels(self):
+        html = """
+        <div id="home" class="tab-pane">Promoter Details</div>
+        <div id="menu2" class="tab-pane">
+          <p>Approved Layout Plan <a href="/download_jc?DOC_ID=site">site.pdf</a></p>
+          <p>Encumbrance Certificate <a href="/download_jc?DOC_ID=ec">ec.pdf</a></p>
+          <p>BESCOM <a href="/download_jc?DOC_ID=bescom">bescom-noc.pdf</a></p>
+          <p>Affidavit (Annexure - 49) <a href="/download_jc?DOC_ID=aff">annexure49.pdf</a></p>
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            promoter_name="Prestige",
+            project_name="Prestige Waterford",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="",
+            original_completion_date="",
+            numeric_id="6981",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+        manifest = json.loads(facts["rera_document_manifest"].value["data"])
+        by_kind = {item["kind"]: item for item in manifest}
+
+        self.assertEqual(by_kind["site_plan"]["document_group"], "plans")
+        self.assertEqual(by_kind["site_plan"]["preview_policy"], "preview_allowed")
+        self.assertEqual(by_kind["encumbrance_certificate"]["document_group"], "legal_land")
+        self.assertEqual(by_kind["noc"]["source_field_label"], "BESCOM")
+        self.assertEqual(by_kind["affidavit"]["document_group"], "affidavits")
+        self.assertEqual(facts["rera_noc_document_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["rera_legal_land_document_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["rera_affidavit_document_count"].value, {"type": "Numeric", "data": 1})
+
+    def test_skip_placeholder_uploaded_document_links(self):
+        html = """
+        <div id="home" class="tab-pane">Promoter Details</div>
+        <div id="menu2" class="tab-pane">
+          <p>Approved Layout Plan <a href="/download_jc?DOC_ID=">Floor Plan</a></p>
+          <p>Approved Layout Plan <a href="/download_jc?DOC_ID=na">Not applicable.pdf</a></p>
+          <p>Joint Development Agreement <a href="/download_jc?DOC_ID=missing">Not Available.pdf</a></p>
+          <p>Approved Layout Plan <a href="/download_jc?DOC_ID=site">site.pdf</a></p>
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            promoter_name="Prestige",
+            project_name="Prestige Waterford",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="",
+            original_completion_date="",
+            numeric_id="6981",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+        manifest = json.loads(facts["rera_document_manifest"].value["data"])
+
+        self.assertEqual(len(manifest), 1)
+        self.assertEqual(manifest[0]["kind"], "site_plan")
+        self.assertEqual(facts["site_plan_asset_count"].value, {"type": "Numeric", "data": 1})
+        self.assertNotIn("floor_plan_asset_count", facts)
+
+    def test_parse_project_and_promoter_complaints_as_separate_scopes(self):
+        html = """
+        <div id="home" class="tab-pane">Promoter Details</div>
+        <div id="menu-comp" class="tab-pane">
+          Complaints on Promoter (2)
+          <table>
+            <tr><td>1</td><td>CMP/10/2024</td><td>12-01-2024</td><td>Refund after cancellation</td><td>DISPOSED</td></tr>
+            <tr><td>2</td><td>CMP/11/2024</td><td>14-02-2024</td><td>Possession delay compensation</td><td>UNDER ENQUIRY</td></tr>
+          </table>
+        </div>
+        <div id="menu-comp2" class="tab-pane">
+          Complaints on Project (1)
+          <table>
+            <tr><td>1</td><td>CMP/20/2025</td><td>04-03-2025</td><td>Agreement payment dispute</td><td>POSTED FOR ORDERS</td></tr>
+          </table>
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            promoter_name="Prestige",
+            project_name="Prestige Waterford",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="",
+            original_completion_date="",
+            numeric_id="6981",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+        summary = json.loads(facts["rera_complaint_summary_manifest"].value["data"])
+        by_scope = {item["scope"]: item for item in summary}
+
+        self.assertEqual(detail.complaints_count, 1)
+        self.assertEqual(facts["rera_complaints_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["rera_project_complaints_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["rera_promoter_complaints_count"].value, {"type": "Numeric", "data": 2})
+        self.assertEqual(facts["rera_project_complaints_open_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(facts["rera_promoter_complaints_disposed_count"].value, {"type": "Numeric", "data": 1})
+        self.assertEqual(by_scope["project"]["theme_counts"], {"agreement_payment": 1})
+        self.assertEqual(
+            by_scope["promoter"]["theme_counts"],
+            {
+                "cancellation": 1,
+                "compensation": 1,
+                "delay": 1,
+                "possession": 1,
+                "refund": 1,
+            },
+        )
+
+    def test_parse_complaint_themes_keeps_fine_legal_and_facility_signals(self):
+        html = """
+        <div id="menu-comp2" class="tab-pane">
+          Complaints on Project (5)
+          <table>
+            <tr><td>1</td><td>CMP/30/2025</td><td>04-03-2025</td><td>Khata and title document handover pending</td><td>UNDER ENQUIRY</td></tr>
+            <tr><td>2</td><td>CMP/31/2025</td><td>05-03-2025</td><td>Land conversion approval and OC not provided</td><td>PENDING</td></tr>
+            <tr><td>3</td><td>CMP/32/2025</td><td>06-03-2025</td><td>Parking allocation and clubhouse amenities dispute</td><td>DISPOSED</td></tr>
+            <tr><td>4</td><td>CMP/33/2025</td><td>07-03-2025</td><td>Maintenance corpus demand letter with penal interest</td><td>POSTED FOR ORDERS</td></tr>
+            <tr><td>5</td><td>CMP/34/2025</td><td>08-03-2025</td><td>False promise and misrepresentation by builder</td><td>UNDER ENQUIRY</td></tr>
+          </table>
+        </div>
+        """
+        search_result = ReraSearchResult(
+            ack_number="ACK-1",
+            registration_number="PRM-1",
+            promoter_name="Prestige",
+            project_name="Prestige Waterford",
+            status="Registered",
+            district="Bengaluru Urban",
+            taluk="Bengaluru East",
+            project_type="Residential",
+            approved_on="",
+            completion_date="",
+            original_completion_date="",
+            numeric_id="6981",
+        )
+
+        detail = parse_rera_detail(html, search_result)
+        facts = {fact.key: fact for fact in rera_detail_to_facts(detail)}
+        summary = json.loads(facts["rera_complaint_summary_manifest"].value["data"])[0]
+
+        self.assertEqual(
+            summary["theme_counts"],
+            {
+                "agreement_payment": 1,
+                "amenities": 1,
+                "approval_oc_cc": 1,
+                "builder_conduct": 1,
+                "interest_demand": 1,
+                "khata": 1,
+                "maintenance": 1,
+                "parking": 1,
+                "registration_document": 1,
+                "title_land": 2,
+            },
+        )
 
     def test_parse_waterford_cross_tab_schedule_fields(self):
         html = """

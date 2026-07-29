@@ -266,7 +266,6 @@ function MarketTrendChart({ rows }: { rows: MarketTrailRow[] }) {
   const axisMin = Math.max(0, scaleMin - pad);
   const axisMax = scaleMax + pad;
   const ticks = niceAxisTicks(axisMin, axisMax);
-  const sourceCount = new Set(rows.map((row) => row.sourceUrl).filter(Boolean)).size;
 
   return (
     <>
@@ -311,8 +310,7 @@ function MarketTrendChart({ rows }: { rows: MarketTrailRow[] }) {
       </div>
 
       <p className="price-bands__caption">
-        {rows.length} configuration{rows.length === 1 ? "" : "s"}
-        {sourceCount > 0 ? ` · ${sourceCount} market source${sourceCount === 1 ? "" : "s"}` : ""}
+        Asking prices by BHK
       </p>
     </>
   );
@@ -322,9 +320,9 @@ function trendSummary(rows: MarketTrailRow[]): string {
   const lows = rows.map((row) => row.saleLow).filter((value): value is number => value != null);
   const highs = rows.map((row) => row.saleHigh).filter((value): value is number => value != null);
   if (lows.length === 0 || highs.length === 0) {
-    return `${rows.length} configuration${rows.length === 1 ? "" : "s"}`;
+    return "BHK price bands";
   }
-  return `${rows.length} configuration${rows.length === 1 ? "" : "s"} · ${formatTotalPrice(Math.min(...lows))}-${formatTotalPrice(Math.max(...highs)).replace("₹", "")}`;
+  return `${formatTotalPrice(Math.min(...lows))}-${formatTotalPrice(Math.max(...highs)).replace("₹", "")}`;
 }
 
 export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
@@ -358,7 +356,7 @@ export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
         </span>
         <span className="market-trend__copy">
           <span className="market-trend__kicker">Market trend</span>
-          <strong id="market-trend-title">Configuration price bands</strong>
+          <strong id="market-trend-title">BHK price bands</strong>
           <span>{summary}</span>
         </span>
         <span className="market-trend__open" aria-hidden="true">
@@ -373,8 +371,8 @@ export function MarketTrendTile({ sections }: { sections: EvidenceSection[] }) {
         <div id="market-trend-panel" className="market-trend__panel">
           <div className="market-trend__panel-head">
             <span>Market trend</span>
-            <strong>Configuration price bands</strong>
-            <p>Asking ranges by configuration.</p>
+            <strong>BHK price bands</strong>
+            <p>Asking ranges by BHK.</p>
           </div>
           <div className="market-trend__chart price-bands">
             <MarketTrendChart rows={rows} />

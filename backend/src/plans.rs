@@ -7,9 +7,6 @@
 //! Serving facts may also carry the same JSON under `media.project_plan_frames`.
 //! Request handlers never download or OCR plan PDFs.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::FactValue;
@@ -91,27 +88,17 @@ struct ProjectPlanFramesRecord {
     floor_plans: Vec<FloorPlanVariant>,
 }
 
-/// Resolve buyer plan media for a society.
-///
-/// Prefer the serving-bundle fact when present. Fall back to the lake JSON
-/// produced by `pipeline/skills/promote_rera_project_plans.py` so the first
-/// Waterford slice works before a full serving rebundle.
+/// Resolve buyer plan media for a society from the promoted serving bundle.
 pub fn project_plans_for_society(
     society_entity_id: &str,
-    society_id: &str,
+    _society_id: &str,
     serving_facts: Option<&ServingFactIndex>,
 ) -> Option<ProjectPlansView> {
-    if let Some(view) = serving_plans(society_entity_id, serving_facts) {
-        return Some(view);
-    }
-    lake_plans(&repo_root(), society_entity_id, society_id)
+    serving_plans(society_entity_id, serving_facts)
 }
 
 /// Pick the representative floor plan for a listing BHK on compare cards.
-pub fn matched_floor_plan_for_bhk(
-    plans: &ProjectPlansView,
-    bhk: u32,
-) -> Option<&FloorPlanVariant> {
+pub fn matched_floor_plan_for_bhk(plans: &ProjectPlansView, bhk: u32) -> Option<&FloorPlanVariant> {
     matched_floor_plan_for_listing(plans, bhk, None)
 }
 
@@ -160,8 +147,7 @@ pub fn overlay_project_plans_on_card(
     serving_facts: Option<&ServingFactIndex>,
 ) {
     let society_entity_id = normalize_society_entity_id(society_id);
-    let Some(plans) =
-        project_plans_for_society(&society_entity_id, society_id, serving_facts)
+    let Some(plans) = project_plans_for_society(&society_entity_id, society_id, serving_facts)
     else {
         return;
     };
@@ -215,6 +201,9 @@ fn serving_plans(
         .facts
         .iter()
         .find(|fact| fact.fact_key == PROJECT_PLAN_FRAMES_FACT_KEY)?;
+    if !fact.source_type.eq_ignore_ascii_case("rera") {
+        return None;
+    }
     let payload = match &fact.value {
         FactValue::Text(text) => text.as_str(),
         _ => return None,
@@ -222,20 +211,14 @@ fn serving_plans(
     parse_plans_payload(payload)
 }
 
-fn lake_plans(
-    project_root: &Path,
-    society_entity_id: &str,
-    society_id: &str,
-) -> Option<ProjectPlansView> {
-    let slug = society_slug(society_entity_id, society_id);
-    let path = lake_plan_fact_path(project_root, &slug);
-    let payload = fs::read_to_string(path).ok()?;
-    let record: ProjectPlanFramesRecord = serde_json::from_str(&payload).ok()?;
-    Some(record_to_view(record))
-}
-
 fn parse_plans_payload(payload: &str) -> Option<ProjectPlansView> {
     let record: ProjectPlanFramesRecord = serde_json::from_str(payload).ok()?;
+    if !record.provider.eq_ignore_ascii_case("rera") {
+        return None;
+    }
+    if record.site_overview.is_none() && record.floor_plans.is_empty() {
+        return None;
+    }
     Some(record_to_view(record))
 }
 
@@ -250,26 +233,58 @@ fn record_to_view(record: ProjectPlanFramesRecord) -> ProjectPlansView {
     }
 }
 
-fn lake_plan_fact_path(project_root: &Path, society_slug: &str) -> PathBuf {
-    project_root
-        .join("data")
-        .join("lake")
-        .join("media")
-        .join("rera_plans")
-        .join(society_slug)
-        .join("project_plan_frames.json")
-}
-
-fn repo_root() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("backend crate lives in the OpenEstates repo")
-        .to_path_buf()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+
+    use crate::serving::{ServingFactIndex, ServingFactRecord};
+
+    fn minimal_payload(provider: &str) -> String {
+        serde_json::json!({
+            "provider": provider,
+            "coverage_quality": "usable",
+            "source_url": "https://rera.test/source",
+            "registration_number": "PRM-1",
+            "society_entity_id": "society:test",
+            "floor_plans": [
+                {
+                    "id": "type-a",
+                    "artifact_id": "test:floor_plan:a",
+                    "configuration_type": "3BHK",
+                    "bedroom_count": 3,
+                    "tab_label": "3 BHK",
+                    "title": "Type A 3 BHK",
+                    "preview_url": "/media/previews/rera_plans/test/type-a.png",
+                    "source_url": "https://rera.test/source",
+                    "carpet_area_sqft": 1200,
+                    "sale_area_sqft": 1800,
+                    "usable_area_ratio": 0.667,
+                    "confidence": 0.86
+                }
+            ]
+        })
+        .to_string()
+    }
+
+    fn serving_index(payload: String, source_type: &str) -> ServingFactIndex {
+        ServingFactIndex::from_records(
+            vec![ServingFactRecord {
+                entity_id: "society:test".to_string(),
+                fact_key: PROJECT_PLAN_FRAMES_FACT_KEY.to_string(),
+                value_type: "Text".to_string(),
+                value_text: Some(payload.clone()),
+                value: FactValue::Text(payload),
+                confidence: 0.86,
+                source_type: source_type.to_string(),
+                source_url: Some("https://rera.test/source".to_string()),
+                model: None,
+                skill_id: Some("promote_rera_project_plans".to_string()),
+                learned_at: Utc::now(),
+            }],
+            Vec::new(),
+        )
+    }
 
     #[test]
     fn matches_highest_confidence_plan_for_bhk() {
@@ -326,17 +341,40 @@ mod tests {
     }
 
     #[test]
-    fn loads_waterford_lake_plans_when_present() {
-        let view = project_plans_for_society(
-            "society:prestige-waterford",
-            "prestige-waterford",
-            None,
-        );
-        let Some(view) = view else {
-            return;
-        };
+    fn parses_serving_project_plan_frames_fact() {
+        let serving = serving_index(minimal_payload("RERA"), "Rera");
+
+        let view = project_plans_for_society("society:test", "test", Some(&serving))
+            .expect("serving fact should parse");
+
         assert_eq!(view.provider, "RERA");
-        assert!(view.site_overview.is_some());
-        assert_eq!(view.floor_plans.len(), 5);
+        assert_eq!(view.floor_plans.len(), 1);
+        assert_eq!(
+            view.floor_plans[0].preview_url,
+            "/media/previews/rera_plans/test/type-a.png"
+        );
+    }
+
+    #[test]
+    fn rejects_non_rera_project_plan_payloads() {
+        assert!(parse_plans_payload(&minimal_payload("manual")).is_none());
+
+        let serving = serving_index(minimal_payload("RERA"), "Manual");
+        assert!(project_plans_for_society("society:test", "test", Some(&serving)).is_none());
+    }
+
+    #[test]
+    fn ignores_empty_rera_project_plan_payloads() {
+        let payload = serde_json::json!({
+            "provider": "RERA",
+            "coverage_quality": "missing",
+            "source_url": "https://rera.test/source",
+            "registration_number": "PRM-1",
+            "society_entity_id": "society:test",
+            "floor_plans": []
+        })
+        .to_string();
+
+        assert!(parse_plans_payload(&payload).is_none());
     }
 }

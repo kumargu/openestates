@@ -27,6 +27,7 @@ pub mod project_enrichment;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
+pub mod rera_plans;
 pub mod run_manifest;
 pub mod skill_facts;
 pub mod source_inputs;
@@ -111,6 +112,9 @@ pub use rera::{
     CanonicalSocietyMaterializer, CanonicalSocietyRows, ReraAssetError, ReraCanonicalMappingRecord,
     ReraProjectSnapshotRecord, ReraRegistryMaterializer, ReraRegistryMonthlyInput,
     CANONICAL_SOCIETY_NODES_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+};
+pub use rera_plans::{
+    rera_project_plan_frames_input, ReraPlanFramesAssetError, RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
 };
 pub use run_manifest::{
     AssetDagResumeLease, AssetDagRunManifest, AssetRunAttempt, AssetRunManifestStore, AssetRunStep,

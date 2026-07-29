@@ -62,7 +62,10 @@ export function CommunityPulseCard({ pulse }: Props) {
       {[...positiveQuotes, ...concernQuotes, ...neutralQuotes].length > 0 && (
         <div className="community-pulse__quotes">
           {[...positiveQuotes, ...concernQuotes, ...neutralQuotes].map((quote) => (
-            <blockquote key={quote.text} className={`community-pulse__quote community-pulse__quote--${quote.polarity}`}>
+            <blockquote
+              key={quote.text}
+              className={`community-pulse__quote community-pulse__quote--${quote.polarity}`}
+            >
               <div className="community-pulse__quote-head">
                 {quote.polarity === "positive" ? <TrendIcon size={14} /> : null}
                 {quote.polarity === "concern" ? <TrendDownIcon size={14} /> : null}

@@ -96,9 +96,38 @@ class ReraDocumentArtifact:
     document_kind: str
     label: str
     source_url: Optional[str] = None
+    source_tab: str = "uploaded_documents"
+    source_field_label: Optional[str] = None
+    document_group: str = "other"
+    buyer_visibility: str = "list_only"
+    preview_policy: str = "list_only"
     configuration_type: Optional[str] = None
     bedroom_count: Optional[float] = None
     confidence: float = 0.7
+
+
+@dataclass
+class ReraComplaintRow:
+    scope: str
+    complaint_number: Optional[str] = None
+    complaint_date: Optional[str] = None
+    complaint_subject: Optional[str] = None
+    status_raw: Optional[str] = None
+    status_group: str = "other"
+    theme_tags: List[str] = field(default_factory=list)
+
+
+@dataclass
+class ReraComplaintSummary:
+    scope: str
+    total_count_from_tab_label: Optional[int] = None
+    row_count_parsed: int = 0
+    disposed_count: int = 0
+    open_count: int = 0
+    theme_counts: Dict[str, int] = field(default_factory=dict)
+    sample_subjects: List[str] = field(default_factory=list)
+    confidence: float = 0.7
+    validation_notes: List[str] = field(default_factory=list)
 
 
 @dataclass
@@ -168,6 +197,8 @@ class ReraProjectDetail:
     # Complaints (across all promoter's projects)
     complaints_count: int = 0
     complaints_resolved: int = 0
+    complaint_rows: List[ReraComplaintRow] = field(default_factory=list)
+    complaint_summaries: List[ReraComplaintSummary] = field(default_factory=list)
 
     # Deep RERA schedules / artifacts
     parking_total_car_count: Optional[int] = None
@@ -543,11 +574,11 @@ def search_rera_project(session: ReraSession, project_name: str) -> Optional[Rer
     """
     body = session.post(SEARCH_URL, {
         "project": project_name,
-        "promoter": "",
-        "registrationNo": "",
+        "firm": "",
+        "regNo": "",
         "district": "",
-        "taluk": "",
-        "applicationNo": "",
+        "subdistrict": "",
+        "appNo": "",
     })
 
     # Extract all table rows (skip header)
@@ -689,12 +720,29 @@ def _get_tab_text(detail_html: str, tab_id: str) -> str:
     Tabs are identified by id="home", id="menu1", id="menu2", etc.
     We take the HTML between this tab's id and the next tab's id, then strip tags.
     """
+    section = _get_tab_html(detail_html, tab_id)
+    return _clean_html(section) if section else ""
+
+
+def _get_tab_html(detail_html: str, tab_id: str) -> str:
+    """Extract raw HTML from a specific tab section of the detail page."""
+    pane_match = re.search(
+        r'<div\b[^>]*\bid\s*=\s*["\']{}["\'][^>]*>'.format(re.escape(tab_id)),
+        detail_html,
+        re.IGNORECASE,
+    )
+    if pane_match:
+        return _balanced_div_html(detail_html, pane_match.start())
+
     idx = detail_html.find(f'id="{tab_id}"')
     if idx < 0:
         return ""
 
     # Find end: next tab boundary or end of document
-    tab_ids = ["home", "menu1", "menu2", "menu3", "menu4", "menu5", "menu6", "menu7"]
+    tab_ids = [
+        "home", "menu1", "menu2", "menu3", "menu4", "menu5", "menu6", "menu7",
+        "menu-comp", "menu-comp2",
+    ]
     end = len(detail_html)
     for other_tab in tab_ids:
         if other_tab == tab_id:
@@ -703,8 +751,22 @@ def _get_tab_text(detail_html: str, tab_id: str) -> str:
         if other_idx > 0:
             end = min(end, other_idx)
 
-    section = detail_html[idx:end]
-    return _clean_html(section)
+    return detail_html[idx:end]
+
+
+def _balanced_div_html(html_text: str, start: int) -> str:
+    """Return one balanced div block starting at ``start`` when possible."""
+    depth = 0
+    for match in re.finditer(r"</?div\b[^>]*>", html_text[start:], re.IGNORECASE):
+        token = match.group(0).lower()
+        if token.startswith("</"):
+            depth -= 1
+        else:
+            depth += 1
+        if depth == 0:
+            end = start + match.end()
+            return html_text[start:end]
+    return html_text[start:]
 
 
 def _project_details_tab_text(detail_html: str) -> str:
@@ -747,10 +809,19 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
         label = _clean_html(match.group(2))
         href_match = re.search(r'href\s*=\s*["\']([^"\']+)["\']', attrs, re.IGNORECASE)
         href = href_match.group(1) if href_match else None
+        if not _usable_document_link(label, href):
+            continue
         surrounding = _clean_html(detail_html[max(0, match.start() - 240):match.end() + 240])
+        source_field_label = _infer_document_source_label(surrounding, label)
         link_text = "{} {}".format(label, href or "").strip()
-        combined = "{} {}".format(link_text, surrounding).strip()
-        kind = _document_kind(link_text, href)
+        combined = "{} {}".format(source_field_label or "", link_text).strip()
+        classification = _document_classification(combined, href)
+        if not classification["kind"]:
+            classification = _document_classification(
+                "{} {}".format(combined, surrounding).strip(),
+                href,
+            )
+        kind = classification["kind"]
         if not kind:
             continue
         source_url = f"{RERA_BASE}{href}" if href and href.startswith("/") else href
@@ -769,6 +840,10 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
                 document_kind=kind,
                 label=label or kind.replace("_", " ").title(),
                 source_url=source_url,
+                source_field_label=source_field_label,
+                document_group=classification["group"] or "other",
+                buyer_visibility=classification["buyer_visibility"] or "list_only",
+                preview_policy=classification["preview_policy"] or "list_only",
                 configuration_type=config_type if kind == "floor_plan" else None,
                 bedroom_count=bedrooms if kind == "floor_plan" else None,
                 confidence=0.85 if source_url else 0.65,
@@ -782,21 +857,175 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
                     artifact_id="{}:site_plan:detected".format(_slug(project_name)),
                     document_kind="site_plan",
                     label="Site plan detected",
+                    source_field_label="Site plan detected",
+                    document_group="plans",
+                    buyer_visibility="preview_allowed",
+                    preview_policy="preview_allowed",
                     confidence=0.55,
                 )
             )
     return artifacts
 
 
-def _document_kind(text: str, href: Optional[str]) -> Optional[str]:
+def _usable_document_link(label: str, href: Optional[str]) -> bool:
+    normalized_label = re.sub(r"[\W_]+", " ", label or "").strip().lower()
+    if normalized_label in {
+        "not applicable",
+        "not applicable pdf",
+        "not available",
+        "not available pdf",
+        "na",
+        "n a",
+        "nil",
+    }:
+        return False
+    if href and re.search(r"[?&]DOC_ID=(?:&|$)", href, re.IGNORECASE):
+        return False
+    return True
+
+
+def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[str]:
+    """Infer the RERA field label that names an uploaded document link."""
+    text = re.sub(r"\s+", " ", surrounding or "").strip()
+    link_label = re.sub(r"\s+", " ", link_label or "").strip()
+    link_classification = _document_classification(link_label, None)
+    if link_classification["kind"] in (
+        "brochure",
+        "floor_plan",
+        "site_plan",
+        "section_plan",
+        "development_plan",
+        "sanction_plan",
+    ):
+        return link_label
+    if not text:
+        return link_label or None
+
+    if link_label and link_label in text:
+        before = text.split(link_label, 1)[0].strip(" :-|")
+    else:
+        before = text
+
+    known_labels = [
+        "Approved Layout Plan",
+        "Approved Building/Plotting Plan",
+        "Approved Section Of Building/Infrastructure Plan of Plotting",
+        "Existing Layout Plan",
+        "Existing Section Plan and Specification",
+        "Area Development Plan Of Project Area",
+        "Sectional Drawing of the apartments",
+        "Floor Plan",
+        "Typical Floor Plan",
+        "Brochure of Current Project",
+        "Commencement Certificate",
+        "Encumbrance Certificate",
+        "Land documents and Location",
+        "Title Deed",
+        "Joint Development Agreement",
+        "Conversion Certificate",
+        "Fire Force Department",
+        "Airport Authority of India",
+        "BESCOM",
+        "BWSSB",
+        "KSPCB",
+        "SEIAA",
+        "BMRCL",
+        "All NOCs from Authority",
+        "Project Specification",
+        "Proforma For Sale Deed",
+        "Proforma of Agreement for Sale",
+        "Performa of Allotment Letter",
+        "PAN Card",
+        "Balance Sheet",
+        "Profit and Loss",
+        "Auditor",
+        "Affidavit",
+        "Annexure - 49",
+        "Declaration (Form B)",
+    ]
+    lowered = before.lower()
+    best_label = None
+    best_pos = -1
+    for label in known_labels:
+        pos = lowered.rfind(label.lower())
+        if pos > best_pos:
+            best_label = label
+            best_pos = pos
+    if best_label:
+        return best_label
+
+    return link_label or None
+
+
+def _document_classification(text: str, href: Optional[str]) -> Dict[str, Optional[str]]:
     combined = "{} {}".format(text or "", href or "").lower()
-    if any(term in combined for term in ("floor plan", "floorplan", "unit plan", "flat plan")):
-        return "floor_plan"
-    if any(term in combined for term in ("site plan", "siteplan", "layout plan", "master plan")):
-        return "site_plan"
-    if any(term in combined for term in ("sanction plan", "approved plan", "approval plan")):
-        return "sanction_plan"
-    return None
+    kind: Optional[str] = None
+    group = "other"
+    buyer_visibility = "list_only"
+    preview_policy = "list_only"
+
+    if any(term in combined for term in ("brochure", "prospectus", "flipchart")):
+        kind = "brochure"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif any(term in combined for term in ("floor plan", "floorplan", "unit plan", "flat plan")):
+        kind = "floor_plan"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif any(term in combined for term in ("site plan", "siteplan", "layout plan", "master plan")):
+        kind = "site_plan"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif any(term in combined for term in ("section plan", "sectional drawing", "section of building")):
+        kind = "section_plan"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif any(term in combined for term in ("area development plan", "development plan")):
+        kind = "development_plan"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif any(term in combined for term in ("sanction plan", "approved plan", "approval plan", "approved building/plotting plan")):
+        kind = "sanction_plan"
+        group = "plans"
+        buyer_visibility = "preview_allowed"
+        preview_policy = "preview_allowed"
+    elif "commencement certificate" in combined:
+        kind = "commencement_certificate"
+        group = "approvals_nocs"
+    elif any(term in combined for term in ("encumbrance certificate", " ec ", " ec.", "ec.pdf")):
+        kind = "encumbrance_certificate"
+        group = "legal_land"
+    elif any(term in combined for term in ("title deed", "sale deed", "joint development", "jda", "conversion certificate", "khata", "land document")):
+        kind = "title_or_land_document"
+        group = "legal_land"
+    elif any(term in combined for term in ("bescom", "bwssb", "fire force", "airport authority", "kspcb", "seiaa", "bmrcl", "noc")):
+        kind = "noc"
+        group = "approvals_nocs"
+    elif any(term in combined for term in ("agreement for sale", "allotment letter", "sale deed proforma", "proforma for sale deed")):
+        kind = "customer_contract_template"
+        group = "buyer_templates"
+        buyer_visibility = "list_only"
+    elif any(term in combined for term in ("pan card", "balance sheet", "profit and loss", "auditor", "itr")):
+        kind = "promoter_financial_document"
+        group = "promoter_financials"
+        buyer_visibility = "private_or_sensitive"
+        preview_policy = "hidden"
+    elif any(term in combined for term in ("affidavit", "annexure - 49", "annexure-49", "form b")):
+        kind = "affidavit"
+        group = "affidavits"
+        buyer_visibility = "list_only"
+
+    return {
+        "kind": kind,
+        "group": group,
+        "buyer_visibility": buyer_visibility,
+        "preview_policy": preview_policy,
+    }
 
 
 def _extract_configurations(
@@ -906,6 +1135,232 @@ def _fill_detail_wide_schedule_fields(detail_html: str, detail: ReraProjectDetai
         detail.parking_offered_for_sale_count = _extract_int(text, r"No of Parking for Sale")
 
     _extract_infra_counts(text, detail)
+
+
+def _extract_complaints(detail_html: str) -> Tuple[List[ReraComplaintRow], List[ReraComplaintSummary]]:
+    rows: List[ReraComplaintRow] = []
+    summaries: List[ReraComplaintSummary] = []
+
+    for tab_id, scope in (("menu-comp2", "project"), ("menu-comp", "promoter")):
+        tab_html = _get_tab_html(detail_html, tab_id)
+        if not tab_html:
+            continue
+        tab_rows = _parse_complaint_rows(tab_html, scope)
+        rows.extend(tab_rows)
+        summaries.append(
+            _complaint_summary(
+                tab_html,
+                scope,
+                tab_rows,
+                total_from_label=_complaint_tab_count(detail_html, scope),
+            )
+        )
+
+    if summaries:
+        return rows, summaries
+
+    legacy_idx = detail_html.lower().find("complaint details")
+    if legacy_idx >= 0:
+        section_html = detail_html[legacy_idx:legacy_idx + 20000]
+        tab_rows = _parse_complaint_rows(section_html, "project")
+        rows.extend(tab_rows)
+        summaries.append(_complaint_summary(section_html, "project", tab_rows))
+    return rows, summaries
+
+
+def _parse_complaint_rows(section_html: str, scope: str) -> List[ReraComplaintRow]:
+    rows: List[ReraComplaintRow] = []
+    seen = set()
+    for row_html in re.findall(r"<tr[^>]*>(.*?)</tr>", section_html, re.IGNORECASE | re.DOTALL):
+        cells = [_clean_html(cell) for cell in re.findall(r"<td[^>]*>(.*?)</td>", row_html, re.IGNORECASE | re.DOTALL)]
+        if not cells:
+            continue
+        row_text = " ".join(cells)
+        complaint_number = _first_complaint_number(row_text)
+        if not complaint_number:
+            continue
+        status_raw = _first_status(row_text)
+        subject = _first_subject(cells, complaint_number, status_raw)
+        row = ReraComplaintRow(
+            scope=scope,
+            complaint_number=complaint_number,
+            complaint_date=_first_date(row_text),
+            complaint_subject=subject,
+            status_raw=status_raw,
+            status_group=_status_group(status_raw or row_text),
+            theme_tags=_complaint_theme_tags(subject or row_text),
+        )
+        key = (row.scope, row.complaint_number, row.complaint_date, row.complaint_subject)
+        if key in seen:
+            continue
+        seen.add(key)
+        rows.append(row)
+
+    if rows:
+        return rows
+
+    text = _clean_html(section_html)
+    complaint_numbers = sorted(set(re.findall(r"(?:CMP|COMP)[/\-]\d+[/\-]\d+", text, re.IGNORECASE)))
+    for number in complaint_numbers:
+        idx = text.lower().find(number.lower())
+        window = text[idx:idx + 300] if idx >= 0 else number
+        status_raw = _first_status(window)
+        rows.append(
+            ReraComplaintRow(
+                scope=scope,
+                complaint_number=number,
+                complaint_date=_first_date(window),
+                complaint_subject=None,
+                status_raw=status_raw,
+                status_group=_status_group(status_raw or window),
+                theme_tags=_complaint_theme_tags(window),
+            )
+        )
+    return rows
+
+
+def _complaint_summary(
+    section_html: str,
+    scope: str,
+    rows: List[ReraComplaintRow],
+    total_from_label: Optional[int] = None,
+) -> ReraComplaintSummary:
+    if total_from_label is None:
+        total_from_label = _complaint_count_from_label(section_html, scope)
+    disposed = sum(1 for row in rows if row.status_group == "disposed")
+    open_count = sum(1 for row in rows if row.status_group != "disposed")
+    theme_counts: Dict[str, int] = {}
+    for row in rows:
+        for tag in row.theme_tags:
+            theme_counts[tag] = theme_counts.get(tag, 0) + 1
+    sample_subjects = []
+    for row in rows:
+        if row.complaint_subject and row.complaint_subject not in sample_subjects:
+            sample_subjects.append(row.complaint_subject)
+        if len(sample_subjects) >= 3:
+            break
+    notes = []
+    if total_from_label is not None and rows and total_from_label != len(rows):
+        notes.append("tab_count_and_row_count_disagree")
+    confidence = 0.9 if rows else 0.65
+    if notes:
+        confidence = 0.6
+    return ReraComplaintSummary(
+        scope=scope,
+        total_count_from_tab_label=total_from_label,
+        row_count_parsed=len(rows),
+        disposed_count=disposed,
+        open_count=open_count,
+        theme_counts=theme_counts,
+        sample_subjects=sample_subjects,
+        confidence=confidence,
+        validation_notes=notes,
+    )
+
+
+def _complaint_count_from_label(section_html: str, scope: str) -> Optional[int]:
+    text = _clean_html(section_html)
+    patterns = [
+        r"Complaints?\s+on\s+(?:this\s+)?{}\s*\(?\s*(\d+)\s*\)?".format(scope),
+        r"{}\s+Complaints?\s*\(?\s*(\d+)\s*\)?".format(scope),
+        r"Complaints?\s*\(?\s*(\d+)\s*\)?",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(1))
+            except ValueError:
+                return None
+    return None
+
+
+def _complaint_tab_count(detail_html: str, scope: str) -> Optional[int]:
+    target = "Project" if scope == "project" else "Promoter"
+    pattern = r"Complaints?\s+On\s+this\s+{}\s*\(\s*(\d+)\s*\)".format(target)
+    match = re.search(pattern, detail_html or "", re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _first_complaint_number(text: str) -> Optional[str]:
+    match = re.search(r"(?:CMP|COMP)[/\-]\d+[/\-]\d+", text or "", re.IGNORECASE)
+    return match.group(0).upper() if match else None
+
+
+def _first_date(text: str) -> Optional[str]:
+    match = re.search(r"\b\d{2}[/-]\d{2}[/-]\d{4}\b", text or "")
+    return match.group(0) if match else None
+
+
+def _first_status(text: str) -> Optional[str]:
+    match = re.search(
+        r"\b(DISPOSED|UNDER\s+ENQUIRY|POSTED\s+FOR\s+ORDERS|PENDING|REGISTERED|CLOSED)\b",
+        text or "",
+        re.IGNORECASE,
+    )
+    return re.sub(r"\s+", " ", match.group(1)).upper() if match else None
+
+
+def _status_group(status: str) -> str:
+    status = (status or "").lower()
+    if "disposed" in status or "closed" in status:
+        return "disposed"
+    if "under" in status and "enquiry" in status:
+        return "under_enquiry"
+    if "posted" in status and "order" in status:
+        return "posted_for_orders"
+    if "pending" in status or "registered" in status:
+        return "open"
+    return "other"
+
+
+def _first_subject(cells: List[str], complaint_number: Optional[str], status_raw: Optional[str]) -> Optional[str]:
+    candidates = []
+    for cell in cells:
+        cleaned = re.sub(r"\s+", " ", cell or "").strip()
+        if not cleaned:
+            continue
+        if complaint_number and complaint_number.lower() in cleaned.lower():
+            continue
+        if status_raw and status_raw.lower() == cleaned.lower():
+            continue
+        if re.fullmatch(r"\d+", cleaned) or _first_date(cleaned):
+            continue
+        if len(cleaned) >= 8:
+            candidates.append(cleaned)
+    return max(candidates, key=len) if candidates else None
+
+
+def _complaint_theme_tags(text: str) -> List[str]:
+    haystack = (text or "").lower()
+    themes = []
+    theme_patterns = [
+        ("refund", r"\brefund|money\s+back|amount\s+back\b"),
+        ("cancellation", r"\bcancellation|cancelled|cancelation|cancelled\s+unit\b"),
+        ("delay", r"\bdelay|delayed|late\b"),
+        ("compensation", r"\bcompensation|damages|penalty\b"),
+        ("possession", r"\bpossession|occupancy|unit\s+handover|flat\s+handover|apartment\s+handover|handover\s+of\s+(?:flat|unit|apartment)\b"),
+        ("agreement_payment", r"\bagreement|payment|demand|installment|interest\b"),
+        ("interest_demand", r"\binterest|penal\s+interest|demand\s+letter|demand\s+notice\b"),
+        ("quality", r"\bquality|defect|seepage|construction\b"),
+        ("amenities", r"\bamenit|clubhouse|common area|common\s+facilit"),
+        ("parking", r"\bparking|car\s+park\b"),
+        ("maintenance", r"\bmaintenance|association|corpus|common\s+charges\b"),
+        ("title_land", r"\bland|litigation|title|ownership|encumbrance|conversion|deed\b"),
+        ("khata", r"\bkhata|katha\b"),
+        ("approval_oc_cc", r"\bapproval|sanction|commencement\s+certificate|completion\s+certificate|cc\b|\boc\b|occupancy\s+certificate"),
+        ("registration_document", r"\bregistration|register|sale\s+deed|document|document\s+handover\b"),
+        ("builder_conduct", r"\bcheat|fraud|misrepresent|false\s+promise|harass|threat\b"),
+    ]
+    for tag, pattern in theme_patterns:
+        if re.search(pattern, haystack):
+            themes.append(tag)
+    return themes or ["other"]
 
 
 def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> ReraProjectDetail:
@@ -1054,23 +1509,24 @@ def parse_rera_detail(detail_html: str, search_result: ReraSearchResult) -> Rera
         detail.builder_states = sorted(states)
 
     # --- Complaints ---
-    comp_idx = detail_html.lower().find("complaint details")
-    if comp_idx >= 0:
-        comp_section = _clean_html(detail_html[comp_idx:comp_idx + 20000])
-        # Count complaint numbers — patterns like CMP/123/2024 or numbered entries
-        complaint_nos = re.findall(r'(?:CMP|COMP)[/\-]\d+[/\-]\d+', comp_section, re.IGNORECASE)
-        if not complaint_nos:
-            # Try alternate pattern: just look for table-row-like entries with dates
-            complaint_nos = re.findall(r'\d{2}[/-]\d{2}[/-]\d{4}', comp_section)
-            # Rough: each date likely represents a complaint entry
-            # Divide by expected date fields per complaint (at least 1)
-        detail.complaints_count = len(set(complaint_nos))
-
-        resolved = len(re.findall(r'DISPOSED', comp_section, re.IGNORECASE))
-        if detail.complaints_count > 0:
-            detail.complaints_resolved = min(resolved, detail.complaints_count)
-        else:
-            detail.complaints_resolved = 0
+    detail.complaint_rows, detail.complaint_summaries = _extract_complaints(detail_html)
+    project_summary = next((summary for summary in detail.complaint_summaries if summary.scope == "project"), None)
+    if project_summary:
+        detail.complaints_count = (
+            project_summary.total_count_from_tab_label
+            if project_summary.total_count_from_tab_label is not None
+            else project_summary.row_count_parsed
+        )
+        detail.complaints_resolved = project_summary.disposed_count
+    elif detail.complaint_summaries:
+        legacy_total = sum(
+            summary.total_count_from_tab_label
+            if summary.total_count_from_tab_label is not None
+            else summary.row_count_parsed
+            for summary in detail.complaint_summaries
+        )
+        detail.complaints_count = legacy_total
+        detail.complaints_resolved = sum(summary.disposed_count for summary in detail.complaint_summaries)
 
     detail.document_artifacts = _extract_document_artifacts(detail_html, detail.project_name)
     detail.configurations = _extract_configurations(
@@ -1435,6 +1891,57 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             ["complaints resolved"],
         )
 
+    if detail.complaint_summaries:
+        summary_manifest = []
+        for summary in detail.complaint_summaries:
+            total = (
+                summary.total_count_from_tab_label
+                if summary.total_count_from_tab_label is not None
+                else summary.row_count_parsed
+            )
+            prefix = "rera_project" if summary.scope == "project" else "rera_promoter"
+            label_scope = "project" if summary.scope == "project" else "promoter"
+            add_numeric_fact(
+                "{}_complaints_count".format(prefix),
+                total,
+                "{{value}} {} complaints filed".format(label_scope),
+                ["complaints", "legal issues", "builder record"],
+                {"direction": "LowerIsBetter", "weight": 2.0, "thresholds": [0.0, 3.0]},
+            )
+            add_numeric_fact(
+                "{}_complaints_disposed_count".format(prefix),
+                summary.disposed_count,
+                "{{value}} {} complaints disposed".format(label_scope),
+                ["complaints resolved"],
+            )
+            add_numeric_fact(
+                "{}_complaints_open_count".format(prefix),
+                summary.open_count,
+                "{{value}} {} complaints open".format(label_scope),
+                ["complaints", "legal issues"],
+                {"direction": "LowerIsBetter", "weight": 2.0, "thresholds": [0.0, 2.0]},
+            )
+            summary_manifest.append(
+                {
+                    "scope": summary.scope,
+                    "total_count_from_tab_label": summary.total_count_from_tab_label,
+                    "row_count_parsed": summary.row_count_parsed,
+                    "disposed_count": summary.disposed_count,
+                    "open_count": summary.open_count,
+                    "theme_counts": summary.theme_counts,
+                    "sample_subjects": summary.sample_subjects,
+                    "confidence": summary.confidence,
+                    "validation_notes": summary.validation_notes,
+                }
+            )
+
+        add_fact(
+            "rera_complaint_summary_manifest",
+            {"type": "Text", "data": json.dumps(summary_manifest, sort_keys=True, separators=(",", ":"))},
+            "RERA complaint summaries available",
+            ["complaints", "legal issues", "builder record"],
+        )
+
     # --- Builder track record ---
     if detail.builder_other_rera_projects > 0:
         add_fact(
@@ -1476,12 +1983,24 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
     site_plan_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "site_plan")
     floor_plan_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "floor_plan")
     sanction_plan_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "sanction_plan")
+    brochure_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "brochure")
+    noc_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "noc")
+    legal_land_doc_count = sum(1 for artifact in detail.document_artifacts if artifact.document_group == "legal_land")
+    affidavit_count = sum(1 for artifact in detail.document_artifacts if artifact.document_kind == "affidavit")
     if site_plan_count > 0:
         add_numeric_fact("site_plan_asset_count", site_plan_count, "{value} site plan assets", ["site plan", "project layout"])
     if floor_plan_count > 0:
         add_numeric_fact("floor_plan_asset_count", floor_plan_count, "{value} floor plan assets", ["floor plan", "unit layout"])
     if sanction_plan_count > 0:
         add_numeric_fact("sanction_plan_asset_count", sanction_plan_count, "{value} sanction plan assets", ["sanction plan", "approved plan"])
+    if brochure_count > 0:
+        add_numeric_fact("brochure_asset_count", brochure_count, "{value} brochure assets", ["brochure", "prospectus", "project brochure"])
+    if noc_count > 0:
+        add_numeric_fact("rera_noc_document_count", noc_count, "{value} RERA NOC documents", ["noc", "utilities", "approvals"])
+    if legal_land_doc_count > 0:
+        add_numeric_fact("rera_legal_land_document_count", legal_land_doc_count, "{value} RERA land/legal documents", ["legal", "land documents", "encumbrance"])
+    if affidavit_count > 0:
+        add_numeric_fact("rera_affidavit_document_count", affidavit_count, "{value} RERA affidavit documents", ["rera documents", "legal"])
 
     if detail.document_artifacts:
         manifest = [
@@ -1490,6 +2009,11 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
                 "kind": artifact.document_kind,
                 "label": artifact.label,
                 "source_url": artifact.source_url,
+                "source_tab": artifact.source_tab,
+                "source_field_label": artifact.source_field_label,
+                "document_group": artifact.document_group,
+                "buyer_visibility": artifact.buyer_visibility,
+                "preview_policy": artifact.preview_policy,
                 "configuration_type": artifact.configuration_type,
                 "bedroom_count": artifact.bedroom_count,
                 "confidence": artifact.confidence,
@@ -1500,7 +2024,13 @@ def rera_detail_to_facts(detail: ReraProjectDetail) -> List[SourcedFact]:
             "rera_plan_artifact_manifest",
             {"type": "Text", "data": json.dumps(manifest, sort_keys=True, separators=(",", ":"))},
             "RERA plan artifacts available",
-            ["site plan", "floor plan", "sanction plan"],
+            ["site plan", "floor plan", "sanction plan", "brochure"],
+        )
+        add_fact(
+            "rera_document_manifest",
+            {"type": "Text", "data": json.dumps(manifest, sort_keys=True, separators=(",", ":"))},
+            "RERA uploaded document manifest available",
+            ["rera documents", "site plan", "floor plan", "legal documents", "noc"],
         )
 
     if detail.configurations:
@@ -1560,7 +2090,7 @@ class FetchReraSkill(BaseSkill):
 
     skill_id = "fetch_rera"
     description = "Scrape Karnataka RERA portal for real project registration data"
-    version = "3.0"  # v3.0 promotes project/config/media facts and drops cost facts.
+    version = "3.3"  # v3.3 tightens placeholder document filtering and source labels.
     output_keys = [
         "rera_registered", "rera_number", "rera_ack_number", "rera_status",
         "rera_promoter_name", "rera_approved_on", "rera_completion_date",
@@ -1569,6 +2099,10 @@ class FetchReraSkill(BaseSkill):
         "rera_total_units", "rera_num_towers", "rera_open_parking", "rera_covered_parking",
         "rera_total_land_area_sqm", "project_land_area_sqm",
         "project_land_area_acres", "project_open_area_pct",
+        "rera_project_complaints_count", "rera_project_complaints_disposed_count",
+        "rera_project_complaints_open_count", "rera_promoter_complaints_count",
+        "rera_promoter_complaints_disposed_count", "rera_promoter_complaints_open_count",
+        "rera_complaint_summary_manifest",
         "project_unit_count", "project_tower_count", "project_max_floor_count",
         "project_units_per_acre", "available_configurations", "configuration_count",
         "has_1bhk", "has_2bhk", "has_3bhk", "has_4bhk",
@@ -1578,7 +2112,9 @@ class FetchReraSkill(BaseSkill):
         "stp_count", "stp_capacity_kld", "borewell_proposed_count",
         "borewell_existing_count", "borewell_depth_ft", "borewell_yield_lph",
         "site_plan_asset_count", "floor_plan_asset_count", "sanction_plan_asset_count",
-        "rera_plan_artifact_manifest", "rera_total_carpet_area_sqm",
+        "rera_noc_document_count", "rera_legal_land_document_count",
+        "rera_affidavit_document_count", "rera_plan_artifact_manifest",
+        "rera_document_manifest", "rera_total_carpet_area_sqm",
         "rera_total_builtup_area_sqm", "rera_far_sanctioned",
     ]
 

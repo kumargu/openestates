@@ -6,6 +6,7 @@ import {
   calculateLoanJourney,
   calculateProjection,
 } from "../src/features/home-plan/model.ts";
+import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
 import {
   isExplicitlyReadyStatus,
   FIXED_HOME_GROWTH_RATE,
@@ -117,6 +118,34 @@ test("extra EMIs pull the loan-free marker forward", () => {
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
 });
 
+test("plan snapshot captures assumptions and inspected outcome", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 180,
+    currentRentThousands: 55,
+    monthlySipThousands: 40,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs, 3);
+  const activeYear = 12;
+  const note = buildPlanSnapshotNote({
+    propertyId: "prop-one",
+    inputs,
+    projection,
+    activeYear,
+    activePoint: projection.points[activeYear],
+    extraEmisPerYear: 3,
+  });
+
+  assert.equal(note.source, "Plan snapshot");
+  assert.deepEqual(note.labels, ["finance", "emi", "down-payment", "price"]);
+  assert.match(note.title, /EMI, loan closes in/);
+  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.match(note.detail, /rent \+ .* SIP/);
+  assert.match(note.detail, /home is projected at/);
+  assert.match(note.catalogKey, /^plan:prop-one:12:/);
+});
+
 test("rent rises by the fixed yearly assumption", () => {
   assert.equal(FIXED_RENT_INFLATION_RATE, 10);
   assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 0), 55_000);
@@ -125,8 +154,11 @@ test("rent rises by the fixed yearly assumption", () => {
 
 test("baseline exposes only the five editable money inputs", () => {
   const inputs = buildBaselinePlanInputs(15_000_000);
+  const expectedEmi = Math.ceil(
+    monthlyPayment(15_000_000, 7.5, 20) / 5_000,
+  ) * 5;
 
-  assert.equal(inputs.monthlyEmiThousands, 90);
+  assert.equal(inputs.monthlyEmiThousands, expectedEmi);
   assert.ok(inputs.currentRentThousands > 0);
   assert.equal(
     inputs.monthlySipThousands + inputs.currentRentThousands,
@@ -138,6 +170,7 @@ test("baseline exposes only the five editable money inputs", () => {
 
 test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
   const inputs = buildBaselinePlanInputs(33_100_000);
+  const projection = calculateProjection(inputs);
 
   assert.equal(
     inputs.monthlySipThousands + inputs.currentRentThousands,
@@ -145,6 +178,24 @@ test("high-price baseline keeps a visible SIP while preserving EMI equals rent p
   );
   assert.ok(inputs.monthlySipThousands > 0);
   assert.ok(inputs.monthlyEmiThousands > inputs.currentRentThousands);
+  assert.ok(projection.loanFreeYear !== null);
+});
+
+test("high-price EMI changes move the loan-free marker", () => {
+  const baseline = buildBaselinePlanInputs(33_100_000);
+  const lower = calculateProjection({
+    ...baseline,
+    holdingPeriodYears: 20,
+  });
+  const higher = calculateProjection({
+    ...baseline,
+    monthlyEmiThousands: baseline.monthlyEmiThousands + 80,
+    holdingPeriodYears: 20,
+  });
+
+  assert.ok(lower.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear! < lower.loanFreeYear!);
 });
 
 test("monthly SIP grows only the rent and invest path", () => {

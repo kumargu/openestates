@@ -1,4 +1,13 @@
 import { type PlanInputs } from "./model.ts";
+import { useEffect, useState } from "react";
+
+const LAKH = 100_000;
+const MONTHS_IN_YEAR = 12;
+
+function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
+  const principal = inputs.propertyPriceLakh * LAKH;
+  return Math.ceil((principal * inputs.loanRate / 100 / MONTHS_IN_YEAR) / 1_000);
+}
 
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
@@ -24,7 +33,7 @@ function PlanInput({
   value,
   min,
   max,
-  step,
+  step: _step,
   prefix,
   suffix,
   note,
@@ -40,23 +49,55 @@ function PlanInput({
   note: string;
   onChange: (value: number) => void;
 }) {
+  const [draft, setDraft] = useState(String(value));
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    if (!editing) setDraft(String(value));
+  }, [editing, value]);
+
+  function normalizeDraft(raw: string): string {
+    const compact = raw.replace(/[^\d.]/g, "");
+    const [head, ...tail] = compact.split(".");
+    const integer = head.replace(/^0+(?=\d)/, "") || (compact.startsWith(".") ? "" : "0");
+    const decimal = tail.length > 0 ? `.${tail.join("")}` : "";
+    return `${integer}${decimal}`;
+  }
+
+  function parseInput(raw: string): number | null {
+    if (!raw.trim()) return min;
+    const next = Number(raw);
+    if (!Number.isFinite(next)) return null;
+    const bounded = Math.max(min, next);
+    return max === undefined ? bounded : Math.min(max, bounded);
+  }
+
   return (
     <label className="home-plan-inline-input">
       <span>{label}</span>
       <div>
         {prefix && <b>{prefix}</b>}
         <input
-          type="number"
-          min={min}
-          max={max}
-          step={step}
-          value={value}
+          type="text"
+          inputMode="decimal"
+          value={editing ? draft : String(value)}
           onChange={(event) => {
-            const next = Number(event.target.value);
-            if (Number.isFinite(next)) {
-              const bounded = Math.max(min, next);
-              onChange(max === undefined ? bounded : Math.min(max, bounded));
-            }
+            const nextDraft = normalizeDraft(event.target.value);
+            setDraft(nextDraft);
+            const next = parseInput(nextDraft);
+            if (next != null) onChange(next);
+          }}
+          onFocus={(event) => {
+            setEditing(true);
+            setDraft(String(value));
+            event.currentTarget.select();
+          }}
+          onBlur={(event) => {
+            const next = parseInput(event.currentTarget.value);
+            const committed = next ?? value;
+            setEditing(false);
+            setDraft(String(committed));
+            if (committed !== value) onChange(committed);
           }}
         />
         <b>{suffix}</b>
@@ -73,6 +114,10 @@ export function PlanAssumptionRail({
   onExtraEmisChange,
   onReset,
 }: PlanAssumptionRailProps) {
+  const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
+  const emiNote = principalThresholdThousands > 0 && inputs.monthlyEmiThousands <= principalThresholdThousands
+    ? `Principal starts above ₹${principalThresholdThousands.toLocaleString("en-IN")}K / mo`
+    : "Loan-free year";
   const rentPathInputs: InputSpec[] = [
     {
       key: "currentRentThousands",
@@ -127,7 +172,7 @@ export function PlanAssumptionRail({
             step={5}
             prefix="₹"
             suffix="K / mo"
-            note="Your buy plan"
+            note={emiNote}
             value={inputs.monthlyEmiThousands}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
           />

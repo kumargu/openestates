@@ -460,6 +460,47 @@
   font-weight: 650;
 }
 
+.home-plan-verdict__action {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  padding-top: 0.15rem;
+}
+
+.home-plan-snapshot-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.38rem;
+  min-height: 2rem;
+  padding: 0.38rem 0.65rem;
+  border: 1px solid var(--plan-line-strong);
+  border-radius: 999px;
+  color: var(--plan-muted);
+  background: rgba(255, 255, 255, 0.72);
+  box-shadow: 0 1px 6px rgba(31, 24, 20, 0.04);
+  font-size: 0.74rem;
+  font-weight: 680;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+  white-space: nowrap;
+}
+
+.home-plan-snapshot-button:hover,
+.home-plan-snapshot-button:focus-visible {
+  border-color: rgba(91, 127, 176, 0.4);
+  color: var(--plan-cool-deep);
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.home-plan-snapshot-button.is-saved {
+  border-color: rgba(91, 127, 176, 0.32);
+  color: var(--plan-cool-deep);
+  background: var(--plan-cool-soft);
+}
+
+.home-plan-snapshot-button svg path {
+  vector-effect: non-scaling-stroke;
+}
+
 .home-plan-verdict__amount {
   color: var(--plan-ink);
   font-variant-numeric: tabular-nums;
@@ -1703,6 +1744,11 @@
 
   .home-plan-verdict__headline {
     max-width: none;
+  }
+
+  .home-plan-verdict__action {
+    align-self: flex-start;
+    padding-top: 0;
   }
 
   .home-plan-verdict__aside {

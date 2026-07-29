@@ -27,7 +27,8 @@ function routePropertyId(pathname: string): string | null {
 }
 
 function activeWorkspaceView(pathname: string): WorkspaceView {
-  if (pathname === "/compare") return "compare";
+  if (pathname === "/workspace" || pathname === "/notebook") return "notebook";
+  if (pathname === "/workspace/compare" || pathname === "/compare") return "compare";
   if (/^\/property\/[^/]+\/plan$/.test(pathname)) return "plan";
   if (/^\/property\/[^/]+$/.test(pathname)) return "home";
   return "browse";
@@ -118,9 +119,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   }, [homes.length]);
 
   const idsValue = homes.map((home) => home.id).join(",");
-  const compareHref = idsValue
-    ? `/compare?ids=${encodeURIComponent(idsValue)}&focus=${encodeURIComponent(focusedId)}`
-    : "/compare";
   const activeView = activeWorkspaceView(location.pathname);
 
   function writeSelection(nextIds: string[], nextFocus?: string) {
@@ -138,7 +136,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       }
       if (focus) next.set("focus", focus);
       else next.delete("focus");
-      navigate(`/compare?${next.toString()}`, { replace: true });
+      navigate(`/workspace/compare?${next.toString()}`, { replace: true });
       return;
     }
 
@@ -171,7 +169,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       next.set("ids", idsValue);
       next.set("focus", nextId);
       if (focusedHome) next.set("bhk", String(focusedHome.bhk));
-      navigate(`/compare?${next.toString()}`, { replace: true });
+      navigate(`/workspace/compare?${next.toString()}`, { replace: true });
       return;
     }
     navigate(`/property/${nextId}`);
@@ -192,7 +190,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       <WorkspaceSidebar
         homes={homes}
         focusedId={focusedId}
-        compareHref={compareHref}
         activeView={activeView}
         collapsed={sidebarCollapsed}
         reduced={reducedBeforeDecision}

@@ -23,7 +23,6 @@ import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/
 import { MarketTrendTile, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { PropertySceneCard } from "../components/property/PropertySceneCard.tsx";
-import { ProjectPlansShelf, hasProjectPlans } from "../components/property/ProjectPlansShelf.tsx";
 import { BuilderHealthPanel } from "../components/property/BuilderHealthPanel.tsx";
 import { AlternativePaths } from "../components/recommendations/AlternativePaths.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
@@ -259,7 +258,6 @@ function PropertyPageBody({
   const showLivabilityBrief = Boolean(
     data.livability_brief?.summary_paragraph?.trim()
   );
-  const showProjectPlans = hasProjectPlans(data.plans);
   const recommendationBranches = recommendations?.items ?? data.recommendation_branches ?? [];
   const recommendationRuntimeLabel = [
     recommendations?.engine_version ?? data.recommendations?.engine_version,
@@ -404,15 +402,11 @@ function PropertyPageBody({
           </aside>
 
           {showNearbyPlate && aroundThisHomeContext && (
-            <AroundThisHomePlate context={aroundThisHomeContext} />
+            <AroundThisHomePlate propertyId={id} context={aroundThisHomeContext} />
           )}
 
           {showApproachTrail && (
-            <ApproachRoadTrail sections={detailEvidenceSections} />
-          )}
-
-          {showProjectPlans && data.plans && (
-            <ProjectPlansShelf plans={data.plans} />
+            <ApproachRoadTrail propertyId={id} sections={detailEvidenceSections} />
           )}
 
           {showLivabilityBrief && data.livability_brief && (
@@ -425,8 +419,10 @@ function PropertyPageBody({
 
           <EvidenceStack
             key={id}
+            propertyId={id}
             evidence={data.evidence}
             rera={data.rera}
+            reraDossier={data.rera_dossier}
             googleReviews={data.external_reviews}
             excludeKinds={evidenceExcludeKinds}
           />
