@@ -177,7 +177,7 @@ function nearbyRailItems(
       if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
       return left.price - right.price;
     })
-    .slice(0, Math.max(0, 8 - primaryItems.length))
+    .slice(0, Math.max(0, 8 - scopedPrimaryItems.length))
     .map((property) => ({
       kind: "nearby",
       id: `nearby-${property.id}`,
