@@ -4,10 +4,11 @@ import type {
   EvidenceSection,
   SourceItem,
   PropertyEvidenceResponse,
+  ReraDossier,
   ReraInfo,
 } from "../../lib/types.ts";
 import { canShowBuyerSource, displaySourceType, humanizeFactText, sectionConstellation, sectionTileCount, sectionTileSignal } from "../../lib/evidence.ts";
-import { reraFactCount, reraFactGroups } from "../../lib/reraProjectFacts.ts";
+import { reraFactCount } from "../../lib/reraProjectFacts.ts";
 import {
   LinkIcon,
   IconForKind,
@@ -20,6 +21,7 @@ type StackProps = {
   propertyId?: string;
   evidence: PropertyEvidenceResponse | undefined;
   rera?: ReraInfo | null;
+  reraDossier?: ReraDossier | null;
   googleReviews?: {
     google_rating?: number;
     google_review_count?: number;
@@ -326,6 +328,7 @@ function closedSectionSignal(
   section: EvidenceSection,
   facts: SourceItem[],
   rera?: ReraInfo | null,
+  reraDossier?: ReraDossier | null,
   googleReviews?: StackProps["googleReviews"],
 ): string {
   if (section.community_pulse) {
@@ -346,17 +349,19 @@ function closedSectionSignal(
       : sentiment;
   }
   if (section.kind === "rera") {
-    if (rera) {
-      const groups = reraFactGroups(rera);
-      const status = groups
-        .find((group) => group.id === "registration")
-        ?.rows.find((row) => row.label === "Status")?.value;
-      const target = groups
-        .find((group) => group.id === "schedule")
-        ?.rows.find((row) => row.label === "Current target")?.value;
+    if (reraDossier) {
+      const registration = reraDossier.summary_cards.find((card) => card.id === "registration");
+      const watch = reraDossier.summary_cards.find((card) => card.tone === "watch");
       return uniqueNonEmpty([
-        status,
-        target ? `Target ${target}` : null,
+        registration?.title,
+        watch && watch.id !== registration?.id ? watch.title : null,
+      ]).join(" · ");
+    }
+    if (rera) {
+      return uniqueNonEmpty([
+        rera.registered ? "RERA registered" : rera.registration_number ? "RERA number available" : null,
+        rera.delay_months && rera.delay_months > 0 ? `${rera.delay_months} month movement` : null,
+        rera.complaints_count ? `${rera.complaints_count} complaints` : null,
       ]).join(" · ");
     }
     const compact = (value: string | null) =>
@@ -387,6 +392,7 @@ function EvidenceFold({
   propertyId,
   section,
   rera,
+  reraDossier,
   googleReviews,
   open,
   onToggle,
@@ -394,13 +400,16 @@ function EvidenceFold({
   propertyId?: string;
   section: EvidenceSection;
   rera?: ReraInfo | null;
+  reraDossier?: ReraDossier | null;
   googleReviews?: StackProps["googleReviews"];
   open: boolean;
   onToggle: () => void;
 }) {
   const { constellation, facts, media, presentation, variant } = useSectionContent(section);
-  const signal = closedSectionSignal(section, facts, rera, googleReviews);
-  const count = section.kind === "rera" && rera ? reraFactCount(rera) : sectionTileCount(section);
+  const signal = closedSectionSignal(section, facts, rera, reraDossier, googleReviews);
+  const count = section.kind === "rera"
+    ? reraDossier?.summary_cards.length ?? (rera ? reraFactCount(rera) : sectionTileCount(section))
+    : sectionTileCount(section);
   const panelId = `evidence-${section.kind}`;
   const FactBody = variant === "fact_grid" || variant === "risk_grid"
     ? FactGridBody
@@ -415,8 +424,8 @@ function EvidenceFold({
       )}
       {variant === "story" && section.community_pulse ? (
         <CommunityPulseCard pulse={section.community_pulse} />
-      ) : section.kind === "rera" && rera ? (
-        <ReraProjectFacts rera={rera} propertyId={propertyId} />
+      ) : section.kind === "rera" && (rera || reraDossier) ? (
+        <ReraProjectFacts rera={rera} dossier={reraDossier} propertyId={propertyId} />
       ) : section.kind === "water_context" ? (
         <WaterResilienceStory facts={facts} />
       ) : (
@@ -492,13 +501,16 @@ export function EvidenceStack({
   propertyId,
   evidence,
   rera,
+  reraDossier,
   googleReviews,
   excludeKinds = [],
 }: StackProps) {
   const folds = useMemo(() => {
     const excluded = new Set(excludeKinds);
     const sections = [...(evidence?.sections ?? [])];
-    const structuredReraFacts = rera ? reraFactCount(rera) : 0;
+    const structuredReraFacts = reraDossier
+      ? reraDossier.summary_cards.length + reraDossier.complaint_sections.length + reraDossier.document_sections.length
+      : rera ? reraFactCount(rera) : 0;
     if (structuredReraFacts > 0 && !sections.some((section) => section.kind === "rera")) {
       sections.push(structuredReraSection());
     }
@@ -508,7 +520,7 @@ export function EvidenceStack({
       .filter((section) =>
         (section.kind === "rera" && structuredReraFacts > 0)
         || hasRenderableContent(section));
-  }, [evidence?.sections, excludeKinds, rera]);
+  }, [evidence?.sections, excludeKinds, rera, reraDossier]);
 
   const [openKeys, setOpenKeys] = useState<Set<string>>(() => new Set());
 
@@ -530,6 +542,7 @@ export function EvidenceStack({
               propertyId={propertyId}
               section={section}
               rera={rera}
+              reraDossier={reraDossier}
               googleReviews={googleReviews}
               open={openKeys.has(key)}
               onToggle={() => setOpenKeys((current) => toggleKey(current, key))}

@@ -809,6 +809,8 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
         label = _clean_html(match.group(2))
         href_match = re.search(r'href\s*=\s*["\']([^"\']+)["\']', attrs, re.IGNORECASE)
         href = href_match.group(1) if href_match else None
+        if not _usable_document_link(label, href):
+            continue
         surrounding = _clean_html(detail_html[max(0, match.start() - 240):match.end() + 240])
         source_field_label = _infer_document_source_label(surrounding, label)
         link_text = "{} {}".format(label, href or "").strip()
@@ -863,6 +865,23 @@ def _extract_document_artifacts(detail_html: str, project_name: str) -> List[Rer
                 )
             )
     return artifacts
+
+
+def _usable_document_link(label: str, href: Optional[str]) -> bool:
+    normalized_label = re.sub(r"[\W_]+", " ", label or "").strip().lower()
+    if normalized_label in {
+        "not applicable",
+        "not applicable pdf",
+        "not available",
+        "not available pdf",
+        "na",
+        "n a",
+        "nil",
+    }:
+        return False
+    if href and re.search(r"[?&]DOC_ID=(?:&|$)", href, re.IGNORECASE):
+        return False
+    return True
 
 
 def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[str]:
@@ -935,11 +954,6 @@ def _infer_document_source_label(surrounding: str, link_label: str) -> Optional[
     if best_label:
         return best_label
 
-    if before:
-        tail = re.split(r"\b(?:View|Download|Document|Uploaded|File)\b", before, flags=re.IGNORECASE)[-1]
-        tail = tail.strip(" :-|")
-        if 3 <= len(tail) <= 100:
-            return tail
     return link_label or None
 
 
@@ -1326,12 +1340,22 @@ def _complaint_theme_tags(text: str) -> List[str]:
     haystack = (text or "").lower()
     themes = []
     theme_patterns = [
-        ("refund", r"\brefund|cancellation|cancelled\b"),
-        ("delay", r"\bdelay|delayed|compensation\b"),
-        ("possession", r"\bpossession|handover|occupancy|oc\b"),
+        ("refund", r"\brefund|money\s+back|amount\s+back\b"),
+        ("cancellation", r"\bcancellation|cancelled|cancelation|cancelled\s+unit\b"),
+        ("delay", r"\bdelay|delayed|late\b"),
+        ("compensation", r"\bcompensation|damages|penalty\b"),
+        ("possession", r"\bpossession|occupancy|unit\s+handover|flat\s+handover|apartment\s+handover|handover\s+of\s+(?:flat|unit|apartment)\b"),
         ("agreement_payment", r"\bagreement|payment|demand|installment|interest\b"),
+        ("interest_demand", r"\binterest|penal\s+interest|demand\s+letter|demand\s+notice\b"),
         ("quality", r"\bquality|defect|seepage|construction\b"),
-        ("amenities", r"\bamenit|clubhouse|parking|common area\b"),
+        ("amenities", r"\bamenit|clubhouse|common area|common\s+facilit"),
+        ("parking", r"\bparking|car\s+park\b"),
+        ("maintenance", r"\bmaintenance|association|corpus|common\s+charges\b"),
+        ("title_land", r"\bland|litigation|title|ownership|encumbrance|conversion|deed\b"),
+        ("khata", r"\bkhata|katha\b"),
+        ("approval_oc_cc", r"\bapproval|sanction|commencement\s+certificate|completion\s+certificate|cc\b|\boc\b|occupancy\s+certificate"),
+        ("registration_document", r"\bregistration|register|sale\s+deed|document|document\s+handover\b"),
+        ("builder_conduct", r"\bcheat|fraud|misrepresent|false\s+promise|harass|threat\b"),
     ]
     for tag, pattern in theme_patterns:
         if re.search(pattern, haystack):
@@ -2066,7 +2090,7 @@ class FetchReraSkill(BaseSkill):
 
     skill_id = "fetch_rera"
     description = "Scrape Karnataka RERA portal for real project registration data"
-    version = "3.0"  # v3.0 promotes project/config/media facts and drops cost facts.
+    version = "3.3"  # v3.3 tightens placeholder document filtering and source labels.
     output_keys = [
         "rera_registered", "rera_number", "rera_ack_number", "rera_status",
         "rera_promoter_name", "rera_approved_on", "rera_completion_date",

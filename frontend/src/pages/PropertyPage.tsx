@@ -422,6 +422,7 @@ function PropertyPageBody({
             propertyId={id}
             evidence={data.evidence}
             rera={data.rera}
+            reraDossier={data.rera_dossier}
             googleReviews={data.external_reviews}
             excludeKinds={evidenceExcludeKinds}
           />

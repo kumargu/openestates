@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 
-use chrono::Utc;
+use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::edge::Relation;
@@ -55,6 +55,27 @@ pub struct ReraInfo {
     pub lat_lng: Option<String>,
     pub rera_portal_url: Option<String>,
     pub last_verified: Option<String>,
+    pub decision_cards: Vec<ReraDecisionCard>,
+}
+
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraDecisionAction {
+    pub kind: String,
+    pub label: String,
+}
+
+#[derive(Serialize, Clone, Debug, Default, PartialEq)]
+pub struct ReraDecisionCard {
+    pub id: String,
+    pub title: String,
+    pub detail: String,
+    pub tone: String,
+    pub source: String,
+    pub labels: Vec<String>,
+    pub facts: serde_json::Value,
+    pub actions: Vec<ReraDecisionAction>,
+    pub confidence: f64,
+    pub validation_notes: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -187,6 +208,320 @@ pub fn rera_affidavit_only_visible(manifest: &[ReraDocumentManifestItem]) -> Opt
     Some(manifest.iter().all(|item| item.kind == "affidavit"))
 }
 
+fn compact_number(value: f64) -> String {
+    if (value.fract()).abs() < 0.05 {
+        format!("{}", value.round() as i64)
+    } else {
+        format!("{value:.1}")
+    }
+}
+
+fn compact_i32(value: i32) -> String {
+    value.to_string()
+}
+
+fn format_rera_month(value: Option<&String>) -> Option<String> {
+    let raw = value?.trim();
+    if raw.is_empty() {
+        return None;
+    }
+    for format in ["%Y-%m-%d", "%d-%m-%Y", "%d/%m/%Y"] {
+        if let Ok(date) = NaiveDate::parse_from_str(raw, format) {
+            return Some(date.format("%b %Y").to_string());
+        }
+    }
+    Some(raw.to_string())
+}
+
+fn card_action(kind: &str, label: &str) -> ReraDecisionAction {
+    ReraDecisionAction {
+        kind: kind.to_string(),
+        label: label.to_string(),
+    }
+}
+
+fn document_group_label(group: &str) -> String {
+    let normalized = group.trim().to_ascii_lowercase().replace(['_', '-'], " ");
+    if normalized.contains("site") {
+        "site plan".to_string()
+    } else if normalized.contains("floor") {
+        "floor plan".to_string()
+    } else if normalized.contains("khata") {
+        "khata".to_string()
+    } else if normalized.contains("approval") || normalized.contains("noc") {
+        "approvals/NOCs".to_string()
+    } else if normalized.contains("legal") || normalized.contains("land") {
+        "land files".to_string()
+    } else if normalized.contains("affidavit") {
+        "affidavit".to_string()
+    } else if normalized.is_empty() {
+        "other files".to_string()
+    } else {
+        normalized
+    }
+}
+
+fn rolled_complaint_theme(theme: &str) -> &'static str {
+    match theme {
+        "refund" | "cancellation" => "Money back / refund",
+        "delay" | "possession" | "compensation" => "Delay / possession",
+        "agreement_payment" | "interest_demand" => "Payment dispute",
+        "title_land" | "khata" | "approval_oc_cc" | "registration_document" => {
+            "Legal/title documents"
+        }
+        "quality" => "Construction quality",
+        "amenities" | "parking" | "maintenance" => "Amenities / upkeep",
+        "builder_conduct" => "Builder conduct",
+        _ => "Other",
+    }
+}
+
+fn top_theme_labels(theme_counts: &HashMap<String, i32>, limit: usize) -> Vec<String> {
+    let mut rolled = BTreeMap::<String, i32>::new();
+    for (theme, count) in theme_counts {
+        if *count <= 0 {
+            continue;
+        }
+        *rolled
+            .entry(rolled_complaint_theme(theme).to_string())
+            .or_insert(0) += *count;
+    }
+    let mut rows: Vec<(String, i32)> = rolled.into_iter().collect();
+    rows.sort_by(|left, right| right.1.cmp(&left.1).then_with(|| left.0.cmp(&right.0)));
+    rows.into_iter()
+        .take(limit)
+        .map(|(label, _)| label)
+        .collect()
+}
+
+fn rera_complaint_card(summary: &ReraComplaintScopeSummary) -> Option<ReraDecisionCard> {
+    let total = summary
+        .total_count_from_tab_label
+        .unwrap_or(summary.row_count_parsed);
+    if total <= 0 && summary.open_count <= 0 && summary.disposed_count <= 0 {
+        return None;
+    }
+    let scope_label = if summary.scope.to_ascii_lowercase().contains("promoter") {
+        "promoter"
+    } else {
+        "project"
+    };
+    let top_themes = top_theme_labels(&summary.theme_counts, 2);
+    let title = if let Some(first) = top_themes.first() {
+        format!("Mostly {} complaints", first.to_ascii_lowercase())
+    } else {
+        format!("{} {} complaints", compact_i32(total), scope_label)
+    };
+    let detail = [
+        Some(format!("{} {} complaints", compact_i32(total), scope_label)),
+        (summary.open_count > 0).then(|| format!("{} open", compact_i32(summary.open_count))),
+        (summary.disposed_count > 0)
+            .then(|| format!("{} disposed", compact_i32(summary.disposed_count))),
+        (!top_themes.is_empty()).then(|| format!("themes: {}", top_themes.join(", "))),
+        (!summary.validation_notes.is_empty()).then(|| "parsed with caveats".to_string()),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" · ");
+    Some(ReraDecisionCard {
+        id: format!("complaints_{scope_label}"),
+        title,
+        detail,
+        tone: if summary.open_count > 0 || total > 0 {
+            "watch".to_string()
+        } else {
+            "positive".to_string()
+        },
+        source: "RERA complaints".to_string(),
+        labels: vec!["legal".to_string(), "risk".to_string()],
+        facts: serde_json::json!({
+            "scope": summary.scope.clone(),
+            "total": total,
+            "open": summary.open_count,
+            "disposed": summary.disposed_count,
+            "fine_theme_counts": summary.theme_counts.clone(),
+            "rolled_up_themes": top_themes,
+            "sample_subjects": summary.sample_subjects.clone(),
+        }),
+        actions: vec![card_action("open_source", "Open complaints")],
+        confidence: summary.confidence,
+        validation_notes: summary.validation_notes.clone(),
+    })
+}
+
+pub fn rera_decision_cards(info: &ReraInfo) -> Vec<ReraDecisionCard> {
+    let mut cards = Vec::new();
+
+    if info.registered || info.registration_number.is_some() {
+        cards.push(ReraDecisionCard {
+            id: "registration".to_string(),
+            title: if info.registered {
+                "RERA registered".to_string()
+            } else {
+                "RERA number available".to_string()
+            },
+            detail: [info.registration_number.clone(), info.status.clone()]
+                .into_iter()
+                .flatten()
+                .collect::<Vec<_>>()
+                .join(" · "),
+            tone: if info.registered {
+                "positive"
+            } else {
+                "neutral"
+            }
+            .to_string(),
+            source: "RERA".to_string(),
+            labels: vec!["legal".to_string()],
+            facts: serde_json::json!({
+                "registered": info.registered,
+                "registration_number": info.registration_number.clone(),
+                "status": info.status.clone(),
+            }),
+            actions: vec![card_action("open_source", "Open source")],
+            confidence: 0.9,
+            validation_notes: Vec::new(),
+        });
+    }
+
+    let original_target = format_rera_month(info.original_completion_date.as_ref());
+    let current_target = format_rera_month(info.completion_date.as_ref());
+    if let Some(delay) = info.delay_months.filter(|value| *value > 0) {
+        cards.push(ReraDecisionCard {
+            id: "delivery_movement".to_string(),
+            title: format!("Delivery moved by {} months", compact_i32(delay)),
+            detail: [
+                original_target.map(|value| format!("original {value}")),
+                current_target.map(|value| format!("current {value}")),
+            ]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" · "),
+            tone: "watch".to_string(),
+            source: "RERA schedule".to_string(),
+            labels: vec!["legal".to_string(), "risk".to_string()],
+            facts: serde_json::json!({
+                "delay_months": delay,
+                "original_completion_date": info.original_completion_date.clone(),
+                "completion_date": info.completion_date.clone(),
+            }),
+            actions: vec![card_action("save_note", "Remember")],
+            confidence: 0.86,
+            validation_notes: Vec::new(),
+        });
+    }
+
+    for summary in &info.complaint_summaries {
+        if let Some(card) = rera_complaint_card(summary) {
+            cards.push(card);
+        }
+    }
+
+    if !info.document_groups.is_empty() {
+        let labels: Vec<String> = info
+            .document_groups
+            .iter()
+            .filter(|group| group.count > 0)
+            .map(|group| document_group_label(&group.group))
+            .collect();
+        let has_plan = labels.iter().any(|label| label.contains("plan"));
+        cards.push(ReraDecisionCard {
+            id: "official_files".to_string(),
+            title: "Official files available".to_string(),
+            detail: labels
+                .iter()
+                .take(5)
+                .cloned()
+                .collect::<Vec<_>>()
+                .join(", "),
+            tone: "neutral".to_string(),
+            source: "RERA documents".to_string(),
+            labels: if has_plan {
+                vec!["legal".to_string(), "layout".to_string()]
+            } else {
+                vec!["legal".to_string()]
+            },
+            facts: serde_json::json!({
+                "document_groups": info.document_groups.clone(),
+                "manifest_count": info.document_manifest.len(),
+                "affidavit_only_visible": info.affidavit_only_visible,
+            }),
+            actions: vec![card_action("request_file", "Request file")],
+            confidence: 0.82,
+            validation_notes: Vec::new(),
+        });
+    }
+
+    let mut land_signals = Vec::new();
+    if info.land_litigation == Some(true) {
+        land_signals.push("land litigation recorded");
+    }
+    if info.has_mortgage == Some(true) {
+        land_signals.push("mortgage reported");
+    }
+    if info.has_borrowing == Some(true) {
+        land_signals.push("borrowing reported");
+    }
+    if !land_signals.is_empty() {
+        cards.push(ReraDecisionCard {
+            id: "legal_follow_up".to_string(),
+            title: "Legal follow-up needed".to_string(),
+            detail: land_signals.join(" · "),
+            tone: "watch".to_string(),
+            source: "RERA".to_string(),
+            labels: vec!["legal".to_string(), "risk".to_string()],
+            facts: serde_json::json!({
+                "land_litigation": info.land_litigation,
+                "has_mortgage": info.has_mortgage,
+                "has_borrowing": info.has_borrowing,
+            }),
+            actions: vec![card_action("ask_lawyer", "Ask lawyer")],
+            confidence: 0.78,
+            validation_notes: vec!["Not a legal opinion; verify source documents.".to_string()],
+        });
+    }
+
+    let scale_parts = [
+        info.total_land_area_acres
+            .map(|value| format!("{} acres", compact_number(value))),
+        info.total_units
+            .map(|value| format!("{} homes", compact_i32(value))),
+        info.units_per_acre
+            .map(|value| format!("{} homes/acre", compact_number(value))),
+        info.open_area_pct
+            .map(|value| format!("{}% open area", compact_number(value))),
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>();
+    if !scale_parts.is_empty() {
+        cards.push(ReraDecisionCard {
+            id: "project_scale".to_string(),
+            title: info
+                .units_per_acre
+                .map(|value| format!("{} homes/acre", compact_number(value)))
+                .unwrap_or_else(|| "Project scale available".to_string()),
+            detail: scale_parts.join(" · "),
+            tone: "neutral".to_string(),
+            source: "RERA".to_string(),
+            labels: vec!["open-space".to_string()],
+            facts: serde_json::json!({
+                "total_land_area_acres": info.total_land_area_acres,
+                "total_units": info.total_units,
+                "units_per_acre": info.units_per_acre,
+                "open_area_pct": info.open_area_pct,
+            }),
+            actions: Vec::new(),
+            confidence: 0.84,
+            validation_notes: Vec::new(),
+        });
+    }
+
+    cards
+}
+
 fn get_bool_fact(facts: &[SourcedFact], key: &str) -> Option<bool> {
     facts
         .iter()
@@ -316,7 +651,7 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         .and_then(|value| parse_rera_json::<Vec<ReraComplaintScopeSummary>>(&value))
         .unwrap_or_default();
 
-    Some(ReraInfo {
+    let mut info = ReraInfo {
         registered,
         registration_number,
         status: get_text_fact(facts, "rera_status"),
@@ -339,8 +674,11 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         complaints_resolved_pct: get_numeric_fact(facts, "rera_complaints_resolved_pct"),
         project_complaints_count: get_numeric_fact(facts, "rera_project_complaints_count")
             .map(|n| n as i32),
-        project_complaints_open_count: get_numeric_fact(facts, "rera_project_complaints_open_count")
-            .map(|n| n as i32),
+        project_complaints_open_count: get_numeric_fact(
+            facts,
+            "rera_project_complaints_open_count",
+        )
+        .map(|n| n as i32),
         project_complaints_disposed_count: get_numeric_fact(
             facts,
             "rera_project_complaints_disposed_count",
@@ -372,7 +710,10 @@ pub fn extract_rera_info(graph: &KnowledgeGraph, society_id: &str) -> Option<Rer
         lat_lng: get_text_fact(facts, "rera_lat_lng"),
         rera_portal_url: get_text_fact(facts, "rera_portal_url"),
         last_verified,
-    })
+        decision_cards: Vec::new(),
+    };
+    info.decision_cards = rera_decision_cards(&info);
+    Some(info)
 }
 
 // ---------------------------------------------------------------------------
