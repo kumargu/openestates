@@ -351,15 +351,17 @@
 .notion-pill {
   display: inline-flex;
   align-items: center;
-  border: 0;
-  border-radius: 4px;
-  padding: 0.18rem 0.45rem;
-  font-size: 0.72rem;
-  font-weight: 700;
+  min-height: 1.85rem;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  border-radius: 999px;
+  padding: 0 0.68rem;
+  font-size: 0.76rem;
+  font-weight: 760;
   cursor: pointer;
   white-space: nowrap;
   background: #eee;
   color: #555;
+  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
 }
 
 .notion-pill--schools { background: #d6e9db; color: #2d5a3d; }
@@ -384,8 +386,8 @@
 
 .notion-pill-add {
   border: 1px dashed rgba(50, 38, 30, 0.18);
-  border-radius: 4px;
-  padding: 0.16rem 0.42rem;
+  border-radius: 999px;
+  padding: 0.2rem 0.58rem;
   background: transparent;
   color: #8a7d72;
   font-size: 0.7rem;
@@ -1393,13 +1395,15 @@
 .notebook-tag {
   display: inline-flex;
   align-items: center;
-  border: 0;
-  border-radius: 4px;
-  padding: 0.18rem 0.45rem;
-  font-size: 0.72rem;
-  font-weight: 700;
+  min-height: 1.75rem;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  border-radius: 999px;
+  padding: 0 0.64rem;
+  font-size: 0.74rem;
+  font-weight: 760;
   background: #eee;
   color: #555;
+  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
 }
 
 .notebook-tag--schools { background: #d6e9db; color: #2d5a3d; }

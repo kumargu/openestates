@@ -25,6 +25,7 @@ import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaPriceBands, type AreaMarketContext } from "../components/AreaPriceBands.tsx";
+import { SoftComparableIcon, SoftNearbyIcon } from "../components/ui/SoftIcons.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt, sceneLabelForIndex } from "../lib/propertyScene.ts";
 import {
@@ -102,12 +103,56 @@ function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 10): Externa
   let used = 0;
   for (const review of reviewCards) {
     const cost = reviewSpaceCost(review);
-    if (selected.length >= 4 && used + cost > budget) break;
-    if (selected.length >= 8) break;
+    if (selected.length >= 5 && used + cost > budget) break;
+    if (selected.length >= 10) break;
     selected.push(review);
     used += cost;
   }
   return selected;
+}
+
+type DetailSignalPill = {
+  key: string;
+  label: string;
+  count?: number;
+  icon: ReactNode;
+};
+
+function countMapLayer(data: PropertyDetailResponse, layer: string): number {
+  return data.map_context?.places.filter((place) => place.layer === layer).length ?? 0;
+}
+
+function countReviewTheme(reviews: ExternalReviewCard[], terms: string[]): number {
+  return reviews.filter((review) => {
+    const text = review.text.toLowerCase();
+    return terms.some((term) => text.includes(term));
+  }).length;
+}
+
+function detailSignalPills(
+  data: PropertyDetailResponse,
+  reviews: ExternalReviewCard[],
+): DetailSignalPill[] {
+  const signals: DetailSignalPill[] = [];
+  const pushCount = (key: string, label: string, count: number, icon: ReactNode) => {
+    if (count > 0) signals.push({ key, label, count, icon });
+  };
+
+  pushCount("schools", "Schools", countMapLayer(data, "schools"), <SoftNearbyIcon kind="schools" size={22} />);
+  pushCount("hospitals", "Hospitals", countMapLayer(data, "hospitals"), <SoftNearbyIcon kind="hospitals" size={22} />);
+  pushCount("tech", "Tech parks", countMapLayer(data, "tech"), <SoftNearbyIcon kind="tech" size={22} />);
+  pushCount("metro", "Metro", countMapLayer(data, "metro"), <SoftNearbyIcon kind="metro" size={22} />);
+  pushCount("breweries", "Breweries", countMapLayer(data, "breweries"), <SoftNearbyIcon kind="breweries" size={22} />);
+  if (data.map_context?.water) {
+    signals.push({ key: "water", label: "Water context", icon: <SoftNearbyIcon kind="water" size={22} /> });
+  }
+
+  pushCount("cleanliness", "Cleanliness", countReviewTheme(reviews, ["clean", "hygien", "maintained"]), <SoftComparableIcon id="homeState" size={22} />);
+  pushCount("location", "Location", countReviewTheme(reviews, ["location", "nearby", "close to", "connectivity"]), <SoftNearbyIcon kind="essentials" size={22} />);
+  pushCount("greenery", "Greenery", countReviewTheme(reviews, ["green", "open space", "garden", "trees"]), <SoftComparableIcon id="openSpace" size={22} />);
+  pushCount("condition", "Condition", countReviewTheme(reviews, ["condition", "seepage", "maintenance", "problem", "issue"]), <SoftComparableIcon id="builder" size={22} />);
+
+  return signals.slice(0, 10);
 }
 
 function cleanAreaToken(value: string): string {
@@ -468,7 +513,9 @@ function GoogleReviewsSection({
       text: reviewSnippetCopy(value),
       tone: "neutral" as const,
     }));
-  const reviewCards = fitReviewCards(reviews?.reviews?.length ? reviews.reviews : fallbackCards);
+  const reviewSourceCards = reviews?.reviews?.length ? reviews.reviews : fallbackCards;
+  const reviewCards = fitReviewCards(reviewSourceCards, 14);
+  const signalPills = detailSignalPills(data, reviewSourceCards);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
     : "Show more Google reviews";
@@ -483,6 +530,18 @@ function GoogleReviewsSection({
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
       </div>
+
+      {signalPills.length > 0 && (
+        <div className="property-signal-pills" aria-label="Review and nearby highlights">
+          {signalPills.map((signal) => (
+            <span key={signal.key} className="property-signal-pill">
+              {signal.icon}
+              <strong>{signal.label}</strong>
+              {typeof signal.count === "number" && <em>{signal.count}</em>}
+            </span>
+          ))}
+        </div>
+      )}
 
       {reviewCards.length > 0 && (
         <div className="property-review-grid">

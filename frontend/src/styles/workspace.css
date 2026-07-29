@@ -1363,13 +1363,16 @@
   display: inline-flex;
   width: fit-content;
   align-items: center;
-  padding: 0.3rem 0.58rem;
-  border-radius: 0.38rem;
+  min-height: 1.65rem;
+  padding: 0 0.64rem;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  border-radius: 999px;
   background: #eee9e5;
   color: #5d554f;
-  font-size: 0.61rem;
-  font-weight: 680;
+  font-size: 0.64rem;
+  font-weight: 740;
   line-height: 1.2;
+  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
 }
 
 .compare-tag--schools,
@@ -1502,8 +1505,9 @@
 }
 
 .compare-note__labels .compare-tag {
-  padding: 0.22rem 0.42rem;
-  font-size: 0.52rem;
+  min-height: 1.45rem;
+  padding: 0 0.48rem;
+  font-size: 0.56rem;
 }
 
 @keyframes compare-page-in {
