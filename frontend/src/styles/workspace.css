@@ -1404,99 +1404,6 @@
   background: transparent;
 }
 
-.compare-tag {
-  display: inline-flex;
-  width: fit-content;
-  align-items: center;
-  gap: 0.32rem;
-  min-height: 1.65rem;
-  padding: 0 0.64rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 999px;
-  background: #eee9e5;
-  color: #5d554f;
-  font-size: 0.64rem;
-  font-weight: 740;
-  line-height: 1.2;
-  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
-}
-
-.compare-tag--schools,
-.compare-tag--schools-under-1km,
-.compare-tag--schools-under-3km,
-.compare-tag--schools-under-5km {
-  background: #dfe9f5;
-  color: #365d83;
-}
-
-.compare-tag--hospitals,
-.compare-tag--hospitals-under-1km,
-.compare-tag--hospitals-under-3km,
-.compare-tag--hospitals-under-5km {
-  background: #f3e1df;
-  color: #8b4d49;
-}
-
-.compare-tag--metro,
-.compare-tag--metro-under-1km,
-.compare-tag--metro-under-3km,
-.compare-tag--commute {
-  background: #e9e1f2;
-  color: #654a7d;
-}
-
-.compare-tag--tech-parks {
-  background: #f2ead5;
-  color: #785f24;
-}
-
-.compare-tag--water {
-  background: #dcecef;
-  color: #356a74;
-}
-
-.compare-tag--risk,
-.compare-tag--transmission {
-  background: #f2dedf;
-  color: #8a4248;
-}
-
-.compare-tag--approach {
-  background: #ebe3dc;
-  color: #715946;
-}
-
-.compare-tag--emi,
-.compare-tag--down-payment {
-  background: #dfece3;
-  color: #3f6d4d;
-}
-
-.compare-tag--legal {
-  background: #e3e4f5;
-  color: #3d3f7a;
-}
-
-.compare-tag--community {
-  background: #e8e6f0;
-  color: #4a4560;
-}
-
-.compare-tag--price {
-  background: #f5e6ea;
-  color: #7a2f45;
-}
-
-.compare-tag--layout {
-  background: #f1e2d8;
-  color: #7a3f28;
-}
-
-.compare-tag--open-space {
-  background: #e8f0d8;
-  color: #4a5c28;
-}
-
 .compare-note {
   display: grid;
   grid-template-columns: 1.45rem minmax(0, 1fr);
@@ -1548,9 +1455,30 @@
   margin-top: 0.46rem;
 }
 
-.compare-note__labels .compare-tag {
-  min-height: 1.6rem;
-  padding: 0 0.66rem;
+.compare-label-pill.notion-pill {
+  width: fit-content;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  font-size: 0.64rem;
+}
+
+.compare-label-pill--readonly.notion-pill {
+  cursor: default;
+}
+
+.compare-label-pill--button.notion-pill {
+  font-family: inherit;
+}
+
+.compare-label-pill--button.notion-pill:hover,
+.compare-label-pill--button.notion-pill:focus-visible {
+  border-color: rgba(38, 35, 32, 0.22);
+  box-shadow: 0 2px 8px rgba(38, 35, 32, 0.08);
+  outline: none;
+}
+
+.compare-note__labels .compare-label-pill.notion-pill {
+  min-height: 1.62rem;
+  padding: 0 0.58rem;
   font-size: 0.6rem;
 }
 
@@ -1565,7 +1493,7 @@
   min-width: 0;
 }
 
-.compare-item-cluster__label.compare-tag {
+.compare-item-cluster__label.compare-label-pill.notion-pill {
   min-height: 1.72rem;
   padding: 0 0.68rem 0 0.5rem;
   font-size: 0.62rem;

@@ -323,6 +323,7 @@ export function WorkspacePage() {
           copied={copied}
           onCopy={copyComparisonLink}
           onRemoveHome={removeCompareHomes}
+          onRemoveNoteLabel={removeNoteLabel}
         />
       ) : (
         <EditorialView
@@ -351,6 +352,7 @@ function CompareWorkspaceView({
   copied,
   onCopy,
   onRemoveHome,
+  onRemoveNoteLabel,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
@@ -359,6 +361,7 @@ function CompareWorkspaceView({
   copied: boolean;
   onCopy: () => void;
   onRemoveHome: (propertyIds: string[]) => void;
+  onRemoveNoteLabel: (noteId: string, label: NotebookLabelId) => void;
 }) {
   if (selectedHomes.length < 2) {
     return (
@@ -406,6 +409,7 @@ function CompareWorkspaceView({
           catalog={catalog}
           details={details}
           onRemoveColumn={onRemoveHome}
+          onRemoveNoteLabel={onRemoveNoteLabel}
         />
       )}
     </section>
