@@ -1,5 +1,6 @@
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import type { NotebookLabelId, NotebookNoteKind } from "../../lib/notebook.ts";
+import { NotebookSaveIcon } from "./NotebookSaveIcon.tsx";
 
 type NotebookPinButtonProps = {
   propertyId: string;
@@ -30,9 +31,9 @@ export function NotebookPinButton({
     <button
       type="button"
       className={`notebook-pin${filled ? " is-filled" : ""} ${className}`.trim()}
-      aria-label={filled ? "Remove note" : "Add note"}
+      aria-label={filled ? "Remove from notebook" : "Save to notebook"}
       aria-pressed={filled}
-      title={filled ? "Remove note" : "Add note"}
+      title={filled ? "Saved" : "Save"}
       onClick={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -47,15 +48,7 @@ export function NotebookPinButton({
         });
       }}
     >
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-        <path
-          d="M6.2 5.4h11.6A2.7 2.7 0 0 1 20.5 8v5.8a2.7 2.7 0 0 1-2.7 2.7H13l-4.4 3.1v-3.1H6.2a2.7 2.7 0 0 1-2.7-2.7V8a2.7 2.7 0 0 1 2.7-2.6Z"
-          fill={filled ? "currentColor" : "none"}
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <NotebookSaveIcon filled={filled} size={15} />
     </button>
   );
 }

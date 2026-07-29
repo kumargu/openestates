@@ -903,6 +903,7 @@ fn append_google_review_facts(
             facts,
             annotations,
         )?;
+        push_google_review_cards_fact(row, run_id, facts, annotations)?;
         append_review_signal_fact(
             row,
             run_id,
@@ -942,6 +943,47 @@ fn append_google_review_facts(
         )?;
     }
     Ok(())
+}
+
+fn push_google_review_cards_fact(
+    row: &GooglePlaceSnapshotRecord,
+    run_id: &MaterializationId,
+    facts: &mut Vec<SkillFactRecord>,
+    annotations: &mut Vec<SkillFactAnnotationRecord>,
+) -> Result<(), GooglePlaceAssetError> {
+    let cards = row
+        .review_snippets
+        .iter()
+        .map(|snippet| {
+            serde_json::json!({
+                "source": "Google",
+                "author": "Google reviewer",
+                "published_at": row.fetched_at.to_rfc3339(),
+                "helpful_count": 0,
+                "text": snippet,
+            })
+            .to_string()
+        })
+        .collect::<Vec<_>>();
+    if cards.is_empty() {
+        return Ok(());
+    }
+    push_fact(
+        row,
+        run_id,
+        "google_review_cards",
+        FactValue::Tags(cards),
+        "Google review cards: {value}",
+        &[
+            "latest reviews",
+            "helpful reviews",
+            "resident feedback",
+            "google reviews",
+        ],
+        Some(("TextMatch", 1.2, Vec::new())),
+        facts,
+        annotations,
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

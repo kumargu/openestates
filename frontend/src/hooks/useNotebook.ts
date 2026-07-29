@@ -3,17 +3,21 @@ import { SHORTLIST_CHANGED_EVENT } from "../lib/compare.ts";
 import {
   NOTEBOOK_CHANGED_EVENT,
   addHandwrittenNote,
+  addNotebookCommandBlock,
   addNotebookNoteLabel,
   addSelectionNote,
   anchorNotebookProperty,
+  hideNotebookCompareLabel,
   isCatalogPinned,
   readNotebook,
   removeNotebookNote,
   removeNotebookNoteLabel,
   removeNotebookProperty,
   setNotebookNoteLabels,
+  showNotebookCompareLabel,
   toggleCatalogNote,
   toggleNotebookCompareId,
+  updateNotebookNote,
   type NotebookLabelId,
   type NotebookNote,
   type NotebookState,
@@ -24,12 +28,15 @@ function isNotebookState(value: unknown): value is NotebookState {
   const candidate = value as Partial<NotebookState>;
   return Array.isArray(candidate.propertyIds)
     && Array.isArray(candidate.notes)
-    && Array.isArray(candidate.compareIds);
+    && Array.isArray(candidate.compareIds)
+    && (candidate.hiddenCompareLabels == null || Array.isArray(candidate.hiddenCompareLabels));
 }
 
 export function useNotebook() {
   const [state, setState] = useState<NotebookState>(() =>
-    typeof window === "undefined" ? { propertyIds: [], notes: [], compareIds: [] } : readNotebook(),
+    typeof window === "undefined"
+      ? { propertyIds: [], notes: [], compareIds: [], hiddenCompareLabels: [] }
+      : readNotebook(),
   );
 
   useEffect(() => {
@@ -61,8 +68,17 @@ export function useNotebook() {
     if (next) setState(next);
   }, []);
 
+  const addCommandBlock = useCallback((input: Parameters<typeof addNotebookCommandBlock>[0]) => {
+    const next = addNotebookCommandBlock(input);
+    if (next) setState(next);
+  }, []);
+
   const removeNote = useCallback((noteId: string) => {
     setState(removeNotebookNote(noteId));
+  }, []);
+
+  const updateNote = useCallback((noteId: string, patch: Parameters<typeof updateNotebookNote>[1]) => {
+    setState(updateNotebookNote(noteId, patch));
   }, []);
 
   const setNoteLabels = useCallback((noteId: string, labels: NotebookLabelId[]) => {
@@ -79,6 +95,14 @@ export function useNotebook() {
 
   const toggleCompare = useCallback((propertyId: string) => {
     setState(toggleNotebookCompareId(propertyId));
+  }, []);
+
+  const hideCompareLabel = useCallback((label: NotebookLabelId) => {
+    setState(hideNotebookCompareLabel(label));
+  }, []);
+
+  const showCompareLabel = useCallback((label: NotebookLabelId) => {
+    setState(showNotebookCompareLabel(label));
   }, []);
 
   const removeProperty = useCallback((propertyId: string) => {
@@ -99,15 +123,20 @@ export function useNotebook() {
     notes: state.notes,
     propertyIds: state.propertyIds,
     compareIds: state.compareIds,
+    hiddenCompareLabels: state.hiddenCompareLabels ?? [],
     isPinned: (catalogKey: string) => isCatalogPinned(catalogKey, state),
     toggleFact,
     rememberSelection,
     addHandwritten,
+    addCommandBlock,
     removeNote,
+    updateNote,
     setNoteLabels,
     addNoteLabel,
     removeNoteLabel,
     toggleCompare,
+    hideCompareLabel,
+    showCompareLabel,
     removeProperty,
     anchorProperty,
     notesFor,

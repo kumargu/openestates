@@ -431,6 +431,7 @@ export function NotebookProvider({ children }: { children: ReactNode }) {
   return <NotebookContext.Provider value={value}>{children}</NotebookContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useNotebook(): NotebookContextValue {
   const ctx = useContext(NotebookContext);
   if (!ctx) throw new Error("useNotebook outside provider");

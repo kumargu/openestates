@@ -8,6 +8,7 @@ import { NotebookCommentAnchor } from "../notebook/NotebookCommentAnchor.tsx";
 type Props = {
   propertyId: string;
   sections: EvidenceSection[];
+  variant?: "tile" | "compact";
 };
 
 type TrailFrame = {
@@ -45,7 +46,7 @@ export function hasApproachRoadTrail(sections: EvidenceSection[]): boolean {
   return trailFrames(section).length > 0;
 }
 
-export function ApproachRoadTrail({ propertyId, sections }: Props) {
+export function ApproachRoadTrail({ propertyId, sections, variant = "tile" }: Props) {
   const section = approachRoadSection(sections);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -81,6 +82,7 @@ export function ApproachRoadTrail({ propertyId, sections }: Props) {
   const hasStrip = frames.length > 1;
   const viewLabel = `${frames.length} ${frames.length === 1 ? "view" : "views"}`;
   const tilePreview = frames[0];
+  const compact = variant === "compact";
 
   function openTrail() {
     setActiveIndex(0);
@@ -95,20 +97,21 @@ export function ApproachRoadTrail({ propertyId, sections }: Props) {
     <section className="area-trail" aria-labelledby="area-trail-title">
       <button
         type="button"
-        className="detail-action-tile area-trail__tile"
+        className={`detail-action-tile area-trail__tile${compact ? " area-trail__tile--compact" : ""}`}
         aria-haspopup="dialog"
         onClick={openTrail}
       >
-        <span className="area-trail__preview">
-          <img src={tilePreview.image_url} alt="" loading="lazy" />
-        </span>
+        {!compact && (
+          <span className="area-trail__preview">
+            <img src={tilePreview.image_url} alt="" loading="lazy" />
+          </span>
+        )}
         <span className="area-trail__copy">
-          <span className="area-trail__kicker">Approach road</span>
-          <strong id="area-trail-title">Gate-side approach</strong>
-          <span>{tilePreview.label} · {viewLabel}</span>
+          {!compact && <span className="area-trail__kicker">Approach road</span>}
+          <strong id="area-trail-title">{compact ? "Approach road" : "Gate-side approach"}</strong>
+          {!compact && <span>{tilePreview.label} · {viewLabel}</span>}
         </span>
         <span className="area-trail__open" aria-hidden="true">
-          View trail
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="m9 18 6-6-6-6" />
           </svg>

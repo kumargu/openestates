@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap, type Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { MapOverlayLine, MapWaterContext } from "../../lib/types.ts";
+import { NOTEBOOK_SAVE_ICON_PATH } from "../notebook/NotebookSaveIcon.tsx";
 import {
   NEARBY_MAP_STYLE,
   type NumberedPlace,
@@ -112,15 +113,16 @@ function placePopupHtml(place: NumberedPlace, pinned: boolean): string {
         type="button"
         class="nearby-map-popup__pin${pinned ? " is-filled" : ""}"
         data-notebook-pin="${escapeHtml(place.id)}"
-        aria-label="${pinned ? "Remove note" : "Add note"}"
-        title="${pinned ? "Remove note" : "Add note"}"
+        aria-label="${pinned ? "Remove from notebook" : "Save to notebook"}"
+        title="${pinned ? "Saved" : "Save"}"
       >
         <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
           <path
-            d="M6.2 5.4h11.6A2.7 2.7 0 0 1 20.5 8v5.8a2.7 2.7 0 0 1-2.7 2.7H13l-4.4 3.1v-3.1H6.2a2.7 2.7 0 0 1-2.7-2.7V8a2.7 2.7 0 0 1 2.7-2.6Z"
+            d="${NOTEBOOK_SAVE_ICON_PATH}"
             fill="${pinned ? "currentColor" : "none"}"
             stroke="currentColor"
-            stroke-width="1.7"
+            stroke-width="1.9"
+            stroke-linecap="round"
             stroke-linejoin="round"
           />
         </svg>

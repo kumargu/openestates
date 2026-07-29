@@ -100,6 +100,10 @@ Buyer-facing UI must never read like agent notes, pipeline status, or how-to chr
 
 Buyer UI should feel modern and edited. Do not add labels, headings, captions, helper text, counts, or badges unless they remove real ambiguity or help the next decision. If the same fact is already visible in a card, table, chart, or nearby heading, do not repeat it above or beside the element. Prefer one strong surface over stacked explanations such as kicker + title + subtitle + chip saying the same thing.
 
+**No duplicate buyer facts.** Treat repeated copy as a product bug. In a single viewport, a property name, price, BHK, size, status, rating, market count, source/count caption, or section concept should appear once unless the second instance is inside an intentional drill-down surface opened by the user. Do not create scan lines that restate header chips. Do not put a society name in the subtitle, map card, and recommendation rail when the page title already names it. Do not stack equivalent labels such as `Market prices`, `Price ranges`, and `Asking prices by BHK` around the same chart. For detail pages, cut captions like `current listings`, `priced homes`, `markets`, `evidence`, `proof`, `checked`, and pipeline/source-status wording unless the buyer must act on it.
+
+Before shipping any buyer-facing UI change, do a duplicate-copy pass across visible text and accessible text (`aria-label`, `sr-only`, button labels, alt text). Delete or merge repeated concepts; do not merely rephrase them. The page should read like an edited product, not a fact dump assembled by an agent.
+
 **Never put on product surfaces:**
 - Interaction tutorials ("click a lower image to bring it forward", "pick a layer to read…")
 - Pipeline / enrichment jargon ("enrichment queued", "still enriching", "zone geometry not drawn", "source-backed")

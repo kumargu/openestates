@@ -30,8 +30,12 @@ Object.defineProperty(globalThis, "window", {
 
 const {
   NOTEBOOK_STORAGE_KEY,
+  addNotebookCommandBlock,
+  hideNotebookCompareLabel,
   readNotebook,
+  showNotebookCompareLabel,
   toggleNotebookCompareId,
+  updateNotebookNote,
 } = await import("../src/lib/notebook.ts");
 const {
   SHORTLIST_STORAGE_KEY,
@@ -66,4 +70,119 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("compare labels can be hidden and restored without changing notes", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "School nearby",
+      kind: "fact",
+      catalogKey: "map:school",
+      labels: ["schools"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const hidden = hideNotebookCompareLabel("schools");
+  assert.deepEqual(hidden.hiddenCompareLabels, ["schools"]);
+  assert.deepEqual(hidden.notes[0].labels, ["schools"]);
+
+  const restored = showNotebookCompareLabel("schools");
+  assert.deepEqual(restored.hiddenCompareLabels, []);
+  assert.deepEqual(restored.notes[0].labels, ["schools"]);
+});
+
+test("saved complaint notes migrate out of generic legal labels", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "Complaints",
+      detail: "21 filed",
+      kind: "selection",
+      catalogKey: "sel:home-1:complaints",
+      labels: ["legal"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const state = readNotebook();
+
+  assert.deepEqual(state.notes[0].labels, ["complaints", "risk", "legal"]);
+});
+
+test("complaint label remains the leading visual label after migration", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "Complaints",
+      detail: "RERA",
+      kind: "fact",
+      catalogKey: "rera:home-1:complaints",
+      labels: ["legal", "complaints"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const state = readNotebook();
+
+  assert.deepEqual(state.notes[0].labels, ["complaints", "risk", "legal"]);
+});
+
+test("slash command blocks append and remain editable", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "existing-note",
+      propertyId: "home-1",
+      title: "Existing thought",
+      kind: "handwritten",
+      catalogKey: "hand:home-1:1",
+      labels: [],
+      createdAt: 1,
+    }],
+    compareIds: [],
+  }));
+
+  const created = addNotebookCommandBlock({ propertyId: "home-1", commandId: "visit" });
+  assert.ok(created);
+  assert.equal(created.notes[0].id, "existing-note");
+  const blockNote = created.notes[1];
+  assert.equal(blockNote.title, "Visit");
+  assert.equal(blockNote.block?.type, "checklist");
+  assert.equal(blockNote.block?.collapsed, false);
+
+  if (blockNote.block?.type !== "checklist") throw new Error("expected checklist block");
+  const firstItem = blockNote.block.items[0];
+  const edited = updateNotebookNote(blockNote.id, {
+    title: "Saturday visit",
+    block: {
+      ...blockNote.block,
+      collapsed: true,
+      items: blockNote.block.items.map((item) => (
+        item.id === firstItem.id ? { ...item, checked: true } : item
+      )),
+    },
+  });
+  const editedNote = edited.notes.find((note) => note.id === blockNote.id);
+
+  assert.equal(editedNote?.title, "Saturday visit");
+  assert.equal(editedNote?.block?.collapsed, true);
+  assert.equal(
+    editedNote?.block?.type === "checklist" ? editedNote.block.items[0].checked : false,
+    true,
+  );
 });

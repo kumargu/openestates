@@ -9,6 +9,7 @@
  */
 
 import { readShortlistIds, writeShortlistIds } from "./compare.ts";
+import { NOTEBOOK_COMMANDS, type NotebookCommand } from "./notebookCommands.ts";
 
 export const NOTEBOOK_STORAGE_KEY = "openestates:buyer-notebook-v2";
 export const NOTEBOOK_CHANGED_EVENT = "openestates:notebook-changed";
@@ -26,7 +27,33 @@ export type NotebookLabelDef = {
   title: string;
   /** False = notebook organization only; never joins Compare. */
   compareJoin: boolean;
+  /** Optional Compare row; keeps label-specific grouping out of Compare UI code. */
+  compareGroup?: string;
 };
+
+export type NotebookChecklistItem = {
+  id: string;
+  text: string;
+  checked: boolean;
+};
+
+export type NotebookFieldItem = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+export type NotebookBlock =
+  | {
+      type: "checklist";
+      collapsed: boolean;
+      items: NotebookChecklistItem[];
+    }
+  | {
+      type: "fields";
+      collapsed: boolean;
+      fields: NotebookFieldItem[];
+    };
 
 export type NotebookNote = {
   id: string;
@@ -40,6 +67,7 @@ export type NotebookNote = {
   selectionText?: string;
   /** Join / organize keys. Empty means the note stays out of Compare. */
   labels: NotebookLabelId[];
+  block?: NotebookBlock;
   createdAt: number;
 };
 
@@ -47,32 +75,34 @@ export type NotebookState = {
   propertyIds: string[];
   notes: NotebookNote[];
   compareIds: string[];
+  hiddenCompareLabels: NotebookLabelId[];
 };
 
 /** Catalog — expand later via config; keep frontend-deterministic for MVP. */
 export const NOTEBOOK_LABELS: NotebookLabelDef[] = [
-  { id: "schools", title: "Schools", compareJoin: true },
-  { id: "schools_under_1km", title: "School under 1 km", compareJoin: true },
-  { id: "schools_under_3km", title: "School under 3 km", compareJoin: true },
-  { id: "schools_under_5km", title: "School under 5 km", compareJoin: true },
-  { id: "hospitals", title: "Hospitals", compareJoin: true },
-  { id: "hospitals_under_1km", title: "Hospital under 1 km", compareJoin: true },
-  { id: "hospitals_under_3km", title: "Hospital under 3 km", compareJoin: true },
-  { id: "hospitals_under_5km", title: "Hospital under 5 km", compareJoin: true },
-  { id: "commute", title: "Commute", compareJoin: true },
-  { id: "metro", title: "Metro", compareJoin: true },
-  { id: "metro_under_1km", title: "Metro under 1 km", compareJoin: true },
-  { id: "metro_under_3km", title: "Metro under 3 km", compareJoin: true },
-  { id: "tech_parks", title: "Tech parks", compareJoin: true },
-  { id: "water", title: "Water", compareJoin: true },
-  { id: "risk", title: "Risk", compareJoin: true },
-  { id: "transmission", title: "High-tension line", compareJoin: true },
-  { id: "approach", title: "Approach road", compareJoin: true },
-  { id: "open-space", title: "Open space", compareJoin: true },
-  { id: "price", title: "Price proof", compareJoin: true },
-  { id: "layout", title: "Layout", compareJoin: true },
-  { id: "down-payment", title: "Down payment", compareJoin: true },
-  { id: "emi", title: "EMI", compareJoin: true },
+  { id: "schools", title: "Schools", compareJoin: true, compareGroup: "access_notes" },
+  { id: "schools_under_1km", title: "School under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "schools_under_3km", title: "School under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "schools_under_5km", title: "School under 5 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals", title: "Hospitals", compareJoin: true, compareGroup: "access_notes" },
+  { id: "hospitals_under_1km", title: "Hospital under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals_under_3km", title: "Hospital under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals_under_5km", title: "Hospital under 5 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "commute", title: "Commute", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "metro", title: "Metro", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "metro_under_1km", title: "Metro under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "metro_under_3km", title: "Metro under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "tech_parks", title: "Tech parks", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "water", title: "Water", compareJoin: true, compareGroup: "water" },
+  { id: "risk", title: "Risk", compareJoin: true, compareGroup: "red_flags" },
+  { id: "complaints", title: "Complaints", compareJoin: true, compareGroup: "red_flags" },
+  { id: "transmission", title: "High-tension line", compareJoin: true, compareGroup: "red_flags" },
+  { id: "approach", title: "Approach road", compareJoin: true, compareGroup: "approach" },
+  { id: "open-space", title: "Open space", compareJoin: true, compareGroup: "open_spaces" },
+  { id: "price", title: "Price proof", compareJoin: true, compareGroup: "money" },
+  { id: "layout", title: "Layout", compareJoin: true, compareGroup: "layout" },
+  { id: "down-payment", title: "Down payment", compareJoin: true, compareGroup: "money" },
+  { id: "emi", title: "EMI", compareJoin: true, compareGroup: "money" },
   { id: "finance", title: "Finance", compareJoin: false },
   { id: "legal", title: "Legal", compareJoin: false },
   { id: "community", title: "Community", compareJoin: false },
@@ -89,6 +119,7 @@ export const ASSIGNABLE_NOTEBOOK_LABELS: NotebookLabelId[] = [
   "tech_parks",
   "water",
   "risk",
+  "complaints",
   "transmission",
   "approach",
   "open-space",
@@ -103,7 +134,7 @@ export const ASSIGNABLE_NOTEBOOK_LABELS: NotebookLabelId[] = [
   "other",
 ];
 
-const EMPTY: NotebookState = { propertyIds: [], notes: [], compareIds: [] };
+const EMPTY: NotebookState = { propertyIds: [], notes: [], compareIds: [], hiddenCompareLabels: [] };
 const LABEL_BY_ID = new Map(NOTEBOOK_LABELS.map((item) => [item.id, item]));
 
 function emit(state: NotebookState) {
@@ -129,6 +160,58 @@ export function compareJoinLabels(note: Pick<NotebookNote, "labels">): NotebookL
 
 function uniqueLabels(labels: NotebookLabelId[]): NotebookLabelId[] {
   return [...new Set(labels.filter(Boolean))].slice(0, MAX_LABELS_PER_NOTE);
+}
+
+function noteId(prefix = "n"): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeChecklistItem(raw: unknown): NotebookChecklistItem | null {
+  if (typeof raw !== "object" || raw == null) return null;
+  const item = raw as Partial<NotebookChecklistItem>;
+  if (typeof item.text !== "string") return null;
+  return {
+    id: typeof item.id === "string" ? item.id : noteId("i"),
+    text: item.text,
+    checked: item.checked === true,
+  };
+}
+
+function normalizeFieldItem(raw: unknown): NotebookFieldItem | null {
+  if (typeof raw !== "object" || raw == null) return null;
+  const item = raw as Partial<NotebookFieldItem>;
+  if (typeof item.label !== "string") return null;
+  return {
+    id: typeof item.id === "string" ? item.id : noteId("f"),
+    label: item.label,
+    value: typeof item.value === "string" ? item.value : "",
+  };
+}
+
+function normalizeBlock(raw: unknown): NotebookBlock | undefined {
+  if (typeof raw !== "object" || raw == null) return undefined;
+  const block = raw as Partial<NotebookBlock>;
+  if (block.type === "checklist" && Array.isArray(block.items)) {
+    const items = block.items
+      .map(normalizeChecklistItem)
+      .filter((item): item is NotebookChecklistItem => item != null);
+    return {
+      type: "checklist",
+      collapsed: block.collapsed === true,
+      items,
+    };
+  }
+  if (block.type === "fields" && Array.isArray(block.fields)) {
+    const fields = block.fields
+      .map(normalizeFieldItem)
+      .filter((field): field is NotebookFieldItem => field != null);
+    return {
+      type: "fields",
+      collapsed: block.collapsed === true,
+      fields,
+    };
+  }
+  return undefined;
 }
 
 /** Distance → bucket label for a base dimension (hospitals → hospitals_under_3km). */
@@ -180,7 +263,8 @@ export function labelsFromEvidenceSection(kind: string, text: string): NotebookL
   if (hay.includes("school")) return ["schools"];
   if (hay.includes("hospital")) return ["hospitals"];
   if (hay.includes("water") || hay.includes("flood") || hay.includes("groundwater")) return ["water"];
-  if (hay.includes("rera") || hay.includes("legal") || hay.includes("complaint") || hay.includes("registration")) {
+  if (hay.includes("complaint")) return ["complaints", "risk"];
+  if (hay.includes("rera") || hay.includes("legal") || hay.includes("registration")) {
     return ["legal"];
   }
   if (hay.includes("price") || hay.includes("market") || hay.includes("asking")) return ["price"];
@@ -201,6 +285,8 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
     : typeof raw.label === "string"
       ? raw.label
       : "";
+  const detail = typeof raw.detail === "string" ? raw.detail : undefined;
+  const source = typeof raw.source === "string" ? raw.source : undefined;
   let labels: NotebookLabelId[] = [];
   if (Array.isArray(raw.labels)) {
     labels = raw.labels.filter((item): item is string => typeof item === "string");
@@ -211,18 +297,29 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
       // Keep labels; joinability now comes from catalog
     }
   }
+  labels = normalizeMigratedLabels(labels, `${title} ${detail ?? ""} ${source ?? ""}`);
   return {
     id: typeof raw.id === "string" ? raw.id : undefined,
     propertyId: typeof raw.propertyId === "string" ? raw.propertyId : undefined,
     title,
-    detail: typeof raw.detail === "string" ? raw.detail : undefined,
-    source: typeof raw.source === "string" ? raw.source : undefined,
+    detail,
+    source,
     kind: (raw.kind as NotebookNoteKind) ?? "fact",
     catalogKey: typeof raw.catalogKey === "string" ? raw.catalogKey : undefined,
     selectionText: typeof raw.selectionText === "string" ? raw.selectionText : undefined,
     labels,
+    block: normalizeBlock(raw.block),
     createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
   };
+}
+
+function normalizeMigratedLabels(labels: NotebookLabelId[], text: string): NotebookLabelId[] {
+  if (!/complaint/i.test(text) && !labels.includes("complaints")) return labels;
+  return [
+    "complaints",
+    "risk",
+    ...labels.filter((label) => label !== "complaints" && label !== "risk"),
+  ];
 }
 
 function normalizeNote(raw: Partial<NotebookNote> | Record<string, unknown>): NotebookNote | null {
@@ -238,6 +335,7 @@ function normalizeNote(raw: Partial<NotebookNote> | Record<string, unknown>): No
     catalogKey: migrated.catalogKey,
     selectionText: migrated.selectionText,
     labels: uniqueLabels(migrated.labels ?? []),
+    block: normalizeBlock(migrated.block),
     createdAt: migrated.createdAt ?? Date.now(),
   };
 }
@@ -258,6 +356,9 @@ function readRawState(): NotebookState {
       propertyIds: Array.isArray(parsed.propertyIds) ? parsed.propertyIds.filter(Boolean) : [],
       notes,
       compareIds: Array.isArray(parsed.compareIds) ? parsed.compareIds.filter(Boolean) : [],
+      hiddenCompareLabels: Array.isArray(parsed.hiddenCompareLabels)
+        ? parsed.hiddenCompareLabels.filter((item): item is NotebookLabelId => typeof item === "string")
+        : [],
     };
   } catch {
     return EMPTY;
@@ -285,6 +386,7 @@ export function writeNotebook(state: NotebookState): NotebookState {
     compareIds: state.compareIds
       .filter((id) => state.propertyIds.includes(id))
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
+    hiddenCompareLabels: [...new Set(state.hiddenCompareLabels ?? [])],
   };
   window.localStorage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify(next));
   emit(next);
@@ -319,7 +421,7 @@ export function toggleCatalogNote(input: {
   }
 
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: input.title,
     detail: input.detail,
@@ -332,7 +434,7 @@ export function toggleCatalogNote(input: {
   const withProp = ensureProperty(state, input.propertyId);
   return writeNotebook({
     ...withProp,
-    notes: [note, ...withProp.notes],
+    notes: [...withProp.notes, note],
   });
 }
 
@@ -351,7 +453,7 @@ export function addSelectionNote(input: {
   if (state.notes.some((n) => n.catalogKey === catalogKey)) return state;
 
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: summary,
     detail: "Selected from evidence",
@@ -363,7 +465,7 @@ export function addSelectionNote(input: {
     createdAt: Date.now(),
   };
   const withProp = ensureProperty(state, input.propertyId);
-  return writeNotebook({ ...withProp, notes: [note, ...withProp.notes] });
+  return writeNotebook({ ...withProp, notes: [...withProp.notes, note] });
 }
 
 /** Handwritten starts unlabeled unless caller passes labels (e.g. approach compose). */
@@ -377,7 +479,7 @@ export function addHandwrittenNote(input: {
   const trimmed = input.text.trim();
   if (!trimmed) return null;
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: trimmed,
     detail: input.detail,
@@ -388,7 +490,78 @@ export function addHandwrittenNote(input: {
     createdAt: Date.now(),
   };
   const state = ensureProperty(readNotebook(), input.propertyId);
-  return writeNotebook({ ...state, notes: [note, ...state.notes] });
+  return writeNotebook({ ...state, notes: [...state.notes, note] });
+}
+
+function commandLabels(command: NotebookCommand): NotebookLabelId[] {
+  if (command.id === "budget") return ["finance"];
+  if (command.id === "payment") return ["legal"];
+  if (command.id === "visit") return ["visit"];
+  return [];
+}
+
+function blockFromCommand(command: NotebookCommand): NotebookBlock {
+  if (command.blockType === "fields") {
+    return {
+      type: "fields",
+      collapsed: false,
+      fields: (command.fields ?? []).map((label) => ({
+        id: noteId("f"),
+        label,
+        value: "",
+      })),
+    };
+  }
+  return {
+    type: "checklist",
+    collapsed: false,
+    items: (command.items ?? ["New item"]).map((text) => ({
+      id: noteId("i"),
+      text,
+      checked: false,
+    })),
+  };
+}
+
+export function addNotebookCommandBlock(input: {
+  propertyId: string;
+  commandId: NotebookCommand["id"];
+}): NotebookState | null {
+  const command = NOTEBOOK_COMMANDS.find((item) => item.id === input.commandId);
+  if (!command) return null;
+  const note: NotebookNote = {
+    id: noteId(),
+    propertyId: input.propertyId,
+    title: command.title,
+    source: "You",
+    kind: "handwritten",
+    catalogKey: `block:${input.propertyId}:${command.id}:${Date.now()}`,
+    labels: uniqueLabels(commandLabels(command)),
+    block: blockFromCommand(command),
+    createdAt: Date.now(),
+  };
+  const state = ensureProperty(readNotebook(), input.propertyId);
+  return writeNotebook({ ...state, notes: [...state.notes, note] });
+}
+
+export function updateNotebookNote(
+  noteIdToUpdate: string,
+  patch: Partial<Pick<NotebookNote, "title" | "block">>,
+): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({
+    ...state,
+    notes: state.notes.map((note) => (
+      note.id === noteIdToUpdate
+        ? {
+            ...note,
+            ...patch,
+            title: patch.title ?? note.title,
+            block: patch.block === undefined ? note.block : patch.block,
+          }
+        : note
+    )),
+  });
 }
 
 export function removeNotebookNote(noteId: string): NotebookState {
@@ -445,6 +618,23 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
   return writeNotebook({ ...withProp, compareIds });
 }
 
+export function hideNotebookCompareLabel(label: NotebookLabelId): NotebookState {
+  const state = readNotebook();
+  if (state.hiddenCompareLabels.includes(label)) return state;
+  return writeNotebook({
+    ...state,
+    hiddenCompareLabels: [...state.hiddenCompareLabels, label],
+  });
+}
+
+export function showNotebookCompareLabel(label: NotebookLabelId): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({
+    ...state,
+    hiddenCompareLabels: state.hiddenCompareLabels.filter((item) => item !== label),
+  });
+}
+
 export function removeNotebookProperty(propertyId: string): NotebookState {
   const state = readNotebook();
   writeShortlistIds(readShortlistIds().filter((id) => id !== propertyId));
@@ -452,6 +642,7 @@ export function removeNotebookProperty(propertyId: string): NotebookState {
     propertyIds: state.propertyIds.filter((id) => id !== propertyId),
     notes: state.notes.filter((n) => n.propertyId !== propertyId),
     compareIds: state.compareIds.filter((id) => id !== propertyId),
+    hiddenCompareLabels: state.hiddenCompareLabels,
   });
 }
 
