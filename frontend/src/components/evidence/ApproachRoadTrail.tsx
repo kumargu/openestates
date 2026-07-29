@@ -108,11 +108,11 @@ export function ApproachRoadTrail({ propertyId, sections, variant = "tile" }: Pr
         )}
         <span className="area-trail__copy">
           <span className="area-trail__kicker">Approach road</span>
-          <strong id="area-trail-title">Gate-side approach</strong>
-          <span>{tilePreview.label} · {viewLabel}</span>
+          <strong id="area-trail-title">{compact ? "Approach road view" : "Gate-side approach"}</strong>
+          {!compact && <span>{tilePreview.label} · {viewLabel}</span>}
         </span>
         <span className="area-trail__open" aria-hidden="true">
-          View trail
+          View
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="m9 18 6-6-6-6" />
           </svg>

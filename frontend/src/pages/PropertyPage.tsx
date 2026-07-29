@@ -51,6 +51,29 @@ function compactLifecycleLabel(value: string): string {
   return normalized.charAt(0).toUpperCase() + normalized.slice(1);
 }
 
+function displayName(value: string): string {
+  const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
+  return value.replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
+    if (keepUpper.has(word) || /\d/.test(word)) return word;
+    return word.charAt(0) + word.slice(1).toLowerCase();
+  });
+}
+
+function truncateCopy(value: string, limit = 220): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (normalized.length <= limit) return normalized;
+  const trimmed = normalized.slice(0, limit).replace(/\s+\S*$/, "");
+  return `${trimmed}...`;
+}
+
+function reviewSnippetCopy(value: string): string {
+  return truncateCopy(
+    value
+      .replace(/^Google review feedback reads/i, "Google reviews read")
+      .replace(/,?\s*though recurring themes are still being extracted\.?/i, "."),
+  );
+}
+
 function formatGoogleRating(value: number | null | undefined): string | null {
   if (!hasKnownNumber(value)) return null;
   return value.toFixed(1);
@@ -72,6 +95,10 @@ function cleanAreaToken(value: string): string {
 
 function areaTokens(value: string): Set<string> {
   return new Set(cleanAreaToken(value).split(" ").filter(Boolean));
+}
+
+function societyKey(property: Pick<PropertyCard, "kg_entity_refs" | "society_name">): string {
+  return property.kg_entity_refs?.society_entity_id || property.society_name.trim().toLowerCase();
 }
 
 function propertyToCard(data: PropertyDetailResponse): PropertyCard {
@@ -155,19 +182,22 @@ function rankedRecommendationItems(
 function nearbyRailItems(
   primaryItems: RankedRecommendationItem[],
   properties: PropertyCard[],
-  currentPropertyId: string,
-  currentArea: string,
+  currentProperty: PropertyCard,
   preferredAreas: string[],
 ): RankedRecommendationItem[] {
-  const allowedAreas = new Set([currentArea, ...preferredAreas]);
+  const currentSocietyKey = societyKey(currentProperty);
+  const allowedAreas = new Set([currentProperty.area, ...preferredAreas]);
+  const isDifferentSociety = (property: PropertyCard) =>
+    !currentSocietyKey || societyKey(property) !== currentSocietyKey;
   const scopedPrimaryItems = primaryItems.filter((item) =>
-    allowedAreas.has(item.property.area));
+    allowedAreas.has(item.property.area) && isDifferentSociety(item.property));
   const used = new Set(scopedPrimaryItems.map((item) => item.property.id));
-  used.add(currentPropertyId);
+  used.add(currentProperty.id);
   const areaRank = new Map(preferredAreas.map((area, index) => [area, index]));
   const fillers: RankedRecommendationItem[] = properties
     .filter((property) => !used.has(property.id))
     .filter((property) => allowedAreas.has(property.area))
+    .filter(isDifferentSociety)
     .filter((property) => property.hero_image || property.society_name)
     .sort((left, right) => {
       const leftAreaRank = areaRank.get(left.area) ?? 99;
@@ -402,7 +432,6 @@ function GoogleReviewsSection({
   const googleUrl = reviews?.google_reviews_url ?? society?.google_reviews_url;
   const rating = formatGoogleRating(reviews?.google_rating);
   const reviewCount = formatReviewCount(reviews?.google_review_count);
-  const [openEvidence, setOpenEvidence] = useState(false);
   const communityPulse = reviewSections.find((section) => section.community_pulse)?.community_pulse;
   const snippets = [
     society?.review_summary,
@@ -410,9 +439,9 @@ function GoogleReviewsSection({
     ...(society?.common_complaints?.slice(0, 2).map((theme) => `Watch for ${theme}.`) ?? []),
     communityPulse?.paragraph,
     ...(communityPulse?.quotes?.slice(0, 2).map((quote) => quote.text) ?? []),
-  ].filter((value): value is string => Boolean(value?.trim())).slice(0, 3);
+  ].filter((value): value is string => Boolean(value?.trim())).map((value) => reviewSnippetCopy(value)).slice(0, 3);
   const reviewFacts = [
-    rating ? { label: "Rating", value: `★ ${rating}` } : null,
+    rating ? { label: "Rating", value: rating } : null,
     reviewCount ? { label: "Reviews", value: reviewCount.replace(" Google ", " ") } : null,
     society?.maintenance_sentiment ? { label: "Maintenance", value: society.maintenance_sentiment } : null,
     society?.common_complaints?.[0] ? { label: "Watch", value: society.common_complaints[0] } : null,
@@ -428,7 +457,7 @@ function GoogleReviewsSection({
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
         {googleUrl && (
-          <a href={googleUrl} target="_blank" rel="noreferrer">Read on Google</a>
+          <a href={googleUrl} target="_blank" rel="noreferrer">Show all reviews</a>
         )}
       </div>
 
@@ -453,44 +482,8 @@ function GoogleReviewsSection({
         </div>
       )}
 
-      {reviewSections.length > 0 && (
-        <button type="button" className="property-text-button" onClick={() => setOpenEvidence(true)}>
-          Show review evidence
-        </button>
-      )}
-
-      {openEvidence && (
-        <CleanDialog title="Review evidence" kicker="Google and resident signal" onClose={() => setOpenEvidence(false)}>
-          <ReviewEvidenceContent sections={reviewSections} />
-        </CleanDialog>
-      )}
+      <p className="property-review-placeholder">Reddit discussions will appear here when available.</p>
     </section>
-  );
-}
-
-function ReviewEvidenceContent({ sections }: { sections: EvidenceSection[] }) {
-  return (
-    <div className="property-review-evidence">
-      {sections.map((section) => (
-        <article key={`${section.kind}-${section.title}`}>
-          <h3>{section.title}</h3>
-          {section.summary && <p>{section.summary}</p>}
-          {section.community_pulse && (
-            <ul>
-              {section.community_pulse.positives.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-              {section.community_pulse.concerns.slice(0, 4).map((item) => <li key={item}>{item}</li>)}
-            </ul>
-          )}
-          {section.items.length > 0 && (
-            <ul>
-              {section.items.slice(0, 8).map((item) => (
-                <li key={`${item.key ?? item.label}-${item.value}`}>{item.value || item.values?.join(", ")}</li>
-              ))}
-            </ul>
-          )}
-        </article>
-      ))}
-    </div>
   );
 }
 
@@ -507,19 +500,20 @@ function NearbyHomeCard({
     societyId: property.kg_entity_refs?.society_entity_id,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);
-  const note = item.kind === "branch" ? item.branch.contrast : `${property.area} · ${property.bhk} BHK`;
+  const title = displayName(property.title);
+  const note = `${property.area} · ${property.bhk} BHK`;
 
   return (
     <article className="property-nearby-card">
       <Link to={`/property/${property.id}`}>
         <span className="property-nearby-card__image">
           {image ? (
-            <ImageWithFallback src={image} alt={property.title} loading="lazy" />
+            <ImageWithFallback src={image} alt={title} loading="lazy" />
           ) : (
             <span>{property.society_name || property.title}</span>
           )}
         </span>
-        <strong>{property.title}</strong>
+        <strong>{title}</strong>
         <span>{note}</span>
         <em>
           ₹{formatPrice(property.price)}
@@ -537,12 +531,52 @@ function NearbyHomesRail({
   items: RankedRecommendationItem[];
   status: RecommendationStatus;
 }) {
+  const [page, setPage] = useState(0);
+  const [pageSize, setPageSize] = useState(4);
+
+  useEffect(() => {
+    const media = window.matchMedia("(max-width: 760px)");
+    const syncPageSize = () => setPageSize(media.matches ? 1 : 4);
+    syncPageSize();
+    media.addEventListener("change", syncPageSize);
+    return () => media.removeEventListener("change", syncPageSize);
+  }, []);
+
+  const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(page, pageCount - 1);
+  const visibleItems = items.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
   if (items.length === 0 && status !== "pending") return null;
 
   return (
     <section className="property-nearby-rail" aria-labelledby="property-nearby-title">
       <div className="property-section-line">
         <h2 id="property-nearby-title">More homes nearby</h2>
+        {items.length > pageSize && (
+          <div className="property-rail-controls" aria-label="More homes pages">
+            <button
+              type="button"
+              onClick={() => setPage(Math.max(0, safePage - 1))}
+              disabled={safePage === 0}
+              aria-label="Previous homes"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="m15 18-6-6 6-6" />
+              </svg>
+            </button>
+            <span>{safePage + 1} / {pageCount}</span>
+            <button
+              type="button"
+              onClick={() => setPage(Math.min(pageCount - 1, safePage + 1))}
+              disabled={safePage >= pageCount - 1}
+              aria-label="Next homes"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                <path d="m9 18 6-6-6-6" />
+              </svg>
+            </button>
+          </div>
+        )}
       </div>
       <div className="property-nearby-rail__scroller">
         {status === "pending" && items.length === 0 && (
@@ -552,7 +586,7 @@ function NearbyHomesRail({
             <span className="property-nearby-skeleton" />
           </>
         )}
-        {items.map((item, index) => (
+        {visibleItems.map((item, index) => (
           <NearbyHomeCard key={item.id} item={item} sceneIndex={index} />
         ))}
       </div>
@@ -809,22 +843,13 @@ function PropertyPageBody({
   }
   const marketProperties = [...marketPropertyMap.values()];
   const microAreas = microMarketAreas(p.area, p.price_per_sqft, marketProperties, recommendationItems);
-  const nearbyItems = nearbyRailItems(recommendationItems, marketProperties, p.id, p.area, microAreas);
+  const nearbyItems = nearbyRailItems(recommendationItems, marketProperties, currentCard, microAreas);
   const googleRating = formatGoogleRating(data.external_reviews?.google_rating);
-  const residentTheme =
-    society?.common_complaints?.[0]
-      ? `${society.common_complaints[0]} watch`
-      : society?.maintenance_sentiment || null;
   const compactStatusRead = (lifecycleTag || data.home_state_display || data.project_status_display || p.possession_status)
     ?.split("·")[0]
     ?.trim();
-  const oneLineRead = [
-    compactStatusRead,
-    pricePerSqftLabel ? `₹${p.price_per_sqft.toLocaleString("en-IN")}/sqft` : null,
-    showNearbyPlate ? "Map checked" : showApproachTrail ? "Approach proof ready" : null,
-    googleRating ? `★ ${googleRating} Google${residentTheme ? `, ${residentTheme}` : ""}` : residentTheme,
-  ].filter(Boolean).join(" · ");
   const reviewsSections = reviewEvidenceSections(detailEvidenceSections);
+  const displayTitle = displayName(p.title);
 
   function handleAreaSelect(area: string) {
     navigate(`/?q=${encodeURIComponent(area)}`);
@@ -844,13 +869,13 @@ function PropertyPageBody({
       </Helmet>
       <section className="property-clean-head">
         <div className="property-clean-head__copy">
-          <p>{society?.name ? `${society.name} · ` : ""}{p.area}, {p.city}</p>
-          <h1>{p.title}</h1>
+          <p>{society?.name ? `${displayName(society.name)} · ` : ""}{p.area}, {p.city}</p>
+          <h1>{displayTitle}</h1>
           <div className="property-clean-meta">
             <span>₹{formatPrice(p.price)}</span>
             <span>{p.bhk} BHK</span>
             {sizeLabel && <span>{sizeLabel}</span>}
-            {compactStatusRead && <span>{compactStatusRead}</span>}
+            {compactStatusRead && <span className="property-status-pill">{compactStatusRead}</span>}
             {googleRating && <span>★ {googleRating} Google</span>}
           </div>
         </div>
@@ -859,7 +884,7 @@ function PropertyPageBody({
           <NotebookCommentAnchor
             propertyId={p.id}
             labels={[]}
-            detail={p.title}
+            detail={displayTitle}
             source="Property detail"
             className="property-action-note"
           />
@@ -879,14 +904,18 @@ function PropertyPageBody({
       </section>
 
       <PropertyPhotoMosaic
-        title={p.title}
+        title={displayTitle}
         societyName={society?.name}
         heroImage={p.hero_image}
         images={p.images}
         societyId={p.society_id}
       />
 
-      <p className="property-one-line-read">{oneLineRead}</p>
+      <p className="property-one-line-read">
+        {compactStatusRead && <span className="property-status-pill">{compactStatusRead}</span>}
+        {pricePerSqftLabel && <span>₹{p.price_per_sqft.toLocaleString("en-IN")}/sqft</span>}
+        {googleRating && <span>★ {googleRating} Google</span>}
+      </p>
 
       <main className="property-clean-flow">
         <section className="property-map-section" aria-label="Around this home">
@@ -902,8 +931,8 @@ function PropertyPageBody({
             )}
             {showMarketTrend && (
               <PopupActionButton
-                label="Market trend"
-                detail="BHK price bands"
+                label="Price ranges"
+                detail="BHK asking bands"
                 onClick={() => setMarketOpen(true)}
               />
             )}
@@ -923,7 +952,7 @@ function PropertyPageBody({
       </main>
 
       {marketOpen && (
-        <CleanDialog title="Market trend" kicker="Asking bands" onClose={() => setMarketOpen(false)}>
+        <CleanDialog title="Price ranges" kicker="Market prices" onClose={() => setMarketOpen(false)}>
           <MarketTrendContent sections={detailEvidenceSections} />
         </CleanDialog>
       )}
