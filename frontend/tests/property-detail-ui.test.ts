@@ -181,7 +181,18 @@ test("surface scene projection preserves enriched map context overlays", () => {
       coordinateQuality: "exact",
     },
     viewport: {},
-    layers: [],
+    layers: [{
+      id: "tech",
+      label: "Tech parks",
+      family: "work",
+      renderKind: "pin",
+      relationClass: "amenity",
+      enabledByDefault: true,
+      rank: 4,
+      availableCount: 1,
+      shownCount: 1,
+      fillState: "filled",
+    }],
     features: [{
       id: "around_this_home:tech:bagmane",
       entityId: "place:bagmane",
@@ -233,6 +244,13 @@ test("surface scene projection preserves enriched map context overlays", () => {
       coordinates: [[77.7, 12.9], [77.71, 12.91]],
       source_type: "OpenStreetMap",
     }],
+    red_flag_lines: [{
+      id: "line-one",
+      name: "High voltage transmission line",
+      kind: "place",
+      coordinates: [[77.755, 12.985], [77.756, 12.986]],
+      source_type: "OpenStreetMap",
+    }],
   };
 
   const context = propertyMapContextFromSurfaceScene(scene, fallback);
@@ -240,6 +258,8 @@ test("surface scene projection preserves enriched map context overlays", () => {
   assert.equal(context?.places.length, 1);
   assert.equal(context?.water?.groundwater_class, "Moderate");
   assert.equal(context?.metro_lines?.[0]?.name, "Purple Line");
+  assert.equal(context?.red_flag_lines?.[0]?.name, "High voltage transmission line");
+  assert.deepEqual(availableLayers(context!), ["tech", "red_flags"]);
 });
 
 test("surface scene projection merges fallback places additively", () => {

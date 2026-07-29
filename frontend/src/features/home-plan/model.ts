@@ -3,6 +3,8 @@ import {
   calculateFinancingInterest,
   calculateProjectionPoints,
   constructionPlanFor,
+  DEFAULT_LOAN_TENURE_YEARS,
+  monthlyPayment,
   monthsToPayoff,
 } from "./financeEngine.ts";
 
@@ -88,6 +90,11 @@ const LAKH = 100_000;
 
 const DEFAULT_MONTHLY_EMI_THOUSANDS = 90;
 const MIN_DEFAULT_MONTHLY_SIP_THOUSANDS = 35;
+const DEFAULT_LOAN_RATE = 7.5;
+
+function rupeesToRoundedThousands(value: number): number {
+  return Math.ceil(value / 5_000) * 5;
+}
 
 export function buildBaselinePlanInputs(
   propertyPriceInr: number,
@@ -98,10 +105,14 @@ export function buildBaselinePlanInputs(
     20,
     Math.round((propertyPriceInr * 0.032 / MONTHS_IN_YEAR) / 1_000 / 5) * 5,
   );
+  const amortizingEmiThousands = rupeesToRoundedThousands(
+    monthlyPayment(propertyPriceInr, DEFAULT_LOAN_RATE, DEFAULT_LOAN_TENURE_YEARS),
+  );
   // Keep the rent-path cash out aligned with the buy EMI by default, while
   // preserving a visible SIP even when the estimated rent is high.
   const monthlyEmiThousands = Math.max(
     DEFAULT_MONTHLY_EMI_THOUSANDS,
+    amortizingEmiThousands,
     estimatedRentThousands + MIN_DEFAULT_MONTHLY_SIP_THOUSANDS,
   );
   const monthlySipThousands = Math.max(
@@ -111,7 +122,7 @@ export function buildBaselinePlanInputs(
   return {
     propertyPriceLakh,
     monthlyEmiThousands,
-    loanRate: 7.5,
+    loanRate: DEFAULT_LOAN_RATE,
     currentRentThousands: estimatedRentThousands,
     equityReturn: 10,
     monthlySipThousands,

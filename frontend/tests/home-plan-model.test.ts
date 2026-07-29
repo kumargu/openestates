@@ -154,8 +154,11 @@ test("rent rises by the fixed yearly assumption", () => {
 
 test("baseline exposes only the five editable money inputs", () => {
   const inputs = buildBaselinePlanInputs(15_000_000);
+  const expectedEmi = Math.ceil(
+    monthlyPayment(15_000_000, 7.5, 20) / 5_000,
+  ) * 5;
 
-  assert.equal(inputs.monthlyEmiThousands, 90);
+  assert.equal(inputs.monthlyEmiThousands, expectedEmi);
   assert.ok(inputs.currentRentThousands > 0);
   assert.equal(
     inputs.monthlySipThousands + inputs.currentRentThousands,
@@ -167,6 +170,7 @@ test("baseline exposes only the five editable money inputs", () => {
 
 test("high-price baseline keeps a visible SIP while preserving EMI equals rent plus SIP", () => {
   const inputs = buildBaselinePlanInputs(33_100_000);
+  const projection = calculateProjection(inputs);
 
   assert.equal(
     inputs.monthlySipThousands + inputs.currentRentThousands,
@@ -174,6 +178,24 @@ test("high-price baseline keeps a visible SIP while preserving EMI equals rent p
   );
   assert.ok(inputs.monthlySipThousands > 0);
   assert.ok(inputs.monthlyEmiThousands > inputs.currentRentThousands);
+  assert.ok(projection.loanFreeYear !== null);
+});
+
+test("high-price EMI changes move the loan-free marker", () => {
+  const baseline = buildBaselinePlanInputs(33_100_000);
+  const lower = calculateProjection({
+    ...baseline,
+    holdingPeriodYears: 20,
+  });
+  const higher = calculateProjection({
+    ...baseline,
+    monthlyEmiThousands: baseline.monthlyEmiThousands + 80,
+    holdingPeriodYears: 20,
+  });
+
+  assert.ok(lower.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear !== null);
+  assert.ok(higher.loanFreeYear! < lower.loanFreeYear!);
 });
 
 test("monthly SIP grows only the rent and invest path", () => {

@@ -1,6 +1,14 @@
 import { type PlanInputs } from "./model.ts";
 import { useEffect, useState } from "react";
 
+const LAKH = 100_000;
+const MONTHS_IN_YEAR = 12;
+
+function monthlyInterestThresholdThousands(inputs: PlanInputs): number {
+  const principal = inputs.propertyPriceLakh * LAKH;
+  return Math.ceil((principal * inputs.loanRate / 100 / MONTHS_IN_YEAR) / 1_000);
+}
+
 type PlanAssumptionRailProps = {
   inputs: PlanInputs;
   extraEmisPerYear: number;
@@ -106,6 +114,10 @@ export function PlanAssumptionRail({
   onExtraEmisChange,
   onReset,
 }: PlanAssumptionRailProps) {
+  const principalThresholdThousands = monthlyInterestThresholdThousands(inputs);
+  const emiNote = principalThresholdThousands > 0 && inputs.monthlyEmiThousands <= principalThresholdThousands
+    ? `Principal starts above ₹${principalThresholdThousands.toLocaleString("en-IN")}K / mo`
+    : "Loan-free year";
   const rentPathInputs: InputSpec[] = [
     {
       key: "currentRentThousands",
@@ -160,7 +172,7 @@ export function PlanAssumptionRail({
             step={5}
             prefix="₹"
             suffix="K / mo"
-            note="Your buy plan"
+            note={emiNote}
             value={inputs.monthlyEmiThousands}
             onChange={(value) => onInputChange("monthlyEmiThousands", value)}
           />
