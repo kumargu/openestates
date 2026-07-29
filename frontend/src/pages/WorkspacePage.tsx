@@ -72,6 +72,25 @@ function workspaceCompareHref(ids: string[], focusId?: string): string {
   return `/workspace/compare?${params.toString()}`;
 }
 
+function propertyIdsWithNotesFirst(propertyIds: string[], notes: NotebookNote[]): string[] {
+  const latestByProperty = new Map<string, number>();
+  for (const note of notes) {
+    latestByProperty.set(
+      note.propertyId,
+      Math.max(latestByProperty.get(note.propertyId) ?? 0, note.createdAt),
+    );
+  }
+  const originalIndex = new Map(propertyIds.map((id, index) => [id, index]));
+  return [...propertyIds].sort((a, b) => {
+    const aLatest = latestByProperty.get(a) ?? 0;
+    const bLatest = latestByProperty.get(b) ?? 0;
+    if (aLatest && bLatest) return bLatest - aLatest;
+    if (aLatest) return -1;
+    if (bLatest) return 1;
+    return (originalIndex.get(a) ?? 0) - (originalIndex.get(b) ?? 0);
+  });
+}
+
 function LabelPicker({
   note,
   onAdd,
@@ -193,6 +212,10 @@ export function WorkspacePage() {
       .sort((a, b) => b.createdAt - a.createdAt),
     [notes, propertyIds],
   );
+  const orderedPropertyIds = useMemo(
+    () => propertyIdsWithNotesFirst(propertyIds, visible),
+    [propertyIds, visible],
+  );
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -288,7 +311,7 @@ export function WorkspacePage() {
         />
       ) : (
         <EditorialView
-          propertyIds={propertyIds}
+          propertyIds={orderedPropertyIds}
           notes={visible}
           homes={byId}
           compareIds={compareIds}
@@ -390,9 +413,16 @@ function EditorialView({
   onRemove: (id: string) => void;
   onQuickAdd: (propertyId: string, text: string) => void;
 }) {
+  const notedPropertyIds = propertyIds.filter((propertyId) =>
+    notes.some((note) => note.propertyId === propertyId),
+  );
+  const savedOnlyPropertyIds = propertyIds.filter((propertyId) =>
+    !notes.some((note) => note.propertyId === propertyId),
+  );
+
   return (
     <article className="notion-editorial" aria-label="Home notebook document">
-      {propertyIds.map((propertyId, index) => {
+      {notedPropertyIds.map((propertyId, index) => {
         const homeNotes = notes.filter((n) => n.propertyId === propertyId);
         const home = homes.get(propertyId);
         const inCompare = compareIds.includes(propertyId);
@@ -402,6 +432,11 @@ function EditorialView({
               <span className="notion-entry__number" aria-hidden="true">
                 {String(index + 1).padStart(2, "0")}
               </span>
+              <CompareCheckbox
+                checked={inCompare}
+                label={`Include ${societyLabel(homes.get(propertyId), propertyId)} in compare`}
+                onChange={() => onToggleCompare(propertyId)}
+              />
               <div className="notion-entry__title">
                 <Link to={`/property/${encodeURIComponent(propertyId)}`}>
                   {societyLabel(homes.get(propertyId), propertyId)}
@@ -411,14 +446,6 @@ function EditorialView({
                   {homeNotes.length} note{homeNotes.length === 1 ? "" : "s"}
                 </span>
               </div>
-              <label className="notion-entry__compare">
-                <input
-                  type="checkbox"
-                  checked={inCompare}
-                  onChange={() => onToggleCompare(propertyId)}
-                />
-                <span>Compare</span>
-              </label>
             </header>
 
             <div className="notion-entry__paper">
@@ -459,7 +486,91 @@ function EditorialView({
           </section>
         );
       })}
+      {savedOnlyPropertyIds.length > 0 && (
+        <section className="notion-saved-stack" aria-label="Saved homes without notes">
+          <header>
+            <span>Saved without notes</span>
+            <p>Blank notebook spaces for homes you have saved.</p>
+          </header>
+          <div className="notion-saved-stack__list">
+            {savedOnlyPropertyIds.map((propertyId) => {
+              const home = homes.get(propertyId);
+              const inCompare = compareIds.includes(propertyId);
+              return (
+                <SavedHomeRow
+                  key={propertyId}
+                  propertyId={propertyId}
+                  title={societyLabel(home, propertyId)}
+                  area={home?.area}
+                  inCompare={inCompare}
+                  onToggleCompare={() => onToggleCompare(propertyId)}
+                  onQuickAdd={(text) => onQuickAdd(propertyId, text)}
+                />
+              );
+            })}
+          </div>
+        </section>
+      )}
     </article>
+  );
+}
+
+function SavedHomeRow({
+  propertyId,
+  title,
+  area,
+  inCompare,
+  onToggleCompare,
+  onQuickAdd,
+}: {
+  propertyId: string;
+  title: string;
+  area?: string;
+  inCompare: boolean;
+  onToggleCompare: () => void;
+  onQuickAdd: (text: string) => void;
+}) {
+  return (
+    <div className="notion-saved-home">
+      <div className="notion-saved-home__heading">
+        <CompareCheckbox
+          checked={inCompare}
+          label={`Include ${title} in compare`}
+          onChange={onToggleCompare}
+        />
+        <div>
+          <Link to={`/property/${encodeURIComponent(propertyId)}`}>{title}</Link>
+          {area && <span>{area}</span>}
+        </div>
+      </div>
+      <div className="notion-saved-home__writer">
+        <WritingBlock
+          placeholder={`Start writing about ${title}...`}
+          onSubmit={onQuickAdd}
+        />
+      </div>
+    </div>
+  );
+}
+
+function CompareCheckbox({
+  checked,
+  label,
+  onChange,
+}: {
+  checked: boolean;
+  label: string;
+  onChange: () => void;
+}) {
+  return (
+    <label className="notion-compare-check" title={checked ? "In compare" : "Add to compare"}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={onChange}
+      />
+      <span className="sr-only">{label}</span>
+    </label>
   );
 }
 

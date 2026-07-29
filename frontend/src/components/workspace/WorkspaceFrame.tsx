@@ -78,12 +78,8 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const homeIds = useMemo(() => {
     if (properties.length === 0) return [];
     const availableIds = new Set(properties.map((property) => property.id));
-    const hasExplicitSelection = queryIds.length > 0;
-    const stored = shortlistIds.filter((id) => availableIds.has(id));
-    return hasExplicitSelection
-      ? queryIds.filter((id) => availableIds.has(id))
-      : stored;
-  }, [properties, queryIds, shortlistIds]);
+    return shortlistIds.filter((id) => availableIds.has(id));
+  }, [properties, shortlistIds]);
 
   useEffect(() => {
     if (properties.length === 0) return;
@@ -118,7 +114,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
   }, [homes.length]);
 
-  const idsValue = homes.map((home) => home.id).join(",");
   const activeView = activeWorkspaceView(location.pathname);
 
   function writeSelection(nextIds: string[], nextFocus?: string) {
@@ -129,11 +124,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
 
     if (activeView === "compare") {
       const next = new URLSearchParams(location.search);
-      if (nextIds.length > 0) {
-        next.set("ids", nextIds.join(","));
-      } else {
-        next.delete("ids");
-      }
       if (focus) next.set("focus", focus);
       else next.delete("focus");
       navigate(`/workspace/compare?${next.toString()}`, { replace: true });
@@ -166,7 +156,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     if (activeView === "compare") {
       const next = new URLSearchParams(location.search);
       const focusedHome = homes.find((home) => home.id === nextId);
-      next.set("ids", idsValue);
       next.set("focus", nextId);
       if (focusedHome) next.set("bhk", String(focusedHome.bhk));
       navigate(`/workspace/compare?${next.toString()}`, { replace: true });
