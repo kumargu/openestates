@@ -27,6 +27,8 @@ export type NotebookLabelDef = {
   title: string;
   /** False = notebook organization only; never joins Compare. */
   compareJoin: boolean;
+  /** Optional Compare row; keeps label-specific grouping out of Compare UI code. */
+  compareGroup?: string;
 };
 
 export type NotebookChecklistItem = {
@@ -77,28 +79,28 @@ export type NotebookState = {
 
 /** Catalog — expand later via config; keep frontend-deterministic for MVP. */
 export const NOTEBOOK_LABELS: NotebookLabelDef[] = [
-  { id: "schools", title: "Schools", compareJoin: true },
-  { id: "schools_under_1km", title: "School under 1 km", compareJoin: true },
-  { id: "schools_under_3km", title: "School under 3 km", compareJoin: true },
-  { id: "schools_under_5km", title: "School under 5 km", compareJoin: true },
-  { id: "hospitals", title: "Hospitals", compareJoin: true },
-  { id: "hospitals_under_1km", title: "Hospital under 1 km", compareJoin: true },
-  { id: "hospitals_under_3km", title: "Hospital under 3 km", compareJoin: true },
-  { id: "hospitals_under_5km", title: "Hospital under 5 km", compareJoin: true },
-  { id: "commute", title: "Commute", compareJoin: true },
-  { id: "metro", title: "Metro", compareJoin: true },
-  { id: "metro_under_1km", title: "Metro under 1 km", compareJoin: true },
-  { id: "metro_under_3km", title: "Metro under 3 km", compareJoin: true },
-  { id: "tech_parks", title: "Tech parks", compareJoin: true },
-  { id: "water", title: "Water", compareJoin: true },
-  { id: "risk", title: "Risk", compareJoin: true },
-  { id: "transmission", title: "High-tension line", compareJoin: true },
-  { id: "approach", title: "Approach road", compareJoin: true },
+  { id: "schools", title: "Schools", compareJoin: true, compareGroup: "access_notes" },
+  { id: "schools_under_1km", title: "School under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "schools_under_3km", title: "School under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "schools_under_5km", title: "School under 5 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals", title: "Hospitals", compareJoin: true, compareGroup: "access_notes" },
+  { id: "hospitals_under_1km", title: "Hospital under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals_under_3km", title: "Hospital under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "hospitals_under_5km", title: "Hospital under 5 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "commute", title: "Commute", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "metro", title: "Metro", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "metro_under_1km", title: "Metro under 1 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "metro_under_3km", title: "Metro under 3 km", compareJoin: true, compareGroup: "nearby_access" },
+  { id: "tech_parks", title: "Tech parks", compareJoin: true, compareGroup: "commute_anchors" },
+  { id: "water", title: "Water", compareJoin: true, compareGroup: "water" },
+  { id: "risk", title: "Risk", compareJoin: true, compareGroup: "red_flags" },
+  { id: "transmission", title: "High-tension line", compareJoin: true, compareGroup: "red_flags" },
+  { id: "approach", title: "Approach road", compareJoin: true, compareGroup: "approach" },
   { id: "open-space", title: "Open space", compareJoin: true },
-  { id: "price", title: "Price proof", compareJoin: true },
-  { id: "layout", title: "Layout", compareJoin: true },
-  { id: "down-payment", title: "Down payment", compareJoin: true },
-  { id: "emi", title: "EMI", compareJoin: true },
+  { id: "price", title: "Price proof", compareJoin: true, compareGroup: "money" },
+  { id: "layout", title: "Layout", compareJoin: true, compareGroup: "layout" },
+  { id: "down-payment", title: "Down payment", compareJoin: true, compareGroup: "money" },
+  { id: "emi", title: "EMI", compareJoin: true, compareGroup: "money" },
   { id: "finance", title: "Finance", compareJoin: false },
   { id: "legal", title: "Legal", compareJoin: false },
   { id: "community", title: "Community", compareJoin: false },

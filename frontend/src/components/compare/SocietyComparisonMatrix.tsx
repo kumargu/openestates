@@ -9,7 +9,11 @@ import {
   type NotebookNote,
 } from "../../lib/notebook.ts";
 import { LabelVisualIcon } from "../../lib/LabelVisualIcon.tsx";
-import { labelClassToken } from "../../lib/labelVisuals.ts";
+import {
+  labelBaseId,
+  labelClassToken,
+  labelDistanceLimitKm,
+} from "../../lib/labelVisuals.ts";
 import type { MapPlacePin, PropertyCard, PropertyDetailResponse, PropertyMapContext } from "../../lib/types.ts";
 
 type SocietyColumn = {
@@ -84,6 +88,25 @@ const NOTE_GROUPS: NoteGroupDef[] = [
 ];
 
 const NOTE_GROUP_BY_ID = new Map(NOTE_GROUPS.map((group) => [group.id, group]));
+const NOTE_SECTION_ORDER: Record<NoteRow["section"], number> = {
+  Access: 1,
+  Risks: 2,
+  Money: 3,
+  Reference: 4,
+};
+
+function isNoteGroupId(value: string | undefined): value is NoteGroupId {
+  return value != null && NOTE_GROUP_BY_ID.has(value as NoteGroupId);
+}
+
+function compareNoteGroupPriority(left: NoteGroupId, right: NoteGroupId): number {
+  const leftGroup = NOTE_GROUP_BY_ID.get(left);
+  const rightGroup = NOTE_GROUP_BY_ID.get(right);
+  if (!leftGroup || !rightGroup) return left.localeCompare(right);
+  return NOTE_SECTION_ORDER[leftGroup.section] - NOTE_SECTION_ORDER[rightGroup.section]
+    || leftGroup.rank - rightGroup.rank
+    || leftGroup.label.localeCompare(rightGroup.label);
+}
 
 function societyKey(property: PropertyCard): string {
   return property.society_name?.trim().toLocaleLowerCase()
@@ -236,19 +259,13 @@ const CANONICAL_NOTE_LABELS = new Set(
 );
 
 function noteCompareGroup(note: Pick<NotebookNote, "labels">): NoteGroupId | null {
-  const labels = note.labels;
-  if (labels.some((label) => label.includes("_under_"))) return "nearby_access";
-  if (labels.includes("transmission") || labels.includes("risk")) return "red_flags";
-  if (labels.includes("water")) return "water";
-  if (labels.includes("approach")) return "approach";
-  if (labels.includes("down-payment") || labels.includes("emi") || labels.includes("price")) return "money";
-  if (labels.includes("layout")) return "layout";
-  if (labels.includes("metro") || labels.includes("tech_parks") || labels.includes("commute")) {
-    return "commute_anchors";
+  const groups: NoteGroupId[] = [];
+  for (const label of note.labels) {
+    const group = labelDef(label).compareGroup;
+    if (isNoteGroupId(group)) groups.push(group);
   }
-  if (labels.includes("schools") || labels.includes("hospitals")) return "access_notes";
-  if (labels.some((label) => ["legal", "community", "visit", "other"].includes(label))) return "reference";
-  return labels.length > 0 ? "reference" : null;
+  if (groups.length > 0) return [...new Set(groups)].sort(compareNoteGroupPriority)[0];
+  return note.labels.length > 0 ? "reference" : null;
 }
 
 function notesForColumn(
@@ -294,39 +311,59 @@ type CompareDisplayTag = {
   classLabel: NotebookLabelId;
 };
 
-function distanceBucketTitle(label: NotebookLabelId): string | null {
-  if (label.endsWith("_under_1km")) return "Under 1 km";
-  if (label.endsWith("_under_3km")) return "Under 3 km";
-  if (label.endsWith("_under_5km")) return "Under 5 km";
-  return null;
-}
-
-function distanceBucketRank(label: NotebookLabelId): number {
-  if (label.endsWith("_under_1km")) return 1;
-  if (label.endsWith("_under_3km")) return 2;
-  if (label.endsWith("_under_5km")) return 3;
-  return 9;
-}
-
-function baseLabelFromBucket(label: NotebookLabelId): NotebookLabelId {
-  return label.replace(/_under_[135]km$/, "");
-}
+type NearbyAccessCluster = {
+  label: NotebookLabelId;
+  items: CompareItem[];
+};
 
 function displayIconLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
-  const bucket = item.labels.find((label) => label.includes("_under_"));
-  if (bucket) return baseLabelFromBucket(bucket);
+  const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
+  if (bucket) return labelBaseId(bucket);
   const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
   return primary ?? null;
 }
 
 function displayItemTags(item: Pick<CompareItem, "labels">): CompareDisplayTag[] {
-  const bucket = item.labels.find((label) => label.includes("_under_"));
-  if (bucket) {
-    const label = distanceBucketTitle(bucket);
-    return label ? [{ key: bucket, label, classLabel: bucket }] : [];
-  }
+  const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
+  if (bucket) return [];
   const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
   return primary ? [{ key: primary, label: labelDef(primary).title, classLabel: primary }] : [];
+}
+
+function accessCategoryLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
+  const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
+  return bucket ? labelBaseId(bucket) : displayIconLabel(item);
+}
+
+function itemDistanceKm(item: Pick<CompareItem, "detail">): number {
+  const parsed = Number(item.detail?.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(parsed) ? parsed : Number.POSITIVE_INFINITY;
+}
+
+function compareNearbyItem(left: CompareItem, right: CompareItem): number {
+  const leftDistanceLimit = Math.min(
+    ...left.labels.map((label) => labelDistanceLimitKm(label) ?? Number.POSITIVE_INFINITY),
+  );
+  const rightDistanceLimit = Math.min(
+    ...right.labels.map((label) => labelDistanceLimitKm(label) ?? Number.POSITIVE_INFINITY),
+  );
+  return leftDistanceLimit - rightDistanceLimit
+    || itemDistanceKm(left) - itemDistanceKm(right)
+    || left.title.localeCompare(right.title);
+}
+
+function nearbyAccessClusters(items: CompareItem[]): NearbyAccessCluster[] {
+  const grouped = new Map<NotebookLabelId, CompareItem[]>();
+  for (const item of [...items].sort(compareNearbyItem)) {
+    const label = accessCategoryLabel(item) ?? "other";
+    grouped.set(label, [...(grouped.get(label) ?? []), item]);
+  }
+  return [...grouped.entries()]
+    .sort((left, right) =>
+      compareNearbyItem(left[1][0], right[1][0])
+      || labelDef(left[0]).title.localeCompare(labelDef(right[0]).title)
+    )
+    .map(([label, groupItems]) => ({ label, items: groupItems }));
 }
 
 function CanonicalRowIcon({ id }: { id: CanonicalRowId }) {
@@ -445,12 +482,7 @@ function backendCompareItems(context: PropertyMapContext | null): CompareItem[] 
   return context.places
     .map(nearbyPlaceCompareItem)
     .filter((item): item is CompareItem => item !== null)
-    .sort((left, right) => {
-      const leftBucket = left.labels.find((label) => label.includes("_under_")) ?? "";
-      const rightBucket = right.labels.find((label) => label.includes("_under_")) ?? "";
-      return distanceBucketRank(leftBucket) - distanceBucketRank(rightBucket)
-        || left.title.localeCompare(right.title);
-    });
+    .sort(compareNearbyItem);
 }
 
 function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): CompareItem[] {
@@ -488,6 +520,40 @@ function CompareNote({ item }: { item: CompareItem }) {
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function NearbyAccessItem({ item }: { item: CompareItem }) {
+  return (
+    <span className="compare-nearby-item">
+      <strong>{item.title}</strong>
+      {item.detail && <small>{item.detail}</small>}
+    </span>
+  );
+}
+
+function NearbyAccessCompareCell({ items }: { items: CompareItem[] }) {
+  if (items.length === 0) {
+    return <div className="compare-theme__cell is-empty" />;
+  }
+
+  const clusters = nearbyAccessClusters(items);
+  return (
+    <div className="compare-theme__cell compare-theme__cell--nearby">
+      {clusters.map((cluster) => (
+        <div key={cluster.label} className="compare-nearby-cluster">
+          <span className={`compare-nearby-cluster__label ${labelClass(cluster.label)}`}>
+            <LabelVisualIcon id={cluster.label} size={18} />
+            {labelDef(cluster.label).title}
+          </span>
+          <div className="compare-nearby-items">
+            {cluster.items.map((item) => (
+              <NearbyAccessItem key={item.id} item={item} />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -763,6 +829,14 @@ export function SocietyComparisonMatrix({
                       const matching = (columnItems.get(column.key) ?? []).filter(
                         (item) => noteCompareGroup(item) === row.id,
                       );
+                      if (row.id === "nearby_access") {
+                        return (
+                          <NearbyAccessCompareCell
+                            key={column.key}
+                            items={matching}
+                          />
+                        );
+                      }
                       return (
                         <div
                           key={column.key}

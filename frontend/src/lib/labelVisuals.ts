@@ -40,13 +40,20 @@ const LABEL_VISUALS: Record<string, LabelVisual> = {
   other: { title: "Other", classToken: "other", family: "nearby", icon: "essentials" },
 };
 
-function baseLabelId(id: string): string {
+export function labelBaseId(id: string): string {
   return id.replace(/_under_\d+km$/, "").replace(/-under-\d+km$/, "");
+}
+
+export function labelDistanceLimitKm(id: string): number | null {
+  const match = id.match(/(?:_under_|-under-)(\d+)km$/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isFinite(value) ? value : null;
 }
 
 export function labelVisual(id: string, fallbackTitle?: string): LabelVisual {
   const normalized = id.replace(/[^a-zA-Z0-9_-]/g, "_");
-  const visual = LABEL_VISUALS[normalized] ?? LABEL_VISUALS[baseLabelId(normalized)];
+  const visual = LABEL_VISUALS[normalized] ?? LABEL_VISUALS[labelBaseId(normalized)];
   if (visual) return visual;
   return {
     title: fallbackTitle ?? id.replace(/[_-]/g, " "),
