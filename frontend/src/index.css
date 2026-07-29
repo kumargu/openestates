@@ -3727,6 +3727,16 @@ body {
   border-top: 1px solid var(--color-border);
 }
 
+.property-signal-section__label {
+  display: block;
+  margin-bottom: 0.72rem;
+  color: var(--color-text-secondary);
+  font-size: 0.74rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .property-signal-section + .property-google-reviews {
   padding-top: 0;
   border-top: 0;
@@ -3818,13 +3828,6 @@ body {
   font-weight: 820;
   line-height: 1;
   white-space: nowrap;
-}
-
-.property-signal-pill em {
-  color: var(--color-text-secondary);
-  font-size: 0.84rem;
-  font-style: normal;
-  font-weight: 760;
 }
 
 .label-visual-symbol {

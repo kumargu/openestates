@@ -121,13 +121,13 @@ function PropertySignalPills({ signals }: { signals: DetailSignal[] | undefined 
   if (signalPills.length === 0) return null;
 
   return (
-    <section className="property-signal-section" aria-label="Nearby and resident highlights">
+    <section className="property-signal-section" aria-label="Positive review themes">
+      <span className="property-signal-section__label">Positive themes</span>
       <div className="property-signal-pills">
         {signalPills.map((signal) => (
           <span key={signal.key} className="property-signal-pill">
             <LabelVisualIcon id={signal.icon || signal.key} size={22} />
             <strong>{signal.label}</strong>
-            {typeof signal.count === "number" && <em>{signal.count}</em>}
           </span>
         ))}
       </div>

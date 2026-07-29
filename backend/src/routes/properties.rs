@@ -134,7 +134,7 @@ pub struct PropertyDetail {
     /// Current external review evidence projected from the Parquet serving bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_reviews: Option<ExternalReviews>,
-    /// Buyer-facing signals aggregated from review, map, and society facts.
+    /// Buyer-facing positive themes from external reviews and resident feedback.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub detail_signals: Vec<DetailSignal>,
     /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
@@ -2735,11 +2735,7 @@ pub async fn get_property(
             context
         })
         .or(legacy_map_context);
-    let detail_signals = detail_signals_for(
-        map_context.as_ref(),
-        external_reviews.as_ref(),
-        society.as_ref(),
-    );
+    let detail_signals = detail_signals_for(external_reviews.as_ref(), society.as_ref());
     let plans = crate::plans::project_plans_for_society(
         &entity_refs.society_entity_id,
         &property.society_id,
@@ -2931,6 +2927,16 @@ fn review_date_score(value: &str) -> Option<i64> {
 }
 
 fn review_tone(rating: Option<f64>, text: &str) -> ReviewTone {
+    let normalized = text.to_ascii_lowercase();
+    if [
+        "traffic", "noise", "water", "smell", "seepage", "parking", "delay", "bad", "poor",
+        "issue", "problem",
+    ]
+    .iter()
+    .any(|term| normalized.contains(term))
+    {
+        return ReviewTone::Concern;
+    }
     if let Some(rating) = rating {
         if rating < 4.0 {
             return ReviewTone::Concern;
@@ -2939,26 +2945,7 @@ fn review_tone(rating: Option<f64>, text: &str) -> ReviewTone {
             return ReviewTone::Positive;
         }
     }
-    let normalized = text.to_ascii_lowercase();
     if [
-        "traffic",
-        "noise",
-        "water",
-        "smell",
-        "seepage",
-        "maintenance",
-        "parking",
-        "delay",
-        "bad",
-        "poor",
-        "issue",
-        "problem",
-    ]
-    .iter()
-    .any(|term| normalized.contains(term))
-    {
-        ReviewTone::Concern
-    } else if [
         "good",
         "great",
         "excellent",
@@ -2987,48 +2974,26 @@ fn review_card_id(text: &str, index: usize) -> String {
 }
 
 fn detail_signals_for(
-    map_context: Option<&crate::routes::property_map::PropertyMapContext>,
     external_reviews: Option<&ExternalReviews>,
     society: Option<&crate::models::Society>,
 ) -> Vec<DetailSignal> {
     let mut signals = Vec::new();
-    push_map_signal(&mut signals, map_context, "schools", "Schools", "schools");
-    push_map_signal(
+    let review_texts = positive_review_signal_texts(external_reviews, society);
+    push_theme_signal(
         &mut signals,
-        map_context,
-        "hospitals",
-        "Hospitals",
-        "hospitals",
+        &review_texts,
+        "amenities",
+        "Amenities",
+        "amenities",
+        &["amenit", "clubhouse", "pool", "gym", "play area"],
     );
-    push_map_signal(&mut signals, map_context, "tech", "Tech parks", "tech");
-    push_map_signal(&mut signals, map_context, "metro", "Metro", "metro");
-    push_map_signal(
-        &mut signals,
-        map_context,
-        "breweries",
-        "Breweries",
-        "breweries",
-    );
-    if map_context
-        .and_then(|context| context.water.as_ref())
-        .is_some()
-    {
-        signals.push(DetailSignal {
-            key: "water".to_string(),
-            label: "Water context".to_string(),
-            icon: "water".to_string(),
-            count: None,
-        });
-    }
-
-    let review_texts = review_signal_texts(external_reviews, society);
     push_theme_signal(
         &mut signals,
         &review_texts,
         "cleanliness",
         "Cleanliness",
         "cleanliness",
-        &["clean", "hygien", "maintained"],
+        &["clean", "hygien"],
     );
     push_theme_signal(
         &mut signals,
@@ -3049,43 +3014,17 @@ fn detail_signals_for(
     push_theme_signal(
         &mut signals,
         &review_texts,
-        "condition",
-        "Condition",
-        "condition",
-        &["condition", "seepage", "maintenance", "problem", "issue"],
+        "maintenance",
+        "Maintenance",
+        "maintenance",
+        &["maintenance", "maintained", "managed", "upkeep"],
     );
 
-    signals.truncate(10);
+    signals.truncate(8);
     signals
 }
 
-fn push_map_signal(
-    signals: &mut Vec<DetailSignal>,
-    map_context: Option<&crate::routes::property_map::PropertyMapContext>,
-    layer: &str,
-    label: &str,
-    icon: &str,
-) {
-    let count = map_context
-        .map(|context| {
-            context
-                .places
-                .iter()
-                .filter(|place| place.layer == layer)
-                .count()
-        })
-        .unwrap_or(0);
-    if count > 0 {
-        signals.push(DetailSignal {
-            key: layer.to_string(),
-            label: label.to_string(),
-            icon: icon.to_string(),
-            count: Some(count as u32),
-        });
-    }
-}
-
-fn review_signal_texts(
+fn positive_review_signal_texts(
     external_reviews: Option<&ExternalReviews>,
     society: Option<&crate::models::Society>,
 ) -> Vec<String> {
@@ -3094,16 +3033,13 @@ fn review_signal_texts(
             reviews
                 .reviews
                 .iter()
+                .filter(|review| review.tone == ReviewTone::Positive)
                 .map(|review| review.text.clone())
                 .collect::<Vec<_>>()
         })
         .unwrap_or_default();
     if let Some(society) = society {
         texts.extend(society.common_positives.iter().cloned());
-        texts.extend(society.common_complaints.iter().cloned());
-        if !society.review_summary.trim().is_empty() {
-            texts.push(society.review_summary.clone());
-        }
     }
     texts
 }
@@ -3128,7 +3064,7 @@ fn push_theme_signal(
             key: key.to_string(),
             label: label.to_string(),
             icon: icon.to_string(),
-            count: Some(count as u32),
+            count: None,
         });
     }
 }
@@ -3863,6 +3799,111 @@ mod serving_state_tests {
             .iter()
             .any(|review| review.tone == ReviewTone::Concern
                 && review.author.as_deref() == Some("Concerned Resident")));
+    }
+
+    #[test]
+    fn detail_signals_are_review_themes_without_counts() {
+        let external_reviews = ExternalReviews {
+            google_rating: Some(4.6),
+            google_review_count: Some(120),
+            google_reviews_url: None,
+            reviews: vec![
+                ExternalReviewCard {
+                    id: "r1".to_string(),
+                    source: "Google".to_string(),
+                    author: None,
+                    rating: Some(5.0),
+                    date_label: None,
+                    helpful_count: Some(8),
+                    text: "Clean society with good amenities and greenery.".to_string(),
+                    tone: ReviewTone::Positive,
+                },
+                ExternalReviewCard {
+                    id: "r2".to_string(),
+                    source: "Google".to_string(),
+                    author: None,
+                    rating: Some(5.0),
+                    date_label: None,
+                    helpful_count: Some(3),
+                    text: "Great location with close connectivity.".to_string(),
+                    tone: ReviewTone::Positive,
+                },
+            ],
+        };
+
+        let signals = detail_signals_for(Some(&external_reviews), None);
+        let keys = signals
+            .iter()
+            .map(|signal| signal.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(keys.contains(&"amenities"));
+        assert!(keys.contains(&"cleanliness"));
+        assert!(keys.contains(&"location"));
+        assert!(keys.contains(&"greenery"));
+        assert!(!keys.contains(&"schools"));
+        assert!(!keys.contains(&"hospitals"));
+        assert!(signals.iter().all(|signal| signal.count.is_none()));
+    }
+
+    #[test]
+    fn detail_signals_do_not_promote_complaints_as_positive_themes() {
+        let external_reviews = ExternalReviews {
+            google_rating: Some(3.4),
+            google_review_count: Some(28),
+            google_reviews_url: None,
+            reviews: vec![ExternalReviewCard {
+                id: "r1".to_string(),
+                source: "Google".to_string(),
+                author: None,
+                rating: Some(2.0),
+                date_label: None,
+                helpful_count: Some(5),
+                text: "Bad location and poor maintenance near the approach road.".to_string(),
+                tone: ReviewTone::Concern,
+            }],
+        };
+
+        assert!(detail_signals_for(Some(&external_reviews), None).is_empty());
+    }
+
+    #[test]
+    fn review_tone_treats_high_rated_complaint_text_as_concern() {
+        assert_eq!(
+            review_tone(
+                Some(5.0),
+                "Good society, but poor maintenance is a problem."
+            ),
+            ReviewTone::Concern
+        );
+    }
+
+    #[test]
+    fn detail_signals_can_promote_positive_maintenance_wording() {
+        let text = "Excellent maintenance and well managed common areas.";
+        let external_reviews = ExternalReviews {
+            google_rating: Some(4.8),
+            google_review_count: Some(64),
+            google_reviews_url: None,
+            reviews: vec![ExternalReviewCard {
+                id: "r1".to_string(),
+                source: "Google".to_string(),
+                author: None,
+                rating: Some(5.0),
+                date_label: None,
+                helpful_count: Some(6),
+                text: text.to_string(),
+                tone: review_tone(Some(5.0), text),
+            }],
+        };
+
+        let signals = detail_signals_for(Some(&external_reviews), None);
+        let keys = signals
+            .iter()
+            .map(|signal| signal.key.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(keys.contains(&"maintenance"));
     }
 
     #[test]
