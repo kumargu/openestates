@@ -134,6 +134,9 @@ pub struct PropertyDetail {
     /// Current external review evidence projected from the Parquet serving bundle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub external_reviews: Option<ExternalReviews>,
+    /// Buyer-facing signals aggregated from review, map, and society facts.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub detail_signals: Vec<DetailSignal>,
     /// Receipt-backed livability diligence brief composed from DAG facts and mined themes.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub livability_brief: Option<LivabilityBrief>,
@@ -288,6 +291,15 @@ struct RankedReview {
     helpful_count: u32,
     recency_score: i64,
     source_order: usize,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct DetailSignal {
+    pub key: String,
+    pub label: String,
+    pub icon: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub count: Option<u32>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -2723,6 +2735,11 @@ pub async fn get_property(
             context
         })
         .or(legacy_map_context);
+    let detail_signals = detail_signals_for(
+        map_context.as_ref(),
+        external_reviews.as_ref(),
+        society.as_ref(),
+    );
     let plans = crate::plans::project_plans_for_society(
         &entity_refs.society_entity_id,
         &property.society_id,
@@ -2753,6 +2770,7 @@ pub async fn get_property(
         data_freshness,
         confidence_score,
         external_reviews,
+        detail_signals,
         livability_brief,
         map_context,
         plans,
@@ -2966,6 +2984,153 @@ fn review_card_id(text: &str, index: usize) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     text.hash(&mut hasher);
     format!("google-review-{index}-{:x}", hasher.finish())
+}
+
+fn detail_signals_for(
+    map_context: Option<&crate::routes::property_map::PropertyMapContext>,
+    external_reviews: Option<&ExternalReviews>,
+    society: Option<&crate::models::Society>,
+) -> Vec<DetailSignal> {
+    let mut signals = Vec::new();
+    push_map_signal(&mut signals, map_context, "schools", "Schools", "schools");
+    push_map_signal(
+        &mut signals,
+        map_context,
+        "hospitals",
+        "Hospitals",
+        "hospitals",
+    );
+    push_map_signal(&mut signals, map_context, "tech", "Tech parks", "tech");
+    push_map_signal(&mut signals, map_context, "metro", "Metro", "metro");
+    push_map_signal(
+        &mut signals,
+        map_context,
+        "breweries",
+        "Breweries",
+        "breweries",
+    );
+    if map_context
+        .and_then(|context| context.water.as_ref())
+        .is_some()
+    {
+        signals.push(DetailSignal {
+            key: "water".to_string(),
+            label: "Water context".to_string(),
+            icon: "water".to_string(),
+            count: None,
+        });
+    }
+
+    let review_texts = review_signal_texts(external_reviews, society);
+    push_theme_signal(
+        &mut signals,
+        &review_texts,
+        "cleanliness",
+        "Cleanliness",
+        "cleanliness",
+        &["clean", "hygien", "maintained"],
+    );
+    push_theme_signal(
+        &mut signals,
+        &review_texts,
+        "location",
+        "Location",
+        "location",
+        &["location", "nearby", "close to", "connectivity"],
+    );
+    push_theme_signal(
+        &mut signals,
+        &review_texts,
+        "greenery",
+        "Greenery",
+        "greenery",
+        &["green", "open space", "garden", "trees"],
+    );
+    push_theme_signal(
+        &mut signals,
+        &review_texts,
+        "condition",
+        "Condition",
+        "condition",
+        &["condition", "seepage", "maintenance", "problem", "issue"],
+    );
+
+    signals.truncate(10);
+    signals
+}
+
+fn push_map_signal(
+    signals: &mut Vec<DetailSignal>,
+    map_context: Option<&crate::routes::property_map::PropertyMapContext>,
+    layer: &str,
+    label: &str,
+    icon: &str,
+) {
+    let count = map_context
+        .map(|context| {
+            context
+                .places
+                .iter()
+                .filter(|place| place.layer == layer)
+                .count()
+        })
+        .unwrap_or(0);
+    if count > 0 {
+        signals.push(DetailSignal {
+            key: layer.to_string(),
+            label: label.to_string(),
+            icon: icon.to_string(),
+            count: Some(count as u32),
+        });
+    }
+}
+
+fn review_signal_texts(
+    external_reviews: Option<&ExternalReviews>,
+    society: Option<&crate::models::Society>,
+) -> Vec<String> {
+    let mut texts = external_reviews
+        .map(|reviews| {
+            reviews
+                .reviews
+                .iter()
+                .map(|review| review.text.clone())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    if let Some(society) = society {
+        texts.extend(society.common_positives.iter().cloned());
+        texts.extend(society.common_complaints.iter().cloned());
+        if !society.review_summary.trim().is_empty() {
+            texts.push(society.review_summary.clone());
+        }
+    }
+    texts
+}
+
+fn push_theme_signal(
+    signals: &mut Vec<DetailSignal>,
+    texts: &[String],
+    key: &str,
+    label: &str,
+    icon: &str,
+    terms: &[&str],
+) {
+    let count = texts
+        .iter()
+        .filter(|text| {
+            let normalized = text.to_ascii_lowercase();
+            terms.iter().any(|term| normalized.contains(term))
+        })
+        .count();
+    if count > 0 {
+        signals.push(DetailSignal {
+            key: key.to_string(),
+            label: label.to_string(),
+            icon: icon.to_string(),
+            count: Some(count as u32),
+        });
+    }
 }
 
 fn external_reviews_for(

@@ -244,6 +244,7 @@ export type PropertyDetailResponse = {
     google_reviews_url?: string;
     reviews?: ExternalReviewCard[];
   };
+  detail_signals?: DetailSignal[];
   livability_brief?: LivabilityBrief;
   /** Schematic neighborhood plate projected from nearby + water facts. */
   map_context?: PropertyMapContext;
@@ -260,6 +261,13 @@ export type ExternalReviewCard = {
   helpful_count?: number;
   text: string;
   tone: "positive" | "concern" | "neutral";
+};
+
+export type DetailSignal = {
+  key: string;
+  label: string;
+  icon: string;
+  count?: number;
 };
 
 export type SiteOverviewPlan = {
