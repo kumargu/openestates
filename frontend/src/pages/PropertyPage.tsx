@@ -99,13 +99,13 @@ function reviewSpaceCost(review: ExternalReviewCard): number {
   return 2.4;
 }
 
-function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 10): ExternalReviewCard[] {
+function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 22): ExternalReviewCard[] {
   const selected: ExternalReviewCard[] = [];
   let used = 0;
   for (const review of reviewCards) {
     const cost = reviewSpaceCost(review);
-    if (selected.length >= 5 && used + cost > budget) break;
-    if (selected.length >= 10) break;
+    if (selected.length >= 8 && used + cost > budget) break;
+    if (selected.length >= 12) break;
     selected.push(review);
     used += cost;
   }
@@ -475,7 +475,7 @@ function GoogleReviewsSection({
       tone: "neutral" as const,
     }));
   const reviewSourceCards = reviews?.reviews?.length ? reviews.reviews : fallbackCards;
-  const reviewCards = fitReviewCards(reviewSourceCards, 14);
+  const reviewCards = fitReviewCards(reviewSourceCards);
   const signalPills = detailSignalPills(data.detail_signals);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
