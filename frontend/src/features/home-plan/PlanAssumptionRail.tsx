@@ -1,5 +1,5 @@
 import { type PlanInputs } from "./model.ts";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const LAKH = 100_000;
 const MONTHS_IN_YEAR = 12;
@@ -33,7 +33,6 @@ function PlanInput({
   value,
   min,
   max,
-  step: _step,
   prefix,
   suffix,
   note,
@@ -51,10 +50,6 @@ function PlanInput({
 }) {
   const [draft, setDraft] = useState(String(value));
   const [editing, setEditing] = useState(false);
-
-  useEffect(() => {
-    if (!editing) setDraft(String(value));
-  }, [editing, value]);
 
   function normalizeDraft(raw: string): string {
     const compact = raw.replace(/[^\d.]/g, "");

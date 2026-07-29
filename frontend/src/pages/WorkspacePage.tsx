@@ -1,12 +1,20 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import {
+  matchingNotebookCommands,
+  slashQuery,
+  type NotebookCommand,
+} from "../lib/notebookCommands.ts";
+import {
   ASSIGNABLE_NOTEBOOK_LABELS,
   labelDef,
+  type NotebookBlock,
+  type NotebookChecklistItem,
+  type NotebookFieldItem,
   type NotebookLabelId,
   type NotebookNote,
 } from "../lib/notebook.ts";
@@ -14,6 +22,7 @@ import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
 const MAX_WORKSPACE_COMPARE_HOMES = 4;
+const NOTEBOOK_COMPOSER_PLACEHOLDER = "Write a note, /visit, /budget, /payment";
 
 type WorkspaceMode = "notes" | "compare";
 type CompareStatus = "idle" | "loading" | "ready" | "error";
@@ -158,6 +167,8 @@ export function WorkspacePage() {
     compareIds,
     toggleCompare,
     addHandwritten,
+    addCommandBlock,
+    updateNote,
     addNoteLabel,
     removeNoteLabel,
     removeNote,
@@ -209,7 +220,7 @@ export function WorkspacePage() {
   const visible = useMemo(
     () => [...notes]
       .filter((n) => propertyIds.includes(n.propertyId))
-      .sort((a, b) => b.createdAt - a.createdAt),
+      .sort((a, b) => a.createdAt - b.createdAt),
     [notes, propertyIds],
   );
   const orderedPropertyIds = useMemo(
@@ -224,13 +235,9 @@ export function WorkspacePage() {
 
   useEffect(() => {
     if (mode !== "compare") return undefined;
-    if (selectedHomes.length < 2) {
-      setCompareState({ key: compareKey, status: "idle", details: [] });
-      return undefined;
-    }
+    if (selectedHomes.length < 2) return undefined;
 
     const controller = new AbortController();
-    setCompareState({ key: compareKey, status: "loading", details: [] });
     Promise.allSettled(
       selectedHomes.map((home) => getProperty(home.id, { signal: controller.signal })),
     )
@@ -319,7 +326,9 @@ export function WorkspacePage() {
           onAddLabel={addNoteLabel}
           onRemoveLabel={removeNoteLabel}
           onRemove={removeNote}
+          onUpdate={updateNote}
           onQuickAdd={(propertyId, text) => quickAdd(propertyId, text)}
+          onCommand={(propertyId, commandId) => addCommandBlock({ propertyId, commandId })}
         />
       )}
     </div>
@@ -401,7 +410,9 @@ function EditorialView({
   onAddLabel,
   onRemoveLabel,
   onRemove,
+  onUpdate,
   onQuickAdd,
+  onCommand,
 }: {
   propertyIds: string[];
   notes: NotebookNote[];
@@ -411,7 +422,9 @@ function EditorialView({
   onAddLabel: (id: string, label: NotebookLabelId) => void;
   onRemoveLabel: (id: string, label: NotebookLabelId) => void;
   onRemove: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
   onQuickAdd: (propertyId: string, text: string) => void;
+  onCommand: (propertyId: string, commandId: NotebookCommand["id"]) => void;
 }) {
   const notedPropertyIds = propertyIds.filter((propertyId) =>
     notes.some((note) => note.propertyId === propertyId),
@@ -450,37 +463,19 @@ function EditorialView({
 
             <div className="notion-entry__paper">
               {homeNotes.map((note) => (
-                <div
+                <NotebookNoteRow
                   key={note.id}
-                  className={`notion-note${Date.now() - note.createdAt < 2_000 ? " is-fresh" : ""}`}
-                >
-                  <span className="notion-note__bullet" aria-hidden="true">
-                    {noteIcon(note)}
-                  </span>
-                  <div className="notion-note__content">
-                    <p>{note.title}</p>
-                    {note.detail && <small>{note.detail}</small>}
-                  </div>
-                  <div className="notion-note__labels">
-                    <LabelPicker
-                      note={note}
-                      onAdd={(label) => onAddLabel(note.id, label)}
-                      onRemove={(label) => onRemoveLabel(note.id, label)}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    className="notion-note__remove"
-                    onClick={() => onRemove(note.id)}
-                    aria-label="Remove"
-                  >
-                    ×
-                  </button>
-                </div>
+                  note={note}
+                  onAddLabel={onAddLabel}
+                  onRemoveLabel={onRemoveLabel}
+                  onRemove={onRemove}
+                  onUpdate={onUpdate}
+                />
               ))}
-              <WritingBlock
-                placeholder={`Continue writing about ${societyLabel(homes.get(propertyId), propertyId)}…`}
+              <NotebookComposer
+                ariaLabel={`Continue writing about ${societyLabel(homes.get(propertyId), propertyId)}`}
                 onSubmit={(text) => onQuickAdd(propertyId, text)}
+                onCommand={(command) => onCommand(propertyId, command.id)}
               />
             </div>
           </section>
@@ -505,6 +500,7 @@ function EditorialView({
                   inCompare={inCompare}
                   onToggleCompare={() => onToggleCompare(propertyId)}
                   onQuickAdd={(text) => onQuickAdd(propertyId, text)}
+                  onCommand={(command) => onCommand(propertyId, command.id)}
                 />
               );
             })}
@@ -522,6 +518,7 @@ function SavedHomeRow({
   inCompare,
   onToggleCompare,
   onQuickAdd,
+  onCommand,
 }: {
   propertyId: string;
   title: string;
@@ -529,6 +526,7 @@ function SavedHomeRow({
   inCompare: boolean;
   onToggleCompare: () => void;
   onQuickAdd: (text: string) => void;
+  onCommand: (command: NotebookCommand) => void;
 }) {
   return (
     <div className="notion-saved-home">
@@ -544,9 +542,10 @@ function SavedHomeRow({
         </div>
       </div>
       <div className="notion-saved-home__writer">
-        <WritingBlock
-          placeholder={`Start writing about ${title}...`}
+        <NotebookComposer
+          ariaLabel={`Start writing about ${title}`}
           onSubmit={onQuickAdd}
+          onCommand={onCommand}
         />
       </div>
     </div>
@@ -574,16 +573,314 @@ function CompareCheckbox({
   );
 }
 
-function WritingBlock({
-  placeholder,
-  onSubmit,
+function NotebookNoteRow({
+  note,
+  onAddLabel,
+  onRemoveLabel,
+  onRemove,
+  onUpdate,
 }: {
-  placeholder: string;
+  note: NotebookNote;
+  onAddLabel: (id: string, label: NotebookLabelId) => void;
+  onRemoveLabel: (id: string, label: NotebookLabelId) => void;
+  onRemove: (id: string) => void;
+  onUpdate: (id: string, patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
+}) {
+  const [mountedAt] = useState(() => Date.now());
+  return (
+    <div className={`notion-note${mountedAt - note.createdAt < 2_000 ? " is-fresh" : ""}`}>
+      <span className="notion-note__bullet" aria-hidden="true">
+        {noteIcon(note)}
+      </span>
+      <div className="notion-note__content">
+        {note.block ? (
+          <NotebookBlockEditor
+            note={note}
+            block={note.block}
+            onUpdate={(patch) => onUpdate(note.id, patch)}
+          />
+        ) : (
+          <>
+            <p>{note.title}</p>
+            {note.detail && <small>{note.detail}</small>}
+          </>
+        )}
+      </div>
+      <div className="notion-note__labels">
+        <LabelPicker
+          note={note}
+          onAdd={(label) => onAddLabel(note.id, label)}
+          onRemove={(label) => onRemoveLabel(note.id, label)}
+        />
+      </div>
+      <button
+        type="button"
+        className="notion-note__remove"
+        onClick={() => onRemove(note.id)}
+        aria-label="Remove"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+function updateChecklistItem(
+  block: Extract<NotebookBlock, { type: "checklist" }>,
+  itemId: string,
+  patch: Partial<NotebookChecklistItem>,
+): NotebookBlock {
+  return {
+    ...block,
+    items: block.items.map((item) => (
+      item.id === itemId ? { ...item, ...patch } : item
+    )),
+  };
+}
+
+function updateFieldItem(
+  block: Extract<NotebookBlock, { type: "fields" }>,
+  fieldId: string,
+  patch: Partial<NotebookFieldItem>,
+): NotebookBlock {
+  return {
+    ...block,
+    fields: block.fields.map((field) => (
+      field.id === fieldId ? { ...field, ...patch } : field
+    )),
+  };
+}
+
+function NotebookBlockEditor({
+  note,
+  block,
+  onUpdate,
+}: {
+  note: NotebookNote;
+  block: NotebookBlock;
+  onUpdate: (patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
+}) {
+  function updateBlock(nextBlock: NotebookBlock) {
+    onUpdate({ block: nextBlock });
+  }
+
+  const itemCount = block.type === "checklist" ? block.items.length : block.fields.length;
+  const checkedCount = block.type === "checklist"
+    ? block.items.filter((item) => item.checked).length
+    : 0;
+  const summary = block.type === "checklist"
+    ? `${checkedCount} / ${itemCount} done`
+    : `${itemCount} fields`;
+
+  return (
+    <div className="notion-block">
+      <div className="notion-block__head">
+        <button
+          type="button"
+          className="notion-block__collapse"
+          aria-label={block.collapsed ? "Expand block" : "Collapse block"}
+          aria-expanded={!block.collapsed}
+          onClick={() => updateBlock({ ...block, collapsed: !block.collapsed })}
+        >
+          {block.collapsed ? "+" : "-"}
+        </button>
+        <input
+          className="notion-block__title"
+          value={note.title}
+          aria-label="Block title"
+          onChange={(event) => onUpdate({ title: event.target.value })}
+        />
+        <small>{summary}</small>
+      </div>
+      {!block.collapsed && block.type === "checklist" && (
+        <ChecklistBlock block={block} onUpdate={updateBlock} />
+      )}
+      {!block.collapsed && block.type === "fields" && (
+        <FieldBlock block={block} onUpdate={updateBlock} />
+      )}
+    </div>
+  );
+}
+
+function ChecklistBlock({
+  block,
+  onUpdate,
+}: {
+  block: Extract<NotebookBlock, { type: "checklist" }>;
+  onUpdate: (block: NotebookBlock) => void;
+}) {
+  function addItem() {
+    onUpdate({
+      ...block,
+      items: [
+        ...block.items,
+        {
+          id: `i_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+          text: "",
+          checked: false,
+        },
+      ],
+    });
+  }
+
+  return (
+    <div className="notion-checklist">
+      {block.items.map((item) => (
+        <label key={item.id} className="notion-checklist__item">
+          <input
+            type="checkbox"
+            checked={item.checked}
+            onChange={(event) => onUpdate(updateChecklistItem(block, item.id, { checked: event.target.checked }))}
+          />
+          <input
+            type="text"
+            value={item.text}
+            aria-label="Checklist item"
+            placeholder="List item"
+            onChange={(event) => onUpdate(updateChecklistItem(block, item.id, { text: event.target.value }))}
+          />
+          <button
+            type="button"
+            aria-label="Remove item"
+            onClick={() => onUpdate({ ...block, items: block.items.filter((candidate) => candidate.id !== item.id) })}
+          >
+            ×
+          </button>
+        </label>
+      ))}
+      <button type="button" className="notion-block__add" onClick={addItem}>
+        + Add item
+      </button>
+    </div>
+  );
+}
+
+function FieldBlock({
+  block,
+  onUpdate,
+}: {
+  block: Extract<NotebookBlock, { type: "fields" }>;
+  onUpdate: (block: NotebookBlock) => void;
+}) {
+  return (
+    <div className="notion-fields">
+      {block.fields.map((field) => (
+        <label key={field.id} className="notion-fields__row">
+          <input
+            type="text"
+            value={field.label}
+            aria-label="Field label"
+            onChange={(event) => onUpdate(updateFieldItem(block, field.id, { label: event.target.value }))}
+          />
+          <input
+            type="text"
+            value={field.value}
+            aria-label={`${field.label} value`}
+            placeholder="Add value"
+            onChange={(event) => onUpdate(updateFieldItem(block, field.id, { value: event.target.value }))}
+          />
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function NotebookComposer({
+  ariaLabel,
+  onSubmit,
+  onCommand,
+}: {
+  ariaLabel: string;
   onSubmit: (text: string) => void;
+  onCommand: (command: NotebookCommand) => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const menuBaseId = useId();
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const query = slashQuery(draft);
+  const commands = menuOpen ? matchingNotebookCommands(query ?? "") : [];
+  const menuVisible = menuOpen && commands.length > 0;
+  const listboxId = `${menuBaseId}-commands`;
+  const activeCommandIndex = commands.length === 0
+    ? 0
+    : Math.min(activeIndex, commands.length - 1);
+  const activeOptionId = menuVisible
+    ? `${listboxId}-${commands[activeCommandIndex].id}`
+    : undefined;
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    function closeOnOutsidePress(event: MouseEvent) {
+      if (event.target instanceof Node && formRef.current?.contains(event.target)) return;
+      setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", closeOnOutsidePress);
+    return () => document.removeEventListener("mousedown", closeOnOutsidePress);
+  }, [menuOpen]);
+
+  function focusComposer() {
+    window.requestAnimationFrame(() => textareaRef.current?.focus());
+  }
+
+  function selectCommand(command: NotebookCommand) {
+    onCommand(command);
+    if (slashQuery(draft) != null) setDraft("");
+    setMenuOpen(false);
+    focusComposer();
+  }
+
+  function openCommandMenu() {
+    setMenuOpen(true);
+    setActiveIndex(0);
+    focusComposer();
+  }
+
+  function updateDraft(value: string) {
+    setDraft(value);
+    const nextQuery = slashQuery(value);
+    if (nextQuery == null) {
+      setMenuOpen(false);
+      return;
+    }
+    setActiveIndex(0);
+    setMenuOpen(true);
+  }
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (!menuOpen) return;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActiveIndex((index) => commands.length === 0 ? 0 : (index + 1) % commands.length);
+      return;
+    }
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActiveIndex((index) => commands.length === 0 ? 0 : (index - 1 + commands.length) % commands.length);
+      return;
+    }
+    if (event.key === "Enter" && commands[activeCommandIndex]) {
+      event.preventDefault();
+      selectCommand(commands[activeCommandIndex]);
+      return;
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      setMenuOpen(false);
+      return;
+    }
+    if (event.key === "Backspace" && draft === "/") {
+      event.preventDefault();
+      setDraft("");
+      setMenuOpen(false);
+    }
+  }
+
   return (
     <form
+      ref={formRef}
       className="notion-writing"
       onSubmit={(event) => {
         event.preventDefault();
@@ -592,13 +889,55 @@ function WritingBlock({
         setDraft("");
       }}
     >
+      <button
+        type="button"
+        className="notion-writing__insert"
+        aria-label="Insert notebook block"
+        aria-haspopup="listbox"
+        aria-expanded={menuVisible}
+        aria-controls={menuVisible ? listboxId : undefined}
+        onClick={openCommandMenu}
+      >
+        +
+      </button>
       <textarea
+        ref={textareaRef}
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder={placeholder}
-        aria-label={placeholder}
+        onChange={(event) => updateDraft(event.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder={NOTEBOOK_COMPOSER_PLACEHOLDER}
+        aria-label={ariaLabel}
+        role="combobox"
+        aria-autocomplete="list"
+        aria-expanded={menuVisible}
+        aria-controls={menuVisible ? listboxId : undefined}
+        aria-activedescendant={activeOptionId}
         rows={2}
       />
+      {menuVisible && (
+        <div
+          id={listboxId}
+          className="notion-command-menu"
+          role="listbox"
+          aria-label="Notebook commands"
+        >
+          {commands.map((command, index) => (
+            <button
+              id={`${listboxId}-${command.id}`}
+              key={command.id}
+              type="button"
+              role="option"
+              aria-selected={index === activeCommandIndex}
+              className={index === activeCommandIndex ? "is-active" : undefined}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => selectCommand(command)}
+            >
+              <span>{command.title}</span>
+              <small>{command.slash}</small>
+            </button>
+          ))}
+        </div>
+      )}
       {draft.trim() && (
         <button type="submit">Done</button>
       )}

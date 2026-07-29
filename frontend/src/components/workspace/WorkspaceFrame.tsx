@@ -38,6 +38,10 @@ function sameIds(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
+function writeSidebarCollapsed(collapsed: boolean) {
+  window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+}
+
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const location = useLocation();
   const navigate = useNavigate();
@@ -54,7 +58,15 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   useEffect(() => {
     const controller = new AbortController();
     getProperties({ signal: controller.signal })
-      .then(setProperties)
+      .then((nextProperties) => {
+        setProperties(nextProperties);
+        const availableIds = new Set(nextProperties.map((property) => property.id));
+        const hasSavedHomes = readShortlistIds().some((id) => availableIds.has(id));
+        if (hasSavedHomes) {
+          setCollapsed(false);
+          writeSidebarCollapsed(false);
+        }
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
         setProperties([]);
@@ -65,6 +77,10 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   useEffect(() => {
     function refresh() {
       const next = readShortlistIds();
+      if (next.length > 0) {
+        setCollapsed(false);
+        writeSidebarCollapsed(false);
+      }
       setShortlistIds((current) => sameIds(current, next) ? current : next);
     }
     window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);
@@ -108,12 +124,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
   }, [focusedId]);
 
-  useEffect(() => {
-    if (homes.length === 0) return;
-    setCollapsed(false);
-    window.localStorage.setItem(SIDEBAR_STORAGE_KEY, "false");
-  }, [homes.length]);
-
   const activeView = activeWorkspaceView(location.pathname);
 
   function writeSelection(nextIds: string[], nextFocus?: string) {
@@ -142,7 +152,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   function toggleSidebar() {
     setCollapsed((current) => {
       const next = !current;
-      window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
+      writeSidebarCollapsed(next);
       return next;
     });
   }

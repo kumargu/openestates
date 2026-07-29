@@ -9,6 +9,7 @@
  */
 
 import { readShortlistIds, writeShortlistIds } from "./compare.ts";
+import { NOTEBOOK_COMMANDS, type NotebookCommand } from "./notebookCommands.ts";
 
 export const NOTEBOOK_STORAGE_KEY = "openestates:buyer-notebook-v2";
 export const NOTEBOOK_CHANGED_EVENT = "openestates:notebook-changed";
@@ -28,6 +29,30 @@ export type NotebookLabelDef = {
   compareJoin: boolean;
 };
 
+export type NotebookChecklistItem = {
+  id: string;
+  text: string;
+  checked: boolean;
+};
+
+export type NotebookFieldItem = {
+  id: string;
+  label: string;
+  value: string;
+};
+
+export type NotebookBlock =
+  | {
+      type: "checklist";
+      collapsed: boolean;
+      items: NotebookChecklistItem[];
+    }
+  | {
+      type: "fields";
+      collapsed: boolean;
+      fields: NotebookFieldItem[];
+    };
+
 export type NotebookNote = {
   id: string;
   propertyId: string;
@@ -40,6 +65,7 @@ export type NotebookNote = {
   selectionText?: string;
   /** Join / organize keys. Empty means the note stays out of Compare. */
   labels: NotebookLabelId[];
+  block?: NotebookBlock;
   createdAt: number;
 };
 
@@ -129,6 +155,58 @@ export function compareJoinLabels(note: Pick<NotebookNote, "labels">): NotebookL
 
 function uniqueLabels(labels: NotebookLabelId[]): NotebookLabelId[] {
   return [...new Set(labels.filter(Boolean))].slice(0, MAX_LABELS_PER_NOTE);
+}
+
+function noteId(prefix = "n"): string {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+}
+
+function normalizeChecklistItem(raw: unknown): NotebookChecklistItem | null {
+  if (typeof raw !== "object" || raw == null) return null;
+  const item = raw as Partial<NotebookChecklistItem>;
+  if (typeof item.text !== "string") return null;
+  return {
+    id: typeof item.id === "string" ? item.id : noteId("i"),
+    text: item.text,
+    checked: item.checked === true,
+  };
+}
+
+function normalizeFieldItem(raw: unknown): NotebookFieldItem | null {
+  if (typeof raw !== "object" || raw == null) return null;
+  const item = raw as Partial<NotebookFieldItem>;
+  if (typeof item.label !== "string") return null;
+  return {
+    id: typeof item.id === "string" ? item.id : noteId("f"),
+    label: item.label,
+    value: typeof item.value === "string" ? item.value : "",
+  };
+}
+
+function normalizeBlock(raw: unknown): NotebookBlock | undefined {
+  if (typeof raw !== "object" || raw == null) return undefined;
+  const block = raw as Partial<NotebookBlock>;
+  if (block.type === "checklist" && Array.isArray(block.items)) {
+    const items = block.items
+      .map(normalizeChecklistItem)
+      .filter((item): item is NotebookChecklistItem => item != null);
+    return {
+      type: "checklist",
+      collapsed: block.collapsed === true,
+      items,
+    };
+  }
+  if (block.type === "fields" && Array.isArray(block.fields)) {
+    const fields = block.fields
+      .map(normalizeFieldItem)
+      .filter((field): field is NotebookFieldItem => field != null);
+    return {
+      type: "fields",
+      collapsed: block.collapsed === true,
+      fields,
+    };
+  }
+  return undefined;
 }
 
 /** Distance → bucket label for a base dimension (hospitals → hospitals_under_3km). */
@@ -221,6 +299,7 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
     catalogKey: typeof raw.catalogKey === "string" ? raw.catalogKey : undefined,
     selectionText: typeof raw.selectionText === "string" ? raw.selectionText : undefined,
     labels,
+    block: normalizeBlock(raw.block),
     createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
   };
 }
@@ -238,6 +317,7 @@ function normalizeNote(raw: Partial<NotebookNote> | Record<string, unknown>): No
     catalogKey: migrated.catalogKey,
     selectionText: migrated.selectionText,
     labels: uniqueLabels(migrated.labels ?? []),
+    block: normalizeBlock(migrated.block),
     createdAt: migrated.createdAt ?? Date.now(),
   };
 }
@@ -319,7 +399,7 @@ export function toggleCatalogNote(input: {
   }
 
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: input.title,
     detail: input.detail,
@@ -332,7 +412,7 @@ export function toggleCatalogNote(input: {
   const withProp = ensureProperty(state, input.propertyId);
   return writeNotebook({
     ...withProp,
-    notes: [note, ...withProp.notes],
+    notes: [...withProp.notes, note],
   });
 }
 
@@ -351,7 +431,7 @@ export function addSelectionNote(input: {
   if (state.notes.some((n) => n.catalogKey === catalogKey)) return state;
 
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: summary,
     detail: "Selected from evidence",
@@ -363,7 +443,7 @@ export function addSelectionNote(input: {
     createdAt: Date.now(),
   };
   const withProp = ensureProperty(state, input.propertyId);
-  return writeNotebook({ ...withProp, notes: [note, ...withProp.notes] });
+  return writeNotebook({ ...withProp, notes: [...withProp.notes, note] });
 }
 
 /** Handwritten starts unlabeled unless caller passes labels (e.g. approach compose). */
@@ -377,7 +457,7 @@ export function addHandwrittenNote(input: {
   const trimmed = input.text.trim();
   if (!trimmed) return null;
   const note: NotebookNote = {
-    id: `n_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
+    id: noteId(),
     propertyId: input.propertyId,
     title: trimmed,
     detail: input.detail,
@@ -388,7 +468,78 @@ export function addHandwrittenNote(input: {
     createdAt: Date.now(),
   };
   const state = ensureProperty(readNotebook(), input.propertyId);
-  return writeNotebook({ ...state, notes: [note, ...state.notes] });
+  return writeNotebook({ ...state, notes: [...state.notes, note] });
+}
+
+function commandLabels(command: NotebookCommand): NotebookLabelId[] {
+  if (command.id === "budget") return ["finance"];
+  if (command.id === "payment") return ["legal"];
+  if (command.id === "visit") return ["visit"];
+  return [];
+}
+
+function blockFromCommand(command: NotebookCommand): NotebookBlock {
+  if (command.blockType === "fields") {
+    return {
+      type: "fields",
+      collapsed: false,
+      fields: (command.fields ?? []).map((label) => ({
+        id: noteId("f"),
+        label,
+        value: "",
+      })),
+    };
+  }
+  return {
+    type: "checklist",
+    collapsed: false,
+    items: (command.items ?? ["New item"]).map((text) => ({
+      id: noteId("i"),
+      text,
+      checked: false,
+    })),
+  };
+}
+
+export function addNotebookCommandBlock(input: {
+  propertyId: string;
+  commandId: NotebookCommand["id"];
+}): NotebookState | null {
+  const command = NOTEBOOK_COMMANDS.find((item) => item.id === input.commandId);
+  if (!command) return null;
+  const note: NotebookNote = {
+    id: noteId(),
+    propertyId: input.propertyId,
+    title: command.title,
+    source: "You",
+    kind: "handwritten",
+    catalogKey: `block:${input.propertyId}:${command.id}:${Date.now()}`,
+    labels: uniqueLabels(commandLabels(command)),
+    block: blockFromCommand(command),
+    createdAt: Date.now(),
+  };
+  const state = ensureProperty(readNotebook(), input.propertyId);
+  return writeNotebook({ ...state, notes: [...state.notes, note] });
+}
+
+export function updateNotebookNote(
+  noteIdToUpdate: string,
+  patch: Partial<Pick<NotebookNote, "title" | "block">>,
+): NotebookState {
+  const state = readNotebook();
+  return writeNotebook({
+    ...state,
+    notes: state.notes.map((note) => (
+      note.id === noteIdToUpdate
+        ? {
+            ...note,
+            ...patch,
+            title: patch.title ?? note.title,
+            block: patch.block === undefined ? note.block : patch.block,
+          }
+        : note
+    )),
+  });
 }
 
 export function removeNotebookNote(noteId: string): NotebookState {

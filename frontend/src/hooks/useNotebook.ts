@@ -3,6 +3,7 @@ import { SHORTLIST_CHANGED_EVENT } from "../lib/compare.ts";
 import {
   NOTEBOOK_CHANGED_EVENT,
   addHandwrittenNote,
+  addNotebookCommandBlock,
   addNotebookNoteLabel,
   addSelectionNote,
   anchorNotebookProperty,
@@ -14,6 +15,7 @@ import {
   setNotebookNoteLabels,
   toggleCatalogNote,
   toggleNotebookCompareId,
+  updateNotebookNote,
   type NotebookLabelId,
   type NotebookNote,
   type NotebookState,
@@ -61,8 +63,17 @@ export function useNotebook() {
     if (next) setState(next);
   }, []);
 
+  const addCommandBlock = useCallback((input: Parameters<typeof addNotebookCommandBlock>[0]) => {
+    const next = addNotebookCommandBlock(input);
+    if (next) setState(next);
+  }, []);
+
   const removeNote = useCallback((noteId: string) => {
     setState(removeNotebookNote(noteId));
+  }, []);
+
+  const updateNote = useCallback((noteId: string, patch: Parameters<typeof updateNotebookNote>[1]) => {
+    setState(updateNotebookNote(noteId, patch));
   }, []);
 
   const setNoteLabels = useCallback((noteId: string, labels: NotebookLabelId[]) => {
@@ -103,7 +114,9 @@ export function useNotebook() {
     toggleFact,
     rememberSelection,
     addHandwritten,
+    addCommandBlock,
     removeNote,
+    updateNote,
     setNoteLabels,
     addNoteLabel,
     removeNoteLabel,

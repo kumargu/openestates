@@ -10,12 +10,6 @@ type NotebookCommentAnchorProps = {
   className?: string;
 };
 
-type CommentContext = {
-  labels: NotebookLabelId[];
-  detail: string;
-  source: string;
-};
-
 export function NotebookCommentAnchor({
   propertyId,
   labels,
@@ -26,7 +20,6 @@ export function NotebookCommentAnchor({
   const { addHandwritten } = useNotebook();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [context, setContext] = useState<CommentContext>({ labels, detail, source });
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
@@ -42,19 +35,15 @@ export function NotebookCommentAnchor({
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
   }, [open]);
 
-  useEffect(() => {
-    setContext({ labels, detail, source });
-  }, [detail, labels, source]);
-
   function submit() {
     const text = draft.trim();
     if (!text) return;
     addHandwritten({
       propertyId,
       text,
-      labels: context.labels,
-      detail: context.detail,
-      source: context.source,
+      labels,
+      detail,
+      source,
     });
     setDraft("");
     setOpen(false);
