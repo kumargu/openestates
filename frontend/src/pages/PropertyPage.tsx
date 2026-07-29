@@ -925,7 +925,7 @@ function PropertyPageBody({
         </section>
 
         {(showApproachTrail || showMarketTrend) && (
-          <section className="property-popup-row" aria-label="Detailed proof">
+          <section className="property-popup-row" aria-label="Area and price details">
             {showApproachTrail && (
               <ApproachRoadTrail propertyId={id} sections={detailEvidenceSections} variant="compact" />
             )}
