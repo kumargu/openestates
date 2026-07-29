@@ -2,7 +2,6 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
-  DetailSignal,
   EvidenceSection,
   ExternalReviewCard,
   PropertyCard,
@@ -26,7 +25,6 @@ import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaPriceBands, type AreaMarketContext } from "../components/AreaPriceBands.tsx";
-import { SoftComparableIcon, SoftNearbyIcon } from "../components/ui/SoftIcons.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt, sceneLabelForIndex } from "../lib/propertyScene.ts";
 import {
@@ -110,33 +108,6 @@ function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 10): Externa
     used += cost;
   }
   return selected;
-}
-
-type DetailSignalPill = {
-  signal: DetailSignal;
-  icon: ReactNode;
-};
-
-function detailSignalIcon(signal: DetailSignal): ReactNode {
-  switch (signal.icon) {
-    case "cleanliness":
-      return <SoftComparableIcon id="homeState" size={22} />;
-    case "condition":
-      return <SoftComparableIcon id="builder" size={22} />;
-    case "greenery":
-      return <SoftComparableIcon id="openSpace" size={22} />;
-    case "location":
-      return <SoftNearbyIcon kind="essentials" size={22} />;
-    default:
-      return <SoftNearbyIcon kind={signal.icon} size={22} />;
-  }
-}
-
-function detailSignalPills(signals: DetailSignal[] | undefined): DetailSignalPill[] {
-  return (signals ?? []).map((signal) => ({
-    signal,
-    icon: detailSignalIcon(signal),
-  }));
 }
 
 function cleanAreaToken(value: string): string {
@@ -499,7 +470,6 @@ function GoogleReviewsSection({
     }));
   const reviewSourceCards = reviews?.reviews?.length ? reviews.reviews : fallbackCards;
   const reviewCards = fitReviewCards(reviewSourceCards, 14);
-  const signalPills = detailSignalPills(data.detail_signals);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
     : "Show more Google reviews";
@@ -514,18 +484,6 @@ function GoogleReviewsSection({
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
       </div>
-
-      {signalPills.length > 0 && (
-        <div className="property-signal-pills" aria-label="Review and nearby highlights">
-          {signalPills.map((signal) => (
-            <span key={signal.signal.key} className="property-signal-pill">
-              {signal.icon}
-              <strong>{signal.signal.label}</strong>
-              {typeof signal.signal.count === "number" && <em>{signal.signal.count}</em>}
-            </span>
-          ))}
-        </div>
-      )}
 
       {reviewCards.length > 0 && (
         <div className="property-review-grid">
