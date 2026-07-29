@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
@@ -19,7 +19,8 @@ use crate::scoring::{
 use crate::search::text::compute_confidence_for_detail;
 use crate::search::ConfidenceScore;
 use crate::serving::{
-    GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, SocietyFactProjection,
+    GoogleReviewEvidence, LoadedServingBundle, ServingFactIndex, ServingFactRecord,
+    SocietyFactProjection,
 };
 use crate::state::AppState;
 
@@ -159,6 +160,7 @@ pub struct PropertyDetail {
 pub struct ReraDossier {
     pub property_id: String,
     pub society_id: String,
+    pub fact_sections: Vec<ReraReportSection>,
     pub summary_cards: Vec<ReraDecisionCard>,
     pub compare_items: Vec<ReraCompareItem>,
     pub complaint_sections: Vec<ReraComplaintSection>,
@@ -166,6 +168,26 @@ pub struct ReraDossier {
     pub timeline: ReraTimeline,
     pub legal_checks: Vec<ReraLegalCheck>,
     pub source: ReraDossierSource,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraReportSection {
+    pub id: String,
+    pub title: String,
+    pub facts: Vec<ReraReportFact>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraReportFact {
+    pub key: String,
+    pub label: String,
+    pub value: String,
+    pub tone: String,
+    pub labels: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_url: Option<String>,
+    pub confidence: f32,
+    pub learned_at: String,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -2557,9 +2579,15 @@ pub async fn get_property(
         &graph,
         serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     );
-    let rera_dossier = rera
-        .as_ref()
-        .map(|info| rera_dossier_for_property(&property.id, &property.society_id, info.clone()));
+    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+    let rera_dossier = rera.as_ref().map(|info| {
+        rera_dossier_for_property(
+            &property.id,
+            &property.society_id,
+            info.clone(),
+            serving_facts,
+        )
+    });
     let (decision_labels, decision_check_summary) =
         if let Some(serving_bundle) = serving_bundle.as_ref() {
             (
@@ -3497,7 +3525,397 @@ fn rera_legal_checks(info: &ReraInfo) -> Vec<ReraLegalCheck> {
     checks
 }
 
-fn rera_dossier_for_property(property_id: &str, society_id: &str, info: ReraInfo) -> ReraDossier {
+fn rera_fact_section_title(section_id: &str) -> &'static str {
+    match section_id {
+        "registration" => "Registration",
+        "timeline" => "Timeline",
+        "complaints" => "Complaints",
+        "builder" => "Builder",
+        "project" => "Project shape",
+        "files" => "Files",
+        "money" => "Money",
+        "checks" => "Checks",
+        "location" => "Location",
+        _ => "Other facts",
+    }
+}
+
+fn rera_fact_section_rank(section_id: &str) -> u8 {
+    match section_id {
+        "registration" => 0,
+        "checks" => 1,
+        "complaints" => 2,
+        "timeline" => 3,
+        "project" => 4,
+        "builder" => 5,
+        "money" => 6,
+        "files" => 7,
+        "location" => 8,
+        _ => 9,
+    }
+}
+
+fn rera_fact_section_id(key: &str) -> &'static str {
+    let key = key.to_ascii_lowercase();
+    if key.contains("complaint") {
+        "complaints"
+    } else if key.contains("litigation")
+        || key.contains("mortgage")
+        || key.contains("borrowing")
+        || key.contains("revocation")
+        || key.contains("escrow")
+    {
+        "checks"
+    } else if key.contains("document")
+        || key.contains("plan")
+        || key.contains("approval")
+        || key.contains("noc")
+        || key.contains("brochure")
+        || key.contains("affidavit")
+    {
+        "files"
+    } else if key.contains("date")
+        || key.contains("delay")
+        || key.contains("start")
+        || key.contains("completion")
+        || key.contains("possession")
+    {
+        "timeline"
+    } else if key.contains("builder") || key.contains("promoter") {
+        "builder"
+    } else if key.contains("cost")
+        || key.contains("loan")
+        || key.contains("charge")
+        || key.contains("bank")
+    {
+        "money"
+    } else if key.contains("lat")
+        || key.contains("lng")
+        || key.contains("address")
+        || key.contains("locality")
+        || key.contains("portal_url")
+    {
+        "location"
+    } else if key.contains("number")
+        || key.contains("registered")
+        || key.contains("status")
+        || key.contains("approved")
+    {
+        "registration"
+    } else if key.contains("unit")
+        || key.contains("acre")
+        || key.contains("area")
+        || key.contains("tower")
+        || key.contains("floor")
+        || key.contains("parking")
+        || key.contains("configuration")
+        || key.contains("bhk")
+    {
+        "project"
+    } else {
+        "other"
+    }
+}
+
+fn rera_report_fact_candidate(fact: &ServingFactRecord) -> bool {
+    let key = fact.fact_key.to_ascii_lowercase();
+    if key.contains("manifest")
+        || key.ends_with("_url")
+        || key.contains("portal_url")
+        || key.contains("source_url")
+        || key.contains("raw")
+        || key.contains("html")
+    {
+        return false;
+    }
+    fact.source_type.eq_ignore_ascii_case("rera")
+        || key.starts_with("rera_")
+        || key.starts_with("project_land_area")
+        || key.starts_with("project_open_area")
+        || key.starts_with("project_unit")
+        || key.starts_with("project_tower")
+        || key.starts_with("project_max_floor")
+        || key.starts_with("parking_")
+}
+
+fn rera_fact_label(key: &str) -> String {
+    let normalized_key = key.trim().to_ascii_lowercase();
+    if normalized_key == "rera_number" || normalized_key == "rera_registration_number" {
+        return "RERA number".to_string();
+    }
+    if normalized_key == "rera_ack_number" {
+        return "Acknowledgement number".to_string();
+    }
+    let mut words: Vec<String> = key
+        .trim()
+        .trim_start_matches("rera_")
+        .trim_start_matches("project_")
+        .split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| match part {
+            "pct" => "%".to_string(),
+            "sqm" => "sqm".to_string(),
+            "sqft" => "sqft".to_string(),
+            "bhk" => "BHK".to_string(),
+            "noc" => "NOC".to_string(),
+            "rera" => "RERA".to_string(),
+            "url" => "URL".to_string(),
+            value => {
+                if value.contains("bhk") {
+                    value.to_uppercase()
+                } else {
+                    let mut chars = value.chars();
+                    match chars.next() {
+                        Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
+                        None => String::new(),
+                    }
+                }
+            }
+        })
+        .collect();
+    if words.is_empty() {
+        return key.to_string();
+    }
+    if words.last().is_some_and(|word| word == "Count") {
+        words.pop();
+        words.push("count".to_string());
+    }
+    words.join(" ")
+}
+
+fn compact_rera_number(value: f64) -> String {
+    if value.is_finite() && value.fract().abs() < 0.05 {
+        format!("{}", value.round() as i64)
+    } else if value.is_finite() {
+        format!("{value:.1}")
+    } else {
+        String::new()
+    }
+}
+
+fn rera_fact_value(fact: &ServingFactRecord) -> Option<String> {
+    let key = fact.fact_key.to_ascii_lowercase();
+    let value = match &fact.value {
+        FactValue::Numeric(value) => {
+            let base = compact_rera_number(*value);
+            if base.is_empty() {
+                return None;
+            }
+            if key.ends_with("_pct") || key.contains("percentage") {
+                format!("{base}%")
+            } else if key.ends_with("_months") || key.contains("delay_months") {
+                format!("{base} months")
+            } else if key.ends_with("_acres") || key.contains("area_acres") {
+                format!("{base} acres")
+            } else if key.ends_with("_sqm") || key.contains("area_sqm") {
+                format!("{base} sqm")
+            } else if key.ends_with("_sqft") || key.contains("area_sqft") {
+                format!("{base} sqft")
+            } else {
+                base
+            }
+        }
+        FactValue::Text(value) => {
+            if serde_json::from_str::<serde_json::Value>(value)
+                .ok()
+                .is_some_and(|parsed| parsed.is_array() || parsed.is_object())
+            {
+                return None;
+            }
+            value.clone()
+        }
+        FactValue::Bool(value) => {
+            if *value {
+                "Yes".to_string()
+            } else {
+                "No".to_string()
+            }
+        }
+        FactValue::Tags(values) => values
+            .iter()
+            .map(String::as_str)
+            .filter(|value| !value.trim().is_empty())
+            .collect::<Vec<_>>()
+            .join(", "),
+        FactValue::Score { value, explanation } => {
+            let score = compact_rera_number(*value);
+            if explanation.trim().is_empty() {
+                score
+            } else {
+                format!("{score} · {}", explanation.trim())
+            }
+        }
+    };
+    let value = value.trim();
+    if value.is_empty()
+        || matches!(
+            value.to_ascii_lowercase().as_str(),
+            "unknown" | "not specified" | "n/a" | "na" | "none" | "null"
+        )
+    {
+        None
+    } else {
+        Some(value.to_string())
+    }
+}
+
+fn rera_fact_tone(key: &str, value: &FactValue) -> String {
+    let key = key.to_ascii_lowercase();
+    if key.contains("resolved_pct") || key.contains("disposed_count") {
+        return match value {
+            FactValue::Numeric(value) if *value > 0.0 => "positive".to_string(),
+            _ => "neutral".to_string(),
+        };
+    }
+    let sensitive = key.contains("complaint")
+        || key.contains("delay")
+        || key.contains("litigation")
+        || key.contains("mortgage")
+        || key.contains("borrowing")
+        || key.contains("revocation");
+    if !sensitive {
+        return "neutral".to_string();
+    }
+    match value {
+        FactValue::Numeric(value) if *value > 0.0 => "watch".to_string(),
+        FactValue::Bool(true) => "watch".to_string(),
+        FactValue::Numeric(_) | FactValue::Bool(false) => "positive".to_string(),
+        _ => "neutral".to_string(),
+    }
+}
+
+fn rera_fact_notebook_labels(section_id: &str, key: &str) -> Vec<String> {
+    let mut labels = vec!["legal".to_string()];
+    let hay = format!("{section_id} {key}").to_ascii_lowercase();
+    if hay.contains("complaint") {
+        labels.insert(0, "complaints".to_string());
+        labels.insert(1, "risk".to_string());
+    } else if hay.contains("litigation")
+        || hay.contains("delay")
+        || hay.contains("mortgage")
+        || hay.contains("borrowing")
+        || hay.contains("revocation")
+    {
+        labels.insert(0, "risk".to_string());
+    }
+    if hay.contains("plan")
+        || hay.contains("unit")
+        || hay.contains("floor")
+        || hay.contains("tower")
+        || hay.contains("parking")
+    {
+        labels.push("layout".to_string());
+    }
+    if hay.contains("open") || hay.contains("acre") || hay.contains("density") {
+        labels.push("open-space".to_string());
+    }
+    if hay.contains("cost") || hay.contains("bank") {
+        labels.push("finance".to_string());
+    }
+    labels.sort();
+    labels.dedup();
+    labels.truncate(4);
+    labels
+}
+
+fn rera_report_sections_for_society(
+    society_id: &str,
+    serving_facts: Option<&ServingFactIndex>,
+) -> Vec<ReraReportSection> {
+    let Some(serving_facts) = serving_facts else {
+        return Vec::new();
+    };
+    let rows = rera_report_society_entity_id_candidates(society_id)
+        .into_iter()
+        .filter_map(|entity_id| serving_facts.entity(&entity_id))
+        .collect::<Vec<_>>();
+    if rows.is_empty() {
+        return Vec::new();
+    }
+    let mut latest_by_key_value = BTreeMap::<(String, String), (&ServingFactRecord, String)>::new();
+    for fact in rows
+        .iter()
+        .flat_map(|rows| rows.facts.iter())
+        .filter(|fact| rera_report_fact_candidate(fact))
+    {
+        let Some(value) = rera_fact_value(fact) else {
+            continue;
+        };
+        latest_by_key_value
+            .entry((fact.fact_key.clone(), value.clone()))
+            .and_modify(|existing| {
+                if fact.learned_at > existing.0.learned_at
+                    || (fact.learned_at == existing.0.learned_at
+                        && fact.confidence > existing.0.confidence)
+                {
+                    *existing = (fact, value.clone());
+                }
+            })
+            .or_insert((fact, value));
+    }
+
+    let mut by_section = BTreeMap::<String, Vec<ReraReportFact>>::new();
+    for (fact, value) in latest_by_key_value.into_values() {
+        let section_id = rera_fact_section_id(&fact.fact_key);
+        by_section
+            .entry(section_id.to_string())
+            .or_default()
+            .push(ReraReportFact {
+                key: fact.fact_key.clone(),
+                label: rera_fact_label(&fact.fact_key),
+                value,
+                tone: rera_fact_tone(&fact.fact_key, &fact.value),
+                labels: rera_fact_notebook_labels(section_id, &fact.fact_key),
+                source_url: fact.source_url.clone(),
+                confidence: fact.confidence,
+                learned_at: fact.learned_at.to_rfc3339(),
+            });
+    }
+
+    let mut sections: Vec<ReraReportSection> = by_section
+        .into_iter()
+        .map(|(id, mut facts)| {
+            facts.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.key.cmp(&b.key)));
+            facts.dedup_by(|left, right| {
+                left.label.eq_ignore_ascii_case(&right.label)
+                    && left.value.eq_ignore_ascii_case(&right.value)
+            });
+            ReraReportSection {
+                title: rera_fact_section_title(&id).to_string(),
+                id,
+                facts,
+            }
+        })
+        .collect();
+    sections.sort_by(|a, b| {
+        rera_fact_section_rank(&a.id)
+            .cmp(&rera_fact_section_rank(&b.id))
+            .then_with(|| a.title.cmp(&b.title))
+    });
+    sections
+}
+
+fn rera_report_society_entity_id_candidates(society_id: &str) -> Vec<String> {
+    let raw = society_id.trim().to_lowercase().replace(['_', ' '], "-");
+    let slug = raw
+        .strip_prefix("society:")
+        .or_else(|| raw.strip_prefix("soc-"))
+        .unwrap_or(&raw);
+    let canonical = format!("society:{slug}");
+
+    if raw == canonical {
+        vec![canonical]
+    } else {
+        vec![canonical, raw]
+    }
+}
+
+fn rera_dossier_for_property(
+    property_id: &str,
+    society_id: &str,
+    info: ReraInfo,
+    serving_facts: Option<&ServingFactIndex>,
+) -> ReraDossier {
     let complaint_sections = rera_complaint_sections(&info);
     let document_sections = rera_document_sections(&info);
     let compare_items = rera_compare_items(&info, &complaint_sections);
@@ -3505,6 +3923,7 @@ fn rera_dossier_for_property(property_id: &str, society_id: &str, info: ReraInfo
     ReraDossier {
         property_id: property_id.to_string(),
         society_id: society_id.to_string(),
+        fact_sections: rera_report_sections_for_society(society_id, serving_facts),
         summary_cards: info.decision_cards.clone(),
         compare_items,
         complaint_sections,
@@ -3562,6 +3981,7 @@ pub async fn get_property_rera(
         &property.id,
         &property.society_id,
         rera,
+        serving_bundle.as_ref().map(|bundle| &bundle.fact_index),
     )))
 }
 
@@ -4656,6 +5076,82 @@ mod serving_state_tests {
                 && item.value == "INR 90K - 1.4L"
                 && item.source_type == "ExternalListing"
         }));
+    }
+
+    #[test]
+    fn rera_report_sections_scan_canonical_society_rows_and_skip_empty_values() {
+        let serving = ServingFactIndex::from_records(
+            vec![
+                serving_fact("rera_number", FactValue::Text("PRM/123".to_string()), 10),
+                serving_fact("rera_delay_months", FactValue::Numeric(8.0), 10),
+                serving_fact("rera_land_litigation", FactValue::Bool(false), 10),
+                serving_fact(
+                    "rera_complaints_resolved_pct",
+                    FactValue::Numeric(100.0),
+                    10,
+                ),
+                serving_fact("rera_status", FactValue::Text("unknown".to_string()), 11),
+                serving_fact(
+                    "rera_document_manifest",
+                    FactValue::Text(r#"[{"label":"file"}]"#.to_string()),
+                    10,
+                ),
+                serving_fact(
+                    "rera_portal_url",
+                    FactValue::Text("https://rera.example".to_string()),
+                    10,
+                ),
+                serving_fact(
+                    "rera_survey_numbers",
+                    FactValue::Text("16/4".to_string()),
+                    9,
+                ),
+                serving_fact(
+                    "rera_survey_numbers",
+                    FactValue::Text("16/5".to_string()),
+                    10,
+                ),
+                typed_serving_fact(
+                    "project_land_area_acres",
+                    FactValue::Numeric(5.3),
+                    "Computed",
+                    None,
+                    10,
+                ),
+            ],
+            Vec::<ServingSearchMetadataRecord>::new(),
+        );
+
+        let sections = rera_report_sections_for_society("soc-sample", Some(&serving));
+        let facts = sections
+            .iter()
+            .flat_map(|section| section.facts.iter())
+            .collect::<Vec<_>>();
+
+        assert!(sections.iter().any(|section| section.id == "registration"));
+        assert!(sections.iter().any(|section| section.id == "timeline"));
+        assert!(sections.iter().any(|section| section.id == "project"));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.key == "rera_number" && fact.label == "RERA number"));
+        assert!(facts
+            .iter()
+            .any(|fact| fact.key == "project_land_area_acres" && fact.value == "5.3 acres"));
+        assert!(facts
+            .iter()
+            .any(|fact| { fact.key == "rera_complaints_resolved_pct" && fact.tone == "positive" }));
+        assert!(!facts.iter().any(|fact| fact.key == "rera_status"));
+        assert!(!facts
+            .iter()
+            .any(|fact| fact.key == "rera_document_manifest"));
+        assert!(!facts.iter().any(|fact| fact.key == "rera_portal_url"));
+        assert_eq!(
+            facts
+                .iter()
+                .filter(|fact| fact.key == "rera_survey_numbers")
+                .count(),
+            2
+        );
     }
 
     fn legacy_graph() -> crate::knowledge::KnowledgeGraph {

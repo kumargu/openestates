@@ -26,6 +26,7 @@ import { MarketTrendContent, hasMarketTrend } from "../components/evidence/Marke
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
+import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaPriceBands, type AreaMarketContext } from "../components/AreaPriceBands.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
@@ -514,12 +515,14 @@ function ProjectCheckTag({
         <LabelVisualIcon id={label.visualId || label.key} size={17} />
       </span>
       <span className="property-check-tag__label">{label.label}</span>
-      <NotebookCommentAnchor
+      <NotebookPinButton
         propertyId={propertyId}
+        catalogKey={`rera:${propertyId}:label:${label.key}`}
+        title={label.label}
         labels={safeNotebookLabels(label)}
-        detail={label.label}
+        detail={label.valueText ?? label.label}
         source="RERA"
-        className="property-check-tag__note"
+        className="property-check-tag__pin"
       />
     </div>
   );
@@ -535,28 +538,29 @@ function ProjectChecksContent({
   const tags = projectCheckTags(summary);
   return (
     <div className="property-checks">
-      {(summary.registrationNumber || summary.registryUrl) && (
-        <div className="property-checks__registry">
-          {summary.registrationNumber && (
-            <button
-              type="button"
-              onClick={() => void navigator.clipboard?.writeText(summary.registrationNumber ?? "")}
-              title="Copy registration number"
-            >
-              {summary.registrationNumber}
-            </button>
-          )}
-          {summary.registryUrl && (
-            <a href={summary.registryUrl} target="_blank" rel="noreferrer" aria-label="Open RERA">
-              Open
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M7 17 17 7" />
-                <path d="M8 7h9v9" />
-              </svg>
-            </a>
-          )}
-        </div>
-      )}
+      <div className="property-checks__registry">
+        {summary.registrationNumber && (
+          <button
+            type="button"
+            onClick={() => void navigator.clipboard?.writeText(summary.registrationNumber ?? "")}
+            title="Copy registration number"
+          >
+            {summary.registrationNumber}
+          </button>
+        )}
+        {summary.registryUrl && (
+          <a href={summary.registryUrl} target="_blank" rel="noreferrer" aria-label="Open RERA">
+            Open
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M7 17 17 7" />
+              <path d="M8 7h9v9" />
+            </svg>
+          </a>
+        )}
+        <Link to={`/property/${encodeURIComponent(propertyId)}/rera`}>
+          Report
+        </Link>
+      </div>
       <div className="property-check-tags" aria-label="RERA facts">
         {tags.map((label) => (
           <ProjectCheckTag key={label.key} label={label} propertyId={propertyId} />

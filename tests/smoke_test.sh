@@ -193,6 +193,16 @@ if [[ -n "$FIRST_ID" ]]; then
     "{\"property_ids\":[\"${FIRST_ID}\"],\"limit\":1}" \
     '(.results | length == 1) and (.results[0].sections | type == "array") and (.missing_property_ids | length == 0)' \
     "expected one evidence result and no missing ids"
+
+  RERA_ID=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '[.[] | select(.decision_check_summary != null)][0].id // empty' 2>/dev/null || echo "")
+  if [[ -n "$RERA_ID" ]]; then
+    check "Property RERA dossier returns report fields" \
+      "${BASE}/api/properties/${RERA_ID}/rera" \
+      'has("source", "fact_sections", "compare_items", "complaint_sections", "document_sections", "timeline") and (.source | has("registered")) and (.fact_sections | type == "array")' \
+      "expected source and flexible RERA fact sections"
+  else
+    echo "  $(green "✓") Skipping RERA dossier shape — no RERA-backed property in this bundle"
+  fi
 else
   echo "  $(red "✗") Skipping detail tests — no property ID available"
   FAIL=$((FAIL + 1))

@@ -3812,34 +3812,30 @@ body {
   white-space: nowrap;
 }
 
-.property-check-tag__note.notebook-comment-anchor {
-  position: relative;
-  inset: auto;
-  z-index: 5;
+.property-check-tag__pin.notebook-pin {
+  width: 1.35rem;
+  height: 1.35rem;
   flex: 0 0 auto;
   margin-left: -0.12rem;
-  opacity: 0;
-  transition: opacity 0.16s ease;
-}
-
-.property-check-tag__note .notebook-comment-anchor__button {
-  width: 1.45rem;
-  height: 1.45rem;
   border: 0;
   background: transparent;
-  box-shadow: none;
   color: currentColor;
+  opacity: 0;
+  box-shadow: none;
+  transition: opacity 0.16s ease, background-color 0.16s ease;
 }
 
-.property-check-tag__note .notebook-comment-anchor__button:hover,
-.property-check-tag__note .notebook-comment-anchor__button:focus-visible {
-  background: rgba(0, 0, 0, 0.04);
-  box-shadow: none;
+.property-check-tag__pin.notebook-pin:hover,
+.property-check-tag__pin.notebook-pin:focus-visible,
+.property-check-tag__pin.notebook-pin.is-filled {
+  background: rgba(0, 0, 0, 0.05);
+  color: currentColor;
+  opacity: 1;
   transform: none;
 }
 
-.property-check-tag:hover .property-check-tag__note,
-.property-check-tag:focus-within .property-check-tag__note {
+.property-check-tag:hover .property-check-tag__pin,
+.property-check-tag:focus-within .property-check-tag__pin {
   opacity: 1;
 }
 
@@ -4340,7 +4336,7 @@ body {
     max-width: 10rem;
   }
 
-  .property-check-tag__note.notebook-comment-anchor {
+  .property-check-tag__pin.notebook-pin {
     opacity: 1;
   }
 

@@ -1089,6 +1089,7 @@ export type ReraInfo = {
 export type ReraDossier = {
   property_id: string;
   society_id: string;
+  fact_sections?: ReraReportSection[];
   summary_cards: ReraDecisionCard[];
   compare_items: ReraCompareItem[];
   complaint_sections: ReraComplaintSection[];
@@ -1096,6 +1097,23 @@ export type ReraDossier = {
   timeline: ReraTimeline;
   legal_checks: ReraLegalCheck[];
   source: ReraDossierSource;
+};
+
+export type ReraReportSection = {
+  id: string;
+  title: string;
+  facts: ReraReportFact[];
+};
+
+export type ReraReportFact = {
+  key: string;
+  label: string;
+  value: string;
+  tone: "positive" | "watch" | "neutral" | "risk" | "caution" | string;
+  labels: string[];
+  source_url?: string;
+  confidence: number;
+  learned_at: string;
 };
 
 export type ReraCompareItem = {
