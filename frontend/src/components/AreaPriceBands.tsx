@@ -319,6 +319,7 @@ type AreaPriceBandsProps = {
   onSelectArea: (area: string) => void;
   heading?: string;
   subheading?: string;
+  showCaption?: boolean;
 };
 
 export function AreaPriceBands({
@@ -328,6 +329,7 @@ export function AreaPriceBands({
   onSelectArea,
   heading = "Market map",
   subheading = "Where asks sit across Bengaluru — tap an area to search it.",
+  showCaption = true,
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
   if (bands.length < 1) return null;
@@ -352,7 +354,7 @@ export function AreaPriceBands({
         <div>
           <p className="price-bands__kicker">Bengaluru</p>
           <h2 className="price-bands__title">{heading}</h2>
-          <p className="price-bands__sub">{subheading}</p>
+          {subheading && <p className="price-bands__sub">{subheading}</p>}
         </div>
       </div>
 
@@ -404,12 +406,14 @@ export function AreaPriceBands({
         </aside>
       </div>
 
-      <p className="price-bands__caption">
-        {bands.length} market{bands.length === 1 ? "" : "s"} · {totalN} priced homes
-        {missingPreferred.length > 0
-          ? ` · ${missingPreferred.length} tracker area${missingPreferred.length === 1 ? "" : "s"} still need priced listings`
-          : ""}
-      </p>
+      {showCaption && (
+        <p className="price-bands__caption">
+          {bands.length} market{bands.length === 1 ? "" : "s"} · {totalN} priced homes
+          {missingPreferred.length > 0
+            ? ` · ${missingPreferred.length} tracker area${missingPreferred.length === 1 ? "" : "s"} still need priced listings`
+            : ""}
+        </p>
+      )}
     </div>
   );
 }

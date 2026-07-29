@@ -309,9 +309,6 @@ function MarketTrendChart({ rows }: { rows: MarketTrailRow[] }) {
         </div>
       </div>
 
-      <p className="price-bands__caption">
-        Asking prices by BHK
-      </p>
     </>
   );
 }

@@ -286,7 +286,7 @@ function CleanDialog({
   onClose,
 }: {
   title: string;
-  kicker: string;
+  kicker?: string;
   children: ReactNode;
   onClose: () => void;
 }) {
@@ -319,7 +319,7 @@ function CleanDialog({
       >
         <div className="property-clean-dialog__head">
           <div>
-            <span>{kicker}</span>
+            {kicker && <span>{kicker}</span>}
             <h2 id="property-clean-dialog-title">{title}</h2>
           </div>
           <button type="button" className="property-clean-dialog__close" onClick={onClose} aria-label={`Close ${title}`}>
@@ -615,7 +615,8 @@ function MicroMarketTracker({
         marketContexts={marketContextsForAreas(properties, areas)}
         onSelectArea={onSelectArea}
         heading={`Explore prices around ${currentArea.split(",")[0]}`}
-        subheading="Nearby micro-markets from current listings."
+        subheading=""
+        showCaption={false}
       />
     </section>
   );
@@ -869,13 +870,18 @@ function PropertyPageBody({
       </Helmet>
       <section className="property-clean-head">
         <div className="property-clean-head__copy">
-          <p>{society?.name ? `${displayName(society.name)} · ` : ""}{p.area}, {p.city}</p>
+          <p>{p.area}, {p.city}</p>
           <h1>{displayTitle}</h1>
           <div className="property-clean-meta">
             <span>₹{formatPrice(p.price)}</span>
             <span>{p.bhk} BHK</span>
             {sizeLabel && <span>{sizeLabel}</span>}
-            {compactStatusRead && <span className="property-status-pill">{compactStatusRead}</span>}
+            {compactStatusRead && (
+              <span className="property-status-pill">
+                <span className="property-status-pill__label">Status</span>
+                {compactStatusRead}
+              </span>
+            )}
             {googleRating && <span>★ {googleRating} Google</span>}
           </div>
         </div>
@@ -910,12 +916,6 @@ function PropertyPageBody({
         images={p.images}
         societyId={p.society_id}
       />
-
-      <p className="property-one-line-read">
-        {compactStatusRead && <span className="property-status-pill">{compactStatusRead}</span>}
-        {pricePerSqftLabel && <span>₹{p.price_per_sqft.toLocaleString("en-IN")}/sqft</span>}
-        {googleRating && <span>★ {googleRating} Google</span>}
-      </p>
 
       <main className="property-clean-flow">
         <section className="property-map-section" aria-label="Around this home">
@@ -952,7 +952,7 @@ function PropertyPageBody({
       </main>
 
       {marketOpen && (
-        <CleanDialog title="Price ranges" kicker="Market prices" onClose={() => setMarketOpen(false)}>
+        <CleanDialog title="Price ranges" onClose={() => setMarketOpen(false)}>
           <MarketTrendContent sections={detailEvidenceSections} />
         </CleanDialog>
       )}

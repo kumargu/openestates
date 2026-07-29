@@ -3369,6 +3369,7 @@ body {
 .property-status-pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.35rem;
   min-height: 1.72rem;
   padding: 0 0.58rem;
   border: 1px solid rgba(91, 127, 176, 0.24);
@@ -3378,6 +3379,13 @@ body {
   font-size: 0.78rem;
   font-weight: 820;
   line-height: 1;
+}
+
+.property-status-pill__label {
+  color: var(--color-text-secondary);
+  font-size: 0.68rem;
+  font-weight: 820;
+  text-transform: uppercase;
 }
 
 .property-clean-actions {
@@ -3888,6 +3896,12 @@ body {
 }
 
 .property-micro-market .price-bands__kicker {
+  display: none;
+}
+
+.property-micro-market .price-bands__sub,
+.property-micro-market .price-bands__caption,
+.property-micro-market .price-bands__legend {
   display: none;
 }
 
