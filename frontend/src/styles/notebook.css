@@ -25,13 +25,13 @@
   width: min(900px, calc(100% - 2rem));
   margin-inline: auto;
   padding: 0;
-  margin-top: -1.7rem;
+  margin-top: -1.95rem;
 }
 
 .notion-emoji {
   width: 3.5rem;
   height: 3.5rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.4rem;
   border-radius: 12px;
   border: 1px solid rgba(50, 38, 30, 0.08);
   background: #fff;
@@ -64,7 +64,7 @@
   gap: 0.18rem;
   width: fit-content;
   max-width: min(900px, calc(100% - 2rem));
-  margin: 1.1rem 0 0.35rem max(1.35rem, calc((100% - 900px) / 2 + 1.35rem));
+  margin: 1.05rem 0 0.35rem max(1.35rem, calc((100% - 900px) / 2 + 1.35rem));
   padding: 0.18rem;
   border: 1px solid rgba(50, 38, 30, 0.08);
   border-radius: 10px;
@@ -1069,12 +1069,7 @@
 .workspace-compare-view {
   width: min(100%, 76rem);
   margin: 0 auto;
-  padding: 1.35rem clamp(1rem, 3vw, 2.2rem) 3rem;
-}
-
-.workspace-compare-view__head {
-  width: min(900px, 100%);
-  margin: 0 auto;
+  padding: 0.55rem clamp(1rem, 3vw, 2.2rem) 3rem;
 }
 
 .workspace-compare-empty > span {
@@ -1085,15 +1080,10 @@
   text-transform: uppercase;
 }
 
-.workspace-compare-view__head h2 {
-  margin: 0;
-}
-
 .workspace-compare-empty h2 {
   margin: 0.28rem 0 0;
 }
 
-.workspace-compare-view__head h2,
 .workspace-compare-empty h2 {
   color: #2c2824;
   font-size: clamp(1.45rem, 2.7vw, 2.15rem);
@@ -1128,7 +1118,7 @@
 
 .workspace-compare-view .compare-editorial {
   width: min(100%, 70rem);
-  margin: 1.6rem auto 0;
+  margin: 0.9rem auto 0;
 }
 
 .workspace-compare-loading {

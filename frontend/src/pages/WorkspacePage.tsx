@@ -374,12 +374,6 @@ function CompareWorkspaceView({
 
   return (
     <section className="workspace-compare-view" aria-label="Compare saved homes">
-      <header className="workspace-compare-view__head">
-        <div>
-          <h2>Sharper tradeoffs.</h2>
-        </div>
-      </header>
-
       {status === "loading" ? (
         <div className="workspace-compare-loading" aria-label="Loading comparison">
           <div />
