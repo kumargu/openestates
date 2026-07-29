@@ -156,13 +156,18 @@ function nearbyRailItems(
   primaryItems: RankedRecommendationItem[],
   properties: PropertyCard[],
   currentPropertyId: string,
+  currentArea: string,
   preferredAreas: string[],
 ): RankedRecommendationItem[] {
-  const used = new Set(primaryItems.map((item) => item.property.id));
+  const allowedAreas = new Set([currentArea, ...preferredAreas]);
+  const scopedPrimaryItems = primaryItems.filter((item) =>
+    allowedAreas.has(item.property.area));
+  const used = new Set(scopedPrimaryItems.map((item) => item.property.id));
   used.add(currentPropertyId);
   const areaRank = new Map(preferredAreas.map((area, index) => [area, index]));
   const fillers: RankedRecommendationItem[] = properties
     .filter((property) => !used.has(property.id))
+    .filter((property) => allowedAreas.has(property.area))
     .filter((property) => property.hero_image || property.society_name)
     .sort((left, right) => {
       const leftAreaRank = areaRank.get(left.area) ?? 99;
@@ -179,7 +184,7 @@ function nearbyRailItems(
       property,
     }));
 
-  return [...primaryItems, ...fillers].slice(0, 8);
+  return [...scopedPrimaryItems, ...fillers].slice(0, 8);
 }
 
 function marketContextsForAreas(properties: PropertyCard[], areas: string[]): AreaMarketContext[] {
@@ -804,7 +809,7 @@ function PropertyPageBody({
   }
   const marketProperties = [...marketPropertyMap.values()];
   const microAreas = microMarketAreas(p.area, p.price_per_sqft, marketProperties, recommendationItems);
-  const nearbyItems = nearbyRailItems(recommendationItems, marketProperties, p.id, microAreas);
+  const nearbyItems = nearbyRailItems(recommendationItems, marketProperties, p.id, p.area, microAreas);
   const googleRating = formatGoogleRating(data.external_reviews?.google_rating);
   const residentTheme =
     society?.common_complaints?.[0]
