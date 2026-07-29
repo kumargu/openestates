@@ -90,6 +90,26 @@ function formatReviewCount(value: number | null | undefined): string | null {
   return `${value.toLocaleString("en-IN")} Google ${value === 1 ? "review" : "reviews"}`;
 }
 
+function reviewSpaceCost(review: ExternalReviewCard): number {
+  const words = review.text.trim().split(/\s+/).filter(Boolean).length;
+  if (words <= 32) return 1;
+  if (words <= 70) return 1.8;
+  return 2.4;
+}
+
+function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 10): ExternalReviewCard[] {
+  const selected: ExternalReviewCard[] = [];
+  let used = 0;
+  for (const review of reviewCards) {
+    const cost = reviewSpaceCost(review);
+    if (selected.length >= 4 && used + cost > budget) break;
+    if (selected.length >= 8) break;
+    selected.push(review);
+    used += cost;
+  }
+  return selected;
+}
+
 function cleanAreaToken(value: string): string {
   return value
     .toLowerCase()
@@ -448,7 +468,7 @@ function GoogleReviewsSection({
       text: reviewSnippetCopy(value),
       tone: "neutral" as const,
     }));
-  const reviewCards = (reviews?.reviews?.length ? reviews.reviews : fallbackCards).slice(0, 6);
+  const reviewCards = fitReviewCards(reviews?.reviews?.length ? reviews.reviews : fallbackCards);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
     : "Show more Google reviews";
@@ -468,15 +488,6 @@ function GoogleReviewsSection({
         <div className="property-review-grid">
           {reviewCards.map((review) => (
             <article key={review.id} className="property-review-card">
-              <header>
-                <span className={`property-review-avatar property-review-avatar--${review.tone}`}>
-                  {(review.author || "G").trim().charAt(0).toUpperCase()}
-                </span>
-                <span>
-                  {review.author && <strong>{review.author}</strong>}
-                  <em>{review.source}</em>
-                </span>
-              </header>
               {(review.rating || review.date_label) && (
                 <p className="property-review-card__meta">
                   {review.rating && <span>{"★".repeat(Math.round(review.rating))}</span>}

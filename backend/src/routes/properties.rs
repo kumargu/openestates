@@ -2855,7 +2855,7 @@ fn google_review_cards_for(
             .then_with(|| left.source_order.cmp(&right.source_order))
             .then_with(|| left.card.text.cmp(&right.card.text))
     });
-    balanced_review_cards(ranked, 6)
+    balanced_review_cards(ranked, 12)
 }
 
 fn balanced_review_cards(ranked: Vec<RankedReview>, limit: usize) -> Vec<ExternalReviewCard> {
