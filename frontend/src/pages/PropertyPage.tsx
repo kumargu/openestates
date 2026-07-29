@@ -79,6 +79,11 @@ function formatGoogleRating(value: number | null | undefined): string | null {
   return value.toFixed(1);
 }
 
+function ratingTone(value: number | null | undefined): "good" | "weak" | null {
+  if (!hasKnownNumber(value)) return null;
+  return value >= 4 ? "good" : "weak";
+}
+
 function formatReviewCount(value: number | null | undefined): string | null {
   if (!hasKnownNumber(value)) return null;
   return `${value.toLocaleString("en-IN")} Google ${value === 1 ? "review" : "reviews"}`;
@@ -402,17 +407,14 @@ function PropertyPhotoMosaic({
 
 function PopupActionButton({
   label,
-  detail,
   onClick,
 }: {
   label: string;
-  detail: string;
   onClick: () => void;
 }) {
   return (
     <button type="button" className="property-popup-action" onClick={onClick} aria-haspopup="dialog">
-      <span>{label}</span>
-      <strong>{detail}</strong>
+      <strong>{label}</strong>
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
         <path d="m9 18 6-6-6-6" />
       </svg>
@@ -846,6 +848,7 @@ function PropertyPageBody({
   const microAreas = microMarketAreas(p.area, p.price_per_sqft, marketProperties, recommendationItems);
   const nearbyItems = nearbyRailItems(recommendationItems, marketProperties, currentCard, microAreas);
   const googleRating = formatGoogleRating(data.external_reviews?.google_rating);
+  const googleRatingTone = ratingTone(data.external_reviews?.google_rating);
   const compactStatusRead = (lifecycleTag || data.home_state_display || data.project_status_display || p.possession_status)
     ?.split("·")[0]
     ?.trim();
@@ -882,7 +885,11 @@ function PropertyPageBody({
                 {compactStatusRead}
               </span>
             )}
-            {googleRating && <span>★ {googleRating} Google</span>}
+            {googleRating && (
+              <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
+                ★ {googleRating} Google
+              </span>
+            )}
           </div>
         </div>
         <div className="property-clean-actions" aria-label="Property actions">
@@ -932,7 +939,6 @@ function PropertyPageBody({
             {showMarketTrend && (
               <PopupActionButton
                 label="Price ranges"
-                detail="BHK asking bands"
                 onClick={() => setMarketOpen(true)}
               />
             )}

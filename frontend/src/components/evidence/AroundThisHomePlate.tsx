@@ -365,8 +365,7 @@ function AroundThisHomePlateInner({
     <section className="nearby-plate" aria-label="Around this home">
       <div className="nearby-plate__head">
         <div>
-          <p className="nearby-plate__kicker">Around this home</p>
-          <h2 className="nearby-plate__title">What's nearby</h2>
+          <h2 className="nearby-plate__title">Around this home</h2>
         </div>
       </div>
 
