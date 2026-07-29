@@ -87,7 +87,7 @@ export function CommunityPulseCard({ pulse }: Props) {
         </div>
       )}
 
-      {buyerVisibleSourceUrls.length > 0 && (
+      {buyerVisibleSourceUrls.length > 0 && [...positiveQuotes, ...concernQuotes, ...neutralQuotes].length === 0 && (
         <div className="community-pulse__sources">
           {buyerVisibleSourceUrls.map((url) => (
             <a key={url} href={url} target="_blank" rel="noreferrer">

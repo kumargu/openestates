@@ -58,7 +58,7 @@ export function AreaTrackerSection({
   footerLink,
   id = "area-tracker",
   heading = "Market map",
-  subheading = "Where asks sit across Bengaluru — tap an area to search it.",
+  subheading = "Asking bands across active micro-markets.",
 }: AreaTrackerSectionProps) {
   const allMarkets = areaTracker
     ? deriveMarketContextsFromTracker(areaTracker)

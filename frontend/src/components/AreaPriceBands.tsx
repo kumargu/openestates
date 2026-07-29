@@ -278,11 +278,7 @@ function QuoteRotator({ quotes }: { quotes: AreaSentiment[] }) {
   }, [quotes]);
 
   if (quotes.length === 0) {
-    return (
-      <p className="price-bands__read-body">
-        No resident themes matched these areas yet. Bands above are still from local asks.
-      </p>
-    );
+    return null;
   }
 
   const quote = quotes[index % quotes.length];
@@ -327,7 +323,7 @@ export function AreaPriceBands({
   marketContexts,
   onSelectArea,
   heading = "Market map",
-  subheading = "Where asks sit across Bengaluru — tap an area to search it.",
+  subheading = "Asking bands across active micro-markets.",
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
   if (bands.length < 1) return null;
@@ -338,13 +334,10 @@ export function AreaPriceBands({
   const axisMin = Math.max(0, scaleMin - pad);
   const axisMax = scaleMax + pad;
   const ticks = niceAxisTicks(axisMin, axisMax);
-  const totalN = bands.reduce((sum, band) => sum + band.n, 0);
   const quotes = sentimentsForAreas(bands.map((band) => band.area), 12);
   const marketContextByArea = new Map(
     marketContexts?.map((context) => [context.area, context]),
   );
-  const missingPreferred =
-    preferredAreas?.filter((area) => !bands.some((band) => band.area === area)) ?? [];
 
   return (
     <div className="price-bands">
@@ -385,31 +378,21 @@ export function AreaPriceBands({
           <div className="price-bands__legend" aria-hidden="true">
             <span className="price-bands__legend-item">
               <span className="price-bands__legend-box" />
-              Typical half
+              Typical range
             </span>
             <span className="price-bands__legend-item">
               <span className="price-bands__legend-median" />
               Middle ask
             </span>
-            <span className="price-bands__legend-item">
-              <span className="price-bands__legend-dot" />
-              Listing asks
-            </span>
-            <span className="price-bands__legend-item">Line = wider range</span>
           </div>
         </div>
 
-        <aside className="price-bands__read">
-          <QuoteRotator quotes={quotes} />
-        </aside>
+        {quotes.length > 0 && (
+          <aside className="price-bands__read">
+            <QuoteRotator quotes={quotes} />
+          </aside>
+        )}
       </div>
-
-      <p className="price-bands__caption">
-        {bands.length} market{bands.length === 1 ? "" : "s"} · {totalN} priced homes
-        {missingPreferred.length > 0
-          ? ` · ${missingPreferred.length} tracker area${missingPreferred.length === 1 ? "" : "s"} still need priced listings`
-          : ""}
-      </p>
     </div>
   );
 }

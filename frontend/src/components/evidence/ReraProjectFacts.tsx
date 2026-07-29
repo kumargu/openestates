@@ -1,8 +1,7 @@
-import type { ReraDecisionCard, ReraDossier, ReraInfo } from "../../lib/types.ts";
+import type { ReraDossier, ReraInfo } from "../../lib/types.ts";
 import { reraFactGroups } from "../../lib/reraProjectFacts.ts";
 import { LinkIcon } from "./EvidenceIcons.tsx";
 import { NotebookCommentAnchor } from "../notebook/NotebookCommentAnchor.tsx";
-import { NotebookPinButton } from "../notebook/NotebookPinButton.tsx";
 
 function formatFreshness(value?: string): string | null {
   if (!value) return null;
@@ -10,16 +9,6 @@ function formatFreshness(value?: string): string | null {
   if (Number.isNaN(date.getTime())) return null;
   return new Intl.DateTimeFormat("en-IN", {
     day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(date);
-}
-
-function formatDate(value?: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-IN", {
     month: "short",
     year: "numeric",
   }).format(date);
@@ -38,10 +27,6 @@ function httpUrl(value?: string): string | null {
 function toneClass(tone?: string): string {
   if (!tone || tone === "default") return "";
   return `is-${tone}`;
-}
-
-function cardLabels(card: ReraDecisionCard): string[] {
-  return card.labels?.length ? card.labels.slice(0, 4) : ["legal"];
 }
 
 function LegacyReraFacts({
@@ -94,7 +79,7 @@ function LegacyReraFacts({
           {sourceUrl && (
             <a href={sourceUrl} target="_blank" rel="noreferrer">
               <LinkIcon size={13} />
-              RERA source
+              Source
             </a>
           )}
         </footer>
@@ -119,18 +104,6 @@ export function ReraProjectFacts({
 
   const freshness = formatFreshness(dossier.source.last_verified);
   const sourceUrl = httpUrl(dossier.source.portal_url);
-  const timelineItems = [
-    { label: "Start", value: formatDate(dossier.timeline.start_date) },
-    { label: "Original target", value: formatDate(dossier.timeline.original_completion_date) },
-    { label: "Current target", value: formatDate(dossier.timeline.completion_date) },
-    {
-      label: "Movement",
-      value: dossier.timeline.delay_months && dossier.timeline.delay_months > 0
-        ? `${dossier.timeline.delay_months} months`
-        : null,
-      tone: dossier.timeline.delay_months && dossier.timeline.delay_months > 0 ? "watch" : "neutral",
-    },
-  ].filter((item) => item.value);
 
   return (
     <div className="rera-dossier notebook-comment-surface" aria-label="RERA project dossier">
@@ -147,130 +120,12 @@ export function ReraProjectFacts({
         <div className="rera-dossier__cards">
           {dossier.summary_cards.slice(0, 6).map((card) => (
             <article key={card.id} className={`rera-dossier-card ${toneClass(card.tone)}`.trim()}>
-              <div className="rera-dossier-card__head">
-                <span>{card.source}</span>
-                {propertyId && (
-                  <NotebookPinButton
-                    propertyId={propertyId}
-                    catalogKey={`rera:${dossier.society_id}:card:${card.id}`}
-                    title={card.title}
-                    detail={card.detail}
-                    source={card.source}
-                    labels={cardLabels(card)}
-                    className="rera-dossier__pin"
-                  />
-                )}
-              </div>
               <h3>{card.title}</h3>
               {card.detail && <p>{card.detail}</p>}
-              {card.validation_notes.length > 0 && (
-                <small>{card.validation_notes[0]}</small>
-              )}
             </article>
           ))}
         </div>
       )}
-
-      {dossier.compare_items.length > 0 && propertyId && (
-        <section className="rera-dossier__compare" aria-label="RERA facts for notebook compare">
-          {dossier.compare_items.slice(0, 7).map((item) => (
-            <div key={item.key} className={`rera-dossier-compare ${toneClass(item.tone)}`.trim()}>
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-              <NotebookPinButton
-                propertyId={propertyId}
-                catalogKey={`rera:${dossier.society_id}:compare:${item.key}`}
-                title={`${item.label}: ${item.value}`}
-                detail="RERA compare fact"
-                source="RERA"
-                labels={item.labels.length ? item.labels : ["legal"]}
-                className="rera-dossier__pin"
-              />
-            </div>
-          ))}
-        </section>
-      )}
-
-      <div className="rera-dossier__body">
-        {dossier.complaint_sections.length > 0 && (
-          <section className="rera-dossier-panel rera-dossier-panel--complaints">
-            <h3>Complaint read</h3>
-            <div className="rera-dossier-complaints">
-              {dossier.complaint_sections.map((section) => (
-                <article key={section.scope} className="rera-dossier-complaint">
-                  <div className="rera-dossier-complaint__head">
-                    <span>{section.label}</span>
-                    <strong>{section.total.toLocaleString("en-IN")}</strong>
-                  </div>
-                  <div className="rera-dossier-complaint__meta">
-                    <span>{section.open.toLocaleString("en-IN")} open</span>
-                    <span>{section.disposed.toLocaleString("en-IN")} disposed</span>
-                  </div>
-                  {section.top_themes.length > 0 && (
-                    <div className="rera-dossier__chips">
-                      {section.top_themes.map((theme) => (
-                        <span key={`${section.scope}-${theme.label}`}>
-                          {theme.label} · {theme.count}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {section.sample_subjects.length > 0 && (
-                    <ul>
-                      {section.sample_subjects.slice(0, 2).map((subject) => (
-                        <li key={subject}>{subject}</li>
-                      ))}
-                    </ul>
-                  )}
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {dossier.document_sections.length > 0 && (
-          <section className="rera-dossier-panel">
-            <h3>Official files</h3>
-            <div className="rera-dossier-files">
-              {dossier.document_sections.slice(0, 6).map((section) => (
-                <div key={section.group} className="rera-dossier-file">
-                  <span>{section.label}</span>
-                  <strong>{section.count}</strong>
-                  {section.kinds.length > 0 && <small>{section.kinds.slice(0, 3).join(", ")}</small>}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {timelineItems.length > 0 && (
-          <section className="rera-dossier-panel">
-            <h3>Timeline</h3>
-            <div className="rera-dossier-timeline">
-              {timelineItems.map((item) => (
-                <div key={item.label} className={toneClass(item.tone)}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {dossier.legal_checks.length > 0 && (
-          <section className="rera-dossier-panel">
-            <h3>Legal checks</h3>
-            <div className="rera-dossier-checks">
-              {dossier.legal_checks.map((check) => (
-                <div key={check.key} className={toneClass(check.tone)}>
-                  <span>{check.label}</span>
-                  <strong>{check.value}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
 
       {(freshness || sourceUrl) && (
         <footer className="rera-project-facts__footer">
@@ -278,7 +133,7 @@ export function ReraProjectFacts({
           {sourceUrl && (
             <a href={sourceUrl} target="_blank" rel="noreferrer">
               <LinkIcon size={13} />
-              RERA source
+              Source
             </a>
           )}
         </footer>

@@ -344,11 +344,6 @@ function PropertyPageBody({
                 compact
               />
             )}
-            {data.rera?.registered && (
-              <span className="property-proof-strip__chip property-proof-strip__chip--positive">
-                RERA verified
-              </span>
-            )}
           </div>
 
           <div className="property-brief-tags">

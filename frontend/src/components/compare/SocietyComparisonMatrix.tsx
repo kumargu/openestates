@@ -8,7 +8,13 @@ import {
   type NotebookLabelId,
   type NotebookNote,
 } from "../../lib/notebook.ts";
-import type { MapPlacePin, PropertyCard, PropertyDetailResponse, PropertyMapContext } from "../../lib/types.ts";
+import type {
+  MapPlacePin,
+  PropertyCard,
+  PropertyDetailResponse,
+  PropertyMapContext,
+  ReraCompareItem,
+} from "../../lib/types.ts";
 
 type SocietyColumn = {
   key: string;
@@ -424,6 +430,26 @@ function backendCompareItems(context: PropertyMapContext | null): CompareItem[] 
     });
 }
 
+function reraCompareItem(item: ReraCompareItem): CompareItem | null {
+  if (!item.value) return null;
+  const labels = item.tone === "positive"
+    ? item.labels.filter((label) => label !== "risk")
+    : item.labels;
+  return {
+    id: `rera:${item.key}`,
+    title: item.label,
+    detail: item.value,
+    labels,
+    origin: "backend",
+  };
+}
+
+function reraCompareItems(detail: PropertyDetailResponse | undefined): CompareItem[] {
+  return detail?.rera_dossier?.compare_items
+    .map(reraCompareItem)
+    .filter((item): item is CompareItem => item !== null) ?? [];
+}
+
 function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): CompareItem[] {
   const seen = new Set<string>();
   const merged: CompareItem[] = [];
@@ -444,8 +470,8 @@ function CompareNote({ item }: { item: CompareItem }) {
         <b aria-hidden="true">{labelIcon(labels[0])}</b>
       )}
       <span>{item.title}</span>
-      {(item.detail || item.source) && (
-        <small>{item.detail || item.source}</small>
+      {item.detail && (
+        <small>{item.detail}</small>
       )}
       {labels.length > 0 && (
         <div className="compare-note__labels" aria-label="Saved labels">
@@ -612,7 +638,11 @@ export function SocietyComparisonMatrix({
   const columnItems = useMemo(
     () => new Map(columns.map((column) => {
       const context = compareContextForColumn(column, detailById);
-      const backendItems = backendCompareItems(context);
+      const detail = detailForColumn(column, detailById);
+      const backendItems = [
+        ...backendCompareItems(context),
+        ...reraCompareItems(detail),
+      ];
       const noteItems = columnNotes.get(column.key) ?? [];
       return [column.key, mergeCompareItems(backendItems, noteItems)];
     })),

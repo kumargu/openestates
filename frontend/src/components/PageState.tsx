@@ -10,48 +10,44 @@ interface PageStateProps {
 
 const contextMessages: Record<string, Record<Variant, { title: string; subtitle: string; actions?: { label: string; path: string }[] }>> = {
   results: {
-    loading: { title: "Finding properties...", subtitle: "Searching across Bengaluru micro-markets." },
+    loading: { title: "Finding homes...", subtitle: "Searching Bengaluru micro-markets." },
     error: {
       title: "Results temporarily unavailable",
-      subtitle: "We couldn't load live property data right now, but you can still continue exploring Bengaluru areas.",
+      subtitle: "We couldn't load homes right now.",
       actions: [
-        { label: "Browse areas", path: "/" },
         { label: "Return home", path: "/" },
       ],
     },
     backend_unavailable: {
       title: "Results temporarily unavailable",
-      subtitle: "We couldn't load live property data right now, but you can still continue exploring Bengaluru areas.",
+      subtitle: "We couldn't load homes right now.",
       actions: [
-        { label: "Browse areas", path: "/" },
         { label: "Return home", path: "/" },
       ],
     },
-    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse homes", path: "/" }] },
+    empty: { title: "No homes match", subtitle: "Try a broader search.", actions: [{ label: "Browse homes", path: "/" }] },
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {
-    loading: { title: "Loading property details...", subtitle: "Gathering proof-backed facts and market context." },
+    loading: { title: "Loading home...", subtitle: "Preparing property context." },
     error: {
       title: "Property details unavailable",
-      subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
+      subtitle: "This home could not be loaded right now.",
       actions: [
         { label: "Back to search", path: "/" },
-        { label: "Browse areas", path: "/" },
       ],
     },
     backend_unavailable: {
       title: "Property details unavailable",
-      subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
+      subtitle: "This home could not be loaded right now.",
       actions: [
         { label: "Back to search", path: "/" },
-        { label: "Browse areas", path: "/" },
       ],
     },
-    empty: { title: "No details available", subtitle: "This property doesn't have detailed information yet." },
+    empty: { title: "No details available", subtitle: "This home has limited detail right now." },
     not_found: {
       title: "Property not found",
-      subtitle: "This listing may no longer be available or the link may be incorrect.",
+      subtitle: "This home may no longer be available.",
       actions: [
         { label: "Browse homes", path: "/" },
         { label: "Return home", path: "/" },
@@ -59,10 +55,10 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
     },
   },
   generic: {
-    loading: { title: "Loading...", subtitle: "Fetching data from OpenEstates." },
-    error: { title: "Something went wrong", subtitle: "We couldn't load this page. Please try again.", actions: [{ label: "Return to homepage", path: "/" }] },
+    loading: { title: "Loading...", subtitle: "Preparing this view." },
+    error: { title: "Something went wrong", subtitle: "We couldn't load this page.", actions: [{ label: "Return home", path: "/" }] },
     backend_unavailable: { title: "Data temporarily unavailable", subtitle: "We're reconnecting. Please try again shortly.", actions: [{ label: "Return to homepage", path: "/" }] },
-    empty: { title: "Nothing here yet", subtitle: "No data available for this view." },
+    empty: { title: "Nothing here yet", subtitle: "This view is empty." },
     not_found: { title: "Not found", subtitle: "The page or item you're looking for doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
 };

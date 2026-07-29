@@ -144,6 +144,7 @@ export function WorkspacePage() {
     removeNote,
   } = useNotebook();
   const [homes, setHomes] = useState<PropertyCard[]>([]);
+  const [homesLoading, setHomesLoading] = useState(true);
   const [compareState, setCompareState] = useState<CompareState>({
     key: "",
     status: "idle",
@@ -157,6 +158,9 @@ export function WorkspacePage() {
       .then(setHomes)
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setHomesLoading(false);
       });
     return () => controller.abort();
   }, []);
@@ -186,6 +190,14 @@ export function WorkspacePage() {
     activeCompareIds,
     searchParams.get("focus") ?? selectedHomes[0]?.id,
   );
+  const workspaceHomeCount = mode === "compare"
+    ? Math.max(activeCompareIds.length, propertyIds.length)
+    : propertyIds.length;
+  const compareStatus = homesLoading && activeCompareIds.length >= 2
+    ? "loading"
+    : compareState.key === compareKey
+      ? compareState.status
+      : "loading";
 
   const visible = useMemo(
     () => [...notes]
@@ -247,7 +259,7 @@ export function WorkspacePage() {
         <div className="notion-emoji" aria-hidden="true">▦</div>
         <h1>Workspace</h1>
         <p className="notion-subtitle">
-          {propertyIds.length} home{propertyIds.length === 1 ? "" : "s"}
+          {workspaceHomeCount} home{workspaceHomeCount === 1 ? "" : "s"}
           {" · "}
           {visible.length} note{visible.length === 1 ? "" : "s"}
         </p>
@@ -271,7 +283,7 @@ export function WorkspacePage() {
         </Link>
       </nav>
 
-      {propertyIds.length === 0 ? (
+      {mode === "notes" && propertyIds.length === 0 ? (
         <div className="notion-empty">
           <h2>Empty workspace</h2>
           <p>Save a home or add a note from a property page to start your decision workspace.</p>
@@ -282,9 +294,10 @@ export function WorkspacePage() {
           selectedHomes={selectedHomes}
           catalog={homes}
           details={compareState.key === compareKey ? compareState.details : []}
-          status={compareState.key === compareKey ? compareState.status : "loading"}
+          status={compareStatus}
           copied={copied}
           onCopy={copyComparisonLink}
+          expectedCount={activeCompareIds.length}
         />
       ) : (
         <EditorialView
@@ -310,6 +323,7 @@ function CompareWorkspaceView({
   status,
   copied,
   onCopy,
+  expectedCount,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
@@ -317,7 +331,19 @@ function CompareWorkspaceView({
   status: CompareStatus;
   copied: boolean;
   onCopy: () => void;
+  expectedCount: number;
 }) {
+  if (selectedHomes.length < 2 && status === "loading" && expectedCount >= 2) {
+    return (
+      <section className="workspace-compare-view" aria-label="Compare saved homes">
+        <div className="workspace-compare-loading" aria-label="Loading comparison">
+          <div />
+          <div />
+        </div>
+      </section>
+    );
+  }
+
   if (selectedHomes.length < 2) {
     return (
       <section className="workspace-compare-empty">

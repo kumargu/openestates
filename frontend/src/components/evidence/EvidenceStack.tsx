@@ -529,7 +529,6 @@ export function EvidenceStack({
   return (
     <section className="evidence-stack">
       <div className="property-section-heading">
-        <span>Sources</span>
         <h2>Property context</h2>
       </div>
 

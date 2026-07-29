@@ -159,7 +159,6 @@ export function AlternativePaths({
   return (
     <section className="alt-paths" title={runtimeLabel} aria-label="Homes that may interest you">
       <div className="property-section-heading">
-        <span>Continue exploring</span>
         <h2>May interest you</h2>
       </div>
 

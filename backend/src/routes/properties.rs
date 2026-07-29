@@ -2815,7 +2815,10 @@ fn rera_scope_label(scope: &str) -> String {
 
 fn rera_rollup_theme(theme: &str) -> String {
     let normalized = theme.trim().to_ascii_lowercase();
-    if normalized.contains("refund") || normalized.contains("money") {
+    if normalized.contains("refund")
+        || normalized.contains("money")
+        || normalized.contains("cancellation")
+    {
         "Refund / money back".to_string()
     } else if normalized.contains("delay")
         || normalized.contains("possession")
@@ -2972,6 +2975,32 @@ fn push_rera_compare(
     }
 }
 
+fn rera_complaint_theme_summary(complaints: &[ReraComplaintSection]) -> Option<String> {
+    let mut counts = std::collections::BTreeMap::<String, i32>::new();
+    for section in complaints {
+        for theme in &section.top_themes {
+            if theme.count > 0 {
+                *counts.entry(theme.label.clone()).or_insert(0) += theme.count;
+            }
+        }
+    }
+
+    let mut ranked: Vec<(String, i32)> = counts.into_iter().collect();
+    ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    if ranked.is_empty() {
+        return None;
+    }
+
+    Some(
+        ranked
+            .into_iter()
+            .take(3)
+            .map(|(label, count)| format!("{label} ({count})"))
+            .collect::<Vec<_>>()
+            .join(" · "),
+    )
+}
+
 fn rera_compare_items(
     info: &ReraInfo,
     complaints: &[ReraComplaintSection],
@@ -3022,8 +3051,17 @@ fn rera_compare_items(
     );
     push_rera_compare(
         &mut items,
+        "complaint_themes",
+        "Complaint themes",
+        rera_complaint_theme_summary(complaints),
+        "watch",
+        vec!["legal", "risk"],
+        Some("complaints_project"),
+    );
+    push_rera_compare(
+        &mut items,
         "documents",
-        "Official files",
+        "Documents",
         (!info.document_manifest.is_empty()).then(|| {
             let group_count = info.document_groups.len();
             format!(
@@ -3501,6 +3539,19 @@ mod serving_state_tests {
         assert_eq!(complaints.labels, vec!["legal", "risk"]);
         assert_eq!(complaints.facts["total"], 15);
         assert_eq!(complaints.facts["fine_theme_counts"]["refund"], 9);
+
+        let dossier = rera_dossier_for_property("sample-property", "sample-society", detail);
+        let complaint_themes = dossier
+            .compare_items
+            .iter()
+            .find(|item| item.key == "complaint_themes")
+            .expect("complaint themes should carry into compare");
+        assert_eq!(complaint_themes.label, "Complaint themes");
+        assert_eq!(
+            complaint_themes.value,
+            "Refund / money back (12) · Payment demand (2)"
+        );
+        assert_eq!(complaint_themes.labels, vec!["legal", "risk"]);
     }
 
     #[test]
