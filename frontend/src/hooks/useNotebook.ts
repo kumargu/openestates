@@ -19,6 +19,14 @@ import {
   type NotebookState,
 } from "../lib/notebook.ts";
 
+function isNotebookState(value: unknown): value is NotebookState {
+  if (typeof value !== "object" || value == null) return false;
+  const candidate = value as Partial<NotebookState>;
+  return Array.isArray(candidate.propertyIds)
+    && Array.isArray(candidate.notes)
+    && Array.isArray(candidate.compareIds);
+}
+
 export function useNotebook() {
   const [state, setState] = useState<NotebookState>(() =>
     typeof window === "undefined" ? { propertyIds: [], notes: [], compareIds: [] } : readNotebook(),
@@ -27,7 +35,7 @@ export function useNotebook() {
   useEffect(() => {
     function refresh(event?: Event) {
       const detail = (event as CustomEvent<NotebookState> | undefined)?.detail;
-      setState(detail ?? readNotebook());
+      setState(isNotebookState(detail) ? detail : readNotebook());
     }
     window.addEventListener(NOTEBOOK_CHANGED_EVENT, refresh);
     window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);

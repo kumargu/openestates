@@ -272,7 +272,7 @@ export function readNotebook(): NotebookState {
   return {
     ...state,
     propertyIds,
-    compareIds: shortlist
+    compareIds: state.compareIds
       .filter((id) => propertyIds.includes(id))
       .slice(0, MAX_COMPARE_FROM_NOTEBOOK),
   };
@@ -435,14 +435,13 @@ export function toggleNotebookCompareId(propertyId: string): NotebookState {
     return state;
   }
   const withProp = ensureProperty(state, propertyId);
-  const currentIds = readShortlistIds().slice(0, MAX_COMPARE_FROM_NOTEBOOK);
+  const currentIds = withProp.compareIds.slice(0, MAX_COMPARE_FROM_NOTEBOOK);
   const on = currentIds.includes(propertyId);
   const compareIds = on
     ? currentIds.filter((id) => id !== propertyId)
     : currentIds.length >= MAX_COMPARE_FROM_NOTEBOOK
       ? currentIds
       : [...currentIds, propertyId];
-  writeShortlistIds(compareIds);
   return writeNotebook({ ...withProp, compareIds });
 }
 
