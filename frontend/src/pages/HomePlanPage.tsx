@@ -179,14 +179,21 @@ export function HomePlanPage() {
                 <button
                   type="button"
                   className={`home-plan-snapshot-button${snapshotSaved ? " is-saved" : ""}`}
+                  aria-label={snapshotSaved ? "Remove plan snapshot" : "Save plan snapshot"}
                   aria-pressed={snapshotSaved}
+                  title={snapshotSaved ? "Saved" : "Save"}
                   onClick={savePlanSnapshot}
                 >
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M7 7.5h10M7 11h7" />
-                    <path d="M5.8 4.5h12.4A2.8 2.8 0 0 1 21 7.3v6.4a2.8 2.8 0 0 1-2.8 2.8H13l-4.7 3.2v-3.2H5.8A2.8 2.8 0 0 1 3 13.7V7.3a2.8 2.8 0 0 1 2.8-2.8Z" />
+                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+                    <path
+                      d="M7 4.6h10a1.7 1.7 0 0 1 1.7 1.7v14.2L12 16.2l-6.7 4.3V6.3A1.7 1.7 0 0 1 7 4.6Z"
+                      fill={snapshotSaved ? "currentColor" : "none"}
+                      stroke="currentColor"
+                      strokeWidth="1.9"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
-                  {snapshotSaved ? "Snapshot saved" : "Save snapshot"}
                 </button>
               )}
             />

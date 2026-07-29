@@ -467,28 +467,26 @@
 }
 
 .home-plan-snapshot-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.38rem;
-  min-height: 2rem;
-  padding: 0.38rem 0.65rem;
+  display: inline-grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
   border: 1px solid var(--plan-line-strong);
-  border-radius: 999px;
+  border-radius: 50%;
   color: var(--plan-muted);
-  background: rgba(255, 255, 255, 0.72);
-  box-shadow: 0 1px 6px rgba(31, 24, 20, 0.04);
-  font-size: 0.74rem;
-  font-weight: 680;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 4px 14px rgba(31, 24, 20, 0.07);
   cursor: pointer;
-  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
-  white-space: nowrap;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease, transform 160ms ease;
 }
 
 .home-plan-snapshot-button:hover,
 .home-plan-snapshot-button:focus-visible {
   border-color: rgba(91, 127, 176, 0.4);
   color: var(--plan-cool-deep);
-  background: rgba(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.98);
+  transform: translateY(-1px);
 }
 
 .home-plan-snapshot-button.is-saved {
