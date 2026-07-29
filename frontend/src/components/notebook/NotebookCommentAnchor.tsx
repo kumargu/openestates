@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNotebook } from "../../hooks/useNotebook.ts";
 import type { NotebookLabelId } from "../../lib/notebook.ts";
+import { NotebookSaveIcon } from "./NotebookSaveIcon.tsx";
 
 type NotebookCommentAnchorProps = {
   propertyId: string;
@@ -66,10 +67,7 @@ export function NotebookCommentAnchor({
           setOpen((current) => !current);
         }}
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path d="M7 7.5h10M7 11h7" />
-          <path d="M5.8 4.5h12.4A2.8 2.8 0 0 1 21 7.3v6.4a2.8 2.8 0 0 1-2.8 2.8H13l-4.7 3.2v-3.2H5.8A2.8 2.8 0 0 1 3 13.7V7.3a2.8 2.8 0 0 1 2.8-2.8Z" />
-        </svg>
+        <NotebookSaveIcon size={16} />
       </button>
       {open && (
         <form

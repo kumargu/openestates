@@ -1217,31 +1217,27 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border: 1px solid rgba(133, 98, 18, 0.24);
+  border: 1px solid rgba(38, 35, 32, 0.1);
   border-radius: 999px;
-  background: #ffd968;
-  color: #3c2c08;
-  box-shadow: 0 8px 18px rgba(56, 39, 8, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  color: #7d746c;
+  box-shadow: 0 6px 16px rgba(31, 24, 20, 0.08);
   cursor: pointer;
   transition:
     transform 140ms ease,
     box-shadow 140ms ease,
-    background-color 140ms ease;
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
 }
 
 .notebook-comment-anchor__button:hover,
 .notebook-comment-anchor__button:focus-visible {
-  background: #ffe28a;
-  box-shadow: 0 10px 22px rgba(56, 39, 8, 0.22);
+  border-color: rgba(91, 127, 176, 0.28);
+  background: rgba(255, 255, 255, 0.98);
+  color: #2f4f72;
+  box-shadow: 0 8px 20px rgba(31, 24, 20, 0.1);
   transform: translateY(-1px);
-}
-
-.notebook-comment-anchor__button svg {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
 }
 
 .notebook-comment-anchor__popover {

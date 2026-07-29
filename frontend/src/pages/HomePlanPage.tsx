@@ -5,6 +5,7 @@ import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { PageState } from "../components/PageState.tsx";
+import { NotebookSaveIcon } from "../components/notebook/NotebookSaveIcon.tsx";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
@@ -184,16 +185,7 @@ export function HomePlanPage() {
                   title={snapshotSaved ? "Saved" : "Save"}
                   onClick={savePlanSnapshot}
                 >
-                  <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                    <path
-                      d="M7 4.6h10a1.7 1.7 0 0 1 1.7 1.7v14.2L12 16.2l-6.7 4.3V6.3A1.7 1.7 0 0 1 7 4.6Z"
-                      fill={snapshotSaved ? "currentColor" : "none"}
-                      stroke="currentColor"
-                      strokeWidth="1.9"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
+                  <NotebookSaveIcon filled={snapshotSaved} size={18} />
                 </button>
               )}
             />
