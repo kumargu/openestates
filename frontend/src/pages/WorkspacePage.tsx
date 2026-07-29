@@ -146,7 +146,7 @@ function LabelPicker({
 
 export function WorkspacePage() {
   const location = useLocation();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const mode = workspaceMode(location.pathname);
   const {
     notes,
@@ -251,6 +251,26 @@ export function WorkspacePage() {
       .then(() => setCopied(true));
   }
 
+  function removeCompareHomes(propertyIdsToRemove: string[]) {
+    const removeSet = new Set(propertyIdsToRemove);
+    const nextIds = activeCompareIds.filter((id) => !removeSet.has(id));
+    for (const id of propertyIdsToRemove) {
+      if (compareIds.includes(id)) toggleCompare(id);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    if (nextIds.length > 0) {
+      next.set("ids", nextIds.join(","));
+    } else {
+      next.delete("ids");
+    }
+    if (!nextIds.includes(next.get("focus") ?? "")) {
+      if (nextIds[0]) next.set("focus", nextIds[0]);
+      else next.delete("focus");
+    }
+    setSearchParams(next, { replace: true });
+  }
+
   return (
     <div className="notion-page workspace-document">
       <Helmet>
@@ -302,6 +322,7 @@ export function WorkspacePage() {
           status={compareState.key === compareKey ? compareState.status : "loading"}
           copied={copied}
           onCopy={copyComparisonLink}
+          onRemoveHome={removeCompareHomes}
         />
       ) : (
         <EditorialView
@@ -329,6 +350,7 @@ function CompareWorkspaceView({
   status,
   copied,
   onCopy,
+  onRemoveHome,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
@@ -336,6 +358,7 @@ function CompareWorkspaceView({
   status: CompareStatus;
   copied: boolean;
   onCopy: () => void;
+  onRemoveHome: (propertyIds: string[]) => void;
 }) {
   if (selectedHomes.length < 2) {
     return (
@@ -382,6 +405,7 @@ function CompareWorkspaceView({
           selectedHomes={selectedHomes}
           catalog={catalog}
           details={details}
+          onRemoveColumn={onRemoveHome}
         />
       )}
     </section>

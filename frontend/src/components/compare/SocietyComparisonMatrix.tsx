@@ -53,9 +53,7 @@ type CompareItem = {
 };
 
 type NoteGroupId =
-  | "nearby_under_1km"
-  | "nearby_under_3km"
-  | "nearby_under_5km"
+  | "nearby_access"
   | "access_notes"
   | "commute_anchors"
   | "red_flags"
@@ -74,9 +72,7 @@ type NoteGroupDef = {
 };
 
 const NOTE_GROUPS: NoteGroupDef[] = [
-  { id: "nearby_under_1km", label: "Nearby under 1 km", icon: "⌖", section: "Access", rank: 10 },
-  { id: "nearby_under_3km", label: "Nearby under 3 km", icon: "⌖", section: "Access", rank: 20 },
-  { id: "nearby_under_5km", label: "Nearby under 5 km", icon: "⌖", section: "Access", rank: 30 },
+  { id: "nearby_access", label: "Nearby access", icon: "⌖", section: "Access", rank: 10 },
   { id: "access_notes", label: "Daily access", icon: "⌁", section: "Access", rank: 40 },
   { id: "commute_anchors", label: "Commute anchors", icon: "↔", section: "Access", rank: 50 },
   { id: "red_flags", label: "Red flags", icon: "!", section: "Risks", rank: 10 },
@@ -241,9 +237,7 @@ const CANONICAL_NOTE_LABELS = new Set(
 
 function noteCompareGroup(note: Pick<NotebookNote, "labels">): NoteGroupId | null {
   const labels = note.labels;
-  if (labels.some((label) => label.endsWith("_under_1km"))) return "nearby_under_1km";
-  if (labels.some((label) => label.endsWith("_under_3km"))) return "nearby_under_3km";
-  if (labels.some((label) => label.endsWith("_under_5km"))) return "nearby_under_5km";
+  if (labels.some((label) => label.includes("_under_"))) return "nearby_access";
   if (labels.includes("transmission") || labels.includes("risk")) return "red_flags";
   if (labels.includes("water")) return "water";
   if (labels.includes("approach")) return "approach";
@@ -294,11 +288,45 @@ function labelClass(label: NotebookLabelId): string {
   return `compare-tag compare-tag--${labelClassToken(label)}`;
 }
 
-function displayItemLabels(item: Pick<CompareItem, "labels">): NotebookLabelId[] {
+type CompareDisplayTag = {
+  key: string;
+  label: string;
+  classLabel: NotebookLabelId;
+};
+
+function distanceBucketTitle(label: NotebookLabelId): string | null {
+  if (label.endsWith("_under_1km")) return "Under 1 km";
+  if (label.endsWith("_under_3km")) return "Under 3 km";
+  if (label.endsWith("_under_5km")) return "Under 5 km";
+  return null;
+}
+
+function distanceBucketRank(label: NotebookLabelId): number {
+  if (label.endsWith("_under_1km")) return 1;
+  if (label.endsWith("_under_3km")) return 2;
+  if (label.endsWith("_under_5km")) return 3;
+  return 9;
+}
+
+function baseLabelFromBucket(label: NotebookLabelId): NotebookLabelId {
+  return label.replace(/_under_[135]km$/, "");
+}
+
+function displayIconLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
   const bucket = item.labels.find((label) => label.includes("_under_"));
-  if (bucket) return [bucket];
+  if (bucket) return baseLabelFromBucket(bucket);
   const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
-  return primary ? [primary] : [];
+  return primary ?? null;
+}
+
+function displayItemTags(item: Pick<CompareItem, "labels">): CompareDisplayTag[] {
+  const bucket = item.labels.find((label) => label.includes("_under_"));
+  if (bucket) {
+    const label = distanceBucketTitle(bucket);
+    return label ? [{ key: bucket, label, classLabel: bucket }] : [];
+  }
+  const primary = item.labels.find((label) => label !== "commute") ?? item.labels[0];
+  return primary ? [{ key: primary, label: labelDef(primary).title, classLabel: primary }] : [];
 }
 
 function CanonicalRowIcon({ id }: { id: CanonicalRowId }) {
@@ -348,24 +376,35 @@ function CompareHomeHeader({
   column,
   index,
   summary = [],
+  onRemove,
 }: {
   column: SocietyColumn;
   index: number;
   summary?: string[];
+  onRemove?: (propertyIds: string[]) => void;
 }) {
   return (
-    <Link
-      className="compare-editorial__home"
-      to={`/property/${encodeURIComponent(column.propertyId)}`}
-    >
-      <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
-      <strong>{column.name}</strong>
-      <span>{column.area}</span>
-      {summary.length > 0 && (
-        <small>{summary.join(" · ")}</small>
+    <article className="compare-editorial__home">
+      {onRemove && (
+        <button
+          type="button"
+          className="compare-editorial__remove"
+          aria-label={`Remove ${column.name} from compare`}
+          onClick={() => onRemove([...column.selectedIds])}
+        >
+          ×
+        </button>
       )}
-      <em>Open home ↗</em>
-    </Link>
+      <Link to={`/property/${encodeURIComponent(column.propertyId)}`}>
+        <i aria-hidden="true">{String(index + 1).padStart(2, "0")}</i>
+        <strong>{column.name}</strong>
+        <span>{column.area}</span>
+        {summary.length > 0 && (
+          <small>{summary.join(" · ")}</small>
+        )}
+        <em>Open home ↗</em>
+      </Link>
+    </article>
   );
 }
 
@@ -409,7 +448,8 @@ function backendCompareItems(context: PropertyMapContext | null): CompareItem[] 
     .sort((left, right) => {
       const leftBucket = left.labels.find((label) => label.includes("_under_")) ?? "";
       const rightBucket = right.labels.find((label) => label.includes("_under_")) ?? "";
-      return leftBucket.localeCompare(rightBucket) || left.title.localeCompare(right.title);
+      return distanceBucketRank(leftBucket) - distanceBucketRank(rightBucket)
+        || left.title.localeCompare(right.title);
     });
 }
 
@@ -426,24 +466,24 @@ function mergeCompareItems(backendItems: CompareItem[], notes: NotebookNote[]): 
 }
 
 function CompareNote({ item }: { item: CompareItem }) {
-  const labels = displayItemLabels(item);
+  const iconLabel = displayIconLabel(item);
+  const tags = displayItemTags(item);
   return (
     <div className={`compare-note compare-note--${item.origin}`}>
-      {labels[0] && (
+      {iconLabel && (
         <b aria-hidden="true">
-          <LabelVisualIcon id={labels[0]} size={18} />
+          <LabelVisualIcon id={iconLabel} size={18} />
         </b>
       )}
       <span>{item.title}</span>
       {(item.detail || item.source) && (
         <small>{item.detail || item.source}</small>
       )}
-      {labels.length > 0 && (
+      {tags.length > 0 && (
         <div className="compare-note__labels" aria-label="Saved labels">
-          {labels.map((label) => (
-            <span key={label} className={labelClass(label)}>
-              <LabelVisualIcon id={label} size={16} />
-              {labelDef(label).title}
+          {tags.map((tag) => (
+            <span key={tag.key} className={labelClass(tag.classLabel)}>
+              {tag.label}
             </span>
           ))}
         </div>
@@ -564,10 +604,12 @@ export function SocietyComparisonMatrix({
   selectedHomes,
   catalog,
   details,
+  onRemoveColumn,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
   details: PropertyDetailResponse[];
+  onRemoveColumn?: (propertyIds: string[]) => void;
 }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const { notes } = useNotebook();
@@ -681,6 +723,7 @@ export function SocietyComparisonMatrix({
               column={column}
               index={index}
               summary={homeHeaderSummary(column.listings.filter((listing) => listing.bhk === activeBhk))}
+              onRemove={onRemoveColumn}
             />
           ))}
         </div>
