@@ -3775,6 +3775,61 @@ body {
   -webkit-box-orient: vertical;
 }
 
+.property-signal-pills {
+  display: flex;
+  gap: 0.55rem;
+  overflow-x: auto;
+  padding: 0.2rem 0 1rem;
+  margin: -0.15rem 0 1rem;
+  border-bottom: 1px solid var(--color-border);
+  scrollbar-width: none;
+}
+
+.property-signal-pills::-webkit-scrollbar {
+  display: none;
+}
+
+.property-signal-pill {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.48rem;
+  min-height: 2.55rem;
+  padding: 0 0.92rem;
+  border: 1px solid rgba(38, 35, 32, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--color-text);
+  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
+}
+
+.property-signal-pill strong {
+  font-size: 0.88rem;
+  font-weight: 820;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.property-signal-pill em {
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  font-style: normal;
+  font-weight: 760;
+}
+
+.label-visual-symbol {
+  display: inline-grid;
+  width: 1.38rem;
+  height: 1.38rem;
+  place-items: center;
+  border-radius: 999px;
+  background: #eee9e5;
+  color: var(--color-text);
+  font-size: 0.82rem;
+  font-weight: 860;
+  line-height: 1;
+}
+
 .property-review-more {
   display: inline-flex;
   align-items: center;
@@ -4111,6 +4166,11 @@ body {
 
   .property-review-grid {
     columns: 1;
+  }
+
+  .property-signal-pills {
+    margin-right: -1rem;
+    padding-right: 1rem;
   }
 
   .property-nearby-rail__scroller {

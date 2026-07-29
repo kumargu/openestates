@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import type {
+  DetailSignal,
   EvidenceSection,
   ExternalReviewCard,
   PropertyCard,
@@ -27,6 +28,7 @@ import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import { AreaPriceBands, type AreaMarketContext } from "../components/AreaPriceBands.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt, sceneLabelForIndex } from "../lib/propertyScene.ts";
+import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import {
   isRedundantHomeState,
 } from "../lib/property-signals.ts";
@@ -108,6 +110,10 @@ function fitReviewCards(reviewCards: ExternalReviewCard[], budget = 10): Externa
     used += cost;
   }
   return selected;
+}
+
+function detailSignalPills(signals: DetailSignal[] | undefined): DetailSignal[] {
+  return (signals ?? []).filter((signal) => signal.label.trim()).slice(0, 8);
 }
 
 function cleanAreaToken(value: string): string {
@@ -470,6 +476,7 @@ function GoogleReviewsSection({
     }));
   const reviewSourceCards = reviews?.reviews?.length ? reviews.reviews : fallbackCards;
   const reviewCards = fitReviewCards(reviewSourceCards, 14);
+  const signalPills = detailSignalPills(data.detail_signals);
   const reviewButtonLabel = reviewCount
     ? `Show all ${reviewCount.replace(" Google ", " ")}`
     : "Show more Google reviews";
@@ -484,6 +491,18 @@ function GoogleReviewsSection({
           {reviewCount ? ` · ${reviewCount}` : ""}
         </h2>
       </div>
+
+      {signalPills.length > 0 && (
+        <div className="property-signal-pills" aria-label="Review and nearby highlights">
+          {signalPills.map((signal) => (
+            <span key={signal.key} className="property-signal-pill">
+              <LabelVisualIcon id={signal.icon || signal.key} size={22} />
+              <strong>{signal.label}</strong>
+              {typeof signal.count === "number" && <em>{signal.count}</em>}
+            </span>
+          ))}
+        </div>
+      )}
 
       {reviewCards.length > 0 && (
         <div className="property-review-grid">

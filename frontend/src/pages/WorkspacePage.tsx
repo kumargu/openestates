@@ -18,6 +18,8 @@ import {
   type NotebookLabelId,
   type NotebookNote,
 } from "../lib/notebook.ts";
+import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
+import { labelClassToken } from "../lib/labelVisuals.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
@@ -45,28 +47,11 @@ function societyLabel(home: PropertyCard | undefined, id: string): string {
 }
 
 function cssLabel(id: string): string {
-  if (id.startsWith("hospitals")) return "hospitals";
-  if (id.startsWith("schools")) return "schools";
-  if (id.startsWith("metro") || id === "tech_parks" || id === "commute") return "commute";
-  if (id === "transmission" || id === "risk") return "risk";
-  if (id === "open-space") return "open-space";
-  if (id === "down-payment") return "down-payment";
-  return id;
+  return labelClassToken(id);
 }
 
-function noteIcon(note: NotebookNote): string {
-  const labels = note.labels.join(" ");
-  if (labels.includes("hospital")) return "🏥";
-  if (labels.includes("school")) return "🎓";
-  if (labels.includes("metro") || labels.includes("tech")) return "🚇";
-  if (labels.includes("risk") || labels.includes("transmission")) return "⚡";
-  if (labels.includes("water")) return "💧";
-  if (labels.includes("approach")) return "🛤️";
-  if (labels.includes("community")) return "💬";
-  if (labels.includes("legal")) return "📋";
-  if (labels.includes("price") || labels.includes("emi")) return "₹";
-  if (note.kind === "handwritten") return "✏️";
-  return "📌";
+function noteIcon(note: NotebookNote) {
+  return <LabelVisualIcon id={note.labels[0] ?? (note.kind === "handwritten" ? "visit" : "other")} size={22} />;
 }
 
 function workspaceMode(pathname: string): WorkspaceMode {
@@ -122,6 +107,7 @@ function LabelPicker({
           title="Remove label"
           onClick={() => onRemove(id)}
         >
+          <LabelVisualIcon id={id} size={18} />
           {labelDef(id).title}
         </button>
       ))}
@@ -147,6 +133,7 @@ function LabelPicker({
                   setOpen(false);
                 }}
               >
+                <LabelVisualIcon id={id} size={18} />
                 {labelDef(id).title}
               </button>
             ))}

@@ -351,6 +351,7 @@
 .notion-pill {
   display: inline-flex;
   align-items: center;
+  gap: 0.36rem;
   min-height: 1.85rem;
   border: 1px solid rgba(38, 35, 32, 0.1);
   border-radius: 999px;
@@ -1395,6 +1396,7 @@
 .notebook-tag {
   display: inline-flex;
   align-items: center;
+  gap: 0.34rem;
   min-height: 1.75rem;
   border: 1px solid rgba(38, 35, 32, 0.1);
   border-radius: 999px;

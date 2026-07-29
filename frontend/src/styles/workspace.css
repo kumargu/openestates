@@ -1363,6 +1363,7 @@
   display: inline-flex;
   width: fit-content;
   align-items: center;
+  gap: 0.32rem;
   min-height: 1.65rem;
   padding: 0 0.64rem;
   border: 1px solid rgba(38, 35, 32, 0.1);

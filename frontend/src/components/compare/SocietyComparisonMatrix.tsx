@@ -8,6 +8,8 @@ import {
   type NotebookLabelId,
   type NotebookNote,
 } from "../../lib/notebook.ts";
+import { LabelVisualIcon } from "../../lib/LabelVisualIcon.tsx";
+import { labelClassToken } from "../../lib/labelVisuals.ts";
 import type { MapPlacePin, PropertyCard, PropertyDetailResponse, PropertyMapContext } from "../../lib/types.ts";
 
 type SocietyColumn = {
@@ -289,21 +291,7 @@ function compareContextForColumn(
 }
 
 function labelClass(label: NotebookLabelId): string {
-  return `compare-tag compare-tag--${label.replace(/[^a-z0-9-]/g, "-")}`;
-}
-
-function labelIcon(label: NotebookLabelId): string {
-  if (label.startsWith("hospitals")) return "+";
-  if (label.startsWith("schools")) return "A";
-  if (label.startsWith("metro")) return "M";
-  if (label === "tech_parks") return "T";
-  if (label === "water") return "~";
-  if (label === "risk" || label === "transmission") return "!";
-  if (label === "approach") return "→";
-  if (label === "price" || label === "emi" || label === "down-payment") return "₹";
-  if (label === "layout") return "□";
-  if (label === "legal") return "§";
-  return "·";
+  return `compare-tag compare-tag--${labelClassToken(label)}`;
 }
 
 function displayItemLabels(item: Pick<CompareItem, "labels">): NotebookLabelId[] {
@@ -441,7 +429,9 @@ function CompareNote({ item }: { item: CompareItem }) {
   return (
     <div className={`compare-note compare-note--${item.origin}`}>
       {labels[0] && (
-        <b aria-hidden="true">{labelIcon(labels[0])}</b>
+        <b aria-hidden="true">
+          <LabelVisualIcon id={labels[0]} size={18} />
+        </b>
       )}
       <span>{item.title}</span>
       {(item.detail || item.source) && (
@@ -451,6 +441,7 @@ function CompareNote({ item }: { item: CompareItem }) {
         <div className="compare-note__labels" aria-label="Saved labels">
           {labels.map((label) => (
             <span key={label} className={labelClass(label)}>
+              <LabelVisualIcon id={label} size={16} />
               {labelDef(label).title}
             </span>
           ))}
