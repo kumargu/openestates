@@ -97,6 +97,50 @@ test("compare labels can be hidden and restored without changing notes", () => {
   assert.deepEqual(restored.notes[0].labels, ["schools"]);
 });
 
+test("saved complaint notes migrate out of generic legal labels", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "Complaints",
+      detail: "21 filed",
+      kind: "selection",
+      catalogKey: "sel:home-1:complaints",
+      labels: ["legal"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const state = readNotebook();
+
+  assert.deepEqual(state.notes[0].labels, ["complaints", "risk", "legal"]);
+});
+
+test("complaint label remains the leading visual label after migration", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "Complaints",
+      detail: "RERA",
+      kind: "fact",
+      catalogKey: "rera:home-1:complaints",
+      labels: ["legal", "complaints"],
+      createdAt: 1,
+    }],
+    compareIds: ["home-1"],
+  }));
+
+  const state = readNotebook();
+
+  assert.deepEqual(state.notes[0].labels, ["complaints", "risk", "legal"]);
+});
+
 test("slash command blocks append and remain editable", () => {
   storage.clear();
   storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({

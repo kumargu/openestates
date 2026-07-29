@@ -95,6 +95,7 @@ export const NOTEBOOK_LABELS: NotebookLabelDef[] = [
   { id: "tech_parks", title: "Tech parks", compareJoin: true, compareGroup: "commute_anchors" },
   { id: "water", title: "Water", compareJoin: true, compareGroup: "water" },
   { id: "risk", title: "Risk", compareJoin: true, compareGroup: "red_flags" },
+  { id: "complaints", title: "Complaints", compareJoin: true, compareGroup: "red_flags" },
   { id: "transmission", title: "High-tension line", compareJoin: true, compareGroup: "red_flags" },
   { id: "approach", title: "Approach road", compareJoin: true, compareGroup: "approach" },
   { id: "open-space", title: "Open space", compareJoin: true, compareGroup: "open_spaces" },
@@ -118,6 +119,7 @@ export const ASSIGNABLE_NOTEBOOK_LABELS: NotebookLabelId[] = [
   "tech_parks",
   "water",
   "risk",
+  "complaints",
   "transmission",
   "approach",
   "open-space",
@@ -261,7 +263,8 @@ export function labelsFromEvidenceSection(kind: string, text: string): NotebookL
   if (hay.includes("school")) return ["schools"];
   if (hay.includes("hospital")) return ["hospitals"];
   if (hay.includes("water") || hay.includes("flood") || hay.includes("groundwater")) return ["water"];
-  if (hay.includes("rera") || hay.includes("legal") || hay.includes("complaint") || hay.includes("registration")) {
+  if (hay.includes("complaint")) return ["complaints", "risk"];
+  if (hay.includes("rera") || hay.includes("legal") || hay.includes("registration")) {
     return ["legal"];
   }
   if (hay.includes("price") || hay.includes("market") || hay.includes("asking")) return ["price"];
@@ -282,6 +285,8 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
     : typeof raw.label === "string"
       ? raw.label
       : "";
+  const detail = typeof raw.detail === "string" ? raw.detail : undefined;
+  const source = typeof raw.source === "string" ? raw.source : undefined;
   let labels: NotebookLabelId[] = [];
   if (Array.isArray(raw.labels)) {
     labels = raw.labels.filter((item): item is string => typeof item === "string");
@@ -292,12 +297,13 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
       // Keep labels; joinability now comes from catalog
     }
   }
+  labels = normalizeMigratedLabels(labels, `${title} ${detail ?? ""} ${source ?? ""}`);
   return {
     id: typeof raw.id === "string" ? raw.id : undefined,
     propertyId: typeof raw.propertyId === "string" ? raw.propertyId : undefined,
     title,
-    detail: typeof raw.detail === "string" ? raw.detail : undefined,
-    source: typeof raw.source === "string" ? raw.source : undefined,
+    detail,
+    source,
     kind: (raw.kind as NotebookNoteKind) ?? "fact",
     catalogKey: typeof raw.catalogKey === "string" ? raw.catalogKey : undefined,
     selectionText: typeof raw.selectionText === "string" ? raw.selectionText : undefined,
@@ -305,6 +311,15 @@ function migrateLegacyNote(raw: Record<string, unknown>): Partial<NotebookNote> 
     block: normalizeBlock(raw.block),
     createdAt: typeof raw.createdAt === "number" ? raw.createdAt : Date.now(),
   };
+}
+
+function normalizeMigratedLabels(labels: NotebookLabelId[], text: string): NotebookLabelId[] {
+  if (!/complaint/i.test(text) && !labels.includes("complaints")) return labels;
+  return [
+    "complaints",
+    "risk",
+    ...labels.filter((label) => label !== "complaints" && label !== "risk"),
+  ];
 }
 
 function normalizeNote(raw: Partial<NotebookNote> | Record<string, unknown>): NotebookNote | null {

@@ -28,6 +28,7 @@ const LABEL_VISUALS: Record<string, LabelVisual> = {
   layout: { title: "Layout", classToken: "layout", family: "comparable", icon: "space" },
   approach: { title: "Approach road", classToken: "approach", family: "symbol", icon: "approach", symbol: "→" },
   risk: { title: "Risk", classToken: "risk", family: "nearby", icon: "red_flags" },
+  complaints: { title: "Complaints", classToken: "complaints", family: "nearby", icon: "red_flags" },
   transmission: { title: "High-tension line", classToken: "transmission", family: "nearby", icon: "red_flags" },
   price: { title: "Price proof", classToken: "price", family: "symbol", icon: "price", symbol: "₹" },
   emi: { title: "EMI", classToken: "emi", family: "symbol", icon: "emi", symbol: "₹" },

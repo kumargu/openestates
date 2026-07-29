@@ -41,7 +41,20 @@ function toneClass(tone?: string): string {
 }
 
 function cardLabels(card: ReraDecisionCard): string[] {
-  return card.labels?.length ? card.labels.slice(0, 4) : ["legal"];
+  return reraNotebookLabels(card.labels, `${card.id} ${card.title}`);
+}
+
+function reraNotebookLabels(labels: string[] | undefined, context: string): string[] {
+  const next = labels?.filter(Boolean) ?? [];
+  const isComplaint = /complaint/i.test(context) || next.includes("complaints");
+  if (isComplaint) {
+    return [
+      "complaints",
+      "risk",
+      ...next.filter((label) => label !== "complaints" && label !== "risk"),
+    ].filter((label, index, all) => all.indexOf(label) === index).slice(0, 4);
+  }
+  return next.length ? [...new Set(next)].slice(0, 4) : ["legal"];
 }
 
 function LegacyReraFacts({
@@ -183,7 +196,7 @@ export function ReraProjectFacts({
                 title={`${item.label}: ${item.value}`}
                 detail="RERA compare fact"
                 source="RERA"
-                labels={item.labels.length ? item.labels : ["legal"]}
+                labels={reraNotebookLabels(item.labels, `${item.key} ${item.label}`)}
                 className="rera-dossier__pin"
               />
             </div>
