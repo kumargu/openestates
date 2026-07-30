@@ -261,12 +261,36 @@
       "label": "Homes per acre"
     },
     {
+      "fact_keys": ["rera_total_builtup_area_sqm"],
+      "label": "Built-up area"
+    },
+    {
+      "fact_keys": ["rera_total_carpet_area_sqm"],
+      "label": "Carpet area"
+    },
+    {
+      "fact_keys": ["rera_far_sanctioned"],
+      "label": "Sanctioned FAR"
+    },
+    {
       "fact_keys": ["parking_offered_for_sale_count"],
       "label": "Parking for sale"
     },
     {
+      "fact_keys": ["parking_covered_count", "rera_covered_parking"],
+      "label": "Covered parking"
+    },
+    {
+      "fact_keys": ["parking_surface_count", "rera_open_parking"],
+      "label": "Open parking"
+    },
+    {
       "fact_keys": ["parking_total_car_count"],
       "label": "Car parking"
+    },
+    {
+      "fact_keys": ["rera_builder_projects_count"],
+      "label": "Builder projects"
     },
     {
       "fact_keys": ["rera_builder_states"],
@@ -275,6 +299,26 @@
     {
       "fact_keys": ["rera_promoter_name"],
       "label": "Promoter"
+    },
+    {
+      "fact_keys": ["rera_escrow_account"],
+      "label": "Escrow account"
+    },
+    {
+      "fact_keys": ["rera_escrow_bank"],
+      "label": "Escrow bank"
+    },
+    {
+      "fact_keys": ["rera_escrow_ifsc"],
+      "label": "Escrow IFSC"
+    },
+    {
+      "fact_keys": ["rera_has_borrowing"],
+      "label": "Borrowing"
+    },
+    {
+      "fact_keys": ["rera_has_mortgage"],
+      "label": "Mortgage"
     },
     {
       "fact_keys": ["site_plan_asset_count"],
@@ -291,6 +335,14 @@
     {
       "fact_keys": ["rera_project_type"],
       "label": "Project type"
+    },
+    {
+      "fact_keys": ["rera_project_sub_type"],
+      "label": "Project subtype"
+    },
+    {
+      "fact_keys": ["rera_lat_lng"],
+      "label": "Coordinates"
     }
   ],
   "tone_rules": [

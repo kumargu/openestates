@@ -39,6 +39,9 @@
   font-size: clamp(1.8rem, 3.5vw, 3.4rem);
   line-height: 0.96;
   letter-spacing: 0;
+  overflow-wrap: break-word;
+  white-space: normal;
+  word-break: normal;
 }
 
 .rera-report-subline,
@@ -61,10 +64,11 @@
 
 .rera-report-registry__number {
   display: inline-flex;
+  min-width: 0;
   max-width: 100%;
   align-items: center;
   gap: 0.45rem;
-  padding: 0.38rem 0.5rem 0.38rem 0.65rem;
+  padding: 0.46rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: 7px;
   background: #fff;
@@ -194,7 +198,6 @@
   display: inline-flex;
   align-items: center;
   gap: 0.34rem;
-  min-height: 1.55rem;
 }
 
 .rera-report-source {
@@ -211,31 +214,6 @@
 .rera-report-source:hover,
 .rera-report-source:focus-visible {
   color: var(--color-text);
-}
-
-.rera-report-copy {
-  display: inline-grid;
-  place-items: center;
-  min-height: 1.75rem;
-  padding: 0 0.55rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 6px;
-  background: #fff;
-  color: var(--color-text-secondary);
-  font-size: 0.72rem;
-  font-weight: 760;
-  cursor: pointer;
-}
-
-.rera-report-copy:hover,
-.rera-report-copy:focus-visible {
-  border-color: rgba(38, 35, 32, 0.2);
-  color: var(--color-text);
-}
-
-.rera-report-copy--compact {
-  min-height: 1.55rem;
-  padding: 0 0.45rem;
 }
 
 .rera-report-pin.notebook-pin {
@@ -363,9 +341,16 @@
 }
 
 @media (max-width: 720px) {
-  .rera-report-page {
-    width: min(100% - 1.25rem, 980px);
+  .rera-report-page.page-container-wide {
+    box-sizing: border-box;
+    width: min(calc(100% - 2rem), 21rem);
+    max-width: min(calc(100% - 2rem), 21rem);
+    margin-right: 0.75rem;
+    margin-left: 0.75rem;
     padding-top: 0.75rem;
+    padding-right: 0;
+    padding-left: 0;
+    overflow-x: hidden;
   }
 
   .rera-report-hero {
@@ -373,8 +358,25 @@
   }
 
   .rera-report-hero h1 {
-    font-size: clamp(1.65rem, 12vw, 2.6rem);
+    max-width: 100%;
+    font-size: clamp(1.45rem, 7.8vw, 1.82rem);
     line-height: 1;
+  }
+
+  .rera-report-registry {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rera-report-registry__number {
+    width: 100%;
+  }
+
+  .rera-report-registry__number span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .rera-report-facts,
@@ -395,6 +397,18 @@
 
   .rera-report-document-link {
     grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+
+  .rera-report-document-link a {
+    align-items: flex-start;
+  }
+
+  .rera-report-document-link a span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
 
   .rera-report-document-link__actions,

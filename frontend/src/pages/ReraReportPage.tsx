@@ -52,17 +52,9 @@ function toneClass(tone?: string): string {
   return `is-${tone}`;
 }
 
-function copyTextForFact(fact: ReraReportFact): string {
-  return `${fact.label}: ${fact.value}`;
-}
-
 function kindLabel(value: string): string {
   const normalized = value.replace(/[_-]+/g, " ").trim();
   return normalized ? displayName(normalized) : "Document";
-}
-
-function documentCopyText(section: ReraDocumentSection, label: string, url: string): string {
-  return `${section.label}: ${label}\n${url}`;
 }
 
 function safeLabels(labels: string[] | undefined, key: string): NotebookLabelId[] {
@@ -92,25 +84,6 @@ function fallbackSections(dossier: ReraDossier): ReraReportSection[] {
   return facts.length > 0 ? [{ id: "facts", title: "Facts", facts }] : [];
 }
 
-function CopyButton({ text, compact = false }: { text: string; compact?: boolean }) {
-  const [copied, setCopied] = useState(false);
-
-  return (
-    <button
-      type="button"
-      className={compact ? "rera-report-copy rera-report-copy--compact" : "rera-report-copy"}
-      onClick={() => {
-        void navigator.clipboard?.writeText(text).then(() => {
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        });
-      }}
-    >
-      {copied ? "Copied" : "Copy"}
-    </button>
-  );
-}
-
 function FactLine({
   fact,
   propertyId,
@@ -128,7 +101,6 @@ function FactLine({
         <strong>{fact.value}</strong>
       </div>
       <div className="rera-report-fact__actions">
-        <CopyButton text={copyTextForFact(fact)} compact />
         <NotebookPinButton
           propertyId={propertyId}
           catalogKey={`rera-report:${propertyId}:${sectionId}:${fact.key}:${fact.value}`}
@@ -181,7 +153,6 @@ function DocumentSectionList({
                     </a>
                     <small>{detail}</small>
                     <div className="rera-report-document-link__actions">
-                      <CopyButton text={documentCopyText(section, itemLabel, href)} compact />
                       <NotebookPinButton
                         propertyId={propertyId}
                         catalogKey={`rera-document:${propertyId}:${section.group}:${item.artifact_id || href}`}
@@ -266,7 +237,6 @@ export function ReraReportPage() {
             {registrationNumber && (
               <div className="rera-report-registry__number">
                 <span>{registrationNumber}</span>
-                <CopyButton text={registrationNumber} compact />
               </div>
             )}
             {sourceUrl && (
