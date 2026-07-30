@@ -1,11 +1,17 @@
+use std::sync::Arc;
+
+use arc_swap::ArcSwap;
 use backend::assets::KgSocietyViewMaterializer;
+use backend::data_loader::runtime_snapshot_from_serving_bundle;
 use backend::knowledge::fact::{
     FactSource, FactValue, ScoringDirection, ScoringHint, SourceType, SourcedFact,
 };
 use backend::knowledge::graph::KnowledgeGraph;
 use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::LakeStore;
+use backend::search::{HashSemanticEmbedder, SemanticEmbedder};
 use backend::serving::{SearchServingBundleMaterializer, ServingBundleLoader};
+use backend::state::{SearchCacheKey, SearchResponseCache};
 use chrono::Utc;
 use tempfile::tempdir;
 
@@ -44,6 +50,15 @@ async fn current_serving_bundle_loads_hydrates_and_recalls_entities() {
         .search("whitefield greenery trees", 5)
         .unwrap();
     assert_eq!(hits[0].entity_id, "society:green-acre-whitefield");
+
+    let repeated_hits = loaded
+        .recall_index
+        .search("whitefield greenery trees", 5)
+        .unwrap();
+    assert_eq!(
+        repeated_hits, hits,
+        "repeated queries should be stable through the reusable Tantivy reader"
+    );
 }
 
 #[tokio::test]
@@ -58,6 +73,116 @@ async fn missing_current_serving_bundle_returns_none() {
         .unwrap();
 
     assert!(loaded.is_none());
+}
+
+#[tokio::test]
+async fn runtime_snapshot_reload_is_atomic() {
+    let lake_root = tempdir().unwrap();
+    let cache_root = tempdir().unwrap();
+    let lake = LakeStore::local(lake_root.path()).unwrap();
+    let graph = mock_graph();
+    let embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
+
+    let kg_v1 = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote(&graph, "bundle-v1", Vec::new(), Vec::new())
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_v1, "bundle-v1")
+        .await
+        .unwrap();
+    let bundle_v1 = Arc::new(
+        ServingBundleLoader::new(lake.clone(), cache_root.path())
+            .load_current_search_bundle()
+            .await
+            .unwrap()
+            .unwrap(),
+    );
+    let snapshot_v1 = runtime_snapshot_from_serving_bundle(bundle_v1, embedder.clone());
+    let runtime = ArcSwap::from_pointee(snapshot_v1);
+    let old_request_snapshot = runtime.load_full();
+
+    let kg_v2 = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote(&graph, "bundle-v2", Vec::new(), Vec::new())
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_v2, "bundle-v2")
+        .await
+        .unwrap();
+    let bundle_v2 = Arc::new(
+        ServingBundleLoader::new(lake, cache_root.path())
+            .load_current_search_bundle()
+            .await
+            .unwrap()
+            .unwrap(),
+    );
+    let snapshot_v2 = runtime_snapshot_from_serving_bundle(bundle_v2, embedder);
+    runtime.store(Arc::new(snapshot_v2));
+
+    assert_eq!(
+        old_request_snapshot.version_key.serving_bundle_version,
+        "bundle-v1"
+    );
+    assert_eq!(
+        runtime.load_full().version_key.serving_bundle_version,
+        "bundle-v2"
+    );
+}
+
+#[tokio::test]
+async fn dag_promotion_reload_smoke_updates_snapshot_and_cache_key() {
+    let lake_root = tempdir().unwrap();
+    let cache_root = tempdir().unwrap();
+    let lake = LakeStore::local(lake_root.path()).unwrap();
+    let graph = mock_graph();
+    let embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
+    let cache = SearchResponseCache::new(8);
+
+    let kg_v1 = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote(&graph, "smoke-v1", Vec::new(), Vec::new())
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_v1, "smoke-v1")
+        .await
+        .unwrap();
+    let snapshot_v1 = runtime_snapshot_from_serving_bundle(
+        Arc::new(
+            ServingBundleLoader::new(lake.clone(), cache_root.path())
+                .load_current_search_bundle()
+                .await
+                .unwrap()
+                .unwrap(),
+        ),
+        embedder.clone(),
+    );
+    let key_v1 = SearchCacheKey::new("whitefield greenery", &snapshot_v1.version_key);
+
+    let kg_v2 = KgSocietyViewMaterializer::new(lake.clone())
+        .materialize_and_promote(&graph, "smoke-v2", Vec::new(), Vec::new())
+        .await
+        .unwrap();
+    SearchServingBundleMaterializer::new(lake.clone())
+        .materialize_and_promote_from_kg_view(&kg_v2, "smoke-v2")
+        .await
+        .unwrap();
+    let snapshot_v2 = runtime_snapshot_from_serving_bundle(
+        Arc::new(
+            ServingBundleLoader::new(lake, cache_root.path())
+                .load_current_search_bundle()
+                .await
+                .unwrap()
+                .unwrap(),
+        ),
+        embedder,
+    );
+    let key_v2 = SearchCacheKey::new("whitefield greenery", &snapshot_v2.version_key);
+
+    assert_eq!(snapshot_v1.version_key.serving_bundle_version, "smoke-v1");
+    assert_eq!(snapshot_v2.version_key.serving_bundle_version, "smoke-v2");
+    assert_ne!(key_v1, key_v2);
+    cache.clear().await;
 }
 
 fn mock_graph() -> KnowledgeGraph {

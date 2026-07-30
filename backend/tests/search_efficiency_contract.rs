@@ -1,9 +1,17 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use backend::models::Property;
 use backend::search::intent::parse_intent;
-use backend::search::{HashSemanticEmbedder, SearchIndex, SemanticSearchIndex, TextSearch};
+use backend::search::{
+    HashSemanticEmbedder, KnowledgeContext, SearchIndex, SearchResponse, SemanticSearchIndex,
+    TextSearch,
+};
+use backend::state::{
+    CachedSearchOutput, RuntimeVersionKey, SearchCacheKey, SearchLogMessage, SearchResponseCache,
+    SEARCH_ENGINE_VERSION,
+};
 
 const MATCHING_PROPERTIES: usize = 12;
 const DISTRACTORS_PER_BUCKET: usize = 800;
@@ -247,6 +255,183 @@ fn semantic_plus_text_search_pipeline_stays_under_latency_budget() {
             "semantic+text search pipeline took {elapsed:?} for {query:?} over {} properties",
             properties.len()
         );
+    }
+}
+
+#[test]
+fn candidate_ranking_preserves_order_and_corpus_tiebreaks() {
+    let properties = vec![
+        property_with_description(
+            "alpha".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Whitefield apartment",
+        ),
+        property_with_description(
+            "bravo".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Whitefield apartment",
+        ),
+        property_with_description(
+            "charlie".to_string(),
+            "Whitefield",
+            3,
+            18_500_000,
+            "Whitefield apartment",
+        ),
+    ];
+    let society_names = society_names(&properties);
+    let intent = parse_intent("3bhk whitefield under 2cr");
+
+    let unrestricted = TextSearch::search_with_index_and_intent(
+        &properties,
+        None,
+        &society_names,
+        &[],
+        "3bhk whitefield under 2cr",
+        &intent,
+        None,
+    );
+    let restricted =
+        TextSearch::search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
+            &properties,
+            None,
+            None,
+            Some(vec![2, 1, 2, 0]),
+            None,
+            None,
+            None,
+            &society_names,
+            &[],
+            "3bhk whitefield under 2cr",
+            &intent,
+            None,
+        );
+
+    assert_eq!(
+        unrestricted
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alpha", "bravo", "charlie"],
+        "baseline tie-break should use original corpus order"
+    );
+    assert_eq!(
+        restricted
+            .iter()
+            .map(|result| result.card.id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["alpha", "bravo", "charlie"],
+        "candidate indexes must not let caller order or duplicates override final corpus tie-breaks"
+    );
+}
+
+#[tokio::test]
+async fn search_cache_key_changes_with_bundle_version() {
+    let cache = SearchResponseCache::new(8);
+    let key_v1 = SearchCacheKey::new("  3BHK   Whitefield  ", &runtime_key("bundle-v1"));
+    let key_v2 = SearchCacheKey::new("3bhk whitefield", &runtime_key("bundle-v2"));
+
+    cache
+        .put(
+            key_v1.clone(),
+            CachedSearchOutput {
+                response: Arc::new(empty_response("3bhk whitefield")),
+                log_messages: Vec::new(),
+            },
+        )
+        .await;
+
+    assert!(cache.get(&key_v1).await.is_some());
+    assert!(
+        cache.get(&key_v2).await.is_none(),
+        "same normalized query under a new bundle/version key must miss"
+    );
+}
+
+#[tokio::test]
+async fn search_cache_hit_still_carries_log_metadata() {
+    let cache = SearchResponseCache::new(8);
+    let key = SearchCacheKey::new("3bhk whitefield", &runtime_key("bundle-v1"));
+    let intent = parse_intent("3bhk whitefield");
+    let event = backend::knowledge::SearchEvent::new("3bhk whitefield".to_string(), intent, 1);
+
+    cache
+        .put(
+            key.clone(),
+            CachedSearchOutput {
+                response: Arc::new(empty_response("3bhk whitefield")),
+                log_messages: vec![SearchLogMessage::SearchEvent(event.clone())],
+            },
+        )
+        .await;
+
+    let cached = cache.get(&key).await.expect("cache should hit");
+    assert_eq!(cached.response.query, "3bhk whitefield");
+    assert_eq!(cached.log_messages.len(), 1);
+    match &cached.log_messages[0] {
+        SearchLogMessage::SearchEvent(cached_event) => {
+            assert_eq!(cached_event.query, event.query);
+            assert_eq!(cached_event.results_returned, event.results_returned);
+        }
+        SearchLogMessage::PersistEnrichmentGaps(_) => {
+            panic!("expected search-event metadata")
+        }
+    }
+}
+
+#[tokio::test]
+async fn search_event_queue_does_not_block_response_side_effect() {
+    let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+    let intent = parse_intent("3bhk whitefield");
+    let first = SearchLogMessage::SearchEvent(backend::knowledge::SearchEvent::new(
+        "3bhk whitefield".to_string(),
+        intent.clone(),
+        1,
+    ));
+    let second = SearchLogMessage::SearchEvent(backend::knowledge::SearchEvent::new(
+        "3bhk whitefield".to_string(),
+        intent,
+        1,
+    ));
+
+    tx.try_send(first)
+        .expect("first side effect should enqueue");
+    assert!(
+        tx.try_send(second).is_err(),
+        "full bounded queue should drop/fail the side effect without awaiting"
+    );
+    assert!(rx.try_recv().is_ok());
+}
+
+fn runtime_key(bundle_version: &str) -> RuntimeVersionKey {
+    RuntimeVersionKey {
+        serving_bundle_version: bundle_version.to_string(),
+        scoring_policy_version: backend::scoring::scoring_policy().version,
+        search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
+        semantic_embedder_model_id: "embedder-test".to_string(),
+        semantic_index_model_id: "index-test".to_string(),
+    }
+}
+
+fn empty_response(query: &str) -> SearchResponse {
+    SearchResponse {
+        query: query.to_string(),
+        intent: parse_intent(query),
+        results: Vec::new(),
+        area_context: None,
+        total_results: 0,
+        knowledge_context: Some(KnowledgeContext {
+            claims: Vec::new(),
+            nodes_consulted: 0,
+            learning_gaps: Vec::new(),
+        }),
+        search_diagnostics: None,
+        relaxations: Vec::new(),
+        search_guidance: None,
     }
 }
 

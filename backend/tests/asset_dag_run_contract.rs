@@ -465,12 +465,25 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         AssetPartition::global(),
     );
     write_current(&materializations, &stormwater_drain_facts).await;
+    let rera_project_plan_frames = materialization_in_partition(
+        "rera_project_plan_frames",
+        AssetStage::Silver,
+        "2026-07-13",
+        vec![
+            rera_facts.materialization_id.clone(),
+            canonical.materialization_id.clone(),
+        ],
+        now,
+        AssetPartition::global(),
+    );
+    write_current(&materializations, &rera_project_plan_frames).await;
     let current_project_facts = materialization_in_partition(
         "current_project_facts",
         AssetStage::Gold,
         "2026-07-13",
         vec![
             rera_facts.materialization_id.clone(),
+            rera_project_plan_frames.materialization_id.clone(),
             google_facts.materialization_id.clone(),
             google_nearby_facts.materialization_id.clone(),
             external_listing_facts.materialization_id.clone(),

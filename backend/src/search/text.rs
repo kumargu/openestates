@@ -1,7 +1,11 @@
 use std::cmp::Ordering;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 
-use crate::dag_config::{search_resolution_config, ui_surfaces_config};
+use crate::dag_config::{
+    nearby_place_category_for_fact_key, requested_nearby_place_categories,
+    search_resolution_config, ui_surfaces_config,
+};
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{KgEntityRefs, Property, Society};
@@ -31,6 +35,8 @@ use super::{
 /// Designed to be swappable with a vector search backend later — the interface
 /// (query in, scored results out) stays the same.
 pub struct TextSearch;
+
+const FIELD_ONLY_STRUCTURED_RESULT_LIMIT: usize = 400;
 
 impl TextSearch {
     /// Intent-based search: filters by hard constraints, scores by relevance,
@@ -157,6 +163,55 @@ impl TextSearch {
         intent: &SearchIntent,
         graph: Option<&KnowledgeGraph>,
     ) -> Vec<SearchResultCard> {
+        let merged_ids = merged_candidate_ids(
+            search_index.map(|index| index.recall_ids(query, intent)),
+            extra_candidate_ids,
+        );
+        let candidate_property_indexes = search_index.and_then(|index| {
+            merged_ids
+                .as_deref()
+                .and_then(|ids| {
+                    let indexes = index.property_indexes_for_ids(ids);
+                    (indexes.len() == ids.len()).then_some(indexes)
+                })
+                .filter(|indexes| !indexes.is_empty())
+        });
+        Self::search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
+            properties,
+            search_index,
+            merged_ids.as_deref(),
+            candidate_property_indexes,
+            semantic_scores,
+            geo_query,
+            serving_facts,
+            society_names,
+            societies,
+            query,
+            intent,
+            graph,
+        )
+    }
+
+    /// Candidate-index ranking entry point for the live snapshot path.
+    ///
+    /// When `candidate_property_indexes` is present, ranking iterates only those
+    /// corpus indexes in caller-provided order and keeps the original corpus
+    /// ordinal for final tie-breaking.
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
+        properties: &[Property],
+        search_index: Option<&SearchIndex>,
+        extra_candidate_ids: Option<&[String]>,
+        candidate_property_indexes: Option<Vec<usize>>,
+        semantic_scores: Option<&HashMap<String, f64>>,
+        geo_query: Option<&geo::GeoSearchQuery<'_>>,
+        serving_facts: Option<&ServingFactIndex>,
+        society_names: &std::collections::HashMap<String, String>,
+        societies: &[Society],
+        query: &str,
+        intent: &SearchIntent,
+        graph: Option<&KnowledgeGraph>,
+    ) -> Vec<SearchResultCard> {
         if !intent.unsupported_inventory_types.is_empty() {
             return Vec::new();
         }
@@ -175,27 +230,43 @@ impl TextSearch {
             .collect::<Vec<_>>();
         let positive_preferences = positive_preference_labels(intent);
         let negative_preferences = negative_preference_labels(intent);
+        let prefix_terms = if scoring_terms.is_empty() && semantic_scores.is_none() {
+            Vec::new()
+        } else {
+            terms.iter().map(String::as_str).collect::<Vec<_>>()
+        };
         let has_geo_query = geo_query.is_some_and(|query| !query.is_empty());
         let has_explainable_signals = !positive_preferences.is_empty()
             || !negative_preferences.is_empty()
             || !intent.hard_constraints.is_empty()
             || has_geo_query;
         let proof_focus_targets = proof_focus_targets();
-        let candidate_ids = merged_candidate_ids(
-            search_index.map(|index| index.recall_ids(query, intent)),
-            extra_candidate_ids,
+        let candidate_ids = if candidate_property_indexes.is_some() {
+            None
+        } else {
+            merged_candidate_ids(
+                search_index.map(|index| index.recall_ids(query, intent)),
+                extra_candidate_ids,
+            )
+        };
+        let mut candidate_properties = candidate_property_refs(
+            properties,
+            candidate_property_indexes.as_deref(),
+            candidate_ids.as_deref(),
         );
+        if should_limit_field_only_structured_results(
+            intent,
+            semantic_scores,
+            geo_query,
+            serving_facts,
+            graph,
+        ) {
+            candidate_properties.truncate(FIELD_ONLY_STRUCTURED_RESULT_LIMIT);
+        }
 
-        let mut results: Vec<RankedSearchResult> = properties
-            .iter()
-            .enumerate()
+        let mut results: Vec<RankedSearchResult> = candidate_properties
+            .into_iter()
             .filter_map(|(ordinal, p)| {
-                if let Some(ids) = candidate_ids.as_ref() {
-                    if !ids.iter().any(|id| id == &p.id) {
-                        return None;
-                    }
-                }
-
                 if !p.is_listable() {
                     return None;
                 }
@@ -265,7 +336,8 @@ impl TextSearch {
                     .unwrap_or("");
                 let named_society_match =
                     query_mentions_resolvable_society(&query_lower, society_name);
-                let name_prefix_score = query_name_prefix_score(&terms, &p.title, society_name);
+                let name_prefix_score =
+                    query_name_prefix_score(&prefix_terms, &p.title, society_name);
 
                 // Base text score
                 let (mut score, mut reasons) = if terms.is_empty() {
@@ -284,8 +356,10 @@ impl TextSearch {
                 let mut total_facts_consulted: usize = 0;
                 let mut positive_evidence_score = 0.0;
                 let mut primary_intent_score: f64 = 0.0;
+                let mut best_fact_key_rank = usize::MAX;
 
                 for evidence in hard_constraint_matches {
+                    best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                     total_facts_consulted += 1;
                     graph_count += 1;
                     score += evidence.score_delta;
@@ -371,7 +445,7 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             if !evidence_is_confident_enough(
                                 &detail.source_type,
@@ -383,6 +457,10 @@ impl TextSearch {
                             total_facts_consulted += 1;
                             score += gs;
                             positive_evidence_score += gs.max(0.0);
+                            best_fact_key_rank = best_fact_key_rank.min(candidate_fact_key_rank(
+                                &candidate_fact_keys,
+                                &detail.fact_key,
+                            ));
                             reasons.push(format!("matches preference: {}", pref));
 
                             // Normalize score to 0-1 range (graph scores are 0-2)
@@ -431,8 +509,10 @@ impl TextSearch {
                             serving_facts,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
+                            &query_lower,
                         ) {
+                            best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
                             positive_evidence_score += evidence.score_delta.max(0.0);
@@ -481,8 +561,9 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
+                            best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
                             positive_evidence_score += evidence.score_delta.max(0.0);
@@ -540,7 +621,7 @@ impl TextSearch {
                             serving_facts,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -585,7 +666,7 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -766,6 +847,7 @@ impl TextSearch {
                 Some(RankedSearchResult {
                     ranking_score: normalized,
                     primary_intent_score,
+                    best_fact_key_rank,
                     name_prefix_score,
                     evidence_strength,
                     review_quality_score,
@@ -786,9 +868,16 @@ impl TextSearch {
             .collect();
 
         results.sort_by(|a, b| {
-            b.primary_intent_score
-                .partial_cmp(&a.primary_intent_score)
+            b.result
+                .match_score
+                .partial_cmp(&a.result.match_score)
                 .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    b.primary_intent_score
+                        .partial_cmp(&a.primary_intent_score)
+                        .unwrap_or(Ordering::Equal)
+                })
+                .then_with(|| a.best_fact_key_rank.cmp(&b.best_fact_key_rank))
                 .then_with(|| b.named_society_match.cmp(&a.named_society_match))
                 .then_with(|| {
                     b.name_prefix_score
@@ -800,7 +889,6 @@ impl TextSearch {
                         .partial_cmp(&a.evidence_strength)
                         .unwrap_or(Ordering::Equal)
                 })
-                .then_with(|| compare_score_and_review(a, b))
                 .then_with(|| {
                     b.result
                         .semantic_score
@@ -808,6 +896,7 @@ impl TextSearch {
                         .partial_cmp(&a.result.semantic_score.unwrap_or(0.0))
                         .unwrap_or(Ordering::Equal)
                 })
+                .then_with(|| compare_score_and_review(a, b))
                 .then_with(|| a.ordinal.cmp(&b.ordinal))
         });
         results.into_iter().map(|ranked| ranked.result).collect()
@@ -818,6 +907,7 @@ struct RankedSearchResult {
     result: SearchResultCard,
     ranking_score: f64,
     primary_intent_score: f64,
+    best_fact_key_rank: usize,
     name_prefix_score: f64,
     evidence_strength: f64,
     review_quality_score: f64,
@@ -1039,6 +1129,50 @@ fn merged_candidate_ids(
     }
 }
 
+fn should_limit_field_only_structured_results(
+    intent: &SearchIntent,
+    semantic_scores: Option<&HashMap<String, f64>>,
+    geo_query: Option<&geo::GeoSearchQuery<'_>>,
+    serving_facts: Option<&ServingFactIndex>,
+    graph: Option<&KnowledgeGraph>,
+) -> bool {
+    graph.is_none()
+        && serving_facts.is_none()
+        && semantic_scores.is_none()
+        && geo_query.is_none_or(geo::GeoSearchQuery::is_empty)
+        && intent.excluded_areas.is_empty()
+        && (intent.area.is_some() || intent.bhk.is_some() || intent.budget_max.is_some())
+}
+
+fn candidate_property_refs<'a>(
+    properties: &'a [Property],
+    candidate_property_indexes: Option<&[usize]>,
+    candidate_ids: Option<&[String]>,
+) -> Vec<(usize, &'a Property)> {
+    if let Some(indexes) = candidate_property_indexes {
+        let mut seen = HashSet::with_capacity(indexes.len());
+        return indexes
+            .iter()
+            .filter_map(|index| {
+                if !seen.insert(*index) {
+                    return None;
+                }
+                properties.get(*index).map(|property| (*index, property))
+            })
+            .collect();
+    }
+
+    properties
+        .iter()
+        .enumerate()
+        .filter(|(_, property)| {
+            candidate_ids
+                .map(|ids| ids.iter().any(|id| id == &property.id))
+                .unwrap_or(true)
+        })
+        .collect()
+}
+
 fn should_prefer_extra_candidate_ids(local_len: usize, extra_len: usize) -> bool {
     let ranking = schema::ranking_policy();
     extra_len >= ranking.broad_local_recall_min_extra
@@ -1048,6 +1182,7 @@ fn should_prefer_extra_candidate_ids(local_len: usize, extra_len: usize) -> bool
 struct EvidenceMatch {
     preference: String,
     fact_key: String,
+    fact_key_rank: usize,
     display: String,
     normalized_score: f64,
     score_delta: f64,
@@ -1204,21 +1339,18 @@ fn named_place_identity_tokens(place_name: &str) -> Vec<String> {
 }
 
 fn is_nearby_place_generic_token(token: &str) -> bool {
-    matches!(
-        token,
-        "the"
-            | "and"
-            | "school"
-            | "academi"
-            | "hospital"
-            | "metro"
-            | "station"
-            | "park"
-            | "road"
-            | "bengaluru"
-            | "bangalor"
-            | "whitefield"
-    )
+    configured_named_place_generic_tokens().contains(token)
+}
+
+fn configured_named_place_generic_tokens() -> &'static HashSet<String> {
+    static TOKENS: OnceLock<HashSet<String>> = OnceLock::new();
+    TOKENS.get_or_init(|| {
+        schema::ranking_policy()
+            .named_place_generic_tokens
+            .iter()
+            .flat_map(|term| analyzer::stemmed_tokens(term))
+            .collect()
+    })
 }
 
 fn distance_for_nearby_place_snippet(snippet: &str, place_name: &str) -> Option<f64> {
@@ -1303,7 +1435,7 @@ fn semantic_candidate_fit_boost(semantic_score: Option<f64>) -> f64 {
     (score * ranking.semantic_candidate_fit_weight).min(ranking.semantic_candidate_fit_cap)
 }
 
-fn query_name_prefix_score(query_terms: &[String], title: &str, society_name: &str) -> f64 {
+fn query_name_prefix_score(query_terms: &[&str], title: &str, society_name: &str) -> f64 {
     if query_terms.is_empty() {
         return 0.0;
     }
@@ -1314,7 +1446,7 @@ fn query_name_prefix_score(query_terms: &[String], title: &str, society_name: &s
         .max(name_prefix_score_for_tokens(query_terms, &title_tokens))
 }
 
-fn name_prefix_score_for_tokens(query_terms: &[String], candidate_tokens: &[String]) -> f64 {
+fn name_prefix_score_for_tokens(query_terms: &[&str], candidate_tokens: &[String]) -> f64 {
     if query_terms.is_empty() || candidate_tokens.is_empty() {
         return 0.0;
     }
@@ -1326,9 +1458,9 @@ fn name_prefix_score_for_tokens(query_terms: &[String], candidate_tokens: &[Stri
             let Some(candidate_token) = candidate_tokens.get(start + offset) else {
                 break;
             };
-            if query_term == candidate_token
-                || candidate_token.starts_with(query_term)
-                || query_term.starts_with(candidate_token)
+            if *query_term == candidate_token.as_str()
+                || candidate_token.starts_with(*query_term)
+                || query_term.starts_with(candidate_token.as_str())
             {
                 matched += 1;
                 continue;
@@ -1471,6 +1603,7 @@ fn numeric_constraint_evidence(
         return ConstraintEvaluation::Matched(EvidenceMatch {
             preference: constraint.raw_text.clone(),
             fact_key: fact.key.clone(),
+            fact_key_rank: usize::MAX,
             display: format!(
                 "{}: {} {}",
                 schema.label,
@@ -1538,6 +1671,7 @@ fn serving_numeric_constraint_evidence(
         return ConstraintEvaluation::Matched(EvidenceMatch {
             preference: constraint.raw_text.clone(),
             fact_key: fact.fact_key.clone(),
+            fact_key_rank: usize::MAX,
             display: format!(
                 "{}: {} {}",
                 schema.label,
@@ -1592,6 +1726,7 @@ fn graph_textual_preference_evidence(
             return Some(EvidenceMatch {
                 preference: preference.to_string(),
                 fact_key: fact.key.clone(),
+                fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, &fact.key),
                 display: format!("{}: {}", schema.display_label, snippet),
                 normalized_score: 0.7,
                 score_delta: schema.score_delta,
@@ -1611,6 +1746,7 @@ fn serving_preference_evidence(
     society_id: &str,
     preference: &str,
     candidate_fact_keys: &[String],
+    query_lower: &str,
 ) -> Option<EvidenceMatch> {
     let node_id = society_node_id(society_id);
     let rows = serving_facts.entity(&node_id)?;
@@ -1643,6 +1779,9 @@ fn serving_preference_evidence(
         if fact_is_negative_support_for_positive_preference(&fact.fact_key, preference) {
             continue;
         }
+        if place_fact_conflicts_with_explicit_query_family(query_lower, &fact.fact_key) {
+            continue;
+        }
         if !lifecycle_preference_value_compatible(preference, &fact.fact_key, &fact.value) {
             continue;
         }
@@ -1654,14 +1793,16 @@ fn serving_preference_evidence(
             continue;
         }
         let normalized_score = (score_delta / 2.0).min(1.0);
+        let fact_key_rank = candidate_fact_key_rank(candidate_fact_keys, &fact.fact_key);
         let ranked = RankedEvidence {
             source_rank: source_rank(&source_priority, &fact.source_type),
-            fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, &fact.fact_key),
+            fact_key_rank,
             normalized_score,
             confidence: fact.confidence,
             evidence: EvidenceMatch {
                 preference: preference.to_string(),
                 fact_key: fact.fact_key.clone(),
+                fact_key_rank,
                 display: render_serving_fact_display(fact, metadata, &fact.value),
                 normalized_score,
                 score_delta,
@@ -1702,6 +1843,9 @@ fn serving_preference_evidence(
         if fact_is_negative_support_for_positive_preference(&fact.fact_key, preference) {
             continue;
         }
+        if place_fact_conflicts_with_explicit_query_family(query_lower, &fact.fact_key) {
+            continue;
+        }
 
         if let Some(snippet) = schema::text_support_snippet(&fact.value, schema) {
             if !evidence_is_confident_enough(&fact.source_type, fact.confidence, "serving-text") {
@@ -1715,6 +1859,7 @@ fn serving_preference_evidence(
                 evidence: EvidenceMatch {
                     preference: preference.to_string(),
                     fact_key: fact.fact_key.clone(),
+                    fact_key_rank: usize::MAX,
                     display: format!("{}: {}", schema.display_label, snippet),
                     normalized_score: 0.7,
                     score_delta: schema.score_delta,
@@ -1734,6 +1879,17 @@ fn serving_preference_evidence(
     }
 
     best_text.map(|ranked| ranked.evidence)
+}
+
+fn place_fact_conflicts_with_explicit_query_family(query_lower: &str, fact_key: &str) -> bool {
+    let Some(fact_category) = nearby_place_category_for_fact_key(fact_key) else {
+        return false;
+    };
+    let requested = requested_nearby_place_categories(query_lower);
+    !requested.is_empty()
+        && !requested
+            .iter()
+            .any(|category| category.eq_ignore_ascii_case(fact_category))
 }
 
 fn graph_negative_preference_evidence(
@@ -1863,6 +2019,7 @@ fn negative_evidence_from_fact(
                 return Some(EvidenceMatch {
                     preference: preference.to_string(),
                     fact_key: fact_key.to_string(),
+                    fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
                     display: format!("{}: {}", risk_label, display_value),
                     normalized_score,
                     score_delta,
@@ -1886,6 +2043,7 @@ fn negative_evidence_from_fact(
     Some(EvidenceMatch {
         preference: preference.to_string(),
         fact_key: fact_key.to_string(),
+        fact_key_rank: candidate_fact_key_rank(candidate_fact_keys, fact_key),
         display: format!("{}: {}", risk_label, display),
         normalized_score,
         score_delta,
@@ -2975,18 +3133,26 @@ fn positive_preference_labels(intent: &SearchIntent) -> Vec<String> {
         intent
             .preferences
             .iter()
-            .filter(|pref| !pref.starts_with("avoid "))
-            .cloned()
+            .map(|pref| schema::legacy_display_preference_signal(pref))
+            .filter(|signal| signal.polarity == crate::search::intent::Polarity::Positive)
+            .map(|signal| signal.raw_text)
             .collect()
     }
 }
 
-fn positive_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+fn positive_preference_keys(intent: &SearchIntent, preference: &str) -> Vec<String> {
     intent
         .positive_preferences
         .iter()
         .find(|signal| signal.raw_text == preference)
-        .map_or(&[], |signal| signal.expanded_keys.as_slice())
+        .map(|signal| signal.expanded_keys.clone())
+        .unwrap_or_else(|| {
+            let signal = schema::preference_signal_for_label(
+                preference,
+                crate::search::intent::Polarity::Positive,
+            );
+            signal.expanded_keys
+        })
 }
 
 fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
@@ -3000,17 +3166,26 @@ fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
         intent
             .preferences
             .iter()
-            .filter_map(|pref| pref.strip_prefix("avoid ").map(str::to_string))
+            .map(|pref| schema::legacy_display_preference_signal(pref))
+            .filter(|signal| signal.polarity == crate::search::intent::Polarity::Negative)
+            .map(|signal| signal.raw_text)
             .collect()
     }
 }
 
-fn negative_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+fn negative_preference_keys(intent: &SearchIntent, preference: &str) -> Vec<String> {
     intent
         .negative_preferences
         .iter()
         .find(|signal| signal.raw_text == preference)
-        .map_or(&[], |signal| signal.expanded_keys.as_slice())
+        .map(|signal| signal.expanded_keys.clone())
+        .unwrap_or_else(|| {
+            let signal = schema::preference_signal_for_label(
+                preference,
+                crate::search::intent::Polarity::Negative,
+            );
+            signal.expanded_keys
+        })
 }
 
 /// Check if a property's society has a SocietyInArea edge to an area node
@@ -4164,6 +4339,24 @@ mod tests {
                 .any(|reason| reason.fact_key == "nearby_schools"),
             "school evidence should not prove a metro query: {:?}",
             wrong_reasons
+        );
+    }
+
+    #[test]
+    fn multi_place_family_query_keeps_each_requested_fact_family() {
+        let query = "near metro and schools in whitefield";
+
+        assert!(
+            !place_fact_conflicts_with_explicit_query_family(query, "nearby_metro_stations"),
+            "explicit metro request should keep metro evidence"
+        );
+        assert!(
+            !place_fact_conflicts_with_explicit_query_family(query, "nearby_schools"),
+            "explicit school request should keep school evidence"
+        );
+        assert!(
+            place_fact_conflicts_with_explicit_query_family(query, "nearby_hospitals"),
+            "unrequested sibling place category should still be suppressed"
         );
     }
 

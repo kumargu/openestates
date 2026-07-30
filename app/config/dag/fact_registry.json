@@ -30,6 +30,22 @@
       "rajakaluve_nearby",
       "rajakaluve_encroachment_record"
     ],
+    "fact_key_derivations": [
+      {
+        "input_dimension": "bhk",
+        "min_value": 1,
+        "max_value": 5,
+        "template": "{key}_{value}bhk",
+        "source_keys": [
+          "listing",
+          "listing_price",
+          "listing_price_range",
+          "listing_price_per_sqft_range",
+          "listing_area_sqft",
+          "listing_source_url"
+        ]
+      }
+    ],
     "query_stopwords": [
       "near",
       "under",

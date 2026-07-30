@@ -8,9 +8,12 @@
 use std::collections::hash_map::DefaultHasher;
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
+use std::sync::OnceLock;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+
+use crate::dag_config::{community_themes_config, CommunityThemeDefinition};
 
 /// Target length for buyer-facing community pulse paragraphs.
 pub const COMMUNITY_PARAGRAPH_MAX_WORDS: usize = 85;
@@ -226,9 +229,9 @@ fn has_theme_anchor(evidence_tokens: &BTreeSet<String>, theme: &CommunityThemeCa
 
 fn theme_anchor_tokens(theme: &CommunityThemeCandidate) -> BTreeSet<String> {
     let mut tokens = BTreeSet::new();
-    tokens.extend(local_embedding_tokens(theme.key));
-    tokens.extend(local_embedding_tokens(theme.label));
-    for term in theme.terms {
+    tokens.extend(local_embedding_tokens(&theme.key));
+    tokens.extend(local_embedding_tokens(&theme.label));
+    for term in &theme.terms {
         tokens.extend(local_embedding_tokens(term));
     }
     tokens
@@ -776,54 +779,41 @@ fn local_embedding_tokens(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
     for token in &raw {
         tokens.push(token.clone());
-        tokens.extend(
-            local_token_expansions(token)
-                .iter()
-                .map(|expanded| (*expanded).to_string()),
-        );
+        tokens.extend(local_embedding_expansions(token, ExpansionKind::Token));
     }
     for window in raw.windows(2) {
         let phrase = format!("{} {}", window[0], window[1]);
         tokens.push(phrase.replace(' ', "_"));
-        tokens.extend(
-            local_phrase_expansions(&phrase)
-                .iter()
-                .map(|expanded| (*expanded).to_string()),
-        );
+        tokens.extend(local_embedding_expansions(&phrase, ExpansionKind::Phrase));
     }
     tokens
 }
 
-fn local_token_expansions(token: &str) -> &'static [&'static str] {
-    match token {
-        "green" | "greenery" | "trees" | "landscaped" | "garden" => {
-            &["open_space", "calm", "nature"]
-        }
-        "maintained" | "maintenance" | "clean" | "upkeep" => &["maintenance", "well_kept"],
-        "clubhouse" | "pool" | "gym" | "amenities" | "amenity" => {
-            &["amenities", "clubhouse", "fitness"]
-        }
-        "metro" | "commute" | "connectivity" | "office" | "offices" => {
-            &["connectivity", "transit", "tech_park"]
-        }
-        "traffic" | "congestion" | "jam" => &["traffic", "commute_risk"],
-        "water" | "tanker" | "borewell" => &["water", "water_supply"],
-        "noise" | "noisy" => &["noise", "quiet"],
-        "parking" => &["parking", "visitor_parking"],
-        _ => &[],
-    }
+#[derive(Debug, Clone, Copy)]
+enum ExpansionKind {
+    Token,
+    Phrase,
 }
 
-fn local_phrase_expansions(phrase: &str) -> &'static [&'static str] {
-    match phrase {
-        "open space" => &["greenery", "calm", "large_campus"],
-        "well maintained" => &["maintenance", "well_kept"],
-        "tech park" | "tech parks" | "it park" | "it parks" => {
-            &["connectivity", "office", "commute"]
+fn local_embedding_expansions(input: &str, kind: ExpansionKind) -> Vec<String> {
+    let input = input.trim().to_ascii_lowercase();
+    let expansions = match kind {
+        ExpansionKind::Token => &community_themes_config().embedding_expansions.token,
+        ExpansionKind::Phrase => &community_themes_config().embedding_expansions.phrase,
+    };
+    expansions
+        .iter()
+        .find(|expansion| expansion.input.eq_ignore_ascii_case(&input))
+        .map(|expansion| expansion.expanded_tokens.clone())
+        .unwrap_or_default()
+}
+
+impl CommunityThemePolarity {
+    fn from_config(value: &str) -> Self {
+        match value {
+            "concern" => Self::Concern,
+            _ => Self::Positive,
         }
-        "metro station" => &["metro", "connectivity", "commute"],
-        "visitor parking" => &["parking"],
-        _ => &[],
     }
 }
 
@@ -893,96 +883,34 @@ fn is_embedding_stopword(token: &str) -> bool {
 
 #[derive(Debug, Clone)]
 pub struct CommunityThemeCandidate {
-    pub key: &'static str,
-    pub label: &'static str,
+    pub key: String,
+    pub label: String,
     pub polarity: CommunityThemePolarity,
-    pub terms: &'static [&'static str],
-    pub evidence_queries: &'static [&'static str],
+    pub terms: Vec<String>,
+    pub evidence_queries: Vec<String>,
 }
 
 pub fn community_theme_candidates() -> &'static [CommunityThemeCandidate] {
-    &[
-        CommunityThemeCandidate {
-            key: "greenery",
-            label: "greenery",
-            polarity: CommunityThemePolarity::Positive,
-            terms: &["green", "greenery", "trees", "tree", "open space", "park"],
-            evidence_queries: &[
-                "greenery trees landscaped open space calm layout",
-                "parks and green open areas inside the society",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "maintenance",
-            label: "maintenance",
-            polarity: CommunityThemePolarity::Positive,
-            terms: &["maintenance", "maintained", "clean", "well kept"],
-            evidence_queries: &[
-                "well maintained clean society upkeep",
-                "good maintenance and responsive facility management",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "amenities",
-            label: "amenities",
-            polarity: CommunityThemePolarity::Positive,
-            terms: &["clubhouse", "pool", "gym", "amenities", "play area"],
-            evidence_queries: &[
-                "clubhouse swimming pool gym play area amenities",
-                "good society amenities for families",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "connectivity",
-            label: "connectivity",
-            polarity: CommunityThemePolarity::Positive,
-            terms: &["metro", "connectivity", "commute", "tech park", "office"],
-            evidence_queries: &[
-                "metro commute connectivity tech parks offices",
-                "easy access to work hubs and public transport",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "traffic",
-            label: "traffic",
-            polarity: CommunityThemePolarity::Concern,
-            terms: &["traffic", "congestion", "jam", "commute issue"],
-            evidence_queries: &[
-                "traffic congestion jams commute delay",
-                "road access problems and peak hour traffic",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "water",
-            label: "water",
-            polarity: CommunityThemePolarity::Concern,
-            terms: &["water issue", "water problem", "tanker", "borewell"],
-            evidence_queries: &[
-                "water shortage tanker dependency borewell issue",
-                "water supply problems in the society",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "noise",
-            label: "noise",
-            polarity: CommunityThemePolarity::Concern,
-            terms: &["noise", "noisy", "construction noise"],
-            evidence_queries: &[
-                "noise problem construction noise noisy area",
-                "sound disturbance around the society",
-            ],
-        },
-        CommunityThemeCandidate {
-            key: "parking",
-            label: "parking",
-            polarity: CommunityThemePolarity::Concern,
-            terms: &["parking issue", "parking problem", "visitor parking"],
-            evidence_queries: &[
-                "parking problem visitor parking shortage",
-                "car parking constraints and visitor parking issues",
-            ],
-        },
-    ]
+    static CANDIDATES: OnceLock<Vec<CommunityThemeCandidate>> = OnceLock::new();
+    CANDIDATES.get_or_init(|| {
+        community_themes_config()
+            .themes
+            .iter()
+            .map(CommunityThemeCandidate::from)
+            .collect()
+    })
+}
+
+impl From<&CommunityThemeDefinition> for CommunityThemeCandidate {
+    fn from(value: &CommunityThemeDefinition) -> Self {
+        Self {
+            key: value.key.clone(),
+            label: value.label.clone(),
+            polarity: CommunityThemePolarity::from_config(&value.polarity),
+            terms: value.terms.clone(),
+            evidence_queries: value.evidence_queries.clone(),
+        }
+    }
 }
 
 #[cfg(test)]

@@ -4,6 +4,8 @@ use std::sync::atomic::AtomicU64;
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
+use arc_swap::ArcSwap;
+use tokio::sync::mpsc;
 use tokio::sync::RwLock;
 
 use crate::dag_config::{
@@ -24,20 +26,16 @@ use crate::serving::{
     LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
     ServingFactIndex,
 };
-use crate::state::AppState;
+use crate::state::{
+    search_log_queue_capacity_from_env, spawn_search_log_worker, AppState, SearchResponseCache,
+    SearchRuntimeSnapshot,
+};
 use crate::{
     lake::{LakeStoreLocation, LAKE_URL_ENV},
     serving::ServingBundleLoadError,
 };
 
-pub struct RuntimeServingSnapshot {
-    pub bundle: Arc<LoadedServingBundle>,
-    pub properties: Vec<Property>,
-    pub societies: Vec<Society>,
-    pub areas: Vec<AreaProfile>,
-    pub search_index: SearchIndex,
-    pub semantic_index: SemanticSearchIndex,
-}
+pub type RuntimeServingSnapshot = SearchRuntimeSnapshot;
 
 /// Load all data and construct the full AppState.
 ///
@@ -55,14 +53,13 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
 
     let semantic_embedder = semantic_embedder_from_env();
-    let RuntimeServingSnapshot {
-        properties,
-        societies,
-        areas,
-        search_index,
-        semantic_index,
-        ..
-    } = runtime_snapshot_from_serving_bundle(bundle.clone(), semantic_embedder.as_ref());
+    let search_runtime =
+        runtime_snapshot_from_serving_bundle(bundle.clone(), semantic_embedder.clone());
+    let properties = search_runtime.properties.to_vec();
+    let societies = search_runtime.societies.to_vec();
+    let areas = search_runtime.areas.to_vec();
+    let search_index = search_runtime.search_index.clone();
+    let semantic_index = search_runtime.semantic_index.clone();
     if properties.is_empty() {
         panic!(
             "Serving bundle {} has no property entities; refusing to fall back to legacy data",
@@ -98,8 +95,15 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     println!("Request-time AI disabled: search uses only local serving bundle data");
     let discovery_config = load_discovery_config();
     let map_overlays = crate::routes::map_overlays::load_city_map_overlays(project_root);
+    let knowledge = Arc::new(RwLock::new(graph));
+    let (search_event_tx, search_event_rx) = mpsc::channel(search_log_queue_capacity_from_env());
+    spawn_search_log_worker(knowledge.clone(), search_event_rx);
 
     AppState {
+        search_runtime: ArcSwap::from_pointee(search_runtime),
+        search_cache: SearchResponseCache::from_env(),
+        search_event_tx,
+        search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
         semantic_index: RwLock::new(semantic_index),
@@ -110,7 +114,7 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         societies: RwLock::new(societies),
         discovery_config,
         map_overlays,
-        knowledge: Arc::new(RwLock::new(graph)),
+        knowledge,
         project_root: project_root.to_path_buf(),
         process_started_at: chrono::Utc::now(),
         interest_counter: AtomicU64::new(0),
@@ -120,22 +124,23 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
 
 pub fn runtime_snapshot_from_serving_bundle(
     bundle: Arc<LoadedServingBundle>,
-    embedder: &dyn SemanticEmbedder,
+    embedder: Arc<dyn SemanticEmbedder>,
 ) -> RuntimeServingSnapshot {
     let properties = properties_from_serving_bundle(&bundle);
     let societies = societies_from_serving_bundle(&bundle);
     let areas = areas_from_serving_properties(&properties);
     let search_index = SearchIndex::build(&properties);
-    let semantic_index = semantic_index_from_bundle(&bundle, embedder, &properties);
+    let semantic_index = semantic_index_from_bundle(&bundle, embedder.as_ref(), &properties);
 
-    RuntimeServingSnapshot {
+    SearchRuntimeSnapshot::new(
         bundle,
         properties,
         societies,
         areas,
         search_index,
         semantic_index,
-    }
+        embedder,
+    )
 }
 
 fn semantic_embedder_from_env() -> Arc<dyn SemanticEmbedder> {

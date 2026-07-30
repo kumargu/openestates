@@ -1124,114 +1124,65 @@ fn collect_structured_livability_facts(
 ) -> Vec<StructuredFactSignal> {
     let society_id = society_node_id(&property.society_id);
     let area_id = super::enrichment::area_node_id(&property.area);
-    let definitions: &[(&str, &str, LivabilityLens, &str)] = &[
-        (
-            "home_state",
-            "delivery state",
-            LivabilityLens::Lifecycle,
-            "society",
-        ),
-        (
-            "home_age_bucket",
-            "project age",
-            LivabilityLens::Lifecycle,
-            "society",
-        ),
-        (
-            "home_timeline_state",
-            "project timeline",
-            LivabilityLens::Lifecycle,
-            "society",
-        ),
-        (
-            "approach_road_condition",
-            "approach road access",
-            LivabilityLens::Risk,
-            "society",
-        ),
-        (
-            "access_road_quality",
-            "road quality",
-            LivabilityLens::Risk,
-            "road_segment",
-        ),
-        (
-            "road_width",
-            "road width",
-            LivabilityLens::Risk,
-            "road_segment",
-        ),
-        (
-            "waterlogging_detail",
-            "area waterlogging",
-            LivabilityLens::Risk,
-            "area",
-        ),
-        (
-            "waterlogging_risk",
-            "waterlogging risk",
-            LivabilityLens::Risk,
-            "area",
-        ),
-        (
-            "stp_concern",
-            "STP concern",
-            LivabilityLens::Risk,
-            "society",
-        ),
-        (
-            "high_tension_wire_concern",
-            "high-tension wires",
-            LivabilityLens::Risk,
-            "society",
-        ),
-        (
-            "nearby_schools",
-            "school access",
-            LivabilityLens::Positive,
-            "society",
-        ),
-        (
-            "nearby_metro_stations",
-            "metro access",
-            LivabilityLens::Positive,
-            "society",
-        ),
-    ];
 
     let mut signals = Vec::new();
-    for (fact_key, label, lens, scope) in definitions {
-        let entity_id = match *scope {
+    for fact in buyer_context_definitions()
+        .iter()
+        .flat_map(|section| &section.facts)
+        .filter(|fact| fact.livability_lens.is_some())
+    {
+        let lens = fact
+            .livability_lens
+            .as_deref()
+            .map(livability_lens_from_config)
+            .unwrap_or(LivabilityLens::Judgment);
+        let entity_id = match fact.scope.as_str() {
             "area" => area_id.as_str(),
             _ => society_id.as_str(),
         };
-        let has_fact = if *scope == "road_segment" {
+        let has_fact = if fact.scope == "road_segment" {
             serving_facts.is_some_and(|facts| {
                 road_segment_entity_ids(property, facts, graph_index)
                     .iter()
                     .any(|entity_id| {
                         facts.entity(entity_id).is_some_and(|rows| {
-                            rows.facts.iter().any(|fact| fact.fact_key == *fact_key)
+                            rows.facts
+                                .iter()
+                                .any(|serving_fact| serving_fact.fact_key == fact.key)
                         })
                     })
             })
         } else {
             projection
-                .and_then(|projection| projection.latest_record(fact_key))
+                .and_then(|projection| projection.latest_record(&fact.key))
                 .is_some()
-                || graph
-                    .get_node(entity_id)
-                    .is_some_and(|node| node.facts.iter().any(|fact| fact.key == *fact_key))
+                || graph.get_node(entity_id).is_some_and(|node| {
+                    node.facts.iter().any(|node_fact| node_fact.key == fact.key)
+                })
         };
         if has_fact {
             signals.push(StructuredFactSignal {
-                fact_key: (*fact_key).to_string(),
-                label: (*label).to_string(),
-                lens: *lens,
+                fact_key: fact.key.clone(),
+                label: fact
+                    .livability_label
+                    .as_deref()
+                    .unwrap_or(&fact.label)
+                    .to_string(),
+                lens,
             });
         }
     }
     signals
+}
+
+fn livability_lens_from_config(value: &str) -> LivabilityLens {
+    match value {
+        "operating" => LivabilityLens::Operating,
+        "risk" => LivabilityLens::Risk,
+        "positive" => LivabilityLens::Positive,
+        "lifecycle" => LivabilityLens::Lifecycle,
+        _ => LivabilityLens::Judgment,
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -5045,6 +4996,8 @@ mod serving_state_tests {
                 label: "Config-only signal".to_string(),
                 scope: "society".to_string(),
                 relationship: "config-only proof".to_string(),
+                livability_lens: None,
+                livability_label: None,
                 max_values: None,
             }],
         });

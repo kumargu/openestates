@@ -17,18 +17,24 @@
       {
         "key": "home_state",
         "label": "Delivery state",
+        "livability_lens": "lifecycle",
+        "livability_label": "delivery state",
         "scope": "society",
         "relationship": "project lifecycle"
       },
       {
         "key": "home_age_bucket",
         "label": "Age band",
+        "livability_lens": "lifecycle",
+        "livability_label": "project age",
         "scope": "society",
         "relationship": "project lifecycle"
       },
       {
         "key": "home_timeline_state",
         "label": "Timeline",
+        "livability_lens": "lifecycle",
+        "livability_label": "project timeline",
         "scope": "society",
         "relationship": "project lifecycle"
       }
@@ -82,18 +88,24 @@
       {
         "key": "approach_road_condition",
         "label": "Review signal",
+        "livability_lens": "risk",
+        "livability_label": "approach road access",
         "scope": "society",
         "relationship": "approach road"
       },
       {
         "key": "access_road_quality",
         "label": "Road quality",
+        "livability_lens": "risk",
+        "livability_label": "road quality",
         "scope": "road_segment",
         "relationship": "approach road"
       },
       {
         "key": "road_width",
         "label": "Road width",
+        "livability_lens": "risk",
+        "livability_label": "road width",
         "scope": "road_segment",
         "relationship": "approach road"
       }
@@ -173,8 +185,8 @@
       "max_preview_items": 6
     },
     "facts": [
-      { "key": "nearby_schools", "label": "Schools", "scope": "society", "relationship": "nearby map context", "max_values": 4 },
-      { "key": "nearby_metro_stations", "label": "Metro", "scope": "society", "relationship": "nearby map context", "max_values": 2 },
+      { "key": "nearby_schools", "label": "Schools", "livability_lens": "positive", "livability_label": "school access", "scope": "society", "relationship": "nearby map context", "max_values": 4 },
+      { "key": "nearby_metro_stations", "label": "Metro", "livability_lens": "positive", "livability_label": "metro access", "scope": "society", "relationship": "nearby map context", "max_values": 2 },
       { "key": "nearby_hospitals", "label": "Hospitals", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
       { "key": "nearby_fitness", "label": "Cult / gyms", "scope": "society", "relationship": "nearby map context", "max_values": 3 },
       { "key": "nearby_tech_parks", "label": "Tech parks / offices", "scope": "society", "relationship": "nearby map context", "max_values": 3 }
@@ -221,12 +233,16 @@
       {
         "key": "waterlogging_detail",
         "label": "Area waterlogging",
+        "livability_lens": "risk",
+        "livability_label": "area waterlogging",
         "scope": "area",
         "relationship": "locality risk"
       },
       {
         "key": "waterlogging_risk",
         "label": "Waterlogging risk",
+        "livability_lens": "risk",
+        "livability_label": "waterlogging risk",
         "scope": "area",
         "relationship": "locality risk"
       },
@@ -280,12 +296,16 @@
       {
         "key": "stp_concern",
         "label": "STP concern",
+        "livability_lens": "risk",
+        "livability_label": "STP concern",
         "scope": "society",
         "relationship": "reviewed surroundings"
       },
       {
         "key": "high_tension_wire_concern",
         "label": "High-tension wires",
+        "livability_lens": "risk",
+        "livability_label": "high-tension wires",
         "scope": "society",
         "relationship": "reviewed surroundings"
       },

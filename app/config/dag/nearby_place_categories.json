@@ -15,7 +15,7 @@
     },
     {
       "fact_key": "nearby_metro_stations",
-      "category_aliases": ["metro", "metro_station", "metro_stations", "subway", "subway_station"],
+      "category_aliases": ["metro", "metro_station", "metro_stations", "station", "purple line", "subway", "subway_station"],
       "display_label": "Nearby metro",
       "answers_preferences": ["nearby", "metro", "metro station", "commute"],
       "relation_class": "access",
@@ -26,7 +26,7 @@
     },
     {
       "fact_key": "nearby_hospitals",
-      "category_aliases": ["hospital", "hospitals"],
+      "category_aliases": ["hospital", "hospitals", "clinic", "medical"],
       "display_label": "Nearby hospitals",
       "answers_preferences": ["nearby", "hospital", "hospitals"],
       "relation_class": "access",

@@ -18,9 +18,11 @@
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod community_themes;
 mod evidence_sections;
 mod fact_registry;
 mod loader;
+mod nearby_place_categories;
 mod rera_decision_labels;
 mod rera_report_surface;
 mod resolution;
@@ -28,6 +30,11 @@ mod search_guardrails;
 mod search_intent;
 mod ui_surfaces;
 
+pub use community_themes::{
+    community_themes_config, community_themes_path, load_community_themes,
+    load_community_themes_from_path, CommunityEmbeddingExpansion,
+    CommunityEmbeddingExpansionConfig, CommunityThemeDefinition, CommunityThemesFile,
+};
 pub use evidence_sections::{
     evidence_sections_config, evidence_sections_path, load_evidence_sections,
     load_evidence_sections_from_path, ContextFactDefinition, EvidenceSectionDefinition,
@@ -43,6 +50,12 @@ pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
     load_json, load_manifest, set_project_dag_root, AssetRegistryFile, CrawlPolicyFile,
     DagConfigError, DagManifest,
+};
+pub use nearby_place_categories::{
+    load_nearby_place_categories, load_nearby_place_categories_from_path,
+    nearby_place_categories_config, nearby_place_categories_path,
+    nearby_place_category_for_fact_key, requested_nearby_place_categories, DerivedDistanceRisk,
+    NearbyPlaceCategoriesFile, NearbyPlaceCategory,
 };
 pub use rera_decision_labels::{
     load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,

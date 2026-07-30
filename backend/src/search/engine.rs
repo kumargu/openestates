@@ -7,6 +7,7 @@ use crate::dag_config::search_resolution_config;
 use crate::knowledge::KnowledgeGraph;
 use crate::models::{Property, Society};
 use crate::serving::{LoadedServingBundle, TantivyRecallHit};
+use crate::state::SEARCH_ENGINE_VERSION;
 
 use super::geo;
 use super::index::SearchIndex;
@@ -28,6 +29,7 @@ pub struct SearchEngine<'a> {
     pub semantic_index: &'a SemanticSearchIndex,
     pub semantic_embedder: &'a dyn SemanticEmbedder,
     pub society_names: &'a HashMap<String, String>,
+    pub property_by_id: Option<&'a HashMap<String, usize>>,
     pub societies: &'a [Society],
     pub graph: Option<&'a KnowledgeGraph>,
 }
@@ -70,6 +72,7 @@ pub struct SearchDiagnostics {
 pub struct SearchRuntimeDiagnostics {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub serving_bundle_version: Option<String>,
+    pub search_engine_version: String,
     pub semantic_embedder_model_id: String,
     pub semantic_index_model_id: String,
     pub semantic_index_document_count: usize,
@@ -218,7 +221,7 @@ impl<'a> SearchEngine<'a> {
                 self.semantic_index
                     .search(query, self.semantic_embedder, SEMANTIC_RECALL_LIMIT);
             let scores = self.search_index.property_scores_for_semantic_hits(&hits);
-            let candidate_ids = scores.keys().cloned().collect::<Vec<_>>();
+            let candidate_ids = self.search_index.property_ids_for_semantic_hits(&hits);
             (candidate_ids, scores)
         });
         let (semantic_candidate_ids, semantic_scores) = semantic_value.value;
@@ -262,6 +265,10 @@ impl<'a> SearchEngine<'a> {
         } else {
             self.graph
         };
+        let ranking_candidate_indexes = recall_set
+            .ranking_candidate_ids
+            .as_ref()
+            .and_then(|ids| candidate_property_indexes(ids, self.property_by_id));
 
         let mut results = timer.measure("ranking", || {
             if explicit_geo_distance_limit
@@ -272,10 +279,11 @@ impl<'a> SearchEngine<'a> {
             {
                 Vec::new()
             } else {
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                TextSearch::search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
                     self.properties,
                     None,
                     recall_set.ranking_candidate_ids.as_deref(),
+                    ranking_candidate_indexes.clone(),
                     semantic_scores_ref,
                     geo_query.as_ref(),
                     serving_facts,
@@ -294,6 +302,7 @@ impl<'a> SearchEngine<'a> {
                     query,
                     &intent,
                     recall_set.merged_extra_candidate_ids.as_deref(),
+                    self.property_by_id,
                     semantic_scores_ref,
                     geo_query.as_ref(),
                     serving_facts,
@@ -317,6 +326,7 @@ impl<'a> SearchEngine<'a> {
                 serving_bundle_version: self
                     .serving_bundle
                     .map(|bundle| bundle.manifest.bundle_version.clone()),
+                search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
                 semantic_embedder_model_id: self.semantic_embedder.model_id().to_string(),
                 semantic_index_model_id: self.semantic_index.model_id().to_string(),
                 semantic_index_document_count: self.semantic_index.len(),
@@ -366,6 +376,7 @@ impl<'a> SearchEngine<'a> {
         query: &str,
         intent: &SearchIntent,
         extra_candidate_ids: Option<&[String]>,
+        property_by_id: Option<&HashMap<String, usize>>,
         semantic_scores: Option<&HashMap<String, f64>>,
         geo_query: Option<&geo::GeoSearchQuery<'_>>,
         serving_facts: Option<&crate::serving::ServingFactIndex>,
@@ -377,11 +388,15 @@ impl<'a> SearchEngine<'a> {
                 optional_non_empty(structured_ids),
                 extra_candidate_ids.unwrap_or_default().to_vec(),
             );
+            let ranking_candidate_indexes = ranking_candidate_ids
+                .as_ref()
+                .and_then(|ids| candidate_property_indexes(ids, property_by_id));
             let results =
-                TextSearch::search_with_index_extra_recall_semantic_scores_serving_facts_and_intent(
+                TextSearch::search_with_candidate_property_indexes_semantic_scores_serving_facts_and_intent(
                     self.properties,
                     None,
                     ranking_candidate_ids.as_deref(),
+                    ranking_candidate_indexes,
                     semantic_scores,
                     geo_query,
                     serving_facts,
@@ -788,6 +803,23 @@ fn intersect_candidate_ids(left: Option<Vec<String>>, right: &[String]) -> Vec<S
     left.into_iter()
         .filter(|id| right.iter().any(|candidate| candidate == id))
         .collect()
+}
+
+fn candidate_property_indexes(
+    candidate_ids: &[String],
+    property_by_id: Option<&HashMap<String, usize>>,
+) -> Option<Vec<usize>> {
+    let property_by_id = property_by_id?;
+    let mut indexes = Vec::new();
+    for id in candidate_ids {
+        let Some(index) = property_by_id.get(id).copied() else {
+            continue;
+        };
+        if !indexes.iter().any(|existing| *existing == index) {
+            indexes.push(index);
+        }
+    }
+    Some(indexes)
 }
 
 fn optional_non_empty(ids: Vec<String>) -> Option<Vec<String>> {

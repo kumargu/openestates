@@ -228,23 +228,14 @@ fn detect_positive_preferences(q: &str, bhk: Option<u32>) -> Vec<PreferenceSigna
 }
 
 fn apply_bhk_fact_key_derivations(bhk: Option<u32>, signal: &mut PreferenceSignal) {
-    let Some(bhk) = bhk.filter(|value| (1..=5).contains(value)) else {
+    let Some(bhk) = bhk else {
         return;
     };
 
-    let generic_keys = [
-        "listing",
-        "listing_price",
-        "listing_price_range",
-        "listing_price_per_sqft_range",
-        "listing_area_sqft",
-        "listing_source_url",
-    ];
     let keys = signal.expanded_keys.clone();
     for key in keys {
-        if generic_keys.iter().any(|generic| key == *generic) {
-            merge_expanded_keys(signal, &[format!("{key}_{bhk}bhk")]);
-        }
+        let derived_keys = schema::derived_fact_keys_for_bhk(&key, bhk);
+        merge_expanded_keys(signal, &derived_keys);
     }
 }
 

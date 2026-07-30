@@ -1,0 +1,236 @@
+{
+  "version": 1,
+  "description": "Community review theme vocabulary and deterministic local embedding expansion policy.",
+  "themes": [
+    {
+      "key": "greenery",
+      "label": "greenery",
+      "polarity": "positive",
+      "terms": ["green", "greenery", "trees", "tree", "open space", "park"],
+      "evidence_queries": [
+        "greenery trees landscaped open space calm layout",
+        "parks and green open areas inside the society"
+      ]
+    },
+    {
+      "key": "maintenance",
+      "label": "maintenance",
+      "polarity": "positive",
+      "terms": ["maintenance", "maintained", "clean", "well kept"],
+      "evidence_queries": [
+        "well maintained clean society upkeep",
+        "good maintenance and responsive facility management"
+      ]
+    },
+    {
+      "key": "amenities",
+      "label": "amenities",
+      "polarity": "positive",
+      "terms": ["clubhouse", "pool", "gym", "amenities", "play area"],
+      "evidence_queries": [
+        "clubhouse swimming pool gym play area amenities",
+        "good society amenities for families"
+      ]
+    },
+    {
+      "key": "connectivity",
+      "label": "connectivity",
+      "polarity": "positive",
+      "terms": ["metro", "connectivity", "commute", "tech park", "office"],
+      "evidence_queries": [
+        "metro commute connectivity tech parks offices",
+        "easy access to work hubs and public transport"
+      ]
+    },
+    {
+      "key": "traffic",
+      "label": "traffic",
+      "polarity": "concern",
+      "terms": ["traffic", "congestion", "jam", "commute issue"],
+      "evidence_queries": [
+        "traffic congestion jams commute delay",
+        "road access problems and peak hour traffic"
+      ]
+    },
+    {
+      "key": "water",
+      "label": "water",
+      "polarity": "concern",
+      "terms": ["water issue", "water problem", "tanker", "borewell"],
+      "evidence_queries": [
+        "water shortage tanker dependency borewell issue",
+        "water supply problems in the society"
+      ]
+    },
+    {
+      "key": "noise",
+      "label": "noise",
+      "polarity": "concern",
+      "terms": ["noise", "noisy", "construction noise"],
+      "evidence_queries": [
+        "noise problem construction noise noisy area",
+        "sound disturbance around the society"
+      ]
+    },
+    {
+      "key": "parking",
+      "label": "parking",
+      "polarity": "concern",
+      "terms": ["parking issue", "parking problem", "visitor parking"],
+      "evidence_queries": [
+        "parking problem visitor parking shortage",
+        "car parking constraints and visitor parking issues"
+      ]
+    }
+  ],
+  "embedding_expansions": {
+    "token": [
+      {
+        "input": "green",
+        "expanded_tokens": ["open_space", "calm", "nature"]
+      },
+      {
+        "input": "greenery",
+        "expanded_tokens": ["open_space", "calm", "nature"]
+      },
+      {
+        "input": "trees",
+        "expanded_tokens": ["open_space", "calm", "nature"]
+      },
+      {
+        "input": "landscaped",
+        "expanded_tokens": ["open_space", "calm", "nature"]
+      },
+      {
+        "input": "garden",
+        "expanded_tokens": ["open_space", "calm", "nature"]
+      },
+      {
+        "input": "maintained",
+        "expanded_tokens": ["maintenance", "well_kept"]
+      },
+      {
+        "input": "maintenance",
+        "expanded_tokens": ["maintenance", "well_kept"]
+      },
+      {
+        "input": "clean",
+        "expanded_tokens": ["maintenance", "well_kept"]
+      },
+      {
+        "input": "upkeep",
+        "expanded_tokens": ["maintenance", "well_kept"]
+      },
+      {
+        "input": "clubhouse",
+        "expanded_tokens": ["amenities", "clubhouse", "fitness"]
+      },
+      {
+        "input": "pool",
+        "expanded_tokens": ["amenities", "clubhouse", "fitness"]
+      },
+      {
+        "input": "gym",
+        "expanded_tokens": ["amenities", "clubhouse", "fitness"]
+      },
+      {
+        "input": "amenities",
+        "expanded_tokens": ["amenities", "clubhouse", "fitness"]
+      },
+      {
+        "input": "amenity",
+        "expanded_tokens": ["amenities", "clubhouse", "fitness"]
+      },
+      {
+        "input": "metro",
+        "expanded_tokens": ["connectivity", "transit", "tech_park"]
+      },
+      {
+        "input": "commute",
+        "expanded_tokens": ["connectivity", "transit", "tech_park"]
+      },
+      {
+        "input": "connectivity",
+        "expanded_tokens": ["connectivity", "transit", "tech_park"]
+      },
+      {
+        "input": "office",
+        "expanded_tokens": ["connectivity", "transit", "tech_park"]
+      },
+      {
+        "input": "offices",
+        "expanded_tokens": ["connectivity", "transit", "tech_park"]
+      },
+      {
+        "input": "traffic",
+        "expanded_tokens": ["traffic", "commute_risk"]
+      },
+      {
+        "input": "congestion",
+        "expanded_tokens": ["traffic", "commute_risk"]
+      },
+      {
+        "input": "jam",
+        "expanded_tokens": ["traffic", "commute_risk"]
+      },
+      {
+        "input": "water",
+        "expanded_tokens": ["water", "water_supply"]
+      },
+      {
+        "input": "tanker",
+        "expanded_tokens": ["water", "water_supply"]
+      },
+      {
+        "input": "borewell",
+        "expanded_tokens": ["water", "water_supply"]
+      },
+      {
+        "input": "noise",
+        "expanded_tokens": ["noise", "quiet"]
+      },
+      {
+        "input": "noisy",
+        "expanded_tokens": ["noise", "quiet"]
+      },
+      {
+        "input": "parking",
+        "expanded_tokens": ["parking", "visitor_parking"]
+      }
+    ],
+    "phrase": [
+      {
+        "input": "open space",
+        "expanded_tokens": ["greenery", "calm", "large_campus"]
+      },
+      {
+        "input": "well maintained",
+        "expanded_tokens": ["maintenance", "well_kept"]
+      },
+      {
+        "input": "tech park",
+        "expanded_tokens": ["connectivity", "office", "commute"]
+      },
+      {
+        "input": "tech parks",
+        "expanded_tokens": ["connectivity", "office", "commute"]
+      },
+      {
+        "input": "it park",
+        "expanded_tokens": ["connectivity", "office", "commute"]
+      },
+      {
+        "input": "it parks",
+        "expanded_tokens": ["connectivity", "office", "commute"]
+      },
+      {
+        "input": "metro station",
+        "expanded_tokens": ["metro", "connectivity", "commute"]
+      },
+      {
+        "input": "visitor parking",
+        "expanded_tokens": ["parking"]
+      }
+    ]
+  }
+}

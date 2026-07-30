@@ -154,6 +154,34 @@ impl SearchIndex {
         scores
     }
 
+    pub fn property_ids_for_semantic_hits(&self, hits: &[SemanticRecallHit]) -> Vec<String> {
+        let mut ids = Vec::new();
+        for hit in hits {
+            if let Some(property_id) = self.by_property_node.get(&hit.entity_id) {
+                push_unique(&mut ids, property_id);
+                continue;
+            }
+            if hit.entity_id.starts_with("society:") {
+                if let Some(property_ids) = self.by_society_node.get(&hit.entity_id) {
+                    for property_id in property_ids {
+                        push_unique(&mut ids, property_id);
+                    }
+                }
+            }
+        }
+        ids
+    }
+
+    pub fn property_indexes_for_ids(&self, ids: &[String]) -> Vec<usize> {
+        let mut indexes = Vec::with_capacity(ids.len());
+        for id in ids {
+            if let Some(index) = self.position_by_id.get(id) {
+                indexes.push(*index);
+            }
+        }
+        indexes
+    }
+
     fn area_candidates(&self, area: &str) -> HashSet<String> {
         let mut ids = HashSet::new();
         let area = normalize(area);

@@ -4,6 +4,7 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Instant;
 
+use arc_swap::ArcSwap;
 use arrow::array::{Array, StringArray};
 use axum::extract::{Query, State};
 use backend::assets::{
@@ -25,7 +26,7 @@ use backend::assets::{
     EXTERNAL_IMAGES_WEEKLY_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
     EXTERNAL_LISTING_FACTS_ASSET_ID, GOOGLE_PLACES_WEEKLY_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
     HOME_STATE_SIGNALS_ASSET_ID, IMAGE_MEDIA_FACTS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    RERA_LEGAL_FACTS_ASSET_ID, RERA_PROJECT_PLAN_FRAMES_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
 };
 use backend::knowledge::edge::{Edge, Relation};
 use backend::knowledge::fact::{
@@ -40,7 +41,7 @@ use backend::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, Seman
 use backend::serving::{
     ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
-use backend::state::AppState;
+use backend::state::{AppState, SearchResponseCache, SearchRuntimeSnapshot};
 use bytes::Bytes;
 use chrono::{Duration, TimeZone, Utc};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
@@ -263,6 +264,7 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
         backend::assets::SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID,
         backend::assets::OSM_POWER_LINE_FACTS_ASSET_ID,
         backend::assets::STORMWATER_DRAIN_FACTS_ASSET_ID,
+        RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
         backend::assets::GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
@@ -277,6 +279,10 @@ async fn executor_materializes_source_assets_from_local_inputs_with_parquet_and_
     for id in expected_assets {
         assert!(report.executed_assets.contains(&asset_id(id)));
     }
+    assert_eq!(
+        run_step(&report.manifest, RERA_PROJECT_PLAN_FRAMES_ASSET_ID).row_count,
+        Some(0)
+    );
     assert!(
         executed_position(&report.executed_assets, GOOGLE_REVIEW_FACTS_ASSET_ID)
             < executed_position(&report.executed_assets, KG_SOCIETY_VIEW_ASSET_ID)
@@ -476,8 +482,8 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .unwrap();
 
     assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
-    assert_eq!(report.manifest.planned_count, 21);
-    assert_eq!(report.executed_assets.len(), 20);
+    assert_eq!(report.manifest.planned_count, 22);
+    assert_eq!(report.executed_assets.len(), 21);
     for id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
         EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -487,6 +493,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         RERA_REGISTRY_MONTHLY_ASSET_ID,
         CANONICAL_SOCIETY_NODES_ASSET_ID,
         RERA_LEGAL_FACTS_ASSET_ID,
+        RERA_PROJECT_PLAN_FRAMES_ASSET_ID,
         HOME_STATE_SIGNALS_ASSET_ID,
         GOOGLE_PLACES_WEEKLY_ASSET_ID,
         GOOGLE_REVIEW_FACTS_ASSET_ID,
@@ -632,12 +639,27 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
     let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
     let semantic_index =
         SemanticSearchIndex::from_serving_entities(&loaded.entities, semantic_embedder.as_ref());
+    let loaded = Arc::new(loaded);
+    let search_runtime = SearchRuntimeSnapshot::new(
+        loaded.clone(),
+        properties.clone(),
+        societies.clone(),
+        Vec::new(),
+        search_index.clone(),
+        semantic_index.clone(),
+        semantic_embedder.clone(),
+    );
+    let (search_event_tx, _search_event_rx) = tokio::sync::mpsc::channel(8);
     let state = Arc::new(AppState {
+        search_runtime: ArcSwap::from_pointee(search_runtime),
+        search_cache: SearchResponseCache::new(8),
+        search_event_tx,
+        search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
         semantic_index: RwLock::new(semantic_index),
         semantic_embedder,
-        serving_bundle: RwLock::new(Some(Arc::new(loaded))),
+        serving_bundle: RwLock::new(Some(loaded)),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(Vec::new()),
         societies: RwLock::new(societies),
@@ -1199,6 +1221,7 @@ async fn executor_runs_partitioned_scope_while_keeping_runtime_assets_global() {
             asset_id(BUILDER_RERA_AGGREGATES_ASSET_ID),
             asset_id(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID),
             asset_id(HOME_STATE_SIGNALS_ASSET_ID),
+            asset_id(RERA_PROJECT_PLAN_FRAMES_ASSET_ID),
             asset_id(KG_SOCIETY_VIEW_ASSET_ID),
             asset_id(SEARCH_SERVING_BUNDLE_ASSET_ID),
         ]
