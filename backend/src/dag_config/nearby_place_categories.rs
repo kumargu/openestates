@@ -120,7 +120,6 @@ impl NearbyPlaceCategory {
         for value in self
             .category_aliases
             .iter()
-            .chain(self.answers_preferences.iter())
             .chain(self.accepted_place_types.iter())
             .chain(self.name_markers.iter())
         {
@@ -193,6 +192,10 @@ mod tests {
         let requested = requested_nearby_place_categories("walkable gym and brewery nearby");
         assert!(requested.contains(&"nearby_fitness"));
         assert!(requested.contains(&"nearby_breweries"));
+        assert!(requested_nearby_place_categories("nearby").is_empty());
+        assert!(requested_nearby_place_categories("clinic nearby").contains(&"nearby_hospitals"));
+        assert!(requested_nearby_place_categories("purple line access")
+            .contains(&"nearby_metro_stations"));
         assert_eq!(
             nearby_place_category_for_fact_key("nearby_lakes"),
             Some("nearby_lakes")

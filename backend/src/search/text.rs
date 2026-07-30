@@ -1,5 +1,6 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::sync::OnceLock;
 
 use crate::dag_config::{
     nearby_place_category_for_fact_key, requested_nearby_place_categories,
@@ -444,7 +445,7 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             if !evidence_is_confident_enough(
                                 &detail.source_type,
@@ -457,7 +458,7 @@ impl TextSearch {
                             score += gs;
                             positive_evidence_score += gs.max(0.0);
                             best_fact_key_rank = best_fact_key_rank.min(candidate_fact_key_rank(
-                                candidate_fact_keys,
+                                &candidate_fact_keys,
                                 &detail.fact_key,
                             ));
                             reasons.push(format!("matches preference: {}", pref));
@@ -508,7 +509,7 @@ impl TextSearch {
                             serving_facts,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                             &query_lower,
                         ) {
                             best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
@@ -560,7 +561,7 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             best_fact_key_rank = best_fact_key_rank.min(evidence.fact_key_rank);
                             total_facts_consulted += 1;
@@ -620,7 +621,7 @@ impl TextSearch {
                             serving_facts,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -665,7 +666,7 @@ impl TextSearch {
                             g,
                             &p.society_id,
                             pref,
-                            candidate_fact_keys,
+                            &candidate_fact_keys,
                         ) {
                             total_facts_consulted += 1;
                             score += evidence.score_delta;
@@ -867,9 +868,15 @@ impl TextSearch {
             .collect();
 
         results.sort_by(|a, b| {
-            b.primary_intent_score
-                .partial_cmp(&a.primary_intent_score)
+            b.result
+                .match_score
+                .partial_cmp(&a.result.match_score)
                 .unwrap_or(Ordering::Equal)
+                .then_with(|| {
+                    b.primary_intent_score
+                        .partial_cmp(&a.primary_intent_score)
+                        .unwrap_or(Ordering::Equal)
+                })
                 .then_with(|| a.best_fact_key_rank.cmp(&b.best_fact_key_rank))
                 .then_with(|| b.named_society_match.cmp(&a.named_society_match))
                 .then_with(|| {
@@ -1332,21 +1339,18 @@ fn named_place_identity_tokens(place_name: &str) -> Vec<String> {
 }
 
 fn is_nearby_place_generic_token(token: &str) -> bool {
-    matches!(
-        token,
-        "the"
-            | "and"
-            | "school"
-            | "academi"
-            | "hospital"
-            | "metro"
-            | "station"
-            | "park"
-            | "road"
-            | "bengaluru"
-            | "bangalor"
-            | "whitefield"
-    )
+    configured_named_place_generic_tokens().contains(token)
+}
+
+fn configured_named_place_generic_tokens() -> &'static HashSet<String> {
+    static TOKENS: OnceLock<HashSet<String>> = OnceLock::new();
+    TOKENS.get_or_init(|| {
+        schema::ranking_policy()
+            .named_place_generic_tokens
+            .iter()
+            .flat_map(|term| analyzer::stemmed_tokens(term))
+            .collect()
+    })
 }
 
 fn distance_for_nearby_place_snippet(snippet: &str, place_name: &str) -> Option<f64> {
@@ -3129,18 +3133,26 @@ fn positive_preference_labels(intent: &SearchIntent) -> Vec<String> {
         intent
             .preferences
             .iter()
-            .filter(|pref| !pref.starts_with("avoid "))
-            .cloned()
+            .map(|pref| schema::legacy_display_preference_signal(pref))
+            .filter(|signal| signal.polarity == crate::search::intent::Polarity::Positive)
+            .map(|signal| signal.raw_text)
             .collect()
     }
 }
 
-fn positive_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+fn positive_preference_keys(intent: &SearchIntent, preference: &str) -> Vec<String> {
     intent
         .positive_preferences
         .iter()
         .find(|signal| signal.raw_text == preference)
-        .map_or(&[], |signal| signal.expanded_keys.as_slice())
+        .map(|signal| signal.expanded_keys.clone())
+        .unwrap_or_else(|| {
+            let signal = schema::preference_signal_for_label(
+                preference,
+                crate::search::intent::Polarity::Positive,
+            );
+            signal.expanded_keys
+        })
 }
 
 fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
@@ -3154,17 +3166,26 @@ fn negative_preference_labels(intent: &SearchIntent) -> Vec<String> {
         intent
             .preferences
             .iter()
-            .filter_map(|pref| pref.strip_prefix("avoid ").map(str::to_string))
+            .map(|pref| schema::legacy_display_preference_signal(pref))
+            .filter(|signal| signal.polarity == crate::search::intent::Polarity::Negative)
+            .map(|signal| signal.raw_text)
             .collect()
     }
 }
 
-fn negative_preference_keys<'a>(intent: &'a SearchIntent, preference: &str) -> &'a [String] {
+fn negative_preference_keys(intent: &SearchIntent, preference: &str) -> Vec<String> {
     intent
         .negative_preferences
         .iter()
         .find(|signal| signal.raw_text == preference)
-        .map_or(&[], |signal| signal.expanded_keys.as_slice())
+        .map(|signal| signal.expanded_keys.clone())
+        .unwrap_or_else(|| {
+            let signal = schema::preference_signal_for_label(
+                preference,
+                crate::search::intent::Polarity::Negative,
+            );
+            signal.expanded_keys
+        })
 }
 
 /// Check if a property's society has a SocietyInArea edge to an area node

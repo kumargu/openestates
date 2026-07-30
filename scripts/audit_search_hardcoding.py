@@ -24,6 +24,11 @@ DEFAULT_EXCLUDES = (
     "/__tests__/",
 )
 
+PRODUCTION_SEARCH_PATHS = (
+    "/backend/src/search/",
+    "/backend/src/routes/search.rs",
+)
+
 APPROVED_SUBSTRINGS = (
     "/app/config/dag/",
     "/backend/src/dag_config/",
@@ -39,6 +44,12 @@ def main() -> int:
         default=Path(__file__).resolve().parents[1],
         type=Path,
         help="Repository root to scan.",
+    )
+    parser.add_argument(
+        "--mode",
+        choices=("all", "production-search"),
+        default="all",
+        help="Scan all review-aid sources or only production search runtime.",
     )
     args = parser.parse_args()
 
@@ -56,6 +67,10 @@ def main() -> int:
         if path.suffix not in SOURCE_SUFFIXES or not path.is_file():
             continue
         rel = "/" + path.relative_to(root).as_posix()
+        if args.mode == "production-search" and not any(
+            rel == allowed or rel.startswith(allowed) for allowed in PRODUCTION_SEARCH_PATHS
+        ):
+            continue
         if any(exclude in rel for exclude in DEFAULT_EXCLUDES):
             continue
         if any(approved in rel for approved in APPROVED_SUBSTRINGS):
@@ -75,6 +90,7 @@ def main() -> int:
     print("Search hardcoding audit report")
     print("===============================")
     print("Mode: warning only")
+    print(f"Scope: {args.mode}")
     print(f"Config-derived terms: {len(terms)}")
     print(f"Findings: {len(findings)}")
     for rel, line_no, term, line in findings:

@@ -460,19 +460,21 @@ fn gap_preferences(intent: &intent::SearchIntent) -> Vec<GapPreference> {
 
     if prefs.is_empty() {
         for pref in &intent.preferences {
-            let is_negative = pref.starts_with("avoid ");
-            let normalized = pref
-                .strip_prefix("avoid ")
-                .unwrap_or(pref.as_str())
-                .to_string();
-            let candidate_fact_keys =
-                crate::search::schema::expanded_keys_for_preference_label(&normalized, is_negative);
+            let signal = crate::search::schema::legacy_display_preference_signal(pref);
+            let label = match signal.polarity {
+                crate::search::intent::Polarity::Positive => signal.raw_text.clone(),
+                crate::search::intent::Polarity::Negative => format!("avoid {}", signal.raw_text),
+            };
+            let mut match_labels = vec![label.clone()];
+            if signal.polarity == crate::search::intent::Polarity::Negative {
+                match_labels.push(signal.raw_text.clone());
+            }
             prefs.push(GapPreference {
-                label: pref.clone(),
-                match_labels: vec![pref.clone(), normalized.clone()],
-                candidate_fact_keys,
-                gap_fact_keys: Vec::new(),
-                reason: format!("User preference: {}", pref),
+                label: label.clone(),
+                match_labels,
+                candidate_fact_keys: signal.expanded_keys,
+                gap_fact_keys: signal.gap_keys,
+                reason: format!("User preference: {}", label),
             });
         }
     }

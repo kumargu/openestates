@@ -82,6 +82,8 @@ pub struct SearchRuntimePolicy {
     #[serde(default)]
     pub registry_fact_key_required_preferences: Vec<String>,
     #[serde(default)]
+    pub fact_key_derivations: Vec<FactKeyDerivationRule>,
+    #[serde(default)]
     pub semantic_stopwords: Vec<String>,
     #[serde(default)]
     pub accepted_tradeoffs: Vec<IntentPhraseGroup>,
@@ -99,6 +101,18 @@ pub struct SearchRuntimePolicy {
     pub lifecycle_value_terms: LifecycleValueTerms,
     #[serde(default)]
     pub lifecycle_compatibility_rules: Vec<LifecycleCompatibilityRule>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FactKeyDerivationRule {
+    pub input_dimension: String,
+    #[serde(default)]
+    pub source_keys: Vec<String>,
+    pub template: String,
+    #[serde(default)]
+    pub min_value: Option<u32>,
+    #[serde(default)]
+    pub max_value: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -704,6 +718,63 @@ pub fn expanded_keys_for_preference_label(label: &str, negative: bool) -> Vec<St
     Vec::new()
 }
 
+pub fn legacy_display_preference_signal(display_label: &str) -> PreferenceSignal {
+    let trimmed = display_label.trim();
+    let Some(raw_text) = trimmed.strip_prefix("avoid ") else {
+        return preference_signal_for_label(trimmed, Polarity::Positive);
+    };
+    preference_signal_for_label(raw_text, Polarity::Negative)
+}
+
+pub fn preference_signal_for_label(label: &str, polarity: Polarity) -> PreferenceSignal {
+    let patterns = match polarity {
+        Polarity::Positive => positive_preference_patterns(),
+        Polarity::Negative => negative_preference_patterns(),
+    };
+    let normalized = label.trim().to_lowercase();
+    for pattern in patterns {
+        if pattern.label.eq_ignore_ascii_case(label)
+            || pattern
+                .patterns
+                .iter()
+                .any(|term| normalized.contains(&term.to_lowercase()))
+        {
+            return schema_preference_signal(pattern, polarity);
+        }
+    }
+    PreferenceSignal {
+        raw_text: label.trim().to_string(),
+        polarity,
+        expanded_keys: Vec::new(),
+        gap_keys: Vec::new(),
+        weight: 1.0,
+    }
+}
+
+pub fn derived_fact_keys_for_bhk(base_key: &str, bhk: u32) -> Vec<String> {
+    runtime_policy()
+        .fact_key_derivations
+        .iter()
+        .filter(|rule| rule.input_dimension.eq_ignore_ascii_case("bhk"))
+        .filter(|rule| {
+            rule.min_value.is_none_or(|min| bhk >= min)
+                && rule.max_value.is_none_or(|max| bhk <= max)
+        })
+        .filter(|rule| {
+            rule.source_keys
+                .iter()
+                .any(|source_key| source_key.eq_ignore_ascii_case(base_key))
+        })
+        .map(|rule| {
+            rule.template
+                .replace("{key}", base_key)
+                .replace("{value}", &bhk.to_string())
+                .replace("{bhk}", &bhk.to_string())
+        })
+        .filter(|key| !key.trim().is_empty())
+        .collect()
+}
+
 pub fn fact_answers_text_schema(
     fact_key: &str,
     answers_preferences: &[String],
@@ -938,7 +1009,34 @@ mod tests {
             .contains(&"want".to_string()));
         assert!(config.runtime.ranking.semantic_candidate_fit_cap > 0.0);
         assert!(config.runtime.ranking.fact_coverage_threshold >= 1.0);
+        assert!(!config.runtime.fact_key_derivations.is_empty());
         assert!(!config.runtime.lifecycle_compatibility_rules.is_empty());
+    }
+
+    #[test]
+    fn derives_bhk_scoped_fact_keys_from_registry_policy() {
+        assert_eq!(
+            derived_fact_keys_for_bhk("listing_price", 3),
+            vec!["listing_price_3bhk".to_string()]
+        );
+        assert!(derived_fact_keys_for_bhk("listing_price", 8).is_empty());
+        assert!(derived_fact_keys_for_bhk("google_rating", 3).is_empty());
+    }
+
+    #[test]
+    fn legacy_display_preferences_resolve_to_structured_signals() {
+        let positive = legacy_display_preference_signal("listing evidence");
+        assert_eq!(positive.polarity, Polarity::Positive);
+        assert!(positive
+            .expanded_keys
+            .contains(&"listing_price".to_string()));
+
+        let negative = legacy_display_preference_signal("avoid waterlogging risk");
+        assert_eq!(negative.polarity, Polarity::Negative);
+        assert!(negative
+            .expanded_keys
+            .contains(&"flooding_risk".to_string()));
+        assert!(!negative.gap_keys.is_empty());
     }
 
     #[test]

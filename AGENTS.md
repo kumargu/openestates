@@ -162,6 +162,18 @@ Every new discovery behavior should be testable with fuzzy/user-like queries and
 
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
 
+### Search execution must stay ontology-driven
+Search cleanup has one non-negotiable rule: **the runtime may contain generic mechanics, but not product vocabulary branches**. If code in `backend/src/search/`, `backend/src/routes/search.rs`, or frontend search/result rendering starts to say "if hospital", "if metro", "if nearby_schools", "if water issue", or `match fact_key`, treat that as a hardcoding regression unless it is a temporary compatibility shim with a tracked removal plan.
+
+Buyer vocabulary, place families, fact-key groups, source priorities, scoring weights, proof labels, layer ids, and eligibility rules belong in `app/config/dag/` or DAG-backed serving facts. Rust may load, validate, index, compare, score, and explain those configured records generically. Rust must not grow new one-off lists like `["hospital", "hospitals", "clinic"]` or closed enums like `PlaceFactFamily` for product semantics.
+
+Before changing search behavior or search cleanup:
+- Read `app/config/dag/manifest.json` and the one relevant config file before editing code.
+- Run or update the hardcoding audit (`python3 scripts/audit_search_hardcoding.py`) and explain any new production-code finding.
+- Preserve search quality with a before/after benchmark or contract test. Cleanup PRs should keep ordered result ids, proof reason keys, and missing-evidence behavior unchanged unless the task explicitly changes product behavior.
+- Do not patch a single query with a phrase-specific branch. Add or adjust config, then make the generic resolver consume it.
+- If a local intent compiler/model is introduced, it may extract clauses and relationships only; configured ontology resolution and DAG-backed proof still decide which facts count.
+
 ### Search proof is additive focus, not filtering
 Search results and property details must share a structured proof contract for "why this result matched" so detail surfaces can focus the relevant evidence without guessing intent again. A proof focus may choose the initial surface/layer, expand the viewport/list enough to include the matched fact, highlight the matched entity, and show short copy such as `Matched your search`.
 
