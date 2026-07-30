@@ -21,6 +21,7 @@
 mod evidence_sections;
 mod fact_registry;
 mod loader;
+mod nearby_place_categories;
 mod rera_decision_labels;
 mod rera_report_surface;
 mod resolution;
@@ -43,6 +44,12 @@ pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
     load_json, load_manifest, set_project_dag_root, AssetRegistryFile, CrawlPolicyFile,
     DagConfigError, DagManifest,
+};
+pub use nearby_place_categories::{
+    load_nearby_place_categories, load_nearby_place_categories_from_path,
+    nearby_place_categories_config, nearby_place_categories_path,
+    nearby_place_category_for_fact_key, requested_nearby_place_categories, DerivedDistanceRisk,
+    NearbyPlaceCategoriesFile, NearbyPlaceCategory,
 };
 pub use rera_decision_labels::{
     load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,

@@ -1,7 +1,10 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 
-use crate::dag_config::{search_resolution_config, ui_surfaces_config};
+use crate::dag_config::{
+    nearby_place_category_for_fact_key, requested_nearby_place_categories,
+    search_resolution_config, ui_surfaces_config,
+};
 use crate::knowledge::node::RootSource;
 use crate::knowledge::{FactValue, KnowledgeGraph};
 use crate::models::{KgEntityRefs, Property, Society};
@@ -1875,55 +1878,14 @@ fn serving_preference_evidence(
 }
 
 fn place_fact_conflicts_with_explicit_query_family(query_lower: &str, fact_key: &str) -> bool {
-    let Some(fact_family) = place_fact_family(fact_key) else {
+    let Some(fact_category) = nearby_place_category_for_fact_key(fact_key) else {
         return false;
     };
-    let requested = requested_place_families(query_lower);
-    !requested.is_empty() && !requested.iter().any(|family| *family == fact_family)
-}
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum PlaceFactFamily {
-    Hospital,
-    School,
-    Metro,
-    TechPark,
-}
-
-fn requested_place_families(query_lower: &str) -> Vec<PlaceFactFamily> {
-    let mut families = Vec::new();
-    if query_contains_any(query_lower, &["hospital", "hospitals", "clinic", "medical"]) {
-        families.push(PlaceFactFamily::Hospital);
-    }
-    if query_contains_any(query_lower, &["school", "schools"]) {
-        families.push(PlaceFactFamily::School);
-    }
-    if query_contains_any(query_lower, &["metro", "station", "purple line"]) {
-        families.push(PlaceFactFamily::Metro);
-    }
-    if query_contains_any(
-        query_lower,
-        &["tech park", "tech parks", "office", "offices"],
-    ) {
-        families.push(PlaceFactFamily::TechPark);
-    }
-    families
-}
-
-fn place_fact_family(fact_key: &str) -> Option<PlaceFactFamily> {
-    match fact_key {
-        "nearby_hospitals" => Some(PlaceFactFamily::Hospital),
-        "nearby_schools" => Some(PlaceFactFamily::School),
-        "nearby_metro_stations" => Some(PlaceFactFamily::Metro),
-        "nearby_tech_parks" => Some(PlaceFactFamily::TechPark),
-        _ => None,
-    }
-}
-
-fn query_contains_any(query_lower: &str, terms: &[&str]) -> bool {
-    terms
-        .iter()
-        .any(|term| query_contains_lower_text(query_lower, term))
+    let requested = requested_nearby_place_categories(query_lower);
+    !requested.is_empty()
+        && !requested
+            .iter()
+            .any(|category| category.eq_ignore_ascii_case(fact_category))
 }
 
 fn graph_negative_preference_evidence(
