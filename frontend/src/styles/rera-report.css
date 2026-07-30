@@ -125,15 +125,16 @@
 
 .rera-report-facts,
 .rera-report-notes {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.65rem;
+  align-items: stretch;
 }
 
 .rera-report-fact,
 .rera-report-note {
   min-width: 0;
-  padding: 0.78rem 0.82rem;
+  padding: 0.72rem 0.78rem;
   border: 1px solid rgba(38, 35, 32, 0.08);
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.7);
@@ -142,12 +143,24 @@
 .rera-report-fact,
 .rera-report-note__head {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
-  gap: 0.55rem;
+  gap: 0.45rem 0.65rem;
+}
+
+.rera-report-fact {
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+.rera-report-fact.is-compact {
+  flex: 0 1 14rem;
+  max-width: 18rem;
 }
 
 .rera-report-fact.is-long {
-  grid-column: 1 / -1;
+  flex: 1 1 100%;
+  max-width: 100%;
 }
 
 .rera-report-fact__copy,
@@ -197,6 +210,7 @@
 .rera-report-fact__actions {
   display: inline-flex;
   align-items: center;
+  justify-self: end;
   gap: 0.34rem;
 }
 
@@ -379,9 +393,15 @@
     overflow-wrap: anywhere;
   }
 
-  .rera-report-facts,
   .rera-report-document-links {
     grid-template-columns: 1fr;
+  }
+
+  .rera-report-fact,
+  .rera-report-fact.is-compact,
+  .rera-report-fact.is-long {
+    flex-basis: 100%;
+    max-width: 100%;
   }
 
   .rera-report-fact,
@@ -392,6 +412,7 @@
   }
 
   .rera-report-fact__actions {
+    justify-self: start;
     justify-content: flex-start;
   }
 
