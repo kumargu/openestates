@@ -193,6 +193,40 @@ if [[ -n "$FIRST_ID" ]]; then
     "{\"property_ids\":[\"${FIRST_ID}\"],\"limit\":1}" \
     '(.results | length == 1) and (.results[0].sections | type == "array") and (.missing_property_ids | length == 0)' \
     "expected one evidence result and no missing ids"
+
+  RERA_ID=$(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '[.[] | select(.decision_check_summary != null)][0].id // empty' 2>/dev/null || echo "")
+  if [[ -n "$RERA_ID" ]]; then
+    check "Property RERA dossier returns report fields" \
+      "${BASE}/api/properties/${RERA_ID}/rera" \
+      'has("source", "fact_sections", "compare_items", "complaint_sections", "document_sections", "timeline") and (.source | has("registered")) and (.fact_sections | type == "array")' \
+      "expected source and flexible RERA fact sections"
+
+    check "Property RERA dossier facts have clean labels" \
+      "${BASE}/api/properties/${RERA_ID}/rera" \
+      '([.fact_sections[]?.facts[]? | select(((.label // "") | test("_")) or ((.label // "") | test("source-backed|extracted|pipeline|debug|RERA file"; "i")) or ((.value // "") == ""))] | length) == 0' \
+      "expected buyer-facing fact labels without raw keys or empty values"
+
+    RERA_DOC_ID=""
+    while IFS= read -r CANDIDATE_ID; do
+      [[ -z "$CANDIDATE_ID" ]] && continue
+      if curl -s "${BASE}/api/properties/${CANDIDATE_ID}/rera" 2>/dev/null \
+        | jq -e '([.document_sections[]?.items[]? | select((.source_url // "") | test("^https?://"))] | length) > 0' >/dev/null 2>&1; then
+        RERA_DOC_ID="$CANDIDATE_ID"
+        break
+      fi
+    done < <(curl -s "${BASE}/api/properties" 2>/dev/null | jq -r '.[] | select(.decision_check_summary != null) | .id' 2>/dev/null || true)
+
+    if [[ -n "$RERA_DOC_ID" ]]; then
+      check "Property RERA dossier exposes official document links" \
+        "${BASE}/api/properties/${RERA_DOC_ID}/rera" \
+        '([.document_sections[]?.items[]? | select((.source_url // "") | test("^https?://"))] | length) > 0' \
+        "expected at least one usable official document link"
+    else
+      echo "  $(green "✓") Skipping RERA document link check — no linked RERA document in this bundle"
+    fi
+  else
+    echo "  $(green "✓") Skipping RERA dossier shape — no RERA-backed property in this bundle"
+  fi
 else
   echo "  $(red "✗") Skipping detail tests — no property ID available"
   FAIL=$((FAIL + 1))

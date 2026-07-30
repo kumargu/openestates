@@ -2,15 +2,18 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
 import { useNotebook } from "../../hooks/useNotebook.ts";
+import {
+  workspaceNavItems,
+  type WorkspaceView,
+} from "../../lib/workspaceNav.ts";
 
 type WorkspaceIconName =
   | "browse"
   | "home"
   | "notebook"
+  | "rera"
   | "plan"
   | "chevron";
-
-export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "plan";
 
 type WorkspaceSidebarProps = {
   homes: PropertyCard[];
@@ -49,27 +52,19 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
       </svg>
     );
   }
+  if (name === "rera") {
+    return (
+      <svg {...common}>
+        <path d="M7 3.5h10v17H7z" />
+        <path d="M10 8h4M10 12h4" />
+        <path d="m10 16 1.4 1.4L15 14" />
+      </svg>
+    );
+  }
   if (name === "plan") {
     return <svg {...common}><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" /></svg>;
   }
   return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
-}
-
-function workspaceNavItems(
-  focusedId: string,
-  activeView: WorkspaceView,
-) {
-  const detailHref = focusedId ? `/property/${focusedId}` : "/";
-  const planHref = focusedId ? `/property/${focusedId}/plan` : "/";
-  return [
-    { view: "browse" as const, label: "Discover", icon: "browse" as const, to: "/" },
-    { view: "home" as const, label: "Property", icon: "home" as const, to: detailHref },
-    { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace" },
-    { view: "plan" as const, label: "Financial plan", icon: "plan" as const, to: planHref },
-  ].map((item) => ({
-    ...item,
-    active: item.view === activeView,
-  }));
 }
 
 function societyLabel(home: PropertyCard): string {
@@ -136,6 +131,7 @@ export function WorkspaceSidebar({
             key={item.label}
             to={item.to}
             className={`workspace-sidebar__nav-item${item.active ? " is-active" : ""}`}
+            aria-label={item.label}
             aria-current={item.active ? "page" : undefined}
             title={collapsed ? item.label : undefined}
           >

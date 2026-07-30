@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::decision_labels::{DecisionCheckSummary, DecisionLabel};
 use crate::routes::enrichment::DataFreshness;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -152,6 +153,12 @@ pub struct PropertyCard {
     /// Matched configuration label, e.g. "3BHK".
     #[serde(skip_serializing_if = "Option::is_none")]
     pub plan_configuration_type: Option<String>,
+    /// Config-derived decision labels for compare, notes, and compact review surfaces.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub decision_labels: Vec<DecisionLabel>,
+    /// Grouped compact check summary for property details, compare, and notes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision_check_summary: Option<DecisionCheckSummary>,
 }
 
 /// Minimal entity identity bundle attached to property/search/detail responses.

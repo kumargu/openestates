@@ -725,6 +725,8 @@ impl TextSearch {
                         plan_carpet_area_sqft: None,
                         plan_sale_area_sqft: None,
                         plan_configuration_type: None,
+                        decision_labels: Vec::new(),
+                        decision_check_summary: None,
                     }
                 };
                 if let Some(serving_facts) = serving_facts {
@@ -981,6 +983,10 @@ pub(crate) fn enrich_card_from_serving_facts(
         .display;
     crate::routes::enrichment::overlay_project_scale_facts(card, serving_facts, society_id);
     crate::plans::overlay_project_plans_on_card(card, society_id, Some(serving_facts));
+    card.decision_labels =
+        crate::decision_labels::rera_decision_labels_for_society(serving_facts, society_id);
+    card.decision_check_summary =
+        crate::decision_labels::rera_decision_check_summary_for_society(serving_facts, society_id);
 }
 
 fn sanitize_card_display_placeholders(card: &mut crate::models::PropertyCard) {

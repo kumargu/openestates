@@ -2,6 +2,7 @@ import "./index.css";
 import "./styles/evidence.css";
 import "./styles/property-scene.css";
 import "./styles/notebook.css";
+import "./styles/rera-report.css";
 import { StrictMode, useEffect, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -21,6 +22,7 @@ import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
 const HomePlanPage = lazy(() => import("./pages/HomePlanPage.tsx").then(m => ({ default: m.HomePlanPage })));
+const ReraReportPage = lazy(() => import("./pages/ReraReportPage.tsx").then(m => ({ default: m.ReraReportPage })));
 const WorkspacePage = lazy(() => import("./pages/WorkspacePage.tsx").then(m => ({ default: m.WorkspacePage })));
 const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ default: m.NotFoundPage })));
 
@@ -82,6 +84,7 @@ export function App() {
                   <Route path="/results" element={<ResultsRedirect />} />
                   <Route path="/property/:id" element={<PropertyPage />} />
                   <Route path="/property/:id/plan" element={<HomePlanPage />} />
+                  <Route path="/property/:id/rera" element={<ReraReportPage />} />
                   <Route path="/workspace" element={<WorkspacePage />} />
                   <Route path="/workspace/compare" element={<WorkspacePage />} />
                   <Route path="/notebook" element={<LegacyWorkspaceRedirect mode="notes" />} />

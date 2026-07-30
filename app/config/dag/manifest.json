@@ -16,6 +16,8 @@
     "fact_registry.json",
     "ontology.json",
     "resolution_policies.json",
+    "rera_decision_labels.json",
+    "rera_report_surface.json",
     "scoring_policy.json",
     "search_guardrails.json",
     "search_intent.json",
@@ -36,6 +38,7 @@
     "add_crawl_asset": "asset_registry.json + crawl_policies/",
     "enrich_leaf": "enrichment_targets.json",
     "add_ui_surface": "ui_surfaces.json",
+    "add_rera_report_fact": "rera_report_surface.json + fact_registry.json",
     "bootstrap_policy": "app/config/bootstrap/",
     "bootstrap_edge_inference": "app/config/bootstrap/edge_inference.json"
   }

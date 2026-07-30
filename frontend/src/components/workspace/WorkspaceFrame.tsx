@@ -9,10 +9,8 @@ import {
   writeShortlistIds,
 } from "../../lib/compare.ts";
 import type { PropertyCard } from "../../lib/types.ts";
-import {
-  WorkspaceSidebar,
-  type WorkspaceView,
-} from "./WorkspaceSidebar.tsx";
+import { activeWorkspaceView } from "../../lib/workspaceNav.ts";
+import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import "../../styles/workspace.css";
 
 const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
@@ -26,20 +24,16 @@ function routePropertyId(pathname: string): string | null {
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
-function activeWorkspaceView(pathname: string): WorkspaceView {
-  if (pathname === "/workspace" || pathname === "/notebook") return "notebook";
-  if (pathname === "/workspace/compare" || pathname === "/compare") return "compare";
-  if (/^\/property\/[^/]+\/plan$/.test(pathname)) return "plan";
-  if (/^\/property\/[^/]+$/.test(pathname)) return "home";
-  return "browse";
-}
-
 function sameIds(left: string[], right: string[]): boolean {
   return left.length === right.length && left.every((id, index) => id === right[index]);
 }
 
 function writeSidebarCollapsed(collapsed: boolean) {
   window.localStorage.setItem(SIDEBAR_STORAGE_KEY, String(collapsed));
+}
+
+function propertyPath(propertyId: string, suffix = ""): string {
+  return `/property/${encodeURIComponent(propertyId)}${suffix}`;
 }
 
 export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
@@ -141,11 +135,15 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     }
 
     if (activeView === "home" && focus) {
-      navigate(`/property/${focus}`);
+      navigate(propertyPath(focus));
+      return;
+    }
+    if (activeView === "rera" && focus) {
+      navigate(propertyPath(focus, "/rera"));
       return;
     }
     if (activeView === "plan" && focus) {
-      navigate(`/property/${focus}/plan`);
+      navigate(propertyPath(focus, "/plan"));
     }
   }
 
@@ -160,7 +158,11 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
     if (activeView === "plan") {
-      navigate(`/property/${nextId}/plan`);
+      navigate(propertyPath(nextId, "/plan"));
+      return;
+    }
+    if (activeView === "rera") {
+      navigate(propertyPath(nextId, "/rera"));
       return;
     }
     if (activeView === "compare") {
@@ -171,7 +173,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       navigate(`/workspace/compare?${next.toString()}`, { replace: true });
       return;
     }
-    navigate(`/property/${nextId}`);
+    navigate(propertyPath(nextId));
   }
 
   function removeHome(propertyIdToRemove: string) {

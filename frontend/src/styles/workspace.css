@@ -2152,8 +2152,8 @@
   .workspace-sidebar__nav {
     height: 100%;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.2rem;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 0.12rem;
   }
 
   .workspace-sidebar__nav-item,
@@ -2167,7 +2167,7 @@
   }
 
   .workspace-sidebar__nav-item span {
-    display: block;
+    display: none;
   }
 
   .workspace-sidebar__nav-item em {

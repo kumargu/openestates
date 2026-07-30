@@ -1,0 +1,400 @@
+{
+  "version": 1,
+  "description": "Buyer-facing full RERA report surface. The API dumps present facts from serving data, then uses these rules for grouping, labels, units, tone, and notebook labels.",
+  "candidate_rules": {
+    "include_source_types": [],
+    "include_fact_keys": [
+      "available_configurations",
+      "configuration_count",
+      "has_1bhk",
+      "has_2bhk",
+      "has_3bhk",
+      "has_4bhk",
+      "project_original_completion_date",
+      "project_revised_completion_date",
+      "project_start_date",
+      "project_land_area_acres",
+      "project_land_area_sqm",
+      "project_max_floor_count",
+      "project_open_area_pct",
+      "project_tower_count",
+      "project_unit_count",
+      "project_units_per_acre",
+      "site_plan_asset_count",
+      "stp_count"
+    ],
+    "include_key_prefixes": [
+      "rera_",
+      "project_land_area",
+      "project_open_area",
+      "project_unit",
+      "project_tower",
+      "project_max_floor",
+      "parking_"
+    ],
+    "exclude_key_contains": [
+      "manifest",
+      "source_url",
+      "raw",
+      "html",
+      "extracted",
+      "evidence",
+      "promoted",
+      "debug",
+      "pipeline",
+      "confidence_reason"
+    ],
+    "exclude_key_suffixes": ["_url"]
+  },
+  "value_rules": {
+    "skip_json_containers": true,
+    "skip_text_values": ["unknown", "not specified", "n/a", "na", "none", "null"],
+    "numeric_units": [
+      {
+        "key_suffixes": ["_pct"],
+        "key_contains": ["percentage"],
+        "suffix": "%"
+      },
+      {
+        "key_suffixes": ["_months"],
+        "key_contains": ["delay_months"],
+        "suffix": " months"
+      },
+      {
+        "key_suffixes": ["_acres"],
+        "key_contains": ["area_acres"],
+        "suffix": " acres"
+      },
+      {
+        "key_suffixes": ["_sqm"],
+        "key_contains": ["area_sqm"],
+        "suffix": " sqm"
+      },
+      {
+        "key_suffixes": ["_sqft"],
+        "key_contains": ["area_sqft"],
+        "suffix": " sqft"
+      }
+    ]
+  },
+  "sections": [
+    {
+      "id": "registration",
+      "title": "Registration",
+      "rank": 0,
+      "fact_keys": ["rera_number", "rera_registration_number", "rera_ack_number", "rera_registered", "rera_status"],
+      "key_contains": ["number", "registered", "status", "approved"]
+    },
+    {
+      "id": "checks",
+      "title": "Checks",
+      "rank": 1,
+      "key_contains": ["litigation", "mortgage", "borrowing", "revocation", "escrow"]
+    },
+    {
+      "id": "complaints",
+      "title": "Complaints",
+      "rank": 2,
+      "key_contains": ["complaint"]
+    },
+    {
+      "id": "timeline",
+      "title": "Timeline",
+      "rank": 3,
+      "key_contains": ["date", "delay", "start", "completion", "possession"]
+    },
+    {
+      "id": "project",
+      "title": "Project shape",
+      "rank": 4,
+      "key_contains": ["unit", "acre", "area", "tower", "floor", "parking", "configuration", "bhk"]
+    },
+    {
+      "id": "builder",
+      "title": "Builder",
+      "rank": 5,
+      "key_contains": ["builder", "promoter"]
+    },
+    {
+      "id": "money",
+      "title": "Money",
+      "rank": 6,
+      "key_contains": ["cost", "loan", "charge", "bank"]
+    },
+    {
+      "id": "files",
+      "title": "Files",
+      "rank": 7,
+      "key_contains": ["document", "plan", "approval", "noc", "brochure", "affidavit"]
+    },
+    {
+      "id": "location",
+      "title": "Location",
+      "rank": 8,
+      "key_contains": ["lat", "lng", "address", "locality"]
+    }
+  ],
+  "default_section": {
+    "id": "other",
+    "title": "Other facts",
+    "rank": 9
+  },
+  "display_rules": [
+    {
+      "fact_keys": ["rera_number", "rera_registration_number"],
+      "label": "RERA number"
+    },
+    {
+      "fact_keys": ["rera_ack_number"],
+      "label": "Acknowledgement number"
+    },
+    {
+      "fact_keys": ["rera_approved_on"],
+      "label": "Approved on"
+    },
+    {
+      "fact_keys": ["rera_registered"],
+      "label": "Registered"
+    },
+    {
+      "fact_keys": ["rera_status"],
+      "label": "Status"
+    },
+    {
+      "fact_keys": ["rera_survey_numbers"],
+      "label": "Survey numbers"
+    },
+    {
+      "fact_keys": ["rera_land_litigation"],
+      "label": "Land litigation"
+    },
+    {
+      "fact_keys": ["rera_builder_revocations"],
+      "label": "Builder revocations"
+    },
+    {
+      "fact_keys": ["rera_complaints_count"],
+      "label": "Complaints"
+    },
+    {
+      "fact_keys": ["rera_complaints_resolved_pct"],
+      "label": "Complaints resolved"
+    },
+    {
+      "fact_keys": ["rera_delay_months"],
+      "label": "Delay"
+    },
+    {
+      "fact_keys": ["rera_completion_date"],
+      "label": "Completion date"
+    },
+    {
+      "fact_keys": ["rera_original_completion_date"],
+      "label": "Original completion"
+    },
+    {
+      "fact_keys": ["rera_start_date"],
+      "label": "Start date"
+    },
+    {
+      "fact_keys": ["project_original_completion_date"],
+      "label": "Original completion"
+    },
+    {
+      "fact_keys": ["project_revised_completion_date"],
+      "label": "Revised completion"
+    },
+    {
+      "fact_keys": ["project_start_date"],
+      "label": "Start date"
+    },
+    {
+      "fact_keys": ["available_configurations"],
+      "label": "Configurations"
+    },
+    {
+      "fact_keys": ["configuration_count"],
+      "label": "Configuration count"
+    },
+    {
+      "fact_keys": ["has_1bhk"],
+      "label": "1BHK"
+    },
+    {
+      "fact_keys": ["has_2bhk"],
+      "label": "2BHK"
+    },
+    {
+      "fact_keys": ["has_3bhk"],
+      "label": "3BHK"
+    },
+    {
+      "fact_keys": ["has_4bhk"],
+      "label": "4BHK"
+    },
+    {
+      "fact_keys": ["project_land_area_acres"],
+      "label": "Land area"
+    },
+    {
+      "fact_keys": ["project_land_area_sqm", "rera_total_land_area_sqm"],
+      "label": "Land area"
+    },
+    {
+      "fact_keys": ["project_open_area_pct"],
+      "label": "Open area"
+    },
+    {
+      "fact_keys": ["project_max_floor_count"],
+      "label": "Max floors"
+    },
+    {
+      "fact_keys": ["rera_num_towers", "project_tower_count"],
+      "label": "Towers"
+    },
+    {
+      "fact_keys": ["project_unit_count", "rera_total_units"],
+      "label": "Homes"
+    },
+    {
+      "fact_keys": ["project_units_per_acre"],
+      "label": "Homes per acre"
+    },
+    {
+      "fact_keys": ["rera_total_builtup_area_sqm"],
+      "label": "Built-up area"
+    },
+    {
+      "fact_keys": ["rera_total_carpet_area_sqm"],
+      "label": "Carpet area"
+    },
+    {
+      "fact_keys": ["rera_far_sanctioned"],
+      "label": "Sanctioned FAR"
+    },
+    {
+      "fact_keys": ["parking_offered_for_sale_count"],
+      "label": "Parking for sale"
+    },
+    {
+      "fact_keys": ["parking_covered_count", "rera_covered_parking"],
+      "label": "Covered parking"
+    },
+    {
+      "fact_keys": ["parking_surface_count", "rera_open_parking"],
+      "label": "Open parking"
+    },
+    {
+      "fact_keys": ["parking_total_car_count"],
+      "label": "Car parking"
+    },
+    {
+      "fact_keys": ["rera_builder_projects_count"],
+      "label": "Builder projects"
+    },
+    {
+      "fact_keys": ["rera_builder_states"],
+      "label": "Builder states"
+    },
+    {
+      "fact_keys": ["rera_promoter_name"],
+      "label": "Promoter"
+    },
+    {
+      "fact_keys": ["rera_escrow_account"],
+      "label": "Escrow account"
+    },
+    {
+      "fact_keys": ["rera_escrow_bank"],
+      "label": "Escrow bank"
+    },
+    {
+      "fact_keys": ["rera_escrow_ifsc"],
+      "label": "Escrow IFSC"
+    },
+    {
+      "fact_keys": ["rera_has_borrowing"],
+      "label": "Borrowing"
+    },
+    {
+      "fact_keys": ["rera_has_mortgage"],
+      "label": "Mortgage"
+    },
+    {
+      "fact_keys": ["site_plan_asset_count"],
+      "label": "Site plans"
+    },
+    {
+      "fact_keys": ["rera_project_address"],
+      "label": "Address"
+    },
+    {
+      "fact_keys": ["stp_count"],
+      "label": "STP count"
+    },
+    {
+      "fact_keys": ["rera_project_type"],
+      "label": "Project type"
+    },
+    {
+      "fact_keys": ["rera_project_sub_type"],
+      "label": "Project subtype"
+    },
+    {
+      "fact_keys": ["rera_lat_lng"],
+      "label": "Coordinates"
+    }
+  ],
+  "tone_rules": [
+    {
+      "tone": "positive",
+      "key_contains": ["resolved_pct", "disposed_count"],
+      "when": { "numeric_gt": 0 }
+    },
+    {
+      "tone": "watch",
+      "key_contains": ["complaint", "delay", "litigation", "mortgage", "borrowing", "revocation"],
+      "when": { "numeric_gt": 0 }
+    },
+    {
+      "tone": "watch",
+      "key_contains": ["complaint", "delay", "litigation", "mortgage", "borrowing", "revocation"],
+      "when": { "bool_value": true }
+    },
+    {
+      "tone": "positive",
+      "key_contains": ["complaint", "delay", "litigation", "mortgage", "borrowing", "revocation"],
+      "when": { "numeric_lte": 0 }
+    },
+    {
+      "tone": "positive",
+      "key_contains": ["complaint", "delay", "litigation", "mortgage", "borrowing", "revocation"],
+      "when": { "bool_value": false }
+    }
+  ],
+  "notebook_label_rules": [
+    {
+      "labels": ["legal"]
+    },
+    {
+      "key_contains": ["complaint"],
+      "labels": ["complaints", "risk"]
+    },
+    {
+      "key_contains": ["litigation", "delay", "mortgage", "borrowing", "revocation"],
+      "labels": ["risk"]
+    },
+    {
+      "key_contains": ["plan", "unit", "floor", "tower", "parking"],
+      "labels": ["layout"]
+    },
+    {
+      "key_contains": ["open", "acre", "density"],
+      "labels": ["open-space"]
+    },
+    {
+      "key_contains": ["cost", "bank"],
+      "labels": ["finance"]
+    }
+  ]
+}

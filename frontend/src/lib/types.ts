@@ -60,6 +60,48 @@ export type PropertyCard = {
   home_state_display?: string;
   builder_delivery_display?: string;
   data_freshness?: DataFreshness;
+  /** Config-derived decision labels for compare, notes, and compact review surfaces. */
+  decision_labels?: DecisionLabel[];
+  /** Grouped compact checks for property details, notes, and compare. */
+  decision_check_summary?: DecisionCheckSummary;
+};
+
+export type DecisionLabel = {
+  key: string;
+  label: string;
+  severity: "info" | "positive" | "caution" | "risk" | string;
+  scope: "project" | "builder" | "area" | string;
+  visualId: string;
+  value?: number;
+  valueText?: string;
+  unit?: string;
+  surfaces?: string[];
+  priority: number;
+  sourceFactKeys?: string[];
+  confidence: number;
+  notebookLabels?: string[];
+  compareGroup?: string;
+  groupId: "attention" | "project_facts" | "documents" | "finance" | string;
+  placement: "primary" | "more" | "audit" | string;
+};
+
+export type DecisionCheckGroup = {
+  id: "attention" | "project_facts" | "documents" | "finance" | string;
+  title: string;
+  labels: DecisionLabel[];
+};
+
+export type DecisionCheckSummary = {
+  tileLabel: string;
+  tileCaption?: string;
+  tone: "risk" | "caution" | "neutral" | "positive" | string;
+  registrationNumber?: string;
+  registrationNumberCompact?: string;
+  registryUrl?: string;
+  primaryCount: number;
+  totalCount: number;
+  primaryLabels?: DecisionLabel[];
+  groups?: DecisionCheckGroup[];
 };
 
 export type DiscoveryQuote = {
@@ -245,6 +287,10 @@ export type PropertyDetailResponse = {
     reviews?: ExternalReviewCard[];
   };
   detail_signals?: DetailSignal[];
+  /** Config-derived labels intended for notes and compare surfaces. */
+  decision_labels?: DecisionLabel[];
+  /** Grouped compact checks for property-detail decision labels. */
+  decision_check_summary?: DecisionCheckSummary;
   livability_brief?: LivabilityBrief;
   /** Schematic neighborhood plate projected from nearby + water facts. */
   map_context?: PropertyMapContext;
@@ -1043,6 +1089,7 @@ export type ReraInfo = {
 export type ReraDossier = {
   property_id: string;
   society_id: string;
+  fact_sections?: ReraReportSection[];
   summary_cards: ReraDecisionCard[];
   compare_items: ReraCompareItem[];
   complaint_sections: ReraComplaintSection[];
@@ -1050,6 +1097,23 @@ export type ReraDossier = {
   timeline: ReraTimeline;
   legal_checks: ReraLegalCheck[];
   source: ReraDossierSource;
+};
+
+export type ReraReportSection = {
+  id: string;
+  title: string;
+  facts: ReraReportFact[];
+};
+
+export type ReraReportFact = {
+  key: string;
+  label: string;
+  value: string;
+  tone: "positive" | "watch" | "neutral" | "risk" | "caution" | string;
+  labels: string[];
+  source_url?: string;
+  confidence: number;
+  learned_at: string;
 };
 
 export type ReraCompareItem = {
@@ -1086,6 +1150,15 @@ export type ReraDocumentSection = {
   kinds: string[];
   preview_available_count: number;
   hidden_count: number;
+  items: ReraDocumentLink[];
+};
+
+export type ReraDocumentLink = {
+  artifact_id: string;
+  label: string;
+  kind: string;
+  source_url: string;
+  source_field_label?: string;
 };
 
 export type ReraTimeline = {

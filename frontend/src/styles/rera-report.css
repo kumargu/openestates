@@ -1,0 +1,419 @@
+.rera-report-page {
+  width: min(1040px, calc(100% - 2rem));
+  padding: 1.4rem 0 4rem;
+}
+
+.rera-report-hero {
+  padding: 1rem 0 1.5rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rera-report-back {
+  display: inline-flex;
+  width: fit-content;
+  margin-bottom: 1.4rem;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.rera-report-back:hover,
+.rera-report-back:focus-visible {
+  color: var(--color-text);
+}
+
+.rera-report-hero p {
+  margin: 0 0 0.25rem;
+  color: var(--color-text-muted);
+  font-size: 0.74rem;
+  font-weight: 820;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rera-report-hero h1 {
+  max-width: 760px;
+  margin: 0;
+  color: var(--color-text);
+  font-size: clamp(1.8rem, 3.5vw, 3.4rem);
+  line-height: 0.96;
+  letter-spacing: 0;
+  overflow-wrap: break-word;
+  white-space: normal;
+  word-break: normal;
+}
+
+.rera-report-subline,
+.rera-report-registry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.85rem;
+}
+
+.rera-report-subline {
+  margin-top: 0.75rem;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+}
+
+.rera-report-registry {
+  margin-top: 1.15rem;
+}
+
+.rera-report-registry__number {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.46rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: 7px;
+  background: #fff;
+}
+
+.rera-report-registry__number span {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.86rem;
+  font-weight: 760;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rera-report-registry a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  min-height: 2rem;
+  color: var(--color-text-secondary);
+  font-size: 0.85rem;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.rera-report-registry a:hover,
+.rera-report-registry a:focus-visible {
+  color: var(--color-text);
+}
+
+.rera-report-section {
+  padding: 1.45rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.rera-report-section__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.rera-report-section h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 1rem;
+  font-weight: 820;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+
+.rera-report-facts,
+.rera-report-notes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.65rem;
+}
+
+.rera-report-fact,
+.rera-report-note {
+  min-width: 0;
+  padding: 0.78rem 0.82rem;
+  border: 1px solid rgba(38, 35, 32, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.rera-report-fact,
+.rera-report-note__head {
+  display: grid;
+  align-items: start;
+  gap: 0.55rem;
+}
+
+.rera-report-fact.is-long {
+  grid-column: 1 / -1;
+}
+
+.rera-report-fact__copy,
+.rera-report-note__head > div:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.16rem;
+}
+
+.rera-report-fact__copy span,
+.rera-report-note__head span {
+  color: var(--color-text-muted);
+  font-size: 0.7rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.rera-report-fact__copy strong,
+.rera-report-note__head strong {
+  min-width: 0;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  font-weight: 760;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-fact__copy small,
+.rera-report-note__head small {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-fact.is-risk .rera-report-fact__copy strong,
+.rera-report-fact.is-watch .rera-report-fact__copy strong {
+  color: #9b5d13;
+}
+
+.rera-report-fact.is-positive .rera-report-fact__copy strong {
+  color: #247346;
+}
+
+.rera-report-fact__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+}
+
+.rera-report-source {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.22rem;
+  min-height: 1.55rem;
+  color: var(--color-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 760;
+  text-decoration: none;
+}
+
+.rera-report-source:hover,
+.rera-report-source:focus-visible {
+  color: var(--color-text);
+}
+
+.rera-report-pin.notebook-pin {
+  opacity: 1;
+}
+
+.rera-report-documents {
+  padding-top: 1.2rem;
+}
+
+.rera-report-document-groups {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.rera-report-document-group {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.rera-report-document-group h3 {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 820;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.rera-report-document-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.6rem;
+}
+
+.rera-report-document-link {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.14rem 0.65rem;
+  align-items: center;
+  padding: 0.72rem 0.78rem;
+  border: 1px solid rgba(38, 35, 32, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.rera-report-document-link a {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.38rem;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-weight: 760;
+  line-height: 1.25;
+  text-decoration: none;
+}
+
+.rera-report-document-link a span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rera-report-document-link a:hover,
+.rera-report-document-link a:focus-visible {
+  color: var(--color-accent);
+}
+
+.rera-report-document-link small {
+  min-width: 0;
+  grid-column: 1;
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-document-link__actions {
+  display: inline-flex;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  align-items: center;
+  gap: 0.32rem;
+}
+
+.rera-report-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.rera-report-chips span {
+  max-width: 100%;
+  padding: 0.22rem 0.48rem;
+  border-radius: 7px;
+  background: var(--color-bg-soft);
+  color: var(--color-text-secondary);
+  font-size: 0.76rem;
+  font-weight: 680;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-list {
+  display: grid;
+  gap: 0.38rem;
+  margin: 0.65rem 0 0;
+  padding-left: 1.15rem;
+  color: var(--color-text-secondary);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.rera-report-empty {
+  max-width: 34rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+@media (max-width: 720px) {
+  .rera-report-page.page-container-wide {
+    box-sizing: border-box;
+    width: min(calc(100% - 2rem), 21rem);
+    max-width: min(calc(100% - 2rem), 21rem);
+    margin-right: 0.75rem;
+    margin-left: 0.75rem;
+    padding-top: 0.75rem;
+    padding-right: 0;
+    padding-left: 0;
+    overflow-x: hidden;
+  }
+
+  .rera-report-hero {
+    padding-top: 0.75rem;
+  }
+
+  .rera-report-hero h1 {
+    max-width: 100%;
+    font-size: clamp(1.45rem, 7.8vw, 1.82rem);
+    line-height: 1;
+  }
+
+  .rera-report-registry {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .rera-report-registry__number {
+    width: 100%;
+  }
+
+  .rera-report-registry__number span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rera-report-facts,
+  .rera-report-document-links {
+    grid-template-columns: 1fr;
+  }
+
+  .rera-report-fact,
+  .rera-report-note__head {
+    grid-template-columns: 1fr;
+    align-items: start;
+    gap: 0.55rem;
+  }
+
+  .rera-report-fact__actions {
+    justify-content: flex-start;
+  }
+
+  .rera-report-document-link {
+    grid-template-columns: 1fr;
+    max-width: 100%;
+  }
+
+  .rera-report-document-link a {
+    align-items: flex-start;
+  }
+
+  .rera-report-document-link a span {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .rera-report-document-link__actions,
+  .rera-report-document-link small {
+    grid-column: 1;
+    grid-row: auto;
+  }
+}

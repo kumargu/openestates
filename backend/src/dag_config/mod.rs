@@ -21,6 +21,8 @@
 mod evidence_sections;
 mod fact_registry;
 mod loader;
+mod rera_decision_labels;
+mod rera_report_surface;
 mod resolution;
 mod search_guardrails;
 mod search_intent;
@@ -32,14 +34,28 @@ pub use evidence_sections::{
     EvidenceSectionPresentation,
 };
 pub use fact_registry::{
-    fact_registry_path, load_fact_registry, load_fact_registry_from_path, load_fact_registry_index,
-    scoring_direction_from_hint, FactRegistryEntry, FactRegistryFile, FactRegistryIndex,
-    FactRegistryRuntime, FactRegistryScoringHint,
+    fact_registry_index_config, fact_registry_path, load_fact_registry,
+    load_fact_registry_from_path, load_fact_registry_index, scoring_direction_from_hint,
+    FactRegistryEntry, FactRegistryFile, FactRegistryIndex, FactRegistryRuntime,
+    FactRegistryScoringHint,
 };
 pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
     load_json, load_manifest, set_project_dag_root, AssetRegistryFile, CrawlPolicyFile,
     DagConfigError, DagManifest,
+};
+pub use rera_decision_labels::{
+    load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,
+    rera_decision_labels_path, ReraDecisionLabelCondition, ReraDecisionLabelDefinition,
+    ReraDecisionLabelGroupDefinition, ReraDecisionLabelSource, ReraDecisionLabelSummaryConfig,
+    ReraDecisionLabelsFile,
+};
+pub use rera_report_surface::{
+    load_rera_report_surface, load_rera_report_surface_from_path, rera_report_surface_config,
+    rera_report_surface_path, ReraReportCandidateRules, ReraReportDefaultSection,
+    ReraReportDisplayRule, ReraReportNotebookLabelRule, ReraReportNumericUnitRule,
+    ReraReportSectionRule, ReraReportSurfaceFile, ReraReportToneCondition, ReraReportToneRule,
+    ReraReportValueRules,
 };
 pub use resolution::{
     better_source_type, better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,

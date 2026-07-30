@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
@@ -97,6 +98,17 @@ pub fn load_fact_registry_from_path(path: &Path) -> Result<FactRegistryFile, Dag
 
 pub fn load_fact_registry_index() -> Result<FactRegistryIndex, DagConfigError> {
     Ok(FactRegistryIndex::from_file(&load_fact_registry()?))
+}
+
+static FACT_REGISTRY_INDEX_CONFIG: OnceLock<Result<FactRegistryIndex, String>> = OnceLock::new();
+
+pub fn fact_registry_index_config() -> Result<&'static FactRegistryIndex, DagConfigError> {
+    match FACT_REGISTRY_INDEX_CONFIG
+        .get_or_init(|| load_fact_registry_index().map_err(|err| err.to_string()))
+    {
+        Ok(config) => Ok(config),
+        Err(err) => Err(DagConfigError::InvalidConfig(err.clone())),
+    }
 }
 
 pub fn scoring_direction_from_hint(hint: &FactRegistryScoringHint) -> String {
