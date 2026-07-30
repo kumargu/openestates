@@ -5,84 +5,26 @@ import { getProperty, getPropertyRera } from "../lib/api.ts";
 import type {
   PropertyDetailResponse,
   ReraDossier,
-  ReraDocumentSection,
   ReraReportFact,
-  ReraReportSection,
 } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
 import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
 import { LinkIcon } from "../components/evidence/EvidenceIcons.tsx";
-import type { NotebookLabelId } from "../lib/notebook.ts";
+import {
+  displayName,
+  httpUrl,
+  kindLabel,
+  knownText,
+  reportSections,
+  safeLabels,
+  toneClass,
+  visibleDocumentSections,
+} from "../lib/reraReportView.ts";
 
 type LoadState =
   | { status: "loading" }
   | { status: "ready"; detail: PropertyDetailResponse; dossier: ReraDossier }
   | { status: "error"; message: string };
-
-function knownText(value?: string | null): string | null {
-  const normalized = value?.trim();
-  if (!normalized) return null;
-  if (["unknown", "not specified", "n/a", "na", "none", "null"].includes(normalized.toLowerCase())) {
-    return null;
-  }
-  return normalized;
-}
-
-function displayName(value: string): string {
-  const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
-  return value.replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
-    if (keepUpper.has(word) || /\d/.test(word)) return word;
-    return word.charAt(0) + word.slice(1).toLowerCase();
-  });
-}
-
-function httpUrl(value?: string): string | null {
-  const known = knownText(value);
-  if (!known) return null;
-  try {
-    const url = new URL(known);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
-function toneClass(tone?: string): string {
-  if (!tone || tone === "neutral" || tone === "default") return "";
-  return `is-${tone}`;
-}
-
-function kindLabel(value: string): string {
-  const normalized = value.replace(/[_-]+/g, " ").trim();
-  return normalized ? displayName(normalized) : "Document";
-}
-
-function safeLabels(labels: string[] | undefined, key: string): NotebookLabelId[] {
-  const next = labels?.filter(Boolean) ?? [];
-  if (next.length > 0) return [...new Set(next)].slice(0, 4);
-  const keyText = key.toLowerCase();
-  if (keyText.includes("complaint")) return ["complaints", "risk", "legal"];
-  if (keyText.includes("delay") || keyText.includes("litigation")) return ["risk", "legal"];
-  return ["legal"];
-}
-
-function fallbackSections(dossier: ReraDossier): ReraReportSection[] {
-  if (dossier.fact_sections?.length) return dossier.fact_sections;
-
-  const facts: ReraReportFact[] = dossier.compare_items
-    .filter((item) => knownText(item.value))
-    .map((item) => ({
-      key: item.key,
-      label: item.label,
-      value: item.value,
-      tone: item.tone,
-      labels: safeLabels(item.labels, item.key),
-      confidence: 1,
-      learned_at: dossier.source.last_verified ?? "",
-    }));
-
-  return facts.length > 0 ? [{ id: "facts", title: "Facts", facts }] : [];
-}
 
 function FactLine({
   fact,
@@ -118,15 +60,10 @@ function DocumentSectionList({
   sections,
   propertyId,
 }: {
-  sections: ReraDocumentSection[];
+  sections: ReraDossier["document_sections"];
   propertyId: string;
 }) {
-  const visibleSections = sections
-    .map((section) => ({
-      ...section,
-      items: section.items?.filter((item) => httpUrl(item.source_url)) ?? [],
-    }))
-    .filter((section) => section.items.length > 0);
+  const visibleSections = visibleDocumentSections(sections);
 
   if (visibleSections.length === 0) return null;
 
@@ -202,7 +139,7 @@ export function ReraReportPage() {
   }, [id]);
 
   const sections = useMemo(() => (
-    state.status === "ready" ? fallbackSections(state.dossier) : []
+    state.status === "ready" ? reportSections(state.dossier) : []
   ), [state]);
 
   if (!id) return <PageState variant="not_found" context="property" />;
