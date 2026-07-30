@@ -2816,178 +2816,6 @@ body {
   color: var(--color-text-muted);
 }
 
-.market-trend {
-  margin-bottom: 1rem;
-}
-
-.market-trend__tile {
-  display: grid;
-  grid-template-columns: 8.5rem minmax(0, 1fr) auto;
-  gap: 1rem;
-  align-items: center;
-  padding: 0;
-  overflow: hidden;
-  text-align: left;
-  cursor: pointer;
-}
-
-.market-trend__tile.is-open {
-  border-color: rgba(72, 148, 148, 0.34);
-  background: #fff;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.05);
-}
-
-.market-trend__tile:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: 2px;
-}
-
-.market-trend__preview {
-  display: flex;
-  height: calc(var(--detail-tile-height, 5.75rem) - 2px);
-  flex-direction: column;
-  justify-content: center;
-  gap: 0.42rem;
-  padding: 0.9rem;
-  background:
-    linear-gradient(90deg, rgba(38, 35, 32, 0.05) 1px, transparent 1px) 0 0 / 25% 100%,
-    linear-gradient(135deg, rgba(168, 214, 214, 0.28), rgba(255, 255, 255, 0.7));
-}
-
-.market-trend__preview span {
-  position: relative;
-  display: block;
-  height: 0.6rem;
-  border-radius: 999px;
-  background: rgba(38, 35, 32, 0.08);
-}
-
-.market-trend__preview span:nth-child(1) {
-  width: 46%;
-}
-
-.market-trend__preview span:nth-child(2) {
-  width: 72%;
-}
-
-.market-trend__preview span:nth-child(3) {
-  width: 92%;
-}
-
-.market-trend__preview span:nth-child(4) {
-  width: 80%;
-}
-
-.market-trend__preview i {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(72, 148, 148, 0.52);
-}
-
-.market-trend__copy {
-  display: flex;
-  min-width: 0;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
-.market-trend__kicker,
-.market-trend__panel-head > span {
-  display: block;
-  color: rgba(72, 148, 148, 0.95);
-  font-size: 0.66rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.market-trend__copy strong {
-  font-size: 1rem;
-  line-height: 1.25;
-}
-
-.market-trend__copy > span:last-child {
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: 0.76rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.market-trend__open {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  margin-right: 1rem;
-  color: var(--color-text-secondary);
-  font-size: 0.74rem;
-  font-weight: 700;
-}
-
-.market-trend__tile.is-open .market-trend__open svg {
-  transform: rotate(90deg);
-}
-
-.market-trend__panel {
-  margin-top: 0.55rem;
-  padding: 0.95rem;
-  border: 1px solid rgba(38, 35, 32, 0.08);
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.95);
-  box-shadow: 0 14px 34px rgba(26, 32, 44, 0.06);
-}
-
-.market-trend__panel-head {
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
-  margin-bottom: 0.7rem;
-}
-
-.market-trend__panel-head > span {
-  color: rgba(72, 148, 148, 0.95);
-  font-size: 0.62rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.market-trend__panel-head strong {
-  color: var(--color-text);
-  font-size: 0.95rem;
-  line-height: 1.24;
-}
-
-.market-trend__panel-head p {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: 0.72rem;
-}
-
-.market-trend__chart {
-  padding: 0;
-  border: 1px solid rgba(38, 35, 32, 0.08);
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.market-trend__chart .price-bands__legend {
-  padding-left: clamp(96px, 18vw, 132px);
-}
-
-.market-trend__chart .price-bands__caption {
-  margin-bottom: 0;
-}
-
-.market-trend__row {
-  cursor: default;
-}
-
-.market-trend__row:hover {
-  background: transparent;
-}
-
 .home-pulse-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
@@ -3286,7 +3114,6 @@ body {
 
 .property-decision-main > .nearby-plate,
 .property-decision-main > .area-trail,
-.property-decision-main > .market-trend,
 .property-decision-main > .evidence-stack,
 .property-decision-main > .alt-paths {
   margin-bottom: 0;
@@ -4333,10 +4160,6 @@ body {
   min-width: 0;
   overflow: auto;
   padding: 1rem;
-}
-
-.property-clean-dialog__body .market-trend__chart {
-  margin-top: 0;
 }
 
 @media (max-width: 760px) {
