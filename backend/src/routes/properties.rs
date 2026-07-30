@@ -636,10 +636,12 @@ fn normalized_builder_key(name: &str) -> String {
 }
 
 fn project_name_for(property: &crate::models::Property) -> String {
-    let prefix = format!("{} BHK in ", property.bhk);
+    let in_prefix = format!("{} BHK in ", property.bhk);
+    let at_prefix = format!("{} BHK at ", property.bhk);
     property
         .title
-        .strip_prefix(&prefix)
+        .strip_prefix(&in_prefix)
+        .or_else(|| property.title.strip_prefix(&at_prefix))
         .unwrap_or(&property.title)
         .to_string()
 }

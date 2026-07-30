@@ -33,11 +33,11 @@
 }
 
 .rera-report-hero h1 {
-  max-width: 760px;
+  max-width: 68rem;
   margin: 0;
   color: var(--color-text);
-  font-size: clamp(1.8rem, 3.5vw, 3.4rem);
-  line-height: 0.96;
+  font-size: clamp(1.65rem, 1.24rem + 0.82vw, 2.05rem);
+  line-height: 1.13;
   letter-spacing: 0;
   overflow-wrap: break-word;
   white-space: normal;
@@ -359,8 +359,8 @@
 
   .rera-report-hero h1 {
     max-width: 100%;
-    font-size: clamp(1.45rem, 7.8vw, 1.82rem);
-    line-height: 1;
+    font-size: clamp(1.45rem, 6.4vw, 1.75rem);
+    line-height: 1.12;
   }
 
   .rera-report-registry {

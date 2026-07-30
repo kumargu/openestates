@@ -63,10 +63,12 @@ function compactLifecycleLabel(value: string): string {
 
 function displayName(value: string): string {
   const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
-  return value.replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
+  return value
+    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
+    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
     if (keepUpper.has(word) || /\d/.test(word)) return word;
     return word.charAt(0) + word.slice(1).toLowerCase();
-  });
+    });
 }
 
 function truncateCopy(value: string, limit = 220): string {
@@ -306,23 +308,18 @@ function InlinePriceRangeSignal({
   const band = derivePriceBands(properties, [area])[0];
   if (!band) return null;
 
-  const low = band.p25;
-  const high = band.p75;
-  const span = Math.max(high - low, 1);
-  const marker = Math.min(100, Math.max(0, ((pricePerSqft - low) / span) * 100));
+  const typicalLow = band.p25;
+  const typicalHigh = band.p75;
   const areaName = area.split(",")[0];
 
   return (
-    <div
+    <p
       className="property-price-range"
-      aria-label={`${formatSqftCompact(pricePerSqft)} per sqft against ${areaName} range ${formatSqftCompact(low)} to ${formatSqftCompact(high)}`}
+      aria-label={`${formatSqftCompact(pricePerSqft)} per sqft against ${areaName} range ${formatSqftCompact(typicalLow)} to ${formatSqftCompact(typicalHigh)}`}
     >
       <span>{formatSqftCompact(pricePerSqft)}/sqft</span>
-      <i aria-hidden="true">
-        <b style={{ left: `${marker}%` }} />
-      </i>
-      <span>{areaName} {formatSqftCompact(low)}-{formatSqftCompact(high)}</span>
-    </div>
+      <span>{areaName} range {formatSqftCompact(typicalLow)}-{formatSqftCompact(typicalHigh)}/sqft</span>
+    </p>
   );
 }
 
@@ -1051,27 +1048,6 @@ function PropertyPageBody({
         <div className="property-clean-head__copy">
           <p>{p.area}, {p.city}</p>
           <h1>{displayTitle}</h1>
-          <div className="property-clean-meta">
-            <span>₹{formatPrice(p.price)}</span>
-            <span>{p.bhk} BHK</span>
-            {sizeLabel && <span>{sizeLabel}</span>}
-            {compactStatusRead && (
-              <span className="property-status-pill">
-                <span className="property-status-pill__label">Status</span>
-                {compactStatusRead}
-              </span>
-            )}
-            {googleRating && (
-              <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
-                ★ {googleRating} Google
-              </span>
-            )}
-          </div>
-          <InlinePriceRangeSignal
-            area={p.area}
-            pricePerSqft={p.price_per_sqft}
-            properties={marketProperties}
-          />
         </div>
         <div className="property-clean-actions" aria-label="Property actions">
           <SaveHeartButton propertyId={p.id} className="property-action-link property-action-save" label="Save" />
@@ -1083,6 +1059,29 @@ function PropertyPageBody({
             className="property-action-note"
           />
         </div>
+      </section>
+
+      <section className="property-summary-card" aria-label="Home summary">
+        <div className="property-clean-meta">
+          <span>₹{formatPrice(p.price)}</span>
+          <span>{p.bhk} BHK</span>
+          {sizeLabel && <span>{sizeLabel}</span>}
+          {compactStatusRead && (
+            <span className="property-status-pill">
+              {compactStatusRead}
+            </span>
+          )}
+          {googleRating && (
+            <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
+              <span aria-hidden="true">★</span> {googleRating} Google
+            </span>
+          )}
+        </div>
+        <InlinePriceRangeSignal
+          area={p.area}
+          pricePerSqft={p.price_per_sqft}
+          properties={marketProperties}
+        />
       </section>
 
       <PropertyPhotoMosaic

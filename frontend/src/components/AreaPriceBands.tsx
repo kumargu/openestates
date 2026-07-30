@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import type { PropertyCard } from "../lib/types.ts";
 import {
   sentimentsForAreas,
+  sentimentSourceLabel,
   themeKindLabel,
   type AreaSentiment,
 } from "../lib/areaSentiments.ts";
@@ -10,6 +12,7 @@ import {
 /** Match Area Tracker: show a row once we have at least 2 priced listings. */
 const MIN_SAMPLES = 2;
 const MAX_DOTS = 36;
+const QUOTE_ROTATE_MS = 20_000;
 
 /** Soft Levels.fyi-style row pastels. */
 const BAND_PALETTE = [
@@ -247,22 +250,55 @@ function BandRow({
 }
 
 function LocalChatter({ themes }: { themes: AreaSentiment[] }) {
+  const [index, setIndex] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    if (themes.length < 2) return undefined;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) return undefined;
+
+    let fadeTimer: number | undefined;
+    const timer = window.setInterval(() => {
+      setFading(true);
+      fadeTimer = window.setTimeout(() => {
+        setIndex((current) => (current + 1) % themes.length);
+        setFading(false);
+      }, 320);
+    }, QUOTE_ROTATE_MS);
+
+    return () => {
+      window.clearInterval(timer);
+      if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
+    };
+  }, [themes]);
+
   if (themes.length === 0) return null;
+  const theme = themes[index % themes.length];
+
   return (
     <aside className="price-bands__chatter" aria-label="Local chatter">
-      <p>Local chatter</p>
-      <div>
-        {themes.map((theme) => (
-          <span
-            key={`${theme.kind}-${theme.theme}-${theme.line}`}
-            className={`price-bands__chatter-chip price-bands__chatter-chip--${theme.polarity}`}
-            title={theme.line}
-          >
-            <b>{themeKindLabel(theme.kind)}</b>
-            {theme.theme}
-          </span>
-        ))}
-      </div>
+      <p className="price-bands__read-kicker">Local chatter</p>
+      <figure className={`price-bands__quote price-bands__quote--${theme.polarity}${fading ? " price-bands__quote--fading" : ""}`}>
+        <blockquote>{theme.line}</blockquote>
+        <figcaption>
+          <span>{themeKindLabel(theme.kind)}</span>
+          <span aria-hidden="true">·</span>
+          <span>{theme.theme}</span>
+          <span aria-hidden="true">·</span>
+          <span>{sentimentSourceLabel(theme.source)}</span>
+        </figcaption>
+      </figure>
+      {themes.length > 1 && (
+        <div className="price-bands__quote-dots" aria-hidden="true">
+          {themes.slice(0, 8).map((item, dotIndex) => (
+            <span
+              key={`${item.kind}-${item.theme}-${item.line}`}
+              className={`price-bands__quote-dot${dotIndex === index % Math.min(themes.length, 8) ? " is-active" : ""}`}
+            />
+          ))}
+        </div>
+      )}
     </aside>
   );
 }

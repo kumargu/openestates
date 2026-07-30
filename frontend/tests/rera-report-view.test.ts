@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  displayName,
   httpUrl,
   kindLabel,
   reportSections,
@@ -118,6 +119,8 @@ test("RERA document sections hide empty groups and invalid links", () => {
 });
 
 test("RERA report helpers keep labels readable and notebook tags bounded", () => {
+  assert.equal(displayName("3 BHK in SUMADHURA CAPITOL RESIDENCES"), "3 BHK Sumadhura Capitol Residences");
+  assert.equal(displayName("3 BHK at Samadhura Capitol Residences"), "3 BHK Samadhura Capitol Residences");
   assert.equal(httpUrl("ftp://example.com/file"), null);
   assert.equal(kindLabel("latest_encumbrance_certificate"), "Latest Encumbrance Certificate");
   assert.deepEqual(safeLabels(["risk", "risk", "legal", "builder", "delay"], "builder_delay"), [
