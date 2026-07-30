@@ -348,49 +348,12 @@
   color: #b0a59c;
 }
 
-.notion-pill {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.36rem;
-  min-height: 1.85rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 999px;
-  padding: 0 0.68rem;
-  font-size: 0.76rem;
-  font-weight: 760;
-  cursor: pointer;
-  white-space: nowrap;
-  background: #eee;
-  color: #555;
-  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
-}
-
-.notion-pill--schools { background: #d6e9db; color: #2d5a3d; }
-.notion-pill--hospitals { background: #f5dde4; color: #7a2f45; }
-.notion-pill--water { background: #f5e0c8; color: #7a4a12; }
-.notion-pill--legal { background: #e3e4f5; color: #3d3f7a; }
-.notion-pill--price { background: #f5e6ea; color: #7a2f45; }
-.notion-pill--layout { background: #f1e2d8; color: #7a3f28; }
-.notion-pill--commute { background: #e2eee8; color: #2f5c4a; }
-.notion-pill--open-space { background: #e8f0d8; color: #4a5c28; }
-.notion-pill--down-payment { background: #e8deee; color: #5b3b6e; }
-.notion-pill--emi { background: #ddebf5; color: #2b5c7a; }
-.notion-pill--approach { background: #ebe4da; color: #5c4634; }
-.notion-pill--risk,
-.notion-pill--complaints,
-.notion-pill--transmission { background: #f3d9d6; color: #7a3228; }
-.notion-pill--community { background: #e8e6f0; color: #4a4560; }
-.notion-pill--metro,
-.notion-pill--tech-parks,
-.notion-pill--tech_parks { background: #e2eee8; color: #2f5c4a; }
-.notion-pill--visit,
-.notion-pill--other,
-.notion-pill--unlabeled { background: #ececec; color: #555; }
-
 .notion-pill-add {
+  min-height: 1.58rem;
+  min-width: 1.58rem;
   border: 1px dashed rgba(50, 38, 30, 0.18);
-  border-radius: 999px;
-  padding: 0.2rem 0.58rem;
+  border-radius: 7px;
+  padding: 0 0.54rem;
   background: transparent;
   color: #8a7d72;
   font-size: 0.7rem;
@@ -576,7 +539,7 @@
 }
 
 .notion-editorial {
-  width: min(900px, calc(100% - 2rem));
+  width: min(1120px, calc(100% - 2rem));
   margin-inline: auto;
   padding: 0 0 2rem;
 }
@@ -662,6 +625,11 @@
   padding: 0.62rem 0;
 }
 
+.notion-note--plan {
+  grid-template-columns: 1.5rem minmax(0, 1fr) 1.4rem;
+  gap: 0.7rem;
+}
+
 .notion-note.is-fresh {
   border-radius: 0.45rem;
   animation: notion-saved-flash 900ms ease;
@@ -688,7 +656,43 @@
   min-width: 0;
 }
 
-.notion-note__content > p {
+.notion-note__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.notion-note__head > div:first-child {
+  min-width: 0;
+}
+
+.notion-note__head-tags {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.45rem;
+  flex: 0 0 auto;
+  max-width: min(22rem, 45%);
+}
+
+.notion-plan-link {
+  flex: 0 0 auto;
+  color: #2f4f72;
+  font-size: 0.74rem;
+  font-weight: 720;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.notion-plan-link:hover,
+.notion-plan-link:focus-visible {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+.notion-note__content p {
   margin: 0;
   color: #342f2b;
   font-family: Georgia, "Times New Roman", serif;
@@ -697,12 +701,43 @@
   white-space: pre-wrap;
 }
 
+.notion-paragraph {
+  width: 100%;
+  min-width: 0;
+  resize: none;
+  overflow: hidden;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: #342f2b;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 1rem;
+  line-height: 1.65;
+}
+
+.notion-paragraph::placeholder {
+  color: #b2aaa2;
+}
+
+.notion-note__meta {
+  display: block;
+  margin-top: 0.12rem;
+  color: #9a9088;
+  font-size: 0.72rem;
+  font-weight: 650;
+}
+
 .notion-note__content > small {
   display: block;
-  margin-top: 0.1rem;
+  margin-top: 0.38rem;
   color: #8a7d72;
-  font-size: 0.73rem;
-  line-height: 1.4;
+  font-size: 0.88rem;
+  line-height: 1.62;
+}
+
+.notion-note--plan .notion-note__content > small {
+  max-width: 74rem;
 }
 
 .notion-note__content .notion-row__tags {
@@ -855,6 +890,15 @@
 
 .notion-note__labels .notion-row__tags {
   justify-content: flex-end;
+}
+
+.notion-note__head-tags .notion-row__tags {
+  justify-content: flex-start;
+}
+
+.notion-note--plan .notion-note__remove {
+  grid-column: 3;
+  grid-row: 1;
 }
 
 .notion-note__remove {
@@ -1376,41 +1420,6 @@
   font-size: 0.78rem;
 }
 
-.notebook-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.34rem;
-  min-height: 1.75rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 999px;
-  padding: 0 0.64rem;
-  font-size: 0.74rem;
-  font-weight: 760;
-  background: #eee;
-  color: #555;
-  box-shadow: 0 1px 0 rgba(38, 35, 32, 0.04);
-}
-
-.notebook-tag--schools { background: #d6e9db; color: #2d5a3d; }
-.notebook-tag--hospitals { background: #f5dde4; color: #7a2f45; }
-.notebook-tag--water { background: #f5e0c8; color: #7a4a12; }
-.notebook-tag--legal { background: #e3e4f5; color: #3d3f7a; }
-.notebook-tag--price { background: #f5e6ea; color: #7a2f45; }
-.notebook-tag--layout { background: #f1e2d8; color: #7a3f28; }
-.notebook-tag--commute { background: #e2eee8; color: #2f5c4a; }
-.notebook-tag--open-space { background: #e8f0d8; color: #4a5c28; }
-.notebook-tag--down-payment { background: #e8deee; color: #5b3b6e; }
-.notebook-tag--emi { background: #ddebf5; color: #2b5c7a; }
-.notebook-tag--approach { background: #ebe4da; color: #5c4634; }
-.notebook-tag--risk,
-.notebook-tag--transmission { background: #f3d9d6; color: #7a3228; }
-.notebook-tag--community { background: #e8e6f0; color: #4a4560; }
-.notebook-tag--metro,
-.notebook-tag--tech-parks,
-.notebook-tag--tech_parks { background: #e2eee8; color: #2f5c4a; }
-.notebook-tag--visit,
-.notebook-tag--other { background: #ececec; color: #555; }
-
 .notebook-toast {
   position: fixed;
   right: 1.2rem;
@@ -1516,6 +1525,16 @@
 
   .notion-note__labels .notion-row__tags {
     justify-content: flex-start;
+  }
+
+  .notion-note__head {
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .notion-note__head-tags {
+    justify-content: flex-start;
+    max-width: 100%;
   }
 }
 

@@ -1,20 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { PLAN_WHISPERS } from "./planWhispers.ts";
+import { planWhispersFor, type PlanWhisperTheme } from "./planWhispers.ts";
 
 const ROTATE_MS = 11_500;
 const FADE_MS = 450;
 
-function shuffled<T>(items: readonly T[]): T[] {
-  const copy = [...items];
-  for (let index = copy.length - 1; index > 0; index -= 1) {
-    const nextIndex = Math.floor(Math.random() * (index + 1));
-    [copy[index], copy[nextIndex]] = [copy[nextIndex], copy[index]];
-  }
-  return copy;
-}
+type PlanWhisperProps = {
+  theme: PlanWhisperTheme;
+};
 
-export function PlanWhisper() {
-  const whispers = useMemo(() => shuffled(PLAN_WHISPERS), []);
+export function PlanWhisper({ theme }: PlanWhisperProps) {
+  const whispers = useMemo(() => planWhispersFor(theme), [theme]);
   const [index, setIndex] = useState(0);
   const [fading, setFading] = useState(false);
   const [motionAllowed, setMotionAllowed] = useState(true);
@@ -45,10 +40,7 @@ export function PlanWhisper() {
 
   return (
     <div className="home-plan-whisper-orbit">
-      <p
-        className={`home-plan-whisper${fading ? " home-plan-whisper--fading" : ""}`}
-        aria-hidden="true"
-      >
+      <p className={`home-plan-whisper${fading ? " home-plan-whisper--fading" : ""}`}>
         {whispers[index]}
       </p>
     </div>

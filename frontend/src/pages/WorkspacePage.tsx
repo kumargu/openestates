@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import {
   matchingNotebookCommands,
@@ -12,14 +13,13 @@ import {
 import {
   ASSIGNABLE_NOTEBOOK_LABELS,
   labelDef,
-  type NotebookBlock,
+  type NotebookCommandBlock,
   type NotebookChecklistItem,
   type NotebookFieldItem,
   type NotebookLabelId,
   type NotebookNote,
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
-import { labelClassToken } from "../lib/labelVisuals.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
@@ -44,10 +44,6 @@ function parseComparedIds(value: string | null): string[] {
 function societyLabel(home: PropertyCard | undefined, id: string): string {
   if (!home) return id.slice(0, 12);
   return home.society_name?.trim() || home.title;
-}
-
-function cssLabel(id: string): string {
-  return labelClassToken(id);
 }
 
 function noteIcon(note: NotebookNote) {
@@ -100,16 +96,13 @@ function LabelPicker({
   return (
     <div className="notion-row__tags">
       {note.labels.map((id) => (
-        <button
+        <LabelPill
           key={id}
-          type="button"
-          className={`notion-pill notion-pill--${cssLabel(id)}`}
+          labelId={id}
+          surface="notebook"
           title="Remove label"
           onClick={() => onRemove(id)}
-        >
-          <LabelVisualIcon id={id} size={18} />
-          {labelDef(id).title}
-        </button>
+        />
       ))}
       <div className="notion-tag-menu">
         <button
@@ -155,6 +148,7 @@ export function WorkspacePage() {
     toggleCompare,
     addHandwritten,
     addCommandBlock,
+    addParagraphAfter,
     updateNote,
     addNoteLabel,
     removeNoteLabel,
@@ -314,7 +308,6 @@ export function WorkspacePage() {
           details={compareState.key === compareKey ? compareState.details : []}
           status={compareState.key === compareKey ? compareState.status : "loading"}
           onRemoveHome={removeCompareHomes}
-          onRemoveNoteLabel={removeNoteLabel}
         />
       ) : (
         <EditorialView
@@ -327,6 +320,9 @@ export function WorkspacePage() {
           onRemoveLabel={removeNoteLabel}
           onRemove={removeNote}
           onUpdate={updateNote}
+          onAddParagraphAfter={(propertyId, blockId) => addParagraphAfter({ propertyId, afterBlockId: blockId })}
+          onCommandAt={(propertyId, blockId, commandId) =>
+            addCommandBlock({ propertyId, commandId, replaceBlockId: blockId })}
           onQuickAdd={(propertyId, text) => quickAdd(propertyId, text)}
           onCommand={(propertyId, commandId) => addCommandBlock({ propertyId, commandId })}
         />
@@ -341,14 +337,12 @@ function CompareWorkspaceView({
   details,
   status,
   onRemoveHome,
-  onRemoveNoteLabel,
 }: {
   selectedHomes: PropertyCard[];
   catalog: PropertyCard[];
   details: PropertyDetailResponse[];
   status: CompareStatus;
   onRemoveHome: (propertyIds: string[]) => void;
-  onRemoveNoteLabel: (noteId: string, label: NotebookLabelId) => void;
 }) {
   if (selectedHomes.length < 2) {
     return (
@@ -385,7 +379,6 @@ function CompareWorkspaceView({
           catalog={catalog}
           details={details}
           onRemoveColumn={onRemoveHome}
-          onRemoveNoteLabel={onRemoveNoteLabel}
         />
       )}
     </section>
@@ -402,6 +395,8 @@ function EditorialView({
   onRemoveLabel,
   onRemove,
   onUpdate,
+  onAddParagraphAfter,
+  onCommandAt,
   onQuickAdd,
   onCommand,
 }: {
@@ -414,6 +409,8 @@ function EditorialView({
   onRemoveLabel: (id: string, label: NotebookLabelId) => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
+  onAddParagraphAfter: (propertyId: string, blockId: string) => void;
+  onCommandAt: (propertyId: string, blockId: string, commandId: NotebookCommand["id"]) => void;
   onQuickAdd: (propertyId: string, text: string) => void;
   onCommand: (propertyId: string, commandId: NotebookCommand["id"]) => void;
 }) {
@@ -461,6 +458,8 @@ function EditorialView({
                   onRemoveLabel={onRemoveLabel}
                   onRemove={onRemove}
                   onUpdate={onUpdate}
+                  onAddParagraphAfter={onAddParagraphAfter}
+                  onCommandAt={onCommandAt}
                 />
               ))}
               <NotebookComposer
@@ -570,16 +569,27 @@ function NotebookNoteRow({
   onRemoveLabel,
   onRemove,
   onUpdate,
+  onAddParagraphAfter,
+  onCommandAt,
 }: {
   note: NotebookNote;
   onAddLabel: (id: string, label: NotebookLabelId) => void;
   onRemoveLabel: (id: string, label: NotebookLabelId) => void;
   onRemove: (id: string) => void;
   onUpdate: (id: string, patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
+  onAddParagraphAfter: (propertyId: string, blockId: string) => void;
+  onCommandAt: (propertyId: string, blockId: string, commandId: NotebookCommand["id"]) => void;
 }) {
   const [mountedAt] = useState(() => Date.now());
+  const labelPicker = (
+    <LabelPicker
+      note={note}
+      onAdd={(label) => onAddLabel(note.id, label)}
+      onRemove={(label) => onRemoveLabel(note.id, label)}
+    />
+  );
   return (
-    <div className={`notion-note${mountedAt - note.createdAt < 2_000 ? " is-fresh" : ""}`}>
+    <div className={`notion-note${note.kind === "plan" ? " notion-note--plan" : ""}${mountedAt - note.createdAt < 2_000 ? " is-fresh" : ""}`}>
       <span className="notion-note__bullet" aria-hidden="true">
         {noteIcon(note)}
       </span>
@@ -590,20 +600,36 @@ function NotebookNoteRow({
             block={note.block}
             onUpdate={(patch) => onUpdate(note.id, patch)}
           />
+        ) : note.kind === "handwritten" ? (
+          <NotebookParagraph
+            note={note}
+            onChange={(text) => onUpdate(note.id, { title: text })}
+            onAddNext={() => onAddParagraphAfter(note.propertyId, note.id)}
+            onCommand={(commandId) => onCommandAt(note.propertyId, note.id, commandId)}
+          />
         ) : (
           <>
-            <p>{note.title}</p>
+            <div className="notion-note__head">
+              <div>
+                <p>{note.title}</p>
+                {note.source && <span className="notion-note__meta">{note.source}</span>}
+              </div>
+              {note.kind === "plan" && (
+                <div className="notion-note__head-tags">
+                  {note.planHref && (
+                    <Link className="notion-plan-link" to={note.planHref}>
+                      Open Plan
+                    </Link>
+                  )}
+                  {labelPicker}
+                </div>
+              )}
+            </div>
             {note.detail && <small>{note.detail}</small>}
           </>
         )}
       </div>
-      <div className="notion-note__labels">
-        <LabelPicker
-          note={note}
-          onAdd={(label) => onAddLabel(note.id, label)}
-          onRemove={(label) => onRemoveLabel(note.id, label)}
-        />
-      </div>
+      {note.kind !== "plan" && <div className="notion-note__labels">{labelPicker}</div>}
       <button
         type="button"
         className="notion-note__remove"
@@ -616,11 +642,53 @@ function NotebookNoteRow({
   );
 }
 
+function commandIdForSlash(value: string): NotebookCommand["id"] | null {
+  const normalized = value.trim().toLowerCase();
+  const command = matchingNotebookCommands(normalized.replace(/^\//, ""))
+    .find((item) => item.slash === normalized);
+  return command?.id ?? null;
+}
+
+function NotebookParagraph({
+  note,
+  onChange,
+  onAddNext,
+  onCommand,
+}: {
+  note: NotebookNote;
+  onChange: (text: string) => void;
+  onAddNext: () => void;
+  onCommand: (commandId: NotebookCommand["id"]) => void;
+}) {
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key !== "Enter" || event.shiftKey) return;
+    event.preventDefault();
+    const commandId = commandIdForSlash(note.title);
+    if (commandId) {
+      onCommand(commandId);
+      return;
+    }
+    onAddNext();
+  }
+
+  return (
+    <textarea
+      className="notion-paragraph"
+      value={note.title}
+      aria-label="Notebook paragraph"
+      rows={1}
+      placeholder="Write a note"
+      onChange={(event) => onChange(event.target.value)}
+      onKeyDown={handleKeyDown}
+    />
+  );
+}
+
 function updateChecklistItem(
-  block: Extract<NotebookBlock, { type: "checklist" }>,
+  block: Extract<NotebookCommandBlock, { type: "checklist" }>,
   itemId: string,
   patch: Partial<NotebookChecklistItem>,
-): NotebookBlock {
+): NotebookCommandBlock {
   return {
     ...block,
     items: block.items.map((item) => (
@@ -630,10 +698,10 @@ function updateChecklistItem(
 }
 
 function updateFieldItem(
-  block: Extract<NotebookBlock, { type: "fields" }>,
+  block: Extract<NotebookCommandBlock, { type: "fields" }>,
   fieldId: string,
   patch: Partial<NotebookFieldItem>,
-): NotebookBlock {
+): NotebookCommandBlock {
   return {
     ...block,
     fields: block.fields.map((field) => (
@@ -648,10 +716,10 @@ function NotebookBlockEditor({
   onUpdate,
 }: {
   note: NotebookNote;
-  block: NotebookBlock;
+  block: NotebookCommandBlock;
   onUpdate: (patch: Partial<Pick<NotebookNote, "title" | "block">>) => void;
 }) {
-  function updateBlock(nextBlock: NotebookBlock) {
+  function updateBlock(nextBlock: NotebookCommandBlock) {
     onUpdate({ block: nextBlock });
   }
 
@@ -697,8 +765,8 @@ function ChecklistBlock({
   block,
   onUpdate,
 }: {
-  block: Extract<NotebookBlock, { type: "checklist" }>;
-  onUpdate: (block: NotebookBlock) => void;
+  block: Extract<NotebookCommandBlock, { type: "checklist" }>;
+  onUpdate: (block: NotebookCommandBlock) => void;
 }) {
   function addItem() {
     onUpdate({
@@ -750,8 +818,8 @@ function FieldBlock({
   block,
   onUpdate,
 }: {
-  block: Extract<NotebookBlock, { type: "fields" }>;
-  onUpdate: (block: NotebookBlock) => void;
+  block: Extract<NotebookCommandBlock, { type: "fields" }>;
+  onUpdate: (block: NotebookCommandBlock) => void;
 }) {
   return (
     <div className="notion-fields">

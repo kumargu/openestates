@@ -1,5 +1,6 @@
 import { useState, type PointerEvent } from "react";
 import { formatCurrency, type PlanProjection } from "./model.ts";
+import { buildWealthGapAreas, linePathForValues } from "./planGraphPaths.ts";
 
 type PlanGraphProps = {
   projection: PlanProjection;
@@ -25,6 +26,10 @@ function graphSeries(projection: PlanProjection): GraphSeries[] {
   ];
 }
 
+function rateLabel(value: number): string {
+  return `${Number(value.toFixed(1)).toLocaleString("en-IN")}%`;
+}
+
 export function PlanGraph({
   projection,
   activeYear,
@@ -46,20 +51,19 @@ export function PlanGraph({
   const minValue = rawMinValue < 0 ? rawMinValue - valuePadding : 0;
   const maxValue = rawMaxValue + valuePadding;
   const valueRange = maxValue - minValue;
-  const x = (year: number) => GRAPH_INSET.left + (year / maxYear) * plotWidth;
+  const x = (year: number) => GRAPH_INSET.left + (maxYear <= 0 ? 0 : (year / maxYear) * plotWidth);
   const y = (value: number) => (
     GRAPH_INSET.top + plotHeight - ((value - minValue) / valueRange) * plotHeight
   );
-  const line = (values: number[]) => values
-    .map((value, year) => `${year === 0 ? "M" : "L"}${x(year).toFixed(1)},${y(value).toFixed(1)}`)
-    .join(" ");
+  const wealthGapAreas = buildWealthGapAreas(projection.points, { x, y });
   const buyValues = series[0].values;
   const rentValues = series[1].values;
   const buyValue = buyValues[displayYear] ?? 0;
   const rentValue = rentValues[displayYear] ?? 0;
+  const gapLeader = buyValue >= rentValue ? "buy" : "rent";
   const cursorX = x(displayYear);
   const tooltipX = cursorX > GRAPH_WIDTH - 250 ? cursorX - 224 : cursorX + 18;
-  const tooltipY = Math.max(48, Math.min(GRAPH_HEIGHT - 98, Math.min(y(buyValue), y(rentValue)) - 34));
+  const tooltipY = Math.max(48, Math.min(GRAPH_HEIGHT - 118, Math.min(y(buyValue), y(rentValue)) - 34));
   const finalBuyY = y(buyValues[maxYear] ?? 0);
   const finalRentY = y(rentValues[maxYear] ?? 0);
   const labelsAreClose = Math.abs(finalBuyY - finalRentY) < 30;
@@ -90,8 +94,8 @@ export function PlanGraph({
       <div className="home-plan-graph__heading">
         <h2>Buying vs Renting</h2>
         <div className="home-plan-graph__assumptions" aria-label="Projection assumptions">
-          <span>6% yearly home appreciation</span>
-          <span>10% yearly rent increase</span>
+          <span>{rateLabel(projection.assumptions.homeAppreciationRate)} yearly home appreciation</span>
+          <span>{rateLabel(projection.assumptions.rentInflationRate)} yearly rent increase</span>
         </div>
       </div>
       <svg
@@ -129,6 +133,15 @@ export function PlanGraph({
           </text>
         ))}
 
+        {wealthGapAreas.map((area, index) => (
+          <path
+            key={`${area.leader}-${index}`}
+            d={area.path}
+            className={`home-plan-graph-gap home-plan-graph-gap--${area.leader}`}
+            aria-hidden="true"
+          />
+        ))}
+
         {showLoanFree && (
           <g className="home-plan-graph-loanfree" aria-hidden="true">
             <line
@@ -138,7 +151,7 @@ export function PlanGraph({
               y2={GRAPH_INSET.top + plotHeight - 22}
             />
             <text x={loanFreeX} y={GRAPH_INSET.top + plotHeight - 8} textAnchor="middle">
-              Loan-free-Yay!
+              Loan-free
             </text>
           </g>
         )}
@@ -146,8 +159,7 @@ export function PlanGraph({
         {series.map((item) => (
           <path
             key={`${item.id}-${Math.round(item.values[maxYear] ?? 0)}`}
-            d={line(item.values)}
-            pathLength="1"
+            d={linePathForValues(item.values, x, y)}
             className={`home-plan-graph-line home-plan-graph-line--${item.id}`}
           />
         ))}
@@ -175,7 +187,7 @@ export function PlanGraph({
 
         {hoverYear !== null && (
           <g className="home-plan-graph-tooltip" transform={`translate(${tooltipX} ${tooltipY})`} filter="url(#home-plan-tooltip-shadow)">
-            <rect width="206" height="78" rx="14" />
+            <rect width="206" height="98" rx="14" />
             <text x="16" y="20" className="home-plan-tooltip-year">Year {displayYear}</text>
             <circle cx="19" cy="40" r="4.5" className="home-plan-tooltip-buy" />
             <text x="32" y="43">Home equity</text>
@@ -183,6 +195,9 @@ export function PlanGraph({
             <circle cx="19" cy="61" r="4.5" className="home-plan-tooltip-rent" />
             <text x="32" y="64">Savings</text>
             <text x="190" y="64" className="home-plan-tooltip-value">{formatCurrency(rentValue, true)}</text>
+            <line x1="16" x2="190" y1="76" y2="76" />
+            <text x="16" y="90" className="home-plan-tooltip-lead">{gapLeader === "buy" ? "Buy ahead" : "Rent path ahead"}</text>
+            <text x="190" y="90" className="home-plan-tooltip-value">{formatCurrency(Math.abs(buyValue - rentValue), true)}</text>
           </g>
         )}
       </svg>

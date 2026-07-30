@@ -7,10 +7,11 @@ import {
   calculateProjection,
 } from "../src/features/home-plan/model.ts";
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
+import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
-  isExplicitlyReadyStatus,
   FIXED_HOME_GROWTH_RATE,
   FIXED_RENT_INFLATION_RATE,
+  isExplicitlyReadyStatus,
   monthlyPayment,
   principalFromMonthlyPayment,
   rentInMonth,
@@ -51,16 +52,11 @@ test("EMI and loan rate keep the loan at the home price", () => {
   assert.ok(Math.abs(projection.monthlyEmi - ready.monthlyEmiThousands * 1_000) < 1);
 });
 
-test("zero EMI means owning the home with no loan", () => {
-  const projection = calculateProjection({
+test("zero EMI is rejected at the algorithm boundary", () => {
+  assert.throws(() => calculateProjection({
     ...ready,
     monthlyEmiThousands: 0,
-  });
-
-  assert.equal(projection.monthlyEmi, 0);
-  assert.equal(projection.loanAmount, 0);
-  assert.equal(projection.upfrontPayment, 0);
-  assert.ok(Math.abs(projection.points[0].buyNetWorth - ready.propertyPriceLakh * 100_000) < 1);
+  }), /monthlyEmiThousands must be a finite number >= 1/);
 });
 
 test("higher EMI clears the loan sooner", () => {
@@ -118,7 +114,7 @@ test("extra EMIs pull the loan-free marker forward", () => {
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
 });
 
-test("plan snapshot captures assumptions and inspected outcome", () => {
+test("plan snapshot captures monthly assumptions and inspected outcome", () => {
   const inputs = {
     ...ready,
     monthlyEmiThousands: 180,
@@ -127,23 +123,25 @@ test("plan snapshot captures assumptions and inspected outcome", () => {
     holdingPeriodYears: 20,
   };
   const projection = calculateProjection(inputs, 3);
-  const activeYear = 12;
   const note = buildPlanSnapshotNote({
     propertyId: "prop-one",
+    propertyTitle: "Waterford Estate",
     inputs,
     projection,
-    activeYear,
-    activePoint: projection.points[activeYear],
-    extraEmisPerYear: 3,
+    activeYear: 12,
   });
 
-  assert.equal(note.source, "Plan snapshot");
-  assert.deepEqual(note.labels, ["finance", "emi", "down-payment", "price"]);
-  assert.match(note.title, /EMI, loan closes in/);
+  assert.match(note.source, /^Saved \d{1,2} [A-Za-z]{3} \d{4}$/);
+  assert.deepEqual(note.labels, ["finance", "emi", "price"]);
+  assert.equal(note.title, "Waterford Estate plan, ₹1.8L EMI");
+  assert.match(note.detail, /Waterford Estate/);
   assert.match(note.detail, /3 extra EMIs\/year/);
-  assert.match(note.detail, /rent \+ .* SIP/);
-  assert.match(note.detail, /home is projected at/);
-  assert.match(note.catalogKey, /^plan:prop-one:12:/);
+  assert.match(note.detail, /rent/i);
+  assert.match(note.detail, /SIP/);
+  assert.match(note.detail, /home.*projected near|home value reads near|home itself is projected near/i);
+  assert.doesNotMatch(note.detail, /assuming|Assumptions:/i);
+  assert.doesNotMatch(note.detail, /cash to close|down|planned loan/i);
+  assert.equal(note.catalogKey, "plan:prop-one:current");
 });
 
 test("rent rises by the fixed yearly assumption", () => {
@@ -152,7 +150,7 @@ test("rent rises by the fixed yearly assumption", () => {
   assert.equal(rentInMonth(55_000, FIXED_RENT_INFLATION_RATE, 120), 142_656);
 });
 
-test("baseline exposes only the five editable money inputs", () => {
+test("baseline exposes monthly inputs", () => {
   const inputs = buildBaselinePlanInputs(15_000_000);
   const expectedEmi = Math.ceil(
     monthlyPayment(15_000_000, 7.5, 20) / 5_000,
@@ -262,15 +260,199 @@ test("under-construction homes still stage builder payments every six months", (
   assert.equal(projection.points[0].annualEmi, 0);
   assert.ok(projection.points[2].annualEmi > 0);
   assert.equal(projection.points[0].rentNetWorth, 0);
-  assert.equal(projection.upfrontPayment, 0);
+  assert.ok(Math.abs(projection.upfrontPayment) < 1);
 });
 
 test("payoff journey matches financing interest for a ready home", () => {
   const projection = calculateProjection(ready);
   const journey = calculateLoanJourney(ready, 0);
 
+  assert.notEqual(journey.totalInterest, null);
+  assert.notEqual(projection.totalInterest, null);
   assert.ok(Math.abs(journey.monthlyEmi - projection.monthlyEmi) < 1);
-  assert.ok(Math.abs(journey.totalInterest - projection.totalInterest) < 1);
+  assert.ok(Math.abs(journey.totalInterest! - projection.totalInterest!) < 1);
+});
+
+test("extra EMIs update payoff, total interest, snapshot, and top insight together", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  };
+  const base = calculateProjection(inputs, 0);
+  const prepaid = calculateProjection(inputs, 3);
+  const view = buildMonthlyPlanVerdict(prepaid, 12);
+  const note = buildPlanSnapshotNote({
+    propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
+    inputs,
+    projection: prepaid,
+    activeYear: view.activeYear,
+  });
+
+  assert.notEqual(base.loanFreeYear, null);
+  assert.notEqual(prepaid.loanFreeYear, null);
+  assert.notEqual(base.totalInterest, null);
+  assert.notEqual(prepaid.totalInterest, null);
+  assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
+  assert.ok(prepaid.totalInterest! < base.totalInterest!);
+  assert.match(view.insight, /At 12 years, (buying|the rent path) leads by ₹/);
+  assert.match(view.insight, /3 extra EMIs\/year closes the loan/);
+  assert.match(view.insight, /Total interest lands near/);
+  assert.match(note.detail, /3 extra EMIs\/year/);
+  assert.equal(note.catalogKey, "plan:home-1:current");
+});
+
+test("default plan focus follows the current loan-free milestone when it is visible", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs, 4);
+  const focusYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
+  const view = buildMonthlyPlanVerdict(projection, focusYear);
+
+  assert.equal(focusYear, projection.loanFreeYear);
+  assert.match(view.timeLabel, new RegExp(`After ${projection.loanFreeYear} years`));
+  assert.match(view.insight, /4 extra EMIs\/year closes the loan/);
+});
+
+test("default plan focus falls back to the graph horizon when payoff is outside the chart", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 5,
+  };
+  const projection = calculateProjection(inputs);
+
+  assert.ok(projection.loanFreeYear !== null);
+  assert.ok(projection.loanFreeYear! > inputs.holdingPeriodYears);
+  assert.equal(defaultPlanFocusYear(projection, inputs.holdingPeriodYears), inputs.holdingPeriodYears);
+});
+
+test("low EMI plan returns explicit non-closing state without fake interest", () => {
+  const projection = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 10,
+    holdingPeriodYears: 20,
+  });
+  const view = buildMonthlyPlanVerdict(projection, 10);
+
+  assert.equal(projection.loanFreeYear, null);
+  assert.equal(projection.totalInterest, null);
+  assert.match(view.insight, /At 10 years, (buying|the rent path) leads by ₹/);
+  assert.match(view.insight, /loan does not close at this EMI/);
+  assert.ok(projection.points.at(-1)!.loanBalance > projection.loanAmount);
+});
+
+test("journey and graph balances both capitalize unpaid interest", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 10,
+    holdingPeriodYears: 5,
+  };
+  const projection = calculateProjection(inputs);
+  const journey = calculateLoanJourney(inputs, 0);
+
+  assert.equal(projection.loanFreeYear, null);
+  assert.equal(journey.totalInterest, null);
+  assert.ok(projection.points[5].loanBalance > projection.points[0].loanBalance);
+  assert.ok(journey.points[5].balance > journey.points[0].balance);
+});
+
+test("short graph horizon preserves actual payoff year", () => {
+  const projection = calculateProjection({
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 5,
+  });
+  const view = buildMonthlyPlanVerdict(projection, 5);
+
+  assert.notEqual(projection.loanFreeYear, null);
+  assert.ok(projection.loanFreeYear! > projection.points.length - 1);
+  assert.doesNotMatch(view.insight, /Loan does not close/);
+});
+
+test("typed assumptions drive projection values instead of graph copy constants", () => {
+  const defaultProjection = calculateProjection(ready);
+  const warmerProjection = calculateProjection({
+    ...ready,
+    assumptions: {
+      homeAppreciationRate: 8,
+      rentInflationRate: 4,
+    },
+  });
+
+  assert.equal(warmerProjection.assumptions.homeAppreciationRate, 8);
+  assert.equal(warmerProjection.assumptions.rentInflationRate, 4);
+  assert.ok(warmerProjection.points.at(-1)!.propertyValue > defaultProjection.points.at(-1)!.propertyValue);
+  assert.ok(warmerProjection.points.at(-1)!.annualRent < defaultProjection.points.at(-1)!.annualRent);
+});
+
+test("future purchase payment schedule uses typed appreciation", () => {
+  const defaultProjection = calculateProjection({
+    ...ready,
+    purchaseYear: 2,
+  });
+  const warmerProjection = calculateProjection({
+    ...ready,
+    purchaseYear: 2,
+    assumptions: {
+      ...ready.assumptions,
+      homeAppreciationRate: 9,
+    },
+  });
+
+  assert.ok(warmerProjection.loanAmount > defaultProjection.loanAmount);
+  assert.ok(warmerProjection.paymentSchedule[0].amount > defaultProjection.paymentSchedule[0].amount);
+});
+
+test("snapshot identity stays stable so saved notebook plans update in place", () => {
+  const base = buildPlanSnapshotNote({
+    propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
+    inputs: ready,
+    projection: calculateProjection(ready, 2),
+    activeYear: 8,
+  });
+  const changedInputs = {
+    ...ready,
+    assumptions: {
+      ...ready.assumptions,
+      rentInflationRate: 4,
+    },
+    construction: {
+      state: "under_construction" as const,
+      asOfDate: "2026-01-01",
+      completionDate: "2028-06-01",
+      dateSource: "rera" as const,
+    },
+  };
+  const changed = buildPlanSnapshotNote({
+    propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
+    inputs: changedInputs,
+    projection: calculateProjection(changedInputs, 2),
+    activeYear: 8,
+  });
+
+  assert.equal(base.catalogKey, changed.catalogKey);
+  assert.notEqual(base.detail, changed.detail);
+});
+
+test("monthly plan rejects invalid numeric inputs at the algorithm boundary", () => {
+  assert.throws(() => calculateProjection({
+    ...ready,
+    monthlyEmiThousands: Number.NaN,
+  }), /monthlyEmiThousands/);
+  assert.throws(() => calculateProjection({
+    ...ready,
+    assumptions: {
+      ...ready.assumptions,
+      rentInflationRate: Number.POSITIVE_INFINITY,
+    },
+  }), /rentInflationRate/);
 });
 
 test("payment and principal formulas are inverses", () => {

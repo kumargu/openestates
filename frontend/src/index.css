@@ -3323,6 +3323,13 @@ body {
   justify-content: flex-start;
 }
 
+.property-checks__registry-number {
+  display: inline-flex;
+  max-width: 100%;
+  align-items: center;
+  gap: 0.34rem;
+}
+
 .property-checks__registry button,
 .property-checks__registry a {
   display: inline-flex;
@@ -3360,77 +3367,45 @@ body {
   flex: 0 0 auto;
 }
 
+.property-checks__registry-pin.notebook-pin {
+  width: 1.42rem;
+  height: 1.42rem;
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  opacity: 0.58;
+}
+
+.property-checks__registry-pin.notebook-pin:hover,
+.property-checks__registry-pin.notebook-pin:focus-visible,
+.property-checks__registry-pin.notebook-pin.is-filled {
+  color: var(--color-text);
+  opacity: 1;
+}
+
 .property-check-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-}
-
-.property-check-tag {
-  display: inline-flex;
-  align-items: center;
   gap: 0.42rem;
-  min-height: 2.15rem;
-  max-width: 100%;
-  padding: 0.38rem 0.55rem 0.38rem 0.48rem;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: #fff;
-  color: var(--color-text);
-  font-size: 0.82rem;
-  font-weight: 760;
-  line-height: 1.1;
 }
 
-.property-check-tag--risk {
-  border-color: #edc6be;
-  background: #fff7f5;
-  color: #9f3f2f;
-}
-
-.property-check-tag--caution {
-  border-color: #ecd5a8;
-  background: #fffaf0;
-  color: #8a5a12;
-}
-
-.property-check-tag--positive {
-  border-color: #cce5d2;
-  background: #f5fbf6;
-  color: #247346;
-}
-
-.property-check-tag--info {
-  border-color: #e5e5e5;
-  background: #fafafa;
-  color: var(--color-text);
-}
-
-.property-check-tag__icon {
-  display: inline-grid;
-  place-items: center;
-  width: 1.25rem;
-  height: 1.25rem;
-  flex: 0 0 auto;
-}
-
-.property-check-tag__label {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.property-check-tag.oe-label-pill {
+  position: relative;
+  padding-right: 2rem;
 }
 
 .property-check-tag__pin.notebook-pin {
+  position: absolute;
+  top: 50%;
+  right: 0.26rem;
   width: 1.35rem;
   height: 1.35rem;
   flex: 0 0 auto;
-  margin-left: -0.12rem;
   border: 0;
   background: transparent;
   color: currentColor;
-  opacity: 0;
+  opacity: 0.42;
   box-shadow: none;
+  transform: translateY(-50%);
   transition: opacity 0.16s ease, background-color 0.16s ease;
 }
 
@@ -3440,12 +3415,12 @@ body {
   background: rgba(0, 0, 0, 0.05);
   color: currentColor;
   opacity: 1;
-  transform: none;
+  transform: translateY(-50%);
 }
 
 .property-check-tag:hover .property-check-tag__pin,
 .property-check-tag:focus-within .property-check-tag__pin {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 .property-section-line {
@@ -3601,6 +3576,117 @@ body {
   font-size: 0.82rem;
   font-weight: 860;
   line-height: 1;
+}
+
+.oe-label-pill {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  min-height: 1.58rem;
+  align-items: center;
+  gap: 0.34rem;
+  border: 1px solid rgba(38, 35, 32, 0.1);
+  border-radius: 7px;
+  padding: 0 0.56rem;
+  background: #ececec;
+  color: #555;
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 760;
+  line-height: 1.1;
+  text-decoration: none;
+  white-space: nowrap;
+  box-shadow: none;
+}
+
+.oe-label-pill__text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.oe-label-pill svg,
+.oe-label-pill .soft-icon,
+.oe-label-pill .label-visual-symbol {
+  flex: 0 0 auto;
+}
+
+.oe-label-pill .soft-icon,
+.oe-label-pill .label-visual-symbol {
+  border-radius: 5px;
+}
+
+button.oe-label-pill {
+  cursor: pointer;
+}
+
+button.oe-label-pill:hover,
+button.oe-label-pill:focus-visible {
+  border-color: rgba(38, 35, 32, 0.22);
+  outline: none;
+}
+
+.oe-label-pill--compare {
+  min-height: 1.62rem;
+  padding: 0 0.62rem 0 0.48rem;
+  font-size: 0.62rem;
+}
+
+.oe-label-pill--fact {
+  position: relative;
+  min-height: 1.72rem;
+  padding: 0 0.64rem;
+  font-size: 0.76rem;
+}
+
+.oe-label-pill--schools { background: #d6e9db; color: #2d5a3d; }
+.oe-label-pill--hospitals { background: #f5dde4; color: #7a2f45; }
+.oe-label-pill--water { background: #f5e0c8; color: #7a4a12; }
+.oe-label-pill--legal { background: #e3e4f5; color: #3d3f7a; }
+.oe-label-pill--price { background: #f5e6ea; color: #7a2f45; }
+.oe-label-pill--layout { background: #f1e2d8; color: #7a3f28; }
+.oe-label-pill--commute { background: #e2eee8; color: #2f5c4a; }
+.oe-label-pill--open-space { background: #e8f0d8; color: #4a5c28; }
+.oe-label-pill--down-payment { background: #e8deee; color: #5b3b6e; }
+.oe-label-pill--emi { background: #ddebf5; color: #2b5c7a; }
+.oe-label-pill--approach { background: #ebe4da; color: #5c4634; }
+.oe-label-pill--risk,
+.oe-label-pill--complaints,
+.oe-label-pill--transmission { background: #f3d9d6; color: #7a3228; }
+.oe-label-pill--community { background: #e8e6f0; color: #4a4560; }
+.oe-label-pill--metro,
+.oe-label-pill--tech-parks,
+.oe-label-pill--tech_parks { background: #e2eee8; color: #2f5c4a; }
+.oe-label-pill--visit,
+.oe-label-pill--other,
+.oe-label-pill--unlabeled { background: #ececec; color: #555; }
+
+.oe-label-pill--tone-risk {
+  border-color: #edc6be;
+  background: #fff7f5;
+  color: #9f3f2f;
+}
+
+.oe-label-pill--tone-caution {
+  border-color: #ecd5a8;
+  background: #fffaf0;
+  color: #8a5a12;
+}
+
+.oe-label-pill--tone-positive {
+  border-color: #cce5d2;
+  background: #f5fbf6;
+  color: #247346;
+}
+
+.oe-label-pill--tone-info {
+  border-color: #e5e5e5;
+  background: #fafafa;
+  color: var(--color-text);
+}
+
+.oe-label-pill--fact.property-check-tag {
+  padding-right: 2rem;
 }
 
 .property-review-more {

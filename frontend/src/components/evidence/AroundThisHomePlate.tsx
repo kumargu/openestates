@@ -316,10 +316,6 @@ function AroundThisHomePlateInner({
     ?? focusedPlace
     ?? numbered[0]
     ?? null;
-  const activePlace = numbered.find((place) => place.id === selectedId)
-    ?? focusedPlace
-    ?? null;
-
   function selectStory(next: PlateStory) {
     setStory(next);
     setSelectedId(null);
@@ -436,34 +432,6 @@ function AroundThisHomePlateInner({
           ) : (
             <div className="nearby-plate__empty-map">
               <p>Map unavailable</p>
-            </div>
-          )}
-
-          {!redFlagsFocused && !waterFocused && activePlace && (
-            <div className="nearby-plate__selected" aria-live="polite">
-              <div className="nearby-plate__selected-copy">
-                <strong>{compactPlaceLabel(activePlace.name)}</strong>
-                <span>
-                  {layerLabel(activePlace.layer, context)}
-                  {typeof activePlace.distance_km === "number"
-                    ? ` · ${activePlace.distance_km.toFixed(1)} km`
-                    : ""}
-                </span>
-              </div>
-              <NotebookPinButton
-                propertyId={propertyId}
-                catalogKey={`nearby:${propertyId}:${activePlace.id}`}
-                title={compactPlaceLabel(activePlace.name)}
-                labels={labelsForNearbyPlace(activePlace.layer, activePlace.distance_km)}
-                detail={[
-                  layerLabel(activePlace.layer, context),
-                  typeof activePlace.distance_km === "number"
-                    ? `${activePlace.distance_km.toFixed(1)} km`
-                    : null,
-                ].filter(Boolean).join(" · ")}
-                source="Around this home"
-                kind="fact"
-              />
             </div>
           )}
 

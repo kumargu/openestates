@@ -30,7 +30,9 @@ Object.defineProperty(globalThis, "window", {
 
 const {
   NOTEBOOK_STORAGE_KEY,
+  NOTEBOOK_SCHEMA_VERSION,
   addNotebookCommandBlock,
+  addNotebookParagraphAfter,
   hideNotebookCompareLabel,
   readNotebook,
   showNotebookCompareLabel,
@@ -54,6 +56,44 @@ test("workspace state includes saved homes even before notes exist", () => {
 
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, []);
+});
+
+test("v2 notebook storage migrates to v3 ordered documents without losing compare state", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "note-1",
+      propertyId: "home-1",
+      title: "Existing thought",
+      kind: "handwritten",
+      catalogKey: "hand:home-1:1",
+      labels: [],
+      createdAt: 1,
+    }, {
+      id: "plan-1",
+      propertyId: "home-1",
+      title: "Plan summary",
+      detail: "EMI looked comfortable.",
+      kind: "plan",
+      catalogKey: "plan:home-1:current",
+      labels: ["finance", "emi"],
+      createdAt: 2,
+    }],
+    compareIds: ["home-1"],
+    hiddenCompareLabels: ["schools"],
+  }));
+
+  const state = readNotebook();
+  const raw = JSON.parse(storage.getItem(NOTEBOOK_STORAGE_KEY) ?? "{}");
+
+  assert.equal(state.version, NOTEBOOK_SCHEMA_VERSION);
+  assert.equal(raw.version, NOTEBOOK_SCHEMA_VERSION);
+  assert.equal(state.documents["home-1"].blocks[0].type, "paragraph");
+  assert.equal(state.documents["home-1"].blocks[1].type, "financial_plan_reference");
+  assert.deepEqual(state.compareIds, ["home-1"]);
+  assert.deepEqual(state.hiddenCompareLabels, ["schools"]);
+  assert.deepEqual(state.notes.map((note) => note.id), ["note-1", "plan-1"]);
 });
 
 test("compare selection is explicit and does not rewrite saved homes", () => {
@@ -185,4 +225,49 @@ test("slash command blocks append and remain editable", () => {
     editedNote?.block?.type === "checklist" ? editedNote.block.items[0].checked : false,
     true,
   );
+});
+
+test("ordered document inserts paragraphs and slash blocks at the active position", () => {
+  storage.clear();
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["home-1"],
+    notes: [{
+      id: "first",
+      propertyId: "home-1",
+      title: "First paragraph",
+      kind: "handwritten",
+      catalogKey: "hand:home-1:first",
+      labels: [],
+      createdAt: 1,
+    }, {
+      id: "second",
+      propertyId: "home-1",
+      title: "Second paragraph",
+      kind: "handwritten",
+      catalogKey: "hand:home-1:second",
+      labels: [],
+      createdAt: 2,
+    }],
+    compareIds: [],
+  }));
+
+  const withParagraph = addNotebookParagraphAfter({ propertyId: "home-1", afterBlockId: "first" });
+  const insertedParagraph = withParagraph.documents["home-1"].blocks[1];
+  assert.equal(insertedParagraph.type, "paragraph");
+  assert.deepEqual(
+    withParagraph.documents["home-1"].blocks.map((block) => block.id),
+    ["first", insertedParagraph.id, "second"],
+  );
+
+  const withCommand = addNotebookCommandBlock({
+    propertyId: "home-1",
+    commandId: "payment",
+    replaceBlockId: insertedParagraph.id,
+  });
+  assert.ok(withCommand);
+  assert.deepEqual(
+    withCommand.documents["home-1"].blocks.map((block) => block.type),
+    ["paragraph", "checklist", "paragraph"],
+  );
+  assert.equal(withCommand.documents["home-1"].blocks[1].type, "checklist");
 });

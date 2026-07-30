@@ -678,30 +678,35 @@
 
 .home-plan-graph-line {
   fill: none;
-  stroke-width: 3;
+  stroke-width: 2.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: home-plan-line-draw 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: d 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes home-plan-line-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
+.home-plan-graph-gap {
+  pointer-events: none;
+  transition: d 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-plan-graph-gap--buy {
+  fill: rgba(201, 107, 79, 0.09);
+}
+
+.home-plan-graph-gap--rent {
+  fill: rgba(91, 127, 176, 0.1);
 }
 
 .home-plan-graph-line--buy {
   stroke: var(--plan-buy);
+  stroke-width: 3.1;
 }
 
 .home-plan-graph-line--rent {
   stroke: var(--plan-rent);
+  stroke-width: 2.35;
+  stroke-dasharray: 7 9;
+  opacity: 0.92;
 }
 
 .home-plan-cursor {
@@ -1768,6 +1773,7 @@
   .home-plan-payoff__year-focus {
     grid-template-columns: 1fr;
   }
+
 }
 
 @media (max-width: 640px) {
@@ -1787,7 +1793,19 @@
   }
 
   .home-plan-view-tabs--compact {
-    align-self: flex-end;
+    align-self: stretch;
+  }
+
+  .home-plan-hero__actions {
+    width: 100%;
+  }
+
+  .home-plan-view-tabs--compact .home-plan-view-tabs__seg {
+    width: 100%;
+  }
+
+  .home-plan-view-tabs--compact .home-plan-view-tabs__seg button {
+    flex: 1;
   }
 
   .home-plan-view-tabs__seg button {

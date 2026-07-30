@@ -39,4 +39,5 @@ test("commands describe appendable notebook blocks", () => {
   assert.equal(visit.items?.includes("Check water pressure"), true);
   assert.equal(budget.blockType, "fields");
   assert.equal(budget.fields?.includes("Comfortable EMI"), true);
+  assert.equal(NOTEBOOK_COMMANDS.some((command) => command.slash === "/buying-cost"), false);
 });
