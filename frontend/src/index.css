@@ -2333,15 +2333,6 @@ body {
   margin-bottom: 1rem;
 }
 
-.price-bands__kicker {
-  margin: 0;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--color-text-muted);
-}
-
 .price-bands__title {
   margin: 0.35rem 0 0;
   font-size: 1.28rem;
@@ -3772,10 +3763,6 @@ body {
 .property-micro-market {
   padding-top: 1.25rem;
   border-top: 1px solid var(--color-border);
-}
-
-.property-micro-market .price-bands__kicker {
-  display: none;
 }
 
 .property-micro-market .price-bands__sub,
