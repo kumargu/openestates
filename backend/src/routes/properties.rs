@@ -232,6 +232,17 @@ pub struct ReraDocumentSection {
     pub kinds: Vec<String>,
     pub preview_available_count: i32,
     pub hidden_count: i32,
+    pub items: Vec<ReraDocumentLink>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct ReraDocumentLink {
+    pub artifact_id: String,
+    pub label: String,
+    pub kind: String,
+    pub source_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_field_label: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, Default)]
@@ -3218,6 +3229,93 @@ fn rera_group_buyer_label(group: &str) -> String {
     }
 }
 
+fn rera_manifest_group(item: &ReraDocumentManifestItem) -> String {
+    let group = item.document_group.trim();
+    if !group.is_empty() {
+        return group.to_string();
+    }
+
+    let haystack = format!(
+        "{} {} {}",
+        item.kind,
+        item.label,
+        item.source_field_label.as_deref().unwrap_or("")
+    )
+    .to_ascii_lowercase();
+    if haystack.contains("approval") || haystack.contains("noc") {
+        "approvals_nocs".to_string()
+    } else if haystack.contains("khata")
+        || haystack.contains("land")
+        || haystack.contains("encumbrance")
+    {
+        "legal_land".to_string()
+    } else if haystack.contains("affidavit") {
+        "affidavits".to_string()
+    } else if haystack.contains("plan") {
+        "plans".to_string()
+    } else if haystack.contains("brochure") {
+        "brochure".to_string()
+    } else {
+        "other".to_string()
+    }
+}
+
+fn rera_document_label(item: &ReraDocumentManifestItem) -> String {
+    for candidate in [
+        item.label.as_str(),
+        item.source_field_label.as_deref().unwrap_or(""),
+        item.kind.as_str(),
+    ] {
+        let candidate = candidate.trim();
+        if !candidate.is_empty() {
+            return candidate.to_string();
+        }
+    }
+    "Document".to_string()
+}
+
+fn rera_public_document_url(item: &ReraDocumentManifestItem) -> Option<String> {
+    let visibility = item
+        .buyer_visibility
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    let preview = item
+        .preview_policy
+        .as_deref()
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if matches!(
+        visibility.as_str(),
+        "hidden" | "private" | "private_or_sensitive"
+    ) || matches!(
+        preview.as_str(),
+        "hidden" | "private" | "private_or_sensitive"
+    ) {
+        return None;
+    }
+
+    let url = item.source_url.as_deref()?.trim();
+    (url.starts_with("https://") || url.starts_with("http://")).then(|| url.to_string())
+}
+
+fn rera_document_link(item: &ReraDocumentManifestItem) -> Option<ReraDocumentLink> {
+    Some(ReraDocumentLink {
+        artifact_id: item.artifact_id.clone(),
+        label: rera_document_label(item),
+        kind: item.kind.clone(),
+        source_url: rera_public_document_url(item)?,
+        source_field_label: item
+            .source_field_label
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string),
+    })
+}
+
 fn rera_scope_label(scope: &str) -> String {
     match scope.trim().to_ascii_lowercase().as_str() {
         "project" => "Project complaints".to_string(),
@@ -3308,11 +3406,7 @@ fn rera_document_sections(info: &ReraInfo) -> Vec<ReraDocumentSection> {
     let mut by_group: std::collections::BTreeMap<String, Vec<&ReraDocumentManifestItem>> =
         std::collections::BTreeMap::new();
     for item in &info.document_manifest {
-        let group = if item.document_group.trim().is_empty() {
-            "other".to_string()
-        } else {
-            item.document_group.clone()
-        };
+        let group = rera_manifest_group(item);
         by_group.entry(group).or_default().push(item);
     }
     if by_group.is_empty() {
@@ -3336,14 +3430,26 @@ fn rera_document_sections(info: &ReraInfo) -> Vec<ReraDocumentSection> {
                 .filter(|item| {
                     matches!(
                         item.preview_policy.as_deref(),
-                        Some("preview") | Some("thumbnail") | Some("inline")
+                        Some("preview")
+                            | Some("preview_allowed")
+                            | Some("thumbnail")
+                            | Some("inline")
                     )
                 })
                 .count() as i32;
             let hidden_count = items
                 .iter()
-                .filter(|item| matches!(item.buyer_visibility.as_deref(), Some("hidden")))
+                .filter(|item| rera_public_document_url(item).is_none())
                 .count() as i32;
+            let mut link_items = items
+                .iter()
+                .filter_map(|item| rera_document_link(item))
+                .collect::<Vec<_>>();
+            link_items.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.kind.cmp(&b.kind)));
+            link_items.dedup_by(|left, right| {
+                left.source_url == right.source_url
+                    || (!left.artifact_id.is_empty() && left.artifact_id == right.artifact_id)
+            });
             ReraDocumentSection {
                 group: group.clone(),
                 label: rera_group_buyer_label(&group),
@@ -3351,6 +3457,7 @@ fn rera_document_sections(info: &ReraInfo) -> Vec<ReraDocumentSection> {
                 kinds,
                 preview_available_count,
                 hidden_count,
+                items: link_items,
             }
         })
         .filter(|section| section.count > 0)
@@ -3892,6 +3999,39 @@ fn rera_report_society_entity_id_candidates(society_id: &str) -> Vec<String> {
     }
 }
 
+fn parse_rera_document_manifest_value(value: &str) -> Vec<ReraDocumentManifestItem> {
+    parse_rera_projection_json::<Vec<ReraDocumentManifestItem>>(value)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|mut item| {
+            if item.document_group.trim().is_empty() {
+                item.document_group = rera_manifest_group(&item);
+            }
+            item
+        })
+        .collect()
+}
+
+fn merge_rera_document_manifest(
+    existing: &mut Vec<ReraDocumentManifestItem>,
+    incoming: Vec<ReraDocumentManifestItem>,
+) {
+    for item in incoming {
+        let duplicate = existing.iter().any(|candidate| {
+            (!item.artifact_id.is_empty() && candidate.artifact_id == item.artifact_id)
+                || (item.source_url.is_some() && candidate.source_url == item.source_url)
+        });
+        if !duplicate {
+            existing.push(item);
+        }
+    }
+}
+
+fn refresh_rera_document_summary(info: &mut ReraInfo) {
+    info.document_groups = rera_document_groups(&info.document_manifest);
+    info.affidavit_only_visible = rera_affidavit_only_visible(&info.document_manifest);
+}
+
 fn rera_dossier_for_property(
     property_id: &str,
     society_id: &str,
@@ -3982,7 +4122,10 @@ fn rera_info_for(
         || projection
             .latest_text("rera_complaint_summary_manifest")
             .is_some()
-        || projection.latest_text("rera_document_manifest").is_some();
+        || projection.latest_text("rera_document_manifest").is_some()
+        || projection
+            .latest_text("rera_plan_artifact_manifest")
+            .is_some();
     if !has_serving_rera {
         return fallback;
     }
@@ -4062,11 +4205,15 @@ fn rera_info_for(
                 .unwrap_or_default();
     }
     if let Some(fact) = projection.latest_text("rera_document_manifest") {
-        info.document_manifest =
-            parse_rera_projection_json::<Vec<ReraDocumentManifestItem>>(&fact.value)
-                .unwrap_or_default();
-        info.document_groups = rera_document_groups(&info.document_manifest);
-        info.affidavit_only_visible = rera_affidavit_only_visible(&info.document_manifest);
+        info.document_manifest = parse_rera_document_manifest_value(&fact.value);
+        refresh_rera_document_summary(&mut info);
+    }
+    if let Some(fact) = projection.latest_text("rera_plan_artifact_manifest") {
+        merge_rera_document_manifest(
+            &mut info.document_manifest,
+            parse_rera_document_manifest_value(&fact.value),
+        );
+        refresh_rera_document_summary(&mut info);
     }
     if let Some(fact) = projection.latest_numeric("rera_builder_projects_count") {
         info.builder_total_projects = projected_i32(fact.value);
@@ -4406,6 +4553,27 @@ mod serving_state_tests {
                     ),
                     10,
                 ),
+                serving_fact(
+                    "rera_plan_artifact_manifest",
+                    FactValue::Text(
+                        serde_json::json!([
+                            {
+                                "artifact_id": "plan-site",
+                                "kind": "site_plan",
+                                "label": "Site Plan.pdf",
+                                "source_url": "https://rera.karnataka.gov.in/download_jc?DOC_ID=site"
+                            },
+                            {
+                                "artifact_id": "plan-sanction",
+                                "kind": "sanction_plan",
+                                "label": "Sanction Plans.pdf",
+                                "source_url": "https://rera.karnataka.gov.in/download_jc?DOC_ID=sanction"
+                            }
+                        ])
+                        .to_string(),
+                    ),
+                    10,
+                ),
                 serving_fact("rera_has_mortgage", FactValue::Bool(true), 10),
             ],
             Vec::<ServingSearchMetadataRecord>::new(),
@@ -4435,6 +4603,27 @@ mod serving_state_tests {
         );
         assert!(card_titles.contains(&"Official files available"));
         assert!(card_titles.contains(&"Legal follow-up needed"));
+        assert!(detail.document_manifest.iter().any(|item| {
+            item.kind == "site_plan"
+                && item.source_url.as_deref()
+                    == Some("https://rera.karnataka.gov.in/download_jc?DOC_ID=site")
+        }));
+        let dossier = rera_dossier_for_property(
+            "property-sample",
+            "soc-sample",
+            detail.clone(),
+            Some(&serving),
+        );
+        let plan_links = dossier
+            .document_sections
+            .iter()
+            .find(|section| section.group == "plans")
+            .map(|section| &section.items)
+            .expect("plan documents should have their own section");
+        assert!(plan_links.iter().any(|item| item.label == "Site Plan.pdf"));
+        assert!(plan_links
+            .iter()
+            .any(|item| item.source_url.contains("DOC_ID=sanction")));
         let complaints = detail
             .decision_cards
             .iter()

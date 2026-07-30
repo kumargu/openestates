@@ -5,6 +5,7 @@ import { getProperty, getPropertyRera } from "../lib/api.ts";
 import type {
   PropertyDetailResponse,
   ReraDossier,
+  ReraDocumentSection,
   ReraReportFact,
   ReraReportSection,
 } from "../lib/types.ts";
@@ -53,6 +54,15 @@ function toneClass(tone?: string): string {
 
 function copyTextForFact(fact: ReraReportFact): string {
   return `${fact.label}: ${fact.value}`;
+}
+
+function kindLabel(value: string): string {
+  const normalized = value.replace(/[_-]+/g, " ").trim();
+  return normalized ? displayName(normalized) : "Document";
+}
+
+function documentCopyText(section: ReraDocumentSection, label: string, url: string): string {
+  return `${section.label}: ${label}\n${url}`;
 }
 
 function safeLabels(labels: string[] | undefined, key: string): NotebookLabelId[] {
@@ -110,8 +120,9 @@ function FactLine({
   propertyId: string;
   sectionId: string;
 }) {
+  const isLong = fact.value.length > 70 || fact.label.length > 32;
   return (
-    <div className={`rera-report-fact ${toneClass(fact.tone)}`.trim()}>
+    <div className={`rera-report-fact ${toneClass(fact.tone)} ${isLong ? "is-long" : ""}`.trim()}>
       <div className="rera-report-fact__copy">
         <span>{fact.label}</span>
         <strong>{fact.value}</strong>
@@ -128,6 +139,66 @@ function FactLine({
         />
       </div>
     </div>
+  );
+}
+
+function DocumentSectionList({
+  sections,
+  propertyId,
+}: {
+  sections: ReraDocumentSection[];
+  propertyId: string;
+}) {
+  const visibleSections = sections
+    .map((section) => ({
+      ...section,
+      items: section.items?.filter((item) => httpUrl(item.source_url)) ?? [],
+    }))
+    .filter((section) => section.items.length > 0);
+
+  if (visibleSections.length === 0) return null;
+
+  return (
+    <section className="rera-report-section rera-report-documents">
+      <div className="rera-report-section__head">
+        <h2>Documents</h2>
+      </div>
+      <div className="rera-report-document-groups">
+        {visibleSections.map((section) => (
+          <div key={section.group} className="rera-report-document-group">
+            <h3>{section.label}</h3>
+            <div className="rera-report-document-links">
+              {section.items.map((item) => {
+                const href = httpUrl(item.source_url);
+                if (!href) return null;
+                const itemLabel = knownText(item.label) ?? kindLabel(item.kind);
+                const detail = knownText(item.source_field_label) ?? kindLabel(item.kind);
+                return (
+                  <div key={`${section.group}-${item.artifact_id || href}`} className="rera-report-document-link">
+                    <a href={href} target="_blank" rel="noreferrer">
+                      <LinkIcon size={14} />
+                      <span>{itemLabel}</span>
+                    </a>
+                    <small>{detail}</small>
+                    <div className="rera-report-document-link__actions">
+                      <CopyButton text={documentCopyText(section, itemLabel, href)} compact />
+                      <NotebookPinButton
+                        propertyId={propertyId}
+                        catalogKey={`rera-document:${propertyId}:${section.group}:${item.artifact_id || href}`}
+                        title={`${section.label}: ${itemLabel}`}
+                        source="RERA"
+                        labels={["legal"]}
+                        className="rera-report-pin"
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -208,10 +279,17 @@ export function ReraReportPage() {
         )}
       </header>
 
+      <DocumentSectionList
+        sections={state.dossier.document_sections ?? []}
+        propertyId={property.id}
+      />
+
       {sections.length > 0 ? (
         sections.map((section) => (
           <section key={section.id} className="rera-report-section">
-            <h2>{section.title}</h2>
+            <div className="rera-report-section__head">
+              <h2>{section.title}</h2>
+            </div>
             <div className="rera-report-facts">
               {section.facts.map((fact) => (
                 <FactLine

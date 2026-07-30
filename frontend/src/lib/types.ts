@@ -1150,6 +1150,15 @@ export type ReraDocumentSection = {
   kinds: string[];
   preview_available_count: number;
   hidden_count: number;
+  items: ReraDocumentLink[];
+};
+
+export type ReraDocumentLink = {
+  artifact_id: string;
+  label: string;
+  kind: string;
+  source_url: string;
+  source_field_label?: string;
 };
 
 export type ReraTimeline = {
