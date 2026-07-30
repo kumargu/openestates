@@ -1,16 +1,15 @@
 import { useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../../hooks/useNotebook.ts";
+import { LabelPill } from "../ui/LabelPill.tsx";
 import { floorPlanForBhk, type FloorPlanComparePlan } from "../../lib/floor-plan-compare.ts";
 import {
   labelDef,
   labelsForNearbyPlace,
   type NotebookLabelId,
 } from "../../lib/notebook.ts";
-import { LabelVisualIcon } from "../../lib/LabelVisualIcon.tsx";
 import {
   labelBaseId,
-  labelClassToken,
   labelDistanceLimitKm,
 } from "../../lib/labelVisuals.ts";
 import type { MapPlacePin, PropertyCard, PropertyDetailResponse, PropertyMapContext } from "../../lib/types.ts";
@@ -296,10 +295,6 @@ function compareContextForColumn(
   return detailForColumn(column, detailById)?.map_context ?? null;
 }
 
-function labelPillClass(label: NotebookLabelId, extra = ""): string {
-  return `notion-pill notion-pill--${labelClassToken(label)} compare-label-pill${extra ? ` ${extra}` : ""}`;
-}
-
 function displayIconLabel(item: Pick<CompareItem, "labels">): NotebookLabelId | null {
   const bucket = item.labels.find((label) => labelDistanceLimitKm(label) != null);
   if (bucket) return labelBaseId(bucket);
@@ -503,10 +498,12 @@ function GroupedCompareCell({
       {clusters.map((cluster) => (
         <div key={cluster.label} className="compare-item-cluster">
           <div className="compare-item-cluster__head">
-            <span className={labelPillClass(cluster.label, "compare-item-cluster__label compare-label-pill--readonly")}>
-              <LabelVisualIcon id={cluster.label} size={18} />
-              {labelDef(cluster.label).title}
-            </span>
+            <LabelPill
+              labelId={cluster.label}
+              surface="compare"
+              showIcon
+              className="compare-item-cluster__label compare-label-pill--readonly"
+            />
             <button
               type="button"
               className="compare-label-hide"
@@ -539,16 +536,16 @@ function HiddenCompareLabels({
     <div className="compare-hidden-labels" aria-label="Hidden compare labels">
       <span>Hidden</span>
       {labels.map((label) => (
-        <button
+        <LabelPill
           key={label}
-          type="button"
-          className={labelPillClass(label, "compare-label-pill--button")}
+          labelId={label}
+          surface="compare"
+          showIcon
+          className="compare-label-pill--button"
           onClick={() => onShow(label)}
         >
-          <LabelVisualIcon id={label} size={18} />
-          {labelDef(label).title}
           <small>Restore</small>
-        </button>
+        </LabelPill>
       ))}
     </div>
   );

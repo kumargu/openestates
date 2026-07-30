@@ -1422,41 +1422,22 @@
   margin-top: 0.46rem;
 }
 
-.compare-label-pill.notion-pill {
-  width: fit-content;
-  min-height: 1.58rem;
-  border: 1px solid rgba(38, 35, 32, 0.1);
-  border-radius: 7px;
-  padding: 0 0.56rem;
-  font-size: 0.64rem;
-  box-shadow: none;
-}
-
-.compare-label-pill.notion-pill b,
-.compare-label-pill.notion-pill svg {
-  flex: 0 0 auto;
-}
-
-.compare-label-pill.notion-pill .soft-icon {
-  border-radius: 5px;
-}
-
-.compare-label-pill--readonly.notion-pill {
+.compare-label-pill--readonly.oe-label-pill {
   cursor: default;
 }
 
-.compare-label-pill--button.notion-pill {
+.compare-label-pill--button.oe-label-pill {
   font-family: inherit;
 }
 
-.compare-label-pill--button.notion-pill:hover,
-.compare-label-pill--button.notion-pill:focus-visible {
+.compare-label-pill--button.oe-label-pill:hover,
+.compare-label-pill--button.oe-label-pill:focus-visible {
   border-color: rgba(38, 35, 32, 0.22);
   box-shadow: 0 2px 8px rgba(38, 35, 32, 0.08);
   outline: none;
 }
 
-.compare-label-pill small {
+.compare-label-pill--button small {
   margin-left: 0.1rem;
   color: currentColor;
   font-size: 0.55rem;
@@ -1464,7 +1445,7 @@
   opacity: 0.62;
 }
 
-.compare-note__labels .compare-label-pill.notion-pill {
+.compare-note__labels .oe-label-pill--compare {
   min-height: 1.62rem;
   padding: 0 0.58rem;
   font-size: 0.6rem;
@@ -1488,7 +1469,7 @@
   min-width: 0;
 }
 
-.compare-item-cluster__label.compare-label-pill.notion-pill {
+.compare-item-cluster__label.oe-label-pill--compare {
   min-height: 1.62rem;
   padding: 0 0.62rem 0 0.48rem;
   font-size: 0.62rem;

@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import {
   matchingNotebookCommands,
@@ -19,7 +20,6 @@ import {
   type NotebookNote,
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
-import { labelClassToken } from "../lib/labelVisuals.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
@@ -44,10 +44,6 @@ function parseComparedIds(value: string | null): string[] {
 function societyLabel(home: PropertyCard | undefined, id: string): string {
   if (!home) return id.slice(0, 12);
   return home.society_name?.trim() || home.title;
-}
-
-function cssLabel(id: string): string {
-  return labelClassToken(id);
 }
 
 function noteIcon(note: NotebookNote) {
@@ -100,16 +96,13 @@ function LabelPicker({
   return (
     <div className="notion-row__tags">
       {note.labels.map((id) => (
-        <button
+        <LabelPill
           key={id}
-          type="button"
-          className={`notion-pill notion-pill--${cssLabel(id)}`}
+          labelId={id}
+          surface="notebook"
           title="Remove label"
           onClick={() => onRemove(id)}
-        >
-          <LabelVisualIcon id={id} size={18} />
-          {labelDef(id).title}
-        </button>
+        />
       ))}
       <div className="notion-tag-menu">
         <button

@@ -26,6 +26,7 @@ import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
+import { LabelPill, type LabelPillTone } from "../components/ui/LabelPill.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import {
   AreaPriceBands,
@@ -536,6 +537,13 @@ function projectCheckTags(summary: DecisionCheckSummary): DecisionLabel[] {
   });
 }
 
+function decisionTone(severity: DecisionLabel["severity"]): LabelPillTone {
+  if (severity === "positive") return "positive";
+  if (severity === "caution") return "caution";
+  if (severity === "risk") return "risk";
+  return "info";
+}
+
 function ProjectCheckTag({
   label,
   propertyId,
@@ -544,11 +552,12 @@ function ProjectCheckTag({
   propertyId: string;
 }) {
   return (
-    <div className={`property-check-tag property-check-tag--${label.severity}`}>
-      <span className="property-check-tag__icon">
-        <LabelVisualIcon id={label.visualId || label.key} size={17} />
-      </span>
-      <span className="property-check-tag__label">{label.label}</span>
+    <LabelPill
+      label={label.label}
+      surface="fact"
+      tone={decisionTone(label.severity)}
+      className="property-check-tag"
+    >
       <NotebookPinButton
         propertyId={propertyId}
         catalogKey={`rera:${propertyId}:label:${label.key}`}
@@ -558,7 +567,7 @@ function ProjectCheckTag({
         source="RERA"
         className="property-check-tag__pin"
       />
-    </div>
+    </LabelPill>
   );
 }
 
@@ -574,13 +583,24 @@ function ProjectChecksContent({
     <div className="property-checks">
       <div className="property-checks__registry">
         {summary.registrationNumber && (
-          <button
-            type="button"
-            onClick={() => void navigator.clipboard?.writeText(summary.registrationNumber ?? "")}
-            title="Copy registration number"
-          >
-            {summary.registrationNumber}
-          </button>
+          <div className="property-checks__registry-number">
+            <button
+              type="button"
+              onClick={() => void navigator.clipboard?.writeText(summary.registrationNumber ?? "")}
+              title="Copy registration number"
+            >
+              {summary.registrationNumber}
+            </button>
+            <NotebookPinButton
+              propertyId={propertyId}
+              catalogKey={`rera:${propertyId}:registration:${summary.registrationNumber}`}
+              title={`RERA ${summary.registrationNumber}`}
+              labels={["legal"]}
+              detail={summary.registrationNumber}
+              source="RERA"
+              className="property-checks__registry-pin"
+            />
+          </div>
         )}
       </div>
       <div className="property-check-tags" aria-label="RERA facts">
