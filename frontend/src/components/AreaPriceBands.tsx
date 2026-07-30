@@ -249,7 +249,7 @@ function BandRow({
   );
 }
 
-function LocalChatter({ themes }: { themes: AreaSentiment[] }) {
+function LocalChatter({ themes, themeKey }: { themes: AreaSentiment[]; themeKey: string }) {
   const [index, setIndex] = useState(0);
   const [fading, setFading] = useState(false);
 
@@ -271,7 +271,7 @@ function LocalChatter({ themes }: { themes: AreaSentiment[] }) {
       window.clearInterval(timer);
       if (fadeTimer !== undefined) window.clearTimeout(fadeTimer);
     };
-  }, [themes]);
+  }, [themeKey, themes.length]);
 
   if (themes.length === 0) return null;
   const theme = themes[index % themes.length];
@@ -329,6 +329,9 @@ export function AreaPriceBands({
   localChatterLimit = 4,
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
+  const themeAreas = bands.map((band) => band.area).join("|");
+  const themes = sentimentsForAreas(themeAreas ? themeAreas.split("|") : [], localChatterLimit);
+
   if (bands.length < 1) return null;
 
   const scaleMin = Math.min(...bands.map((band) => band.p10));
@@ -337,7 +340,6 @@ export function AreaPriceBands({
   const axisMin = Math.max(0, scaleMin - pad);
   const axisMax = scaleMax + pad;
   const ticks = niceAxisTicks(axisMin, axisMax);
-  const themes = sentimentsForAreas(bands.map((band) => band.area), localChatterLimit);
   const marketContextByArea = new Map(
     marketContexts?.map((context) => [context.area, context]),
   );
@@ -381,7 +383,7 @@ export function AreaPriceBands({
           </div>
         </div>
 
-        {showLocalChatter && <LocalChatter themes={themes} />}
+        {showLocalChatter && <LocalChatter themes={themes} themeKey={`${themeAreas}:${localChatterLimit}`} />}
       </div>
 
       {showCaption && missingPreferred.length > 0 && (
