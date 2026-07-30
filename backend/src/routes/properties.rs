@@ -29,8 +29,11 @@ use crate::community::{
     deterministic_community_summarizer, CommunityPulse,
 };
 use crate::dag_config::{
-    evidence_sections_config, ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
-    EvidenceSectionPresentation,
+    evidence_sections_config, fact_registry_index_config, rera_report_surface_config,
+    ui_surfaces_config, ContextFactDefinition, EvidenceSectionDefinition,
+    EvidenceSectionPresentation, FactRegistryIndex, ReraReportDisplayRule,
+    ReraReportNotebookLabelRule, ReraReportSectionRule, ReraReportSurfaceFile,
+    ReraReportToneCondition, ReraReportToneRule,
 };
 use crate::knowledge::node::NodeType;
 use crate::knowledge::{google_reviews_url_from_facts, FactValue, SourcedFact};
@@ -3525,162 +3528,110 @@ fn rera_legal_checks(info: &ReraInfo) -> Vec<ReraLegalCheck> {
     checks
 }
 
-fn rera_fact_section_title(section_id: &str) -> &'static str {
-    match section_id {
-        "registration" => "Registration",
-        "timeline" => "Timeline",
-        "complaints" => "Complaints",
-        "builder" => "Builder",
-        "project" => "Project shape",
-        "files" => "Files",
-        "money" => "Money",
-        "checks" => "Checks",
-        "location" => "Location",
-        _ => "Other facts",
-    }
+fn rera_key_matches(
+    key_lower: &str,
+    fact_keys: &[String],
+    key_prefixes: &[String],
+    key_contains: &[String],
+    key_suffixes: &[String],
+) -> bool {
+    fact_keys
+        .iter()
+        .any(|value| key_lower == value.trim().to_ascii_lowercase())
+        || key_prefixes
+            .iter()
+            .any(|value| key_lower.starts_with(&value.trim().to_ascii_lowercase()))
+        || key_contains
+            .iter()
+            .any(|value| key_lower.contains(&value.trim().to_ascii_lowercase()))
+        || key_suffixes
+            .iter()
+            .any(|value| key_lower.ends_with(&value.trim().to_ascii_lowercase()))
 }
 
-fn rera_fact_section_rank(section_id: &str) -> u8 {
-    match section_id {
-        "registration" => 0,
-        "checks" => 1,
-        "complaints" => 2,
-        "timeline" => 3,
-        "project" => 4,
-        "builder" => 5,
-        "money" => 6,
-        "files" => 7,
-        "location" => 8,
-        _ => 9,
-    }
+fn rera_section_for_key<'a>(
+    config: &'a ReraReportSurfaceFile,
+    key: &str,
+) -> (&'a str, &'a str, u32) {
+    let key_lower = key.to_ascii_lowercase();
+    config
+        .sections
+        .iter()
+        .find(|section| rera_section_matches(section, &key_lower))
+        .map(|section| (section.id.as_str(), section.title.as_str(), section.rank))
+        .unwrap_or_else(|| {
+            let fallback = &config.default_section;
+            (fallback.id.as_str(), fallback.title.as_str(), fallback.rank)
+        })
 }
 
-fn rera_fact_section_id(key: &str) -> &'static str {
-    let key = key.to_ascii_lowercase();
-    if key.contains("complaint") {
-        "complaints"
-    } else if key.contains("litigation")
-        || key.contains("mortgage")
-        || key.contains("borrowing")
-        || key.contains("revocation")
-        || key.contains("escrow")
-    {
-        "checks"
-    } else if key.contains("document")
-        || key.contains("plan")
-        || key.contains("approval")
-        || key.contains("noc")
-        || key.contains("brochure")
-        || key.contains("affidavit")
-    {
-        "files"
-    } else if key.contains("date")
-        || key.contains("delay")
-        || key.contains("start")
-        || key.contains("completion")
-        || key.contains("possession")
-    {
-        "timeline"
-    } else if key.contains("builder") || key.contains("promoter") {
-        "builder"
-    } else if key.contains("cost")
-        || key.contains("loan")
-        || key.contains("charge")
-        || key.contains("bank")
-    {
-        "money"
-    } else if key.contains("lat")
-        || key.contains("lng")
-        || key.contains("address")
-        || key.contains("locality")
-        || key.contains("portal_url")
-    {
-        "location"
-    } else if key.contains("number")
-        || key.contains("registered")
-        || key.contains("status")
-        || key.contains("approved")
-    {
-        "registration"
-    } else if key.contains("unit")
-        || key.contains("acre")
-        || key.contains("area")
-        || key.contains("tower")
-        || key.contains("floor")
-        || key.contains("parking")
-        || key.contains("configuration")
-        || key.contains("bhk")
-    {
-        "project"
-    } else {
-        "other"
-    }
+fn rera_section_matches(section: &ReraReportSectionRule, key_lower: &str) -> bool {
+    rera_key_matches(
+        key_lower,
+        &section.fact_keys,
+        &section.key_prefixes,
+        &section.key_contains,
+        &section.key_suffixes,
+    )
 }
 
-fn rera_report_fact_candidate(fact: &ServingFactRecord) -> bool {
+fn rera_report_fact_candidate(config: &ReraReportSurfaceFile, fact: &ServingFactRecord) -> bool {
     let key = fact.fact_key.to_ascii_lowercase();
-    if key.contains("manifest")
-        || key.ends_with("_url")
-        || key.contains("portal_url")
-        || key.contains("source_url")
-        || key.contains("raw")
-        || key.contains("html")
+    if config
+        .candidate_rules
+        .exclude_key_contains
+        .iter()
+        .any(|value| key.contains(&value.trim().to_ascii_lowercase()))
+        || config
+            .candidate_rules
+            .exclude_key_suffixes
+            .iter()
+            .any(|value| key.ends_with(&value.trim().to_ascii_lowercase()))
     {
         return false;
     }
-    fact.source_type.eq_ignore_ascii_case("rera")
-        || key.starts_with("rera_")
-        || key.starts_with("project_land_area")
-        || key.starts_with("project_open_area")
-        || key.starts_with("project_unit")
-        || key.starts_with("project_tower")
-        || key.starts_with("project_max_floor")
-        || key.starts_with("parking_")
+    config
+        .candidate_rules
+        .include_source_types
+        .iter()
+        .any(|source_type| source_type.eq_ignore_ascii_case(&fact.source_type))
+        || config
+            .candidate_rules
+            .include_fact_keys
+            .iter()
+            .any(|fact_key| key == fact_key.trim().to_ascii_lowercase())
+        || config
+            .candidate_rules
+            .include_key_prefixes
+            .iter()
+            .any(|prefix| key.starts_with(&prefix.trim().to_ascii_lowercase()))
 }
 
-fn rera_fact_label(key: &str) -> String {
+fn rera_fact_label(
+    config: &ReraReportSurfaceFile,
+    fact_registry: Option<&FactRegistryIndex>,
+    key: &str,
+) -> String {
     let normalized_key = key.trim().to_ascii_lowercase();
-    if normalized_key == "rera_number" || normalized_key == "rera_registration_number" {
-        return "RERA number".to_string();
+    if let Some(rule) = config
+        .display_rules
+        .iter()
+        .find(|rule| rera_display_rule_matches(rule, &normalized_key))
+    {
+        return rule.label.clone();
     }
-    if normalized_key == "rera_ack_number" {
-        return "Acknowledgement number".to_string();
-    }
-    let mut words: Vec<String> = key
-        .trim()
-        .trim_start_matches("rera_")
-        .trim_start_matches("project_")
-        .split('_')
-        .filter(|part| !part.is_empty())
-        .map(|part| match part {
-            "pct" => "%".to_string(),
-            "sqm" => "sqm".to_string(),
-            "sqft" => "sqft".to_string(),
-            "bhk" => "BHK".to_string(),
-            "noc" => "NOC".to_string(),
-            "rera" => "RERA".to_string(),
-            "url" => "URL".to_string(),
-            value => {
-                if value.contains("bhk") {
-                    value.to_uppercase()
-                } else {
-                    let mut chars = value.chars();
-                    match chars.next() {
-                        Some(first) => format!("{}{}", first.to_uppercase(), chars.as_str()),
-                        None => String::new(),
-                    }
-                }
+    if let Some(entry) = fact_registry.and_then(|registry| registry.lookup(key)) {
+        if let Some(label) = entry.label.as_deref() {
+            if !label.trim().is_empty() {
+                return label.trim().to_string();
             }
-        })
-        .collect();
-    if words.is_empty() {
-        return key.to_string();
+        }
     }
-    if words.last().is_some_and(|word| word == "Count") {
-        words.pop();
-        words.push("count".to_string());
-    }
-    words.join(" ")
+    key.to_string()
+}
+
+fn rera_display_rule_matches(rule: &ReraReportDisplayRule, key_lower: &str) -> bool {
+    rera_key_matches(key_lower, &rule.fact_keys, &[], &rule.key_contains, &[])
 }
 
 fn compact_rera_number(value: f64) -> String {
@@ -3693,7 +3644,7 @@ fn compact_rera_number(value: f64) -> String {
     }
 }
 
-fn rera_fact_value(fact: &ServingFactRecord) -> Option<String> {
+fn rera_fact_value(config: &ReraReportSurfaceFile, fact: &ServingFactRecord) -> Option<String> {
     let key = fact.fact_key.to_ascii_lowercase();
     let value = match &fact.value {
         FactValue::Numeric(value) => {
@@ -3701,24 +3652,17 @@ fn rera_fact_value(fact: &ServingFactRecord) -> Option<String> {
             if base.is_empty() {
                 return None;
             }
-            if key.ends_with("_pct") || key.contains("percentage") {
-                format!("{base}%")
-            } else if key.ends_with("_months") || key.contains("delay_months") {
-                format!("{base} months")
-            } else if key.ends_with("_acres") || key.contains("area_acres") {
-                format!("{base} acres")
-            } else if key.ends_with("_sqm") || key.contains("area_sqm") {
-                format!("{base} sqm")
-            } else if key.ends_with("_sqft") || key.contains("area_sqft") {
-                format!("{base} sqft")
+            if let Some(unit) = rera_numeric_unit_suffix(config, &key) {
+                format!("{base}{unit}")
             } else {
                 base
             }
         }
         FactValue::Text(value) => {
-            if serde_json::from_str::<serde_json::Value>(value)
-                .ok()
-                .is_some_and(|parsed| parsed.is_array() || parsed.is_object())
+            if config.value_rules.skip_json_containers
+                && serde_json::from_str::<serde_json::Value>(value)
+                    .ok()
+                    .is_some_and(|parsed| parsed.is_array() || parsed.is_object())
             {
                 return None;
             }
@@ -3748,10 +3692,11 @@ fn rera_fact_value(fact: &ServingFactRecord) -> Option<String> {
     };
     let value = value.trim();
     if value.is_empty()
-        || matches!(
-            value.to_ascii_lowercase().as_str(),
-            "unknown" | "not specified" | "n/a" | "na" | "none" | "null"
-        )
+        || config
+            .value_rules
+            .skip_text_values
+            .iter()
+            .any(|skip| value.eq_ignore_ascii_case(skip.trim()))
     {
         None
     } else {
@@ -3759,63 +3704,102 @@ fn rera_fact_value(fact: &ServingFactRecord) -> Option<String> {
     }
 }
 
-fn rera_fact_tone(key: &str, value: &FactValue) -> String {
-    let key = key.to_ascii_lowercase();
-    if key.contains("resolved_pct") || key.contains("disposed_count") {
-        return match value {
-            FactValue::Numeric(value) if *value > 0.0 => "positive".to_string(),
-            _ => "neutral".to_string(),
-        };
-    }
-    let sensitive = key.contains("complaint")
-        || key.contains("delay")
-        || key.contains("litigation")
-        || key.contains("mortgage")
-        || key.contains("borrowing")
-        || key.contains("revocation");
-    if !sensitive {
-        return "neutral".to_string();
-    }
-    match value {
-        FactValue::Numeric(value) if *value > 0.0 => "watch".to_string(),
-        FactValue::Bool(true) => "watch".to_string(),
-        FactValue::Numeric(_) | FactValue::Bool(false) => "positive".to_string(),
-        _ => "neutral".to_string(),
-    }
+fn rera_numeric_unit_suffix<'a>(
+    config: &'a ReraReportSurfaceFile,
+    key_lower: &str,
+) -> Option<&'a str> {
+    config
+        .value_rules
+        .numeric_units
+        .iter()
+        .find(|rule| rera_key_matches(key_lower, &[], &[], &rule.key_contains, &rule.key_suffixes))
+        .map(|rule| rule.suffix.as_str())
 }
 
-fn rera_fact_notebook_labels(section_id: &str, key: &str) -> Vec<String> {
-    let mut labels = vec!["legal".to_string()];
+fn rera_fact_tone(config: &ReraReportSurfaceFile, key: &str, value: &FactValue) -> String {
+    let key = key.to_ascii_lowercase();
+    config
+        .tone_rules
+        .iter()
+        .find(|rule| rera_tone_rule_matches(rule, &key, value))
+        .map(|rule| rule.tone.clone())
+        .unwrap_or_else(|| "neutral".to_string())
+}
+
+fn rera_tone_rule_matches(rule: &ReraReportToneRule, key_lower: &str, value: &FactValue) -> bool {
+    rera_key_matches(
+        key_lower,
+        &rule.fact_keys,
+        &rule.key_prefixes,
+        &rule.key_contains,
+        &[],
+    ) && rera_tone_condition_matches(&rule.when, value)
+}
+
+fn rera_tone_condition_matches(condition: &ReraReportToneCondition, value: &FactValue) -> bool {
+    if let Some(present) = condition.present {
+        if !present {
+            return false;
+        }
+    }
+    if let Some(expected) = condition.bool_value {
+        if !matches!(value, FactValue::Bool(value) if *value == expected) {
+            return false;
+        }
+    }
+    if let Some(threshold) = condition.numeric_gt {
+        if !matches!(value, FactValue::Numeric(value) if *value > threshold) {
+            return false;
+        }
+    }
+    if let Some(threshold) = condition.numeric_lte {
+        if !matches!(value, FactValue::Numeric(value) if *value <= threshold) {
+            return false;
+        }
+    }
+    true
+}
+
+fn rera_fact_notebook_labels(
+    config: &ReraReportSurfaceFile,
+    section_id: &str,
+    key: &str,
+) -> Vec<String> {
+    let mut labels = Vec::new();
     let hay = format!("{section_id} {key}").to_ascii_lowercase();
-    if hay.contains("complaint") {
-        labels.insert(0, "complaints".to_string());
-        labels.insert(1, "risk".to_string());
-    } else if hay.contains("litigation")
-        || hay.contains("delay")
-        || hay.contains("mortgage")
-        || hay.contains("borrowing")
-        || hay.contains("revocation")
-    {
-        labels.insert(0, "risk".to_string());
-    }
-    if hay.contains("plan")
-        || hay.contains("unit")
-        || hay.contains("floor")
-        || hay.contains("tower")
-        || hay.contains("parking")
-    {
-        labels.push("layout".to_string());
-    }
-    if hay.contains("open") || hay.contains("acre") || hay.contains("density") {
-        labels.push("open-space".to_string());
-    }
-    if hay.contains("cost") || hay.contains("bank") {
-        labels.push("finance".to_string());
+    for rule in &config.notebook_label_rules {
+        if rera_notebook_label_rule_matches(rule, section_id, key, &hay) {
+            labels.extend(rule.labels.iter().cloned());
+        }
     }
     labels.sort();
     labels.dedup();
     labels.truncate(4);
     labels
+}
+
+fn rera_notebook_label_rule_matches(
+    rule: &ReraReportNotebookLabelRule,
+    section_id: &str,
+    key: &str,
+    haystack_lower: &str,
+) -> bool {
+    let has_matchers =
+        !rule.section_ids.is_empty() || !rule.fact_keys.is_empty() || !rule.key_contains.is_empty();
+    if !has_matchers {
+        return true;
+    }
+    rule.section_ids
+        .iter()
+        .any(|value| value.eq_ignore_ascii_case(section_id))
+        || rule
+            .fact_keys
+            .iter()
+            .any(|value| value.eq_ignore_ascii_case(key))
+        || rule
+            .key_contains
+            .iter()
+            .any(|value| haystack_lower.contains(&value.trim().to_ascii_lowercase()))
 }
 
 fn rera_report_sections_for_society(
@@ -3825,6 +3809,10 @@ fn rera_report_sections_for_society(
     let Some(serving_facts) = serving_facts else {
         return Vec::new();
     };
+    let Ok(config) = rera_report_surface_config() else {
+        return Vec::new();
+    };
+    let fact_registry = fact_registry_index_config().ok();
     let rows = rera_report_society_entity_id_candidates(society_id)
         .into_iter()
         .filter_map(|entity_id| serving_facts.entity(&entity_id))
@@ -3836,9 +3824,9 @@ fn rera_report_sections_for_society(
     for fact in rows
         .iter()
         .flat_map(|rows| rows.facts.iter())
-        .filter(|fact| rera_report_fact_candidate(fact))
+        .filter(|fact| rera_report_fact_candidate(config, fact))
     {
-        let Some(value) = rera_fact_value(fact) else {
+        let Some(value) = rera_fact_value(config, fact) else {
             continue;
         };
         latest_by_key_value
@@ -3854,45 +3842,39 @@ fn rera_report_sections_for_society(
             .or_insert((fact, value));
     }
 
-    let mut by_section = BTreeMap::<String, Vec<ReraReportFact>>::new();
+    let mut by_section = BTreeMap::<String, (String, u32, Vec<ReraReportFact>)>::new();
     for (fact, value) in latest_by_key_value.into_values() {
-        let section_id = rera_fact_section_id(&fact.fact_key);
+        let (section_id, section_title, section_rank) =
+            rera_section_for_key(config, &fact.fact_key);
         by_section
             .entry(section_id.to_string())
-            .or_default()
+            .or_insert_with(|| (section_title.to_string(), section_rank, Vec::new()))
+            .2
             .push(ReraReportFact {
                 key: fact.fact_key.clone(),
-                label: rera_fact_label(&fact.fact_key),
+                label: rera_fact_label(config, fact_registry, &fact.fact_key),
                 value,
-                tone: rera_fact_tone(&fact.fact_key, &fact.value),
-                labels: rera_fact_notebook_labels(section_id, &fact.fact_key),
+                tone: rera_fact_tone(config, &fact.fact_key, &fact.value),
+                labels: rera_fact_notebook_labels(config, section_id, &fact.fact_key),
                 source_url: fact.source_url.clone(),
                 confidence: fact.confidence,
                 learned_at: fact.learned_at.to_rfc3339(),
             });
     }
 
-    let mut sections: Vec<ReraReportSection> = by_section
+    let mut sections: Vec<(u32, ReraReportSection)> = by_section
         .into_iter()
-        .map(|(id, mut facts)| {
+        .map(|(id, (title, rank, mut facts))| {
             facts.sort_by(|a, b| a.label.cmp(&b.label).then_with(|| a.key.cmp(&b.key)));
             facts.dedup_by(|left, right| {
                 left.label.eq_ignore_ascii_case(&right.label)
                     && left.value.eq_ignore_ascii_case(&right.value)
             });
-            ReraReportSection {
-                title: rera_fact_section_title(&id).to_string(),
-                id,
-                facts,
-            }
+            (rank, ReraReportSection { title, id, facts })
         })
         .collect();
-    sections.sort_by(|a, b| {
-        rera_fact_section_rank(&a.id)
-            .cmp(&rera_fact_section_rank(&b.id))
-            .then_with(|| a.title.cmp(&b.title))
-    });
-    sections
+    sections.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.title.cmp(&b.1.title)));
+    sections.into_iter().map(|(_, section)| section).collect()
 }
 
 fn rera_report_society_entity_id_candidates(society_id: &str) -> Vec<String> {
