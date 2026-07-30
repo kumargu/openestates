@@ -64,8 +64,8 @@ pub fn rera_project_plan_frames_input(
         let path = plan_payload_path(&repo_root, &target.society_slug);
         if !path.exists() {
             watermarks.push(SourceWatermark {
-                source: format!("rera_project_plan_frames:{}", target.society_slug),
-                high_watermark: "missing".to_string(),
+                source: "rera_project_plan_frames_skipped".to_string(),
+                high_watermark: format!("missing:{}", target.society_slug),
             });
             continue;
         }
@@ -215,5 +215,20 @@ mod tests {
             Path::new("/repo")
                 .join("data/lake/media/rera_plans/prestige-waterford/project_plan_frames.json")
         );
+    }
+
+    #[test]
+    fn missing_plan_payloads_emit_skipped_watermark() {
+        let input = rera_project_plan_frames_input("test-run", Utc::now()).unwrap();
+        if input.facts.is_empty() {
+            assert!(
+                input
+                    .source_watermarks
+                    .iter()
+                    .any(|watermark| watermark.source.ends_with("_skipped")),
+                "empty RERA plan input must be explicitly skippable: {:?}",
+                input.source_watermarks
+            );
+        }
     }
 }

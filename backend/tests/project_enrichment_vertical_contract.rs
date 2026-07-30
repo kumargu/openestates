@@ -1,12 +1,16 @@
+use std::collections::BTreeMap;
+
 use backend::assets::{
     default_openestates_registry, read_skill_fact_artifact_rows, AssetDagExecutionOptions,
-    AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs,
-    ExternalImageObservationRecord, ExternalImagesWeeklyInput, ExternalListingObservationRecord,
-    ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord, GoogleNearbyPlacesWeeklyInput,
-    GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput, ReraProjectSnapshotRecord,
+    AssetDagExecutor, AssetMaterializationStore, AssetPartition, AssetSourceInputs, DagRunStatus,
+    EnvironmentGroundwaterPotentialInput, EnvironmentGroundwaterPotentialZone,
+    EnvironmentRingPoint, ExternalImageObservationRecord, ExternalImagesWeeklyInput,
+    ExternalListingObservationRecord, ExternalListingsWeeklyInput, GoogleNearbyPlaceRecord,
+    GoogleNearbyPlacesWeeklyInput, GooglePlaceSnapshotRecord, GooglePlacesWeeklyInput,
+    OsmPowerInfrastructureInput, OsmPowerLineObservationRecord, ReraProjectSnapshotRecord,
     ReraRegistryMonthlyInput, SkillFactAnnotationRecord, SkillFactRecord, SourceWatermark,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
-    EXTERNAL_LISTING_FACTS_ASSET_ID,
+    StormwaterDrainObservationRecord, StormwaterDrainRiskInput, BUILDER_RERA_AGGREGATES_ASSET_ID,
+    EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 use backend::knowledge::{FactValue, KnowledgeGraph};
 use backend::lake::LakeStore;
@@ -33,6 +37,8 @@ async fn three_societies_reach_serving_with_listing_and_builder_evidence() {
         )
         .await
         .unwrap();
+    assert_eq!(report.manifest.status, DagRunStatus::Succeeded);
+    assert_eq!(report.manifest.failed_count, 0);
 
     for asset_id in [
         EXTERNAL_LISTINGS_WEEKLY_ASSET_ID,
@@ -256,6 +262,72 @@ fn source_inputs(
             observed_at,
         })
         .collect();
+    let osm_power_records = projects
+        .iter()
+        .enumerate()
+        .map(|(index, project)| OsmPowerLineObservationRecord {
+            entity_id: canonical_id(project.registration),
+            project_key: Some(project.registration.to_string()),
+            query: format!("power=line around {}", project.name),
+            osm_id: format!("way/power-{}", slug(project.name)),
+            name: Some(format!("{} fixture transmission line", project.name)),
+            power: "line".to_string(),
+            voltage_kv: Some(220.0),
+            distance_meters: 0.0,
+            subject_latitude: Some(project.latitude),
+            subject_longitude: Some(project.longitude),
+            latitude: project.latitude,
+            longitude: project.longitude,
+            geometry_geojson: format!(
+                r#"{{"type":"LineString","coordinates":[[{lon1},{lat1}],[{lon2},{lat2}]]}}"#,
+                lon1 = project.longitude - 0.001,
+                lat1 = project.latitude - 0.001,
+                lon2 = project.longitude + 0.001,
+                lat2 = project.latitude + 0.001
+            ),
+            source_tags: BTreeMap::from([
+                ("power".to_string(), "line".to_string()),
+                ("voltage".to_string(), "220000".to_string()),
+            ]),
+            source_url: Some(format!("https://www.openstreetmap.org/way/power-{index}")),
+            confidence: 0.82,
+            fetched_at: observed_at,
+            fetch_source: "fixture_overpass_power".to_string(),
+        })
+        .collect();
+    let stormwater_records = projects
+        .iter()
+        .enumerate()
+        .map(|(index, project)| StormwaterDrainObservationRecord {
+            entity_id: canonical_id(project.registration),
+            project_key: Some(project.registration.to_string()),
+            query: format!("stormwater drain around {}", project.name),
+            drain_id: format!("swd/{}", slug(project.name)),
+            name: Some(format!("{} fixture rajakaluve", project.name)),
+            drain_type: "rajakaluve".to_string(),
+            hierarchy: Some("primary_swd".to_string()),
+            distance_meters: 0.0,
+            intersects_property: false,
+            subject_latitude: Some(project.latitude),
+            subject_longitude: Some(project.longitude),
+            latitude: project.latitude,
+            longitude: project.longitude,
+            geometry_geojson: format!(
+                r#"{{"type":"LineString","coordinates":[[{lon1},{lat1}],[{lon2},{lat2}]]}}"#,
+                lon1 = project.longitude - 0.001,
+                lat1 = project.latitude - 0.001,
+                lon2 = project.longitude + 0.001,
+                lat2 = project.latitude + 0.001
+            ),
+            encroachment_record: None,
+            source_tags: BTreeMap::from([("waterway".to_string(), "drain".to_string())]),
+            source_url: Some(format!("https://data.opencity.in/swd/{index}")),
+            source_type: Some("OpenCity".to_string()),
+            confidence: 0.8,
+            fetched_at: observed_at,
+            fetch_source: "fixture_opencity_stormwater".to_string(),
+        })
+        .collect();
     let watermark = vec![SourceWatermark {
         source: "fixture".to_string(),
         high_watermark: observed_at.to_rfc3339(),
@@ -357,6 +429,48 @@ fn source_inputs(
                 .collect(),
             source_health: Vec::new(),
             media_qa_report: None,
+            source_watermarks: watermark.clone(),
+        }),
+        environment_groundwater_potential: Some(EnvironmentGroundwaterPotentialInput {
+            snapshot_date: "2026-07-14".to_string(),
+            source_url: "https://example.com/groundwater.kml".to_string(),
+            zones: vec![EnvironmentGroundwaterPotentialZone {
+                zone_id: "whitefield-good-groundwater".to_string(),
+                groundwater_potential_class: "Good".to_string(),
+                rings: vec![vec![
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.70,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.80,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 13.05,
+                        longitude: 77.80,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 13.05,
+                        longitude: 77.70,
+                    },
+                    EnvironmentRingPoint {
+                        latitude: 12.90,
+                        longitude: 77.70,
+                    },
+                ]],
+                source_fields: BTreeMap::new(),
+            }],
+            source_watermarks: watermark.clone(),
+        }),
+        osm_power_infrastructure: Some(OsmPowerInfrastructureInput {
+            snapshot_date: "2026-07-14".to_string(),
+            records: osm_power_records,
+            source_watermarks: watermark.clone(),
+        }),
+        stormwater_drains: Some(StormwaterDrainRiskInput {
+            snapshot_date: "2026-07-14".to_string(),
+            records: stormwater_records,
             source_watermarks: watermark.clone(),
         }),
         ..AssetSourceInputs::default()

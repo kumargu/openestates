@@ -1,8 +1,4 @@
-use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
-
-use chrono::Utc;
 
 use axum::extract::{Query, State};
 use axum::Json;
@@ -16,7 +12,9 @@ use crate::search::{
     guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
     SearchResponse, SearchResultCard, SourcedClaim,
 };
-use crate::state::AppState;
+use crate::state::{
+    AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
+};
 
 use super::enrichment::society_node_id;
 
@@ -78,10 +76,7 @@ pub async fn search_properties(
                 missing_fact: guarded.guidance.mode.clone(),
                 reason: guarded.guidance.message.clone(),
             });
-            {
-                let mut graph = state.knowledge.write().await;
-                graph.log_search(event);
-            }
+            enqueue_search_log(&state, SearchLogMessage::SearchEvent(event));
 
             return Json(SearchResponse {
                 query,
@@ -97,42 +92,44 @@ pub async fn search_properties(
         }
     }
 
-    // Build society name lookup map.
-    let serving_bundle = state.serving_bundle.read().await.clone();
-    let societies = state.societies.read().await;
-    let society_names: HashMap<String, String> = societies
-        .iter()
-        .map(|s| (s.id.clone(), s.name.clone()))
-        .collect();
+    let snapshot = state.search_runtime.load_full();
+    let cache_key =
+        (!include_diagnostics).then(|| SearchCacheKey::new(&query, &snapshot.version_key));
+    if let Some(cache_key) = cache_key.as_ref() {
+        if let Some(cached) = state.search_cache.get(cache_key).await {
+            for message in rebase_cached_log_messages(cached.log_messages, &query) {
+                enqueue_search_log(&state, message);
+            }
+            return Json(rebase_cached_response(cached.response.as_ref(), &query));
+        }
+    }
 
-    let serving_facts = serving_bundle.as_ref().map(|bundle| &bundle.fact_index);
+    let serving_facts = Some(&snapshot.bundle.fact_index);
     let engine_output = {
         let graph = state.knowledge.read().await;
-        let properties = state.properties.read().await;
-        let search_index = state.search_index.read().await;
-        let semantic_index = state.semantic_index.read().await;
 
         SearchEngine {
-            properties: &properties,
-            search_index: &search_index,
-            serving_bundle: serving_bundle.as_deref(),
-            semantic_index: &semantic_index,
-            semantic_embedder: state.semantic_embedder.as_ref(),
-            society_names: &society_names,
-            societies: &societies,
+            properties: &snapshot.properties,
+            search_index: &snapshot.search_index,
+            serving_bundle: Some(snapshot.bundle.as_ref()),
+            semantic_index: &snapshot.semantic_index,
+            semantic_embedder: snapshot.semantic_embedder.as_ref(),
+            society_names: &snapshot.society_names,
+            property_by_id: Some(&snapshot.property_by_id),
+            societies: &snapshot.societies,
             graph: Some(&graph),
         }
         .search(&query)
     };
     let parsed_intent = engine_output.intent;
-    let search_diagnostics = engine_output.diagnostics;
+    let mut search_diagnostics = engine_output.diagnostics;
     let results = engine_output.results;
     let relaxations = engine_output.relaxations;
 
     // Look up area context if the intent identified an area.
-    let areas = state.areas.read().await;
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
-        areas
+        snapshot
+            .areas
             .iter()
             .find(|a| a.name.eq_ignore_ascii_case(area_name))
             .cloned()
@@ -143,11 +140,11 @@ pub async fn search_properties(
 
     // --- Extract knowledge context from the graph ---
     let graph = state.knowledge.read().await;
-    let properties = state.properties.read().await;
     let (knowledge_context, graph_nodes_hit, enrichment_gaps, gap_candidate_society_ids) = {
         let mut matched_society_ids: Vec<String> = Vec::new();
         for result in &results {
-            if let Some(society_id) = properties
+            if let Some(society_id) = snapshot
+                .properties
                 .iter()
                 .find(|p| p.id == result.card.id)
                 .map(|p| p.society_id.clone())
@@ -173,24 +170,26 @@ pub async fn search_properties(
             matched_society_ids,
         )
     };
-    drop(properties);
     drop(graph);
 
     // --- Log search event ---
     let mut event = SearchEvent::new(query.clone(), parsed_intent.clone(), total_results);
     event.graph_nodes_hit = graph_nodes_hit;
     event.enrichment_gaps = enrichment_gaps.clone();
-    spawn_persist_enrichment_gaps(
-        enrichment_gaps.clone(),
-        query.clone(),
-        parsed_intent.clone(),
-        total_results,
-        gap_candidate_society_ids.clone(),
-    );
-
-    {
-        let mut graph = state.knowledge.write().await;
-        graph.log_search(event);
+    let mut log_messages = vec![SearchLogMessage::SearchEvent(event)];
+    if !enrichment_gaps.is_empty() {
+        log_messages.push(SearchLogMessage::PersistEnrichmentGaps(
+            EnrichmentGapPersistence {
+                gaps: enrichment_gaps.clone(),
+                query: query.clone(),
+                intent: parsed_intent.clone(),
+                results_returned: total_results,
+                top_candidate_society_ids: gap_candidate_society_ids.clone(),
+            },
+        ));
+    }
+    for message in log_messages.clone() {
+        enqueue_search_log(&state, message);
     }
 
     let buyer_knowledge_context = if include_diagnostics {
@@ -202,8 +201,16 @@ pub async fn search_properties(
             learning_gaps: Vec::new(),
         }
     };
+    if include_diagnostics {
+        let dropped = state.search_log_dropped_count();
+        if dropped > 0 {
+            search_diagnostics
+                .warnings
+                .push(format!("search log side effects dropped: {dropped}"));
+        }
+    }
 
-    Json(SearchResponse {
+    let response = SearchResponse {
         query,
         intent: parsed_intent,
         results,
@@ -213,7 +220,67 @@ pub async fn search_properties(
         search_diagnostics: include_diagnostics.then_some(search_diagnostics),
         relaxations,
         search_guidance: (total_results == 0).then(no_results_guidance),
-    })
+    };
+    if let Some(cache_key) = cache_key {
+        if response.total_results > 0 {
+            state
+                .search_cache
+                .put(
+                    cache_key,
+                    CachedSearchOutput {
+                        response: Arc::new(response.clone()),
+                        log_messages,
+                    },
+                )
+                .await;
+        }
+    }
+
+    Json(response)
+}
+
+fn enqueue_search_log(state: &AppState, message: SearchLogMessage) {
+    try_enqueue_search_log(
+        &state.search_event_tx,
+        &state.search_log_dropped_count,
+        message,
+    );
+}
+
+fn try_enqueue_search_log(
+    tx: &tokio::sync::mpsc::Sender<SearchLogMessage>,
+    dropped_count: &std::sync::atomic::AtomicU64,
+    message: SearchLogMessage,
+) {
+    if tx.try_send(message).is_err() {
+        dropped_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+fn rebase_cached_response(response: &SearchResponse, query: &str) -> SearchResponse {
+    let mut response = response.clone();
+    response.query = query.to_string();
+    response
+}
+
+fn rebase_cached_log_messages(
+    messages: Vec<SearchLogMessage>,
+    query: &str,
+) -> Vec<SearchLogMessage> {
+    messages
+        .into_iter()
+        .map(|message| match message {
+            SearchLogMessage::SearchEvent(mut event) => {
+                event.query = query.to_string();
+                event.timestamp = chrono::Utc::now();
+                SearchLogMessage::SearchEvent(event)
+            }
+            SearchLogMessage::PersistEnrichmentGaps(mut payload) => {
+                payload.query = query.to_string();
+                SearchLogMessage::PersistEnrichmentGaps(payload)
+            }
+        })
+        .collect()
 }
 
 fn push_unique_string(values: &mut Vec<String>, value: String) {
@@ -958,6 +1025,94 @@ mod tests {
     use super::*;
     use crate::knowledge::fact::{ScoringDirection, ScoringHint};
     use crate::knowledge::FactValue;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn cached_response_and_log_messages_are_rebased_to_current_query() {
+        let intent = intent::parse_intent("3bhk whitefield");
+        let mut event = SearchEvent::new("3bhk whitefield".to_string(), intent.clone(), 2);
+        let original_timestamp = event.timestamp;
+        event.enrichment_gaps.push(EnrichmentGap {
+            entity_id: "society:test".to_string(),
+            missing_fact: "nearby_schools".to_string(),
+            reason: "school access requested".to_string(),
+        });
+        let response = SearchResponse {
+            query: "3bhk whitefield".to_string(),
+            intent: intent.clone(),
+            results: Vec::new(),
+            area_context: None,
+            total_results: 2,
+            knowledge_context: None,
+            search_diagnostics: None,
+            relaxations: Vec::new(),
+            search_guidance: None,
+        };
+        let messages = vec![
+            SearchLogMessage::SearchEvent(event),
+            SearchLogMessage::PersistEnrichmentGaps(EnrichmentGapPersistence {
+                gaps: Vec::new(),
+                query: "3bhk whitefield".to_string(),
+                intent,
+                results_returned: 2,
+                top_candidate_society_ids: Vec::new(),
+            }),
+        ];
+
+        let rebased_response = rebase_cached_response(&response, "  3BHK   Whitefield  ");
+        let rebased_messages = rebase_cached_log_messages(messages, "  3BHK   Whitefield  ");
+
+        assert_eq!(rebased_response.query, "  3BHK   Whitefield  ");
+        match &rebased_messages[0] {
+            SearchLogMessage::SearchEvent(rebased_event) => {
+                assert_eq!(rebased_event.query, "  3BHK   Whitefield  ");
+                assert!(
+                    rebased_event.timestamp >= original_timestamp,
+                    "cache-hit log event should get a fresh timestamp"
+                );
+            }
+            SearchLogMessage::PersistEnrichmentGaps(_) => {
+                panic!("first message should remain search event")
+            }
+        }
+        match &rebased_messages[1] {
+            SearchLogMessage::PersistEnrichmentGaps(payload) => {
+                assert_eq!(payload.query, "  3BHK   Whitefield  ");
+            }
+            SearchLogMessage::SearchEvent(_) => {
+                panic!("second message should remain enrichment-gap payload")
+            }
+        }
+    }
+
+    #[test]
+    fn full_search_log_queue_increments_drop_counter() {
+        let (tx, mut rx) = tokio::sync::mpsc::channel(1);
+        let dropped = AtomicU64::new(0);
+        let intent = intent::parse_intent("3bhk whitefield");
+
+        try_enqueue_search_log(
+            &tx,
+            &dropped,
+            SearchLogMessage::SearchEvent(SearchEvent::new(
+                "3bhk whitefield".to_string(),
+                intent.clone(),
+                1,
+            )),
+        );
+        try_enqueue_search_log(
+            &tx,
+            &dropped,
+            SearchLogMessage::SearchEvent(SearchEvent::new(
+                "3bhk whitefield".to_string(),
+                intent,
+                1,
+            )),
+        );
+
+        assert_eq!(dropped.load(Ordering::Relaxed), 1);
+        assert!(rx.try_recv().is_ok());
+    }
 
     // --- Day 62: TextMatch scoring fix tests ---
 
@@ -1705,118 +1860,9 @@ async fn guarded_search_has_local_recall(
         return false;
     }
 
-    let search_index = state.search_index.read().await;
-    !search_index.recall_ids(query, &guarded.intent).is_empty()
-}
-
-fn spawn_persist_enrichment_gaps(
-    gaps: Vec<EnrichmentGap>,
-    query: String,
-    intent: intent::SearchIntent,
-    results_returned: usize,
-    top_candidate_society_ids: Vec<String>,
-) {
-    if gaps.is_empty() {
-        return;
-    }
-
-    tokio::task::spawn_blocking(move || {
-        persist_enrichment_gaps(
-            &gaps,
-            &query,
-            &intent,
-            results_returned,
-            &top_candidate_society_ids,
-        );
-    });
-}
-
-fn persist_enrichment_gaps(
-    gaps: &[EnrichmentGap],
-    query: &str,
-    intent: &intent::SearchIntent,
-    results_returned: usize,
-    top_candidate_society_ids: &[String],
-) {
-    if gaps.is_empty() {
-        return;
-    }
-
-    let path = enrichment_gaps_output_path();
-    let mut entries: Vec<serde_json::Value> = if path.exists() {
-        std::fs::read_to_string(&path)
-            .ok()
-            .and_then(|payload| serde_json::from_str(&payload).ok())
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-
-    let recorded_at = Utc::now().to_rfc3339();
-    let query_categories = query_gap_categories(intent);
-    for gap in gaps {
-        entries.push(serde_json::json!({
-            "entity_id": gap.entity_id,
-            "missing_fact": gap.missing_fact,
-            "reason": gap.reason,
-            "query": query,
-            "query_categories": &query_categories,
-            "top_candidate_society_ids": top_candidate_society_ids,
-            "results_returned": results_returned,
-            "intent_area": intent.area.as_deref(),
-            "intent_bhk": intent.bhk,
-            "intent_budget_max": intent.budget_max,
-            "recorded_at": recorded_at,
-        }));
-    }
-
-    if entries.len() > 500 {
-        let start = entries.len() - 500;
-        entries = entries.split_off(start);
-    }
-
-    if let Some(parent) = path.parent() {
-        let _ = std::fs::create_dir_all(parent);
-    }
-    if let Ok(payload) = serde_json::to_string_pretty(&entries) {
-        let _ = std::fs::write(path, payload);
-    }
-}
-
-fn query_gap_categories(intent: &intent::SearchIntent) -> Vec<String> {
-    let mut categories = Vec::new();
-
-    for constraint in &intent.hard_constraints {
-        push_unique_string(
-            &mut categories,
-            format!("hard_constraint:{}", constraint.field),
-        );
-    }
-    for preference in &intent.positive_preferences {
-        push_unique_string(&mut categories, format!("positive:{}", preference.raw_text));
-    }
-    for preference in &intent.negative_preferences {
-        push_unique_string(&mut categories, format!("negative:{}", preference.raw_text));
-    }
-    for inventory_type in &intent.unsupported_inventory_types {
-        push_unique_string(
-            &mut categories,
-            format!("unsupported_inventory:{inventory_type}"),
-        );
-    }
-    if let Some(archetype) = &intent.buyer_archetype {
-        push_unique_string(&mut categories, format!("buyer_archetype:{archetype:?}"));
-    }
-
-    if categories.is_empty() {
-        categories.push("general".to_string());
-    }
-    categories
-}
-
-fn enrichment_gaps_output_path() -> PathBuf {
-    if let Ok(path) = std::env::var("OPENESTATES_ENRICHMENT_GAPS_PATH") {
-        return PathBuf::from(path);
-    }
-    PathBuf::from("data/validation/enrichment_gaps.json")
+    let snapshot = state.search_runtime.load_full();
+    !snapshot
+        .search_index
+        .recall_ids(query, &guarded.intent)
+        .is_empty()
 }

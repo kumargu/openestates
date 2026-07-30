@@ -5,7 +5,7 @@ use std::path::Path;
 use tantivy::collector::TopDocs;
 use tantivy::query::QueryParser;
 use tantivy::schema::{Field, TantivyDocument, Value, STORED, STRING, TEXT};
-use tantivy::{doc, Index, IndexWriter, ReloadPolicy};
+use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy};
 
 use crate::lake::{LakeKey, LakeStore};
 
@@ -15,6 +15,7 @@ use super::{
 
 pub struct TantivyRecallIndex {
     index: Index,
+    reader: IndexReader,
     entity_id: Field,
     entity_type: Field,
     name: Field,
@@ -72,8 +73,15 @@ impl TantivyRecallIndex {
         }
 
         writer.commit().map_err(TantivyIndexError::Tantivy)?;
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()
+            .map_err(TantivyIndexError::Tantivy)?;
+
         Ok(Self {
             index,
+            reader,
             entity_id,
             entity_type,
             name,
@@ -100,8 +108,14 @@ impl TantivyRecallIndex {
         let fact_keys = schema
             .get_field("fact_keys")
             .map_err(TantivyIndexError::Tantivy)?;
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()
+            .map_err(TantivyIndexError::Tantivy)?;
         Ok(Self {
             index,
+            reader,
             entity_id,
             entity_type,
             name,
@@ -115,13 +129,7 @@ impl TantivyRecallIndex {
         query: &str,
         limit: usize,
     ) -> Result<Vec<TantivyRecallHit>, TantivyIndexError> {
-        let reader = self
-            .index
-            .reader_builder()
-            .reload_policy(ReloadPolicy::Manual)
-            .try_into()
-            .map_err(TantivyIndexError::Tantivy)?;
-        let searcher = reader.searcher();
+        let searcher = self.reader.searcher();
         let mut query_parser =
             QueryParser::for_index(&self.index, vec![self.name, self.body, self.fact_keys]);
         query_parser.set_conjunction_by_default();
