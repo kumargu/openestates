@@ -5304,6 +5304,20 @@ mod serving_state_tests {
         assert!(sections.iter().any(|section| section.id == "registration"));
         assert!(sections.iter().any(|section| section.id == "timeline"));
         assert!(sections.iter().any(|section| section.id == "project"));
+        let section_ids = sections
+            .iter()
+            .map(|section| section.id.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(
+            section_ids,
+            vec![
+                "registration",
+                "project",
+                "checks",
+                "complaints",
+                "timeline"
+            ]
+        );
         assert!(facts
             .iter()
             .any(|fact| fact.key == "rera_number" && fact.label == "RERA number"));

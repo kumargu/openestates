@@ -88,25 +88,25 @@
     {
       "id": "checks",
       "title": "Checks",
-      "rank": 1,
+      "rank": 2,
       "key_contains": ["litigation", "mortgage", "borrowing", "revocation", "escrow"]
     },
     {
       "id": "complaints",
       "title": "Complaints",
-      "rank": 2,
+      "rank": 3,
       "key_contains": ["complaint"]
     },
     {
       "id": "timeline",
       "title": "Timeline",
-      "rank": 3,
+      "rank": 4,
       "key_contains": ["date", "delay", "start", "completion", "possession"]
     },
     {
       "id": "project",
       "title": "Project shape",
-      "rank": 4,
+      "rank": 1,
       "key_contains": ["unit", "acre", "area", "tower", "floor", "parking", "configuration", "bhk"]
     },
     {

@@ -35,8 +35,10 @@ function FactLine({
   sectionId: string;
 }) {
   const isLong = fact.value.length > 70 || fact.label.length > 32;
+  const isCompact = !isLong && fact.value.length <= 18 && fact.label.length <= 28;
+  const densityClass = isLong ? "is-long" : isCompact ? "is-compact" : "is-medium";
   return (
-    <div className={`rera-report-fact ${toneClass(fact.tone)} ${isLong ? "is-long" : ""}`.trim()}>
+    <div className={`rera-report-fact ${toneClass(fact.tone)} ${densityClass}`.trim()}>
       <div className="rera-report-fact__copy">
         <span>{fact.label}</span>
         <strong>{fact.value}</strong>
