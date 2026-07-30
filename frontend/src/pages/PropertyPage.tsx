@@ -22,13 +22,17 @@ import {
 } from "../lib/api.ts";
 import { PageState } from "../components/PageState.tsx";
 import { ApproachRoadTrail, hasApproachRoadTrail } from "../components/evidence/ApproachRoadTrail.tsx";
-import { MarketTrendContent, hasMarketTrend } from "../components/evidence/MarketTrailBands.tsx";
 import { AroundThisHomePlate } from "../components/evidence/AroundThisHomePlate.tsx";
 import { SaveHeartButton } from "../components/SaveHeartButton.tsx";
 import { NotebookCommentAnchor } from "../components/notebook/NotebookCommentAnchor.tsx";
 import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
-import { AreaPriceBands, type AreaMarketContext } from "../components/AreaPriceBands.tsx";
+import {
+  AreaPriceBands,
+  derivePriceBands,
+  formatSqftCompact,
+  type AreaMarketContext,
+} from "../components/AreaPriceBands.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt, sceneLabelForIndex } from "../lib/propertyScene.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
@@ -59,10 +63,12 @@ function compactLifecycleLabel(value: string): string {
 
 function displayName(value: string): string {
   const keepUpper = new Set(["BHK", "ITPL", "JP", "KR"]);
-  return value.replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
+  return value
+    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
+    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
     if (keepUpper.has(word) || /\d/.test(word)) return word;
     return word.charAt(0) + word.slice(1).toLowerCase();
-  });
+    });
 }
 
 function truncateCopy(value: string, limit = 220): string {
@@ -287,6 +293,34 @@ function marketContextsForAreas(properties: PropertyCard[], areas: string[]): Ar
       societies: new Set(areaProperties.map((property) => property.society_name)).size,
     };
   });
+}
+
+function InlinePriceRangeSignal({
+  area,
+  pricePerSqft,
+  properties,
+}: {
+  area: string;
+  pricePerSqft: number;
+  properties: PropertyCard[];
+}) {
+  if (!hasKnownNumber(pricePerSqft)) return null;
+  const band = derivePriceBands(properties, [area])[0];
+  if (!band) return null;
+
+  const typicalLow = band.p25;
+  const typicalHigh = band.p75;
+  const areaName = area.split(",")[0];
+
+  return (
+    <p
+      className="property-price-range"
+      aria-label={`${formatSqftCompact(pricePerSqft)} per sqft against ${areaName} range ${formatSqftCompact(typicalLow)} to ${formatSqftCompact(typicalHigh)}`}
+    >
+      <span>{formatSqftCompact(pricePerSqft)}/sqft</span>
+      <span>{areaName} range {formatSqftCompact(typicalLow)}-{formatSqftCompact(typicalHigh)}/sqft</span>
+    </p>
+  );
 }
 
 function microMarketAreas(
@@ -753,9 +787,10 @@ function MicroMarketTracker({
         preferredAreas={areas}
         marketContexts={marketContextsForAreas(properties, areas)}
         onSelectArea={onSelectArea}
-        heading={`Explore prices around ${currentArea.split(",")[0]}`}
-        subheading=""
+        heading="Nearby price ranges"
+        density="compact"
         showCaption={false}
+        localChatterLimit={5}
       />
     </section>
   );
@@ -822,7 +857,6 @@ function PropertyPageBody({
   const [recommendationStatus, setRecommendationStatus] =
     useState<RecommendationStatus>("pending");
   const [status, setStatus] = useState<"loading" | "error" | "not_found" | "ok">("loading");
-  const [marketOpen, setMarketOpen] = useState(false);
   const [projectChecksOpen, setProjectChecksOpen] = useState(false);
 
   useEffect(() => {
@@ -955,7 +989,6 @@ function PropertyPageBody({
   ].filter(Boolean).join(". ");
   const detailEvidenceSections = data.evidence?.sections ?? [];
   const showApproachTrail = hasApproachRoadTrail(detailEvidenceSections);
-  const showMarketTrend = hasMarketTrend(detailEvidenceSections);
   const aroundThisHomeContext =
     propertyMapContextFromSurfaceScene(aroundThisHomeScene, data.map_context);
   const showNearbyPlate = hasAroundThisHomePlate(aroundThisHomeContext);
@@ -1015,22 +1048,6 @@ function PropertyPageBody({
         <div className="property-clean-head__copy">
           <p>{p.area}, {p.city}</p>
           <h1>{displayTitle}</h1>
-          <div className="property-clean-meta">
-            <span>₹{formatPrice(p.price)}</span>
-            <span>{p.bhk} BHK</span>
-            {sizeLabel && <span>{sizeLabel}</span>}
-            {compactStatusRead && (
-              <span className="property-status-pill">
-                <span className="property-status-pill__label">Status</span>
-                {compactStatusRead}
-              </span>
-            )}
-            {googleRating && (
-              <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
-                ★ {googleRating} Google
-              </span>
-            )}
-          </div>
         </div>
         <div className="property-clean-actions" aria-label="Property actions">
           <SaveHeartButton propertyId={p.id} className="property-action-link property-action-save" label="Save" />
@@ -1042,6 +1059,29 @@ function PropertyPageBody({
             className="property-action-note"
           />
         </div>
+      </section>
+
+      <section className="property-summary-card" aria-label="Home summary">
+        <div className="property-clean-meta">
+          <span>₹{formatPrice(p.price)}</span>
+          <span>{p.bhk} BHK</span>
+          {sizeLabel && <span>{sizeLabel}</span>}
+          {compactStatusRead && (
+            <span className="property-status-pill">
+              {compactStatusRead}
+            </span>
+          )}
+          {googleRating && (
+            <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
+              <span aria-hidden="true">★</span> {googleRating} Google
+            </span>
+          )}
+        </div>
+        <InlinePriceRangeSignal
+          area={p.area}
+          pricePerSqft={p.price_per_sqft}
+          properties={marketProperties}
+        />
       </section>
 
       <PropertyPhotoMosaic
@@ -1059,16 +1099,10 @@ function PropertyPageBody({
           )}
         </section>
 
-        {(showApproachTrail || showMarketTrend || showProjectChecks) && (
+        {(showApproachTrail || showProjectChecks) && (
           <section className="property-popup-row" aria-label="Home details">
             {showApproachTrail && (
               <ApproachRoadTrail propertyId={id} sections={detailEvidenceSections} variant="compact" />
-            )}
-            {showMarketTrend && (
-              <PopupActionButton
-                label="Price ranges"
-                onClick={() => setMarketOpen(true)}
-              />
             )}
             {projectChecks && (
               <PopupActionButton
@@ -1094,11 +1128,6 @@ function PropertyPageBody({
         />
       </main>
 
-      {marketOpen && (
-        <CleanDialog title="Price ranges" onClose={() => setMarketOpen(false)}>
-          <MarketTrendContent sections={detailEvidenceSections} />
-        </CleanDialog>
-      )}
       {projectChecksOpen && projectChecks && (
         <CleanDialog title="RERA" onClose={() => setProjectChecksOpen(false)}>
           <ProjectChecksContent summary={projectChecks} propertyId={p.id} />

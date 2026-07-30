@@ -18,10 +18,12 @@ export function knownText(value?: string | null): string | null {
 
 export function displayName(value: string): string {
   const keepUpper = new Set(["BHK", "ITPL", "JP", "KR", "NOC", "RERA", "BBMP", "BDA"]);
-  return value.replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
-    if (keepUpper.has(word) || /\d/.test(word)) return word;
-    return word.charAt(0) + word.slice(1).toLowerCase();
-  });
+  return value
+    .replace(/^(\d+(?:\.\d+)?)\s+BHK\s+(?:in|at)\s+/i, "$1 BHK ")
+    .replace(/\b[A-Z][A-Z0-9&.'-]*\b/g, (word) => {
+      if (keepUpper.has(word) || /\d/.test(word)) return word;
+      return word.charAt(0) + word.slice(1).toLowerCase();
+    });
 }
 
 function titleLabel(value: string): string {

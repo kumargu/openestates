@@ -2464,17 +2464,7 @@
     gap: 0.7rem;
   }
 
-  .market-trend__tile {
-    grid-template-columns: 5.5rem minmax(0, 1fr) auto;
-    gap: 0.7rem;
-  }
-
-  .market-trend__preview {
-    padding: 0.75rem;
-  }
-
-  .area-trail__open,
-  .market-trend__open {
+  .area-trail__open {
     margin-right: 0.7rem;
     font-size: 0;
   }
@@ -2488,20 +2478,6 @@
     width: 100%;
     max-height: 92vh;
     border-radius: 16px 16px 0 0;
-  }
-
-  .market-trend__chart {
-    overflow-x: auto;
-  }
-
-  .market-trend__chart .price-bands__axis-row,
-  .market-trend__chart .price-bands__row,
-  .market-trend__chart .price-bands__legend {
-    min-width: 40rem;
-  }
-
-  .market-trend__chart .price-bands__legend {
-    padding-left: 0;
   }
 
   .area-trail__hero {
