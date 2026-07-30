@@ -87,9 +87,13 @@ export function reportSections(dossier: ReraDossier): ReraReportSection[] {
 
 export function visibleDocumentSections(sections: ReraDocumentSection[]): ReraDocumentSection[] {
   return sections
-    .map((section) => ({
-      ...section,
-      items: section.items?.filter((item) => httpUrl(item.source_url)) ?? [],
-    }))
+    .map((section) => {
+      const items = section.items?.filter((item) => httpUrl(item.source_url)) ?? [];
+      return {
+        ...section,
+        count: items.length,
+        items,
+      };
+    })
     .filter((section) => section.items.length > 0);
 }

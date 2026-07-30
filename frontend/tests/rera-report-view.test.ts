@@ -113,6 +113,7 @@ test("RERA document sections hide empty groups and invalid links", () => {
 
   assert.equal(visible.length, 1);
   assert.equal(visible[0].group, "noc");
+  assert.equal(visible[0].count, 1);
   assert.deepEqual(visible[0].items.map((item) => item.label), ["Fire NOC"]);
 });
 

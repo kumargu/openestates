@@ -22,9 +22,8 @@ import {
 } from "../lib/reraReportView.ts";
 
 type LoadState =
-  | { status: "loading" }
-  | { status: "ready"; detail: PropertyDetailResponse; dossier: ReraDossier }
-  | { status: "error"; message: string };
+  | { status: "ready"; id: string; detail: PropertyDetailResponse; dossier: ReraDossier }
+  | { status: "error"; id: string; message: string };
 
 function FactLine({
   fact,
@@ -112,25 +111,23 @@ function DocumentSectionList({
 
 export function ReraReportPage() {
   const { id } = useParams<{ id: string }>();
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [state, setState] = useState<LoadState | null>(null);
 
   useEffect(() => {
-    if (!id) {
-      setState({ status: "error", message: "This report needs a property id." });
-      return;
-    }
+    if (!id) return;
 
+    const propertyId = id;
     const controller = new AbortController();
-    setState({ status: "loading" });
     Promise.all([
-      getProperty(id, { signal: controller.signal }),
-      getPropertyRera(id),
+      getProperty(propertyId, { signal: controller.signal }),
+      getPropertyRera(propertyId),
     ])
-      .then(([detail, dossier]) => setState({ status: "ready", detail, dossier }))
+      .then(([detail, dossier]) => setState({ status: "ready", id: propertyId, detail, dossier }))
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         setState({
           status: "error",
+          id: propertyId,
           message: error instanceof Error ? error.message : "Unable to load RERA report.",
         });
       });
@@ -138,18 +135,19 @@ export function ReraReportPage() {
     return () => controller.abort();
   }, [id]);
 
+  const currentState = state?.id === id ? state : null;
   const sections = useMemo(() => (
-    state.status === "ready" ? reportSections(state.dossier) : []
-  ), [state]);
+    currentState?.status === "ready" ? reportSections(currentState.dossier) : []
+  ), [currentState]);
 
   if (!id) return <PageState variant="not_found" context="property" />;
-  if (state.status === "loading") return <PageState variant="loading" context="property" message="Opening RERA." />;
-  if (state.status === "error") return <PageState variant="error" context="property" message={state.message} />;
+  if (!currentState) return <PageState variant="loading" context="property" message="Opening RERA." />;
+  if (currentState.status === "error") return <PageState variant="error" context="property" message={currentState.message} />;
 
-  const property = state.detail.property;
+  const property = currentState.detail.property;
   const title = displayName(property.title);
-  const sourceUrl = httpUrl(state.dossier.source.portal_url);
-  const registrationNumber = knownText(state.dossier.source.registration_number);
+  const sourceUrl = httpUrl(currentState.dossier.source.portal_url);
+  const registrationNumber = knownText(currentState.dossier.source.registration_number);
   const pageTitle = `${title} RERA - OpenEstates`;
 
   return (
@@ -167,7 +165,7 @@ export function ReraReportPage() {
         <h1>{title}</h1>
         <div className="rera-report-subline">
           <span>{property.area}, {property.city}</span>
-          {state.dossier.source.status && <span>{state.dossier.source.status}</span>}
+          {currentState.dossier.source.status && <span>{currentState.dossier.source.status}</span>}
         </div>
         {(registrationNumber || sourceUrl) && (
           <div className="rera-report-registry">
@@ -187,7 +185,7 @@ export function ReraReportPage() {
       </header>
 
       <DocumentSectionList
-        sections={state.dossier.document_sections ?? []}
+        sections={currentState.dossier.document_sections ?? []}
         propertyId={property.id}
       />
 
