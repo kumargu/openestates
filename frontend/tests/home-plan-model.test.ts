@@ -125,6 +125,7 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
   const projection = calculateProjection(inputs, 3);
   const note = buildPlanSnapshotNote({
     propertyId: "prop-one",
+    propertyTitle: "Waterford Estate",
     inputs,
     projection,
     activeYear: 12,
@@ -132,11 +133,13 @@ test("plan snapshot captures monthly assumptions and inspected outcome", () => {
 
   assert.match(note.source, /^Saved \d{1,2} [A-Za-z]{3} \d{4}$/);
   assert.deepEqual(note.labels, ["finance", "emi", "price"]);
-  assert.match(note.title, /^₹1\.8L EMI, loan closes in/);
-  assert.match(note.detail, /Monthly plan:/);
+  assert.equal(note.title, "Waterford Estate plan, ₹1.8L EMI");
+  assert.match(note.detail, /Waterford Estate/);
   assert.match(note.detail, /3 extra EMIs\/year/);
-  assert.match(note.detail, /Rent path:/);
-  assert.match(note.detail, /Assumptions:/);
+  assert.match(note.detail, /rent/i);
+  assert.match(note.detail, /SIP/);
+  assert.match(note.detail, /home.*projected near|home value reads near|home itself is projected near/i);
+  assert.doesNotMatch(note.detail, /assuming|Assumptions:/i);
   assert.doesNotMatch(note.detail, /cash to close|down|planned loan/i);
   assert.equal(note.catalogKey, "plan:prop-one:current");
 });
@@ -281,6 +284,7 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   const view = buildMonthlyPlanVerdict(prepaid, 12);
   const note = buildPlanSnapshotNote({
     propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
     inputs,
     projection: prepaid,
     activeYear: view.activeYear,
@@ -377,6 +381,7 @@ test("future purchase payment schedule uses typed appreciation", () => {
 test("snapshot identity stays stable so saved notebook plans update in place", () => {
   const base = buildPlanSnapshotNote({
     propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
     inputs: ready,
     projection: calculateProjection(ready, 2),
     activeYear: 8,
@@ -396,6 +401,7 @@ test("snapshot identity stays stable so saved notebook plans update in place", (
   };
   const changed = buildPlanSnapshotNote({
     propertyId: "home-1",
+    propertyTitle: "Waterford Estate",
     inputs: changedInputs,
     projection: calculateProjection(changedInputs, 2),
     activeYear: 8,

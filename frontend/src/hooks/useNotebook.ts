@@ -4,6 +4,7 @@ import {
   NOTEBOOK_CHANGED_EVENT,
   addHandwrittenNote,
   addNotebookCommandBlock,
+  addNotebookParagraphAfter,
   addNotebookNoteLabel,
   addSelectionNote,
   anchorNotebookProperty,
@@ -27,6 +28,8 @@ function isNotebookState(value: unknown): value is NotebookState {
   if (typeof value !== "object" || value == null) return false;
   const candidate = value as Partial<NotebookState>;
   return Array.isArray(candidate.propertyIds)
+    && typeof candidate.documents === "object"
+    && candidate.documents != null
     && Array.isArray(candidate.notes)
     && Array.isArray(candidate.compareIds)
     && (candidate.hiddenCompareLabels == null || Array.isArray(candidate.hiddenCompareLabels));
@@ -35,7 +38,7 @@ function isNotebookState(value: unknown): value is NotebookState {
 export function useNotebook() {
   const [state, setState] = useState<NotebookState>(() =>
     typeof window === "undefined"
-      ? { propertyIds: [], notes: [], compareIds: [], hiddenCompareLabels: [] }
+      ? { version: 3, propertyIds: [], documents: {}, notes: [], compareIds: [], hiddenCompareLabels: [] }
       : readNotebook(),
   );
 
@@ -71,6 +74,10 @@ export function useNotebook() {
   const addCommandBlock = useCallback((input: Parameters<typeof addNotebookCommandBlock>[0]) => {
     const next = addNotebookCommandBlock(input);
     if (next) setState(next);
+  }, []);
+
+  const addParagraphAfter = useCallback((input: Parameters<typeof addNotebookParagraphAfter>[0]) => {
+    setState(addNotebookParagraphAfter(input));
   }, []);
 
   const removeNote = useCallback((noteId: string) => {
@@ -121,6 +128,7 @@ export function useNotebook() {
   return {
     state,
     notes: state.notes,
+    documents: state.documents,
     propertyIds: state.propertyIds,
     compareIds: state.compareIds,
     hiddenCompareLabels: state.hiddenCompareLabels ?? [],
@@ -129,6 +137,7 @@ export function useNotebook() {
     rememberSelection,
     addHandwritten,
     addCommandBlock,
+    addParagraphAfter,
     removeNote,
     updateNote,
     setNoteLabels,

@@ -120,6 +120,7 @@ export function HomePlanPage() {
   const verdict = buildMonthlyPlanVerdict(projection, activeYear);
   const planSnapshot = buildPlanSnapshotNote({
     propertyId: id,
+    propertyTitle: property.title,
     inputs,
     projection,
     activeYear: verdict.activeYear,
