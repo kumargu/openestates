@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
 import type { PropertyCard } from "../lib/types.ts";
 import {
   sentimentsForAreas,
-  sentimentSourceLabel,
   themeKindLabel,
   type AreaSentiment,
 } from "../lib/areaSentiments.ts";
@@ -12,7 +10,6 @@ import {
 /** Match Area Tracker: show a row once we have at least 2 priced listings. */
 const MIN_SAMPLES = 2;
 const MAX_DOTS = 36;
-const QUOTE_ROTATE_MS = 20_000;
 
 /** Soft Levels.fyi-style row pastels. */
 const BAND_PALETTE = [
@@ -123,7 +120,7 @@ export function derivePriceBands(
     }));
 }
 
-function formatSqftCompact(value: number): string {
+export function formatSqftCompact(value: number): string {
   if (value >= 1000) {
     const thousands = value / 1000;
     const rounded = thousands >= 10 ? thousands.toFixed(0) : thousands.toFixed(1).replace(/\.0$/, "");
@@ -173,12 +170,14 @@ function BandRow({
   scaleMin,
   scaleMax,
   onSelect,
+  density,
 }: {
   band: PriceBand;
   marketContext?: AreaMarketContext;
   scaleMin: number;
   scaleMax: number;
   onSelect: (area: string) => void;
+  density: "standard" | "compact";
 }) {
   const span = Math.max(scaleMax - scaleMin, 1);
   const pct = (value: number) => `${((value - scaleMin) / span) * 100}%`;
@@ -192,7 +191,7 @@ function BandRow({
       type="button"
       className={`price-bands__row${band.thin ? " price-bands__row--thin" : ""}`}
       onClick={() => onSelect(band.area)}
-      aria-label={`${band.area} price band, middle ask ${formatSqftCompact(band.median)} per sqft`}
+      aria-label={`${band.area} price band, ${formatSqftCompact(band.median)} per sqft`}
     >
       <div className="price-bands__label">
         <span className="price-bands__area">{band.area}</span>
@@ -203,7 +202,7 @@ function BandRow({
           {marketContext && marketContext.bhks.length > 0
             ? ` · ${marketContext.bhks.join(", ")} BHK`
             : ""}
-          {band.thin ? " · early" : ""}
+          {band.thin && density !== "compact" ? " · early" : ""}
         </span>
       </div>
       <div className="price-bands__plot" aria-hidden="true">
@@ -242,73 +241,29 @@ function BandRow({
         <span className="price-bands__median-label" style={{ left: medianLeft }}>
           {formatSqftCompact(band.median)}
         </span>
-        <span className="price-bands__p-label price-bands__p-label--low" style={{ left: pct(band.p25) }}>
-          {formatSqftCompact(band.p25)}
-        </span>
-        <span className="price-bands__p-label price-bands__p-label--high" style={{ left: pct(band.p75) }}>
-          {formatSqftCompact(band.p75)}
-        </span>
-      </div>
-      <div className="price-bands__value">
-        <strong>{formatSqftCompact(band.median)}</strong>
-        <span>middle</span>
       </div>
     </button>
   );
 }
 
-function QuoteRotator({ quotes }: { quotes: AreaSentiment[] }) {
-  const [index, setIndex] = useState(0);
-  const [fading, setFading] = useState(false);
-
-  useEffect(() => {
-    if (quotes.length < 2) return undefined;
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    if (media.matches) return undefined;
-
-    const timer = window.setInterval(() => {
-      setFading(true);
-      window.setTimeout(() => {
-        setIndex((current) => (current + 1) % quotes.length);
-        setFading(false);
-      }, 320);
-    }, QUOTE_ROTATE_MS);
-
-    return () => window.clearInterval(timer);
-  }, [quotes]);
-
-  if (quotes.length === 0) {
-    return (
-      <p className="price-bands__read-body">
-        No resident themes matched these areas yet. Bands above are still from local asks.
-      </p>
-    );
-  }
-
-  const quote = quotes[index % quotes.length];
-
+function LocalChatter({ themes }: { themes: AreaSentiment[] }) {
+  if (themes.length === 0) return null;
   return (
-    <div className="price-bands__quote-board">
-      <p className="price-bands__read-kicker">From the ground</p>
-      <figure className={`price-bands__quote${fading ? " price-bands__quote--fading" : ""}`}>
-        <blockquote>“{quote.line}”</blockquote>
-        <figcaption>
-          <span>{themeKindLabel(quote.kind)}</span>
-          <span aria-hidden="true">·</span>
-          <span>{quote.theme}</span>
-          <span aria-hidden="true">·</span>
-          <span>{sentimentSourceLabel(quote.source)}</span>
-        </figcaption>
-      </figure>
-      <div className="price-bands__quote-dots" aria-hidden="true">
-        {quotes.slice(0, 8).map((item, i) => (
+    <aside className="price-bands__chatter" aria-label="Local chatter">
+      <p>Local chatter</p>
+      <div>
+        {themes.map((theme) => (
           <span
-            key={item.line}
-            className={`price-bands__quote-dot${i === index % Math.min(quotes.length, 8) ? " is-active" : ""}`}
-          />
+            key={`${theme.kind}-${theme.theme}-${theme.line}`}
+            className={`price-bands__chatter-chip price-bands__chatter-chip--${theme.polarity}`}
+            title={theme.line}
+          >
+            <b>{themeKindLabel(theme.kind)}</b>
+            {theme.theme}
+          </span>
         ))}
       </div>
-    </div>
+    </aside>
   );
 }
 
@@ -319,7 +274,10 @@ type AreaPriceBandsProps = {
   onSelectArea: (area: string) => void;
   heading?: string;
   subheading?: string;
+  density?: "standard" | "compact";
   showCaption?: boolean;
+  showLocalChatter?: boolean;
+  localChatterLimit?: number;
 };
 
 export function AreaPriceBands({
@@ -328,8 +286,11 @@ export function AreaPriceBands({
   marketContexts,
   onSelectArea,
   heading = "Market map",
-  subheading = "Where asks sit across Bengaluru — tap an area to search it.",
-  showCaption = true,
+  subheading = "",
+  density = "standard",
+  showCaption = false,
+  showLocalChatter = true,
+  localChatterLimit = 4,
 }: AreaPriceBandsProps) {
   const bands = derivePriceBands(properties, preferredAreas);
   if (bands.length < 1) return null;
@@ -340,8 +301,7 @@ export function AreaPriceBands({
   const axisMin = Math.max(0, scaleMin - pad);
   const axisMax = scaleMax + pad;
   const ticks = niceAxisTicks(axisMin, axisMax);
-  const totalN = bands.reduce((sum, band) => sum + band.n, 0);
-  const quotes = sentimentsForAreas(bands.map((band) => band.area), 12);
+  const themes = sentimentsForAreas(bands.map((band) => band.area), localChatterLimit);
   const marketContextByArea = new Map(
     marketContexts?.map((context) => [context.area, context]),
   );
@@ -349,10 +309,9 @@ export function AreaPriceBands({
     preferredAreas?.filter((area) => !bands.some((band) => band.area === area)) ?? [];
 
   return (
-    <div className="price-bands">
+    <div className={`price-bands price-bands--${density}`}>
       <div className="price-bands__head">
         <div>
-          <p className="price-bands__kicker">Bengaluru</p>
           <h2 className="price-bands__title">{heading}</h2>
           {subheading && <p className="price-bands__sub">{subheading}</p>}
         </div>
@@ -380,38 +339,18 @@ export function AreaPriceBands({
                 scaleMin={axisMin}
                 scaleMax={axisMax}
                 onSelect={onSelectArea}
+                density={density}
               />
             ))}
           </div>
-
-          <div className="price-bands__legend" aria-hidden="true">
-            <span className="price-bands__legend-item">
-              <span className="price-bands__legend-box" />
-              Typical half
-            </span>
-            <span className="price-bands__legend-item">
-              <span className="price-bands__legend-median" />
-              Middle ask
-            </span>
-            <span className="price-bands__legend-item">
-              <span className="price-bands__legend-dot" />
-              Listing asks
-            </span>
-            <span className="price-bands__legend-item">Line = wider range</span>
-          </div>
         </div>
 
-        <aside className="price-bands__read">
-          <QuoteRotator quotes={quotes} />
-        </aside>
+        {showLocalChatter && <LocalChatter themes={themes} />}
       </div>
 
-      {showCaption && (
+      {showCaption && missingPreferred.length > 0 && (
         <p className="price-bands__caption">
-          {bands.length} market{bands.length === 1 ? "" : "s"} · {totalN} priced homes
-          {missingPreferred.length > 0
-            ? ` · ${missingPreferred.length} tracker area${missingPreferred.length === 1 ? "" : "s"} still need priced listings`
-            : ""}
+          {missingPreferred.length} tracker area{missingPreferred.length === 1 ? "" : "s"} still need priced listings
         </p>
       )}
     </div>

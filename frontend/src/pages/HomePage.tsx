@@ -311,7 +311,6 @@ export function HomePage() {
           areaTracker={areaTracker}
           onSearch={commitSearch}
           maxMarkets={4}
-          subheading="Compare asking bands before opening homes."
         />
       )}
     </div>
