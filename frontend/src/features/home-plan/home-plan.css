@@ -310,6 +310,45 @@
   gap: 0.55rem;
 }
 
+.home-plan-whisper-orbit {
+  animation: home-plan-whisper-drift 34s ease-in-out infinite;
+}
+
+@keyframes home-plan-whisper-drift {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(4px, -2px); }
+  50% { transform: translate(0, -4px); }
+  75% { transform: translate(-4px, -2px); }
+}
+
+.home-plan-whisper {
+  min-height: 2.6em;
+  max-width: min(38rem, 94vw);
+  margin: 0;
+  color: var(--plan-whisper);
+  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
+  font-size: clamp(0.95rem, 0.88rem + 0.3vw, 1.08rem);
+  font-style: italic;
+  line-height: 1.45;
+  opacity: 1;
+  transition: opacity 0.45s ease, transform 0.45s ease;
+}
+
+.home-plan-whisper--fading {
+  opacity: 0;
+  transform: translateY(5px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-plan-whisper-orbit {
+    animation: none;
+  }
+
+  .home-plan-whisper {
+    transition: none;
+  }
+}
+
 /* Grid children must be allowed to shrink so inner overflow (charts, scrollers)
    never blows out the page width. */
 .home-plan-canvas > * {
@@ -473,15 +512,10 @@
   border-left: 1px solid var(--plan-line);
 }
 
-.home-plan-verdict__insight {
+.home-plan-verdict__aside .home-plan-whisper {
   min-height: 4.2em;
   max-width: 24rem;
-  margin: 0;
-  color: var(--plan-whisper);
-  font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
   font-size: clamp(0.86rem, 0.81rem + 0.2vw, 0.98rem);
-  font-style: italic;
-  line-height: 1.45;
 }
 
 .home-plan-shell--view-net-worth .home-plan-verdict__amount,
@@ -644,30 +678,35 @@
 
 .home-plan-graph-line {
   fill: none;
-  stroke-width: 3;
+  stroke-width: 2.8;
   stroke-linecap: round;
   stroke-linejoin: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  animation: home-plan-line-draw 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
   transition: d 420ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-@keyframes home-plan-line-draw {
-  from {
-    stroke-dashoffset: 1;
-  }
-  to {
-    stroke-dashoffset: 0;
-  }
+.home-plan-graph-gap {
+  pointer-events: none;
+  transition: d 420ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.home-plan-graph-gap--buy {
+  fill: rgba(201, 107, 79, 0.09);
+}
+
+.home-plan-graph-gap--rent {
+  fill: rgba(91, 127, 176, 0.1);
 }
 
 .home-plan-graph-line--buy {
   stroke: var(--plan-buy);
+  stroke-width: 3.1;
 }
 
 .home-plan-graph-line--rent {
   stroke: var(--plan-rent);
+  stroke-width: 2.35;
+  stroke-dasharray: 7 9;
+  opacity: 0.92;
 }
 
 .home-plan-cursor {
@@ -1722,7 +1761,7 @@
     border-left: 0;
   }
 
-  .home-plan-verdict__insight {
+  .home-plan-verdict__aside .home-plan-whisper {
     min-height: 2.9em;
     max-width: none;
   }

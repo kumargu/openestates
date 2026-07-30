@@ -7,7 +7,7 @@ import {
   calculateProjection,
 } from "../src/features/home-plan/model.ts";
 import { buildPlanSnapshotNote } from "../src/features/home-plan/planSnapshot.ts";
-import { buildMonthlyPlanVerdict } from "../src/features/home-plan/monthlyPlanView.ts";
+import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../src/features/home-plan/monthlyPlanView.ts";
 import {
   FIXED_HOME_GROWTH_RATE,
   FIXED_RENT_INFLATION_RATE,
@@ -296,10 +296,39 @@ test("extra EMIs update payoff, total interest, snapshot, and top insight togeth
   assert.notEqual(prepaid.totalInterest, null);
   assert.ok(prepaid.loanFreeYear! < base.loanFreeYear!);
   assert.ok(prepaid.totalInterest! < base.totalInterest!);
+  assert.match(view.insight, /At 12 years, (buying|the rent path) leads by ₹/);
   assert.match(view.insight, /3 extra EMIs\/year closes the loan/);
   assert.match(view.insight, /Total interest lands near/);
   assert.match(note.detail, /3 extra EMIs\/year/);
   assert.equal(note.catalogKey, "plan:home-1:current");
+});
+
+test("default plan focus follows the current loan-free milestone when it is visible", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 20,
+  };
+  const projection = calculateProjection(inputs, 4);
+  const focusYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
+  const view = buildMonthlyPlanVerdict(projection, focusYear);
+
+  assert.equal(focusYear, projection.loanFreeYear);
+  assert.match(view.timeLabel, new RegExp(`After ${projection.loanFreeYear} years`));
+  assert.match(view.insight, /4 extra EMIs\/year closes the loan/);
+});
+
+test("default plan focus falls back to the graph horizon when payoff is outside the chart", () => {
+  const inputs = {
+    ...ready,
+    monthlyEmiThousands: 160,
+    holdingPeriodYears: 5,
+  };
+  const projection = calculateProjection(inputs);
+
+  assert.ok(projection.loanFreeYear !== null);
+  assert.ok(projection.loanFreeYear! > inputs.holdingPeriodYears);
+  assert.equal(defaultPlanFocusYear(projection, inputs.holdingPeriodYears), inputs.holdingPeriodYears);
 });
 
 test("low EMI plan returns explicit non-closing state without fake interest", () => {
@@ -312,7 +341,8 @@ test("low EMI plan returns explicit non-closing state without fake interest", ()
 
   assert.equal(projection.loanFreeYear, null);
   assert.equal(projection.totalInterest, null);
-  assert.equal(view.insight, "Loan does not close at this EMI.");
+  assert.match(view.insight, /At 10 years, (buying|the rent path) leads by ₹/);
+  assert.match(view.insight, /loan does not close at this EMI/);
   assert.ok(projection.points.at(-1)!.loanBalance > projection.loanAmount);
 });
 

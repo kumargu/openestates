@@ -15,6 +15,11 @@ function yearLabel(year: number): string {
   return `${year} ${year === 1 ? "year" : "years"}`;
 }
 
+function sentenceYearLabel(year: number): string {
+  if (year <= 0) return "Today";
+  return `At ${yearLabel(year)}`;
+}
+
 function extraEmiLabel(extraEmisPerYear: number): string {
   if (extraEmisPerYear === 1) return "1 extra EMI/year";
   return `${extraEmisPerYear} extra EMIs/year`;
@@ -23,6 +28,21 @@ function extraEmiLabel(extraEmisPerYear: number): string {
 function boundedYear(projection: PlanProjection, activeYear: number): number {
   const maxYear = Math.max(0, projection.points.length - 1);
   return Math.max(0, Math.min(activeYear, maxYear));
+}
+
+export function defaultPlanFocusYear(
+  projection: Pick<PlanProjection, "loanFreeYear" | "points">,
+  holdingPeriodYears: number,
+): number {
+  const maxYear = Math.max(0, projection.points.length - 1);
+  if (
+    projection.loanFreeYear !== null
+    && projection.loanFreeYear > 0
+    && projection.loanFreeYear <= maxYear
+  ) {
+    return projection.loanFreeYear;
+  }
+  return Math.min(holdingPeriodYears, maxYear);
 }
 
 export function buildMonthlyPlanVerdict(
@@ -60,21 +80,25 @@ export function monthlyPlanInsight(
   buyWins: boolean,
 ): string {
   const horizonYears = Math.max(0, projection.points.length - 1);
+  const activePoint = projection.points[activeYear] ?? projection.points[0];
+  const advantage = activePoint
+    ? Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth)
+    : 0;
+  const lead = `${sentenceYearLabel(activeYear)}, ${buyWins ? "buying" : "the rent path"} leads by ${formatCurrency(advantage, true)}`;
   if (projection.loanFreeYear == null) {
-    return "Loan does not close at this EMI.";
+    return `${lead}; loan does not close at this EMI.`;
   }
 
   if (projection.extraEmisPerYear > 0) {
     const interest = projection.totalInterest == null
       ? ""
       : ` Total interest lands near ${formatCurrency(projection.totalInterest, true)}.`;
-    return `${extraEmiLabel(projection.extraEmisPerYear)} closes the loan in ${yearLabel(projection.loanFreeYear)}.${interest}`;
+    return `${lead}; ${extraEmiLabel(projection.extraEmisPerYear)} closes the loan in ${yearLabel(projection.loanFreeYear)}.${interest}`;
   }
 
   if (projection.breakEvenYear != null) {
-    return `Break-even appears around ${yearLabel(projection.breakEvenYear)}; this view is reading ${yearLabel(activeYear)}.`;
+    return `${lead}; break-even appears around ${yearLabel(projection.breakEvenYear)}.`;
   }
 
-  const choice = buyWins ? "buying" : "renting and investing";
-  return `Within ${yearLabel(horizonYears)}, ${choice} stays ahead at the inspected year.`;
+  return `${lead}; this stays ahead within ${yearLabel(horizonYears)}.`;
 }

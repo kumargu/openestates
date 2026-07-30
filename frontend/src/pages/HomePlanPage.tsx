@@ -8,6 +8,7 @@ import { NotebookSaveIcon } from "../components/notebook/NotebookSaveIcon.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
+import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
 import {
@@ -22,7 +23,7 @@ import {
   isExplicitlyReadyStatus,
   parsePlanDate,
 } from "../features/home-plan/financeEngine.ts";
-import { buildMonthlyPlanVerdict } from "../features/home-plan/monthlyPlanView.ts";
+import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
 import { buildPlanSnapshotNote } from "../features/home-plan/planSnapshot.ts";
 
 function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfile {
@@ -115,9 +116,20 @@ export function HomePlanPage() {
 
   const property = propertyData.property;
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
-  const defaultYear = Math.min(inputs.holdingPeriodYears, projection.points.length - 1);
+  const defaultYear = defaultPlanFocusYear(projection, inputs.holdingPeriodYears);
   const activeYear = previewYear ?? pinnedYear ?? defaultYear;
   const verdict = buildMonthlyPlanVerdict(projection, activeYear);
+  const whisperTheme = projection.extraEmisPerYear > 0
+    ? "prepay"
+    : verdict.buyWins
+      ? "buy"
+      : "rent";
+  const whisperSignature = [
+    whisperTheme,
+    verdict.activeYear,
+    projection.loanFreeYear ?? "open",
+    Math.round(verdict.advantage),
+  ].join(":");
   const planSnapshot = buildPlanSnapshotNote({
     propertyId: id,
     propertyTitle: property.title,
@@ -128,7 +140,15 @@ export function HomePlanPage() {
   const snapshotSaved = isPinned(planSnapshot.catalogKey);
 
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
+    setPreviewYear(null);
+    setPinnedYear(null);
     setInputs((current) => current ? { ...current, [key]: value } : current);
+  };
+
+  const updateExtraEmisPerYear = (count: number) => {
+    setPreviewYear(null);
+    setPinnedYear(null);
+    setExtraEmisPerYear(count);
   };
 
   const resetInputs = () => {
@@ -184,13 +204,14 @@ export function HomePlanPage() {
                   <NotebookSaveIcon filled={snapshotSaved} size={17} />
                 </button>
               )}
+              aside={<PlanWhisper key={whisperSignature} theme={whisperTheme} />}
             />
 
             <PlanAssumptionRail
               inputs={inputs}
               extraEmisPerYear={extraEmisPerYear}
               onInputChange={updateInput}
-              onExtraEmisChange={setExtraEmisPerYear}
+              onExtraEmisChange={updateExtraEmisPerYear}
               onReset={resetInputs}
             />
 

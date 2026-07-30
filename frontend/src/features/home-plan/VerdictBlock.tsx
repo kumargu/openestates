@@ -5,11 +5,13 @@ import type { MonthlyPlanVerdict } from "./monthlyPlanView.ts";
 type VerdictBlockProps = {
   verdict: MonthlyPlanVerdict;
   action?: ReactNode;
+  aside?: ReactNode;
 };
 
 export function VerdictBlock({
   verdict,
   action,
+  aside,
 }: VerdictBlockProps) {
   return (
     <header className="home-plan-verdict">
@@ -20,9 +22,7 @@ export function VerdictBlock({
           {" "}if you {verdict.choiceLabel}.
         </h1>
         {action && <div className="home-plan-verdict__action">{action}</div>}
-        <aside className="home-plan-verdict__aside">
-          <p className="home-plan-verdict__insight">{verdict.insight}</p>
-        </aside>
+        {aside && <aside className="home-plan-verdict__aside">{aside}</aside>}
       </div>
     </header>
   );

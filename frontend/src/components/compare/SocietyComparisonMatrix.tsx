@@ -38,7 +38,6 @@ type CanonicalRow = {
 type NoteRow = {
   id: NoteGroupId;
   label: string;
-  icon: string;
   section: "Access" | "Risks" | "Money" | "Reference";
   rank: number;
 };
@@ -85,22 +84,21 @@ type NoteGroupId =
 type NoteGroupDef = {
   id: NoteGroupId;
   label: string;
-  icon: string;
   section: NoteRow["section"];
   rank: number;
 };
 
 const NOTE_GROUPS: NoteGroupDef[] = [
-  { id: "nearby_access", label: "Nearby access", icon: "⌖", section: "Access", rank: 10 },
-  { id: "access_notes", label: "Daily access", icon: "⌁", section: "Access", rank: 40 },
-  { id: "commute_anchors", label: "Commute anchors", icon: "↔", section: "Access", rank: 50 },
-  { id: "open_spaces", label: "Open spaces", icon: "⌑", section: "Access", rank: 60 },
-  { id: "red_flags", label: "Red flags", icon: "!", section: "Risks", rank: 10 },
-  { id: "water", label: "Water and flood", icon: "~", section: "Risks", rank: 20 },
-  { id: "approach", label: "Approach", icon: "→", section: "Risks", rank: 30 },
-  { id: "money", label: "Money", icon: "₹", section: "Money", rank: 10 },
-  { id: "layout", label: "Plan and layout", icon: "□", section: "Reference", rank: 10 },
-  { id: "reference", label: "Other", icon: "·", section: "Reference", rank: 99 },
+  { id: "nearby_access", label: "Nearby access", section: "Access", rank: 10 },
+  { id: "access_notes", label: "Daily access", section: "Access", rank: 40 },
+  { id: "commute_anchors", label: "Commute anchors", section: "Access", rank: 50 },
+  { id: "open_spaces", label: "Open spaces", section: "Access", rank: 60 },
+  { id: "red_flags", label: "Red flags", section: "Risks", rank: 10 },
+  { id: "water", label: "Water and flood", section: "Risks", rank: 20 },
+  { id: "approach", label: "Approach", section: "Risks", rank: 30 },
+  { id: "money", label: "Money", section: "Money", rank: 10 },
+  { id: "layout", label: "Plan and layout", section: "Reference", rank: 10 },
+  { id: "reference", label: "Other", section: "Reference", rank: 99 },
 ];
 
 const NOTE_GROUP_BY_ID = new Map(NOTE_GROUPS.map((group) => [group.id, group]));
@@ -378,27 +376,13 @@ function compareEvidenceClusters(items: CompareEvidence[]): CompareEvidenceClust
     .map(([label, groupItems]) => ({ label, items: groupItems }));
 }
 
-function CanonicalRowIcon({ id }: { id: CanonicalRowId }) {
-  if (id === "projectScale") {
-    return (
-      <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-        <path d="M4.5 18.5h15M6.5 16V8.5h3V16M10.5 16V5.5h3V16M14.5 16v-5.5h3V16" />
-      </svg>
-    );
-  }
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true">
-      <path d="M12 7v5l3 2" />
-      <path d="M20 12a8 8 0 1 1-2.35-5.65" />
-      <path d="M18.5 4.5v3.8h-3.8" />
-    </svg>
-  );
-}
-
 function statusClassName(value: string): string {
   const normalized = value.toLocaleLowerCase("en-IN");
   if (normalized.includes("delivered") || normalized.includes("ready")) {
     return "compare-property-status compare-property-status--good";
+  }
+  if (normalized.includes("watch") || normalized.includes("caution")) {
+    return "compare-property-status compare-property-status--watch";
   }
   if (normalized.includes("delay")) {
     return "compare-property-status compare-property-status--risk";
@@ -615,9 +599,6 @@ function SocietyFactCard({
     <article className="compare-fact-card">
       {visible.map((item) => (
         <div key={item.row.id} className="compare-fact-card__row">
-          <span className="compare-fact-card__icon">
-            <CanonicalRowIcon id={item.row.id} />
-          </span>
           <span className="compare-fact-card__label">{item.row.label}</span>
           {item.value && <CanonicalValue row={item.row} value={item.value} />}
         </div>
@@ -737,7 +718,6 @@ export function SocietyComparisonMatrix({
         return {
           id,
           label: group?.label ?? id,
-          icon: group?.icon ?? "·",
           section: group?.section ?? "Reference",
           rank: group?.rank ?? 99,
         };
@@ -818,9 +798,6 @@ export function SocietyComparisonMatrix({
               {rows.map((row) => (
                 <article key={row.id} className="compare-theme">
                   <header className="compare-theme__head">
-                    <span className="compare-topics__label-icon" aria-hidden="true">
-                      {row.icon}
-                    </span>
                     <strong>{row.label}</strong>
                   </header>
                   <div className={`compare-topic-columns compare-topic-columns--homes-${columns.length}`}>
