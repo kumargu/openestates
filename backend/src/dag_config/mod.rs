@@ -18,6 +18,7 @@
 //! **Instances** (society:*, road:*, fact values) live in `data/lake/` Parquet only.
 //! See `app/config/coverage.json` for full audit.
 
+mod community_themes;
 mod evidence_sections;
 mod fact_registry;
 mod loader;
@@ -29,6 +30,11 @@ mod search_guardrails;
 mod search_intent;
 mod ui_surfaces;
 
+pub use community_themes::{
+    community_themes_config, community_themes_path, load_community_themes,
+    load_community_themes_from_path, CommunityEmbeddingExpansion,
+    CommunityEmbeddingExpansionConfig, CommunityThemeDefinition, CommunityThemesFile,
+};
 pub use evidence_sections::{
     evidence_sections_config, evidence_sections_path, load_evidence_sections,
     load_evidence_sections_from_path, ContextFactDefinition, EvidenceSectionDefinition,

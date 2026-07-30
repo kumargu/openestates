@@ -38,6 +38,10 @@ pub struct ContextFactDefinition {
     pub scope: String,
     pub relationship: String,
     #[serde(default)]
+    pub livability_lens: Option<String>,
+    #[serde(default)]
+    pub livability_label: Option<String>,
+    #[serde(default)]
     pub max_values: Option<usize>,
 }
 
@@ -135,6 +139,26 @@ fn validate_evidence_sections(config: &[EvidenceSectionDefinition]) -> Result<()
                     "evidence section {kind} contains an incomplete fact definition"
                 )));
             }
+            if fact
+                .livability_label
+                .as_deref()
+                .is_some_and(|label| label.trim().is_empty())
+            {
+                return Err(DagConfigError::InvalidConfig(format!(
+                    "evidence section {kind} contains a blank livability_label"
+                )));
+            }
+            if let Some(lens) = fact.livability_lens.as_deref() {
+                if !matches!(
+                    lens,
+                    "operating" | "risk" | "positive" | "lifecycle" | "judgment"
+                ) {
+                    return Err(DagConfigError::InvalidConfig(format!(
+                        "evidence section {kind} fact {} has unsupported livability_lens {lens}",
+                        fact.key
+                    )));
+                }
+            }
         }
     }
 
@@ -152,6 +176,16 @@ mod tests {
         assert!(sections.iter().any(|section| {
             section.kind == "community" && section.derived.as_deref() == Some("community_pulse")
         }));
+        let nearby_schools = sections
+            .iter()
+            .flat_map(|section| &section.facts)
+            .find(|fact| fact.key == "nearby_schools")
+            .expect("nearby_schools should be configured");
+        assert_eq!(nearby_schools.livability_lens.as_deref(), Some("positive"));
+        assert_eq!(
+            nearby_schools.livability_label.as_deref(),
+            Some("school access")
+        );
     }
 
     #[test]
