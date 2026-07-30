@@ -3,14 +3,13 @@ import { Helmet } from "react-helmet-async";
 import { useParams } from "react-router-dom";
 import { getProperty } from "../lib/api.ts";
 import type { PropertyDetailResponse } from "../lib/types.ts";
-import { useNotebook } from "../hooks/useNotebook.ts";
 import { PageState } from "../components/PageState.tsx";
 import { NotebookSaveIcon } from "../components/notebook/NotebookSaveIcon.tsx";
+import { useNotebook } from "../hooks/useNotebook.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { PropertyOrigin } from "../features/home-plan/PropertyOrigin.tsx";
 import { VerdictBlock } from "../features/home-plan/VerdictBlock.tsx";
-import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
 import {
   buildBaselinePlanInputs,
   calculateProjection,
@@ -23,6 +22,7 @@ import {
   isExplicitlyReadyStatus,
   parsePlanDate,
 } from "../features/home-plan/financeEngine.ts";
+import { buildMonthlyPlanVerdict } from "../features/home-plan/monthlyPlanView.ts";
 import { buildPlanSnapshotNote } from "../features/home-plan/planSnapshot.ts";
 
 function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfile {
@@ -73,13 +73,13 @@ function LoadingPlan() {
 
 export function HomePlanPage() {
   const { id } = useParams<{ id: string }>();
+  const { isPinned, toggleFact } = useNotebook();
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
-  const { isPinned, toggleFact } = useNotebook();
 
   useEffect(() => {
     if (!id) return;
@@ -89,6 +89,9 @@ export function HomePlanPage() {
         if (!active) return;
         setPropertyData(data);
         setInputs(buildBaselinePlanInputs(data.property.price, constructionProfileFor(data)));
+        setPreviewYear(null);
+        setPinnedYear(null);
+        setExtraEmisPerYear(0);
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -114,16 +117,12 @@ export function HomePlanPage() {
   const baseline = buildBaselinePlanInputs(property.price, constructionProfileFor(propertyData));
   const defaultYear = Math.min(inputs.holdingPeriodYears, projection.points.length - 1);
   const activeYear = previewYear ?? pinnedYear ?? defaultYear;
-  const activePoint = projection.points[Math.min(activeYear, projection.points.length - 1)];
-  const buyWins = activePoint.buyNetWorth >= activePoint.rentNetWorth;
-  const advantage = Math.abs(activePoint.buyNetWorth - activePoint.rentNetWorth);
+  const verdict = buildMonthlyPlanVerdict(projection, activeYear);
   const planSnapshot = buildPlanSnapshotNote({
     propertyId: id,
     inputs,
     projection,
-    activeYear,
-    activePoint,
-    extraEmisPerYear,
+    activeYear: verdict.activeYear,
   });
   const snapshotSaved = isPinned(planSnapshot.catalogKey);
 
@@ -131,14 +130,14 @@ export function HomePlanPage() {
     setInputs((current) => current ? { ...current, [key]: value } : current);
   };
 
-  const resetPlan = () => {
+  const resetInputs = () => {
     setInputs(baseline);
-    setExtraEmisPerYear(0);
-    setPinnedYear(null);
     setPreviewYear(null);
+    setPinnedYear(null);
+    setExtraEmisPerYear(0);
   };
 
-  const savePlanSnapshot = () => {
+  const toggleSnapshot = () => {
     toggleFact({
       propertyId: id,
       catalogKey: planSnapshot.catalogKey,
@@ -151,7 +150,7 @@ export function HomePlanPage() {
   };
 
   return (
-    <div className="home-plan-shell home-plan-shell--view-net-worth">
+    <div className="home-plan-shell">
       <Helmet>
         <title>{property.title} — {BUY_VS_RENT.pageTitle} | OpenEstates</title>
         <meta name="description" content={`Compare buying ${property.title} with renting and investing over time.`} />
@@ -172,20 +171,16 @@ export function HomePlanPage() {
             </section>
 
             <VerdictBlock
-              activeYear={activeYear}
-              buyWins={buyWins}
-              advantage={advantage}
-              aside={<PlanWhisper />}
+              verdict={verdict}
               action={(
                 <button
                   type="button"
                   className={`home-plan-snapshot-button${snapshotSaved ? " is-saved" : ""}`}
+                  onClick={toggleSnapshot}
                   aria-label={snapshotSaved ? "Remove plan snapshot" : "Save plan snapshot"}
-                  aria-pressed={snapshotSaved}
-                  title={snapshotSaved ? "Saved" : "Save"}
-                  onClick={savePlanSnapshot}
+                  title={snapshotSaved ? "Remove plan snapshot" : "Save plan snapshot"}
                 >
-                  <NotebookSaveIcon filled={snapshotSaved} size={18} />
+                  <NotebookSaveIcon filled={snapshotSaved} size={17} />
                 </button>
               )}
             />
@@ -195,13 +190,13 @@ export function HomePlanPage() {
               extraEmisPerYear={extraEmisPerYear}
               onInputChange={updateInput}
               onExtraEmisChange={setExtraEmisPerYear}
-              onReset={resetPlan}
+              onReset={resetInputs}
             />
 
             <section className="home-plan-stage" aria-label="Projection over time">
               <PlanGraph
                 projection={projection}
-                activeYear={activeYear}
+                activeYear={verdict.activeYear}
                 onPreviewYearChange={setPreviewYear}
                 onPinYear={setPinnedYear}
               />

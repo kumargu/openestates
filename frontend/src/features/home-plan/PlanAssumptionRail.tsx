@@ -163,7 +163,7 @@ export function PlanAssumptionRail({
         <div className="home-plan-inline-studio__buy">
           <PlanInput
             label="Monthly EMI"
-            min={0}
+            min={1}
             step={5}
             prefix="₹"
             suffix="K / mo"

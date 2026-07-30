@@ -1,10 +1,10 @@
 /**
  * Buyer notebook — local persistence until a transactional API exists.
  *
- * Rule: labels are the join key.
- * - UI picks mint labels from structured card data (layer + distance).
+ * Rule: labels are v2 compatibility metadata, not the durable cross-surface contract.
+ * - UI still mints labels from structured card data while Notebook remains local.
  * - Handwritten notes start with no labels → Add-note only.
- * - Compare joins homes on shared compare-join labels.
+ * - Shared DecisionFacet projections carry the semantic Compare contract.
  * - Some labels organize only (community, legal) and never join Compare.
  */
 
@@ -19,7 +19,7 @@ export const MAX_LABELS_PER_NOTE = 4;
 
 export type NotebookNoteKind = "fact" | "plan" | "selection" | "handwritten";
 
-/** Stable label ids used as Compare join keys. */
+/** Stable v2 label ids retained for Notebook organization and migration. */
 export type NotebookLabelId = string;
 
 export type NotebookLabelDef = {
@@ -435,6 +435,42 @@ export function toggleCatalogNote(input: {
   return writeNotebook({
     ...withProp,
     notes: [...withProp.notes, note],
+  });
+}
+
+export function upsertCatalogNote(input: {
+  propertyId: string;
+  catalogKey: string;
+  title: string;
+  labels: NotebookLabelId[];
+  detail?: string;
+  source?: string;
+  kind?: NotebookNoteKind;
+}): NotebookState {
+  const state = ensureProperty(readNotebook(), input.propertyId);
+  const existing = state.notes.find((note) => note.catalogKey === input.catalogKey);
+  const nextNote: NotebookNote = {
+    id: existing?.id ?? noteId(),
+    propertyId: input.propertyId,
+    title: input.title,
+    detail: input.detail,
+    source: input.source,
+    kind: input.kind ?? "fact",
+    catalogKey: input.catalogKey,
+    labels: uniqueLabels(input.labels),
+    createdAt: existing?.createdAt ?? Date.now(),
+  };
+
+  if (existing) {
+    return writeNotebook({
+      ...state,
+      notes: state.notes.map((note) => note.id === existing.id ? nextNote : note),
+    });
+  }
+
+  return writeNotebook({
+    ...state,
+    notes: [...state.notes, nextNote],
   });
 }
 

@@ -25,6 +25,10 @@ function graphSeries(projection: PlanProjection): GraphSeries[] {
   ];
 }
 
+function rateLabel(value: number): string {
+  return `${Number(value.toFixed(1)).toLocaleString("en-IN")}%`;
+}
+
 export function PlanGraph({
   projection,
   activeYear,
@@ -46,7 +50,7 @@ export function PlanGraph({
   const minValue = rawMinValue < 0 ? rawMinValue - valuePadding : 0;
   const maxValue = rawMaxValue + valuePadding;
   const valueRange = maxValue - minValue;
-  const x = (year: number) => GRAPH_INSET.left + (year / maxYear) * plotWidth;
+  const x = (year: number) => GRAPH_INSET.left + (maxYear <= 0 ? 0 : (year / maxYear) * plotWidth);
   const y = (value: number) => (
     GRAPH_INSET.top + plotHeight - ((value - minValue) / valueRange) * plotHeight
   );
@@ -90,8 +94,8 @@ export function PlanGraph({
       <div className="home-plan-graph__heading">
         <h2>Buying vs Renting</h2>
         <div className="home-plan-graph__assumptions" aria-label="Projection assumptions">
-          <span>6% yearly home appreciation</span>
-          <span>10% yearly rent increase</span>
+          <span>{rateLabel(projection.assumptions.homeAppreciationRate)} yearly home appreciation</span>
+          <span>{rateLabel(projection.assumptions.rentInflationRate)} yearly rent increase</span>
         </div>
       </div>
       <svg
@@ -138,7 +142,7 @@ export function PlanGraph({
               y2={GRAPH_INSET.top + plotHeight - 22}
             />
             <text x={loanFreeX} y={GRAPH_INSET.top + plotHeight - 8} textAnchor="middle">
-              Loan-free-Yay!
+              Loan-free
             </text>
           </g>
         )}
