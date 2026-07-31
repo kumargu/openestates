@@ -39,6 +39,7 @@ from pipeline.skills.search_reddit import (
 )
 from pipeline.sources.external_listings import (
     collect_external_listings,
+    external_listing_source_pages,
     magicbricks_source_pages,
     squareyards_source_pages,
 )
@@ -693,6 +694,62 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(len(output["records"]), 1)
         self.assertEqual(output["records"][0]["entity_id"], "society:overpass-succeeds")
 
+    def test_collect_stormwater_drains_keeps_successful_rows_when_google_fallback_unavailable(self):
+        request = {
+            "partition": {"parts": [["dt", "2026-07-27"]]},
+            "planned_at": "2026-07-27T09:00:00Z",
+            "source_entities": [
+                {
+                    "entity_id": "society:overpass-fails",
+                    "name": "Overpass Fails",
+                    "city": "Bengaluru",
+                    "latitude": 12.9700,
+                    "longitude": 77.7500,
+                },
+                {
+                    "entity_id": "society:overpass-succeeds",
+                    "name": "Overpass Succeeds",
+                    "city": "Bengaluru",
+                    "latitude": 12.9800,
+                    "longitude": 77.7600,
+                },
+            ],
+        }
+        overpass = {
+            "elements": [
+                {
+                    "type": "way",
+                    "id": 654,
+                    "tags": {"waterway": "drain", "name": "Whitefield Rajakaluve"},
+                    "geometry": [
+                        {"lat": 12.9795, "lon": 77.7595},
+                        {"lat": 12.9805, "lon": 77.7605},
+                    ],
+                }
+            ]
+        }
+        calls = []
+
+        def fetch(_url, _query):
+            calls.append(_query)
+            if len(calls) == 1:
+                raise HTTPError("https://overpass.example", 504, "timeout", None, None)
+            return overpass
+
+        with patch(
+            "pipeline.collect_asset_sources.google_stormwater_records",
+            side_effect=ValueError("GOOGLE_PLACES_API_KEY is required"),
+        ):
+            output = collect_stormwater_drains(request, fetch=fetch)
+
+        self.assertEqual(len(output["records"]), 1)
+        self.assertEqual(output["records"][0]["entity_id"], "society:overpass-succeeds")
+        watermarks = {
+            watermark["source"]: watermark["high_watermark"]
+            for watermark in output["source_watermarks"]
+        }
+        self.assertIn("openstreetmap_stormwater_partial_failures", watermarks)
+
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
         with patch(
@@ -865,6 +922,86 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["observed_at"], "2026-07-16T09:30:00Z")
         self.assertNotIn("confidence", listing)
 
+    def test_external_listing_collection_normalizes_magicbricks_html(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
+                            {
+                                "source_name": "MagicBricks",
+                                "source_url": "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+                                "html": """
+                                    <html><body>
+                                      <h2 class="mb-srp__card--title" title="3 BHK Flat  for Sale in  Example Green, Hoodi, Bangalore">3 BHK Flat</h2>
+                                      <div class="mb-srp__card__summary--label">Carpet Area</div>
+                                      <div class="mb-srp__card__summary--value">1,800 sqft</div>
+                                      <div class="mb-srp__card__summary--label">Floor</div>
+                                      <div class="mb-srp__card__summary--value">12 out of 20</div>
+                                      <div class="mb-srp__card__summary--label">Bathroom</div>
+                                      <div class="mb-srp__card__summary--value">3</div>
+                                      <div class="mb-srp__card__price--amount"><span class="rupees">₹</span>2.08 Cr</div>
+                                      <div class="mb-srp__card__price--size"><span class="rupees">₹</span>11556 per sqft</div>
+                                    </body></html>
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["source_name"], "MagicBricks")
+        self.assertEqual(listing["price"], 20_800_000)
+        self.assertEqual(listing["area_sqft"], 1800)
+        self.assertEqual(listing["area_type"], "carpet")
+        self.assertEqual(listing["price_per_sqft_min"], 11556)
+        self.assertEqual(listing["bathrooms"], 3.0)
+        self.assertEqual(listing["floor"], "12 out of 20")
+        self.assertEqual(listing["locality"], "Hoodi")
+
+    def test_external_listing_alias_page_keeps_canonical_society_name(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green Phase 2",
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
+                            {
+                                "source_name": "MagicBricks",
+                                "query_society_name": "Example Green",
+                                "source_url": "https://www.magicbricks.com/project-example-green-for-sale-in-bangalore-pppfs",
+                                "html": """
+                                    <html><body>
+                                      <h2 class="mb-srp__card--title" title="3 BHK Flat for Sale in Example Green, Hoodi, Bangalore">3 BHK Flat</h2>
+                                      <div class="mb-srp__card__summary--label">Super Area</div>
+                                      <div class="mb-srp__card__summary--value">1,800 sqft</div>
+                                      <div class="mb-srp__card__price--amount"><span class="rupees">₹</span>2.08 Cr</div>
+                                    </body></html>
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["society"], "Example Green Phase 2")
+        self.assertEqual(listing["locality"], "Hoodi")
+
     def test_external_listing_collection_keeps_rent_separate(self):
         output = collect_asset_sources(
             {
@@ -984,6 +1121,26 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
         self.assertFalse(any("4-bhk-flats-for-rent" in url for url in urls))
 
+    def test_external_listing_queries_try_base_project_for_phase_names(self):
+        pages = external_listing_source_pages(
+            {"city": "Bengaluru"},
+            "Embassy Verde Phase 2",
+        )
+        urls = [page["source_url"] for page in pages]
+
+        self.assertIn(
+            "https://www.magicbricks.com/project-embassy-verde-phase-2-for-sale-in-bangalore-pppfs",
+            urls,
+        )
+        self.assertIn(
+            "https://www.magicbricks.com/project-embassy-verde-for-sale-in-bangalore-pppfs",
+            urls,
+        )
+        self.assertIn(
+            "https://www.squareyards.com/sale/resale-properties-in-embassy-verde-bangalore",
+            urls,
+        )
+
     def test_squareyards_uses_focused_project_pages(self):
         pages = squareyards_source_pages(
             {
@@ -1059,6 +1216,106 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(listing["area_sqft"], 1800)
         self.assertEqual(listing["area_type"], "built-up")
         self.assertEqual(listing["bathrooms"], 3.0)
+
+    def test_external_listing_collection_normalizes_squareyards_html(self):
+        output = collect_asset_sources(
+            {
+                "partition": {"parts": [["dt", "2026-07-16"]]},
+                "planned_at": "2026-07-16T09:30:00Z",
+                "requested_assets": ["external_listings_weekly"],
+                "source_entities": [
+                    {
+                        "entity_id": "society:example-green",
+                        "name": "Example Green",
+                        "area": "Whitefield",
+                        "external_listing_source_pages": [
+                            {
+                                "source_name": "SquareYards",
+                                "source_url": "https://www.squareyards.com/sale/resale-properties-in-example-green-bangalore",
+                                "html": """
+                                    <html><body>
+                                      <article class="listing-card single-box-conversion">
+                                        <span class="project-name">Example Green</span>
+                                        <h2 class="heading">
+                                          <span>3 BHK Flat for Sale in Hoodi, Bangalore</span>
+                                        </h2>
+                                        <p class="listing-price"><strong>₹ 1.4 Cr</strong></p>
+                                        <dl class="listing-attributes">
+                                          <div class="attribute-item"><dt><em class="icon-bed"></em>Config</dt><dd>3 BHK + 3 Bath</dd></div>
+                                          <div class="attribute-item unit-drop"><dt><em class="icon-unit-size"></em>Area <small>Built-up Area</small></dt><dd><div class="unit-value avail-area" data-area="1800">1800</div></dd></div>
+                                          <div class="attribute-item"><dt><em class="icon-stairs"></em>Floor</dt><dd>10th of 20 Floors</dd></div>
+                                        </dl>
+                                      </article>
+                                    </body></html>
+                                """,
+                            }
+                        ],
+                    }
+                ],
+            }
+        )
+
+        listing = output["external_listings_weekly"]["records"][0]
+        self.assertEqual(listing["source_name"], "SquareYards")
+        self.assertEqual(listing["price"], 14_000_000)
+        self.assertEqual(listing["area_sqft"], 1800)
+        self.assertEqual(listing["area_type"], "built-up")
+        self.assertEqual(listing["bathrooms"], 3.0)
+        self.assertEqual(listing["floor"], "10th of 20 Floors")
+        self.assertEqual(listing["locality"], "Hoodi")
+
+    def test_external_listing_collection_falls_back_to_direct_html_fetch(self):
+        class Response:
+            status = 200
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def read(self):
+                return b"""
+                    <html><body>
+                      <h2 class="mb-srp__card--title" title="3 BHK Flat for Sale in Example Green, Whitefield, Bangalore">3 BHK Flat</h2>
+                      <div class="mb-srp__card__summary--label">Super Area</div>
+                      <div class="mb-srp__card__summary--value">2,000 sqft</div>
+                      <div class="mb-srp__card__price--amount"><span class="rupees">\xe2\x82\xb9</span>2.5 Cr</div>
+                    </body></html>
+                """
+
+        def fake_urlopen(request, timeout):
+            url = request.full_url
+            if url.startswith("https://r.jina.ai/"):
+                raise HTTPError(url, 403, "Forbidden", {}, BytesIO())
+            return Response()
+
+        with patch(
+            "pipeline.sources.external_listings.urllib.request.urlopen",
+            side_effect=fake_urlopen,
+        ):
+            output = collect_external_listings(
+                {
+                    "partition": {"parts": [["dt", "2026-07-16"]]},
+                    "planned_at": "2026-07-16T09:30:00Z",
+                    "source_entities": [
+                        {
+                            "entity_id": "society:example-green",
+                            "name": "Example Green",
+                            "area": "Whitefield",
+                            "city": "Bengaluru",
+                        }
+                    ],
+                }
+            )
+
+        listing = output["records"][0]
+        self.assertEqual(listing["price"], 25_000_000)
+        watermarks = {
+            watermark["source"]: watermark["high_watermark"]
+            for watermark in output["source_watermarks"]
+        }
+        self.assertIn("direct_fallbacks=", watermarks["external_listing_fetch_coverage"])
 
     def test_external_listing_collection_strips_markdown_images_from_locality(self):
         output = collect_asset_sources(
