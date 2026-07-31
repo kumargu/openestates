@@ -135,6 +135,7 @@ crawl/source input -> normalize -> DAG asset -> serving bundle -> Rust API -> UI
 Rules:
 - If a fact appears in the UI, it should come from a promoted DAG-backed serving bundle or from a deterministic computation over DAG facts.
 - Joins against heavy source datasets must happen offline during DAG materialization, not on the request path. For example, society coordinates should be joined to groundwater polygons, drain networks, flood points, metro updates, or other source layers ahead of time, then served as scoped facts with provenance.
+- Canonicalizing entity IDs must preserve runtime alias lookup across facts, graph edges, and spatial/proximity indexes; test each path using the ID carried by runtime properties.
 - Missing evidence should be tracked internally for enrichment, not rendered as raw "unknown/gap" copy to users.
 - Legacy local data stores must not silently mix with DAG outputs; mixed truth makes quality impossible to measure.
 - Area Tracker must stay first-class and must read from the same DAG-backed facts as property details and search.
