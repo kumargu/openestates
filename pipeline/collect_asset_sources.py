@@ -407,36 +407,57 @@ def collect_stormwater_drains(
                 error,
             )
     if overpass_failures:
-        fallback_records = google_stormwater_records(
-            fallback_subjects,
-            max_distance,
-            collector,
-            planned_at,
-        )
+        fallback_error = None
+        try:
+            fallback_records = google_stormwater_records(
+                fallback_subjects,
+                max_distance,
+                collector,
+                planned_at,
+            )
+        except Exception as error:
+            fallback_records = []
+            fallback_error = "{}: {}".format(type(error).__name__, error)
         if fallback_records:
             records.extend(fallback_records)
         elif len(overpass_failures) == len(subjects):
-            raise ValueError(
-                "stormwater Overpass failed for all subjects and Google fallback returned no records: {}".format(
-                    "; ".join(overpass_failures[:5])
+            message = "stormwater Overpass failed for all subjects"
+            if fallback_error:
+                message = "{} and Google fallback failed: {}".format(
+                    message, fallback_error
                 )
-            )
+            else:
+                message = "{} and Google fallback returned no records".format(message)
+            raise ValueError("{}: {}".format(message, "; ".join(overpass_failures[:5])))
     records = dedupe_spatial_records(records, "drain_id")
     watermark_source = str(collector.get("source_id") or "openstreetmap_stormwater")
     if not records:
         watermark_source = "{}_empty".format(watermark_source)
+    watermarks = [
+        {
+            "source": watermark_source,
+            "high_watermark": "query_sha256:{};records={}".format(
+                hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
+                len(records),
+            ),
+        }
+    ]
+    if overpass_failures:
+        watermarks.append(
+            {
+                "source": "{}_partial_failures".format(
+                    str(collector.get("source_id") or "openstreetmap_stormwater")
+                ),
+                "high_watermark": "failed_subjects={};fallback_subjects={}".format(
+                    len(overpass_failures),
+                    len(fallback_subjects),
+                ),
+            }
+        )
     return {
         "snapshot_date": snapshot_date,
         "records": records,
-        "source_watermarks": [
-            {
-                "source": watermark_source,
-                "high_watermark": "query_sha256:{};records={}".format(
-                    hashlib.sha256(";".join(query_hashes).encode("utf-8")).hexdigest(),
-                    len(records),
-                ),
-            }
-        ],
+        "source_watermarks": watermarks,
     }
 
 

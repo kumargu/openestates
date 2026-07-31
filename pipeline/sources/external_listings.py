@@ -9,9 +9,11 @@ import math
 import os
 import re
 import statistics
+import html as html_lib
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -46,13 +48,25 @@ PRICE_LINE_RE = re.compile(
 PPSF_LINE_RE = re.compile(r"^₹\s*[\d,]+(?:\.\d+)?\s*per\s+sqft\s*$", re.IGNORECASE)
 
 
+@dataclass(frozen=True)
+class ListingFetchResult:
+    text: Optional[str]
+    fetched_url: str
+    mode: str
+    error: Optional[str] = None
+    fallback_error: Optional[str] = None
+
+
 def collect_external_listings(request: Dict[str, Any]) -> Dict[str, Any]:
     observed_at = normalized_planned_at(request)
     snapshot_date = partition_values(request).get("dt") or observed_at[:10]
     records = []  # type: List[Dict[str, Any]]
+    fetch_diagnostics = []  # type: List[Dict[str, Any]]
 
     for input_data in request.get("source_entities", []):
-        records.extend(records_for_entity(input_data, observed_at, request))
+        records.extend(
+            records_for_entity(input_data, observed_at, request, fetch_diagnostics)
+        )
 
     records = dedupe_records(records)
     records.sort(
@@ -65,6 +79,7 @@ def collect_external_listings(request: Dict[str, Any]) -> Dict[str, Any]:
     )
     watermarks = source_watermarks(records, "external_listing", observed_at)
     watermarks.extend(listing_coverage_watermarks(records, request, observed_at))
+    watermarks.extend(listing_fetch_watermarks(fetch_diagnostics, observed_at))
     return {
         "snapshot_date": snapshot_date,
         "records": records,
@@ -73,7 +88,10 @@ def collect_external_listings(request: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def records_for_entity(
-    input_data: Dict[str, Any], observed_at: str, request: Dict[str, Any]
+    input_data: Dict[str, Any],
+    observed_at: str,
+    request: Dict[str, Any],
+    fetch_diagnostics: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
     entity_id = optional_string(input_data.get("entity_id"))
     society_name = optional_string(
@@ -99,22 +117,61 @@ def records_for_entity(
         source_name = source_name_from_page(source_page)
         query_kind = listing_type_from_page(source_page)
         if page_text is None:
-            page_text = fetch_listing_page_text(source_url, source_name)
+            fetch_result = fetch_listing_page(source_url, source_name)
+            page_text = fetch_result.text
+            if fetch_diagnostics is not None:
+                fetch_diagnostics.append(
+                    {
+                        "entity_id": entity_id,
+                        "source_name": source_name,
+                        "source_url": source_url,
+                        "fetched_url": fetch_result.fetched_url,
+                        "mode": fetch_result.mode,
+                        "fetched": page_text is not None,
+                        "error": fetch_result.error,
+                        "fallback_error": fetch_result.fallback_error,
+                    }
+                )
+        elif fetch_diagnostics is not None:
+            fetch_diagnostics.append(
+                {
+                    "entity_id": entity_id,
+                    "source_name": source_name,
+                    "source_url": source_url,
+                    "fetched_url": source_url,
+                    "mode": "provided",
+                    "fetched": True,
+                    "error": None,
+                    "fallback_error": None,
+                }
+            )
         if not page_text:
             continue
-        observations.extend(
-            listing_observations_from_page_text(
-                page_text,
-                entity_id=entity_id,
-                project_key=optional_string(input_data.get("project_key")),
-                society_name=society_name,
-                fallback_locality=optional_string(input_data.get("area")),
-                source_url=source_url,
-                source_name=source_name,
-                query_kind=query_kind,
-                observed_at=observed_at,
-            )
+        match_society_name = optional_string(source_page.get("query_society_name")) or society_name
+        page_observations = listing_observations_from_page_text(
+            page_text,
+            entity_id=entity_id,
+            project_key=optional_string(input_data.get("project_key")),
+            society_name=match_society_name,
+            output_society_name=society_name,
+            fallback_locality=optional_string(input_data.get("area")),
+            source_url=source_url,
+            source_name=source_name,
+            query_kind=query_kind,
+            observed_at=observed_at,
         )
+        if fetch_diagnostics is not None:
+            fetch_diagnostics.append(
+                {
+                    "entity_id": entity_id,
+                    "source_name": source_name,
+                    "source_url": source_url,
+                    "mode": "parse",
+                    "fetched": True,
+                    "observations": len(page_observations),
+                }
+            )
+        observations.extend(page_observations)
 
     return aggregate_listing_records(observations)
 
@@ -139,9 +196,28 @@ def explicit_source_pages(input_data: Dict[str, Any]) -> List[Dict[str, Any]]:
 def external_listing_source_pages(
     input_data: Dict[str, Any], society_name: str
 ) -> List[Dict[str, Any]]:
-    return magicbricks_source_pages(input_data, society_name) + squareyards_source_pages(
-        input_data, society_name
-    )
+    pages = []
+    for query_name in listing_query_name_variants(society_name):
+        for page in magicbricks_source_pages(input_data, query_name):
+            page["query_society_name"] = query_name
+            pages.append(page)
+        for page in squareyards_source_pages(input_data, query_name):
+            page["query_society_name"] = query_name
+            pages.append(page)
+    return dedupe_source_pages(pages)
+
+
+def listing_query_name_variants(society_name: str) -> List[str]:
+    variants = [society_name]
+    phase_stripped = re.sub(
+        r"\s+(?:phase|ph)\s*[-:]?\s*(?:\d+|[ivxlcdm]+)\s*$",
+        "",
+        society_name,
+        flags=re.IGNORECASE,
+    ).strip()
+    if phase_stripped and phase_stripped.lower() != society_name.lower():
+        variants.append(phase_stripped)
+    return variants
 
 
 def magicbricks_source_pages(
@@ -276,6 +352,10 @@ def configuration_bhk(value: Any) -> Optional[float]:
 
 
 def fetch_listing_page_text(source_url: str, source_name: str) -> Optional[str]:
+    return fetch_listing_page(source_url, source_name).text
+
+
+def fetch_listing_page(source_url: str, source_name: str) -> ListingFetchResult:
     if source_name.lower() == "squareyards":
         reader_prefix = os.environ.get("OPENESTATES_SQUAREYARDS_READER_PREFIX")
         if reader_prefix is None:
@@ -285,13 +365,46 @@ def fetch_listing_page_text(source_url: str, source_name: str) -> Optional[str]:
         if reader_prefix is None:
             reader_prefix = MAGICBRICKS_READER_PREFIX
     fetch_url = "{}{}".format(reader_prefix, source_url) if reader_prefix else source_url
+    text, error = fetch_listing_url(fetch_url)
+    if text is not None:
+        return ListingFetchResult(text=text, fetched_url=fetch_url, mode="reader" if reader_prefix else "direct")
+    if reader_prefix:
+        fallback_text, fallback_error = fetch_listing_url(source_url)
+        if fallback_text is not None:
+            return ListingFetchResult(
+                text=fallback_text,
+                fetched_url=source_url,
+                mode="direct_fallback",
+                error=error,
+            )
+        return ListingFetchResult(
+            text=None,
+            fetched_url=source_url,
+            mode="failed",
+            error=error,
+            fallback_error=fallback_error,
+        )
+    return ListingFetchResult(text=None, fetched_url=fetch_url, mode="failed", error=error)
+
+
+def fetch_listing_url(fetch_url: str) -> Tuple[Optional[str], Optional[str]]:
     request = urllib.request.Request(fetch_url, headers=HEADERS)
     timeout = optional_float(os.environ.get("OPENESTATES_LISTING_FETCH_TIMEOUT")) or 30.0
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.read().decode("utf-8", "replace")
-    except (OSError, urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
-        return None
+            return response.read().decode("utf-8", "replace"), None
+    except (OSError, urllib.error.URLError, urllib.error.HTTPError, TimeoutError) as exc:
+        return None, fetch_error_summary(exc)
+
+
+def fetch_error_summary(exc: BaseException) -> str:
+    status = getattr(exc, "code", None)
+    if status is not None:
+        return "{}:{}".format(type(exc).__name__, status)
+    reason = getattr(exc, "reason", None)
+    if reason:
+        return "{}:{}".format(type(exc).__name__, reason)
+    return type(exc).__name__
 
 
 def listing_observations_from_page_text(
@@ -305,9 +418,23 @@ def listing_observations_from_page_text(
     source_name: str,
     query_kind: str,
     observed_at: str,
+    output_society_name: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     observations = []
     matches = list(LISTING_HEADING_RE.finditer(page_text))
+    if not matches and looks_like_html(page_text):
+        return html_listing_observations_from_page_text(
+            page_text,
+            entity_id=entity_id,
+            project_key=project_key,
+            society_name=society_name,
+            fallback_locality=fallback_locality,
+            source_url=source_url,
+            source_name=source_name,
+            query_kind=query_kind,
+            observed_at=observed_at,
+            output_society_name=output_society_name or society_name,
+        )
     for index, match in enumerate(matches):
         block_start = match.end()
         block_end = matches[index + 1].start() if index + 1 < len(matches) else len(page_text)
@@ -347,12 +474,350 @@ def listing_observations_from_page_text(
                 "bhk": bhk,
                 "bathrooms": bathrooms_from_block(block),
                 "floor": labeled_text(block, "Floor"),
-                "society": society_name,
+                "society": output_society_name or society_name,
                 "locality": locality,
                 "observed_at": observed_at,
             }
         )
     return observations
+
+
+def html_listing_observations_from_page_text(
+    page_text: str,
+    *,
+    entity_id: str,
+    project_key: Optional[str],
+    society_name: str,
+    fallback_locality: Optional[str],
+    source_url: str,
+    source_name: str,
+    query_kind: str,
+    observed_at: str,
+    output_society_name: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    if source_name.lower() == "squareyards":
+        return squareyards_html_listing_observations(
+            page_text,
+            entity_id=entity_id,
+            project_key=project_key,
+            society_name=society_name,
+            fallback_locality=fallback_locality,
+            source_url=source_url,
+            source_name=source_name,
+            query_kind=query_kind,
+            observed_at=observed_at,
+            output_society_name=output_society_name or society_name,
+        )
+    return magicbricks_html_listing_observations(
+        page_text,
+        entity_id=entity_id,
+        project_key=project_key,
+        society_name=society_name,
+        fallback_locality=fallback_locality,
+        source_url=source_url,
+        source_name=source_name,
+        query_kind=query_kind,
+        observed_at=observed_at,
+        output_society_name=output_society_name or society_name,
+    )
+
+
+def magicbricks_html_listing_observations(
+    page_text: str,
+    *,
+    entity_id: str,
+    project_key: Optional[str],
+    society_name: str,
+    fallback_locality: Optional[str],
+    source_url: str,
+    source_name: str,
+    query_kind: str,
+    observed_at: str,
+    output_society_name: str,
+) -> List[Dict[str, Any]]:
+    heading_re = re.compile(
+        r'<h2[^>]+class="[^"]*mb-srp__card--title[^"]*"[^>]+title="(?P<title>[^"]+)"',
+        re.IGNORECASE,
+    )
+    heading_matches = list(heading_re.finditer(page_text))
+    observations = []
+    for index, match in enumerate(heading_matches):
+        next_start = (
+            heading_matches[index + 1].start()
+            if index + 1 < len(heading_matches)
+            else len(page_text)
+        )
+        title = clean_html_text(match.group("title"))
+        heading = listing_heading_parts(title)
+        if not heading:
+            continue
+        block = page_text[match.start() : next_start]
+        area = magicbricks_html_area(block)
+        price = magicbricks_html_price(block)
+        if not area or not price:
+            continue
+        ppsf = magicbricks_html_ppsf(block)
+        observations.append(
+            listing_observation(
+                entity_id=entity_id,
+                project_key=project_key,
+                source_name=source_name,
+                source_url=source_url,
+                listing_type=listing_type_from_heading(heading["kind"], query_kind),
+                price=price[0],
+                price_display=price[1],
+                area=area,
+                price_per_sqft=ppsf,
+                bhk=heading["bhk"],
+                bathrooms=magicbricks_html_summary_number(block, "Bathroom"),
+                floor=magicbricks_html_summary_text(block, "Floor"),
+                society_name=output_society_name,
+                locality=locality_from_heading(
+                    heading["location"], society_name, fallback_locality
+                ),
+                observed_at=observed_at,
+            )
+        )
+    return observations
+
+
+def squareyards_html_listing_observations(
+    page_text: str,
+    *,
+    entity_id: str,
+    project_key: Optional[str],
+    society_name: str,
+    fallback_locality: Optional[str],
+    source_url: str,
+    source_name: str,
+    query_kind: str,
+    observed_at: str,
+    output_society_name: str,
+) -> List[Dict[str, Any]]:
+    article_re = re.compile(
+        r'<article\b[^>]*class="[^"]*listing-card[^"]*"[^>]*>',
+        re.IGNORECASE,
+    )
+    articles = list(article_re.finditer(page_text))
+    observations = []
+    for index, match in enumerate(articles):
+        next_start = articles[index + 1].start() if index + 1 < len(articles) else len(page_text)
+        block = page_text[match.start() : next_start]
+        if not block_mentions_project(clean_html_text(block), society_name):
+            continue
+        heading_text = first_clean_html_match(
+            block,
+            r'<h2[^>]*class="[^"]*heading[^"]*"[^>]*>.*?<span[^>]*>(?P<value>.*?)</span>',
+        )
+        heading = listing_heading_parts(heading_text)
+        if not heading:
+            continue
+        area = squareyards_html_area(block)
+        price = squareyards_html_price(block)
+        if not area or not price:
+            continue
+        observations.append(
+            listing_observation(
+                entity_id=entity_id,
+                project_key=project_key,
+                source_name=source_name,
+                source_url=source_url,
+                listing_type=listing_type_from_heading(heading["kind"], query_kind),
+                price=price[0],
+                price_display=price[1],
+                area=area,
+                price_per_sqft=None,
+                bhk=heading["bhk"],
+                bathrooms=squareyards_html_bathrooms(block),
+                floor=squareyards_html_floor(block),
+                society_name=output_society_name,
+                locality=locality_from_heading(
+                    heading["location"], society_name, fallback_locality
+                ),
+                observed_at=observed_at,
+            )
+        )
+    return observations
+
+
+def listing_observation(
+    *,
+    entity_id: str,
+    project_key: Optional[str],
+    source_name: str,
+    source_url: str,
+    listing_type: str,
+    price: float,
+    price_display: str,
+    area: Tuple[float, str, str],
+    price_per_sqft: Optional[Tuple[float, str]],
+    bhk: float,
+    bathrooms: Optional[float],
+    floor: Optional[str],
+    society_name: str,
+    locality: Optional[str],
+    observed_at: str,
+) -> Dict[str, Any]:
+    return {
+        "entity_id": entity_id,
+        "project_key": project_key,
+        "source_name": source_name,
+        "source_url": source_url,
+        "listing_type": listing_type,
+        "price": price,
+        "price_display": price_display,
+        "area_sqft": area[0],
+        "area_display": area[1],
+        "price_per_sqft": price_per_sqft[0] if price_per_sqft else None,
+        "price_per_sqft_display": price_per_sqft[1] if price_per_sqft else None,
+        "configuration": "{} BHK".format(format_bhk(bhk)),
+        "area_type": area[2],
+        "bhk": bhk,
+        "bathrooms": bathrooms,
+        "floor": floor,
+        "society": society_name,
+        "locality": locality,
+        "observed_at": observed_at,
+    }
+
+
+def looks_like_html(page_text: str) -> bool:
+    sample = page_text[:5000].lower()
+    return "<html" in sample or "<article" in sample or "<div" in sample
+
+
+def listing_heading_parts(heading_text: Optional[str]) -> Optional[Dict[str, Any]]:
+    if not heading_text:
+        return None
+    match = re.search(
+        r"(?P<bhk>\d+(?:\.\d+)?)\s+BHK\s+Flat\s+for\s+(?P<kind>Sale|Rent)\s+in\s+(?P<location>.+)$",
+        heading_text,
+        re.IGNORECASE,
+    )
+    if not match:
+        return None
+    bhk = optional_float(match.group("bhk"))
+    if bhk is None:
+        return None
+    return {
+        "bhk": bhk,
+        "kind": match.group("kind"),
+        "location": match.group("location"),
+    }
+
+
+def magicbricks_html_area(block: str) -> Optional[Tuple[float, str, str]]:
+    match = re.search(
+        r'<div[^>]+class="[^"]*mb-srp__card__summary--label[^"]*"[^>]*>\s*'
+        r"(?P<label>Carpet Area|Super Area)\s*</div>\s*"
+        r'<div[^>]+class="[^"]*mb-srp__card__summary--value[^"]*"[^>]*>\s*'
+        r"(?P<area>[\d,]+(?:\.\d+)?)\s*sq\.?\s*ft",
+        block,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+    area = optional_float(match.group("area").replace(",", ""))
+    if area is None or area <= 0:
+        return None
+    label = "carpet" if "carpet" in match.group("label").lower() else "super built-up"
+    return area, "{} sqft".format(clean_number(area)), label
+
+
+def magicbricks_html_price(block: str) -> Optional[Tuple[float, str]]:
+    price_text = first_clean_html_match(
+        block,
+        r'<div[^>]+class="[^"]*mb-srp__card__price--amount[^"]*"[^>]*>(?P<value>.*?)</div>',
+    )
+    if not price_text:
+        return None
+    value = parse_inr_price(price_text)
+    return (value, price_text) if value else None
+
+
+def magicbricks_html_ppsf(block: str) -> Optional[Tuple[float, str]]:
+    ppsf_text = first_clean_html_match(
+        block,
+        r'<div[^>]+class="[^"]*mb-srp__card__price--size[^"]*"[^>]*>(?P<value>.*?)</div>',
+    )
+    if not ppsf_text:
+        return None
+    value = optional_float(re.sub(r"[^\d.]", "", ppsf_text))
+    if not value or value <= 0:
+        return None
+    return value, ppsf_text
+
+
+def magicbricks_html_summary_text(block: str, label: str) -> Optional[str]:
+    return first_clean_html_match(
+        block,
+        r'<div[^>]+class="[^"]*mb-srp__card__summary--label[^"]*"[^>]*>\s*'
+        + re.escape(label)
+        + r'\s*</div>\s*<div[^>]+class="[^"]*mb-srp__card__summary--value[^"]*"[^>]*>(?P<value>.*?)</div>',
+    )
+
+
+def magicbricks_html_summary_number(block: str, label: str) -> Optional[float]:
+    return optional_float(magicbricks_html_summary_text(block, label))
+
+
+def squareyards_html_area(block: str) -> Optional[Tuple[float, str, str]]:
+    match = re.search(
+        r"Area\s*<small>\s*(?P<label>Built-up Area|Carpet Area|Super Area)\s*</small>"
+        r".*?data-area=\"(?P<area>[\d,]+(?:\.\d+)?)\"",
+        block,
+        re.IGNORECASE | re.DOTALL,
+    )
+    if not match:
+        return None
+    area = optional_float(match.group("area").replace(",", ""))
+    if area is None or area <= 0:
+        return None
+    label = area_label_from_text(match.group("label")) or "listed area"
+    return area, "{} sqft".format(clean_number(area)), label
+
+
+def squareyards_html_price(block: str) -> Optional[Tuple[float, str]]:
+    price_text = first_clean_html_match(
+        block,
+        r'<p[^>]+class="[^"]*listing-price[^"]*"[^>]*>\s*<strong>(?P<value>.*?)</strong>',
+    )
+    if not price_text:
+        return None
+    value = parse_inr_price(price_text)
+    return (value, price_text) if value else None
+
+
+def squareyards_html_bathrooms(block: str) -> Optional[float]:
+    config = first_clean_html_match(
+        block,
+        r"<dt>.*?Config.*?</dt>\s*<dd>(?P<value>.*?)</dd>",
+    )
+    if not config:
+        return None
+    match = re.search(r"\+\s*(?P<baths>\d+(?:\.\d+)?)\s*Bath\b", config, re.IGNORECASE)
+    return optional_float(match.group("baths")) if match else None
+
+
+def squareyards_html_floor(block: str) -> Optional[str]:
+    return first_clean_html_match(
+        block,
+        r'<em[^>]+class="[^"]*icon-stairs[^"]*"[^>]*>.*?</em>\s*Floor\s*</dt>\s*<dd>(?P<value>.*?)</dd>',
+    )
+
+
+def first_clean_html_match(text: str, pattern: str) -> Optional[str]:
+    match = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
+    return clean_html_text(match.group("value")) if match else None
+
+
+def clean_html_text(value: str) -> str:
+    text = re.sub(r"<!--.*?-->", " ", value, flags=re.DOTALL)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = html_lib.unescape(text)
+    text = text.replace("\xa0", " ")
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
 
 
 def aggregate_listing_records(observations: Iterable[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -523,6 +988,10 @@ def squareyards_area_match(block: str):
 
 def area_label_from_match(match) -> Optional[str]:
     label = match.groupdict().get("label")
+    return area_label_from_text(label)
+
+
+def area_label_from_text(label: Optional[str]) -> Optional[str]:
     if not label:
         return None
     lowered = label.lower()
@@ -652,6 +1121,40 @@ def listing_coverage_watermarks(
         },
         {
             "source": "external_listing_coverage_at",
+            "high_watermark": observed_at,
+        },
+    ]
+
+
+def listing_fetch_watermarks(
+    fetch_diagnostics: Iterable[Dict[str, Any]], observed_at: str
+) -> List[Dict[str, str]]:
+    diagnostics = list(fetch_diagnostics)
+    if not diagnostics:
+        return []
+    fetches = [diag for diag in diagnostics if diag.get("mode") != "parse"]
+    parses = [diag for diag in diagnostics if diag.get("mode") == "parse"]
+    fetched = [diag for diag in fetches if diag.get("fetched")]
+    failed = [diag for diag in fetches if not diag.get("fetched")]
+    direct_fallbacks = [
+        diag for diag in fetches if diag.get("mode") == "direct_fallback"
+    ]
+    parse_observations = sum(positive_int(diag.get("observations"), 0) for diag in parses)
+    return [
+        {
+            "source": "external_listing_fetch_coverage",
+            "high_watermark": (
+                "pages={};fetched={};failed={};direct_fallbacks={};parsed_observations={}".format(
+                    len(fetches),
+                    len(fetched),
+                    len(failed),
+                    len(direct_fallbacks),
+                    parse_observations,
+                )
+            ),
+        },
+        {
+            "source": "external_listing_fetch_at",
             "high_watermark": observed_at,
         },
     ]
