@@ -987,6 +987,7 @@ fn resolution_policies() -> &'static ResolutionPoliciesFile {
             source_tiers: Vec::new(),
             never_default_fact_prefixes: Vec::new(),
             source_caps: HashMap::new(),
+            coordinate_sources: HashMap::new(),
             overrides: HashMap::new(),
         })
     })

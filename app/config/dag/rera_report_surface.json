@@ -339,10 +339,6 @@
     {
       "fact_keys": ["rera_project_sub_type"],
       "label": "Project subtype"
-    },
-    {
-      "fact_keys": ["rera_lat_lng"],
-      "label": "Coordinates"
     }
   ],
   "tone_rules": [

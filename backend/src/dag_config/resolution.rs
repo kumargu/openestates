@@ -16,7 +16,50 @@ pub struct ResolutionPoliciesFile {
     #[serde(default)]
     pub source_caps: HashMap<String, f32>,
     #[serde(default)]
+    pub coordinate_sources: HashMap<String, CoordinateSourcePolicy>,
+    #[serde(default)]
     pub overrides: HashMap<String, ResolutionOverride>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct CoordinateSourcePolicy {
+    #[serde(default)]
+    pub allowed_sources: Vec<String>,
+    #[serde(default)]
+    pub denied_sources: Vec<String>,
+    #[serde(default)]
+    pub source_priority: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CoordinateEntityScope {
+    Society,
+    Place,
+}
+
+impl CoordinateEntityScope {
+    fn config_key(self) -> &'static str {
+        match self {
+            Self::Society => "society",
+            Self::Place => "place",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CoordinatePairCandidate<'a> {
+    pub source_type: &'a str,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub confidence: f32,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ResolvedCoordinatePair {
+    pub source_type: String,
+    pub latitude: f64,
+    pub longitude: f64,
+    pub confidence: f32,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -107,6 +150,97 @@ pub fn better_source_type_for_fact(
     false
 }
 
+pub fn source_allowed_for_fact(
+    fact_key: &str,
+    source_type: &str,
+    policies: &ResolutionPoliciesFile,
+) -> bool {
+    let Some(source_priority) = policies
+        .overrides
+        .get(fact_key)
+        .map(|override_policy| &override_policy.source_priority)
+    else {
+        return true;
+    };
+    if source_priority.is_empty() {
+        return true;
+    }
+    let normalized = normalize_source_type(source_type);
+    source_priority
+        .iter()
+        .any(|source| normalize_source_type(source) == normalized)
+}
+
+pub fn coordinate_source_allowed(
+    scope: CoordinateEntityScope,
+    source_type: &str,
+    policies: &ResolutionPoliciesFile,
+) -> bool {
+    let Some(policy) = policies.coordinate_sources.get(scope.config_key()) else {
+        return false;
+    };
+    let normalized = normalize_source_type(source_type);
+    if policy
+        .denied_sources
+        .iter()
+        .any(|source| normalize_source_type(source) == normalized)
+    {
+        return false;
+    }
+    policy
+        .allowed_sources
+        .iter()
+        .any(|source| normalize_source_type(source) == normalized)
+}
+
+pub fn resolve_coordinate_pair<'a>(
+    scope: CoordinateEntityScope,
+    candidates: impl IntoIterator<Item = CoordinatePairCandidate<'a>>,
+    policies: &ResolutionPoliciesFile,
+) -> Option<ResolvedCoordinatePair> {
+    let policy = policies.coordinate_sources.get(scope.config_key())?;
+    let mut best: Option<ResolvedCoordinatePair> = None;
+    for candidate in candidates {
+        if !valid_coordinate_pair(candidate.latitude, candidate.longitude)
+            || !coordinate_source_allowed(scope, candidate.source_type, policies)
+        {
+            continue;
+        }
+        let resolved = ResolvedCoordinatePair {
+            source_type: candidate.source_type.to_string(),
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            confidence: candidate.confidence,
+        };
+        let replace = best.as_ref().is_none_or(|current| {
+            let candidate_rank = coordinate_source_rank(candidate.source_type, policy);
+            let current_rank = coordinate_source_rank(&current.source_type, policy);
+            candidate_rank < current_rank
+                || (candidate_rank == current_rank && candidate.confidence > current.confidence)
+        });
+        if replace {
+            best = Some(resolved);
+        }
+    }
+    best
+}
+
+pub fn valid_coordinate_pair(latitude: f64, longitude: f64) -> bool {
+    latitude.is_finite()
+        && longitude.is_finite()
+        && (-90.0..=90.0).contains(&latitude)
+        && (-180.0..=180.0).contains(&longitude)
+}
+
+fn coordinate_source_rank(source_type: &str, policy: &CoordinateSourcePolicy) -> usize {
+    let normalized = normalize_source_type(source_type);
+    policy
+        .source_priority
+        .iter()
+        .position(|source| normalize_source_type(source) == normalized)
+        .unwrap_or(usize::MAX)
+}
+
 fn source_rank_for_fact(
     fact_key: Option<&str>,
     source_type: &str,
@@ -140,7 +274,7 @@ fn capped_confidence(source_type: &str, confidence: f32, policies: &ResolutionPo
         .unwrap_or(confidence)
 }
 
-fn normalize_source_type(source_type: &str) -> String {
+pub fn normalize_source_type(source_type: &str) -> String {
     let compact = source_type
         .trim()
         .trim_start_matches("SourceType::")
@@ -219,6 +353,65 @@ mod tests {
             0.5,
             &policies
         ));
+    }
+
+    #[test]
+    fn coordinate_policy_separates_society_and_place_sources() {
+        let policies = load_resolution_policies().expect("resolution policies load");
+
+        assert!(coordinate_source_allowed(
+            CoordinateEntityScope::Society,
+            "Google",
+            &policies
+        ));
+        assert!(!coordinate_source_allowed(
+            CoordinateEntityScope::Society,
+            "OpenStreetMap",
+            &policies
+        ));
+        assert!(coordinate_source_allowed(
+            CoordinateEntityScope::Place,
+            "OpenStreetMap",
+            &policies
+        ));
+        assert!(!coordinate_source_allowed(
+            CoordinateEntityScope::Place,
+            "Rera",
+            &policies
+        ));
+    }
+
+    #[test]
+    fn coordinate_pair_resolution_prefers_seed_then_google_for_societies() {
+        let policies = load_resolution_policies().expect("resolution policies load");
+        let resolved = resolve_coordinate_pair(
+            CoordinateEntityScope::Society,
+            [
+                CoordinatePairCandidate {
+                    source_type: "Google",
+                    latitude: 12.9,
+                    longitude: 77.6,
+                    confidence: 0.9,
+                },
+                CoordinatePairCandidate {
+                    source_type: "SourceEntitySeed",
+                    latitude: 12.8,
+                    longitude: 77.5,
+                    confidence: 0.8,
+                },
+                CoordinatePairCandidate {
+                    source_type: "Rera",
+                    latitude: 1.0,
+                    longitude: 2.0,
+                    confidence: 1.0,
+                },
+            ],
+            &policies,
+        )
+        .expect("trusted society coordinate");
+
+        assert_eq!(resolved.source_type, "SourceEntitySeed");
+        assert_eq!((resolved.latitude, resolved.longitude), (12.8, 77.5));
     }
 
     #[test]

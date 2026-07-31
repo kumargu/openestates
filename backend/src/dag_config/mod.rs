@@ -71,8 +71,11 @@ pub use rera_report_surface::{
     ReraReportValueRules,
 };
 pub use resolution::{
-    better_source_type, better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
-    source_tier_rank, ResolutionPoliciesFile,
+    better_source_type, better_source_type_for_fact, buyer_visible_fact, coordinate_source_allowed,
+    load_resolution_policies, normalize_source_type, resolve_coordinate_pair,
+    source_allowed_for_fact, source_tier_rank, valid_coordinate_pair, CoordinateEntityScope,
+    CoordinatePairCandidate, CoordinateSourcePolicy, ResolutionPoliciesFile,
+    ResolvedCoordinatePair,
 };
 pub use search_guardrails::{
     load_search_guardrails, load_search_guardrails_from_path, search_guardrail_config,

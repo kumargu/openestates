@@ -10,8 +10,12 @@ use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
 
 use super::{
-    geometry::validate_geojson_geometry, MaterializationRecord, ReraAssetError,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
+    geometry::validate_geojson_geometry,
+    source_resolution::{
+        SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
+    },
+    MaterializationRecord, ReraAssetError, SkillFactAnnotationRecord, SkillFactRecord,
+    SkillFactsInput, SourceEntitySeed, SourceWatermark,
 };
 
 pub const OSM_POWER_LINE_FACTS_ASSET_ID: &str = "osm_power_line_facts";
@@ -238,58 +242,17 @@ pub async fn canonicalize_osm_power_infrastructure_input(
     lake: &LakeStore,
     input: &OsmPowerInfrastructureInput,
     canonical_record: &MaterializationRecord,
+    source_entities: &[SourceEntitySeed],
+    scope: SourceEntityResolutionScope,
 ) -> Result<OsmPowerInfrastructureInput, OsmPowerAssetError> {
     let canonical = super::read_canonical_society_rows(lake, canonical_record).await?;
-    let canonical_ids = canonical
-        .entities
-        .iter()
-        .filter(|entity| entity.entity_type == "society")
-        .map(|entity| entity.entity_id.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let by_project_key = canonical
-        .mappings
-        .iter()
-        .map(|mapping| {
-            (
-                mapping.project_key.as_str(),
-                mapping.canonical_entity_id.as_str(),
-            )
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    let by_alias = canonical
-        .mappings
-        .iter()
-        .filter_map(|mapping| {
-            mapping
-                .alias_entity_id
-                .as_deref()
-                .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
-        })
-        .collect::<std::collections::HashMap<_, _>>();
+    let resolver = SourceEntityResolver::new(&canonical, source_entities, scope);
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
-        if canonical_ids.contains(record.entity_id.as_str()) {
-            records.push(record);
-            continue;
-        }
-        let Some(entity_id) = by_alias
-            .get(record.entity_id.as_str())
-            .copied()
-            .or_else(|| {
-                record
-                    .project_key
-                    .as_deref()
-                    .and_then(|key| by_project_key.get(key).copied())
-            })
-        else {
-            eprintln!(
-                "WARN: Skipping OSM power row without canonical society evidence: {}",
-                record.query
-            );
-            continue;
-        };
-        record.entity_id = entity_id.to_string();
+        let entity_id =
+            resolver.resolve(record.entity_id.as_str(), record.project_key.as_deref())?;
+        record.entity_id = entity_id;
         records.push(record);
     }
     resolved.records = records;
@@ -649,6 +612,7 @@ pub enum OsmPowerAssetError {
     InvalidInput(String),
     Json(serde_json::Error),
     Canonical(ReraAssetError),
+    Identity(SourceEntityResolutionError),
 }
 
 impl fmt::Display for OsmPowerAssetError {
@@ -658,6 +622,7 @@ impl fmt::Display for OsmPowerAssetError {
             Self::InvalidInput(message) => write!(f, "invalid OSM power input: {message}"),
             Self::Json(err) => write!(f, "OSM power JSON error: {err}"),
             Self::Canonical(err) => write!(f, "OSM power canonical society lookup failed: {err}"),
+            Self::Identity(err) => write!(f, "OSM power source identity resolution failed: {err}"),
         }
     }
 }
@@ -679,5 +644,11 @@ impl From<serde_json::Error> for OsmPowerAssetError {
 impl From<ReraAssetError> for OsmPowerAssetError {
     fn from(value: ReraAssetError) -> Self {
         Self::Canonical(value)
+    }
+}
+
+impl From<SourceEntityResolutionError> for OsmPowerAssetError {
+    fn from(value: SourceEntityResolutionError) -> Self {
+        Self::Identity(value)
     }
 }

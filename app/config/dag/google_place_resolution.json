@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "description": "Deterministic acceptance policy for resolving a society to one canonical Google place.",
+  "project_place": {
+    "required_fields": ["place_id", "location"],
+    "accepted_place_types": [
+      "apartment_building",
+      "condominium_complex",
+      "establishment",
+      "housing_complex",
+      "point_of_interest",
+      "premise"
+    ],
+    "rejected_place_types": [
+      "construction_company",
+      "real_estate_agency"
+    ],
+    "ignored_name_tokens": [
+      "apartments",
+      "apartment",
+      "homes",
+      "phase",
+      "project",
+      "residences",
+      "residency",
+      "the"
+    ],
+    "minimum_name_recall": 0.6,
+    "minimum_score": 0.62,
+    "ambiguity_margin": 0.1,
+    "weights": {
+      "name": 0.7,
+      "locality": 0.15,
+      "place_type": 0.15
+    }
+  }
+}

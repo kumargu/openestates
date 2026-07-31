@@ -4,13 +4,15 @@ use chrono::{DateTime, Utc};
 use geojson::{GeoJson, Value as GeoJsonValue};
 use serde::Serialize;
 
-use crate::dag_config::{UiSurfaceConfig, UiSurfaceLayerRule};
+use crate::dag_config::{CoordinateEntityScope, UiSurfaceConfig, UiSurfaceLayerRule};
 use crate::knowledge::FactValue;
 use crate::models::{KgEntityRefs, Property};
 use crate::proof_focus::ProofFocus;
 use crate::related_societies::related_society_entity_ids_with_entities;
 use crate::search::geo::{extract_first_distance_km, haversine_km};
-use crate::serving::{LoadedServingBundle, ServingEntityFactRows, ServingFactRecord};
+use crate::serving::{
+    resolve_serving_coordinates, LoadedServingBundle, ServingEntityFactRows, ServingFactRecord,
+};
 
 pub const SURFACE_SCENE_CONTRACT_VERSION: u32 = 1;
 
@@ -570,7 +572,7 @@ impl ScenePlaceIndex {
                     .spatial_index
                     .point_for_entity(&entity.entity_id)
                     .map(|point| (point.latitude, point.longitude))
-                    .or_else(|| coordinates_from_rows(rows)),
+                    .or_else(|| coordinates_from_rows(rows, &entity.entity_id)),
                 rating: numeric_fact(rows, "google_rating"),
                 review_count: numeric_fact(rows, "google_review_count").map(|value| value as u32),
             };
@@ -874,20 +876,18 @@ fn coordinates_for_entity(bundle: &LoadedServingBundle, entity_id: &str) -> Opti
             bundle
                 .fact_index
                 .entity(entity_id)
-                .and_then(coordinates_from_rows)
+                .and_then(|rows| coordinates_from_rows(rows, entity_id))
         })
 }
 
-fn coordinates_from_rows(rows: &ServingEntityFactRows) -> Option<(f64, f64)> {
-    let latitude =
-        numeric_fact(rows, "geo.latitude").or_else(|| numeric_fact(rows, "project_latitude"))?;
-    let longitude =
-        numeric_fact(rows, "geo.longitude").or_else(|| numeric_fact(rows, "project_longitude"))?;
-    if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) {
-        Some((latitude, longitude))
+fn coordinates_from_rows(rows: &ServingEntityFactRows, entity_id: &str) -> Option<(f64, f64)> {
+    let scope = if entity_id.starts_with("place:") {
+        CoordinateEntityScope::Place
     } else {
-        None
-    }
+        CoordinateEntityScope::Society
+    };
+    let coordinates = resolve_serving_coordinates(rows, scope)?;
+    Some((coordinates.latitude, coordinates.longitude))
 }
 
 fn text_facts(rows: &ServingEntityFactRows, fact_key: &str) -> Vec<String> {
@@ -2341,6 +2341,15 @@ mod tests {
         value: FactValue,
         source_url: Option<&str>,
     ) -> ServingFactRecord {
+        let source_type = if matches!(fact_key, "geo.latitude" | "geo.longitude") {
+            if entity_id.starts_with("place:") {
+                "OpenStreetMap"
+            } else {
+                "Google"
+            }
+        } else {
+            "test"
+        };
         ServingFactRecord {
             entity_id: entity_id.to_string(),
             fact_key: fact_key.to_string(),
@@ -2348,7 +2357,7 @@ mod tests {
             value_text: None,
             value,
             confidence: 0.8,
-            source_type: "test".to_string(),
+            source_type: source_type.to_string(),
             source_url: source_url.map(str::to_string),
             model: None,
             skill_id: None,

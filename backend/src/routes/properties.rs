@@ -4195,9 +4195,6 @@ fn rera_info_for(
     if let Some(fact) = projection.latest_bool("rera_has_mortgage") {
         info.has_mortgage = Some(fact.value);
     }
-    if let Some(fact) = projection.latest_text("rera_lat_lng") {
-        info.lat_lng = Some(fact.value);
-    }
     if let Some(fact) = projection.latest_text("rera_portal_url") {
         info.rera_portal_url = Some(fact.value);
     }

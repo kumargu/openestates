@@ -22,9 +22,12 @@ use crate::parquet_data::{
 };
 
 use super::{
+    source_resolution::{
+        SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
+    },
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
     MaterializationId, MaterializationRecord, ReraAssetError, SkillFactAnnotationRecord,
-    SkillFactRecord, SkillFactsInput, SourceWatermark,
+    SkillFactRecord, SkillFactsInput, SourceEntitySeed, SourceWatermark,
 };
 
 pub const GOOGLE_PLACES_WEEKLY_ASSET_ID: &str = "google_places_weekly";
@@ -1030,58 +1033,17 @@ pub async fn canonicalize_google_places_input(
     lake: &LakeStore,
     input: &GooglePlacesWeeklyInput,
     canonical_record: &MaterializationRecord,
+    source_entities: &[SourceEntitySeed],
+    scope: SourceEntityResolutionScope,
 ) -> Result<GooglePlacesWeeklyInput, GooglePlaceAssetError> {
     let canonical = super::read_canonical_society_rows(lake, canonical_record).await?;
-    let canonical_ids: HashSet<_> = canonical
-        .entities
-        .iter()
-        .filter(|entity| entity.entity_type == "society")
-        .map(|entity| entity.entity_id.as_str())
-        .collect();
-    let by_project_key: HashMap<_, _> = canonical
-        .mappings
-        .iter()
-        .map(|mapping| {
-            (
-                mapping.project_key.as_str(),
-                mapping.canonical_entity_id.as_str(),
-            )
-        })
-        .collect();
-    let by_alias: HashMap<_, _> = canonical
-        .mappings
-        .iter()
-        .filter_map(|mapping| {
-            mapping
-                .alias_entity_id
-                .as_deref()
-                .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
-        })
-        .collect();
+    let resolver = SourceEntityResolver::new(&canonical, source_entities, scope);
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
-        if canonical_ids.contains(record.entity_id.as_str()) {
-            records.push(record);
-            continue;
-        }
-        let Some(entity_id) = by_alias
-            .get(record.entity_id.as_str())
-            .copied()
-            .or_else(|| {
-                record
-                    .project_key
-                    .as_deref()
-                    .and_then(|key| by_project_key.get(key).copied())
-            })
-        else {
-            eprintln!(
-                "WARN: Skipping Google place row without canonical society evidence: {}",
-                record.query
-            );
-            continue;
-        };
-        record.entity_id = entity_id.to_string();
+        let entity_id =
+            resolver.resolve(record.entity_id.as_str(), record.project_key.as_deref())?;
+        record.entity_id = entity_id;
         records.push(record);
     }
     resolved.records = records;
@@ -1092,58 +1054,17 @@ pub async fn canonicalize_google_nearby_places_input(
     lake: &LakeStore,
     input: &GoogleNearbyPlacesWeeklyInput,
     canonical_record: &MaterializationRecord,
+    source_entities: &[SourceEntitySeed],
+    scope: SourceEntityResolutionScope,
 ) -> Result<GoogleNearbyPlacesWeeklyInput, GooglePlaceAssetError> {
     let canonical = super::read_canonical_society_rows(lake, canonical_record).await?;
-    let canonical_ids: HashSet<_> = canonical
-        .entities
-        .iter()
-        .filter(|entity| entity.entity_type == "society")
-        .map(|entity| entity.entity_id.as_str())
-        .collect();
-    let by_project_key: HashMap<_, _> = canonical
-        .mappings
-        .iter()
-        .map(|mapping| {
-            (
-                mapping.project_key.as_str(),
-                mapping.canonical_entity_id.as_str(),
-            )
-        })
-        .collect();
-    let by_alias: HashMap<_, _> = canonical
-        .mappings
-        .iter()
-        .filter_map(|mapping| {
-            mapping
-                .alias_entity_id
-                .as_deref()
-                .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
-        })
-        .collect();
+    let resolver = SourceEntityResolver::new(&canonical, source_entities, scope);
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
-        if canonical_ids.contains(record.entity_id.as_str()) {
-            records.push(record);
-            continue;
-        }
-        let Some(entity_id) = by_alias
-            .get(record.entity_id.as_str())
-            .copied()
-            .or_else(|| {
-                record
-                    .project_key
-                    .as_deref()
-                    .and_then(|key| by_project_key.get(key).copied())
-            })
-        else {
-            eprintln!(
-                "WARN: Skipping Google nearby row without canonical society evidence: {}",
-                record.query
-            );
-            continue;
-        };
-        record.entity_id = entity_id.to_string();
+        let entity_id =
+            resolver.resolve(record.entity_id.as_str(), record.project_key.as_deref())?;
+        record.entity_id = entity_id;
         records.push(record);
     }
     resolved.records = records;
@@ -1985,6 +1906,7 @@ pub enum GooglePlaceAssetError {
     Parquet(parquet::errors::ParquetError),
     Json(serde_json::Error),
     Canonical(ReraAssetError),
+    Identity(SourceEntityResolutionError),
 }
 
 impl fmt::Display for GooglePlaceAssetError {
@@ -2004,6 +1926,7 @@ impl fmt::Display for GooglePlaceAssetError {
             Self::Parquet(err) => write!(f, "Google place Parquet error: {err}"),
             Self::Json(err) => write!(f, "Google place JSON error: {err}"),
             Self::Canonical(err) => write!(f, "Google canonical society lookup failed: {err}"),
+            Self::Identity(err) => write!(f, "Google source identity resolution failed: {err}"),
         }
     }
 }
@@ -2049,5 +1972,11 @@ impl From<serde_json::Error> for GooglePlaceAssetError {
 impl From<ReraAssetError> for GooglePlaceAssetError {
     fn from(value: ReraAssetError) -> Self {
         Self::Canonical(value)
+    }
+}
+
+impl From<SourceEntityResolutionError> for GooglePlaceAssetError {
+    fn from(value: SourceEntityResolutionError) -> Self {
+        Self::Identity(value)
     }
 }

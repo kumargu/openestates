@@ -609,14 +609,26 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .facts
         .iter()
         .any(|fact| fact.fact_key == "rera_total_land_area_sqm"));
-    assert!(loaded.edges.iter().any(|edge| {
-        edge.from_entity_id == "society:rera-meadows"
-            && edge.edge_type == "served_by_road"
-            && edge.to_entity_id == "road_segment:rera-meadows-approach"
-    }));
+    let rera_meadows_entity = loaded
+        .entities
+        .iter()
+        .find(|entity| entity.entity_type == "society" && entity.name == "RERA Meadows")
+        .expect("RERA Meadows should resolve to one canonical society");
+    let rera_meadows_road_edge = loaded
+        .edges
+        .iter()
+        .find(|edge| {
+            edge.from_entity_id == rera_meadows_entity.entity_id
+                && edge.edge_type == "served_by_road"
+        })
+        .expect("canonical RERA Meadows society should have one approach road");
+    assert_ne!(
+        rera_meadows_road_edge.from_entity_id,
+        "society:rera-meadows"
+    );
     let rera_meadows_road = loaded
         .fact_index
-        .entity("road_segment:rera-meadows-approach")
+        .entity(&rera_meadows_road_edge.to_entity_id)
         .expect("RERA Meadows road segment should carry approach-road facts");
     assert!(rera_meadows_road
         .facts
@@ -1736,6 +1748,7 @@ fn executed_position(executed_assets: &[AssetId], id: &str) -> usize {
 
 fn mock_source_inputs(now: chrono::DateTime<Utc>) -> AssetSourceInputs {
     AssetSourceInputs {
+        source_entities: Vec::new(),
         source_failures: Default::default(),
         rera_registry_monthly: Some(mock_rera_input(now)),
         external_listings_weekly: Some(ExternalListingsWeeklyInput {

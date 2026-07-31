@@ -7,18 +7,15 @@ use backend::assets::{
     openestates_registry, AssetDagExecutionOptions, AssetDagExecutor, AssetDagRunManifest, AssetId,
     AssetMaterializationStore, AssetPartition, AssetRunManifestStore, AssetSourceInputs,
     CommandSourceInputProvider, LakeObjectSourceInputProvider, LocalFileSourceInputProvider,
-    MaterializationId, SourceEntitySeed, SourceInputCollectionPlan, SourceInputProvider,
-    SourceInputRequest, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
-    BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
-    CURRENT_PROJECT_FACTS_ASSET_ID, DEFAULT_RESUME_LEASE_SECONDS, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
+    MaterializationId, SourceEntityResolutionScope, SourceEntitySeed, SourceInputCollectionPlan,
+    SourceInputProvider, SourceInputRequest, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    DEFAULT_RESUME_LEASE_SECONDS, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, GOOGLE_NEARBY_PLACES_WEEKLY_ASSET_ID,
-    GOOGLE_PLACES_WEEKLY_ASSET_ID, HOME_STATE_SIGNALS_ASSET_ID, KG_SOCIETY_VIEW_ASSET_ID,
-    OSM_POWER_LINE_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
+    GOOGLE_PLACES_WEEKLY_ASSET_ID, OSM_POWER_LINE_FACTS_ASSET_ID, RERA_REGISTRY_MONTHLY_ASSET_ID,
     SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID, STORMWATER_DRAIN_FACTS_ASSET_ID,
 };
 use backend::knowledge::KnowledgeGraph;
 use backend::lake::{LakeKey, LakeStore, LakeStoreLocation};
-use backend::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
 use chrono::{Duration as ChronoDuration, Utc};
 
 #[tokio::main]
@@ -55,6 +52,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .as_ref()
         .map_or(requested_at, |manifest| manifest.created_at);
     let mut options = AssetDagExecutionOptions::new(partition, planned_at).dry_run(cli.dry_run);
+    let scoped_run = cli.scoped_source_inputs
+        || !cli.source_entity_ids.is_empty()
+        || !cli.source_entity_seed_paths.is_empty();
+    options = options.with_source_scope(if scoped_run {
+        SourceEntityResolutionScope::Scoped
+    } else {
+        SourceEntityResolutionScope::Production
+    });
     if let Some(manifest) = &resume_manifest {
         if !manifest.execution_version.is_empty() {
             options = options.with_version(manifest.execution_version.clone());
@@ -88,11 +93,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         if !cli.source_collection_asset_ids.is_empty() {
             restrict_source_collection_plan(&mut collection_plan, &cli.source_collection_asset_ids);
         }
-        let mut source_entities =
-            current_source_entities(&lake, resume_manifest.as_ref(), &cli.source_entity_ids)
-                .await?;
+        let mut source_entities = if should_load_current_source_entities(
+            resume_manifest.as_ref(),
+            &cli.source_entity_ids,
+            cli.scoped_source_inputs,
+            &cli.source_entity_seed_paths,
+        ) {
+            current_source_entities(&lake, resume_manifest.as_ref(), &cli.source_entity_ids).await?
+        } else {
+            Vec::new()
+        };
         source_entities.extend(load_source_entity_seed_files(&cli.source_entity_seed_paths).await?);
         let source_entities = dedupe_source_entities(source_entities)?;
+        let runner_source_entities = source_entities.clone();
         let request = SourceInputRequest {
             project_root: project_root.clone(),
             partition: options.partition.clone(),
@@ -133,7 +146,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Result::<(), Box<dyn std::error::Error>>::Err(Box::new(err));
             }
         };
-        if let Some(source_inputs) = loaded {
+        if let Some(mut source_inputs) = loaded {
+            merge_source_input_entities(&mut source_inputs, runner_source_entities)?;
             let mut force_assets = collection_plan.force_assets;
             force_assets.extend(cli.force_asset_ids.clone());
             force_assets.sort_by(|left, right| left.as_str().cmp(right.as_str()));
@@ -141,18 +155,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             options = options
                 .with_source_inputs(source_inputs)
                 .with_forced_assets(force_assets);
-            if resume_manifest.is_none()
-                && (!cli.source_entity_ids.is_empty()
-                    || !cli.source_entity_seed_paths.is_empty()
-                    || cli.scoped_source_inputs)
-                && !cli.promote_scoped_current
-            {
-                options = options
-                    .with_skip_current_promotion_assets(scoped_current_promotion_exclusions());
-            }
-            if resume_manifest.is_none() && cli.scoped_source_inputs {
-                options = options.with_skip_missing_source_inputs(true);
-            }
         }
     }
 
@@ -281,32 +283,6 @@ fn add_geospatial_source_companions(allowed_assets: &mut BTreeSet<String>) -> bo
     needs_google_places_companion
 }
 
-fn scoped_current_promotion_exclusions() -> Vec<AssetId> {
-    let mut exclusions = vec![
-        AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID)
-            .expect("valid static canonical society asset ID"),
-        AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).expect("valid static RERA registry asset ID"),
-        AssetId::new(RERA_LEGAL_FACTS_ASSET_ID).expect("valid static RERA legal asset ID"),
-        AssetId::new(BUILDER_RERA_AGGREGATES_ASSET_ID)
-            .expect("valid static builder aggregate asset ID"),
-        AssetId::new(HOME_STATE_SIGNALS_ASSET_ID).expect("valid static home state asset ID"),
-        AssetId::new(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID)
-            .expect("valid static approach-road asset ID"),
-        AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID)
-            .expect("valid static groundwater asset ID"),
-        AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).expect("valid static OSM power asset ID"),
-        AssetId::new(STORMWATER_DRAIN_FACTS_ASSET_ID).expect("valid static stormwater asset ID"),
-        AssetId::new(BENGALURU_METRO_STATION_FACTS_ASSET_ID).expect("valid static metro asset ID"),
-        AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID)
-            .expect("valid static current project asset ID"),
-        AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).expect("valid static KG view asset ID"),
-        AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).expect("valid static serving bundle asset ID"),
-    ];
-    exclusions.sort_by(|left, right| left.as_str().cmp(right.as_str()));
-    exclusions.dedup();
-    exclusions
-}
-
 async fn release_cli_resume_lease(
     lake: &LakeStore,
     partition: &AssetPartition,
@@ -318,6 +294,27 @@ async fn release_cli_resume_lease(
             .release_resume_lease(partition, run_id, lease_id)
             .await;
     }
+}
+
+fn should_load_current_source_entities(
+    resume_manifest: Option<&AssetDagRunManifest>,
+    selected_entity_ids: &[String],
+    scoped_source_inputs: bool,
+    source_entity_seed_paths: &[PathBuf],
+) -> bool {
+    resume_manifest.is_some()
+        || !selected_entity_ids.is_empty()
+        || (!scoped_source_inputs && source_entity_seed_paths.is_empty())
+}
+
+fn merge_source_input_entities(
+    source_inputs: &mut AssetSourceInputs,
+    runner_source_entities: Vec<SourceEntitySeed>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let mut source_entities = std::mem::take(&mut source_inputs.source_entities);
+    source_entities.extend(runner_source_entities);
+    source_inputs.source_entities = dedupe_source_entities(source_entities)?;
+    Ok(())
 }
 
 async fn current_source_entities(
@@ -475,6 +472,7 @@ fn dedupe_source_entities(
 ) -> Result<Vec<SourceEntitySeed>, Box<dyn std::error::Error>> {
     let mut by_key = BTreeMap::<String, SourceEntitySeed>::new();
     for seed in seeds {
+        validate_source_entity_seed_coordinates(&seed)?;
         let key = seed
             .project_key
             .as_deref()
@@ -489,6 +487,29 @@ fn dedupe_source_entities(
         by_key.insert(key, seed);
     }
     Ok(by_key.into_values().collect())
+}
+
+fn validate_source_entity_seed_coordinates(
+    seed: &SourceEntitySeed,
+) -> Result<(), Box<dyn std::error::Error>> {
+    match (seed.latitude, seed.longitude) {
+        (Some(latitude), Some(longitude))
+            if backend::dag_config::valid_coordinate_pair(latitude, longitude) =>
+        {
+            Ok(())
+        }
+        (None, None) => Ok(()),
+        (Some(_), Some(_)) => Err(format!(
+            "source entity seed {} has invalid coordinates",
+            seed.entity_id
+        )
+        .into()),
+        _ => Err(format!(
+            "source entity seed {} must provide latitude and longitude together",
+            seed.entity_id
+        )
+        .into()),
+    }
 }
 
 fn merge_source_entity_seed(
@@ -607,7 +628,6 @@ struct CliOptions {
     source_entity_seed_paths: Vec<PathBuf>,
     source_collection_asset_ids: Vec<AssetId>,
     scoped_source_inputs: bool,
-    promote_scoped_current: bool,
     only_forced_assets: bool,
     force_asset_ids: Vec<AssetId>,
     resume_run_id: Option<MaterializationId>,
@@ -709,9 +729,6 @@ impl CliOptions {
                 }
                 "--scoped-source-inputs" => {
                     options.scoped_source_inputs = true;
-                }
-                "--promote-scoped-current" => {
-                    options.promote_scoped_current = true;
                 }
                 "--only-forced-assets" => {
                     options.only_forced_assets = true;
@@ -847,7 +864,6 @@ fn print_help() {
     println!("  --source-entity-seeds Add source entities from a JSON file");
     println!("  --source-collection-asset Restrict source collection to one collectable asset id");
     println!("  --scoped-source-inputs Treat --source-inputs as already scoped to a partial run");
-    println!("  --promote-scoped-current Promote scoped source runs to current global outputs");
     println!(
         "  --only-forced-assets Skip non-forced planned assets and use their current snapshots"
     );
@@ -1003,27 +1019,21 @@ mod tests {
     }
 
     #[test]
-    fn scoped_source_runs_keep_global_canonical_current_pointer() {
-        let exclusions = scoped_current_promotion_exclusions();
-
-        assert_eq!(
-            exclusions,
-            vec![
-                AssetId::new(APPROACH_ROAD_GRAPH_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(BENGALURU_METRO_STATION_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(BUILDER_RERA_AGGREGATES_ASSET_ID).unwrap(),
-                AssetId::new(CANONICAL_SOCIETY_NODES_ASSET_ID).unwrap(),
-                AssetId::new(CURRENT_PROJECT_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(HOME_STATE_SIGNALS_ASSET_ID).unwrap(),
-                AssetId::new(KG_SOCIETY_VIEW_ASSET_ID).unwrap(),
-                AssetId::new(OSM_POWER_LINE_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(RERA_LEGAL_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(RERA_REGISTRY_MONTHLY_ASSET_ID).unwrap(),
-                AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID).unwrap(),
-                AssetId::new(SOCIETY_GROUNDWATER_POTENTIAL_FACTS_ASSET_ID).unwrap(),
-                AssetId::new(STORMWATER_DRAIN_FACTS_ASSET_ID).unwrap(),
-            ]
-        );
+    fn scoped_seed_runs_do_not_load_current_source_entities() {
+        assert!(!should_load_current_source_entities(None, &[], true, &[]));
+        assert!(should_load_current_source_entities(
+            None,
+            &["society:selected".to_string()],
+            true,
+            &[]
+        ));
+        assert!(!should_load_current_source_entities(
+            None,
+            &[],
+            false,
+            &[PathBuf::from("seeds.json")]
+        ));
+        assert!(should_load_current_source_entities(None, &[], false, &[]));
     }
 
     #[tokio::test]
@@ -1124,6 +1134,48 @@ mod tests {
         );
         assert_eq!(merged[0].area.as_deref(), Some("Whitefield"));
         assert_eq!(merged[0].latitude, Some(12.971234567));
+    }
+
+    #[test]
+    fn source_entity_dedupe_rejects_partial_coordinate_pairs() {
+        let seed = SourceEntitySeed {
+            entity_id: "society:rera-partial".to_string(),
+            alias_entity_id: None,
+            name: "Partial Coordinates".to_string(),
+            area: None,
+            city: Some("Bengaluru".to_string()),
+            project_key: Some("PRM-PARTIAL".to_string()),
+            latitude: Some(12.9),
+            longitude: None,
+        };
+
+        let error = dedupe_source_entities(vec![seed]).unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("must provide latitude and longitude together"));
+    }
+
+    #[test]
+    fn scoped_source_input_keeps_embedded_identity_scope() {
+        let embedded = SourceEntitySeed {
+            entity_id: "society:rera-embedded".to_string(),
+            alias_entity_id: None,
+            name: "Embedded Society".to_string(),
+            area: None,
+            city: Some("Bengaluru".to_string()),
+            project_key: Some("PRM-EMBEDDED".to_string()),
+            latitude: None,
+            longitude: None,
+        };
+        let mut source_inputs = AssetSourceInputs {
+            source_entities: vec![embedded.clone()],
+            ..AssetSourceInputs::default()
+        };
+
+        merge_source_input_entities(&mut source_inputs, Vec::new()).unwrap();
+
+        assert_eq!(source_inputs.source_entities, vec![embedded]);
     }
 
     #[tokio::test]

@@ -5,15 +5,16 @@ use rstar::{PointDistance, RTree, RTreeObject, AABB};
 use serde::Deserialize;
 
 use crate::dag_config::{
-    dag_root, load_fact_registry_index, load_json, scoring_direction_from_hint, FactRegistryEntry,
+    dag_root, load_fact_registry_index, load_json, scoring_direction_from_hint,
+    CoordinateEntityScope, FactRegistryEntry,
 };
 use crate::knowledge::FactValue;
 use crate::search::geo::haversine_km;
 use crate::search::{analyzer, schema};
 
 use super::{
-    ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord, ServingFactIndex,
-    ServingFactRecord, ServingSearchMetadataRecord,
+    resolve_serving_coordinates, ServingEdgeRecord, ServingEntityFactRows, ServingEntityRecord,
+    ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
 };
 
 const NEAR_PLACE_EDGE: &str = "near_place";
@@ -310,6 +311,10 @@ fn derived_nearby_fact(
     }
 }
 
+fn latest_datetime(left: DateTime<Utc>, right: DateTime<Utc>) -> DateTime<Utc> {
+    left.max(right)
+}
+
 fn derived_search_metadata(
     society: &EntityPoint,
     spec: &ProximityFactSpec,
@@ -575,49 +580,23 @@ fn entity_point_from_rows(
     fallback_name: &str,
     rows: &ServingEntityFactRows,
 ) -> Option<EntityPoint> {
-    let latitude = coordinate_value(rows, &["geo.latitude", "project_latitude"])?;
-    let longitude = coordinate_value(rows, &["geo.longitude", "project_longitude"])?;
-    if !valid_latitude(latitude.value) || !valid_longitude(longitude.value) {
-        return None;
-    }
+    let scope = if entity_id.starts_with("place:") {
+        CoordinateEntityScope::Place
+    } else {
+        CoordinateEntityScope::Society
+    };
+    let coordinates = resolve_serving_coordinates(rows, scope)?;
     Some(EntityPoint {
         entity_id: entity_id.to_string(),
         name: text_fact(rows, "place.name")
             .or_else(|| text_fact(rows, "listing_society"))
             .or_else(|| text_fact(rows, "rera_project_name"))
             .unwrap_or_else(|| fallback_name.to_string()),
-        latitude: latitude.value,
-        longitude: longitude.value,
-        confidence: latitude.confidence.min(longitude.confidence),
-        learned_at: latest_datetime(latitude.learned_at, longitude.learned_at),
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        confidence: coordinates.confidence,
+        learned_at: coordinates.learned_at,
     })
-}
-
-#[derive(Debug, Clone, Copy)]
-struct CoordinateValue {
-    value: f64,
-    confidence: f32,
-    learned_at: DateTime<Utc>,
-}
-
-fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<CoordinateValue> {
-    keys.iter().find_map(|key| {
-        rows.facts
-            .iter()
-            .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-            .filter_map(|fact| {
-                numeric_value(&fact.value).map(|value| CoordinateValue {
-                    value,
-                    confidence: fact.confidence,
-                    learned_at: fact.learned_at,
-                })
-            })
-            .max_by(|left, right| left.confidence.total_cmp(&right.confidence))
-    })
-}
-
-fn latest_datetime(left: DateTime<Utc>, right: DateTime<Utc>) -> DateTime<Utc> {
-    left.max(right)
 }
 
 fn place_matches_spec(place: &PlacePoint, spec: &ProximityFactSpec) -> bool {
@@ -801,22 +780,6 @@ fn fact_text(value: &FactValue) -> Option<String> {
         }
         _ => None,
     }
-}
-
-fn numeric_value(value: &FactValue) -> Option<f64> {
-    match value {
-        FactValue::Numeric(value) => Some(*value),
-        FactValue::Score { value, .. } => Some(*value),
-        _ => None,
-    }
-}
-
-fn valid_latitude(value: f64) -> bool {
-    value.is_finite() && (-90.0..=90.0).contains(&value)
-}
-
-fn valid_longitude(value: f64) -> bool {
-    value.is_finite() && (-180.0..=180.0).contains(&value)
 }
 
 #[cfg(test)]
@@ -1100,7 +1063,12 @@ mod tests {
             value_text,
             value,
             confidence: 0.9,
-            source_type: "test".to_string(),
+            source_type: if entity_id.starts_with("place:") {
+                "OpenStreetMap"
+            } else {
+                "Google"
+            }
+            .to_string(),
             source_url: None,
             model: None,
             skill_id: None,

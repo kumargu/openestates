@@ -17,6 +17,8 @@ from pipeline.collect_asset_sources import (
     collect_google_places,
     collect_osm_power_infrastructure,
     collect_stormwater_drains,
+    geospatial_society_inputs,
+    google_nearby_collection_categories,
     groundwater_zones_from_kml,
     collect_reddit_assets,
     collect_rera_registry,
@@ -190,6 +192,71 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 "high_watermark": "2026-07-14T09:31:00Z",
             },
         )
+
+    def test_geospatial_inputs_ignore_rera_lat_lng_when_google_missing(self):
+        subjects = geospatial_society_inputs(
+            {
+                "source_entities": [
+                    {
+                        "entity_id": "society:rera-green",
+                        "name": "RERA Green",
+                        "area": "Kanakapura Road",
+                        "city": "Bengaluru",
+                    }
+                ]
+            },
+            {
+                "detail_facts": [
+                    {
+                        "entity_id": "society:rera-green",
+                        "fact_key": "rera_lat_lng",
+                        "value_json": json.dumps(
+                            {"type": "Text", "data": "12.877617,77.528900"}
+                        ),
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(subjects, [])
+
+    def test_geospatial_inputs_prefer_google_coordinate_pair_over_rera(self):
+        subjects = geospatial_society_inputs(
+            {
+                "source_entities": [
+                    {
+                        "entity_id": "society:rera-green",
+                        "name": "RERA Green",
+                        "area": "Kanakapura Road",
+                        "city": "Bengaluru",
+                    }
+                ]
+            },
+            {
+                "detail_facts": [
+                    {
+                        "entity_id": "society:rera-green",
+                        "fact_key": "rera_lat_lng",
+                        "value_json": json.dumps(
+                            {"type": "Text", "data": "12.814964,77.509353"}
+                        ),
+                    }
+                ]
+            },
+            {
+                "records": [
+                    {
+                        "entity_id": "society:rera-green",
+                        "latitude": 12.896276,
+                        "longitude": 77.5308391,
+                    }
+                ]
+            },
+        )
+
+        self.assertEqual(len(subjects), 1)
+        self.assertEqual(subjects[0]["latitude"], 12.896276)
+        self.assertEqual(subjects[0]["longitude"], 77.5308391)
 
     def test_reddit_inputs_use_only_requested_source_entities(self):
         inputs = reddit_society_inputs(
@@ -621,7 +688,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertLess(record["distance_meters"], 5.0)
         self.assertIn("LineString", record["geometry_geojson"])
 
-    def test_collect_stormwater_drains_falls_back_only_for_failed_subjects(self):
+    def test_collect_stormwater_drains_rejects_partial_subject_failure(self):
         request = {
             "partition": {"parts": [["dt", "2026-07-27"]]},
             "planned_at": "2026-07-27T09:00:00Z",
@@ -677,24 +744,14 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 raise HTTPError("https://overpass.example", 504, "timeout", None, None)
             return overpass
 
-        fallback_subject_ids = []
-
-        def fallback(subjects, _max_distance, _collector, _planned_at):
-            fallback_subject_ids.extend(subject["entity_id"] for subject in subjects)
-            return []
-
-        with patch("pipeline.collect_asset_sources.google_stormwater_records", fallback):
-            output = collect_stormwater_drains(
+        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
+            collect_stormwater_drains(
                 request,
                 google_places_input=google_places,
                 fetch=fetch,
             )
 
-        self.assertEqual(fallback_subject_ids, ["society:overpass-fails"])
-        self.assertEqual(len(output["records"]), 1)
-        self.assertEqual(output["records"][0]["entity_id"], "society:overpass-succeeds")
-
-    def test_collect_stormwater_drains_keeps_successful_rows_when_google_fallback_unavailable(self):
+    def test_collect_stormwater_drains_never_promotes_partial_rows(self):
         request = {
             "partition": {"parts": [["dt", "2026-07-27"]]},
             "planned_at": "2026-07-27T09:00:00Z",
@@ -736,19 +793,8 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 raise HTTPError("https://overpass.example", 504, "timeout", None, None)
             return overpass
 
-        with patch(
-            "pipeline.collect_asset_sources.google_stormwater_records",
-            side_effect=ValueError("GOOGLE_PLACES_API_KEY is required"),
-        ):
-            output = collect_stormwater_drains(request, fetch=fetch)
-
-        self.assertEqual(len(output["records"]), 1)
-        self.assertEqual(output["records"][0]["entity_id"], "society:overpass-succeeds")
-        watermarks = {
-            watermark["source"]: watermark["high_watermark"]
-            for watermark in output["source_watermarks"]
-        }
-        self.assertIn("openstreetmap_stormwater_partial_failures", watermarks)
+        with self.assertRaisesRegex(ValueError, "unavailable for 1 of 2 subjects"):
+            collect_stormwater_drains(request, fetch=fetch)
 
     def test_reddit_transient_failure_retries_before_returning_empty(self):
         unavailable = RedditSourceUnavailable("temporary failure")
@@ -2039,6 +2085,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     "displayName": {"text": "Example Green"},
                     "formattedAddress": "Whitefield, Bengaluru",
                     "googleMapsUri": "https://maps.google.com/?cid=123",
+                    "location": {"latitude": 12.97, "longitude": 77.75},
+                    "primaryType": "housing_complex",
+                    "types": ["housing_complex", "establishment"],
                     "rating": 4.5,
                     "userRatingCount": 812,
                 }
@@ -2049,6 +2098,9 @@ class CollectAssetSourcesTest(unittest.TestCase):
             "displayName": {"text": "Example Green"},
             "formattedAddress": "Whitefield, Bengaluru",
             "googleMapsUri": "https://maps.google.com/?cid=123",
+            "location": {"latitude": 12.97, "longitude": 77.75},
+            "primaryType": "housing_complex",
+            "types": ["housing_complex", "establishment"],
             "rating": 4.5,
             "userRatingCount": 812,
             "reviews": [
@@ -2148,11 +2200,13 @@ class CollectAssetSourcesTest(unittest.TestCase):
         )
 
         self.assertEqual(output["snapshot_date"], "2026-07-14")
-        self.assertEqual(len(output["records"]), 5)
+        self.assertEqual(
+            len(output["records"]), len(google_nearby_collection_categories())
+        )
         school = output["records"][0]
         self.assertEqual(school["entity_id"], "society:rera-example-green")
         self.assertEqual(school["project_key"], "PRM-EXAMPLE-GREEN")
-        self.assertEqual(school["query"], "school near Example Green Whitefield Bengaluru")
+        self.assertEqual(school["query"], "schools near Example Green Whitefield Bengaluru")
         self.assertEqual(school["category"], "school")
         self.assertEqual(school["place_name"], "Example school")
         self.assertEqual(school["distance_km"], 1.2)
@@ -2180,7 +2234,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                     }
                 ]
             }
-            if query.startswith("school near"):
+            if query.startswith("schools near"):
                 payload["places"][0].update(
                     {
                         "id": "places/school",
@@ -2192,7 +2246,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "userRatingCount": 120,
                     }
                 )
-            elif query.startswith("metro station near"):
+            elif query.startswith("metro near"):
                 payload["places"][0].update(
                     {
                         "displayName": {"text": "Example Metro Station"},
@@ -2200,7 +2254,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "types": ["subway_station", "transit_station"],
                     }
                 )
-            elif query.startswith("hospital near"):
+            elif query.startswith("hospitals near"):
                 payload["places"][0].update(
                     {
                         "displayName": {"text": "Example Hospital"},
@@ -2208,7 +2262,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "types": ["hospital"],
                     }
                 )
-            elif query.startswith("gym fitness near"):
+            elif query.startswith("fitness near"):
                 payload["places"][0].update(
                     {
                         "displayName": {"text": "Cult Whitefield"},
@@ -2216,7 +2270,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "types": ["gym"],
                     }
                 )
-            elif query.startswith("tech park office near"):
+            elif query.startswith("tech parks and offices near"):
                 payload["places"][0].update(
                     {
                         "displayName": {"text": "Example Tech Park"},
@@ -2243,12 +2297,22 @@ class CollectAssetSourcesTest(unittest.TestCase):
                             "society_name": "Example Green",
                             "area": "Whitefield",
                             "city": "Bengaluru",
+                            "latitude": 12.9716,
+                            "longitude": 77.5946,
                         }
                     },
                 )
 
-        self.assertEqual(len(requests), 6)
-        school_request = json.loads(requests[1].data.decode("utf-8"))
+        self.assertEqual(len(requests), len(google_nearby_collection_categories()))
+        requests_by_query = {
+            json.loads(request.data.decode("utf-8"))["textQuery"]: request
+            for request in requests
+        }
+        school_request = json.loads(
+            requests_by_query["schools near Example Green Whitefield Bengaluru"].data.decode(
+                "utf-8"
+            )
+        )
         self.assertEqual(
             school_request["locationBias"]["circle"]["center"]["latitude"], 12.9716
         )
@@ -2256,18 +2320,30 @@ class CollectAssetSourcesTest(unittest.TestCase):
             school_request["locationBias"]["circle"]["center"]["longitude"], 77.5946
         )
         self.assertEqual(school_request["locationBias"]["circle"]["radius"], 5000)
-        metro_request = json.loads(requests[2].data.decode("utf-8"))
+        metro_request = json.loads(
+            requests_by_query[
+                "metro near Example Green Whitefield Bengaluru"
+            ].data.decode("utf-8")
+        )
         self.assertEqual(metro_request["locationBias"]["circle"]["radius"], 6000)
-        fitness_request = json.loads(requests[4].data.decode("utf-8"))
+        fitness_request = json.loads(
+            requests_by_query[
+                "fitness near Example Green Whitefield Bengaluru"
+            ].data.decode("utf-8")
+        )
         self.assertEqual(fitness_request["locationBias"]["circle"]["radius"], 3500)
-        tech_park_request = json.loads(requests[5].data.decode("utf-8"))
+        tech_park_request = json.loads(
+            requests_by_query[
+                "tech parks and offices near Example Green Whitefield Bengaluru"
+            ].data.decode("utf-8")
+        )
         self.assertEqual(
             tech_park_request["locationBias"]["circle"]["radius"],
             15000,
         )
         self.assertEqual(len(output["records"]), 5)
         school = output["records"][0]
-        self.assertEqual(school["query"], "school near Example Green Whitefield Bengaluru")
+        self.assertEqual(school["query"], "schools near Example Green Whitefield Bengaluru")
         self.assertEqual(school["place_name"], "Example School")
         self.assertEqual(school["place_id"], "places/school")
         self.assertEqual(school["distance_km"], 0.0)
@@ -2292,7 +2368,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 },
                 {
                     "id": "places/gym",
-                    "displayName": {"text": "Example Gym"},
+                    "displayName": {"text": "Cult Example Gym"},
                     "googleMapsUri": "https://maps.google.com/?cid=gym",
                     "location": {"latitude": 12.9730, "longitude": 77.5946},
                     "primaryType": "gym",
@@ -2317,7 +2393,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                 )
 
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0]["place_name"], "Example Gym")
+        self.assertEqual(records[0]["place_name"], "Cult Example Gym")
         self.assertEqual(records[0]["latitude"], 12.9730)
         self.assertEqual(records[0]["longitude"], 77.5946)
 

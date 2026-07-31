@@ -8,7 +8,9 @@ use std::collections::HashMap;
 
 use serde::Serialize;
 
-use crate::dag_config::{load_fact_registry_index, ui_surfaces_config, FactRegistryIndex};
+use crate::dag_config::{
+    load_fact_registry_index, ui_surfaces_config, CoordinateEntityScope, FactRegistryIndex,
+};
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::related_societies::{
@@ -17,7 +19,8 @@ use crate::related_societies::{
 };
 use crate::search::geo::{extract_first_distance_km, haversine_km};
 use crate::serving::{
-    ServingEntityFactRows, ServingFactIndex, ServingFactRecord, SocietyFactProjection,
+    resolve_serving_coordinates, ServingEntityFactRows, ServingFactIndex, ServingFactRecord,
+    SocietyFactProjection,
 };
 use crate::surfaces::{SceneGeometry, SurfaceSceneResponse};
 
@@ -176,7 +179,7 @@ pub fn build_property_map_context(
     }
 
     let water = map_water_context(property, facts, &projection);
-    let overlay_home = home_coords.or_else(|| approximate_home_from_places(&places));
+    let overlay_home = home_coords;
     let (metro_lines, green_patches, lakes) = match (map_overlays, overlay_home) {
         (Some(overlays), Some(home)) => {
             let metro_stations = metro_corridor_anchors(&places, &dag_metro_stations, home);
@@ -403,43 +406,16 @@ fn add_metro_line_stations(
     }
 }
 
-fn approximate_home_from_places(places: &[MapPlacePin]) -> Option<(f64, f64)> {
-    let mut ranked = places
-        .iter()
-        .filter_map(|place| match (place.latitude, place.longitude) {
-            (Some(lat), Some(lng)) => Some((place.distance_km.unwrap_or(f64::INFINITY), lat, lng)),
-            _ => None,
-        })
-        .collect::<Vec<_>>();
-    if ranked.is_empty() {
-        return None;
-    }
-    ranked.sort_by(|left, right| {
-        left.0
-            .partial_cmp(&right.0)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-    let near = &ranked[..ranked.len().min(3)];
-    let lat = near.iter().map(|item| item.1).sum::<f64>() / near.len() as f64;
-    let lng = near.iter().map(|item| item.2).sum::<f64>() / near.len() as f64;
-    Some((lat, lng))
-}
-
 fn dag_metro_stations(facts: &ServingFactIndex) -> Vec<DagMetroStation> {
     let mut stations = Vec::new();
     for (entity_id, rows) in facts.rows() {
         if !entity_id.starts_with("place:metro:") {
             continue;
         }
-        let Some(latitude) = numeric_fact(rows, "geo.latitude") else {
+        let Some(coordinates) = resolve_serving_coordinates(rows, CoordinateEntityScope::Place)
+        else {
             continue;
         };
-        let Some(longitude) = numeric_fact(rows, "geo.longitude") else {
-            continue;
-        };
-        if !(-90.0..=90.0).contains(&latitude) || !(-180.0..=180.0).contains(&longitude) {
-            continue;
-        }
         let name = text_fact(rows, "place.name").unwrap_or_else(|| entity_id.to_string());
         let lines = tags_fact(rows, "transit.lines")
             .into_iter()
@@ -448,8 +424,8 @@ fn dag_metro_stations(facts: &ServingFactIndex) -> Vec<DagMetroStation> {
         stations.push(DagMetroStation {
             entity_id: entity_id.to_string(),
             name,
-            latitude,
-            longitude,
+            latitude: coordinates.latitude,
+            longitude: coordinates.longitude,
             lines,
         });
     }
@@ -825,8 +801,9 @@ fn map_linked_place_pin(
         _ => return None,
     };
     let rows = facts.entity(place_entity_id)?;
-    let latitude = numeric_fact(rows, "geo.latitude")?;
-    let longitude = numeric_fact(rows, "geo.longitude")?;
+    let coordinates = resolve_serving_coordinates(rows, CoordinateEntityScope::Place)?;
+    let latitude = coordinates.latitude;
+    let longitude = coordinates.longitude;
     let evidence = linked_fact
         .source_url
         .as_deref()
@@ -1107,8 +1084,9 @@ fn place_lookup_by_google_url(facts: &ServingFactIndex) -> HashMap<String, Place
         let Some(url) = url else {
             continue;
         };
-        let latitude = numeric_fact(rows, "geo.latitude");
-        let longitude = numeric_fact(rows, "geo.longitude");
+        let coordinates = resolve_serving_coordinates(rows, CoordinateEntityScope::Place);
+        let latitude = coordinates.as_ref().map(|value| value.latitude);
+        let longitude = coordinates.as_ref().map(|value| value.longitude);
         let name = text_fact(rows, "place.name");
         let rating = numeric_fact(rows, "google_rating");
         let review_count = numeric_fact(rows, "google_review_count").and_then(|value| {
@@ -1136,12 +1114,10 @@ fn place_lookup_by_google_url(facts: &ServingFactIndex) -> HashMap<String, Place
 fn coordinates_for_candidates(facts: &ServingFactIndex, society_id: &str) -> Option<(f64, f64)> {
     for candidate in society_entity_id_candidates(society_id) {
         if let Some(rows) = facts.entity(&candidate) {
-            let latitude = preferred_coordinate_fact(rows, "geo.latitude")
-                .or_else(|| preferred_coordinate_fact(rows, "project_latitude"))?;
-            let longitude = preferred_coordinate_fact(rows, "geo.longitude")
-                .or_else(|| preferred_coordinate_fact(rows, "project_longitude"))?;
-            if (-90.0..=90.0).contains(&latitude) && (-180.0..=180.0).contains(&longitude) {
-                return Some((latitude, longitude));
+            if let Some(coordinates) =
+                resolve_serving_coordinates(rows, CoordinateEntityScope::Society)
+            {
+                return Some((coordinates.latitude, coordinates.longitude));
             }
         }
     }
@@ -1160,45 +1136,6 @@ fn society_entity_id_candidates(society_id: &str) -> Vec<String> {
     } else {
         vec![canonical, raw]
     }
-}
-
-fn preferred_coordinate_fact(rows: &ServingEntityFactRows, key: &str) -> Option<f64> {
-    coordinate_fact_from_sources(rows, key, &["Google", "Manual"])
-        .or_else(|| coordinate_fact_excluding_sources(rows, key, &["Rera"]))
-}
-
-fn coordinate_fact_from_sources(
-    rows: &ServingEntityFactRows,
-    key: &str,
-    source_types: &[&str],
-) -> Option<f64> {
-    rows.facts
-        .iter()
-        .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-        .filter(|fact| {
-            source_types
-                .iter()
-                .any(|source_type| fact.source_type.eq_ignore_ascii_case(source_type))
-        })
-        .filter_map(finite_numeric_fact)
-        .max_by(|left, right| left.total_cmp(right))
-}
-
-fn coordinate_fact_excluding_sources(
-    rows: &ServingEntityFactRows,
-    key: &str,
-    excluded_source_types: &[&str],
-) -> Option<f64> {
-    rows.facts
-        .iter()
-        .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-        .filter(|fact| {
-            !excluded_source_types
-                .iter()
-                .any(|source_type| fact.source_type.eq_ignore_ascii_case(source_type))
-        })
-        .filter_map(finite_numeric_fact)
-        .max_by(|left, right| left.total_cmp(right))
 }
 
 fn numeric_fact(rows: &ServingEntityFactRows, key: &str) -> Option<f64> {
@@ -1986,7 +1923,8 @@ mod tests {
         let context =
             build_property_map_context(&property, Some("Assetz Marq"), Some(&serving), None)
                 .expect("places without home coords should still build");
-        assert_eq!(context.home.latitude, Some(12.981));
+        assert_eq!(context.home.latitude, None);
+        assert_eq!(context.home.longitude, None);
         assert_eq!(context.places.len(), 1);
         assert_eq!(context.places[0].distance_km, Some(0.2));
     }

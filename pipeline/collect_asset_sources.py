@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from urllib.parse import urlencode
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from pipeline.skills.fetch_rera import LISTING_CACHE_PATH, LISTING_URL, scrape_rera_listing
 
@@ -28,7 +28,31 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 KNOWLEDGE_DIR = PROJECT_ROOT / "data" / "knowledge" / "nodes"
 DAG_ROOT = PROJECT_ROOT / "app" / "config" / "dag"
 FACT_REGISTRY_PATH = DAG_ROOT / "fact_registry.json"
+RESOLUTION_POLICIES_PATH = DAG_ROOT / "resolution_policies.json"
 _FACT_REGISTRY_CACHE = None  # type: Optional[Dict[str, Any]]
+_RESOLUTION_POLICIES_CACHE = None  # type: Optional[Dict[str, Any]]
+
+
+def load_project_local_env() -> None:
+    path = PROJECT_ROOT / ".env.local"
+    if not path.exists():
+        return
+    for raw_line in path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("export "):
+            line = line[len("export ") :].strip()
+        key, separator, value = line.partition("=")
+        if not separator or not key.strip():
+            continue
+        value = value.strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+            value = value[1:-1]
+        os.environ.setdefault(key.strip(), value)
+
+
+load_project_local_env()
 
 
 def load_fact_registry_index():
@@ -53,6 +77,20 @@ def load_fact_registry_index():
             index[str(legacy_key)] = index[str(canonical)]
     _FACT_REGISTRY_CACHE = index
     return index
+
+
+def load_resolution_policies():
+    # type: () -> Dict[str, Any]
+    global _RESOLUTION_POLICIES_CACHE
+    if _RESOLUTION_POLICIES_CACHE is not None:
+        return _RESOLUTION_POLICIES_CACHE
+    if not RESOLUTION_POLICIES_PATH.exists():
+        _RESOLUTION_POLICIES_CACHE = {}
+        return _RESOLUTION_POLICIES_CACHE
+    _RESOLUTION_POLICIES_CACHE = json.loads(
+        RESOLUTION_POLICIES_PATH.read_text(encoding="utf-8")
+    )
+    return _RESOLUTION_POLICIES_CACHE
 
 
 def annotation_from_registry(fact_key, skill_scoring=None):
@@ -149,6 +187,9 @@ def collect_asset_sources(
         try:
             google_inputs = google_society_inputs(
                 request, output.get(RERA_REGISTRY_MONTHLY)
+            )
+            apply_google_origin_locations(
+                google_inputs, output.get(GOOGLE_PLACES_WEEKLY)
             )
             if not google_inputs:
                 raise ValueError(
@@ -289,17 +330,27 @@ def collect_bengaluru_metro_stations(
 
 
 def fetch_overpass_json(url: str, query: str) -> Dict[str, Any]:
-    request = Request(
-        url,
-        data=urlencode({"data": query}).encode("utf-8"),
-        headers={
-            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
-            "User-Agent": "OpenEstates DAG source collector",
-        },
-        method="POST",
-    )
-    with urlopen(request, timeout=45) as response:
-        return json.loads(response.read().decode("utf-8"))
+    for attempt in range(1, 4):
+        request = Request(
+            url,
+            data=urlencode({"data": query}).encode("utf-8"),
+            headers={
+                "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+                "User-Agent": "OpenEstates DAG source collector",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=45) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            if attempt >= 3 or error.code not in (429, 500, 502, 503, 504):
+                raise
+        except URLError:
+            if attempt >= 3:
+                raise
+        time.sleep(float(attempt * 2))
+    raise RuntimeError("Overpass request exhausted retries")
 
 
 def collect_osm_power_infrastructure(
@@ -336,6 +387,7 @@ def collect_osm_power_infrastructure(
         watermark_source = "{}_empty".format(watermark_source)
     return {
         "snapshot_date": snapshot_date,
+        "collection_status": "complete" if records else "complete_empty",
         "records": records,
         "source_watermarks": [
             {
@@ -369,7 +421,6 @@ def collect_stormwater_drains(
     records = []
     query_hashes = []
     overpass_failures = []
-    fallback_subjects = []
     waterway_values = optional_string_list(collector.get("waterway_values")) or [
         "drain",
         "ditch",
@@ -400,35 +451,17 @@ def collect_stormwater_drains(
             )
         except Exception as error:
             overpass_failures.append("{}: {}".format(subject["entity_id"], error))
-            fallback_subjects.append(subject)
             logger.warning(
                 "Stormwater Overpass collection failed for %s: %s",
                 subject["entity_id"],
                 error,
             )
     if overpass_failures:
-        fallback_error = None
-        try:
-            fallback_records = google_stormwater_records(
-                fallback_subjects,
-                max_distance,
-                collector,
-                planned_at,
+        raise ValueError(
+            "stormwater Overpass was unavailable for {} of {} subjects: {}".format(
+                len(overpass_failures), len(subjects), "; ".join(overpass_failures[:5])
             )
-        except Exception as error:
-            fallback_records = []
-            fallback_error = "{}: {}".format(type(error).__name__, error)
-        if fallback_records:
-            records.extend(fallback_records)
-        elif len(overpass_failures) == len(subjects):
-            message = "stormwater Overpass failed for all subjects"
-            if fallback_error:
-                message = "{} and Google fallback failed: {}".format(
-                    message, fallback_error
-                )
-            else:
-                message = "{} and Google fallback returned no records".format(message)
-            raise ValueError("{}: {}".format(message, "; ".join(overpass_failures[:5])))
+        )
     records = dedupe_spatial_records(records, "drain_id")
     watermark_source = str(collector.get("source_id") or "openstreetmap_stormwater")
     if not records:
@@ -442,20 +475,9 @@ def collect_stormwater_drains(
             ),
         }
     ]
-    if overpass_failures:
-        watermarks.append(
-            {
-                "source": "{}_partial_failures".format(
-                    str(collector.get("source_id") or "openstreetmap_stormwater")
-                ),
-                "high_watermark": "failed_subjects={};fallback_subjects={}".format(
-                    len(overpass_failures),
-                    len(fallback_subjects),
-                ),
-            }
-        )
     return {
         "snapshot_date": snapshot_date,
+        "collection_status": "complete" if records else "complete_empty",
         "records": records,
         "source_watermarks": watermarks,
     }
@@ -698,104 +720,6 @@ def osm_power_records_from_overpass(
     return dedupe_spatial_records(records, "osm_id")
 
 
-def google_stormwater_records(
-    subjects: List[Dict[str, Any]],
-    max_distance_meters: float,
-    collector: Dict[str, Any],
-    planned_at: str,
-) -> List[Dict[str, Any]]:
-    from pipeline.skills.fetch_google_review_links import (
-        fetch_google_places_text_search,
-        google_maps_search_url,
-        google_place_display_name,
-        google_place_location,
-        google_places_api_key,
-        parse_float,
-        parse_int,
-    )
-
-    api_key = google_places_api_key()
-    if not api_key:
-        raise ValueError("GOOGLE_PLACES_API_KEY is required for stormwater fallback")
-    markers = optional_string_list(collector.get("rajakaluve_name_markers"))
-    query_labels = optional_string_list(collector.get("google_fallback_queries")) or [
-        "rajakaluve",
-        "stormwater drain",
-    ]
-    records = []
-    for subject in subjects:
-        for label in query_labels:
-            query = "{} near {}".format(label, subject_query(subject, "").strip())
-            payload = fetch_google_places_text_search(
-                query,
-                api_key,
-                max_result_count=3,
-                location_bias={
-                    "latitude": subject["latitude"],
-                    "longitude": subject["longitude"],
-                },
-                radius_meters=max_distance_meters,
-            )
-            for place in payload.get("places") or []:
-                if not isinstance(place, dict):
-                    continue
-                name = optional_string(google_place_display_name(place))
-                if not name or not any(marker in name.lower() for marker in markers):
-                    continue
-                location = google_place_location(place)
-                if not location:
-                    continue
-                points = [
-                    {
-                        "latitude": location["latitude"] - 0.00001,
-                        "longitude": location["longitude"],
-                    },
-                    {
-                        "latitude": location["latitude"] + 0.00001,
-                        "longitude": location["longitude"],
-                    },
-                ]
-                distance_meters, closest = distance_from_subject_to_line(subject, points)
-                if distance_meters > max_distance_meters:
-                    continue
-                place_id = optional_string(place.get("id")) or hashlib.sha256(
-                    "{}:{}:{}".format(name, location["latitude"], location["longitude"]).encode(
-                        "utf-8"
-                    )
-                ).hexdigest()[:16]
-                records.append(
-                    {
-                        "entity_id": subject["entity_id"],
-                        "project_key": optional_string(subject.get("project_key")),
-                        "query": query,
-                        "drain_id": "google/{}".format(place_id),
-                        "name": name,
-                        "drain_type": "rajakaluve",
-                        "hierarchy": stormwater_hierarchy({"name": name}, collector),
-                        "distance_meters": distance_meters,
-                        "intersects_property": distance_meters <= 1.0,
-                        "subject_latitude": subject["latitude"],
-                        "subject_longitude": subject["longitude"],
-                        "latitude": closest["latitude"],
-                        "longitude": closest["longitude"],
-                        "geometry_geojson": line_geojson(points),
-                        "encroachment_record": None,
-                        "source_tags": {
-                            "google_place_id": place_id,
-                            "rating": str(parse_float(place.get("rating")) or ""),
-                            "user_rating_count": str(parse_int(place.get("userRatingCount")) or ""),
-                        },
-                        "source_url": optional_string(place.get("googleMapsUri"))
-                        or google_maps_search_url(query, place_id),
-                        "source_type": "Google",
-                        "confidence": float(collector.get("google_fallback_confidence") or 0.62),
-                        "fetched_at": planned_at,
-                        "fetch_source": "google_places_text_search_stormwater_fallback",
-                    }
-                )
-    return dedupe_spatial_records(records, "drain_id")
-
-
 def stormwater_records_from_overpass(
     payload: Dict[str, Any],
     subjects: List[Dict[str, Any]],
@@ -851,10 +775,6 @@ def geospatial_society_inputs(
     google_places_input: Dict[str, Any] = None,
 ) -> List[Dict[str, Any]]:
     by_entity = {}
-    profile_facts = rera_detail_facts_by_entity_for_keys(
-        rera_input,
-        {"geo.latitude", "geo.longitude"},
-    )
     google_coordinates = google_place_coordinates_by_entity(google_places_input)
     for seed in request.get("source_entities", []):
         if not isinstance(seed, dict):
@@ -863,18 +783,21 @@ def geospatial_society_inputs(
         name = optional_string(seed.get("name"))
         if not entity_id or not name:
             continue
-        fact_values = profile_facts.get(entity_id, {})
-        latitude = optional_float(seed.get("latitude"))
-        longitude = optional_float(seed.get("longitude"))
-        if latitude is None:
-            latitude = optional_float(fact_values.get("geo.latitude"))
-        if longitude is None:
-            longitude = optional_float(fact_values.get("geo.longitude"))
         google_point = google_coordinates.get(entity_id, {})
-        if latitude is None:
-            latitude = optional_float(google_point.get("latitude"))
-        if longitude is None:
-            longitude = optional_float(google_point.get("longitude"))
+        latitude, longitude = select_coordinate_pair(
+            [
+                {
+                    "source_type": "source_entity_seed",
+                    "latitude": seed.get("latitude"),
+                    "longitude": seed.get("longitude"),
+                },
+                {
+                    "source_type": "google",
+                    "latitude": google_point.get("latitude"),
+                    "longitude": google_point.get("longitude"),
+                },
+            ]
+        )
         if latitude is None or longitude is None:
             continue
         by_entity[entity_id] = {
@@ -906,6 +829,75 @@ def google_place_coordinates_by_entity(
             "longitude": longitude,
         }
     return coordinates
+
+
+def select_coordinate_pair(
+    candidates: List[Dict[str, Any]], entity_scope: str = "society"
+) -> Tuple[Optional[float], Optional[float]]:
+    policy = (load_resolution_policies().get("coordinate_sources") or {}).get(
+        entity_scope
+    ) or {}
+    allowed = {
+        normalize_source_type(source) for source in policy.get("allowed_sources") or []
+    }
+    denied = {
+        normalize_source_type(source) for source in policy.get("denied_sources") or []
+    }
+    priority = policy.get("source_priority") or []
+    ranked = {
+        normalize_source_type(source): index
+        for index, source in enumerate(priority)
+    }
+    best = None
+    best_rank = len(ranked) + len(candidates)
+    for index, candidate in enumerate(candidates):
+        latitude = optional_float(candidate.get("latitude"))
+        longitude = optional_float(candidate.get("longitude"))
+        if latitude is None or longitude is None:
+            continue
+        source_type = normalize_source_type(candidate.get("source_type"))
+        if not source_type or source_type in denied or source_type not in allowed:
+            continue
+        if not (
+            math.isfinite(latitude)
+            and math.isfinite(longitude)
+            and -90.0 <= latitude <= 90.0
+            and -180.0 <= longitude <= 180.0
+        ):
+            continue
+        rank = ranked.get(source_type, len(ranked) + index)
+        if best is None or rank < best_rank:
+            best = (latitude, longitude)
+            best_rank = rank
+    if best is None:
+        return None, None
+    return best
+
+
+def normalize_source_type(value: Any) -> str:
+    return (
+        optional_string(value)
+        .replace("_", "")
+        .replace("-", "")
+        .replace(" ", "")
+        .lower()
+    )
+
+
+def parse_lat_lng_text(value: Any) -> Dict[str, float]:
+    text = optional_string(value)
+    if not text:
+        return {}
+    parts = [part.strip() for part in text.split(",")]
+    if len(parts) != 2:
+        return {}
+    latitude = optional_float(parts[0])
+    longitude = optional_float(parts[1])
+    if latitude is None or longitude is None:
+        return {}
+    if not (-90.0 <= latitude <= 90.0 and -180.0 <= longitude <= 180.0):
+        return {}
+    return {"latitude": latitude, "longitude": longitude}
 
 
 def rera_detail_facts_by_entity_for_keys(
@@ -1505,6 +1497,43 @@ def load_society_inputs_for_reddit() -> Dict[str, Dict[str, Any]]:
     return inputs
 
 
+def apply_google_origin_locations(
+    inputs: Dict[str, Dict[str, Any]], google_places_input: Dict[str, Any] = None
+) -> None:
+    if not google_places_input:
+        return
+    for record in google_places_input.get("records") or []:
+        entity_id = optional_string(record.get("entity_id"))
+        input_data = inputs.get(entity_id)
+        if input_data is None:
+            continue
+        existing_latitude, existing_longitude = select_coordinate_pair(
+            [
+                {
+                    "source_type": "source_entity_seed",
+                    "latitude": input_data.get("latitude"),
+                    "longitude": input_data.get("longitude"),
+                }
+            ]
+        )
+        if existing_latitude is not None and existing_longitude is not None:
+            continue
+        latitude, longitude = select_coordinate_pair(
+            [
+                {
+                    "source_type": "google",
+                    "latitude": record.get("latitude"),
+                    "longitude": record.get("longitude"),
+                }
+            ]
+        )
+        if latitude is None or longitude is None:
+            continue
+        input_data["latitude"] = latitude
+        input_data["longitude"] = longitude
+        input_data["google_place_id"] = optional_string(record.get("place_id"))
+
+
 def node_fact_text(node: Dict[str, Any], key: str) -> str:
     for fact in node.get("facts", []):
         if fact.get("key") != key:
@@ -1743,6 +1772,8 @@ def source_society_inputs(
             "society_name": name,
             "area": optional_string(seed.get("area")),
             "city": optional_string(seed.get("city")) or "Bengaluru",
+            "latitude": optional_float(seed.get("latitude")),
+            "longitude": optional_float(seed.get("longitude")),
         }
     if inputs or not rera_input:
         return inputs
@@ -2133,7 +2164,7 @@ def source_entity_profile_rows(
                 "value_type": value_type,
                 "value_json": value_json,
                 "confidence": confidence,
-                "source_type": "Manual",
+                "source_type": "SourceEntitySeed",
                 "source_url": None,
                 "model": None,
                 "skill_id": "source_entity_profile",

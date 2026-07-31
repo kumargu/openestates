@@ -1,0 +1,44 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-de36720f386e8a3f",
+      "alias_entity_id": "society:prestige-falcon-city",
+      "name": "PRESTIGE FALCON CITY",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170913/000114"
+    },
+    {
+      "entity_id": "society:rera-9e36c8a04a40e472",
+      "alias_entity_id": "society:prestige-song-of-the-south-phase-i",
+      "name": "PRESTIGE SONG OF THE SOUTH PHASE I",
+      "area": "Begur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000243"
+    },
+    {
+      "entity_id": "society:rera-a746aa687e84264d",
+      "alias_entity_id": "society:mantri-serenity-1",
+      "name": "Mantri Serenity1",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171019/000494"
+    },
+    {
+      "entity_id": "society:rera-2a8457298f16cc42",
+      "alias_entity_id": "society:sobha-forest-edge",
+      "name": "Sobha Forest Edge",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180227/002592"
+    },
+    {
+      "entity_id": "society:rera-e68d15500e147ecd",
+      "alias_entity_id": "society:brigade-7-gardens",
+      "name": "Brigade 7 Gardens",
+      "area": "Banashankari",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171021/000508"
+    }
+  ]
+}

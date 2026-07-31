@@ -353,7 +353,8 @@ pub async fn rera_legal_facts_input(
         }
     }
 
-    let detail_rows = read_rera_detail_fact_rows(lake, rera_record).await?;
+    let mut detail_rows = read_rera_detail_fact_rows(lake, rera_record).await?;
+    remove_untrusted_rera_coordinate_facts(&mut detail_rows);
     let (facts, annotations) = merge_current_fact_rows(
         facts,
         annotations,
@@ -459,6 +460,12 @@ fn merge_current_fact_rows(
         }
     }
     (facts, annotations)
+}
+
+fn remove_untrusted_rera_coordinate_facts(rows: &mut super::SkillFactArtifactRows) {
+    rows.facts.retain(|fact| fact.fact_key != "rera_lat_lng");
+    rows.fact_annotations
+        .retain(|annotation| annotation.fact_key != "rera_lat_lng");
 }
 
 pub async fn read_rera_project_rows(
@@ -1300,5 +1307,63 @@ impl From<serde_json::Error> for ReraAssetError {
 impl From<SkillFactMaterializeError> for ReraAssetError {
     fn from(value: SkillFactMaterializeError) -> Self {
         Self::SkillFact(value)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    #[test]
+    fn rera_legal_facts_drop_untrusted_rera_lat_lng() {
+        let learned_at = Utc.with_ymd_and_hms(2026, 7, 31, 12, 0, 0).unwrap();
+        let mut rows = super::super::SkillFactArtifactRows {
+            facts: vec![
+                test_fact("society:rera-green", "rera_lat_lng", learned_at),
+                test_fact("society:rera-green", "rera_project_address", learned_at),
+            ],
+            fact_annotations: vec![
+                test_annotation("society:rera-green", "rera_lat_lng"),
+                test_annotation("society:rera-green", "rera_project_address"),
+            ],
+        };
+
+        remove_untrusted_rera_coordinate_facts(&mut rows);
+
+        assert_eq!(rows.facts.len(), 1);
+        assert_eq!(rows.facts[0].fact_key, "rera_project_address");
+        assert_eq!(rows.fact_annotations.len(), 1);
+        assert_eq!(rows.fact_annotations[0].fact_key, "rera_project_address");
+    }
+
+    fn test_fact(entity_id: &str, fact_key: &str, learned_at: DateTime<Utc>) -> SkillFactRecord {
+        SkillFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: "text".to_string(),
+            value_json: serde_json::to_string(&FactValue::Text("test".to_string())).unwrap(),
+            confidence: 1.0,
+            source_type: "Rera".to_string(),
+            source_url: None,
+            model: None,
+            skill_id: Some("fetch_rera".to_string()),
+            triggered_by: Some("asset_dag".to_string()),
+            learned_at,
+            run_id: "test".to_string(),
+            input_hash: "test".to_string(),
+        }
+    }
+
+    fn test_annotation(entity_id: &str, fact_key: &str) -> SkillFactAnnotationRecord {
+        SkillFactAnnotationRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            display_template: None,
+            answers_preferences_json: "[]".to_string(),
+            scoring_direction: None,
+            scoring_weight: None,
+            scoring_thresholds_json: "[]".to_string(),
+        }
     }
 }

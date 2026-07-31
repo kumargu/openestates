@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use super::environment::EnvironmentGroundwaterPotentialInput;
 use super::osm_power::OsmPowerInfrastructureInput;
+use super::source_provider::SourceEntitySeed;
 use super::stormwater::StormwaterDrainRiskInput;
 use super::transit::BengaluruMetroStationsInput;
 use super::{
@@ -25,6 +26,8 @@ use super::{
 /// lake shape. Executors normalize these records into Parquet-backed assets.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AssetSourceInputs {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_entities: Vec<SourceEntitySeed>,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub source_failures: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

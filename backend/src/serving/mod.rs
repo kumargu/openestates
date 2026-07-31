@@ -5,6 +5,7 @@
 //! a Tantivy index prefix for fast local recall.
 
 pub mod builder;
+pub mod coordinates;
 pub mod loader;
 pub mod materializer;
 pub mod parquet;
@@ -15,6 +16,7 @@ pub mod tantivy_index;
 pub mod types;
 
 pub use builder::{ServingBundleBuilder, ServingBundleError};
+pub use coordinates::{resolve_serving_coordinates, ServingCoordinates};
 pub use loader::{LoadedServingBundle, ServingBundleLoadError, ServingBundleLoader};
 pub use materializer::{
     SearchServingBundleMaterialization, SearchServingBundleMaterializeError,
