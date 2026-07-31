@@ -10,8 +10,12 @@ use crate::knowledge::FactValue;
 use crate::lake::LakeStore;
 
 use super::{
-    geometry::validate_geojson_geometry, MaterializationRecord, ReraAssetError,
-    SkillFactAnnotationRecord, SkillFactRecord, SkillFactsInput, SourceWatermark,
+    geometry::validate_geojson_geometry,
+    source_resolution::{
+        SourceEntityResolutionError, SourceEntityResolutionScope, SourceEntityResolver,
+    },
+    MaterializationRecord, ReraAssetError, SkillFactAnnotationRecord, SkillFactRecord,
+    SkillFactsInput, SourceEntitySeed, SourceWatermark,
 };
 
 pub const STORMWATER_DRAIN_FACTS_ASSET_ID: &str = "stormwater_drain_facts";
@@ -280,58 +284,17 @@ pub async fn canonicalize_stormwater_drain_input(
     lake: &LakeStore,
     input: &StormwaterDrainRiskInput,
     canonical_record: &MaterializationRecord,
+    source_entities: &[SourceEntitySeed],
+    scope: SourceEntityResolutionScope,
 ) -> Result<StormwaterDrainRiskInput, StormwaterAssetError> {
     let canonical = super::read_canonical_society_rows(lake, canonical_record).await?;
-    let canonical_ids = canonical
-        .entities
-        .iter()
-        .filter(|entity| entity.entity_type == "society")
-        .map(|entity| entity.entity_id.as_str())
-        .collect::<std::collections::HashSet<_>>();
-    let by_project_key = canonical
-        .mappings
-        .iter()
-        .map(|mapping| {
-            (
-                mapping.project_key.as_str(),
-                mapping.canonical_entity_id.as_str(),
-            )
-        })
-        .collect::<std::collections::HashMap<_, _>>();
-    let by_alias = canonical
-        .mappings
-        .iter()
-        .filter_map(|mapping| {
-            mapping
-                .alias_entity_id
-                .as_deref()
-                .map(|alias| (alias, mapping.canonical_entity_id.as_str()))
-        })
-        .collect::<std::collections::HashMap<_, _>>();
+    let resolver = SourceEntityResolver::new(&canonical, source_entities, scope);
     let mut resolved = input.clone();
     let mut records = Vec::with_capacity(resolved.records.len());
     for mut record in resolved.records {
-        if canonical_ids.contains(record.entity_id.as_str()) {
-            records.push(record);
-            continue;
-        }
-        let Some(entity_id) = by_alias
-            .get(record.entity_id.as_str())
-            .copied()
-            .or_else(|| {
-                record
-                    .project_key
-                    .as_deref()
-                    .and_then(|key| by_project_key.get(key).copied())
-            })
-        else {
-            eprintln!(
-                "WARN: Skipping stormwater drain row without canonical society evidence: {}",
-                record.query
-            );
-            continue;
-        };
-        record.entity_id = entity_id.to_string();
+        let entity_id =
+            resolver.resolve(record.entity_id.as_str(), record.project_key.as_deref())?;
+        record.entity_id = entity_id;
         records.push(record);
     }
     resolved.records = records;
@@ -775,6 +738,7 @@ pub enum StormwaterAssetError {
     InvalidInput(String),
     Json(serde_json::Error),
     Canonical(ReraAssetError),
+    Identity(SourceEntityResolutionError),
 }
 
 impl fmt::Display for StormwaterAssetError {
@@ -785,6 +749,12 @@ impl fmt::Display for StormwaterAssetError {
             Self::Json(err) => write!(f, "stormwater drain JSON error: {err}"),
             Self::Canonical(err) => {
                 write!(f, "stormwater drain canonical society lookup failed: {err}")
+            }
+            Self::Identity(err) => {
+                write!(
+                    f,
+                    "stormwater drain source identity resolution failed: {err}"
+                )
             }
         }
     }
@@ -807,5 +777,11 @@ impl From<serde_json::Error> for StormwaterAssetError {
 impl From<ReraAssetError> for StormwaterAssetError {
     fn from(value: ReraAssetError) -> Self {
         Self::Canonical(value)
+    }
+}
+
+impl From<SourceEntityResolutionError> for StormwaterAssetError {
+    fn from(value: SourceEntityResolutionError) -> Self {
+        Self::Identity(value)
     }
 }

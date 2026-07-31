@@ -31,6 +31,7 @@ GOOGLE_MAPS_SEARCH_URL = "https://www.google.com/maps/search/"
 EARTH_RADIUS_KM = 6371.0088
 _ORIGIN_LOCATION_CACHE = {}
 _NEARBY_CATEGORY_CONFIG_CACHE = None
+_PLACE_RESOLUTION_CONFIG_CACHE = None
 GOOGLE_PLACES_FIELD_MASK = ",".join(
     [
         "places.id",
@@ -65,7 +66,7 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
 
     skill_id = "fetch_google_review_links"
     description = "Collect Google Maps review links and place metadata without LLMs."
-    version = "1.2"
+    version = "1.3"
     output_keys = [
         "google_reviews_url",
         "google_place_id",
@@ -110,8 +111,9 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
 
         places_key = google_places_api_key()
         if places_key:
-            payload = fetch_google_places_text_search(query, places_key)
-            place = best_google_places_result(payload)
+            payload = fetch_google_places_text_search(query, places_key, max_result_count=5)
+            resolution = resolve_google_project_place(payload, input_data)
+            place = resolution.get("place") if resolution["status"] == "accepted" else None
             if place:
                 place_payload = google_places_to_place_payload(query, place)
                 api_calls = 1
@@ -127,7 +129,12 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
                     api_calls=api_calls,
                     fetch_source="google_places_text_search",
                 )
-            logger.info("Google Places returned no place for query: %s", query)
+            logger.info(
+                "Google Places did not resolve an accepted place for %s: %s (%s)",
+                query,
+                resolution["status"],
+                "; ".join(resolution["reasons"]),
+            )
 
         serpapi_key = serpapi_api_key()
         if serpapi_key:
@@ -324,6 +331,181 @@ def best_google_places_result(payload: dict) -> Optional[dict]:
         if isinstance(place, dict) and has_google_places_signal(place):
             return place
     return None
+
+
+def resolve_google_project_place(payload: dict, input_data: dict) -> Dict[str, Any]:
+    places = payload.get("places")
+    if not isinstance(places, list):
+        return {"status": "rejected", "place": None, "reasons": ["no_candidates"]}
+    evaluated = [
+        evaluate_google_project_place(place, input_data)
+        for place in places
+        if isinstance(place, dict)
+    ]
+    accepted = [candidate for candidate in evaluated if candidate["eligible"]]
+    accepted.sort(
+        key=lambda candidate: (
+            -candidate["score"],
+            clean_text(candidate["place"].get("id")),
+        )
+    )
+    if not accepted:
+        reasons = sorted(
+            {
+                reason
+                for candidate in evaluated
+                for reason in candidate["reasons"]
+            }
+        ) or ["no_eligible_candidate"]
+        return {"status": "rejected", "place": None, "reasons": reasons}
+    policy = google_place_resolution_policy()
+    if len(accepted) > 1 and (
+        accepted[0]["score"] - accepted[1]["score"]
+        < float(policy.get("ambiguity_margin") or 0.0)
+    ):
+        return {
+            "status": "ambiguous",
+            "place": None,
+            "reasons": [
+                "top_candidates_within_margin",
+                "{}:{:.3f}".format(
+                    google_place_display_name(accepted[0]["place"]), accepted[0]["score"]
+                ),
+                "{}:{:.3f}".format(
+                    google_place_display_name(accepted[1]["place"]), accepted[1]["score"]
+                ),
+            ],
+        }
+    winner = accepted[0]
+    return {
+        "status": "accepted",
+        "place": winner["place"],
+        "score": winner["score"],
+        "reasons": winner["reasons"],
+    }
+
+
+def evaluate_google_project_place(place: dict, input_data: dict) -> Dict[str, Any]:
+    policy = google_place_resolution_policy()
+    reasons = []
+    place_id = clean_text(place.get("id"))
+    location = google_place_location(place)
+    if not place_id:
+        reasons.append("missing_place_id")
+    if not location:
+        reasons.append("missing_location")
+
+    expected_name = clean_text(
+        input_data.get("society_name")
+        or input_data.get("name")
+        or input_data.get("project_name")
+    )
+    name_recall = token_recall(
+        expected_name,
+        google_place_display_name(place),
+        policy.get("ignored_name_tokens") or [],
+    )
+    minimum_name_recall = float(policy.get("minimum_name_recall") or 0.0)
+    if name_recall < minimum_name_recall:
+        reasons.append("name_recall_below_threshold")
+
+    place_types = google_place_types(place)
+    rejected_types = normalized_config_values(policy.get("rejected_place_types"))
+    accepted_types = normalized_config_values(policy.get("accepted_place_types"))
+    if place_types & rejected_types:
+        reasons.append("rejected_place_type")
+    type_match = 1.0 if place_types & accepted_types else 0.0
+    if not type_match:
+        reasons.append("place_type_not_accepted")
+
+    address = clean_text(place.get("formattedAddress"))
+    locality_values = [
+        clean_text(input_data.get("area")),
+        clean_text(input_data.get("city")),
+    ]
+    locality_values = [value for value in locality_values if value]
+    locality_match = (
+        sum(1.0 for value in locality_values if value.lower() in address.lower())
+        / len(locality_values)
+        if locality_values
+        else 0.0
+    )
+    weights = policy.get("weights") or {}
+    score = (
+        name_recall * float(weights.get("name") or 0.0)
+        + locality_match * float(weights.get("locality") or 0.0)
+        + type_match * float(weights.get("place_type") or 0.0)
+    )
+    if score < float(policy.get("minimum_score") or 0.0):
+        reasons.append("score_below_threshold")
+    eligible = not any(
+        reason
+        in {
+            "missing_place_id",
+            "missing_location",
+            "name_recall_below_threshold",
+            "rejected_place_type",
+            "place_type_not_accepted",
+            "score_below_threshold",
+        }
+        for reason in reasons
+    )
+    if eligible:
+        reasons.extend(
+            [
+                "name_recall:{:.3f}".format(name_recall),
+                "locality_match:{:.3f}".format(locality_match),
+                "place_type_match:{:.3f}".format(type_match),
+            ]
+        )
+    return {"place": place, "eligible": eligible, "score": score, "reasons": reasons}
+
+
+def google_place_resolution_policy() -> Dict[str, Any]:
+    global _PLACE_RESOLUTION_CONFIG_CACHE
+    if _PLACE_RESOLUTION_CONFIG_CACHE is None:
+        path = (
+            Path(__file__).resolve().parents[2]
+            / "app"
+            / "config"
+            / "dag"
+            / "google_place_resolution.json"
+        )
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        _PLACE_RESOLUTION_CONFIG_CACHE = payload.get("project_place") or {}
+    return _PLACE_RESOLUTION_CONFIG_CACHE
+
+
+def token_recall(expected: str, actual: str, ignored_tokens: List[str]) -> float:
+    ignored = {normalize_match_token(token) for token in ignored_tokens}
+    expected_tokens = {
+        normalize_match_token(token)
+        for token in expected.split()
+        if normalize_match_token(token) and normalize_match_token(token) not in ignored
+    }
+    actual_tokens = {
+        normalize_match_token(token)
+        for token in actual.split()
+        if normalize_match_token(token) and normalize_match_token(token) not in ignored
+    }
+    if not expected_tokens:
+        return 0.0
+    return len(expected_tokens & actual_tokens) / float(len(expected_tokens))
+
+
+def normalize_match_token(value: str) -> str:
+    normalized = "".join(character.lower() for character in value if character.isalnum())
+    if any(character.isalpha() for character in normalized):
+        normalized = normalized.rstrip("0123456789")
+    return normalized
+
+
+def normalized_config_values(values: Any) -> set:
+    return {
+        clean_text(value).replace("-", "_").lower()
+        for value in values or []
+        if clean_text(value)
+    }
 
 
 def has_place_signal(result: dict) -> bool:
@@ -556,6 +738,8 @@ def fetch_google_places_nearby_text(
     if not base:
         return []
     origin = google_places_origin_location(input_data, api_key)
+    if not origin:
+        raise ValueError("Google nearby collection requires an accepted origin coordinate pair")
     query = f"{label} near {base}"
     payload = fetch_google_places_text_search(
         query,
@@ -824,13 +1008,13 @@ def google_place_types(place: dict) -> set:
     values = set()
     primary_type = clean_text(place.get("primaryType"))
     if primary_type:
-        values.add(primary_type)
+        values.add(primary_type.replace("-", "_").lower())
     types = place.get("types")
     if isinstance(types, list):
         for value in types:
             text = clean_text(value)
             if text:
-                values.add(text)
+                values.add(text.replace("-", "_").lower())
     return values
 
 
@@ -838,22 +1022,7 @@ def google_places_origin_location(input_data: dict, api_key: str) -> Optional[Di
     seeded = parse_location_pair(input_data.get("latitude"), input_data.get("longitude"))
     if seeded:
         return seeded
-
-    base = build_place_query(input_data)
-    if not base:
-        return None
-    cached = _ORIGIN_LOCATION_CACHE.get(base)
-    if cached is not None:
-        return cached
-    try:
-        payload = fetch_google_places_text_search(base, api_key, max_result_count=1)
-        place = best_google_places_result(payload)
-        location = google_place_location(place or {})
-    except Exception as error:
-        logger.warning("Could not resolve Google origin location for %s: %s", base, error)
-        location = None
-    _ORIGIN_LOCATION_CACHE[base] = location
-    return location
+    return None
 
 
 def google_place_location(place: dict) -> Optional[Dict[str, float]]:

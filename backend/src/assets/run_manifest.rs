@@ -6,7 +6,7 @@ use crate::lake::{ArtifactMetadata, LakeError, LakeKey, LakeStore};
 use super::{
     ArtifactRef, AssetDagPlan, AssetFreshness, AssetId, AssetPartition, AssetPathBuilder,
     AssetStage, CostTier, MaterializationId, MaterializationRecord, PlanDecision, PlanReason,
-    RefreshCadence, TrustTier,
+    RefreshCadence, SourceEntityResolutionScope, TrustTier,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -101,6 +101,10 @@ pub struct AssetDagRunManifest {
     pub partition: AssetPartition,
     #[serde(default)]
     pub execution_version: String,
+    #[serde(default = "default_promote_current")]
+    pub promote_current: bool,
+    #[serde(default)]
+    pub source_scope: SourceEntityResolutionScope,
     pub status: DagRunStatus,
     pub created_at: DateTime<Utc>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -164,6 +168,8 @@ impl AssetDagRunManifest {
             run_id: plan.run_id.clone(),
             partition: plan.partition.clone(),
             execution_version: execution_version.into(),
+            promote_current: true,
+            source_scope: SourceEntityResolutionScope::Production,
             status: DagRunStatus::Planned,
             created_at: plan.planned_at,
             completed_at: None,
@@ -633,6 +639,10 @@ impl AssetDagRunManifest {
             .filter(|step| step.status == AssetRunStepStatus::Blocked)
             .count();
     }
+}
+
+fn default_promote_current() -> bool {
+    true
 }
 
 fn reset_step_for_resume(step: &mut AssetRunStep) {

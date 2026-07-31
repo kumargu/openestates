@@ -1,9 +1,11 @@
 use rstar::{PointDistance, RTree, RTreeObject, AABB};
 
-use crate::knowledge::FactValue;
+use crate::dag_config::{valid_coordinate_pair, CoordinateEntityScope};
 use crate::search::geo::haversine_km;
 
-use super::{ServingEntityFactRows, ServingEntityRecord, ServingFactIndex};
+use super::{
+    resolve_serving_coordinates, ServingEntityFactRows, ServingEntityRecord, ServingFactIndex,
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct SpatialServingIndex {
@@ -109,7 +111,7 @@ impl SpatialServingIndex {
         longitude: f64,
         limit: usize,
     ) -> Vec<&SpatialPoint> {
-        if limit == 0 || !valid_latitude(latitude) || !valid_longitude(longitude) {
+        if limit == 0 || !valid_coordinate_pair(latitude, longitude) {
             return Vec::new();
         }
         let mut nearest = self
@@ -139,53 +141,20 @@ fn spatial_point_from_rows(
     entity: &ServingEntityRecord,
     rows: &ServingEntityFactRows,
 ) -> Option<SpatialPoint> {
-    let latitude = coordinate_value(rows, &["geo.latitude", "project_latitude"])?;
-    let longitude = coordinate_value(rows, &["geo.longitude", "project_longitude"])?;
-    if !valid_latitude(latitude.value) || !valid_longitude(longitude.value) {
-        return None;
-    }
+    let scope = if entity.entity_type.eq_ignore_ascii_case("place") {
+        CoordinateEntityScope::Place
+    } else {
+        CoordinateEntityScope::Society
+    };
+    let coordinates = resolve_serving_coordinates(rows, scope)?;
     Some(SpatialPoint {
         entity_id: entity.entity_id.clone(),
         entity_type: entity.entity_type.clone(),
         name: entity.name.clone(),
-        latitude: latitude.value,
-        longitude: longitude.value,
-        confidence: latitude.confidence.min(longitude.confidence),
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        confidence: coordinates.confidence,
     })
-}
-
-#[derive(Debug, Clone, Copy)]
-struct CoordinateValue {
-    value: f64,
-    confidence: f32,
-}
-
-fn coordinate_value(rows: &ServingEntityFactRows, keys: &[&str]) -> Option<CoordinateValue> {
-    keys.iter().find_map(|key| {
-        rows.facts
-            .iter()
-            .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-            .filter_map(|fact| match &fact.value {
-                FactValue::Numeric(value) if value.is_finite() => Some(CoordinateValue {
-                    value: *value,
-                    confidence: fact.confidence,
-                }),
-                FactValue::Score { value, .. } if value.is_finite() => Some(CoordinateValue {
-                    value: *value,
-                    confidence: fact.confidence,
-                }),
-                _ => None,
-            })
-            .max_by(|left, right| left.confidence.total_cmp(&right.confidence))
-    })
-}
-
-fn valid_latitude(value: f64) -> bool {
-    value.is_finite() && (-90.0..=90.0).contains(&value)
-}
-
-fn valid_longitude(value: f64) -> bool {
-    value.is_finite() && (-180.0..=180.0).contains(&value)
 }
 
 #[cfg(test)]
@@ -193,6 +162,7 @@ mod tests {
     use chrono::{TimeZone, Utc};
 
     use super::*;
+    use crate::knowledge::FactValue;
     use crate::serving::ServingFactRecord;
 
     fn entity(entity_id: &str, entity_type: &str, name: &str) -> ServingEntityRecord {
@@ -213,7 +183,12 @@ mod tests {
             value_text: None,
             value: FactValue::Numeric(value),
             confidence,
-            source_type: "test".to_string(),
+            source_type: if entity_id.starts_with("place:") {
+                "OpenStreetMap"
+            } else {
+                "Google"
+            }
+            .to_string(),
             source_url: None,
             model: None,
             skill_id: None,

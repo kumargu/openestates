@@ -10,8 +10,6 @@
     "query_timeout_seconds": 60,
     "bbox_padding_meters": 100.0,
     "confidence": 0.74,
-    "google_fallback_confidence": 0.62,
-    "google_fallback_queries": ["rajakaluve", "stormwater drain", "storm water drain"],
     "waterway_values": ["drain", "ditch", "canal"],
     "rajakaluve_name_markers": ["rajakaluve", "raja kaluve", "swd", "storm water", "stormwater"],
     "hierarchy_name_markers": [

@@ -38,7 +38,7 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
                 source_url: Some(
                     "https://data.opencity.in/dataset/bengaluru-stormwater-drains-maps".to_string(),
                 ),
-                source_type: Some("OpenCity".to_string()),
+                source_type: Some("OpenStreetMap".to_string()),
                 confidence: 0.84,
                 fetched_at,
                 fetch_source: "opencity_stormwater_drain_snapshot".to_string(),
@@ -68,7 +68,7 @@ fn stormwater_drain_facts_emit_rajakaluve_risk_and_geometry() {
                 source_url: Some(
                     "https://data.opencity.in/dataset/bengaluru-stormwater-drains-maps".to_string(),
                 ),
-                source_type: Some("OpenCity".to_string()),
+                source_type: Some("OpenStreetMap".to_string()),
                 confidence: 0.8,
                 fetched_at,
                 fetch_source: "opencity_stormwater_drain_snapshot".to_string(),

@@ -1,10 +1,12 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
+use crate::dag_config::CoordinateEntityScope;
 use crate::knowledge::FactValue;
 use crate::models::Property;
 use crate::serving::{
-    ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
+    resolve_serving_coordinates, ServingEntityRecord, ServingFactIndex, ServingFactRecord,
+    ServingSearchMetadataRecord,
 };
 
 use super::analyzer;
@@ -466,49 +468,18 @@ fn coordinates_for_entity(
     entity_id: &str,
 ) -> Option<EntityCoordinates> {
     let rows = fact_index.entity(entity_id)?;
-    let latitude = coordinate_fact_value(rows, &["geo.latitude", "project_latitude"])?;
-    let longitude = coordinate_fact_value(rows, &["geo.longitude", "project_longitude"])?;
-    if !valid_latitude(latitude.value) || !valid_longitude(longitude.value) {
-        return None;
-    }
+    let scope = if entity_id.starts_with("place:") {
+        CoordinateEntityScope::Place
+    } else {
+        CoordinateEntityScope::Society
+    };
+    let coordinates = resolve_serving_coordinates(rows, scope)?;
     Some(EntityCoordinates {
         entity_id: entity_id.to_string(),
-        latitude: latitude.value,
-        longitude: longitude.value,
-        confidence: latitude.confidence.min(longitude.confidence),
+        latitude: coordinates.latitude,
+        longitude: coordinates.longitude,
+        confidence: coordinates.confidence,
     })
-}
-
-#[derive(Debug, Clone, Copy)]
-struct CoordinateValue {
-    value: f64,
-    confidence: f32,
-}
-
-fn coordinate_fact_value(
-    rows: &crate::serving::ServingEntityFactRows,
-    keys: &[&str],
-) -> Option<CoordinateValue> {
-    keys.iter().find_map(|key| {
-        rows.facts
-            .iter()
-            .filter(|fact| fact.fact_key.eq_ignore_ascii_case(key))
-            .filter_map(|fact| {
-                fact_value_numeric(&fact.value).map(|value| CoordinateValue {
-                    value,
-                    confidence: fact.confidence,
-                })
-            })
-            .max_by(|left, right| left.confidence.total_cmp(&right.confidence))
-    })
-}
-
-fn fact_value_numeric(value: &FactValue) -> Option<f64> {
-    match value {
-        FactValue::Numeric(value) => Some(*value),
-        FactValue::Score { value, .. } => Some(*value),
-        _ => None,
-    }
 }
 
 fn place_query_match_score(
@@ -709,14 +680,6 @@ pub(crate) fn haversine_km(
     EARTH_RADIUS_KM * c
 }
 
-fn valid_latitude(value: f64) -> bool {
-    value.is_finite() && (-90.0..=90.0).contains(&value)
-}
-
-fn valid_longitude(value: f64) -> bool {
-    value.is_finite() && (-180.0..=180.0).contains(&value)
-}
-
 fn serving_fact_distance_km(fact: &ServingFactRecord) -> Option<f64> {
     match &fact.value {
         FactValue::Numeric(value) => Some(*value),
@@ -797,6 +760,8 @@ fn is_meter_unit(unit: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use chrono::TimeZone;
+
     use super::*;
 
     #[test]
@@ -870,6 +835,58 @@ mod tests {
             coordinates.entity_id,
             "society:sumadhura-capitol-residences"
         );
+    }
+
+    #[test]
+    fn serving_coordinate_lookup_ignores_rera_geo_facts() {
+        let index = ServingFactIndex::from_records(
+            vec![
+                serving_numeric_fact("society:rera-green", "geo.latitude", 12.814964, "Rera"),
+                serving_numeric_fact("society:rera-green", "geo.longitude", 77.509353, "Rera"),
+            ],
+            Vec::new(),
+        );
+
+        assert!(coordinates_for_entity(&index, "society:rera-green").is_none());
+    }
+
+    #[test]
+    fn serving_coordinate_lookup_uses_google_over_rera_geo_facts() {
+        let index = ServingFactIndex::from_records(
+            vec![
+                serving_numeric_fact("society:rera-green", "geo.latitude", 12.814964, "Rera"),
+                serving_numeric_fact("society:rera-green", "geo.longitude", 77.509353, "Rera"),
+                serving_numeric_fact("society:rera-green", "geo.latitude", 12.896276, "Google"),
+                serving_numeric_fact("society:rera-green", "geo.longitude", 77.5308391, "Google"),
+            ],
+            Vec::new(),
+        );
+
+        let coordinates = coordinates_for_entity(&index, "society:rera-green").unwrap();
+
+        assert_eq!(coordinates.latitude, 12.896276);
+        assert_eq!(coordinates.longitude, 77.5308391);
+    }
+
+    fn serving_numeric_fact(
+        entity_id: &str,
+        fact_key: &str,
+        value: f64,
+        source_type: &str,
+    ) -> ServingFactRecord {
+        ServingFactRecord {
+            entity_id: entity_id.to_string(),
+            fact_key: fact_key.to_string(),
+            value_type: "numeric".to_string(),
+            value_text: Some(value.to_string()),
+            value: FactValue::Numeric(value),
+            confidence: 1.0,
+            source_type: source_type.to_string(),
+            source_url: None,
+            model: None,
+            skill_id: None,
+            learned_at: chrono::Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
+        }
     }
 
     #[test]

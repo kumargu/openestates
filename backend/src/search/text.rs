@@ -3234,7 +3234,7 @@ mod tests {
     use crate::serving::{
         ServingEntityRecord, ServingFactIndex, ServingFactRecord, ServingSearchMetadataRecord,
     };
-    use chrono::Utc;
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn structured_preference_terms_are_removed_from_free_text_scoring() {
@@ -3734,7 +3734,7 @@ mod tests {
             source_url: None,
             model: None,
             skill_id: Some("unit-test".to_string()),
-            learned_at: Utc::now(),
+            learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
         }
     }
 
@@ -3795,7 +3795,7 @@ mod tests {
             source_url: None,
             model: None,
             skill_id: Some("unit-test".to_string()),
-            learned_at: Utc::now(),
+            learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
         }
     }
 
@@ -4484,28 +4484,28 @@ mod tests {
                     "society:close-to-kadugodi",
                     "geo.latitude",
                     FactValue::Numeric(12.9857),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:close-to-kadugodi",
                     "geo.longitude",
                     FactValue::Numeric(77.7468),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:farther-from-kadugodi",
                     "geo.latitude",
                     FactValue::Numeric(13.0050),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:farther-from-kadugodi",
                     "geo.longitude",
                     FactValue::Numeric(77.7700),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
@@ -4613,28 +4613,28 @@ mod tests {
                     "society:close-home",
                     "geo.latitude",
                     FactValue::Numeric(12.9857),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:close-home",
                     "geo.longitude",
                     FactValue::Numeric(77.7468),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:kadugodi-tree-park-view",
                     "geo.latitude",
                     FactValue::Numeric(13.0050),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:kadugodi-tree-park-view",
                     "geo.longitude",
                     FactValue::Numeric(77.7700),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
@@ -4736,14 +4736,14 @@ mod tests {
                     "society:waterford",
                     "geo.latitude",
                     FactValue::Numeric(12.9900),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:waterford",
                     "geo.longitude",
                     FactValue::Numeric(77.7500),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_fact(
@@ -4757,14 +4757,14 @@ mod tests {
                     "society:coordinate-only",
                     "geo.latitude",
                     FactValue::Numeric(12.9858),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:coordinate-only",
                     "geo.longitude",
                     FactValue::Numeric(77.7469),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
@@ -4909,14 +4909,14 @@ mod tests {
                     "society:school-fit",
                     "geo.latitude",
                     FactValue::Numeric(12.9960),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:school-fit",
                     "geo.longitude",
                     FactValue::Numeric(77.7200),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_fact(
@@ -4930,14 +4930,14 @@ mod tests {
                     "society:hoodi-only",
                     "geo.latitude",
                     FactValue::Numeric(12.9919),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(
                     "society:hoodi-only",
                     "geo.longitude",
                     FactValue::Numeric(77.7152),
-                    "Rera",
+                    "Google",
                     1.0,
                 ),
                 serving_entity_fact(

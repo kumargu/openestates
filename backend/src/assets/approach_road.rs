@@ -15,9 +15,9 @@ use super::skill_facts::{
 };
 use super::{
     ArtifactRef, AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, AssetStage,
-    CanonicalNodeRows, CanonicalSocietyRows, MaterializationId, MaterializationRecord,
-    SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID, GOOGLE_REVIEW_FACTS_ASSET_ID,
-    RERA_LEGAL_FACTS_ASSET_ID,
+    CanonicalNodeRows, CanonicalSocietyRows, CurrentProjectFactsError, MaterializationId,
+    MaterializationRecord, SourceWatermark, CANONICAL_SOCIETY_NODES_ASSET_ID,
+    GOOGLE_REVIEW_FACTS_ASSET_ID, RERA_LEGAL_FACTS_ASSET_ID,
 };
 
 pub const APPROACH_ROAD_GRAPH_FACTS_ASSET_ID: &str = "approach_road_graph_facts";
@@ -254,11 +254,37 @@ fn rows_from_upstream(
     run_id: &MaterializationId,
 ) -> Result<ApproachRoadGraphRows, ApproachRoadGraphError> {
     let mut evidence_by_society = canonical_society_evidence(canonical);
-    for fact in &upstream.facts {
-        let Some(evidence) = evidence_by_society.get_mut(&fact.entity_id) else {
+    let canonical_ids_by_alias = canonical
+        .mappings
+        .iter()
+        .filter_map(|mapping| {
+            Some((
+                mapping.alias_entity_id.clone()?,
+                mapping.canonical_entity_id.clone(),
+            ))
+        })
+        .collect::<BTreeMap<_, _>>();
+    for fact in upstream
+        .facts
+        .iter()
+        .filter(|fact| !matches!(fact.fact_key.as_str(), "geo.latitude" | "geo.longitude"))
+    {
+        let society_id = canonical_ids_by_alias
+            .get(&fact.entity_id)
+            .unwrap_or(&fact.entity_id);
+        let Some(evidence) = evidence_by_society.get_mut(society_id) else {
             continue;
         };
         evidence.accept_fact(fact)?;
+    }
+    for fact in super::compaction::resolve_coordinate_fact_records(&upstream.facts)? {
+        let society_id = canonical_ids_by_alias
+            .get(&fact.entity_id)
+            .unwrap_or(&fact.entity_id);
+        let Some(evidence) = evidence_by_society.get_mut(society_id) else {
+            continue;
+        };
+        evidence.accept_fact(&fact)?;
     }
 
     let mut entities = BTreeMap::<String, KgViewEntityRecord>::new();
@@ -710,19 +736,10 @@ fn approach_road_frame_specs() -> impl Iterator<Item = (&'static str, u32, f64)>
 fn canonical_society_evidence(
     canonical: &CanonicalSocietyRows,
 ) -> BTreeMap<String, SocietyRoadEvidence> {
-    let mut names_by_id = canonical
+    canonical
         .entities
         .iter()
         .map(|entity| (entity.entity_id.clone(), entity.name.clone()))
-        .collect::<BTreeMap<_, _>>();
-    for mapping in &canonical.mappings {
-        if let Some(alias) = &mapping.alias_entity_id {
-            names_by_id.insert(alias.clone(), mapping.project_name.clone());
-        }
-    }
-
-    names_by_id
-        .into_iter()
         .filter(|(entity_id, _)| entity_id.starts_with("society:"))
         .map(|(entity_id, name)| {
             (
@@ -925,6 +942,7 @@ pub enum ApproachRoadGraphError {
     Rera(ReraAssetError),
     SkillFact(SkillFactMaterializeError),
     AssetId(super::types::AssetIdError),
+    Compaction(CurrentProjectFactsError),
     MissingCanonicalSocieties,
     MissingArtifact { asset_id: String, path: String },
 }
@@ -938,6 +956,7 @@ impl fmt::Display for ApproachRoadGraphError {
             Self::Rera(err) => write!(f, "approach road graph parquet error: {err}"),
             Self::SkillFact(err) => write!(f, "approach road fact parquet error: {err}"),
             Self::AssetId(err) => write!(f, "approach road asset id error: {err}"),
+            Self::Compaction(err) => write!(f, "approach road coordinate resolution failed: {err}"),
             Self::MissingCanonicalSocieties => {
                 write!(f, "approach road graph is missing canonical society parent")
             }
@@ -974,8 +993,16 @@ impl From<SkillFactMaterializeError> for ApproachRoadGraphError {
     }
 }
 
+impl From<CurrentProjectFactsError> for ApproachRoadGraphError {
+    fn from(err: CurrentProjectFactsError) -> Self {
+        Self::Compaction(err)
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use chrono::TimeZone;
+
     use super::*;
 
     #[test]
@@ -1047,6 +1074,58 @@ mod tests {
         assert_eq!(payload["frames"][0]["longitude"], 77.7507);
         assert_eq!(payload["frames"][4]["distance_from_gate_m"], 80);
         assert_eq!(payload["frames"][5]["distance_from_gate_m"], 160);
+    }
+
+    #[test]
+    fn alias_facts_materialize_one_canonical_road() {
+        let canonical = CanonicalSocietyRows {
+            entities: vec![KgViewEntityRecord {
+                entity_id: "society:rera-canonical".to_string(),
+                entity_type: "society".to_string(),
+                name: "CANONICAL SOCIETY".to_string(),
+                root_source: Some("rera".to_string()),
+                fact_count: 0,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }],
+            edges: Vec::new(),
+            mappings: vec![crate::assets::ReraCanonicalMappingRecord {
+                project_key: "project-key".to_string(),
+                canonical_entity_id: "society:rera-canonical".to_string(),
+                alias_entity_id: Some("society:legacy-alias".to_string()),
+                project_name: "CANONICAL SOCIETY".to_string(),
+                registration_number: Some("project-key".to_string()),
+                ack_number: None,
+            }],
+        };
+        let upstream = SkillFactArtifactRows {
+            facts: vec![
+                test_google_fact(
+                    "society:legacy-alias",
+                    "geo.latitude",
+                    FactValue::Numeric(12.9),
+                ),
+                test_google_fact(
+                    "society:legacy-alias",
+                    "geo.longitude",
+                    FactValue::Numeric(77.6),
+                ),
+            ],
+            fact_annotations: Vec::new(),
+        };
+
+        let rows = rows_from_upstream(&canonical, &upstream, Utc::now(), &MaterializationId::new())
+            .expect("alias facts should resolve to canonical society");
+
+        assert_eq!(rows.canonical.entities.len(), 1);
+        assert_eq!(
+            rows.canonical.entities[0].entity_id,
+            "road_segment:rera-canonical-approach"
+        );
+        assert_eq!(
+            rows.canonical.edges[0].from_entity_id,
+            "society:rera-canonical"
+        );
     }
 
     #[test]
@@ -1382,7 +1461,7 @@ mod tests {
             model: None,
             skill_id: Some(skill_id.to_string()),
             triggered_by: None,
-            learned_at: Utc::now(),
+            learned_at: Utc.with_ymd_and_hms(2026, 7, 31, 0, 0, 0).unwrap(),
             run_id: "test".to_string(),
             input_hash: "test".to_string(),
         }

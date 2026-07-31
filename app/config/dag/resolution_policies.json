@@ -3,6 +3,7 @@
   "version": 1,
   "default_strategy": "prefer_highest_confidence",
   "source_tiers": [
+    "source_entity_seed",
     "rera",
     "registered_transactions",
     "google",
@@ -21,6 +22,18 @@
   "source_caps": {
     "reddit_theme": 0.45,
     "seller_claim": 0.4
+  },
+  "coordinate_sources": {
+    "society": {
+      "allowed_sources": ["source_entity_seed", "google"],
+      "denied_sources": ["rera"],
+      "source_priority": ["source_entity_seed", "google"]
+    },
+    "place": {
+      "allowed_sources": ["google", "openstreetmap"],
+      "denied_sources": ["rera"],
+      "source_priority": ["google", "openstreetmap"]
+    }
   },
   "overrides": {
     "legal.rera_registered": {

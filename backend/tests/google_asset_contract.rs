@@ -529,9 +529,15 @@ async fn google_place_alias_resolves_to_first_run_rera_canonical_entity() {
         source_watermarks: Vec::new(),
     };
 
-    let resolved = canonicalize_google_places_input(&lake, &input, &canonical)
-        .await
-        .unwrap();
+    let resolved = canonicalize_google_places_input(
+        &lake,
+        &input,
+        &canonical,
+        &[],
+        backend::assets::SourceEntityResolutionScope::Production,
+    )
+    .await
+    .unwrap();
 
     assert_ne!(resolved.records[0].entity_id, input.records[0].entity_id);
     assert!(resolved.records[0].entity_id.starts_with("society:rera-"));

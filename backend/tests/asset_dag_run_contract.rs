@@ -431,7 +431,6 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         "2026-07-13",
         vec![
             canonical.materialization_id.clone(),
-            rera_facts.materialization_id.clone(),
             google_facts.materialization_id.clone(),
         ],
         now,
@@ -519,7 +518,11 @@ async fn dag_plan_fans_all_current_support_partitions_into_global_kg_lineage() {
         .await
         .unwrap();
     let kg_entry = plan_entry(&plan, "kg_society_view");
-    assert_eq!(kg_entry.decision, PlanDecision::Skip);
+    assert_eq!(
+        kg_entry.decision,
+        PlanDecision::Skip,
+        "unexpected KG plan entry: {kg_entry:?}"
+    );
     assert_eq!(
         kg_entry.current_parent_materializations,
         fresh_kg.parent_materializations

@@ -701,11 +701,7 @@ pub fn default_openestates_registry() -> AssetRegistry {
             "society_groundwater_potential_facts",
             AssetStage::Silver,
             "Groundwater potential facts joined offline from society coordinates to OpenCity groundwater zones.",
-            &[
-                "canonical_society_nodes",
-                "rera_legal_facts",
-                "google_review_facts",
-            ],
+            &["canonical_society_nodes", "google_review_facts"],
             RefreshCadence::Monthly,
             CostTier::Free,
             TrustTier::Support,

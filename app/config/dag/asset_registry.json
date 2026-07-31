@@ -281,7 +281,6 @@
       "description": "Groundwater potential facts joined offline from society coordinates to OpenCity groundwater zones.",
       "dependencies": [
         "canonical_society_nodes",
-        "rera_legal_facts",
         "google_review_facts"
       ],
       "refresh": "monthly",

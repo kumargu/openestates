@@ -24,8 +24,8 @@ use super::{
     OsmPowerAssetError, PartitionResolutionError, PlannerError, ProjectEnrichmentAssetError,
     ProjectEnrichmentMaterializer, ReraAssetError, ReraPlanFramesAssetError,
     ReraRegistryMaterializer, RunManifestError, SkillFactMaterializeError, SkillFactMaterializer,
-    SkillFactsInput, SourceWatermark, StormwaterAssetError, TransitAssetError,
-    APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
+    SkillFactsInput, SourceEntityResolutionScope, SourceWatermark, StormwaterAssetError,
+    TransitAssetError, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID, BENGALURU_METRO_STATION_FACTS_ASSET_ID,
     BUILDER_RERA_AGGREGATES_ASSET_ID, CANONICAL_SOCIETY_NODES_ASSET_ID,
     CURRENT_PROJECT_FACTS_ASSET_ID, EXTERNAL_IMAGES_WEEKLY_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
@@ -48,8 +48,10 @@ pub struct AssetDagExecutionOptions {
     pub source_inputs: AssetSourceInputs,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub force_assets: Vec<AssetId>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub skip_current_promotion_assets: Vec<AssetId>,
+    #[serde(default = "default_promote_current")]
+    pub promote_current: bool,
+    #[serde(default)]
+    pub source_scope: SourceEntityResolutionScope,
     #[serde(default)]
     pub skip_missing_source_inputs: bool,
     #[serde(default)]
@@ -88,7 +90,8 @@ impl AssetDagExecutionOptions {
             dry_run: false,
             source_inputs: AssetSourceInputs::default(),
             force_assets: Vec::new(),
-            skip_current_promotion_assets: Vec::new(),
+            promote_current: true,
+            source_scope: SourceEntityResolutionScope::Production,
             skip_missing_source_inputs: false,
             only_forced_assets: false,
             retry_policy: AssetRetryPolicy::default(),
@@ -117,11 +120,16 @@ impl AssetDagExecutionOptions {
         self
     }
 
-    pub fn with_skip_current_promotion_assets(mut self, assets: Vec<AssetId>) -> Self {
-        self.skip_current_promotion_assets = assets;
-        self.skip_current_promotion_assets
-            .sort_by(|left, right| left.as_str().cmp(right.as_str()));
-        self.skip_current_promotion_assets.dedup();
+    pub fn with_promote_current(mut self, promote_current: bool) -> Self {
+        self.promote_current = promote_current;
+        self
+    }
+
+    pub fn with_source_scope(mut self, source_scope: SourceEntityResolutionScope) -> Self {
+        self.source_scope = source_scope;
+        if source_scope == SourceEntityResolutionScope::Scoped {
+            self.promote_current = false;
+        }
         self
     }
 
@@ -155,12 +163,10 @@ impl AssetDagExecutionOptions {
         self.asset_execution_timeout_ms
             .min(DEFAULT_ASSET_EXECUTION_TIMEOUT_MS)
     }
+}
 
-    fn should_skip_current_promotion(&self, asset_id: &AssetId) -> bool {
-        self.skip_current_promotion_assets
-            .binary_search_by(|candidate| candidate.as_str().cmp(asset_id.as_str()))
-            .is_ok()
-    }
+fn default_promote_current() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -232,7 +238,15 @@ impl AssetDagExecutor {
                 &options.force_assets,
             )
             .await?;
-        let manifest = AssetDagRunManifest::from_plan_with_version(&plan, options.version.clone());
+        let mut manifest =
+            AssetDagRunManifest::from_plan_with_version(&plan, options.version.clone());
+        manifest.promote_current = options.promote_current;
+        manifest.source_scope = options.source_scope;
+        let mut options = options;
+        if !options.promote_current {
+            options.version = format!("{}-run-{}", options.version, manifest.run_id);
+            manifest.execution_version.clone_from(&options.version);
+        }
 
         if options.dry_run {
             return Ok(AssetDagExecutionReport {
@@ -277,6 +291,8 @@ impl AssetDagExecutor {
         }
         manifest.ensure_exact_resume()?;
         let mut options = options;
+        options.promote_current = manifest.promote_current;
+        options.source_scope = manifest.source_scope;
         let lease_id = options.resume_lease_id.clone().unwrap_or_default();
         self.run_manifests
             .acquire_resume_lease(
@@ -404,7 +420,7 @@ impl AssetDagExecutor {
         for step in manifest.steps.clone() {
             if step.status == super::AssetRunStepStatus::Materialized {
                 let record = self.record_for_manifest_step(&step).await?;
-                if options.should_skip_current_promotion(&step.asset_id) {
+                if !manifest.promote_current {
                     manifest.mark_step_promoted(&step.asset_id, Utc::now())?;
                     self.persist_manifest(&mut manifest, false).await?;
                     records_by_asset.insert(step.asset_id.clone(), record);
@@ -554,7 +570,7 @@ impl AssetDagExecutor {
                             completed_at,
                         )?;
                         self.persist_manifest(&mut manifest, false).await?;
-                        if options.should_skip_current_promotion(&asset_id) {
+                        if !manifest.promote_current {
                             manifest.mark_step_promoted(&asset_id, Utc::now())?;
                             self.persist_manifest(&mut manifest, false).await?;
                             records_by_asset.insert(asset_id.clone(), record);
@@ -630,7 +646,10 @@ impl AssetDagExecutor {
         let completed_at = Utc::now();
         manifest.finish(completed_at)?;
         manifest.resume_lease = None;
-        let persisted = self.persist_manifest(&mut manifest, true).await?;
+        let promote_current = manifest.promote_current;
+        let persisted = self
+            .persist_manifest(&mut manifest, promote_current)
+            .await?;
 
         if manifest.status == super::DagRunStatus::Failed {
             if let Some(err) = first_error {
@@ -642,7 +661,7 @@ impl AssetDagExecutor {
             dry_run: false,
             manifest,
             run_manifest_key: Some(persisted.run_manifest_key),
-            current_pointer_key: Some(persisted.current_pointer_key),
+            current_pointer_key: persisted.current_pointer_key,
             executed_assets,
         })
     }
@@ -1125,10 +1144,10 @@ impl AssetDagExecutor {
         }
         Ok(PersistedManifest {
             run_manifest_key: meta.key.to_string(),
-            current_pointer_key: super::AssetPathBuilder::current_dag_run_pointer_key(
-                &manifest.partition,
-            )
-            .to_string(),
+            current_pointer_key: promote_current.then(|| {
+                super::AssetPathBuilder::current_dag_run_pointer_key(&manifest.partition)
+                    .to_string()
+            }),
         })
     }
 }
@@ -1136,7 +1155,7 @@ impl AssetDagExecutor {
 #[derive(Debug)]
 struct PersistedManifest {
     run_manifest_key: String,
-    current_pointer_key: String,
+    current_pointer_key: Option<String>,
 }
 
 #[derive(Clone)]
@@ -1387,6 +1406,8 @@ impl BuiltInAssetExecutor {
                     &context.dag.lake,
                     input,
                     canonical_record,
+                    &context.options.source_inputs.source_entities,
+                    context.options.source_scope,
                 )
                 .await?;
                 let parent_materializations = parent_records
@@ -1460,6 +1481,8 @@ impl BuiltInAssetExecutor {
                     &context.dag.lake,
                     input,
                     canonical_record,
+                    &context.options.source_inputs.source_entities,
+                    context.options.source_scope,
                 )
                 .await?;
                 let parent_materializations = parent_records
@@ -1727,6 +1750,7 @@ impl BuiltInAssetExecutor {
                     &context.dag.lake,
                     input,
                     &parent_records,
+                    &context.options.source_inputs.source_entities,
                     context.run_id,
                     context.options.planned_at,
                 )
@@ -1777,6 +1801,8 @@ impl BuiltInAssetExecutor {
                     &context.dag.lake,
                     input,
                     canonical_record,
+                    &context.options.source_inputs.source_entities,
+                    context.options.source_scope,
                 )
                 .await?;
                 let input = super::osm_power_line_facts_input(&input, &context.run_id.to_string())?;
@@ -1809,6 +1835,8 @@ impl BuiltInAssetExecutor {
                     &context.dag.lake,
                     input,
                     canonical_record,
+                    &context.options.source_inputs.source_entities,
+                    context.options.source_scope,
                 )
                 .await?;
                 let input =
@@ -1834,6 +1862,9 @@ impl BuiltInAssetExecutor {
                             &context.options.version,
                             context.run_id.clone(),
                             context.asset_partition.clone(),
+                            &context.options.source_inputs.source_entities,
+                            context.options.source_scope,
+                            context.options.planned_at,
                         )
                         .await?;
                 Ok(ExecutedAsset::Record(materialization.record))
@@ -2577,7 +2608,8 @@ fn default_asset_execution_timeout_ms() -> u64 {
 }
 
 fn is_default_source_inputs(source_inputs: &AssetSourceInputs) -> bool {
-    source_inputs.source_failures.is_empty()
+    source_inputs.source_entities.is_empty()
+        && source_inputs.source_failures.is_empty()
         && source_inputs.rera_registry_monthly.is_none()
         && source_inputs.reddit_threads_daily.is_none()
         && source_inputs.reddit_resident_facts.is_none()
@@ -2691,7 +2723,7 @@ mod tests {
             .execute(
                 &KnowledgeGraph::new(),
                 AssetDagExecutionOptions::new(AssetPartition::global(), now)
-                    .with_skip_current_promotion_assets(vec![asset_id.clone()]),
+                    .with_promote_current(false),
             )
             .await
             .unwrap();
@@ -2703,6 +2735,12 @@ mod tests {
             .find(|step| step.asset_id == asset_id)
             .unwrap();
         assert_eq!(step.status, super::super::AssetRunStepStatus::Succeeded);
+        assert!(!report.manifest.promote_current);
+        assert!(report
+            .manifest
+            .execution_version
+            .ends_with(&report.manifest.run_id.to_string()));
+        assert!(report.current_pointer_key.is_none());
         assert!(AssetMaterializationStore::new(lake)
             .current_record(&asset_id, &AssetPartition::global())
             .await

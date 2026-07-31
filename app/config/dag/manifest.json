@@ -15,6 +15,7 @@
     "evidence_sections.json",
     "enrichment_targets.json",
     "fact_registry.json",
+    "google_place_resolution.json",
     "nearby_place_categories.json",
     "ontology.json",
     "resolution_policies.json",

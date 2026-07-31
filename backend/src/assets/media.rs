@@ -189,7 +189,6 @@ impl MediaAssetMaterializer {
         .with_row_count(input.records.len() as u64)
         .with_run_id(dag_run_id);
         self.materializations.write_materialization(&record).await?;
-        self.materializations.promote_current(&record).await?;
         Ok(record)
     }
 }
@@ -916,7 +915,50 @@ from_error!(crate::lake::keys::KeyError, Key);
 
 #[cfg(test)]
 mod tests {
+    use tempfile::tempdir;
+
     use super::*;
+
+    #[tokio::test]
+    async fn raw_image_materialization_does_not_bypass_executor_promotion() {
+        let temp = tempdir().unwrap();
+        let lake = LakeStore::local(temp.path()).unwrap();
+        let partition = AssetPartition::new([("source", "external_image")]);
+        let input = ExternalImagesWeeklyInput {
+            snapshot_date: "2026-08-01".to_string(),
+            records: vec![test_row(
+                "https://img.example.com/tower.webp",
+                "exterior",
+                vec!["hero", "gallery"],
+                None,
+                Some(0.9),
+                Some(0.9),
+                Some(1200),
+                Some(800),
+            )],
+            source_health: Vec::new(),
+            media_qa_report: None,
+            source_watermarks: Vec::new(),
+        };
+
+        MediaAssetMaterializer::new(lake.clone())
+            .materialize_external_images(
+                &input,
+                Vec::new(),
+                MaterializationId::new(),
+                partition.clone(),
+            )
+            .await
+            .unwrap();
+
+        assert!(AssetMaterializationStore::new(lake)
+            .current_record(
+                &AssetId::new(EXTERNAL_IMAGES_WEEKLY_ASSET_ID).unwrap(),
+                &partition,
+            )
+            .await
+            .is_err());
+    }
 
     #[test]
     fn media_promotion_excludes_floor_plan_from_hero_and_gallery() {

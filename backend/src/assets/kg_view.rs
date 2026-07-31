@@ -446,6 +446,10 @@ fn merge_synthesized_entities(
 fn support_place_entities(
     support_facts: &[SkillFactRecord],
 ) -> Result<Vec<KgViewEntityRecord>, KgSocietyViewMaterializeError> {
+    let coordinate_entities = super::compaction::resolve_coordinate_fact_records(support_facts)?
+        .into_iter()
+        .map(|fact| fact.entity_id)
+        .collect::<HashSet<_>>();
     let mut by_entity = BTreeMap::<String, SupportPlaceEntity>::new();
     for fact in support_facts
         .iter()
@@ -457,8 +461,7 @@ fn support_place_entities(
             .or_insert_with(|| SupportPlaceEntity {
                 entity_id: fact.entity_id.clone(),
                 name: None,
-                has_latitude: false,
-                has_longitude: false,
+                has_coordinates: coordinate_entities.contains(&fact.entity_id),
                 root_source: Some(fact.source_type.to_ascii_lowercase()),
                 created_at: fact.learned_at,
                 updated_at: fact.learned_at,
@@ -471,12 +474,6 @@ fn support_place_entities(
         match (fact.fact_key.as_str(), value) {
             ("place.name", FactValue::Text(name)) if !name.trim().is_empty() => {
                 entry.name = Some(name.trim().to_string());
-            }
-            ("geo.latitude", FactValue::Numeric(latitude)) if valid_latitude(latitude) => {
-                entry.has_latitude = true;
-            }
-            ("geo.longitude", FactValue::Numeric(longitude)) if valid_longitude(longitude) => {
-                entry.has_longitude = true;
             }
             _ => {}
         }
@@ -491,8 +488,7 @@ fn support_place_entities(
 struct SupportPlaceEntity {
     entity_id: String,
     name: Option<String>,
-    has_latitude: bool,
-    has_longitude: bool,
+    has_coordinates: bool,
     root_source: Option<String>,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -501,7 +497,7 @@ struct SupportPlaceEntity {
 impl SupportPlaceEntity {
     fn into_record(self) -> Option<KgViewEntityRecord> {
         let name = self.name?;
-        if !self.has_latitude || !self.has_longitude {
+        if !self.has_coordinates {
             return None;
         }
         Some(KgViewEntityRecord {
@@ -514,14 +510,6 @@ impl SupportPlaceEntity {
             updated_at: self.updated_at,
         })
     }
-}
-
-fn valid_latitude(value: f64) -> bool {
-    value.is_finite() && (-90.0..=90.0).contains(&value)
-}
-
-fn valid_longitude(value: f64) -> bool {
-    value.is_finite() && (-180.0..=180.0).contains(&value)
 }
 
 fn slug(value: &str) -> String {
@@ -1368,6 +1356,7 @@ pub enum KgSocietyViewMaterializeError {
     Json(serde_json::Error),
     Lake(LakeError),
     Parquet(parquet::errors::ParquetError),
+    Coordinate(super::CurrentProjectFactsError),
 }
 
 impl fmt::Display for KgSocietyViewMaterializeError {
@@ -1384,6 +1373,7 @@ impl fmt::Display for KgSocietyViewMaterializeError {
             Self::Json(err) => write!(f, "KG view JSON error: {err}"),
             Self::Lake(err) => write!(f, "KG view lake error: {err}"),
             Self::Parquet(err) => write!(f, "KG view Parquet error: {err}"),
+            Self::Coordinate(err) => write!(f, "KG view coordinate resolution error: {err}"),
         }
     }
 }
@@ -1399,6 +1389,12 @@ impl From<serde_json::Error> for KgSocietyViewMaterializeError {
 impl From<LakeError> for KgSocietyViewMaterializeError {
     fn from(err: LakeError) -> Self {
         Self::Lake(err)
+    }
+}
+
+impl From<super::CurrentProjectFactsError> for KgSocietyViewMaterializeError {
+    fn from(err: super::CurrentProjectFactsError) -> Self {
+        Self::Coordinate(err)
     }
 }
 

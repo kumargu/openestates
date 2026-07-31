@@ -335,6 +335,7 @@ fn source_inputs(
     let first_project = &projects[0];
 
     AssetSourceInputs {
+        source_entities: Vec::new(),
         rera_registry_monthly: Some(ReraRegistryMonthlyInput {
             snapshot_date: "2026-07".to_string(),
             projects: rera_projects,
