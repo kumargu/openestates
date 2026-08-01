@@ -208,12 +208,29 @@ impl KgViewRecords {
         support_facts: &[SkillFactRecord],
         support_annotations: &[SkillFactAnnotationRecord],
     ) -> Result<Self, KgSocietyViewMaterializeError> {
-        let shadow_alias_entity_ids = canonical_society_alias_entity_ids(canonical_entities);
         let mut records = Self::from_graph(graph)?;
+        let canonical_aliases = canonical_society_alias_map(canonical_entities);
+        records.rewrite_entity_references(&canonical_aliases);
+        let shadow_alias_entity_ids = canonical_aliases.keys().cloned().collect();
         records.remove_entities(&shadow_alias_entity_ids)?;
         records.merge_canonical_rows(canonical_entities, canonical_edges)?;
-        records.merge_skill_facts(support_facts, support_annotations)?;
+        let support_facts = rewrite_skill_facts(support_facts, &canonical_aliases);
+        let support_annotations = rewrite_skill_annotations(support_annotations, &canonical_aliases);
+        records.merge_skill_facts(&support_facts, &support_annotations)?;
         Ok(records)
+    }
+
+    fn rewrite_entity_references(&mut self, aliases: &HashMap<String, String>) {
+        for fact in &mut self.facts {
+            rewrite_entity_id(&mut fact.entity_id, aliases);
+        }
+        for annotation in &mut self.fact_annotations {
+            rewrite_entity_id(&mut annotation.entity_id, aliases);
+        }
+        for edge in &mut self.edges {
+            rewrite_entity_id(&mut edge.from_entity_id, aliases);
+            rewrite_entity_id(&mut edge.to_entity_id, aliases);
+        }
     }
 
     fn remove_entities(
@@ -529,15 +546,50 @@ fn slug(value: &str) -> String {
     output
 }
 
-fn canonical_society_alias_entity_ids(
+fn canonical_society_alias_map(
     canonical_entities: &[KgViewEntityRecord],
-) -> HashSet<String> {
+) -> HashMap<String, String> {
     canonical_entities
         .iter()
         .filter(|entity| entity.entity_type == "society")
         .filter_map(|entity| {
             let alias_entity_id = format!("society:{}", slug(&entity.name));
-            (alias_entity_id != entity.entity_id).then_some(alias_entity_id)
+            (alias_entity_id != entity.entity_id)
+                .then_some((alias_entity_id, entity.entity_id.clone()))
+        })
+        .collect()
+}
+
+fn rewrite_entity_id(entity_id: &mut String, aliases: &HashMap<String, String>) {
+    if let Some(canonical_id) = aliases.get(entity_id) {
+        entity_id.clone_from(canonical_id);
+    }
+}
+
+fn rewrite_skill_facts(
+    facts: &[SkillFactRecord],
+    aliases: &HashMap<String, String>,
+) -> Vec<SkillFactRecord> {
+    facts
+        .iter()
+        .cloned()
+        .map(|mut fact| {
+            rewrite_entity_id(&mut fact.entity_id, aliases);
+            fact
+        })
+        .collect()
+}
+
+fn rewrite_skill_annotations(
+    annotations: &[SkillFactAnnotationRecord],
+    aliases: &HashMap<String, String>,
+) -> Vec<SkillFactAnnotationRecord> {
+    annotations
+        .iter()
+        .cloned()
+        .map(|mut annotation| {
+            rewrite_entity_id(&mut annotation.entity_id, aliases);
+            annotation
         })
         .collect()
 }
@@ -1491,13 +1543,22 @@ mod tests {
             .iter()
             .filter(|fact| fact.entity_id == "society:prestige-lavender-fields")
             .collect::<Vec<_>>();
-        assert_eq!(alias_facts.len(), 1);
-        assert_eq!(alias_facts[0].fact_key, "google_rating");
-        assert_eq!(alias_facts[0].value_text.as_deref(), Some("3.9"));
+        assert!(alias_facts.is_empty());
+        assert_eq!(
+            records
+                .facts
+                .iter()
+                .filter(|fact| {
+                    fact.entity_id == "society:rera-a19f2cf2456fc549"
+                        && fact.fact_key == "google_rating"
+                })
+                .count(),
+            1
+        );
         assert!(records
             .fact_annotations
             .iter()
-            .any(|annotation| annotation.entity_id == "society:prestige-lavender-fields"));
+            .all(|annotation| annotation.entity_id != "society:prestige-lavender-fields"));
     }
 
     #[test]

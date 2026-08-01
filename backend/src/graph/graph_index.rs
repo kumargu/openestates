@@ -40,6 +40,39 @@ impl GraphIndex {
         index
     }
 
+    pub fn add_entity_aliases(&mut self, aliases: &[(String, String)]) {
+        for (alias, canonical_id) in aliases {
+            let outgoing = self
+                .edges_out
+                .get(canonical_id)
+                .cloned()
+                .unwrap_or_default();
+            for (edge_type, to_entity_id) in outgoing {
+                self.edges_from
+                    .entry((alias.clone(), edge_type.clone()))
+                    .or_default()
+                    .push(to_entity_id.clone());
+                self.edges_out
+                    .entry(alias.clone())
+                    .or_default()
+                    .push((edge_type, to_entity_id));
+            }
+
+            let incoming = self
+                .edges_to
+                .iter()
+                .filter(|((to_entity_id, _), _)| to_entity_id == canonical_id)
+                .map(|((_, edge_type), from_ids)| (edge_type.clone(), from_ids.clone()))
+                .collect::<Vec<_>>();
+            for (edge_type, from_ids) in incoming {
+                self.edges_to
+                    .entry((alias.clone(), edge_type))
+                    .or_default()
+                    .extend(from_ids);
+            }
+        }
+    }
+
     pub fn walk_out(&self, anchor: &str, hops: &[&str], max_depth: usize) -> Vec<WalkStep> {
         if hops.is_empty() || max_depth == 0 {
             return Vec::new();
@@ -171,6 +204,34 @@ mod tests {
         let steps = index.walk_out("society:prestige-waterford", &["served_by_road"], 2);
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].to_entity_id, "road:ecc-road");
+    }
+
+    #[test]
+    fn alias_walk_follows_canonical_society_edges() {
+        let edges = vec![ServingEdgeRecord {
+            from_entity_id: "society:rera-falcon-city".to_string(),
+            edge_type: "served_by_road".to_string(),
+            to_entity_id: "road_segment:rera-falcon-city-approach".to_string(),
+            confidence: 0.9,
+            source_type: "Computed".to_string(),
+        }];
+        let mut index = GraphIndex::from_serving_edges(&edges);
+        index.add_entity_aliases(&[(
+            "society:prestige-falcon-city".to_string(),
+            "society:rera-falcon-city".to_string(),
+        )]);
+
+        let steps = index.walk_out(
+            "society:prestige-falcon-city",
+            &["served_by_road"],
+            1,
+        );
+
+        assert_eq!(steps.len(), 1);
+        assert_eq!(
+            steps[0].to_entity_id,
+            "road_segment:rera-falcon-city-approach"
+        );
     }
 
     #[test]

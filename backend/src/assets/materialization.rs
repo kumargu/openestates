@@ -52,6 +52,20 @@ impl AssetMaterializationStore {
             .await
     }
 
+    pub async fn force_promote_current(
+        &self,
+        record: &MaterializationRecord,
+    ) -> Result<(), LakeError> {
+        let pointer = current_pointer_for_record(record, Utc::now());
+        self.lake
+            .put_json(
+                &AssetPathBuilder::current_pointer_key(&record.asset_id, &record.partition),
+                &pointer,
+            )
+            .await?;
+        Ok(())
+    }
+
     pub async fn promote_current_for_run(
         &self,
         record: &MaterializationRecord,
@@ -67,21 +81,8 @@ impl AssetMaterializationStore {
         run_created_at: chrono::DateTime<Utc>,
         expected_current: Option<&super::MaterializationId>,
     ) -> Result<bool, LakeError> {
-        let pointer = CurrentAssetPointer {
-            asset_id: record.asset_id.clone(),
-            partition: record.partition.clone(),
-            materialization_id: record.materialization_id.clone(),
-            materialization_key: AssetPathBuilder::materialization_record_key(
-                &record.asset_id,
-                &record.partition,
-                &record.materialization_id,
-            )
-            .to_string(),
-            version: record.version.clone(),
-            run_id: Some(record.run_id.clone()),
-            run_created_at: Some(run_created_at),
-            updated_at: Utc::now(),
-        };
+        let mut pointer = current_pointer_for_record(record, Utc::now());
+        pointer.run_created_at = Some(run_created_at);
         let key = AssetPathBuilder::current_pointer_key(&record.asset_id, &record.partition);
         self.lake
             .put_json_if(&key, &pointer, |current: Option<&CurrentAssetPointer>| {
@@ -217,6 +218,33 @@ impl AssetMaterializationStore {
         Ok(Some(record))
     }
 
+    pub async fn record_by_id(
+        &self,
+        materialization_id: &super::MaterializationId,
+    ) -> Result<Option<MaterializationRecord>, LakeError> {
+        let lookup_key = AssetPathBuilder::materialization_lookup_key(materialization_id);
+        let lookup = match self
+            .lake
+            .get_json::<MaterializationLookup>(&lookup_key)
+            .await
+        {
+            Ok(lookup) => lookup,
+            Err(err) if err.is_not_found() => return Ok(None),
+            Err(err) => return Err(err),
+        };
+        let key = LakeKey::new(lookup.materialization_key).map_err(LakeError::Key)?;
+        let record: MaterializationRecord = self.lake.get_json(&key).await?;
+        if record.asset_id != lookup.asset_id
+            || record.partition != lookup.partition
+            || record.materialization_id != *materialization_id
+        {
+            return Err(LakeError::InvalidMetadata(format!(
+                "materialization lookup {lookup_key} does not match {materialization_id}"
+            )));
+        }
+        Ok(Some(record))
+    }
+
     pub async fn record_for_run_attempt(
         &self,
         asset_id: &AssetId,
@@ -312,5 +340,26 @@ impl AssetMaterializationStore {
             )));
         }
         Ok(record)
+    }
+}
+
+fn current_pointer_for_record(
+    record: &MaterializationRecord,
+    updated_at: chrono::DateTime<Utc>,
+) -> CurrentAssetPointer {
+    CurrentAssetPointer {
+        asset_id: record.asset_id.clone(),
+        partition: record.partition.clone(),
+        materialization_id: record.materialization_id.clone(),
+        materialization_key: AssetPathBuilder::materialization_record_key(
+            &record.asset_id,
+            &record.partition,
+            &record.materialization_id,
+        )
+        .to_string(),
+        version: record.version.clone(),
+        run_id: Some(record.run_id.clone()),
+        run_created_at: Some(record.created_at),
+        updated_at,
     }
 }

@@ -80,8 +80,11 @@ impl ServingBundleLoader {
         let recall_index = TantivyRecallIndex::open(&cache_dir)?;
         let entities = load_entities(&self.lake, &manifest).await?;
         let edges = load_edges(&self.lake, &manifest).await?;
-        let fact_index = load_fact_index(&self.lake, &manifest).await?;
-        let graph_index = GraphIndex::from_serving_edges(&edges);
+        let aliases = super::types::unique_society_aliases(&entities);
+        let mut fact_index = load_fact_index(&self.lake, &manifest).await?;
+        fact_index.add_society_aliases(&entities);
+        let mut graph_index = GraphIndex::from_serving_edges(&edges);
+        graph_index.add_entity_aliases(&aliases);
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         let semantic_embeddings = load_semantic_embeddings(&self.lake, &manifest).await?;

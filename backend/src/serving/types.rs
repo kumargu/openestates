@@ -134,6 +134,17 @@ impl ServingFactIndex {
         self.by_entity.get(entity_id)
     }
 
+    pub fn add_society_aliases(&mut self, entities: &[ServingEntityRecord]) {
+        for (alias, canonical_id) in unique_society_aliases(entities) {
+            if self.by_entity.contains_key(&alias) {
+                continue;
+            }
+            if let Some(rows) = self.by_entity.get(&canonical_id).cloned() {
+                self.by_entity.insert(alias, rows);
+            }
+        }
+    }
+
     pub fn entity_count(&self) -> usize {
         self.by_entity.len()
     }
@@ -150,6 +161,44 @@ impl ServingFactIndex {
             .flat_map(|rows| rows.facts.iter())
             .collect()
     }
+}
+
+pub fn unique_society_aliases(entities: &[ServingEntityRecord]) -> Vec<(String, String)> {
+    let mut alias_counts = HashMap::<String, usize>::new();
+    for entity in entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+    {
+        let alias = format!("society:{}", entity_slug(&entity.name));
+        *alias_counts.entry(alias).or_default() += 1;
+    }
+
+    entities
+        .iter()
+        .filter(|entity| entity.entity_type == "society")
+        .filter_map(|entity| {
+            let alias = format!("society:{}", entity_slug(&entity.name));
+            (alias != entity.entity_id && alias_counts.get(&alias) == Some(&1))
+                .then_some((alias, entity.entity_id.clone()))
+        })
+        .collect()
+}
+
+fn entity_slug(value: &str) -> String {
+    let mut output = String::new();
+    let mut pending_dash = false;
+    for character in value.trim().to_ascii_lowercase().chars() {
+        if character.is_ascii_alphanumeric() {
+            if pending_dash && !output.is_empty() {
+                output.push('-');
+            }
+            output.push(character);
+            pending_dash = false;
+        } else {
+            pending_dash = true;
+        }
+    }
+    output
 }
 
 impl ServingEntityFactRows {
@@ -215,6 +264,46 @@ impl Default for TrustPolicy {
             ],
             ai_source_max_confidence: 0.5,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn society_alias_resolves_canonical_fact_rows() {
+        let learned_at = Utc::now();
+        let canonical_id = "society:rera-falcon-city";
+        let mut index = ServingFactIndex::from_records(
+            vec![ServingFactRecord {
+                entity_id: canonical_id.to_string(),
+                fact_key: "google_rating".to_string(),
+                value_type: "numeric".to_string(),
+                value_text: Some("4.4".to_string()),
+                value: FactValue::Numeric(4.4),
+                confidence: 0.9,
+                source_type: "Google".to_string(),
+                source_url: None,
+                model: None,
+                skill_id: None,
+                learned_at,
+            }],
+            Vec::new(),
+        );
+        index.add_society_aliases(&[ServingEntityRecord {
+            entity_id: canonical_id.to_string(),
+            entity_type: "society".to_string(),
+            name: "Prestige Falcon City".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }]);
+
+        let rows = index
+            .entity("society:prestige-falcon-city")
+            .expect("unique society alias should resolve");
+        assert_eq!(rows.facts.len(), 1);
+        assert_eq!(rows.facts[0].entity_id, canonical_id);
     }
 }
 
