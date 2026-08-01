@@ -15,6 +15,7 @@ The frontend IS the product. Every pixel communicates trust.
 - **Motion with purpose** — subtle transitions on state changes (loading → loaded, collapsed → expanded). No gratuitous animation.
 - **Mobile-first responsive** — property search happens on phones. Design for thumb reach.
 - **Dark mode ready** — use CSS variables / Tailwind semantic tokens from day one.
+- **Human UI critic** — before shipping buyer UI, run `.claude/skills/ui-critic.md`. Kill sticky-note fact cards, heading stacks, duplicate facts, and agent-jargon chrome.
 
 ### Component quality bar
 - Every component should feel like it belongs in a design system, even before we have one.

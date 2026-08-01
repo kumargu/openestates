@@ -48,8 +48,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "kadugodi-metro",
     query: "Near Kadugodi metro",
     theme: "metro",
-    intents: ["Named place", "Metro access", "Whitefield corridor"],
-    motif: "Transit intent pulls the closest Purple Line homes",
+    intents: ["Kadugodi", "Metro", "Whitefield"],
+    motif: "",
     landsOn: "Prestige Waterford",
     societyHints: ["waterford"],
     fallbackHints: ["kadugodi", "whitefield", "itpl"],
@@ -67,8 +67,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "large-township",
     query: "100+ acre society with lake",
     theme: "acres",
-    intents: ["Land scale", "Lake township", "Open campus"],
-    motif: "Scale + water intent lifts the large lakeside township",
+    intents: ["100+ acres", "Lake", "Township"],
+    motif: "",
     landsOn: "Prestige Lakeside Habitat",
     societyHints: ["lakeside habitat", "lakeside"],
     fallbackHints: ["habitat", "township"],
@@ -90,9 +90,9 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "quiet-family",
     query: "Quiet 3BHK near schools under 2.5Cr",
     theme: "family",
-    intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Calm"],
-    motif: "Family life maps BHK, budget, and calm context together",
-    landsOn: "A calm 3BHK fit",
+    intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Quiet"],
+    motif: "",
+    landsOn: "Best brief match",
     societyHints: [],
     fallbackHints: [],
     proof: (home) => {
@@ -112,9 +112,9 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "google-proof",
     query: "Whitefield homes with strong Google reviews",
     theme: "reviews",
-    intents: ["Whitefield", "Google proof", "Resident signal"],
-    motif: "Review strength becomes the rank axis — not a silent filter",
-    landsOn: "Strongest Google-backed home",
+    intents: ["Whitefield", "Google", "Reviews"],
+    motif: "",
+    landsOn: "Highest Google score",
     societyHints: [],
     fallbackHints: ["whitefield"],
     proof: (home) => {
@@ -236,11 +236,11 @@ function FeaturedSuggestions({
   return (
     <div className="landing-featured">
       <header className="landing-featured__head">
-        <p className="landing-featured__kicker">Semantic match</p>
-        <h2>Change the ask — the ranked why shifts with it.</h2>
-        <button type="button" className="landing-featured__query" onClick={() => onSearch(beat.query)}>
-          {beat.query}
-        </button>
+        <h2>
+          <button type="button" className="landing-featured__query" onClick={() => onSearch(beat.query)}>
+            {beat.query}
+          </button>
+        </h2>
       </header>
       <div className="landing-stage__featured" key={beat.id}>
         {suggestions.map(({ property, labels }) => (
@@ -312,17 +312,12 @@ function SemanticSearchCanvas() {
 
   return (
     <div className={`landing-showcase landing-showcase--search is-${beat.theme}`}>
-      <p className="landing-showcase__whisper" aria-hidden="true">
-        {beat.theme === "metro" ? "Metro" : beat.theme === "acres" ? "Scale" : beat.theme === "reviews" ? "Reviews" : "Life"}
-      </p>
-
       <div className="landing-search-stage">
         <div className={`landing-search-query${phase >= 0 ? " is-in" : ""}`} key={`q-${beat.id}`}>
-          <span>Life query</span>
           <strong>{beat.query}</strong>
         </div>
 
-        <div className="landing-search-intents" aria-label="Parsed context">
+        <div className="landing-search-intents" aria-label="Parsed from your ask">
           {beat.intents.map((intent, index) => (
             <span
               key={`${beat.id}-${intent}`}
@@ -341,9 +336,7 @@ function SemanticSearchCanvas() {
           <div className="landing-search-intent-board__icon" aria-hidden="true">
             <SoftNearbyIcon kind={iconKind} size={26} />
           </div>
-          <p className="landing-search-intent-board__motif">{beat.motif}</p>
           <p className="landing-search-intent-board__lands">
-            <span>Ranks toward</span>
             <strong>{beat.landsOn}</strong>
           </p>
         </div>
@@ -812,24 +805,20 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       <FeaturedSuggestions properties={listable} onSearch={onSearch} />
 
       <header className="landing-journey">
-        <p className="landing-journey__step">Where we differ</p>
-        <h2>Context search first. Then the neighborhood proof.</h2>
+        <h2>From search to a clear decision</h2>
       </header>
 
       <article className="landing-scene landing-scene--right">
         <div className="landing-scene__copy">
           <p className="landing-scene__step">01</p>
-          <h2>Search by life, not checkboxes</h2>
-          <p>
-            Watch the ask change — Kadugodi metro lifts Waterford, a 100-acre lake society
-            lifts Lakeside Habitat — each result carries a semantic why.
-          </p>
+          <h2>Search by life</h2>
+          <p>Plain language in. Ranked homes out — each with a why.</p>
           <button
             type="button"
             className="landing-scene__cta"
             onClick={() => onSearch(SEARCH_DEMO_BEATS[0].query)}
           >
-            Try a life search
+            Try a search
           </button>
         </div>
         <div className="landing-canvas landing-canvas--product">
@@ -843,10 +832,9 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
         </div>
         <div className="landing-scene__copy">
           <p className="landing-scene__step">02</p>
-          <h2>Then read what’s around the home</h2>
+          <h2>See the neighborhood</h2>
           <p>
-            Water, lake buffer, lines, traffic, schools — status tones beside each signal,
-            before you fall for the brochure.
+            Water, lake buffer, lines, traffic, schools — before the brochure takes over.
           </p>
           <button
             type="button"
@@ -861,10 +849,9 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       <article className="landing-scene landing-scene--right">
         <div className="landing-scene__copy">
           <p className="landing-scene__step">03</p>
-          <h2>Then read what people keep saying</h2>
+          <h2>Read what residents say</h2>
           <p>
-            Google themes and Reddit lines, curated side by side — praise, caution, and
-            tradeoffs without the tab chase.
+            Google themes and Reddit lines side by side — praise, caution, tradeoffs.
           </p>
           <button
             type="button"
@@ -885,10 +872,9 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
         </div>
         <div className="landing-scene__copy">
           <p className="landing-scene__step">04</p>
-          <h2>Capture notes — then compare</h2>
+          <h2>Compare what you noted</h2>
           <p>
-            Tag what you notice on visits. Those same labels open into a ready side-by-side
-            when two homes are in play.
+            Tag visits as you go. Those labels open into a side-by-side when two homes matter.
           </p>
           <Link to="/workspace" className="landing-scene__cta">
             Open notebook
@@ -899,10 +885,9 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       <article className="landing-scene landing-scene--right landing-scene--compare">
         <div className="landing-scene__copy">
           <p className="landing-scene__step">05</p>
-          <h2>Finish on the money tradeoff</h2>
+          <h2>Weigh buy vs rent</h2>
           <p>
-            Buy and rent on one horizon — the year marker slides so the advantage feels
-            concrete, not abstract.
+            One horizon, a sliding year marker — so the money tradeoff stays concrete.
           </p>
           <Link to={`/property/${planHome.id}/plan`} className="landing-scene__cta">
             Open plan

@@ -24,6 +24,8 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 **Always read `.claude/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
 
+**Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
+
 ---
 
 ## 1. Working Philosophy
@@ -456,6 +458,7 @@ Read the matching skill file **before** starting any task that falls under it:
 | Skill | File | Purpose |
 |-------|------|---------|
 | Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
+| UI Critic | `.claude/skills/ui-critic.md` | Human UI review: sticky-note chrome, clutter, buyer copy, same-page modes |
 | Add Crawler | `.claude/skills/add-crawler.md` | Add a new data source to the pipeline |
 | Add API Endpoint | `.claude/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
 | Data Enrichment | `.claude/skills/data-enrichment.md` | Run AI enrichment on entities |
