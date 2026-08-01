@@ -87,6 +87,46 @@ export function reportSections(dossier: ReraDossier): ReraReportSection[] {
   return facts.length > 0 ? [{ id: "facts", title: "Facts", facts }] : [];
 }
 
+function isAddressFact(fact: ReraReportFact): boolean {
+  const hay = `${fact.key} ${fact.label}`.toLowerCase();
+  return hay.includes("address") || hay.includes("locality");
+}
+
+function isCoordinateFact(fact: ReraReportFact): boolean {
+  const hay = `${fact.key} ${fact.label}`.toLowerCase();
+  return /lat|lng|coord/.test(hay);
+}
+
+/** Round noisy portal coordinates for a calm secondary line. */
+export function formatReraCoordinates(value: string): string | null {
+  const known = knownText(value);
+  if (!known) return null;
+  const parts = known.split(/[,\s]+/).map((part) => Number(part)).filter((n) => Number.isFinite(n));
+  if (parts.length >= 2) {
+    return `${parts[0]!.toFixed(5)}, ${parts[1]!.toFixed(5)}`;
+  }
+  return known;
+}
+
+export type LocationPresentation = {
+  address: ReraReportFact | null;
+  coordinates: ReraReportFact | null;
+  coordinatesDisplay: string | null;
+  otherFacts: ReraReportFact[];
+};
+
+export function presentLocationFacts(facts: ReraReportFact[]): LocationPresentation {
+  const address = facts.find(isAddressFact) ?? null;
+  const coordinates = facts.find((fact) => fact !== address && isCoordinateFact(fact)) ?? null;
+  const otherFacts = facts.filter((fact) => fact !== address && fact !== coordinates);
+  return {
+    address,
+    coordinates,
+    coordinatesDisplay: coordinates ? formatReraCoordinates(coordinates.value) : null,
+    otherFacts,
+  };
+}
+
 export function visibleDocumentSections(sections: ReraDocumentSection[]): ReraDocumentSection[] {
   return sections
     .map((section) => {

@@ -131,6 +131,46 @@
   align-items: stretch;
 }
 
+.rera-report-location {
+  max-width: 46rem;
+}
+
+.rera-report-location__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem 0.75rem;
+  align-items: start;
+}
+
+.rera-report-location__copy {
+  display: grid;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.rera-report-location__address {
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.rera-report-location__coords {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+}
+
+.rera-report-location-section .rera-report-facts {
+  margin-top: 0.75rem;
+}
+
 .rera-report-fact,
 .rera-report-note {
   min-width: 0;

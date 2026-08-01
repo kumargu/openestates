@@ -86,6 +86,12 @@
       "key_contains": ["number", "registered", "status", "approved"]
     },
     {
+      "id": "location",
+      "title": "Location",
+      "rank": 1,
+      "key_contains": ["lat", "lng", "address", "locality"]
+    },
+    {
       "id": "checks",
       "title": "Checks",
       "rank": 2,
@@ -126,12 +132,6 @@
       "title": "Files",
       "rank": 7,
       "key_contains": ["document", "plan", "approval", "noc", "brochure", "affidavit"]
-    },
-    {
-      "id": "location",
-      "title": "Location",
-      "rank": 8,
-      "key_contains": ["lat", "lng", "address", "locality"]
     }
   ],
   "default_section": {
@@ -325,8 +325,12 @@
       "label": "Site plans"
     },
     {
-      "fact_keys": ["rera_project_address"],
+      "fact_keys": ["rera_project_address", "rera_address", "project_address", "address"],
       "label": "Address"
+    },
+    {
+      "fact_keys": ["rera_lat_lng", "lat_lng", "coordinates"],
+      "label": "Coordinates"
     },
     {
       "fact_keys": ["stp_count"],
