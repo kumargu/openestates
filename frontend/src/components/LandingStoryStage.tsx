@@ -218,7 +218,7 @@ function FeaturedSuggestions({
     if (media.matches) return undefined;
     const timer = window.setInterval(() => {
       setBeatIndex((current) => (current + 1) % SEARCH_DEMO_BEATS.length);
-    }, 7200);
+    }, 9000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -277,15 +277,37 @@ function SemanticSearchCanvas() {
       return undefined;
     }
 
-    const timer = window.setInterval(() => {
-      setPhase((current) => {
-        if (current < 2) return current + 1;
-        setBeatIndex((index) => (index + 1) % SEARCH_DEMO_BEATS.length);
-        return 0;
-      });
-    }, 2800);
+    let cancelled = false;
+    const timers: number[] = [];
 
-    return () => window.clearInterval(timer);
+    function clearTimers() {
+      while (timers.length > 0) {
+        window.clearTimeout(timers.pop());
+      }
+    }
+
+    // Fast to a readable result, then hold so the context can be absorbed.
+    function scheduleCycle() {
+      clearTimers();
+      setPhase(0);
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setPhase(1);
+      }, 750));
+      timers.push(window.setTimeout(() => {
+        if (!cancelled) setPhase(2);
+      }, 1400));
+      timers.push(window.setTimeout(() => {
+        if (cancelled) return;
+        setBeatIndex((index) => (index + 1) % SEARCH_DEMO_BEATS.length);
+        scheduleCycle();
+      }, 1400 + 6500));
+    }
+
+    scheduleCycle();
+    return () => {
+      cancelled = true;
+      clearTimers();
+    };
   }, []);
 
   return (
@@ -305,7 +327,7 @@ function SemanticSearchCanvas() {
             <span
               key={`${beat.id}-${intent}`}
               className={`landing-search-intent${phase >= 1 ? " is-in" : ""}`}
-              style={{ transitionDelay: `${index * 120}ms` }}
+              style={{ transitionDelay: `${index * 90}ms` }}
             >
               {intent}
             </span>
