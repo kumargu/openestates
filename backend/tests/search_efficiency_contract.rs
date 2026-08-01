@@ -25,10 +25,10 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
     let properties = mock_property_corpus();
     let society_names = society_names(&properties);
     let index = SearchIndex::build(&properties);
-    let query = "3bhk whitefield under 2cr";
+    let query = "3bhk east bangalore under 2cr";
     let intent = parse_intent(query);
 
-    assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+    assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
     assert_eq!(intent.bhk, Some(3));
     assert_eq!(intent.budget_max, Some(20_000_000));
 
@@ -60,7 +60,7 @@ fn indexed_search_prunes_large_mock_corpus_before_ranking() {
     assert_eq!(results.len(), MATCHING_PROPERTIES);
     assert!(
         results.iter().all(|result| {
-            result.card.area == "Whitefield"
+            result.card.area == "East Bengaluru"
                 && result.card.bhk == 3
                 && result.card.price <= 20_000_000
         }),
@@ -424,6 +424,7 @@ fn empty_response(query: &str) -> SearchResponse {
         results: Vec::new(),
         area_context: None,
         total_results: 0,
+        focus: None,
         knowledge_context: Some(KnowledgeContext {
             claims: Vec::new(),
             nodes_consulted: 0,
@@ -441,10 +442,10 @@ fn mock_property_corpus() -> Vec<Property> {
     for i in 0..MATCHING_PROPERTIES {
         let mut matched = property_with_description(
             format!("match-whitefield-3bhk-{i}"),
-            "Whitefield",
+            "East Bengaluru",
             3,
             18_000_000,
-            "Whitefield apartment with metro connectivity, low traffic access, quiet blocks, and family-friendly healthcare reach.",
+            "East Bengaluru apartment with metro connectivity, low traffic access, quiet blocks, and family-friendly healthcare reach.",
         );
         matched.traffic_score = Some(0.1);
         properties.push(matched);
@@ -453,19 +454,19 @@ fn mock_property_corpus() -> Vec<Property> {
     for i in 0..DISTRACTORS_PER_BUCKET {
         properties.push(property(
             format!("area-distractor-sarjapur-{i}"),
-            "Sarjapur Road",
+            "South Bengaluru",
             3,
             18_000_000,
         ));
         properties.push(property(
             format!("bhk-distractor-whitefield-2bhk-{i}"),
-            "Whitefield",
+            "East Bengaluru",
             2,
             18_000_000,
         ));
         properties.push(property(
             format!("budget-distractor-whitefield-3bhk-{i}"),
-            "Whitefield",
+            "East Bengaluru",
             3,
             25_000_000,
         ));

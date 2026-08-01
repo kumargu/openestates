@@ -7,7 +7,7 @@ use chrono::{NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 
 use crate::knowledge::edge::Relation;
-use crate::knowledge::{google_reviews_url_from_facts, FactValue, KnowledgeGraph, SourcedFact};
+use crate::knowledge::{FactValue, KnowledgeGraph, SourcedFact, google_reviews_url_from_facts};
 use crate::models::{AreaProfile, KgEntityRefs, Property, PropertyCard, Society};
 use crate::serving::{ServingFactIndex, SocietyFactProjection};
 
@@ -1085,7 +1085,7 @@ pub fn enrich_property_card(
         society_name,
         builder_name: p.builder_name.clone(),
         hero_image,
-        transparency_tags: p.transparency_tags.iter().take(3).cloned().collect(),
+        transparency_tags: compact_transparency_tags(&p.transparency_tags),
         description_summary: p.description_summary.clone(),
         possession_status: p.possession_status.clone(),
         metro_distance_mins: p.metro_distance_mins,
@@ -1111,6 +1111,20 @@ pub fn enrich_property_card(
         decision_labels: Vec::new(),
         decision_check_summary: None,
     }
+}
+
+pub fn compact_transparency_tags(tags: &[String]) -> Vec<String> {
+    let mut compact = tags.iter().take(3).cloned().collect::<Vec<_>>();
+    if tags
+        .iter()
+        .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
+        && !compact
+            .iter()
+            .any(|tag| tag.eq_ignore_ascii_case("Price unavailable"))
+    {
+        compact.push("Price unavailable".to_string());
+    }
+    compact
 }
 
 // ---------------------------------------------------------------------------

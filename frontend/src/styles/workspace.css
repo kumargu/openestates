@@ -3,7 +3,7 @@
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--workspace-sidebar-width) minmax(0, 1fr);
-  background: #fbfaf8;
+  background: transparent;
   color: var(--color-text);
   transition: grid-template-columns 180ms var(--ease-out);
 }
@@ -16,7 +16,7 @@
   grid-column: 2;
   min-width: 0;
   min-height: 100vh;
-  background: #fdfcfb;
+  background: transparent;
 }
 
 .workspace-view > main {
@@ -36,7 +36,7 @@
   padding: 0.75rem 0.6rem;
   overflow: hidden;
   border-right: 1px solid rgba(38, 35, 32, 0.07);
-  background: #f4f2ef;
+  background: color-mix(in srgb, var(--color-bg-deep) 88%, #fff 12%);
   backface-visibility: hidden;
   contain: layout paint style;
   isolation: isolate;
@@ -61,17 +61,10 @@
   text-decoration: none;
 }
 
-.workspace-sidebar__brand > span {
-  display: grid;
-  width: 1.65rem;
-  height: 1.65rem;
+.workspace-sidebar__mark {
   flex: 0 0 auto;
-  place-items: center;
+  color: var(--color-accent);
   border-radius: 0.5rem;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 800;
 }
 
 .workspace-sidebar__brand strong {
@@ -150,6 +143,12 @@
   background: var(--color-cool-soft);
   color: var(--color-cool-deep);
   font-weight: 700;
+}
+
+.workspace-sidebar__nav-item.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .workspace-sidebar__nav-item svg {
@@ -379,7 +378,7 @@
 
 .compare-workspace {
   min-width: 0;
-  background: #fdfcfb;
+  background: transparent;
 }
 
 .compare-workspace__bar {
@@ -1962,7 +1961,7 @@
 
 .compare-loading {
   min-height: 100vh;
-  background: #fbfaf8;
+  background: transparent;
 }
 
 .compare-loading__main {
@@ -2002,7 +2001,7 @@
   display: grid;
   place-content: center;
   padding: 2rem;
-  background: #fbfaf8;
+  background: transparent;
   text-align: center;
 }
 
@@ -2184,7 +2183,7 @@
     position: sticky;
     left: 0;
     z-index: 3;
-    background: #fdfcfb;
+    background: var(--color-bg);
   }
 
   .compare-matrix__corner {

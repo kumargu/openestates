@@ -21,6 +21,7 @@ pub struct SearchIndex {
     by_bhk: HashMap<u32, Vec<String>>,
     by_property_node: HashMap<String, String>,
     by_society_node: HashMap<String, Vec<String>>,
+    by_named_entity_phrase: HashMap<String, Vec<String>>,
     by_token: HashMap<String, Vec<String>>,
     position_by_id: HashMap<String, usize>,
     price_by_id: HashMap<String, u64>,
@@ -53,6 +54,12 @@ impl SearchIndex {
                 .or_default(),
             &property.id,
         );
+        for phrase in named_entity_phrases(property) {
+            push_unique(
+                self.by_named_entity_phrase.entry(phrase).or_default(),
+                &property.id,
+            );
+        }
         self.price_by_id.insert(property.id.clone(), property.price);
 
         let text = format!(
@@ -73,6 +80,11 @@ impl SearchIndex {
 
     pub fn recall_ids(&self, query: &str, intent: &SearchIntent) -> Vec<String> {
         let mut candidate: Option<HashSet<String>> = None;
+
+        let named_entity_ids = self.named_entity_candidates(query);
+        if !named_entity_ids.is_empty() {
+            intersect_candidate(&mut candidate, named_entity_ids);
+        }
 
         if let Some(area) = intent.area.as_deref() {
             let area_ids = self.area_candidates(area);
@@ -245,6 +257,24 @@ impl SearchIndex {
         ids
     }
 
+    fn named_entity_candidates(&self, query: &str) -> HashSet<String> {
+        let query = normalize(query);
+        if query.is_empty() {
+            return HashSet::new();
+        }
+        self.by_named_entity_phrase
+            .iter()
+            .filter(|(phrase, _)| {
+                phrase_has_multiple_tokens(phrase)
+                    && (query_contains_phrase(&query, phrase)
+                        || (phrase.len() >= query.len()
+                            && phrase_has_multiple_tokens(&query)
+                            && query_contains_phrase(phrase, &query)))
+            })
+            .flat_map(|(_, ids)| ids.iter().cloned())
+            .collect()
+    }
+
     fn corpus_position(&self, id: &str) -> usize {
         self.position_by_id.get(id).copied().unwrap_or(usize::MAX)
     }
@@ -346,6 +376,36 @@ fn normalize(value: &str) -> String {
     value.trim().to_lowercase()
 }
 
+fn named_entity_phrases(property: &Property) -> Vec<String> {
+    let mut phrases = Vec::new();
+    push_normalized_phrase(&mut phrases, &property.title);
+    push_normalized_phrase(&mut phrases, &property.society_id.replace('-', " "));
+    push_normalized_phrase(&mut phrases, &property.society_id);
+    phrases
+}
+
+fn push_normalized_phrase(phrases: &mut Vec<String>, value: &str) {
+    let normalized = normalize(value);
+    if phrase_has_multiple_tokens(&normalized) && !phrases.contains(&normalized) {
+        phrases.push(normalized);
+    }
+}
+
+fn phrase_has_multiple_tokens(value: &str) -> bool {
+    value.split_whitespace().take(2).count() >= 2
+}
+
+fn query_contains_phrase(query: &str, phrase: &str) -> bool {
+    if query == phrase {
+        return true;
+    }
+    query
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .windows(phrase.split_whitespace().count())
+        .any(|window| window.join(" ") == phrase)
+}
+
 pub(crate) fn price_satisfies_budget(price: u64, budget_max: u64) -> bool {
     price > 0 && price <= budget_max
 }
@@ -389,6 +449,24 @@ mod tests {
             vec!["prop-1"]
         );
         assert_eq!(index.recall_ids("gorej", &intent), vec!["prop-1"]);
+    }
+
+    #[test]
+    fn exact_society_name_recall_seeds_candidates_before_area_vocab() {
+        let mut target = test_property("falcon-3bhk", "prestige-falcon-city");
+        target.title = "Prestige Falcon City".to_string();
+        target.area = "South Bengaluru".to_string();
+        let mut area_peer = test_property("area-peer", "other-south-project");
+        area_peer.title = "Other South Project".to_string();
+        area_peer.area = "South Bengaluru".to_string();
+        let index = SearchIndex::build(&[target, area_peer]);
+        let mut intent = empty_intent();
+        intent.area = Some("South Bengaluru".to_string());
+
+        assert_eq!(
+            index.recall_ids("Prestige Falcon City", &intent),
+            vec!["falcon-3bhk"]
+        );
     }
 
     #[test]
@@ -463,6 +541,22 @@ mod tests {
             description_summary: String::new(),
             transparency_tags: Vec::new(),
             source_reference: "unit-test".to_string(),
+        }
+    }
+
+    fn empty_intent() -> SearchIntent {
+        SearchIntent {
+            area: None,
+            excluded_areas: Vec::new(),
+            bhk: None,
+            budget_max: None,
+            hard_constraints: Vec::new(),
+            preferences: Vec::new(),
+            positive_preferences: Vec::new(),
+            negative_preferences: Vec::new(),
+            accepted_tradeoffs: Vec::new(),
+            unsupported_inventory_types: Vec::new(),
+            buyer_archetype: None,
         }
     }
 }

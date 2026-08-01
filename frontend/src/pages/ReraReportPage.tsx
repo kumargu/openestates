@@ -6,6 +6,7 @@ import type {
   PropertyDetailResponse,
   ReraDossier,
   ReraReportFact,
+  ReraReportSection,
 } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
 import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
@@ -15,6 +16,7 @@ import {
   httpUrl,
   kindLabel,
   knownText,
+  presentLocationFacts,
   reportSections,
   safeLabels,
   toneClass,
@@ -54,6 +56,69 @@ function FactLine({
         />
       </div>
     </div>
+  );
+}
+
+function LocationSection({
+  section,
+  propertyId,
+}: {
+  section: ReraReportSection;
+  propertyId: string;
+}) {
+  const { address, coordinates, coordinatesDisplay, otherFacts } = presentLocationFacts(section.facts);
+  if (!address && !coordinates && otherFacts.length === 0) return null;
+
+  return (
+    <section className="rera-report-section rera-report-location-section">
+      <div className="rera-report-section__head">
+        <h2>{section.title}</h2>
+      </div>
+      {(address || coordinatesDisplay) && (
+        <div className="rera-report-location">
+          <div className="rera-report-location__row">
+            <div className="rera-report-location__copy">
+              {address && <p className="rera-report-location__address">{address.value}</p>}
+              {coordinatesDisplay && (
+                <p className="rera-report-location__coords">{coordinatesDisplay}</p>
+              )}
+            </div>
+            {address && (
+              <NotebookPinButton
+                propertyId={propertyId}
+                catalogKey={`rera-report:${propertyId}:${section.id}:${address.key}:${address.value}`}
+                title={`${address.label}: ${address.value}`}
+                source="RERA"
+                labels={safeLabels(address.labels, address.key)}
+                className="rera-report-pin"
+              />
+            )}
+            {!address && coordinates && (
+              <NotebookPinButton
+                propertyId={propertyId}
+                catalogKey={`rera-report:${propertyId}:${section.id}:${coordinates.key}:${coordinates.value}`}
+                title={`Coordinates: ${coordinatesDisplay}`}
+                source="RERA"
+                labels={safeLabels(coordinates.labels, coordinates.key)}
+                className="rera-report-pin"
+              />
+            )}
+          </div>
+        </div>
+      )}
+      {otherFacts.length > 0 && (
+        <div className="rera-report-facts">
+          {otherFacts.map((fact) => (
+            <FactLine
+              key={`${section.id}-${fact.key}-${fact.value}`}
+              fact={fact}
+              propertyId={propertyId}
+              sectionId={section.id}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 
@@ -151,6 +216,8 @@ export function ReraReportPage() {
   const sourceUrl = httpUrl(currentState.dossier.source.portal_url);
   const registrationNumber = knownText(currentState.dossier.source.registration_number);
   const pageTitle = `${title} RERA - OpenEstates`;
+  const locationSection = sections.find((section) => section.id === "location") ?? null;
+  const otherSections = sections.filter((section) => section.id !== "location");
 
   return (
     <div className="page-container-wide rera-report-page">
@@ -186,13 +253,17 @@ export function ReraReportPage() {
         )}
       </header>
 
+      {locationSection && (
+        <LocationSection section={locationSection} propertyId={property.id} />
+      )}
+
       <DocumentSectionList
         sections={currentState.dossier.document_sections ?? []}
         propertyId={property.id}
       />
 
-      {sections.length > 0 ? (
-        sections.map((section) => (
+      {otherSections.length > 0 ? (
+        otherSections.map((section) => (
           <section key={section.id} className="rera-report-section">
             <div className="rera-report-section__head">
               <h2>{section.title}</h2>
@@ -209,12 +280,12 @@ export function ReraReportPage() {
             </div>
           </section>
         ))
-      ) : (
+      ) : !locationSection ? (
         <section className="rera-report-section">
           <h2>Facts</h2>
           <p className="rera-report-empty">No RERA facts are available for this home yet.</p>
         </section>
-      )}
+      ) : null}
     </div>
   );
 }

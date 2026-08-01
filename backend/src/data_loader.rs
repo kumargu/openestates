@@ -5,16 +5,16 @@ use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwap;
-use tokio::sync::mpsc;
 use tokio::sync::RwLock;
+use tokio::sync::mpsc;
 
 use crate::dag_config::{
-    better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
-    ResolutionPoliciesFile,
+    ResolutionPoliciesFile, better_source_type_for_fact, buyer_visible_fact,
+    load_resolution_policies,
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
-use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
+use crate::knowledge::fact::{FactValue, google_reviews_url_from_facts};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
@@ -27,13 +27,17 @@ use crate::serving::{
     ServingFactIndex,
 };
 use crate::state::{
-    search_log_queue_capacity_from_env, spawn_search_log_worker, AppState, SearchResponseCache,
-    SearchRuntimeSnapshot,
+    AppState, SearchResponseCache, SearchRuntimeSnapshot, search_log_queue_capacity_from_env,
+    spawn_search_log_worker,
 };
 use crate::{
-    lake::{LakeStoreLocation, LAKE_URL_ENV},
+    assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore},
+    lake::{LAKE_URL_ENV, LakeStoreLocation},
     serving::ServingBundleLoadError,
 };
+
+pub const SERVING_ENV_ENV: &str = "OPENESTATES_SERVING_ENV";
+pub const SERVING_RELEASE_ID_ENV: &str = "OPENESTATES_SERVING_RELEASE_ID";
 
 pub type RuntimeServingSnapshot = SearchRuntimeSnapshot;
 
@@ -274,10 +278,8 @@ async fn load_serving_bundle_from_location(
         }
     };
 
-    match ServingBundleLoader::new(lake, cache_root)
-        .load_current_search_bundle()
-        .await
-    {
+    let loader = ServingBundleLoader::new(lake, cache_root);
+    match load_selected_search_bundle(&loader).await {
         Ok(Some(bundle)) => {
             println!(
                 "Loaded serving bundle {} with {} entities and {} facts",
@@ -302,6 +304,51 @@ async fn load_serving_bundle_from_location(
             Ok(None)
         }
     }
+}
+
+async fn load_selected_search_bundle(
+    loader: &ServingBundleLoader,
+) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
+    let explicit_release = std::env::var(SERVING_RELEASE_ID_ENV).ok();
+    let explicit_environment = std::env::var(SERVING_ENV_ENV).ok();
+    if explicit_release.is_none() && explicit_environment.is_none() {
+        return loader.load_current_search_bundle().await;
+    }
+
+    let release_id = match explicit_release {
+        Some(value) => value.parse::<CatalogReleaseId>().map_err(|err| {
+            ServingBundleLoadError::Configuration(format!(
+                "{SERVING_RELEASE_ID_ENV} must be a catalog release UUID: {err}"
+            ))
+        })?,
+        None => {
+            let environment = explicit_environment
+                .as_deref()
+                .unwrap_or("production")
+                .parse::<CatalogEnvironment>()
+                .map_err(ServingBundleLoadError::Configuration)?;
+            let store = CatalogReleaseStore::new(loader.lake().clone());
+            let pointer = store
+                .current_pointer(environment)
+                .await
+                .map_err(ServingBundleLoadError::Lake)?
+                .ok_or_else(|| {
+                    ServingBundleLoadError::Configuration(format!(
+                        "{SERVING_ENV_ENV}={environment} has no catalog release pointer"
+                    ))
+                })?;
+            pointer.release_id
+        }
+    };
+
+    let store = CatalogReleaseStore::new(loader.lake().clone());
+    let release = store
+        .release(&release_id)
+        .await
+        .map_err(ServingBundleLoadError::Lake)?;
+    loader
+        .load_search_bundle_by_materialization(&release.derived_assets.serving_materialization_id)
+        .await
 }
 
 fn log_serving_load_error(err: ServingBundleLoadError) {
@@ -388,10 +435,9 @@ fn representative_properties_from_serving_societies(
 
 fn has_representative_property_signal(rows: &ServingEntityFactRows) -> bool {
     latest_bool(Some(rows), "source_scan_selected").unwrap_or(false)
-        || rows
-            .facts
-            .iter()
-            .any(|fact| bhk_from_serving_fact_key(&fact.fact_key).is_some())
+        || rows.facts.iter().any(|fact| {
+            priced_bhk_from_fact(fact).is_some() || configured_bhks_from_fact(fact).next().is_some()
+        })
 }
 
 fn representative_property_from_serving_society(
@@ -891,16 +937,25 @@ fn serving_market_pricing(rows: &ServingEntityFactRows, bhk: u32) -> Option<Mark
 }
 
 fn serving_society_bhks(rows: &ServingEntityFactRows) -> Vec<u32> {
-    let mut bhks = BTreeSet::new();
+    let mut priced_bhks = BTreeSet::new();
+    let mut configured_bhks = BTreeSet::new();
     for fact in &rows.facts {
-        if let Some(bhk) = bhk_from_serving_fact_key(&fact.fact_key) {
-            bhks.insert(bhk);
+        if let Some(bhk) = priced_bhk_from_fact(fact) {
+            priced_bhks.insert(bhk);
+        }
+        for bhk in configured_bhks_from_fact(fact) {
+            configured_bhks.insert(bhk);
         }
     }
+    let mut bhks = if priced_bhks.is_empty() {
+        configured_bhks
+    } else {
+        priced_bhks
+    };
     if bhks.is_empty() {
         bhks.insert(3);
     }
-    bhks.into_iter().take(3).collect()
+    bhks.into_iter().collect()
 }
 
 fn bhk_from_serving_fact_key(fact_key: &str) -> Option<u32> {
@@ -912,6 +967,69 @@ fn bhk_from_serving_fact_key(fact_key: &str) -> Option<u32> {
         .parse::<u32>()
         .ok()
         .filter(|value| (1..=6).contains(value))
+}
+
+fn priced_bhk_from_fact(fact: &crate::serving::ServingFactRecord) -> Option<u32> {
+    bhk_from_serving_fact_key(&fact.fact_key)
+}
+
+fn configured_bhks_from_fact(
+    fact: &crate::serving::ServingFactRecord,
+) -> impl Iterator<Item = u32> {
+    let mut bhks = BTreeSet::new();
+    if let Some(bhk) = bhk_from_available_bhk_flag(fact) {
+        bhks.insert(bhk);
+    }
+    if fact.fact_key == "available_configurations" {
+        bhks.extend(bhks_from_fact_value(&fact.value));
+    }
+    bhks.into_iter()
+}
+
+fn bhk_from_available_bhk_flag(fact: &crate::serving::ServingFactRecord) -> Option<u32> {
+    let digits = fact.fact_key.strip_prefix("has_")?.strip_suffix("bhk")?;
+    if !matches!(fact.value, FactValue::Bool(true)) {
+        return None;
+    }
+    digits
+        .parse::<u32>()
+        .ok()
+        .filter(|value| (1..=6).contains(value))
+}
+
+fn bhks_from_fact_value(value: &FactValue) -> BTreeSet<u32> {
+    let text = match value {
+        FactValue::Text(value) => value.clone(),
+        FactValue::Tags(values) => values.join(" "),
+        _ => String::new(),
+    };
+    bhks_from_text(&text)
+}
+
+fn bhks_from_text(value: &str) -> BTreeSet<u32> {
+    let mut bhks = BTreeSet::new();
+    let lowered = value.to_ascii_lowercase();
+    let bytes = lowered.as_bytes();
+    for index in 0..bytes.len() {
+        if !bytes[index].is_ascii_digit() {
+            continue;
+        }
+        if index > 0 && bytes[index - 1].is_ascii_digit() {
+            continue;
+        }
+        let mut cursor = index + 1;
+        while cursor < bytes.len() && bytes[cursor].is_ascii_whitespace() {
+            cursor += 1;
+        }
+        if cursor + 3 > bytes.len() || &lowered[cursor..cursor + 3] != "bhk" {
+            continue;
+        }
+        let bhk = (bytes[index] - b'0') as u32;
+        if (1..=6).contains(&bhk) {
+            bhks.insert(bhk);
+        }
+    }
+    bhks
 }
 
 fn fact_to_text(value: &FactValue) -> String {
@@ -1994,10 +2112,12 @@ mod tests {
         assert_eq!(property.id, "discovered-prestige-elm-park-3bhk");
         assert_eq!(property.price, 12_500_000);
         assert_eq!(property.possession_status, "New Launch");
-        assert!(property
-            .transparency_tags
-            .iter()
-            .any(|tag| tag == "RERA verified"));
+        assert!(
+            property
+                .transparency_tags
+                .iter()
+                .any(|tag| tag == "RERA verified")
+        );
     }
 
     #[test]
@@ -2094,7 +2214,7 @@ mod tests {
     }
 
     #[test]
-    fn serving_society_without_price_signal_stays_out_of_runtime_catalog() {
+    fn serving_society_without_configuration_signal_stays_out_of_runtime_catalog() {
         let entities = vec![ServingEntityRecord {
             entity_id: "society:rera-only-project".to_string(),
             entity_type: "society".to_string(),
@@ -2115,8 +2235,96 @@ mod tests {
         let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
         assert!(
             properties.is_empty(),
-            "RERA-only projects without pricing should not become listable homes"
+            "RERA-only projects without BHK configuration should not become listable homes"
         );
+    }
+
+    #[test]
+    fn serving_society_rera_configurations_create_unpriced_runtime_homes() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:pursuit-of-a-radical-rhapsody-phase-2".to_string(),
+            entity_type: "society".to_string(),
+            name: "Pursuit of a Radical Rhapsody Phase 2".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:pursuit-of-a-radical-rhapsody-phase-2",
+                    "available_configurations",
+                    FactValue::Text("2 BHK, 3BHK, 4 BHK, 5BHK".to_string()),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:pursuit-of-a-radical-rhapsody-phase-2",
+                    "rera_registered",
+                    FactValue::Bool(true),
+                    1.0,
+                ),
+                serving_fact(
+                    "society:pursuit-of-a-radical-rhapsody-phase-2",
+                    "area",
+                    FactValue::Text("Whitefield".to_string()),
+                    0.9,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+        let bhks = properties
+            .iter()
+            .map(|property| property.bhk)
+            .collect::<Vec<_>>();
+
+        assert_eq!(bhks, vec![2, 3, 4, 5]);
+        assert!(properties.iter().all(|property| property.price == 0));
+        assert!(
+            properties
+                .iter()
+                .all(|property| property.price_per_sqft == 0)
+        );
+        assert!(properties.iter().all(|property| {
+            property
+                .transparency_tags
+                .iter()
+                .any(|tag| tag == "Price unavailable")
+        }));
+    }
+
+    #[test]
+    fn serving_society_priced_bhks_do_not_expand_from_rera_configurations() {
+        let entities = vec![ServingEntityRecord {
+            entity_id: "society:priced-project".to_string(),
+            entity_type: "society".to_string(),
+            name: "Priced Project".to_string(),
+            root_source: Some("rera".to_string()),
+            searchable_text: String::new(),
+        }];
+        let fact_index = ServingFactIndex::from_records(
+            vec![
+                serving_fact(
+                    "society:priced-project",
+                    "listing_3bhk",
+                    FactValue::Text(listing_payload(12_500_000.0, 1_250.0)),
+                    0.95,
+                ),
+                serving_fact(
+                    "society:priced-project",
+                    "available_configurations",
+                    FactValue::Text("2 BHK, 3 BHK, 4 BHK".to_string()),
+                    0.95,
+                ),
+            ],
+            Vec::new(),
+        );
+
+        let properties = properties_from_serving_records(&entities, &fact_index, "bundle-v1");
+
+        assert_eq!(properties.len(), 1);
+        assert_eq!(properties[0].id, "discovered-priced-project-3bhk");
+        assert_eq!(properties[0].price, 12_500_000);
     }
 
     fn make_society_node(slug: &str, name: &str, area: &str, builder: &str) -> Node {
@@ -2287,9 +2495,10 @@ mod tests {
         // Missing quality/risk scores stay absent — no bootstrap defaults.
         assert!(p.society_quality_score.is_none());
         assert!(p.litigation_risk.is_none());
-        assert!(p
-            .transparency_tags
-            .contains(&"Discovered via Search".to_string()));
+        assert!(
+            p.transparency_tags
+                .contains(&"Discovered via Search".to_string())
+        );
         assert!(p.greenery_score.is_none());
     }
 

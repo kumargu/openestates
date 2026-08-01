@@ -24,6 +24,8 @@ OpenEstates is not trying to win by having the biggest pile of listings. The wed
 
 **Always read `.claude/skills/coding-practices.md` before writing any code.** It contains the full quality bar, design philosophy, Rust/TypeScript/Python patterns, latency budgets, testing requirements, and the pre-ship checklist. Do not skip this.
 
+**Before shipping buyer-facing UI**, also run `.claude/skills/ui-critic.md` — a human product-design pass for sticky-note cards, heading clutter, duplicate facts, agent-jargon copy, and fake page jumps.
+
 ---
 
 ## 1. Working Philosophy
@@ -163,10 +165,23 @@ Every new discovery behavior should be testable with fuzzy/user-like queries and
 
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
 
+Search work must run as a proof loop, not as accumulated code:
+- Start each search-quality session with a chain audit: list the relevant local commits or touched files, map them to the current milestone, and call out anything that looks like duplicated, bypassed, or accidentally productized experimental behavior.
+- Run the current benchmark or a focused contract before changing behavior, unless the task is pure documentation. Keep the baseline artifact path in the notes.
+- Classify every miss as `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, `embedding_gap`, or `architecture_gap` before changing ranking, parser logic, config, or embeddings.
+- For every `data_gap` or suspected recall/proof miss, inspect the promoted serving Parquet directly before changing runtime code. Use the current search bundle pointer, query `entities`, `facts`, and `search_metadata`, and write down whether the expected entity/fact is truly absent, present but unannotated, present but below confidence/eligibility thresholds, present under a non-canonical ID, or present and ignored by search. This is allowed as an investigation shortcut only. It must not become hardcoded benchmark facts in Rust, parser JSON, or search config.
+- Work backwards from durable truth: parquet facts/search metadata -> loaded serving indexes -> resolver/recall diagnostics -> ranking/proof reasons -> benchmark check. If parquet lacks the fact, fix the DAG/materializer/enrichment path or mark an enrichment gap. If parquet has the fact, fix the generic loader, resolver, index, scoring, or proof contract so search can see what the serving bundle already proves.
+- Make one small architectural change at a time, then rerun the same benchmark/contract. Keep the change only if it improves a stated metric or removes a verified hardcoding/architecture regression without search-quality loss.
+- If the benchmark does not improve, either revert the behavior change or document why it is purely structural and what follow-up proof will validate it. Do not pile follow-on code on an unproven layer.
+
 ### Search execution must stay ontology-driven
 Search cleanup has one non-negotiable rule: **the runtime may contain generic mechanics, but not product vocabulary branches**. If code in `backend/src/search/`, `backend/src/routes/search.rs`, or frontend search/result rendering starts to say "if hospital", "if metro", "if nearby_schools", "if water issue", or `match fact_key`, treat that as a hardcoding regression unless it is a temporary compatibility shim with a tracked removal plan.
 
 Buyer vocabulary, place families, fact-key groups, source priorities, scoring weights, proof labels, layer ids, and eligibility rules belong in `app/config/dag/` or DAG-backed serving facts. Rust may load, validate, index, compare, score, and explain those configured records generically. Rust must not grow new one-off lists like `["hospital", "hospitals", "clinic"]` or closed enums like `PlaceFactFamily` for product semantics.
+
+Place ontology must not become a hidden filter list. Config may define broad place families such as `school`, `hospital`, `metro`, `tech_park`, `mall`, `landmark`, and at most broad market regions such as North/South/East/West Bengaluru. Actual localities, roads, societies, schools, hospitals, tech parks, malls, metro stations, landmarks, aliases, coordinates, and distance facts are DAG serving entities/facts, not parser config. A query like `near Gopalan National School`, `Hoodi`, `Bagmane`, or `Phoenix Marketcity` should resolve through the serving bundle's entity/place index and proof facts, not through hardcoded area aliases.
+
+Do not win benchmarks by adding locality or landmark aliases. That is just filters hidden in JSON.
 
 Before changing search behavior or search cleanup:
 - Read `app/config/dag/manifest.json` and the one relevant config file before editing code.
@@ -457,6 +472,7 @@ Read the matching skill file **before** starting any task that falls under it:
 | Skill | File | Purpose |
 |-------|------|---------|
 | Coding Practices | `.claude/skills/coding-practices.md` | Quality bar, patterns, testing, latency budgets |
+| UI Critic | `.claude/skills/ui-critic.md` | Human UI review: sticky-note chrome, clutter, buyer copy, same-page modes |
 | Add Crawler | `.claude/skills/add-crawler.md` | Add a new data source to the pipeline |
 | Add API Endpoint | `.claude/skills/add-api-endpoint.md` | Add a new Rust API endpoint end-to-end |
 | Data Enrichment | `.claude/skills/data-enrichment.md` | Run AI enrichment on entities |

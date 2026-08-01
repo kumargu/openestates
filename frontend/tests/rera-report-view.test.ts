@@ -2,13 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   displayName,
+  formatReraCoordinates,
   httpUrl,
   kindLabel,
+  presentLocationFacts,
   reportSections,
   safeLabels,
   visibleDocumentSections,
 } from "../src/lib/reraReportView.ts";
-import type { ReraDossier, ReraDocumentSection } from "../src/lib/types.ts";
+import type { ReraDossier, ReraDocumentSection, ReraReportFact } from "../src/lib/types.ts";
 
 const BASE_DOSSIER: ReraDossier = {
   property_id: "property:test",
@@ -130,4 +132,34 @@ test("RERA report helpers keep labels readable and notebook tags bounded", () =>
     "delay",
   ]);
   assert.deepEqual(safeLabels([], "land_litigation"), ["risk", "legal"]);
+});
+
+test("location facts fold coordinates under address without a second box", () => {
+  const facts: ReraReportFact[] = [
+    {
+      key: "address",
+      label: "Address",
+      value: "Sy No. 14, Pattandur Agrahara Village, Bengaluru",
+      tone: "neutral",
+      labels: ["location"],
+      confidence: 0.9,
+      learned_at: "2026-07-30",
+    },
+    {
+      key: "rera_lat_lng",
+      label: "RERA_LAT_LNG",
+      value: "12.98535765887552, 77.75078040700681",
+      tone: "neutral",
+      labels: ["location"],
+      confidence: 0.7,
+      learned_at: "2026-07-30",
+    },
+  ];
+
+  const presented = presentLocationFacts(facts);
+  assert.equal(presented.address?.key, "address");
+  assert.equal(presented.coordinates?.key, "rera_lat_lng");
+  assert.equal(presented.coordinatesDisplay, "12.98536, 77.75078");
+  assert.equal(presented.otherFacts.length, 0);
+  assert.equal(formatReraCoordinates("12.98535765887552, 77.75078040700681"), "12.98536, 77.75078");
 });

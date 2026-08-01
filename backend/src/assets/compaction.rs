@@ -898,9 +898,7 @@ mod tests {
         assert!(scoped
             .iter()
             .all(|fact| fact.entity_id == "society:selected"));
-        assert!(scoped
-            .iter()
-            .any(|fact| fact.fact_key == "nearby_schools"));
+        assert!(scoped.iter().any(|fact| fact.fact_key == "nearby_schools"));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 pub mod analyzer;
-pub mod area_alias;
 pub mod engine;
+pub mod focus;
 pub mod geo;
 pub mod guard;
 pub mod index;
@@ -15,6 +15,7 @@ pub use engine::{
     CandidateScore, SearchDiagnostics, SearchEngine, SearchLayerTiming, SearchRecallDiagnostics,
     SearchRelaxation,
 };
+pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
 pub use guard::{guard_search_query, no_results_guidance, SearchGuidance};
 pub use index::SearchIndex;
 pub use intent::SearchIntent;
@@ -53,7 +54,7 @@ pub struct MatchReason {
 /// How a user preference was handled during scoring.
 #[derive(Debug, Clone, Serialize)]
 pub struct PreferenceCoverage {
-    /// The user preference, e.g. "metro access"
+    /// The user preference label from config or parsed intent.
     pub preference: String,
     /// "matched" (score > 0.5), "partial" (score > 0), "no_data"
     pub status: String,
@@ -150,6 +151,9 @@ pub struct SearchResponse {
     pub results: Vec<SearchResultCard>,
     pub area_context: Option<AreaProfile>,
     pub total_results: usize,
+    /// Journey rails: named-society focus + siblings, or ranked matches + more homes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub focus: Option<SearchResultFocus>,
     /// Knowledge graph provenance for the results
     #[serde(skip_serializing_if = "Option::is_none")]
     pub knowledge_context: Option<KnowledgeContext>,

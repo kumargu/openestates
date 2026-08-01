@@ -19,6 +19,7 @@ import { PageState } from "../components/PageState.tsx";
 import { PropertySidePanel } from "../components/PropertySidePanel.tsx";
 import { addRecentSearch } from "../lib/recent-searches.ts";
 import { LivingEvidenceTile } from "../components/evidence/LivingEvidenceTile.tsx";
+import { SearchFocusBoard } from "../components/evidence/SearchFocusBoard.tsx";
 import { UniverseBoard } from "../components/evidence/UniverseBoard.tsx";
 import { useEvidenceBatch } from "../hooks/useEvidenceBatch.ts";
 
@@ -306,8 +307,16 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
   }, [properties, areaFilter]);
 
   const matchResults: { property: PropertyCardType; match?: MatchResult; explanation?: MatchExplanation }[] = useMemo(() => {
-    if (useBackendResults) {
-      return searchResponse.results.map((r) => ({
+    if (useBackendResults && searchResponse) {
+      const focus = searchResponse.focus;
+      const cards = focus
+        ? [
+            ...focus.focus_results,
+            ...(focus.sibling_configs ?? []),
+            ...(focus.more_homes ?? []),
+          ]
+        : searchResponse.results;
+      return cards.map((r) => ({
         property: r as PropertyCardType,
         match: {
           label: r.match_label as MatchResult["label"],
@@ -339,10 +348,17 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
     }));
   }, [hasQuery, useBackendResults, searchResponse, filtered]);
 
-  const propertyIds = useMemo(
-    () => universeResults.map((result) => result.id),
-    [universeResults],
-  );
+  const propertyIds = useMemo(() => {
+    if (useBackendResults && searchResponse?.focus) {
+      const focus = searchResponse.focus;
+      return [
+        ...focus.focus_results.map((result) => result.id),
+        ...(focus.sibling_configs ?? []).map((result) => result.id),
+        ...(focus.more_homes ?? []).map((result) => result.id),
+      ];
+    }
+    return universeResults.map((result) => result.id);
+  }, [useBackendResults, searchResponse, universeResults]);
   const { byId: evidenceById } = useEvidenceBatch(propertyIds, propertyIds.length > 0);
 
   const areaContext: SearchAreaContext | null = useBackendResults ? searchResponse.area_context : null;
@@ -476,6 +492,11 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
             </div>
           ))}
         </div>
+      ) : useBackendResults && searchResponse?.focus ? (
+        <SearchFocusBoard
+          focus={searchResponse.focus}
+          renderResult={renderTile}
+        />
       ) : (
         <UniverseBoard
           results={universeResults}

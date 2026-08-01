@@ -1,11 +1,11 @@
-/* Notion-style buyer notebook — calm page, cream workspace. */
+/* Buyer notebook — inherits global stone field; surfaces float on top. */
 
 .notion-page {
   min-height: 100%;
   width: 100%;
   margin: 0;
   padding: 0 0 3.5rem;
-  background: #fdfcfb;
+  background: transparent;
   animation: notion-page-in 280ms ease;
 }
 
@@ -18,7 +18,7 @@
   height: 112px;
   background:
     linear-gradient(120deg, rgba(91, 127, 176, 0.12), transparent 55%),
-    linear-gradient(0deg, #fdfcfb, #efebe6);
+    linear-gradient(0deg, transparent, var(--color-bg-deep));
 }
 
 .notion-title-block {

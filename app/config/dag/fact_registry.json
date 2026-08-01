@@ -91,6 +91,24 @@
           "traffic is fine",
           "bad traffic but"
         ]
+      },
+      {
+        "label": "flat_size",
+        "patterns": [
+          "ok with smaller flat",
+          "okay with smaller flat",
+          "can compromise on size",
+          "smaller flat if"
+        ]
+      },
+      {
+        "label": "amenity_quality",
+        "patterns": [
+          "can compromise on clubhouse",
+          "compromise on clubhouse",
+          "clubhouse is optional",
+          "amenities are optional"
+        ]
       }
     ],
     "unsupported_inventory_types": [
@@ -162,7 +180,26 @@
           "legal clear",
           "legal paperwork",
           "safe legal",
-          "reliable builder"
+          "legal clarity",
+          "legal papers",
+          "rera",
+          "rera registered",
+          "rera approved",
+          "rera receipts",
+          "approval",
+          "approvals",
+          "pending approvals",
+          "oc",
+          "occupancy certificate",
+          "clear title",
+          "unclear title",
+          "shady paperwork",
+          "legal grey area",
+          "unverified seller",
+          "prelaunch",
+          "pre-launch",
+          "reliable builder",
+          "builder delivery issues"
         ]
       },
       {
@@ -209,7 +246,8 @@
         ],
         "expanded_keys": [
           "hospital_access",
-          "nearby_hospitals"
+          "nearby_hospitals",
+          "social_infra_score"
         ]
       },
       {
@@ -217,12 +255,19 @@
         "patterns": [
           "school",
           "schools",
+          "academy",
+          "school access",
+          "school bus",
           "kids",
+          "kid",
           "children"
         ],
         "expanded_keys": [
+          "social_infrastructure",
+          "family_friendly",
           "school_access",
-          "nearby_schools"
+          "nearby_schools",
+          "social_infra_score"
         ]
       },
       {
@@ -233,15 +278,16 @@
         ],
         "expanded_keys": [
           "nearby_metro_stations",
-          "metro_access"
+          "metro_access",
+          "metro_distance_mins",
+          "distance_to_nearest_metro_km"
         ]
       },
       {
         "preference": "social infrastructure",
         "patterns": [
           "gym",
-          "fitness",
-          "cult"
+          "fitness"
         ],
         "expanded_keys": [
           "nearby_fitness"
@@ -256,7 +302,8 @@
           "open space"
         ],
         "expanded_keys": [
-          "nearby_public_parks"
+          "nearby_public_parks",
+          "open_space_score"
         ]
       },
       {
@@ -282,16 +329,23 @@
           "offices"
         ],
         "expanded_keys": [
-          "nearby_tech_parks"
+          "nearby_tech_parks",
+          "commute_reality"
         ]
       },
       {
         "preference": "legal safety",
         "patterns": [
           "approval documents",
+          "approvals",
+          "approval",
           "bbmp approval",
           "bbmp approval issues",
           "occupancy certificate",
+          "oc",
+          "oc clean",
+          "clean oc",
+          "pending approvals",
           "oc-like",
           "oc like",
           "oc confidence"
@@ -1069,7 +1123,6 @@
       "intent_terms": [
         "traffic",
         "commute",
-        "orr",
         "road access",
         "congestion",
         "office"
@@ -1156,10 +1209,10 @@
       "layer": "infrastructure",
       "intent_terms": [
         "school",
+        "academy",
         "metro",
         "hospital",
         "gym",
-        "cult",
         "fitness",
         "tech park",
         "office"
@@ -1608,7 +1661,6 @@
           "metro station",
           "hospital",
           "hospitals",
-          "cult",
           "gym",
           "fitness",
           "tech park",
@@ -1845,6 +1897,9 @@
           "reliable builder",
           "dependable builder",
           "safe builder",
+          "builder reliability",
+          "builder trust",
+          "builder track record",
           "builder reputation",
           "experienced builder",
           "rera track record",
@@ -2081,7 +2136,14 @@
           "good commute",
           "easy commute",
           "commute",
-          "commute friendly"
+          "commute friendly",
+          "quick commute",
+          "office commute",
+          "predictable commute",
+          "not too far",
+          "not too far from",
+          "traffic nightmare",
+          "daily traffic nightmare"
         ],
         "label": "commute",
         "expanded_keys": [
@@ -2089,7 +2151,8 @@
           "commute_reality",
           "traffic_reality",
           "metro_access",
-          "nearby_metro_stations"
+          "nearby_metro_stations",
+          "nearby_tech_parks"
         ],
         "weight": 1.0
       },
@@ -2099,6 +2162,9 @@
           "family friendly",
           "good for family",
           "for family",
+          "family project",
+          "family livability",
+          "young family",
           "parents",
           "kids friendly",
           "kid friendly"
@@ -2117,10 +2183,23 @@
         "rank": 37,
         "patterns": [
           "legal paperwork",
+          "safe legal",
           "clean legal receipts",
           "legal receipts",
           "legal papers",
           "clear title",
+          "legal clarity",
+          "legal risk low",
+          "low legal risk",
+          "rera approved",
+          "rera registered",
+          "rera number",
+          "approval",
+          "approvals",
+          "documents",
+          "oc",
+          "oc clean",
+          "clean oc",
           "legal and listing receipts",
           "legal and listing proof",
           "rera clarity",
@@ -2294,7 +2373,11 @@
         "rank": 3,
         "patterns": [
           "noise",
-          "highway noise"
+          "highway noise",
+          "airport noise",
+          "main road noise",
+          "noisy main road",
+          "construction noise"
         ],
         "label": "noise",
         "expanded_keys": [
@@ -2308,29 +2391,49 @@
         "rank": 4,
         "patterns": [
           "legal issue",
-          "litigation"
+          "litigation",
+          "unclear title",
+          "shady paperwork",
+          "legal grey area",
+          "grey area",
+          "pending approvals",
+          "unverified seller",
+          "unverified",
+          "approval pending",
+          "approvals pending"
         ],
         "label": "legal risk",
         "expanded_keys": [
           "litigation_risk",
           "legal_risk",
+          "legal.litigation",
           "rera_complaints",
-          "land_litigation"
+          "land_litigation",
+          "seller_trust"
         ],
         "weight": 1.5
       },
       {
         "rank": 5,
         "patterns": [
-          "possession delay"
+          "possession delay",
+          "delivery delay",
+          "delivery issues",
+          "builder delivery issues",
+          "prelaunch",
+          "pre-launch",
+          "prelaunch marketing",
+          "under construction delays"
         ],
         "label": "delay risk",
         "expanded_keys": [
           "home_timeline_state",
           "home_state",
+          "project_status",
           "rera_delay_months",
           "possession_delay",
-          "possession_status"
+          "possession_status",
+          "delivery_delay_risk"
         ],
         "weight": 1.4
       },
@@ -2525,7 +2628,11 @@
           "bad builder",
           "unreliable builder",
           "builder risk",
-          "builder issue"
+          "builder issue",
+          "builder complaints",
+          "builder complaint",
+          "builder delivery issues",
+          "delivery issues"
         ],
         "label": "builder trust",
         "expanded_keys": [
@@ -2534,11 +2641,14 @@
           "builder_quality_score",
           "lifecycle.builder_reputation_negative",
           "maintenance_sentiment",
-          "rera_builder_revocations"
+          "rera_builder_revocations",
+          "delivery_track_record"
         ],
         "gap_keys": [
           "lifecycle.builder_reputation_negative",
-          "maintenance_sentiment"
+          "maintenance_sentiment",
+          "rera_builder_revocations",
+          "delivery_track_record"
         ],
         "weight": 1.3
       },
@@ -3130,6 +3240,7 @@
         "nearby",
         "near by",
         "school",
+        "academy",
         "hospital",
         "tech park",
         "office",
@@ -3296,7 +3407,6 @@
       "positive_terms": [
         "near airport",
         "airport access",
-        "airport road",
         "airport is close"
       ],
       "negative_terms": [

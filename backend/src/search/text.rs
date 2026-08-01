@@ -21,7 +21,7 @@ use crate::serving::{
 
 use super::analyzer;
 use super::geo;
-use super::index::{price_satisfies_budget, SearchIndex};
+use super::index::{SearchIndex, price_satisfies_budget};
 use super::intent::{ConstraintOperator, HardConstraint, SearchIntent};
 use super::resolver::{is_resolvable_entity_name, query_contains_lower_text};
 use super::schema::{self, NumericConstraintSchema, NumericEvidenceSchema, TextEvidenceSchema};
@@ -783,7 +783,9 @@ impl TextSearch {
                         society_name: society_name.to_string(),
                         builder_name: p.builder_name.clone(),
                         hero_image: p.hero_image.clone(),
-                        transparency_tags: p.transparency_tags.iter().take(3).cloned().collect(),
+                        transparency_tags: crate::routes::enrichment::compact_transparency_tags(
+                            &p.transparency_tags,
+                        ),
                         description_summary: p.description_summary.clone(),
                         possession_status: p.possession_status.clone(),
                         metro_distance_mins: p.metro_distance_mins,
@@ -5837,11 +5839,13 @@ mod tests {
             results[0].match_reason
         );
         let explanation = results[0].match_explanation.as_ref().unwrap();
-        assert!(explanation
-            .reasons
-            .iter()
-            .any(|reason| reason.scoring_method == "rera-proof"
-                && reason.fact_key == "rera_total_land_area_sqm"));
+        assert!(
+            explanation
+                .reasons
+                .iter()
+                .any(|reason| reason.scoring_method == "rera-proof"
+                    && reason.fact_key == "rera_total_land_area_sqm")
+        );
     }
 
     #[test]
@@ -6005,9 +6009,11 @@ mod tests {
         );
 
         assert_eq!(results.len(), 1);
-        assert!(results[0]
-            .match_reason
-            .contains("Near Whitefield (Varthur)"));
+        assert!(
+            results[0]
+                .match_reason
+                .contains("Near Whitefield (Varthur)")
+        );
         assert!(!results[0].match_reason.contains("Matches Whitefield"));
     }
 
@@ -6566,13 +6572,17 @@ mod tests {
 
         assert_eq!(results.len(), 2);
         assert_eq!(results[0].card.id, "stronger-builder");
-        assert!(results[0]
-            .match_explanation
-            .as_ref()
-            .expect("builder preference should have explanation")
-            .reasons
-            .iter()
-            .any(|r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"));
+        assert!(
+            results[0]
+                .match_explanation
+                .as_ref()
+                .expect("builder preference should have explanation")
+                .reasons
+                .iter()
+                .any(
+                    |r| r.preference == "reliable builder" && r.fact_key == "builder_quality_score"
+                )
+        );
     }
 
     #[test]

@@ -215,7 +215,8 @@ impl KgViewRecords {
         records.remove_entities(&shadow_alias_entity_ids)?;
         records.merge_canonical_rows(canonical_entities, canonical_edges)?;
         let support_facts = rewrite_skill_facts(support_facts, &canonical_aliases);
-        let support_annotations = rewrite_skill_annotations(support_annotations, &canonical_aliases);
+        let support_annotations =
+            rewrite_skill_annotations(support_annotations, &canonical_aliases);
         records.merge_skill_facts(&support_facts, &support_annotations)?;
         Ok(records)
     }

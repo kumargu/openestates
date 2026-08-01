@@ -36,6 +36,69 @@ APPROVED_SUBSTRINGS = (
     "/frontend/src/lib/types.ts",
 )
 
+STRUCTURAL_SEARCH_TERMS = {
+    "bhk",
+    "budget",
+    "cr",
+    "crore",
+    "crores",
+    "l",
+    "lakh",
+    "lakhs",
+    "km",
+    "kms",
+    "kilometer",
+    "kilometers",
+    "m",
+    "meter",
+    "meters",
+    "metre",
+    "metres",
+    "under",
+    "below",
+    "within",
+    "upto",
+    "up to",
+    "less than",
+    "inside",
+    "limit",
+    "max",
+    "near",
+    "nearby",
+    "near by",
+    "close to",
+}
+
+BLOCKED_SEARCH_CONFIG_ALIASES = {
+    "aster",
+    "bagalur",
+    "bagmane",
+    "bellandur",
+    "deens",
+    "electronic city",
+    "gopalan",
+    "hebbal",
+    "hoodi",
+    "indiranagar",
+    "itpl",
+    "jayanagar",
+    "jp nagar",
+    "kadugodi",
+    "koramangala",
+    "manipal",
+    "manyata",
+    "marathahalli",
+    "phoenix",
+    "sarjapur",
+    "varthur",
+    "whitefield",
+}
+
+SEARCH_CONFIG_BLOCKLIST_PATHS = (
+    "app/config/dag/search_intent.json",
+    "app/config/dag/search_guardrails.json",
+)
+
 
 def main() -> int:
     parser = argparse.ArgumentParser()
@@ -87,6 +150,8 @@ def main() -> int:
             if match:
                 findings.append((path.relative_to(root), line_no, match.group(0), line.strip()))
 
+    blocked_config_aliases = find_blocked_search_config_aliases(root)
+
     print("Search hardcoding audit report")
     print("===============================")
     print("Mode: warning only")
@@ -95,6 +160,9 @@ def main() -> int:
     print(f"Findings: {len(findings)}")
     for rel, line_no, term, line in findings:
         print(f"{rel}:{line_no}: product_semantic? `{term}` :: {line}")
+    print(f"Blocked search-config alias findings: {len(blocked_config_aliases)}")
+    for rel, json_path, term, value in blocked_config_aliases:
+        print(f"{rel}:{json_path}: blocked_alias? `{term}` :: {value}")
     return 0
 
 
@@ -114,9 +182,6 @@ def read_json(path: Path) -> object:
 def add_search_intent_terms(terms: set[str], data: object) -> None:
     if not isinstance(data, dict):
         return
-    parser = data.get("parser")
-    if isinstance(parser, dict):
-        add_nested_strings(terms, parser)
     resolution = data.get("resolution")
     if isinstance(resolution, dict):
         add_nested_strings(terms, resolution.get("place_families"))
@@ -191,7 +256,7 @@ def should_scan_term(term: str) -> bool:
         "m",
         "km",
     }
-    if len(term) < 2 or term in ignored:
+    if len(term) < 2 or term in ignored or term in STRUCTURAL_SEARCH_TERMS:
         return False
     if term.startswith("app/config/"):
         return False
@@ -200,6 +265,39 @@ def should_scan_term(term: str) -> bool:
     if re.fullmatch(r"[a-z_]+\.[a-z0-9_]+", term):
         return False
     return any(ch.isalpha() for ch in term)
+
+
+def find_blocked_search_config_aliases(root: Path) -> list[tuple[Path, str, str, str]]:
+    findings: list[tuple[Path, str, str, str]] = []
+    for rel_path in SEARCH_CONFIG_BLOCKLIST_PATHS:
+        path = root / rel_path
+        if not path.exists():
+            continue
+        data = read_json(path)
+        for json_path, value in iter_json_strings(data):
+            value_lower = value.lower()
+            for term in sorted(BLOCKED_SEARCH_CONFIG_ALIASES, key=len, reverse=True):
+                if contains_term(value_lower, term):
+                    findings.append((Path(rel_path), json_path, term, value))
+                    break
+    return findings
+
+
+def iter_json_strings(value: object, path: str = "$") -> list[tuple[str, str]]:
+    strings: list[tuple[str, str]] = []
+    if isinstance(value, str):
+        strings.append((path, value))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            strings.extend(iter_json_strings(item, f"{path}[{index}]"))
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            strings.extend(iter_json_strings(item, f"{path}.{key}"))
+    return strings
+
+
+def contains_term(text: str, term: str) -> bool:
+    return re.search(r"\b" + re.escape(term) + r"\b", text, re.IGNORECASE) is not None
 
 
 if __name__ == "__main__":

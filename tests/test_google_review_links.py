@@ -1,5 +1,9 @@
+import json
 import os
+import tempfile
 import unittest
+from io import BytesIO
+from pathlib import Path
 from unittest.mock import patch
 
 from pipeline.skills.fetch_google_review_links import (
@@ -9,6 +13,9 @@ from pipeline.skills.fetch_google_review_links import (
     fallback_search_result,
     google_maps_search_url,
     place_to_skill_result,
+    place_query_variants,
+    resolve_google_project_place,
+    strip_project_phase_suffix,
 )
 
 
@@ -22,6 +29,46 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
             }
         )
         self.assertEqual(query, "Prestige Lakeside Habitat Whitefield Bengaluru")
+
+    def test_phase_suffix_stripping_preserves_base_project_name(self):
+        examples = {
+            "SUMADHURA EDITION PHASE-I": "SUMADHURA EDITION",
+            "SUMADHURA EDITION PHASE II": "SUMADHURA EDITION",
+            "FOLIUM BY SUMADHURA PHASE-I/II/III/IV": "FOLIUM BY SUMADHURA",
+            "PURSUIT OF A RADICAL RHAPSODY PHASE 2": "PURSUIT OF A RADICAL RHAPSODY",
+            "Assetz Marq Phase 3B": "Assetz Marq",
+            "Sobha Windsor Phase 1 Wing 1 and 2": "Sobha Windsor",
+        }
+
+        for value, expected in examples.items():
+            with self.subTest(value=value):
+                self.assertEqual(strip_project_phase_suffix(value), expected)
+
+    def test_place_query_variants_are_exact_then_phase_then_address(self):
+        variants = place_query_variants(
+            {
+                "society_name": "Sumadhura Edition Phase I",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+                "address": "Hoodi Village, K.R. Puram Hobli, Bangalore East",
+            }
+        )
+
+        self.assertEqual(
+            [variant["query"] for variant in variants],
+            [
+                "Sumadhura Edition Phase I Whitefield Bengaluru",
+                "Sumadhura Edition Whitefield Bengaluru",
+                "Sumadhura Edition Phase I Bengaluru",
+                "Sumadhura Edition Bengaluru",
+                "Sumadhura Edition Phase I Hoodi Village, K.R. Puram Hobli, Bangalore East",
+                "Sumadhura Edition Hoodi Village, K.R. Puram Hobli, Bangalore East",
+                "Sumadhura Edition Phase I Whitefield Bengaluru Hoodi Village, K.R. Puram Hobli, Bangalore East",
+                "Sumadhura Edition Whitefield Bengaluru Hoodi Village, K.R. Puram Hobli, Bangalore East",
+                "Sumadhura Edition Phase I Bengaluru Hoodi Village, K.R. Puram Hobli, Bangalore East",
+                "Sumadhura Edition Bengaluru Hoodi Village, K.R. Puram Hobli, Bangalore East",
+            ],
+        )
 
     def test_maps_url_supports_place_id(self):
         url = google_maps_search_url("Test Society Bengaluru", "ChIJ Test")
@@ -130,6 +177,242 @@ class GoogleReviewLinkSkillTests(unittest.TestCase):
             serpapi_key = skill._cache_key(input_data)
 
         self.assertNotEqual(fallback_key, serpapi_key)
+
+    def test_resolution_accepts_residential_place_with_secondary_agency_type(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "ChIJ-godrej",
+                        "displayName": {"text": "Godrej Splendour, Whitefield Bangalore"},
+                        "formattedAddress": "Whitefield, Bengaluru, Karnataka",
+                        "location": {"latitude": 13.0120239, "longitude": 77.7470451},
+                        "types": [
+                            "apartment_building",
+                            "real_estate_agency",
+                            "point_of_interest",
+                            "establishment",
+                        ],
+                    }
+                ]
+            },
+            {
+                "name": "Godrej Splendour",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "accepted")
+
+    def test_resolution_ignores_standalone_numeric_name_suffix(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "places/provident-capella",
+                        "displayName": {"text": "Provident Capella"},
+                        "formattedAddress": "Samethanahalli, Bengaluru",
+                        "location": {"latitude": 12.9927, "longitude": 77.8060},
+                        "types": ["general_contractor", "establishment"],
+                    }
+                ]
+            },
+            {
+                "name": "Provident Capella 1",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "accepted")
+
+    def test_resolution_rejects_pure_agency_place(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "ChIJ-agency",
+                        "displayName": {"text": "Godrej Splendour Sales Office"},
+                        "formattedAddress": "Whitefield, Bengaluru, Karnataka",
+                        "location": {"latitude": 13.0120239, "longitude": 77.7470451},
+                        "types": [
+                            "real_estate_agency",
+                            "point_of_interest",
+                            "establishment",
+                        ],
+                    }
+                ]
+            },
+            {
+                "name": "Godrej Splendour",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("rejected_place_type", result["reasons"])
+
+    def test_resolution_prefers_project_over_block_or_tower_candidate(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "places/block",
+                        "displayName": {"text": "D Block Vaswani Exquisite"},
+                        "formattedAddress": "ITPL Main Road, Whitefield, Bengaluru",
+                        "location": {"latitude": 12.9892, "longitude": 77.7236},
+                        "types": ["apartment_building", "establishment"],
+                    },
+                    {
+                        "id": "places/project",
+                        "displayName": {"text": "Vaswani Exquisite"},
+                        "formattedAddress": "ITPL Main Road, Whitefield, Bengaluru",
+                        "location": {"latitude": 12.9894, "longitude": 77.7240},
+                        "types": [
+                            "apartment_building",
+                            "condominium_complex",
+                            "establishment",
+                        ],
+                    },
+                ]
+            },
+            {
+                "name": "Vaswani Exquisite",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["place"]["id"], "places/project")
+
+    def test_resolution_prefers_specific_residential_place_over_street_address(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "places/street-address",
+                        "displayName": {"text": "Vaswani Exquisite"},
+                        "formattedAddress": "Vaswani Exquisite, ITPL Main Road, Bengaluru",
+                        "location": {"latitude": 12.9895, "longitude": 77.7239},
+                        "types": ["premise", "street_address"],
+                    },
+                    {
+                        "id": "places/project",
+                        "displayName": {"text": "Vaswani Exquisite"},
+                        "formattedAddress": "ITPL Main Road, Whitefield, Bengaluru",
+                        "location": {"latitude": 12.9894, "longitude": 77.7240},
+                        "types": [
+                            "apartment_building",
+                            "condominium_complex",
+                            "establishment",
+                        ],
+                    },
+                ]
+            },
+            {
+                "name": "Vaswani Exquisite",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["place"]["id"], "places/project")
+
+    def test_resolution_rejects_experience_centre_when_project_place_exists(self):
+        result = resolve_google_project_place(
+            {
+                "places": [
+                    {
+                        "id": "places/office",
+                        "displayName": {
+                            "text": "Sumadhura Solace & Sumadhura Edition - Experience Centre"
+                        },
+                        "formattedAddress": "Thubarahalli, Whitefield, Bengaluru",
+                        "location": {"latitude": 12.9562, "longitude": 77.7252},
+                        "primaryType": "corporate_office",
+                        "types": [
+                            "corporate_office",
+                            "establishment",
+                            "point_of_interest",
+                        ],
+                    },
+                    {
+                        "id": "places/project",
+                        "displayName": {"text": "Sumadhura Solace"},
+                        "formattedAddress": "Thubarahalli, Whitefield, Bengaluru",
+                        "location": {"latitude": 12.9554, "longitude": 77.7238},
+                        "primaryType": "apartment_building",
+                        "types": ["apartment_building", "establishment"],
+                    },
+                ]
+            },
+            {
+                "name": "Sumadhura Solace",
+                "area": "Whitefield",
+                "city": "Bengaluru",
+            },
+        )
+
+        self.assertEqual(result["status"], "accepted")
+        self.assertEqual(result["place"]["id"], "places/project")
+
+    def test_google_places_tries_phase_stripped_query_after_exact_rejection(self):
+        exact_payload = {"places": []}
+        phase_payload = {
+            "places": [
+                {
+                    "id": "places/sumadhura-edition",
+                    "displayName": {"text": "Sumadhura Edition"},
+                    "formattedAddress": "Whitefield, Bengaluru",
+                    "googleMapsUri": "https://maps.google.com/?cid=edition",
+                    "location": {"latitude": 12.97, "longitude": 77.75},
+                    "primaryType": "housing_complex",
+                    "types": ["housing_complex", "establishment"],
+                    "rating": 4.3,
+                    "userRatingCount": 420,
+                }
+            ]
+        }
+        detail_payload = dict(phase_payload["places"][0])
+        responses = [exact_payload, phase_payload, detail_payload]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with patch.dict("os.environ", {"GOOGLE_PLACES_API_KEY": "test-key"}):
+                with patch(
+                    "pipeline.skills.fetch_google_review_links.urllib.request.urlopen",
+                    side_effect=lambda *_args, **_kwargs: BytesIO(
+                        json.dumps(responses.pop(0)).encode("utf-8")
+                    ),
+                ) as mocked_open:
+                    result = FetchGoogleReviewLinksSkill(cache_dir=Path(temp_dir)).execute(
+                        {
+                            "society_name": "Sumadhura Edition Phase I",
+                            "area": "Whitefield",
+                            "city": "Bengaluru",
+                        }
+                    )
+
+        request_bodies = [
+            json.loads(call_args[0][0].data.decode("utf-8"))
+            for call_args in mocked_open.call_args_list[:2]
+        ]
+        self.assertEqual(
+            [body["textQuery"] for body in request_bodies],
+            [
+                "Sumadhura Edition Phase I Whitefield Bengaluru",
+                "Sumadhura Edition Whitefield Bengaluru",
+            ],
+        )
+        by_key = {fact.key: fact for fact in result.facts}
+        self.assertEqual(
+            by_key["google_place_id"].value["data"],
+            "places/sumadhura-edition",
+        )
+        self.assertEqual(result.cost.api_calls, 3)
 
 
 if __name__ == "__main__":

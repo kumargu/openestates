@@ -2,8 +2,8 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 
 use crate::assets::{
-    AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, MaterializationRecord,
-    MaterializationStatus,
+    AssetId, AssetMaterializationStore, AssetPartition, AssetPathBuilder, MaterializationId,
+    MaterializationRecord, MaterializationStatus,
 };
 use crate::lake::{LakeError, LakeKey, LakeStore};
 
@@ -46,6 +46,10 @@ impl ServingBundleLoader {
         }
     }
 
+    pub(crate) fn lake(&self) -> &LakeStore {
+        &self.lake
+    }
+
     pub async fn load_current_search_bundle(
         &self,
     ) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
@@ -62,6 +66,31 @@ impl ServingBundleLoader {
             Err(err) => return Err(ServingBundleLoadError::Lake(err)),
         };
 
+        self.load_search_bundle_record(record).await.map(Some)
+    }
+
+    pub async fn load_search_bundle_by_materialization(
+        &self,
+        materialization_id: &MaterializationId,
+    ) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
+        let asset_id = AssetId::new(SEARCH_SERVING_BUNDLE_ASSET_ID)
+            .expect("search serving bundle asset id is static and valid");
+        let record = match self
+            .materializations
+            .record_by_id_for_asset(&asset_id, materialization_id)
+            .await
+        {
+            Ok(Some(record)) => record,
+            Ok(None) => return Ok(None),
+            Err(err) => return Err(ServingBundleLoadError::Lake(err)),
+        };
+        self.load_search_bundle_record(record).await.map(Some)
+    }
+
+    async fn load_search_bundle_record(
+        &self,
+        record: MaterializationRecord,
+    ) -> Result<LoadedServingBundle, ServingBundleLoadError> {
         if record.status != MaterializationStatus::Succeeded {
             return Err(ServingBundleLoadError::CurrentMaterializationNotSucceeded {
                 asset_id: record.asset_id.to_string(),
@@ -88,7 +117,7 @@ impl ServingBundleLoader {
         let geo_index = GeoSearchIndex::from_serving_bundle(&entities, &fact_index);
         let spatial_index = SpatialServingIndex::from_serving_bundle(&entities, &fact_index);
         let semantic_embeddings = load_semantic_embeddings(&self.lake, &manifest).await?;
-        Ok(Some(LoadedServingBundle {
+        Ok(LoadedServingBundle {
             manifest,
             entities,
             edges,
@@ -99,7 +128,7 @@ impl ServingBundleLoader {
             spatial_index,
             semantic_embeddings,
             cache_dir,
-        }))
+        })
     }
 
     fn cache_dir_for(&self, record: &MaterializationRecord) -> PathBuf {
@@ -208,6 +237,7 @@ async fn hydrate_atomically(
 
 #[derive(Debug)]
 pub enum ServingBundleLoadError {
+    Configuration(String),
     Io(std::io::Error),
     Key(crate::lake::keys::KeyError),
     Lake(LakeError),
@@ -222,6 +252,9 @@ pub enum ServingBundleLoadError {
 impl fmt::Display for ServingBundleLoadError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Configuration(message) => {
+                write!(f, "serving bundle configuration error: {message}")
+            }
             Self::Io(err) => write!(f, "serving bundle load IO error: {err}"),
             Self::Key(err) => write!(f, "serving bundle manifest key error: {err}"),
             Self::Lake(err) => write!(f, "serving bundle load lake error: {err}"),

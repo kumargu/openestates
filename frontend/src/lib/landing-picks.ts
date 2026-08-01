@@ -1,4 +1,7 @@
-import { filterListableProperties } from "./property-filters.ts";
+import {
+  filterListableProperties,
+  uniqueSocietiesForDiscovery,
+} from "./property-filters.ts";
 import type { AreaTrackerResponse, PropertyCard } from "./types.ts";
 
 export type LandingPick = {
@@ -15,17 +18,24 @@ export type LandingPickRail = {
 function hasGoogleRating(
   property: PropertyCard,
 ): property is PropertyCard & { google_rating: number } {
-  return typeof property.google_rating === "number" && property.google_rating > 0;
+  return (
+    typeof property.google_rating === "number" && property.google_rating > 0
+  );
 }
 
 function compareGoogleRank(a: PropertyCard, b: PropertyCard): number {
   const ratingDelta = (b.google_rating ?? 0) - (a.google_rating ?? 0);
   if (ratingDelta !== 0) return ratingDelta;
 
-  const reviewDelta = (b.google_review_count ?? 0) - (a.google_review_count ?? 0);
+  const reviewDelta =
+    (b.google_review_count ?? 0) - (a.google_review_count ?? 0);
   if (reviewDelta !== 0) return reviewDelta;
 
-  return a.price - b.price;
+  return comparablePrice(a.price) - comparablePrice(b.price);
+}
+
+function comparablePrice(price: number): number {
+  return price > 0 ? price : Number.MAX_SAFE_INTEGER;
 }
 
 export function areaNamesForLandingPicks(
@@ -55,7 +65,7 @@ export function topGoogleRatedPerArea(
   properties: PropertyCard[],
   areaNames: string[],
 ): LandingPick[] {
-  const listable = filterListableProperties(properties);
+  const listable = uniqueSocietiesForDiscovery(properties);
   const picks: LandingPick[] = [];
 
   for (const area of areaNames) {
@@ -78,7 +88,8 @@ export function landingPickRails(
   areaTracker: AreaTrackerResponse | null,
   maxPerRail = 7,
 ): LandingPickRail[] {
-  const listable = filterListableProperties(properties);
+  // Discover rails: one card per society — BHK variants belong to search.
+  const listable = uniqueSocietiesForDiscovery(properties);
   const rails: LandingPickRail[] = [];
   const topRated = [...listable]
     .filter(hasGoogleRating)
@@ -94,7 +105,10 @@ export function landingPickRails(
     });
   }
 
-  const areaNames = areaNamesForLandingPicks(areaTracker, properties).slice(0, 4);
+  const areaNames = areaNamesForLandingPicks(areaTracker, properties).slice(
+    0,
+    4,
+  );
   for (const area of areaNames) {
     const picks = listable
       .filter((property) => property.area === area)

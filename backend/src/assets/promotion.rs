@@ -17,22 +17,37 @@ pub struct ServingReleasePromotion {
     pub promoted_materializations: Vec<MaterializationRecord>,
 }
 
+pub async fn validate_search_serving_lineage(
+    store: &AssetMaterializationStore,
+    serving_record: &MaterializationRecord,
+) -> Result<ServingReleasePromotion, ServingReleasePromotionError> {
+    if serving_record.asset_id.as_str() != SEARCH_SERVING_BUNDLE_ASSET_ID {
+        return Err(ServingReleasePromotionError::InvalidTarget(format!(
+            "release validation requires {SEARCH_SERVING_BUNDLE_ASSET_ID}, got {}",
+            serving_record.asset_id
+        )));
+    }
+    let ordered = resolve_lineage(store, serving_record).await?;
+    let kg_record = direct_parent(&ordered, serving_record, KG_SOCIETY_VIEW_ASSET_ID)?;
+    let current_project_facts_record =
+        direct_parent(&ordered, kg_record, CURRENT_PROJECT_FACTS_ASSET_ID)?;
+    Ok(ServingReleasePromotion {
+        serving_materialization_id: serving_record.materialization_id.clone(),
+        kg_materialization_id: kg_record.materialization_id.clone(),
+        current_project_facts_materialization_id: current_project_facts_record
+            .materialization_id
+            .clone(),
+        promoted_materializations: ordered,
+    })
+}
+
 pub async fn promote_search_serving_release(
     store: &AssetMaterializationStore,
     serving_record: &MaterializationRecord,
     force: bool,
 ) -> Result<ServingReleasePromotion, ServingReleasePromotionError> {
-    if serving_record.asset_id.as_str() != SEARCH_SERVING_BUNDLE_ASSET_ID {
-        return Err(ServingReleasePromotionError::InvalidTarget(format!(
-            "release promotion requires {SEARCH_SERVING_BUNDLE_ASSET_ID}, got {}",
-            serving_record.asset_id
-        )));
-    }
-
-    let ordered = resolve_lineage(store, serving_record).await?;
-    let kg_record = direct_parent(&ordered, serving_record, KG_SOCIETY_VIEW_ASSET_ID)?;
-    let current_project_facts_record =
-        direct_parent(&ordered, kg_record, CURRENT_PROJECT_FACTS_ASSET_ID)?;
+    let lineage = validate_search_serving_lineage(store, serving_record).await?;
+    let ordered = lineage.promoted_materializations.clone();
 
     for (index, record) in ordered.iter().enumerate() {
         if record.materialization_id == serving_record.materialization_id {
@@ -57,12 +72,8 @@ pub async fn promote_search_serving_release(
     verify_current_records(store, &ordered).await?;
 
     Ok(ServingReleasePromotion {
-        serving_materialization_id: serving_record.materialization_id.clone(),
-        kg_materialization_id: kg_record.materialization_id.clone(),
-        current_project_facts_materialization_id: current_project_facts_record
-            .materialization_id
-            .clone(),
         promoted_materializations: ordered,
+        ..lineage
     })
 }
 
@@ -100,6 +111,11 @@ async fn resolve_lineage(
                 "{} materialization {} did not succeed",
                 record.asset_id, record.materialization_id
             )));
+        }
+        let is_target = record.materialization_id == target.materialization_id;
+        if !is_target && is_current_record(store, &record).await? {
+            records.insert(record.materialization_id.clone(), record);
+            continue;
         }
         for parent_id in &record.parent_materializations {
             let parent = store
@@ -143,7 +159,7 @@ async fn resolve_lineage(
                 record
                     .parent_materializations
                     .iter()
-                    .all(|parent| emitted.contains(parent))
+                    .all(|parent| !records.contains_key(parent) || emitted.contains(parent))
             })
             .cloned()
             .collect::<Vec<_>>();
@@ -179,6 +195,20 @@ async fn resolve_lineage(
         ));
     }
     Ok(ordered)
+}
+
+async fn is_current_record(
+    store: &AssetMaterializationStore,
+    record: &MaterializationRecord,
+) -> Result<bool, ServingReleasePromotionError> {
+    match store
+        .current_record(&record.asset_id, &record.partition)
+        .await
+    {
+        Ok(current) => Ok(current.materialization_id == record.materialization_id),
+        Err(err) if err.is_not_found() => Ok(false),
+        Err(err) => Err(err.into()),
+    }
 }
 
 fn direct_parent<'a>(
@@ -329,6 +359,69 @@ mod tests {
             current_serving.materialization_id,
             current[2].materialization_id
         );
+    }
+
+    #[tokio::test]
+    async fn reused_current_snapshots_seal_their_historical_lineage() {
+        let root = tempdir().unwrap();
+        let store = AssetMaterializationStore::new(LakeStore::local(root.path()).unwrap());
+
+        let old_canonical = record("canonical_society_nodes", "old", Vec::new());
+        let reused_support = record(
+            "stormwater_drain_facts",
+            "current",
+            vec![old_canonical.materialization_id.clone()],
+        );
+        write_records(&store, &[old_canonical.clone(), reused_support.clone()]).await;
+        for record in [&old_canonical, &reused_support] {
+            store.force_promote_current(record).await.unwrap();
+        }
+
+        let new_canonical = record("canonical_society_nodes", "new", Vec::new());
+        let project = record(
+            CURRENT_PROJECT_FACTS_ASSET_ID,
+            "new",
+            vec![
+                new_canonical.materialization_id.clone(),
+                reused_support.materialization_id.clone(),
+            ],
+        );
+        let kg = record(
+            KG_SOCIETY_VIEW_ASSET_ID,
+            "new",
+            vec![
+                new_canonical.materialization_id.clone(),
+                project.materialization_id.clone(),
+            ],
+        );
+        let serving = record(
+            SEARCH_SERVING_BUNDLE_ASSET_ID,
+            "new",
+            vec![kg.materialization_id.clone()],
+        );
+        write_records(
+            &store,
+            &[
+                new_canonical.clone(),
+                project.clone(),
+                kg.clone(),
+                serving.clone(),
+            ],
+        )
+        .await;
+
+        let promotion = validate_search_serving_lineage(&store, &serving)
+            .await
+            .unwrap();
+        let ids = promotion
+            .promoted_materializations
+            .iter()
+            .map(|record| record.materialization_id.clone())
+            .collect::<Vec<_>>();
+
+        assert!(ids.contains(&reused_support.materialization_id));
+        assert!(ids.contains(&new_canonical.materialization_id));
+        assert!(!ids.contains(&old_canonical.materialization_id));
     }
 
     fn release_records(version: &str) -> Vec<MaterializationRecord> {

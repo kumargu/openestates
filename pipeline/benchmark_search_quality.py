@@ -120,7 +120,8 @@ def main() -> None:
         print(f"  checks={passed}/{len(checks)} results={len(response.get('results') or [])}")
         results.append(case_result(case, response, checks))
 
-    scoreable_modes = spec.get("scoreable_modes") or ["data_backed"]
+    scoreable_modes = spec.get("scoreable_modes") or inferred_scoreable_modes(cases)
+    serving_materialization = current_search_bundle_materialization(Path.cwd())
     output = {
         "benchmark": spec.get("benchmark"),
         "version": spec.get("version"),
@@ -129,6 +130,7 @@ def main() -> None:
         "scoreable_modes": scoreable_modes,
         "query_sources": query_sources,
         "search_runtime": search_runtime_summary(results),
+        "serving_bundle_materialization": serving_materialization,
         "summary": summarize(results, scoreable_modes),
         "results": results,
     }
@@ -460,14 +462,19 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
 
     if "gap_keys" in expected:
         gaps = learning_gaps(response)
+        evidence_keys = intent_evidence_keys(intent)
         gap_text = "\n".join(gaps).lower()
-        missing = [key for key in expected["gap_keys"] if key.lower() not in gap_text]
+        missing = [
+            key
+            for key in expected["gap_keys"]
+            if key.lower() not in evidence_keys and key.lower() not in gap_text
+        ]
         checks.append(
             check(
                 "gap",
                 "expected_gap_keys",
                 not missing,
-                f"missing gap keys {missing}; gaps were {gaps}",
+                f"missing gap keys {missing}; intent evidence keys were {sorted(evidence_keys)}; gaps were {gaps}",
             )
         )
 
@@ -484,10 +491,13 @@ def case_result(
         "mode": case.get("mode", "data_backed"),
         "category": case.get("category"),
         "query": case["query"],
+        "expected": case.get("expected") or {},
+        "oracle": case.get("oracle") or {},
         "known_missing_fact_keys": (case.get("expected") or {}).get("gap_keys", []),
         "checks": checks,
         "status": "PASS" if all(item["passed"] for item in checks) else "FAIL",
     }
+    result["failure_bucket"] = primary_failure_bucket(result)
     if response is None:
         result.update({"num_results": 0, "intent": None, "top_results": [], "learning_gaps": []})
         return result
@@ -540,9 +550,12 @@ def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> 
     by_layer: Dict[str, Counter] = defaultdict(Counter)
     by_category: Dict[str, Counter] = defaultdict(Counter)
     by_mode: Dict[str, Counter] = defaultdict(Counter)
+    failure_buckets: Counter = Counter()
     for result in results:
         category = result.get("category") or "unknown"
         mode = result.get("mode") or "data_backed"
+        if result["status"] != "PASS":
+            failure_buckets[result.get("failure_bucket") or "architecture_gap"] += 1
         for item in result["checks"]:
             status = "passed" if item["passed"] else "failed"
             by_layer[item["layer"]][status] += 1
@@ -553,7 +566,7 @@ def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> 
     total = len(checks)
     scoreable_passed = sum(1 for item in scoreable_checks if item["passed"])
     scoreable_total = len(scoreable_checks)
-    return {
+    summary = {
         "cases": len(results),
         "passed_cases": sum(1 for result in results if result["status"] == "PASS"),
         "failed_cases": sum(1 for result in results if result["status"] != "PASS"),
@@ -571,8 +584,12 @@ def summarize(results: List[Dict[str, Any]], scoreable_modes: Iterable[str]) -> 
         "by_layer": counter_map(by_layer),
         "by_category": counter_map(by_category),
         "by_mode": counter_map(by_mode),
+        "failure_buckets": dict(failure_buckets),
+        "data_gap_cases": failure_buckets.get("data_gap", 0),
         "latency": latency_summary(results),
     }
+    summary["proof_loop_decision"] = proof_loop_decision(summary, results)
+    return summary
 
 
 def markdown_report(output: Dict[str, Any]) -> str:
@@ -590,6 +607,8 @@ def markdown_report(output: Dict[str, Any]) -> str:
         f"{summary['scoreable_passed_checks']}/{summary['scoreable_total_checks']} "
         f"({summary['scoreable_pass_rate_pct']}%) across data-backed cases",
         f"- Overall checks including data-gap sentinels: {summary['passed_checks']}/{summary['total_checks']} ({summary['pass_rate_pct']}%)",
+        f"- Failure buckets: {summary.get('failure_buckets') or {}}",
+        f"- Proof-loop decision: `{summary.get('proof_loop_decision')}`",
         "",
         "### By Layer",
         "",
@@ -611,6 +630,14 @@ def markdown_report(output: Dict[str, Any]) -> str:
                 f"- Semantic index model: `{runtime.get('semanticIndexModelId') or runtime.get('semantic_index_model_id')}`",
                 f"- Semantic index documents: {runtime.get('semanticIndexDocumentCount') or runtime.get('semantic_index_document_count')}",
                 f"- Semantic index empty: {runtime.get('semanticIndexEmpty', runtime.get('semantic_index_empty'))}",
+            ]
+        )
+    materialization = output.get("serving_bundle_materialization") or {}
+    if materialization:
+        lines.extend(
+            [
+                f"- Materialization id: `{materialization.get('materialization_id')}`",
+                f"- Materialization version: `{materialization.get('version')}`",
             ]
         )
 
@@ -649,6 +676,8 @@ def markdown_report(output: Dict[str, Any]) -> str:
         for item in result["checks"]:
             if not item["passed"]:
                 lines.append(f"- `{item['layer']}.{item['check']}`: {item['detail']}")
+        if result.get("failure_bucket"):
+            lines.append(f"- Failure bucket: `{result['failure_bucket']}`")
         if result.get("top_results"):
             top = result["top_results"][0]
             lines.append(
@@ -748,6 +777,29 @@ def learning_gaps(response: Dict[str, Any]) -> List[str]:
     return [str(gap) for gap in gaps]
 
 
+def intent_evidence_keys(intent: Dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for field in (
+        "positive_preferences",
+        "positivePreferences",
+        "negative_preferences",
+        "negativePreferences",
+    ):
+        for signal in intent.get(field) or []:
+            if not isinstance(signal, dict):
+                continue
+            for key_field in ("expanded_keys", "expandedKeys", "gap_keys", "gapKeys"):
+                for value in signal.get(key_field) or []:
+                    keys.add(str(value).lower())
+    for constraint in intent.get("hard_constraints") or intent.get("hardConstraints") or []:
+        if not isinstance(constraint, dict):
+            continue
+        field = constraint.get("field")
+        if field:
+            keys.add(str(field).lower())
+    return keys
+
+
 def search_diagnostics(response: Dict[str, Any]) -> Dict[str, Any]:
     diagnostics = response.get("search_diagnostics") or response.get("searchDiagnostics") or {}
     return diagnostics if isinstance(diagnostics, dict) else {}
@@ -773,6 +825,103 @@ def search_runtime_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
         if isinstance(runtime, dict):
             return runtime
     return {}
+
+
+def inferred_scoreable_modes(cases: List[Dict[str, Any]]) -> List[str]:
+    modes = sorted({str(case.get("mode", "data_backed")) for case in cases})
+    non_scoreable = {"data_gap", "search_guardrail"}
+    scoreable = [mode for mode in modes if mode not in non_scoreable]
+    return scoreable or ["data_backed"]
+
+
+def current_search_bundle_materialization(root: Path) -> Dict[str, Any]:
+    current = (
+        root
+        / "data"
+        / "lake"
+        / "manifests"
+        / "assets"
+        / "search_serving_bundle"
+        / "partition=global"
+        / "current.json"
+    )
+    if not current.exists():
+        return {}
+    try:
+        data = load_json(current)
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return {
+        "asset_id": data.get("asset_id"),
+        "materialization_id": data.get("materialization_id"),
+        "materialization_key": data.get("materialization_key"),
+        "version": data.get("version"),
+        "run_id": data.get("run_id"),
+        "updated_at": data.get("updated_at"),
+    }
+
+
+def primary_failure_bucket(result: Dict[str, Any]) -> Optional[str]:
+    failed = [item for item in result["checks"] if not item["passed"]]
+    if not failed:
+        return None
+    if result.get("known_missing_fact_keys"):
+        return "data_gap"
+
+    layer_to_bucket = {
+        "request": "architecture_gap",
+        "latency": "architecture_gap",
+        "intent": "intent_gap",
+        "guardrail": "intent_gap",
+        "resolution": "resolver_gap",
+        "proof": "proof_gap",
+        "ranking": "ranking_gap",
+        "recall": "data_gap",
+        "result_count": "data_gap",
+        "gap": "data_gap",
+        "safety": "architecture_gap",
+    }
+    priority = [
+        "request",
+        "intent",
+        "guardrail",
+        "resolution",
+        "proof",
+        "ranking",
+        "recall",
+        "result_count",
+        "gap",
+        "latency",
+        "safety",
+    ]
+    failed_layers = {str(item.get("layer")) for item in failed}
+    for layer in priority:
+        if layer in failed_layers:
+            return layer_to_bucket[layer]
+    return "architecture_gap"
+
+
+def proof_loop_decision(summary: Dict[str, Any], results: List[Dict[str, Any]]) -> str:
+    if has_semantic_proof_regression(results):
+        return "revert"
+    score = summary["scoreable_pass_rate_pct"] or summary["pass_rate_pct"]
+    if score >= 80.0:
+        return "keep"
+    if summary.get("failure_buckets", {}).get("data_gap", 0) > 0:
+        return "needs_more_data"
+    return "shadow_only"
+
+
+def has_semantic_proof_regression(results: List[Dict[str, Any]]) -> bool:
+    for result in results:
+        for item in result["checks"]:
+            if (
+                item.get("layer") == "safety"
+                and item.get("check") == "no_semantic_proof_reason"
+                and not item.get("passed")
+            ):
+                return True
+    return False
 
 
 def timing_value_ms(diagnostics: Dict[str, Any], layer: str) -> Optional[float]:

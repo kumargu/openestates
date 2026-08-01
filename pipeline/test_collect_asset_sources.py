@@ -863,6 +863,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
                         "name": "Canonical Green",
                         "area": "Whitefield",
                         "city": "Bengaluru",
+                        "address": "Canonical Road",
                         "project_key": "PRM-CANONICAL",
                     }
                 ]
@@ -874,6 +875,155 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(
             inputs["society:rera-canonical"]["society_name"], "Canonical Green"
         )
+
+    def test_google_inputs_hydrate_rera_address_when_rera_input_missing(self):
+        with patch(
+            "pipeline.collect_asset_sources.collect_rera_project_details",
+            return_value=(
+                [
+                    {
+                        "entity_id": "society:rera-godrej-air",
+                        "fact_key": "rera_project_address",
+                        "value_json": json.dumps(
+                            {
+                                "type": "Text",
+                                "data": "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+                            }
+                        ),
+                    }
+                ],
+                [],
+                "2026-08-01T09:00:00Z",
+            ),
+        ) as collect_details:
+            inputs = google_society_inputs(
+                {
+                    "source_entities": [
+                        {
+                            "entity_id": "society:rera-godrej-air",
+                            "alias_entity_id": "society:godrej-air",
+                            "name": "Godrej Air",
+                            "area": "Whitefield",
+                            "city": "Bengaluru",
+                            "project_key": "PRM-GODREJ-AIR",
+                        }
+                    ]
+                }
+            )
+
+        collect_details.assert_called_once()
+        self.assertEqual(
+            inputs["society:rera-godrej-air"]["address"],
+            "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+        )
+
+    def test_google_source_collection_shares_rera_address_hydration(self):
+        captured_inputs = []
+
+        def capture_places(_request, society_inputs=None):
+            captured_inputs.append(society_inputs)
+            return {"records": [], "source_watermarks": []}
+
+        def capture_nearby(_request, society_inputs=None):
+            captured_inputs.append(society_inputs)
+            return {"records": [], "source_watermarks": []}
+
+        with patch(
+            "pipeline.collect_asset_sources.collect_rera_project_details",
+            return_value=(
+                [
+                    {
+                        "entity_id": "society:rera-godrej-air",
+                        "fact_key": "rera_project_address",
+                        "value_json": json.dumps(
+                            {
+                                "type": "Text",
+                                "data": "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+                            }
+                        ),
+                    }
+                ],
+                [],
+                "2026-08-01T09:00:00Z",
+            ),
+        ) as collect_details:
+            with patch(
+                "pipeline.collect_asset_sources.collect_google_places",
+                side_effect=capture_places,
+            ):
+                with patch(
+                    "pipeline.collect_asset_sources.collect_google_nearby_places",
+                    side_effect=capture_nearby,
+                ):
+                    collect_asset_sources(
+                        {
+                            "requested_assets": [
+                                "google_places_weekly",
+                                "google_nearby_places_weekly",
+                            ],
+                            "source_entities": [
+                                {
+                                    "entity_id": "society:rera-godrej-air",
+                                    "name": "Godrej Air",
+                                    "area": "Whitefield",
+                                    "city": "Bengaluru",
+                                }
+                            ],
+                            "planned_at": "2026-08-01T09:00:00Z",
+                        }
+                    )
+
+        collect_details.assert_called_once()
+        self.assertEqual(len(captured_inputs), 2)
+        for inputs in captured_inputs:
+            self.assertEqual(
+                inputs["society:rera-godrej-air"]["address"],
+                "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+            )
+
+    def test_google_inputs_attach_rera_address_without_using_rera_coordinates(self):
+        inputs = google_society_inputs(
+            {
+                "source_entities": [
+                    {
+                        "entity_id": "society:godrej-air",
+                        "name": "Godrej Air",
+                        "area": "Whitefield",
+                        "city": "Bengaluru",
+                        "project_key": "PRM-GODREJ-AIR",
+                    }
+                ]
+            },
+            {
+                "detail_facts": [
+                    {
+                        "entity_id": "society:godrej-air",
+                        "fact_key": "rera_project_address",
+                        "value_json": json.dumps(
+                            {
+                                "type": "Text",
+                                "data": "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+                            }
+                        ),
+                    },
+                    {
+                        "entity_id": "society:godrej-air",
+                        "fact_key": "rera_lat_lng",
+                        "value_json": json.dumps(
+                            {"type": "Text", "data": "12.991,77.715"}
+                        ),
+                    },
+                ]
+            },
+        )
+
+        subject = inputs["society:godrej-air"]
+        self.assertEqual(
+            subject["address"],
+            "Khatha No. 365, Hoodi Village, K.R. Puram Hobli",
+        )
+        self.assertIsNone(subject["latitude"])
+        self.assertIsNone(subject["longitude"])
 
     def test_external_listing_collection_normalizes_magicbricks_markdown_without_confidence(self):
         output = collect_asset_sources(
@@ -2215,6 +2365,57 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(school["primary_type"], "school")
         self.assertEqual(school["place_types"], ["school"])
         self.assertEqual(school["fetch_source"], "fixture_nearby")
+
+    def test_google_nearby_collection_skips_societies_without_coordinates(self):
+        calls = []
+
+        def fake_nearby_fetch(input_data, category):
+            calls.append((input_data["society_name"], category))
+            if input_data["society_name"] == "Missing Coordinates":
+                raise ValueError(
+                    "Google nearby collection requires an accepted origin coordinate pair"
+                )
+            return [
+                {
+                    "place_name": "Example {}".format(category),
+                    "place_url": "https://maps.google.com/{}".format(category),
+                }
+            ]
+
+        output = collect_google_nearby_places(
+            {
+                "partition": {"parts": [["dt", "2026-07-14"]]},
+                "planned_at": "2026-07-14T09:30:00Z",
+            },
+            society_inputs={
+                "missing": {
+                    "entity_id": "society:rera-missing",
+                    "society_name": "Missing Coordinates",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                },
+                "valid": {
+                    "entity_id": "society:rera-valid",
+                    "society_name": "Valid Coordinates",
+                    "area": "Whitefield",
+                    "city": "Bengaluru",
+                },
+            },
+            nearby_fetch=fake_nearby_fetch,
+        )
+
+        self.assertEqual(len(output["records"]), len(google_nearby_collection_categories()))
+        self.assertEqual(
+            calls,
+            [("Missing Coordinates", "school")]
+            + [
+                ("Valid Coordinates", category)
+                for category in google_nearby_collection_categories()
+            ],
+        )
+        self.assertTrue(
+            all(record["entity_id"] == "society:rera-valid" for record in output["records"])
+        )
 
     def test_google_nearby_collection_uses_places_api_by_default(self):
         requests = []

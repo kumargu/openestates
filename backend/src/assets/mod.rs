@@ -10,6 +10,7 @@
 
 pub mod approach_road;
 pub mod canonical_nodes;
+pub mod catalog_releases;
 pub mod compaction;
 pub mod environment;
 pub mod executor;
@@ -43,6 +44,13 @@ pub use approach_road::{
     ApproachRoadGraphMaterializer, ApproachRoadGraphRows, APPROACH_ROAD_GRAPH_FACTS_ASSET_ID,
 };
 pub use canonical_nodes::{read_canonical_node_rows, CanonicalNodeRows, CanonicalNodesError};
+pub use catalog_releases::{
+    CatalogEnvironment, CatalogMembership, CatalogMembershipKind, CatalogRelease,
+    CatalogReleaseChanges, CatalogReleaseError, CatalogReleaseId, CatalogReleaseStore,
+    CatalogTombstone, CatalogValidationStatus, DerivedCatalogAssets, EnvironmentPointer,
+    PinnedMaterialization, PromoteCatalogReleaseOptions, QualityGateResult, QualityGateStatus,
+    QualityReport,
+};
 pub use compaction::{
     CurrentProjectFactsError, CurrentProjectFactsMaterialization, CurrentProjectFactsMaterializer,
     CURRENT_PROJECT_FACTS_ASSET_ID,
@@ -100,7 +108,8 @@ pub use project_enrichment::{
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
 };
 pub use promotion::{
-    promote_search_serving_release, ServingReleasePromotion, ServingReleasePromotionError,
+    promote_search_serving_release, validate_search_serving_lineage, ServingReleasePromotion,
+    ServingReleasePromotionError,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,

@@ -7,7 +7,53 @@ semantic score can widen the candidate pool and add a soft ranking signal, but
 every buyer-facing reason must still come from DAG-backed serving facts or a
 deterministic computation over those facts.
 
-The implementation roadmap lives in `docs/search_engine_roadmap.md`.
+The implementation roadmap lives in `docs/search_engine_roadmap.md`; the active
+ontology cleanup plan lives in `docs/search_ontology_refactor_plan.md`.
+
+## Current Reset
+
+As of 2026-08-01, search quality work is reset around the pinned Bangalore
+bundle `bangalore-catalog-60-coherent-2026-08-01`
+(`909a8bd0-3af0-42af-ae26-ba493f54174a`). Older benchmark numbers in this file
+are historical context only until rerun against that bundle.
+
+The current architecture rule is stricter than the old benchmark: search should
+not recover quality by adding locality, landmark, school, mall, tech-park, or
+road aliases to parser config. Named-place quality must come from serving
+entities, coordinates, graph edges, and proof facts.
+
+## Proof Loop Discipline
+
+Search quality work must be evidence-led. Before adding more code, run a short
+chain audit and decide whether the existing layers still line up with the
+roadmap:
+
+1. **Audit the chain:** list relevant local commits or touched files since the
+   last search-quality checkpoint, map each to the milestone it was meant to
+   serve, and flag duplicated or bypassed paths.
+2. **Pin the evidence:** record the serving bundle, benchmark spec, API command,
+   config mode, and baseline artifact used for the run. Do not compare results
+   across different bundles without saying so.
+3. **Classify failures first:** assign each bad case to one primary bucket:
+   `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, `embedding_gap`, or
+   `architecture_gap`.
+4. **Change one layer:** make the smallest generic/config-driven change that
+   addresses the dominant bucket. Avoid query-specific patches.
+5. **Rerun and decide:** keep the change only if it improves a stated metric,
+   preserves safety, and does not introduce a hardcoding regression. Otherwise
+   revert or leave it behind an explicitly experimental flag.
+
+Every benchmark markdown should include a short "proof-loop decision" section:
+`keep`, `revert`, `shadow_only`, or `needs_more_data`, with the reason. This is
+how we avoid piling code that is not improving search.
+
+Before each loop, also do a shape audit:
+
+- Which files/commits changed since the last loop?
+- Which milestone does each change belong to?
+- Did any change create hidden filters in config, tests, or runtime?
+- Is the benchmark measuring real data-backed improvement or rewarding a
+  shortcut?
 
 ## Bar
 
@@ -15,9 +61,9 @@ The implementation roadmap lives in `docs/search_engine_roadmap.md`.
    buyer language: BHK, area, budget, positive preferences, negative
    preferences, accepted tradeoffs, and unsupported inventory requests.
 2. Semantic recall handles paraphrases without adding one-off vocabulary for
-   every phrase. The offline embedding model is the primary mechanism for
-   mapping "bad drainage" near "waterlogging" style language; config synonyms
-   stay for domain labels and controlled intent extraction.
+   every phrase. The offline embedding model can widen recall, but ontology
+   resolution and DAG-backed proof decide what facts count. Config synonyms stay
+   for domain labels and controlled intent extraction, not named-place aliases.
 3. The runtime never embeds the corpus at API startup. Serving bundles carry
    precomputed vectors in Parquet, keyed by `model_id`, dimensions, and document
    text hash.
@@ -66,10 +112,15 @@ The contract tests that encode the product bar are:
 - `backend/tests/search_efficiency_contract.rs`
 - `backend/tests/search_quality_contract.rs`
 
-The current promoted FastEmbed bundle is
+The previous promoted FastEmbed bundle was
 `2026-07-21-generated-context-waterford-brigade-semantic-20260722053602`.
-The profile shows 16,431 entities, 146 properties, 94,032 fact rows, 94,018
+That profile showed 16,431 entities, 146 properties, 94,032 fact rows, 94,018
 search metadata rows, and 9,930 precomputed semantic embedding rows.
+
+The current reset bundle is `bangalore-catalog-60-coherent-2026-08-01`, with
+286 entities, 6,901 facts, 1,894 graph edges, and 6,754 search metadata rows.
+Profile it before using it as a benchmark baseline; do not compare its score
+directly with older Waterford/Whitefield bundle runs.
 
 Scoreable fact families in the current bundle include RERA/legal status,
 builder RERA track record, Google/community review evidence, metro access,
@@ -84,7 +135,7 @@ confidence `0.4`, no `maintenance_sentiment`, no
 rows. These stay as data-gap sentinels until DAG collection/enrichment promotes
 enough sourced facts.
 
-The data-backed buyer-language benchmark baseline against the promoted offline
+The old data-backed buyer-language benchmark baseline against the promoted offline
 FastEmbed bundle is 55/76 scoreable checks, or 72.4%. Overall, including
 data-gap sentinels, it is 70/99 checks, or 70.7%. Recall is healthy for this
 suite: 19/19 cases returned results. Safety is clean: 19/19 checks pass for
@@ -121,6 +172,10 @@ ranking weights:
 5. `embedding_gap`: the query and document are semantically related, the data
    exists, the intent/proof wiring is adequate, but semantic recall still misses
    the candidate. This is the real model-quality failure bucket.
+6. `architecture_gap`: the code path works for a case but is in the wrong layer,
+   duplicates another layer, bypasses DAG/config ownership, or cannot explain
+   itself through the shared proof contract. This bucket blocks more feature
+   work until the chain is simplified or documented as a temporary shim.
 
 This matters because embeddings cannot fix missing facts, and DAG collection
 cannot fix weak query parsing. The benchmark report should make that separation
@@ -137,16 +192,16 @@ source can prove them:
 - external places such as malls, schools, hospitals, tech parks, metro
   stations, approach-road points, and waterlogging spots with the same shape
 - deterministic derived facts such as `distance_to_nearest_metro_km`,
-  `distance_to_phoenix_marketcity_km`, `distance_to_nearest_hospital_km`, or
-  `within_15_min_drive_to_whitefield_offices`
+  `distance_to_named_landmark_km`, `distance_to_nearest_hospital_km`, or
+  `within_15_min_drive_to_office_hub`
 
-For a query like "near Shantiniketan mall" or "close to metro but not cut off
-from hospitals", search should parse the place mention, resolve it to a
-place/entity with coordinates, compute local distances over the serving bundle,
-and rank/explain with those derived distance facts. The embedding document can
-include compact geospatial text such as "1.2 km from Pattandur Agrahara metro"
-or "near Forum Shantiniketan", but the proof reason must come from the
-coordinate-backed derived fact, not from vector similarity.
+For a query like "near a named mall" or "close to metro but not cut off from
+hospitals", search should parse the place mention, resolve it to a place/entity
+with coordinates, compute local distances over the serving bundle, and
+rank/explain with those derived distance facts. The embedding document can
+include compact geospatial text such as "1.2 km from named metro station" or
+"near named mall", but the proof reason must come from the coordinate-backed
+derived fact, not from vector similarity.
 
 ## Next Data Work
 
