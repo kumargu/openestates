@@ -177,6 +177,10 @@ Search cleanup has one non-negotiable rule: **the runtime may contain generic me
 
 Buyer vocabulary, place families, fact-key groups, source priorities, scoring weights, proof labels, layer ids, and eligibility rules belong in `app/config/dag/` or DAG-backed serving facts. Rust may load, validate, index, compare, score, and explain those configured records generically. Rust must not grow new one-off lists like `["hospital", "hospitals", "clinic"]` or closed enums like `PlaceFactFamily` for product semantics.
 
+Place ontology must not become a hidden filter list. Config may define broad place families such as `school`, `hospital`, `metro`, `tech_park`, `mall`, `landmark`, and at most broad market regions such as North/South/East/West Bengaluru. Actual localities, roads, societies, schools, hospitals, tech parks, malls, metro stations, landmarks, aliases, coordinates, and distance facts are DAG serving entities/facts, not parser config. A query like `near Gopalan National School`, `Hoodi`, `Bagmane`, or `Phoenix Marketcity` should resolve through the serving bundle's entity/place index and proof facts, not through hardcoded area aliases.
+
+Do not win benchmarks by adding locality or landmark aliases. That is just filters hidden in JSON.
+
 Before changing search behavior or search cleanup:
 - Read `app/config/dag/manifest.json` and the one relevant config file before editing code.
 - Run or update the hardcoding audit (`python3 scripts/audit_search_hardcoding.py`) and explain any new production-code finding.
