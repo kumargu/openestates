@@ -3,7 +3,6 @@ import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
 import { SoftNearbyIcon } from "./ui/SoftIcons.tsx";
 import { LabelPill } from "./ui/LabelPill.tsx";
-import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties } from "../lib/property-filters.ts";
 import {
@@ -38,6 +37,7 @@ type SearchDemoBeat = {
   theme: SearchDemoTheme;
   intents: string[];
   motif: string;
+  landsOn: string;
   societyHints: string[];
   fallbackHints: string[];
   proof: (home: PropertyCard) => string[];
@@ -49,7 +49,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     query: "Near Kadugodi metro",
     theme: "metro",
     intents: ["Named place", "Metro access", "Whitefield corridor"],
-    motif: "Transit intent surfaces the closest Purple Line homes",
+    motif: "Transit intent pulls the closest Purple Line homes",
+    landsOn: "Prestige Waterford",
     societyHints: ["waterford"],
     fallbackHints: ["kadugodi", "whitefield", "itpl"],
     proof: (home) => {
@@ -68,6 +69,7 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     theme: "acres",
     intents: ["Land scale", "Lake township", "Open campus"],
     motif: "Scale + water intent lifts the large lakeside township",
+    landsOn: "Prestige Lakeside Habitat",
     societyHints: ["lakeside habitat", "lakeside"],
     fallbackHints: ["habitat", "township"],
     proof: (home) => {
@@ -89,7 +91,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     query: "Quiet 3BHK near schools under 2.5Cr",
     theme: "family",
     intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Calm"],
-    motif: "Family life maps to BHK, budget, and calm context together",
+    motif: "Family life maps BHK, budget, and calm context together",
+    landsOn: "A calm 3BHK fit",
     societyHints: [],
     fallbackHints: [],
     proof: (home) => {
@@ -111,6 +114,7 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     theme: "reviews",
     intents: ["Whitefield", "Google proof", "Resident signal"],
     motif: "Review strength becomes the rank axis — not a silent filter",
+    landsOn: "Strongest Google-backed home",
     societyHints: [],
     fallbackHints: ["whitefield"],
     proof: (home) => {
@@ -214,7 +218,7 @@ function FeaturedSuggestions({
     if (media.matches) return undefined;
     const timer = window.setInterval(() => {
       setBeatIndex((current) => (current + 1) % SEARCH_DEMO_BEATS.length);
-    }, 4800);
+    }, 7200);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -253,12 +257,18 @@ function FeaturedSuggestions({
   );
 }
 
-function SemanticSearchCanvas({ homes }: { homes: PropertyCard[] }) {
+function SemanticSearchCanvas() {
   const [beatIndex, setBeatIndex] = useState(0);
   const [phase, setPhase] = useState(0);
   const beat = SEARCH_DEMO_BEATS[beatIndex % SEARCH_DEMO_BEATS.length];
-  const home = pickDemoHome(homes, beat);
-  const proof = home ? beat.proof(home) : [];
+  const iconKind =
+    beat.theme === "metro"
+      ? "metro"
+      : beat.theme === "acres"
+        ? "water"
+        : beat.theme === "reviews"
+          ? "essentials"
+          : "schools";
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -273,7 +283,7 @@ function SemanticSearchCanvas({ homes }: { homes: PropertyCard[] }) {
         setBeatIndex((index) => (index + 1) % SEARCH_DEMO_BEATS.length);
         return 0;
       });
-    }, 1550);
+    }, 2800);
 
     return () => window.clearInterval(timer);
   }, []);
@@ -295,52 +305,26 @@ function SemanticSearchCanvas({ homes }: { homes: PropertyCard[] }) {
             <span
               key={`${beat.id}-${intent}`}
               className={`landing-search-intent${phase >= 1 ? " is-in" : ""}`}
-              style={{ transitionDelay: `${index * 80}ms` }}
+              style={{ transitionDelay: `${index * 120}ms` }}
             >
               {intent}
             </span>
           ))}
         </div>
 
-        {home && (
-          <article
-            key={beat.id}
-            className={`landing-search-result${phase >= 2 ? " is-in" : ""}`}
-          >
-            <div className="landing-search-result__visual" aria-hidden="true">
-              {home.hero_image ? (
-                <ImageWithFallback
-                  src={home.hero_image}
-                  alt=""
-                  className="landing-search-result__image"
-                />
-              ) : (
-                <div className="landing-search-result__motif-art">
-                  <SoftNearbyIcon
-                    kind={beat.theme === "metro" ? "metro" : beat.theme === "acres" ? "water" : "essentials"}
-                    size={28}
-                  />
-                </div>
-              )}
-              <span className="landing-search-result__theme">{beat.motif}</span>
-            </div>
-            <div className="landing-search-result__body">
-              <p className="landing-search-result__kicker">Matched</p>
-              <h3>{home.society_name || home.title}</h3>
-              <p>
-                {home.area} · {home.bhk} BHK · {formatPrice(home.price)}
-              </p>
-              <div className="landing-search-result__proof">
-                {proof.map((label) => (
-                  <span key={label}>{label}</span>
-                ))}
-              </div>
-              <Link to={propertyDetailPath(home.id)} className="landing-search-result__link">
-                Open this home
-              </Link>
-            </div>
-          </article>
-        )}
+        <div
+          key={beat.id}
+          className={`landing-search-intent-board${phase >= 2 ? " is-in" : ""}`}
+        >
+          <div className="landing-search-intent-board__icon" aria-hidden="true">
+            <SoftNearbyIcon kind={iconKind} size={26} />
+          </div>
+          <p className="landing-search-intent-board__motif">{beat.motif}</p>
+          <p className="landing-search-intent-board__lands">
+            <span>Ranks toward</span>
+            <strong>{beat.landsOn}</strong>
+          </p>
+        </div>
       </div>
     </div>
   );
@@ -798,7 +782,6 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const mapHome = listable[0];
   const sentimentHome = listable.find((item) => item.area !== mapHome.area) ?? listable[1] ?? listable[0];
   const planHome = listable[1] ?? listable[0];
-  const searchHomes = listable;
 
   return (
     <section className="landing-stage" aria-label="How OpenEstates works">
@@ -828,7 +811,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
           </button>
         </div>
         <div className="landing-canvas landing-canvas--product">
-          <SemanticSearchCanvas homes={searchHomes} />
+          <SemanticSearchCanvas />
         </div>
       </article>
 
