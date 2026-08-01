@@ -169,7 +169,16 @@ impl<'a> SearchEngine<'a> {
     pub fn search(&self, query: &str) -> SearchEngineOutput {
         let mut timer = SearchTimer::start();
 
-        let intent = timer.measure("intent_parse", || intent::parse_intent(query));
+        let mut intent = timer.measure("intent_parse", || intent::parse_intent(query));
+        let mut area_match_kind = intent.area.as_ref().map(|_| "area_alias");
+        timer.measure("indexed_area_resolve", || {
+            enrich_intent_with_indexed_areas(
+                query,
+                &mut intent,
+                self.search_index,
+                &mut area_match_kind,
+            )
+        });
 
         let mut structured_candidate_ids = timer.measure("structured_recall", || {
             self.search_index.recall_ids(query, &intent)
@@ -317,7 +326,13 @@ impl<'a> SearchEngine<'a> {
         }
 
         let resolved_entities = timer.measure("entity_resolution", || {
-            resolve_query_entities(query, &intent, &results, geo_query.as_ref())
+            resolve_query_entities(
+                query,
+                &intent,
+                area_match_kind,
+                &results,
+                geo_query.as_ref(),
+            )
         });
         let total_duration_ms = timer.started_at.elapsed().as_secs_f64() * 1000.0;
         let mut diagnostics = SearchDiagnostics {
@@ -589,6 +604,7 @@ fn budget_display(value: u64) -> String {
 fn resolve_query_entities(
     query: &str,
     intent: &SearchIntent,
+    area_match_kind: Option<&'static str>,
     results: &[SearchResultCard],
     geo_query: Option<&geo::GeoSearchQuery<'_>>,
 ) -> Vec<ResolvedSearchEntity> {
@@ -602,7 +618,7 @@ fn resolve_query_entities(
                 entity_id: format!("area:{}", slug(area)),
                 entity_type: "area".to_string(),
                 name: area.to_string(),
-                match_kind: "area_alias".to_string(),
+                match_kind: area_match_kind.unwrap_or("area").to_string(),
                 matched_text: area.to_string(),
             },
         );
@@ -749,6 +765,30 @@ fn has_filter_intent(intent: &SearchIntent) -> bool {
         || intent.area.is_some()
         || intent.bhk.is_some()
         || intent.budget_max.is_some()
+}
+
+fn enrich_intent_with_indexed_areas(
+    query: &str,
+    intent: &mut SearchIntent,
+    search_index: &SearchIndex,
+    area_match_kind: &mut Option<&'static str>,
+) {
+    for excluded in search_index.resolve_excluded_query_areas(query) {
+        if !intent
+            .excluded_areas
+            .iter()
+            .any(|area| area.eq_ignore_ascii_case(&excluded.name))
+        {
+            intent.excluded_areas.push(excluded.name);
+        }
+    }
+
+    if intent.area.is_none() {
+        if let Some(resolved) = search_index.resolve_query_area(query, &intent.excluded_areas) {
+            intent.area = Some(resolved.name);
+            *area_match_kind = Some("indexed_area");
+        }
+    }
 }
 
 fn tantivy_candidate_ids(

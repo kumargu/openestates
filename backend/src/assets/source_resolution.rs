@@ -87,9 +87,21 @@ impl SourceEntityResolver {
             .iter()
             .map(|seed| seed.entity_id.clone())
             .collect::<HashSet<_>>();
+        let scoped_project_keys = scoped_seeds
+            .iter()
+            .filter_map(|seed| seed.project_key.clone())
+            .collect::<HashSet<_>>();
         let allowed_ids = match scope {
             SourceEntityResolutionScope::Production => canonical_ids,
-            SourceEntityResolutionScope::Scoped => scoped_ids,
+            SourceEntityResolutionScope::Scoped => {
+                let mut ids = scoped_ids.clone();
+                for mapping in &canonical.mappings {
+                    if scoped_project_keys.contains(&mapping.project_key) {
+                        ids.insert(mapping.canonical_entity_id.clone());
+                    }
+                }
+                ids
+            }
         };
 
         let mut resolver = Self {
@@ -99,6 +111,9 @@ impl SourceEntityResolver {
             project_keys: HashMap::new(),
         };
         for entity_id in resolver.allowed_ids.clone() {
+            if scope == SourceEntityResolutionScope::Scoped && scoped_ids.contains(&entity_id) {
+                continue;
+            }
             add_mapping(&mut resolver.direct_ids, &entity_id, &entity_id);
         }
         for mapping in &canonical.mappings {
@@ -114,13 +129,28 @@ impl SourceEntityResolver {
                 add_mapping(&mut resolver.aliases, alias, &mapping.canonical_entity_id);
             }
         }
+        let canonical_project_keys = resolver.project_keys.clone();
         if scope == SourceEntityResolutionScope::Scoped {
             for seed in scoped_seeds {
+                let target_entity_id = seed
+                    .project_key
+                    .as_deref()
+                    .and_then(|project_key| canonical_project_keys.get(project_key))
+                    .and_then(|candidates| {
+                        if candidates.len() == 1 {
+                            candidates.iter().next()
+                        } else {
+                            None
+                        }
+                    })
+                    .cloned()
+                    .unwrap_or_else(|| seed.entity_id.clone());
+                add_mapping(&mut resolver.direct_ids, &seed.entity_id, &target_entity_id);
                 if let Some(alias) = seed.alias_entity_id.as_deref() {
-                    add_mapping(&mut resolver.aliases, alias, &seed.entity_id);
+                    add_mapping(&mut resolver.aliases, alias, &target_entity_id);
                 }
                 if let Some(project_key) = seed.project_key.as_deref() {
-                    add_mapping(&mut resolver.project_keys, project_key, &seed.entity_id);
+                    add_mapping(&mut resolver.project_keys, project_key, &target_entity_id);
                 }
             }
         }
@@ -282,5 +312,41 @@ mod tests {
             resolver.resolve("unknown", Some("PRM-SAME")),
             Err(SourceEntityResolutionError::Ambiguous { .. })
         ));
+    }
+
+    #[test]
+    fn scoped_phase_seed_resolves_to_selected_canonical_parent() {
+        let canonical = CanonicalSocietyRows {
+            entities: Vec::new(),
+            edges: Vec::new(),
+            mappings: vec![ReraCanonicalMappingRecord {
+                project_key: "PRM-PHASE-2".to_string(),
+                canonical_entity_id: "society:radical-rhapsody".to_string(),
+                alias_entity_id: None,
+                project_name: "Radical Rhapsody Phase 2".to_string(),
+                registration_number: Some("PRM-PHASE-2".to_string()),
+                ack_number: None,
+            }],
+        };
+        let resolver = SourceEntityResolver::new(
+            &canonical,
+            &[seed(
+                "society:rera-phase-2",
+                Some("society:radical-rhapsody-phase-2"),
+                Some("PRM-PHASE-2"),
+            )],
+            SourceEntityResolutionScope::Scoped,
+        );
+
+        assert_eq!(
+            resolver.resolve("society:rera-phase-2", Some("PRM-PHASE-2")).unwrap(),
+            "society:radical-rhapsody"
+        );
+        assert_eq!(
+            resolver
+                .resolve("society:radical-rhapsody-phase-2", Some("PRM-PHASE-2"))
+                .unwrap(),
+            "society:radical-rhapsody"
+        );
     }
 }

@@ -9,6 +9,13 @@ use super::intent::SearchIntent;
 use super::semantic::SemanticRecallHit;
 use crate::dag_config::area_alias_entries;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IndexedAreaResolution {
+    pub name: String,
+    pub indexed_area: String,
+    pub candidate_count: usize,
+}
+
 /// In-memory recall index for local search.
 ///
 /// This is deliberately simple: it narrows candidates with deterministic local
@@ -194,6 +201,71 @@ impl SearchIndex {
         indexes
     }
 
+    pub fn resolve_query_area(
+        &self,
+        query: &str,
+        excluded_areas: &[String],
+    ) -> Option<IndexedAreaResolution> {
+        let excluded = excluded_areas
+            .iter()
+            .map(|area| normalize(area))
+            .collect::<HashSet<_>>();
+        self.resolve_query_area_matches(query)
+            .into_iter()
+            .filter(|resolution| !excluded.contains(&normalize(&resolution.name)))
+            .filter(|resolution| !area_term_is_excluded(query, &resolution.name))
+            .max_by(|left, right| compare_area_resolution(left, right))
+    }
+
+    pub fn resolve_excluded_query_areas(&self, query: &str) -> Vec<IndexedAreaResolution> {
+        let mut areas = Vec::new();
+        for (indexed_area, ids) in &self.by_area {
+            if indexed_area.trim().is_empty() {
+                continue;
+            }
+            let mut terms = area_match_terms(indexed_area);
+            push_area_term(&mut terms, &normalize_area_text_for_exclusion(indexed_area));
+            for term in terms {
+                if area_term_is_excluded(query, &term) {
+                    areas.push(IndexedAreaResolution {
+                        name: display_area_term(&term),
+                        indexed_area: indexed_area.clone(),
+                        candidate_count: ids.len(),
+                    });
+                    break;
+                }
+            }
+        }
+        areas.sort_by(compare_area_resolution);
+        areas.dedup_by(|left, right| left.name.eq_ignore_ascii_case(&right.name));
+        areas
+    }
+
+    fn resolve_query_area_matches(&self, query: &str) -> Vec<IndexedAreaResolution> {
+        let query_tokens = analyzer::search_tokens(query, super::schema::query_stopwords());
+        if query_tokens.is_empty() {
+            return Vec::new();
+        }
+
+        let mut matches = Vec::new();
+        for (indexed_area, ids) in &self.by_area {
+            if indexed_area.trim().is_empty() {
+                continue;
+            }
+            for term in area_match_terms(indexed_area) {
+                if area_term_matches_query(&term, &query_tokens) {
+                    matches.push(IndexedAreaResolution {
+                        name: display_area_term(&term),
+                        indexed_area: indexed_area.clone(),
+                        candidate_count: ids.len(),
+                    });
+                    break;
+                }
+            }
+        }
+        matches
+    }
+
     fn area_candidates(&self, area: &str) -> HashSet<String> {
         let mut ids = HashSet::new();
         let area = normalize(area);
@@ -359,6 +431,135 @@ fn intersect_candidate(candidate: &mut Option<HashSet<String>>, next: HashSet<St
     }
 }
 
+fn compare_area_resolution(
+    left: &IndexedAreaResolution,
+    right: &IndexedAreaResolution,
+) -> std::cmp::Ordering {
+    left.name
+        .split_whitespace()
+        .count()
+        .cmp(&right.name.split_whitespace().count())
+        .then_with(|| left.name.len().cmp(&right.name.len()))
+        .then_with(|| left.candidate_count.cmp(&right.candidate_count))
+        .then_with(|| right.indexed_area.cmp(&left.indexed_area))
+}
+
+fn area_match_terms(area: &str) -> Vec<String> {
+    let mut terms = Vec::new();
+    let normalized = normalize_area_text(area);
+    push_area_term(&mut terms, &normalized);
+    for segment in area.split([',', '/', '|']) {
+        push_area_term(&mut terms, &normalize_area_text(segment));
+    }
+    for token in analyzer::search_tokens(area, super::schema::query_stopwords()) {
+        if is_distinctive_area_token(&token) {
+            push_area_term(&mut terms, &token);
+        }
+    }
+    terms
+}
+
+fn normalize_area_text(value: &str) -> String {
+    analyzer::search_tokens(value, super::schema::query_stopwords()).join(" ")
+}
+
+fn push_area_term(terms: &mut Vec<String>, term: &str) {
+    let term = term.trim();
+    if term.is_empty() || terms.iter().any(|existing| existing == term) {
+        return;
+    }
+    if term.split_whitespace().count() == 1 && !is_distinctive_area_token(term) {
+        return;
+    }
+    terms.push(term.to_string());
+}
+
+fn is_distinctive_area_token(token: &str) -> bool {
+    token.len() >= 4
+        && !matches!(
+            token,
+            "area"
+                | "road"
+                | "main"
+                | "phase"
+                | "stage"
+                | "sector"
+                | "layout"
+                | "nagar"
+                | "city"
+                | "tower"
+                | "west"
+                | "east"
+                | "north"
+                | "south"
+        )
+}
+
+fn area_term_matches_query(term: &str, query_tokens: &[String]) -> bool {
+    let term_tokens = analyzer::search_tokens(term, super::schema::query_stopwords());
+    if term_tokens.is_empty() {
+        return false;
+    }
+    if term_tokens.len() == 1 {
+        return query_tokens
+            .iter()
+            .any(|query_token| token_matches_query(query_token, &term_tokens[0]));
+    }
+    query_tokens.windows(term_tokens.len()).any(|window| {
+        window
+            .iter()
+            .zip(term_tokens.iter())
+            .all(|(query_token, term_token)| token_matches_query(query_token, term_token))
+    })
+}
+
+fn area_term_is_excluded(query: &str, term: &str) -> bool {
+    let normalized_query = normalize_area_text_for_exclusion(query);
+    let normalized_term = normalize_area_text_for_exclusion(term);
+    if normalized_term.is_empty() {
+        return false;
+    }
+    [
+        format!("not {}", normalized_term),
+        format!("not in {}", normalized_term),
+        format!("avoid {}", normalized_term),
+        format!("exclude {}", normalized_term),
+        format!("excluding {}", normalized_term),
+        format!("except {}", normalized_term),
+        format!("outside {}", normalized_term),
+    ]
+    .iter()
+    .any(|pattern| query_contains_phrase(&normalized_query, pattern))
+}
+
+fn normalize_area_text_for_exclusion(value: &str) -> String {
+    value
+        .split(|ch: char| !ch.is_ascii_alphanumeric())
+        .filter_map(|token| {
+            let token = token.trim().to_lowercase();
+            if token.len() >= 2 { Some(token) } else { None }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+fn display_area_term(term: &str) -> String {
+    term.split_whitespace()
+        .map(|word| {
+            let mut chars = word.chars();
+            match chars.next() {
+                Some(first) => {
+                    let mut out = first.to_uppercase().collect::<String>();
+                    out.push_str(chars.as_str());
+                    out
+                }
+                None => String::new(),
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 fn push_unique(ids: &mut Vec<String>, id: &str) {
     if !ids.iter().any(|existing| existing == id) {
         ids.push(id.to_string());
@@ -496,6 +697,32 @@ mod tests {
         let ids = index.property_ids_for_entity_hits(&hits);
 
         assert_eq!(ids, vec!["prop-1".to_string(), "prop-2".to_string()]);
+    }
+
+    #[test]
+    fn resolves_area_terms_from_indexed_property_area_without_config_alias() {
+        let mut property = test_property("whitefield-3bhk", "prestige-waterford");
+        property.area = "Itpl, Whitefield".to_string();
+        let index = SearchIndex::build(&[property]);
+
+        let resolved = index
+            .resolve_query_area("3bhk in whitefield under 2cr", &[])
+            .expect("indexed area token should resolve from runtime corpus");
+
+        assert_eq!(resolved.name, "Whitefield");
+        assert_eq!(resolved.indexed_area, "itpl, whitefield");
+    }
+
+    #[test]
+    fn resolves_excluded_area_terms_from_indexed_property_area() {
+        let mut property = test_property("electronic-city-3bhk", "snn-greenbay");
+        property.area = "Phase 2 Electronic City".to_string();
+        let index = SearchIndex::build(&[property]);
+
+        let excluded =
+            index.resolve_excluded_query_areas("not phase 2 electronic city, 3bhk near metro");
+
+        assert_eq!(excluded[0].name, "Phase Electronic City");
     }
 
     fn test_property(id: &str, society_id: &str) -> Property {
