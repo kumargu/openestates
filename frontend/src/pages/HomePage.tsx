@@ -5,7 +5,8 @@ import { getAreaTracker, getProperties } from "../lib/api.ts";
 import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/recent-searches.ts";
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
-import { LandingPicksSection } from "../components/LandingPicksSection.tsx";
+import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
+import { LandingCloseBanner } from "../components/LandingCloseBanner.tsx";
 
 const HERO_PROMISE = "Tell us the life you want. We'll show homes with receipts.";
 
@@ -21,6 +22,8 @@ function RotatingText() {
   const [fading, setFading] = useState(false);
 
   useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) return undefined;
     const interval = setInterval(() => {
       setFading(true);
       setTimeout(() => {
@@ -167,7 +170,6 @@ export function HomePage() {
 
   return (
     <div className="home-page">
-      {/* Hero */}
       <section
         className={`home-hero ${hasInlinePane ? "home-hero--search-active" : ""}`}
       >
@@ -184,7 +186,6 @@ export function HomePage() {
           {HERO_PROMISE}
         </p>
 
-        {/* Search bar */}
         <form
           onSubmit={handleSearch}
           className={`home-composer fade-up fade-up-delay-1${searchFocused ? " home-composer--focused" : ""}`}
@@ -247,7 +248,6 @@ export function HomePage() {
           ))}
         </div>
 
-        {/* Error banner — non-blocking */}
         {loadError && (
           <div className="home-error-banner fade-up fade-up-delay-2">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#92400e" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -290,7 +290,6 @@ export function HomePage() {
             </button>
           </div>
         )}
-
       </section>
 
       {hasInlinePane && (
@@ -302,15 +301,23 @@ export function HomePage() {
       )}
 
       {!hasInlinePane && properties.length > 0 && (
-        <LandingPicksSection properties={properties} areaTracker={areaTracker} />
+        <LandingStoryStage properties={properties} onSearch={commitSearch} />
       )}
 
-      {properties.length > 0 && (
+      {!hasInlinePane && properties.length > 0 && (
         <AreaTrackerSection
           properties={properties}
           areaTracker={areaTracker}
           onSearch={commitSearch}
-          maxMarkets={4}
+          maxMarkets={6}
+        />
+      )}
+
+      {!hasInlinePane && (
+        <LandingCloseBanner
+          query={query}
+          onQueryChange={setQuery}
+          onSubmit={handleSearch}
         />
       )}
     </div>
