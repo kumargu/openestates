@@ -7,7 +7,20 @@ semantic score can widen the candidate pool and add a soft ranking signal, but
 every buyer-facing reason must still come from DAG-backed serving facts or a
 deterministic computation over those facts.
 
-The implementation roadmap lives in `docs/search_engine_roadmap.md`.
+The implementation roadmap lives in `docs/search_engine_roadmap.md`; the active
+ontology cleanup plan lives in `docs/search_ontology_refactor_plan.md`.
+
+## Current Reset
+
+As of 2026-08-01, search quality work is reset around the pinned Bangalore
+bundle `bangalore-catalog-60-coherent-2026-08-01`
+(`909a8bd0-3af0-42af-ae26-ba493f54174a`). Older benchmark numbers in this file
+are historical context only until rerun against that bundle.
+
+The current architecture rule is stricter than the old benchmark: search should
+not recover quality by adding locality, landmark, school, mall, tech-park, or
+road aliases to parser config. Named-place quality must come from serving
+entities, coordinates, graph edges, and proof facts.
 
 ## Proof Loop Discipline
 
@@ -34,15 +47,23 @@ Every benchmark markdown should include a short "proof-loop decision" section:
 `keep`, `revert`, `shadow_only`, or `needs_more_data`, with the reason. This is
 how we avoid piling code that is not improving search.
 
+Before each loop, also do a shape audit:
+
+- Which files/commits changed since the last loop?
+- Which milestone does each change belong to?
+- Did any change create hidden filters in config, tests, or runtime?
+- Is the benchmark measuring real data-backed improvement or rewarding a
+  shortcut?
+
 ## Bar
 
 1. Intent parsing captures hard constraints and soft tradeoffs from natural
    buyer language: BHK, area, budget, positive preferences, negative
    preferences, accepted tradeoffs, and unsupported inventory requests.
 2. Semantic recall handles paraphrases without adding one-off vocabulary for
-   every phrase. The offline embedding model is the primary mechanism for
-   mapping "bad drainage" near "waterlogging" style language; config synonyms
-   stay for domain labels and controlled intent extraction.
+   every phrase. The offline embedding model can widen recall, but ontology
+   resolution and DAG-backed proof decide what facts count. Config synonyms stay
+   for domain labels and controlled intent extraction, not named-place aliases.
 3. The runtime never embeds the corpus at API startup. Serving bundles carry
    precomputed vectors in Parquet, keyed by `model_id`, dimensions, and document
    text hash.
@@ -91,10 +112,15 @@ The contract tests that encode the product bar are:
 - `backend/tests/search_efficiency_contract.rs`
 - `backend/tests/search_quality_contract.rs`
 
-The current promoted FastEmbed bundle is
+The previous promoted FastEmbed bundle was
 `2026-07-21-generated-context-waterford-brigade-semantic-20260722053602`.
-The profile shows 16,431 entities, 146 properties, 94,032 fact rows, 94,018
+That profile showed 16,431 entities, 146 properties, 94,032 fact rows, 94,018
 search metadata rows, and 9,930 precomputed semantic embedding rows.
+
+The current reset bundle is `bangalore-catalog-60-coherent-2026-08-01`, with
+286 entities, 6,901 facts, 1,894 graph edges, and 6,754 search metadata rows.
+Profile it before using it as a benchmark baseline; do not compare its score
+directly with older Waterford/Whitefield bundle runs.
 
 Scoreable fact families in the current bundle include RERA/legal status,
 builder RERA track record, Google/community review evidence, metro access,
@@ -109,7 +135,7 @@ confidence `0.4`, no `maintenance_sentiment`, no
 rows. These stay as data-gap sentinels until DAG collection/enrichment promotes
 enough sourced facts.
 
-The data-backed buyer-language benchmark baseline against the promoted offline
+The old data-backed buyer-language benchmark baseline against the promoted offline
 FastEmbed bundle is 55/76 scoreable checks, or 72.4%. Overall, including
 data-gap sentinels, it is 70/99 checks, or 70.7%. Recall is healthy for this
 suite: 19/19 cases returned results. Safety is clean: 19/19 checks pass for
