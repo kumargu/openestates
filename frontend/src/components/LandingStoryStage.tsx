@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
 import { SoftNearbyIcon } from "./ui/SoftIcons.tsx";
 import { LabelPill } from "./ui/LabelPill.tsx";
+import { ImageWithFallback } from "./ImageWithFallback.tsx";
 import { propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties } from "../lib/property-filters.ts";
 import {
@@ -27,8 +28,104 @@ function formatAdvantage(price: number): string {
 }
 
 const FEATURED_LIMIT = 12;
-const DEMO_LIFE_QUERY = "Quiet 3BHK near schools under 2.5Cr";
 const DEMO_BUDGET_INR = 25_000_000;
+
+type SearchDemoTheme = "metro" | "acres" | "family" | "reviews";
+
+type SearchDemoBeat = {
+  id: string;
+  query: string;
+  theme: SearchDemoTheme;
+  intents: string[];
+  motif: string;
+  societyHints: string[];
+  fallbackHints: string[];
+  proof: (home: PropertyCard) => string[];
+};
+
+const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
+  {
+    id: "kadugodi-metro",
+    query: "Near Kadugodi metro",
+    theme: "metro",
+    intents: ["Named place", "Metro access", "Whitefield corridor"],
+    motif: "Transit intent surfaces the closest Purple Line homes",
+    societyHints: ["waterford"],
+    fallbackHints: ["kadugodi", "whitefield", "itpl"],
+    proof: (home) => {
+      const labels: string[] = [];
+      if (home.metro_distance_mins > 0) labels.push(`${home.metro_distance_mins} min metro`);
+      labels.push("Near Kadugodi");
+      if (typeof home.google_rating === "number" && home.google_rating > 0) {
+        labels.push(`Google ${home.google_rating.toFixed(1)}`);
+      }
+      return labels.slice(0, 3);
+    },
+  },
+  {
+    id: "large-township",
+    query: "100+ acre society with lake",
+    theme: "acres",
+    intents: ["Land scale", "Lake township", "Open campus"],
+    motif: "Scale + water intent lifts the large lakeside township",
+    societyHints: ["lakeside habitat", "lakeside"],
+    fallbackHints: ["habitat", "township"],
+    proof: (home) => {
+      const labels: string[] = [];
+      if (typeof home.society_land_acres === "number" && home.society_land_acres > 0) {
+        labels.push(`${Math.round(home.society_land_acres)} acres`);
+      } else {
+        labels.push("Large township");
+      }
+      labels.push("Lake setting");
+      if (typeof home.open_space_pct === "number" && home.open_space_pct > 0) {
+        labels.push(`${Math.round(home.open_space_pct)}% open`);
+      }
+      return labels.slice(0, 3);
+    },
+  },
+  {
+    id: "quiet-family",
+    query: "Quiet 3BHK near schools under 2.5Cr",
+    theme: "family",
+    intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Calm"],
+    motif: "Family life maps to BHK, budget, and calm context together",
+    societyHints: [],
+    fallbackHints: [],
+    proof: (home) => {
+      const labels: string[] = [];
+      if (home.bhk === 3) labels.push("3 BHK fit");
+      if (home.price > 0 && home.price <= DEMO_BUDGET_INR) labels.push("Under 2.5 Cr");
+      if (typeof home.google_rating === "number" && home.google_rating >= 4) {
+        labels.push(`Google ${home.google_rating.toFixed(1)}`);
+      }
+      if (home.metro_distance_mins > 0 && home.metro_distance_mins <= 20) {
+        labels.push(`${home.metro_distance_mins} min metro`);
+      }
+      return labels.slice(0, 3);
+    },
+  },
+  {
+    id: "google-proof",
+    query: "Whitefield homes with strong Google reviews",
+    theme: "reviews",
+    intents: ["Whitefield", "Google proof", "Resident signal"],
+    motif: "Review strength becomes the rank axis — not a silent filter",
+    societyHints: [],
+    fallbackHints: ["whitefield"],
+    proof: (home) => {
+      const labels: string[] = [];
+      if (typeof home.google_rating === "number" && home.google_rating > 0) {
+        labels.push(`Google ${home.google_rating.toFixed(1)}`);
+      }
+      if (typeof home.google_review_count === "number" && home.google_review_count > 0) {
+        labels.push(`${home.google_review_count} reviews`);
+      }
+      labels.push(home.area);
+      return labels.slice(0, 3);
+    },
+  },
+];
 
 type LandingStoryStageProps = {
   properties: PropertyCard[];
@@ -49,27 +146,57 @@ type DossierRow = {
   toneLabel: string;
 };
 
-/** Real card fields framed as why a life-query matched — never invent context. */
-function semanticMatchLabels(property: PropertyCard): string[] {
-  const labels: string[] = [];
-  if (property.bhk === 3) labels.push("3 BHK fit");
-  if (property.price > 0 && property.price <= DEMO_BUDGET_INR) labels.push("Under 2.5 Cr");
-  if (property.metro_distance_mins > 0 && property.metro_distance_mins <= 20) {
-    labels.push(`${property.metro_distance_mins} min metro`);
+function haystack(property: PropertyCard): string {
+  return `${property.society_name} ${property.title} ${property.area}`.toLowerCase();
+}
+
+function pickDemoHome(homes: PropertyCard[], beat: SearchDemoBeat): PropertyCard | null {
+  if (homes.length === 0) return null;
+
+  for (const hint of beat.societyHints) {
+    const match = homes.find((home) => haystack(home).includes(hint));
+    if (match) return match;
   }
-  if (typeof property.google_rating === "number" && property.google_rating >= 4) {
-    labels.push(`Google ${property.google_rating.toFixed(1)}`);
+
+  if (beat.id === "google-proof") {
+    const rated = [...homes]
+      .filter((home) => typeof home.google_rating === "number" && home.google_rating > 0)
+      .sort((a, b) => (b.google_rating ?? 0) - (a.google_rating ?? 0)
+        || (b.google_review_count ?? 0) - (a.google_review_count ?? 0));
+    if (rated[0]) return rated[0];
   }
-  if (typeof property.open_space_pct === "number" && property.open_space_pct >= 25) {
-    labels.push(`${Math.round(property.open_space_pct)}% open`);
+
+  if (beat.id === "quiet-family") {
+    const family = [...homes]
+      .filter((home) => home.bhk === 3 && home.price > 0 && home.price <= DEMO_BUDGET_INR)
+      .sort((a, b) => (b.google_rating ?? 0) - (a.google_rating ?? 0));
+    if (family[0]) return family[0];
   }
-  if (property.home_state_display || property.project_status_display) {
-    const state = (property.home_state_display || property.project_status_display || "")
-      .split("·")[0]
-      ?.trim();
-    if (state && labels.length < 2) labels.push(state);
+
+  if (beat.id === "kadugodi-metro") {
+    const metro = [...homes]
+      .filter((home) => home.metro_distance_mins > 0)
+      .sort((a, b) => a.metro_distance_mins - b.metro_distance_mins);
+    if (metro[0]) return metro[0];
   }
-  return labels.slice(0, 2);
+
+  if (beat.id === "large-township") {
+    const byAcres = [...homes]
+      .filter((home) => typeof home.society_land_acres === "number" && (home.society_land_acres ?? 0) > 0)
+      .sort((a, b) => (b.society_land_acres ?? 0) - (a.society_land_acres ?? 0));
+    if (byAcres[0]) return byAcres[0];
+  }
+
+  for (const hint of beat.fallbackHints) {
+    const match = homes.find((home) => haystack(home).includes(hint));
+    if (match) return match;
+  }
+
+  return homes[0] ?? null;
+}
+
+function semanticMatchLabels(property: PropertyCard, beat: SearchDemoBeat = SEARCH_DEMO_BEATS[2]): string[] {
+  return beat.proof(property).slice(0, 2);
 }
 
 function FeaturedSuggestions({
@@ -79,9 +206,26 @@ function FeaturedSuggestions({
   properties: PropertyCard[];
   onSearch: (query: string) => void;
 }) {
+  const [beatIndex, setBeatIndex] = useState(0);
+  const beat = SEARCH_DEMO_BEATS[beatIndex % SEARCH_DEMO_BEATS.length];
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) return undefined;
+    const timer = window.setInterval(() => {
+      setBeatIndex((current) => (current + 1) % SEARCH_DEMO_BEATS.length);
+    }, 4800);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const suggestions = filterListableProperties(properties)
-    .map((property) => ({ property, labels: semanticMatchLabels(property) }))
-    .sort((a, b) => b.labels.length - a.labels.length)
+    .map((property) => ({ property, labels: semanticMatchLabels(property, beat) }))
+    .sort((a, b) => {
+      const preferred = pickDemoHome([a.property, b.property], beat);
+      if (preferred?.id === a.property.id) return -1;
+      if (preferred?.id === b.property.id) return 1;
+      return b.labels.length - a.labels.length;
+    })
     .slice(0, FEATURED_LIMIT);
   if (suggestions.length === 0) return null;
 
@@ -89,14 +233,14 @@ function FeaturedSuggestions({
     <div className="landing-featured">
       <header className="landing-featured__head">
         <p className="landing-featured__kicker">Semantic match</p>
-        <h2>Homes ranked for a life query — with the why on each card.</h2>
-        <button type="button" className="landing-featured__query" onClick={() => onSearch(DEMO_LIFE_QUERY)}>
-          {DEMO_LIFE_QUERY}
+        <h2>Change the ask — the ranked why shifts with it.</h2>
+        <button type="button" className="landing-featured__query" onClick={() => onSearch(beat.query)}>
+          {beat.query}
         </button>
       </header>
-      <div className="landing-stage__featured">
+      <div className="landing-stage__featured" key={beat.id}>
         {suggestions.map(({ property, labels }) => (
-          <div key={property.id} className="landing-stage__feature-card">
+          <div key={`${beat.id}-${property.id}`} className="landing-stage__feature-card">
             <LivingEvidenceTile
               property={property}
               variant="browse"
@@ -110,75 +254,93 @@ function FeaturedSuggestions({
 }
 
 function SemanticSearchCanvas({ homes }: { homes: PropertyCard[] }) {
-  const samples = homes
-    .map((property) => ({ property, labels: semanticMatchLabels(property) }))
-    .filter((item) => item.labels.length > 0)
-    .slice(0, 3);
-  const [step, setStep] = useState(0);
+  const [beatIndex, setBeatIndex] = useState(0);
+  const [phase, setPhase] = useState(0);
+  const beat = SEARCH_DEMO_BEATS[beatIndex % SEARCH_DEMO_BEATS.length];
+  const home = pickDemoHome(homes, beat);
+  const proof = home ? beat.proof(home) : [];
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     if (media.matches) {
-      setStep(3);
+      setPhase(2);
       return undefined;
     }
-    let tick = 0;
+
     const timer = window.setInterval(() => {
-      tick = (tick + 1) % 4;
-      setStep(tick);
-    }, 1700);
+      setPhase((current) => {
+        if (current < 2) return current + 1;
+        setBeatIndex((index) => (index + 1) % SEARCH_DEMO_BEATS.length);
+        return 0;
+      });
+    }, 1550);
+
     return () => window.clearInterval(timer);
   }, []);
 
-  const intents = [
-    { id: "life", label: "Quiet family home" },
-    { id: "bhk", label: "3 BHK" },
-    { id: "budget", label: "Under 2.5 Cr" },
-    { id: "context", label: "Near schools" },
-  ];
-
   return (
-    <div className="landing-showcase landing-showcase--search">
+    <div className={`landing-showcase landing-showcase--search is-${beat.theme}`}>
       <p className="landing-showcase__whisper" aria-hidden="true">
-        Context search
+        {beat.theme === "metro" ? "Metro" : beat.theme === "acres" ? "Scale" : beat.theme === "reviews" ? "Reviews" : "Life"}
       </p>
+
       <div className="landing-search-stage">
-        <div className={`landing-search-query${step >= 0 ? " is-in" : ""}`}>
+        <div className={`landing-search-query${phase >= 0 ? " is-in" : ""}`} key={`q-${beat.id}`}>
           <span>Life query</span>
-          <strong>{DEMO_LIFE_QUERY}</strong>
+          <strong>{beat.query}</strong>
         </div>
+
         <div className="landing-search-intents" aria-label="Parsed context">
-          {intents.map((intent, index) => (
+          {beat.intents.map((intent, index) => (
             <span
-              key={intent.id}
-              className={`landing-search-intent${step >= 1 && index <= step + 1 ? " is-in" : ""}`}
-              style={{ transitionDelay: `${index * 70}ms` }}
+              key={`${beat.id}-${intent}`}
+              className={`landing-search-intent${phase >= 1 ? " is-in" : ""}`}
+              style={{ transitionDelay: `${index * 80}ms` }}
             >
-              {intent.label}
+              {intent}
             </span>
           ))}
         </div>
-        <ul className={`landing-search-hits${step >= 2 ? " is-in" : ""}`}>
-          {(samples.length > 0 ? samples : homes.slice(0, 3).map((property) => ({
-            property,
-            labels: ["Context ranked"] as string[],
-          }))).map((item, index) => (
-            <li
-              key={item.property.id}
-              className={step >= 2 && index <= step ? "is-in" : ""}
-              style={{ transitionDelay: `${index * 90}ms` }}
-            >
-              <div>
-                <strong>{item.property.society_name || item.property.title}</strong>
-                <span>{item.property.area} · {formatPrice(item.property.price)}</span>
+
+        {home && (
+          <article
+            key={beat.id}
+            className={`landing-search-result${phase >= 2 ? " is-in" : ""}`}
+          >
+            <div className="landing-search-result__visual" aria-hidden="true">
+              {home.hero_image ? (
+                <ImageWithFallback
+                  src={home.hero_image}
+                  alt=""
+                  className="landing-search-result__image"
+                />
+              ) : (
+                <div className="landing-search-result__motif-art">
+                  <SoftNearbyIcon
+                    kind={beat.theme === "metro" ? "metro" : beat.theme === "acres" ? "water" : "essentials"}
+                    size={28}
+                  />
+                </div>
+              )}
+              <span className="landing-search-result__theme">{beat.motif}</span>
+            </div>
+            <div className="landing-search-result__body">
+              <p className="landing-search-result__kicker">Matched</p>
+              <h3>{home.society_name || home.title}</h3>
+              <p>
+                {home.area} · {home.bhk} BHK · {formatPrice(home.price)}
+              </p>
+              <div className="landing-search-result__proof">
+                {proof.map((label) => (
+                  <span key={label}>{label}</span>
+                ))}
               </div>
-              <em>{item.labels.join(" · ")}</em>
-            </li>
-          ))}
-        </ul>
-        <p className={`landing-search-aside${step >= 3 ? " is-in" : ""}`}>
-          Filters hide rows. Semantic ranking keeps the why beside each home.
-        </p>
+              <Link to={propertyDetailPath(home.id)} className="landing-search-result__link">
+                Open this home
+              </Link>
+            </div>
+          </article>
+        )}
       </div>
     </div>
   );
@@ -636,9 +798,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const mapHome = listable[0];
   const sentimentHome = listable.find((item) => item.area !== mapHome.area) ?? listable[1] ?? listable[0];
   const planHome = listable[1] ?? listable[0];
-  const searchHomes = [...listable]
-    .sort((a, b) => semanticMatchLabels(b).length - semanticMatchLabels(a).length)
-    .slice(0, 4);
+  const searchHomes = listable;
 
   return (
     <section className="landing-stage" aria-label="How OpenEstates works">
@@ -656,13 +816,13 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
           <p className="landing-scene__step">01</p>
           <h2>Search by life, not checkboxes</h2>
           <p>
-            Soft intent becomes structured context — BHK, budget, commute, schools, vibe —
-            and each result carries a semantic why, not a silent filter hit.
+            Watch the ask change — Kadugodi metro lifts Waterford, a 100-acre lake society
+            lifts Lakeside Habitat — each result carries a semantic why.
           </p>
           <button
             type="button"
             className="landing-scene__cta"
-            onClick={() => onSearch(DEMO_LIFE_QUERY)}
+            onClick={() => onSearch(SEARCH_DEMO_BEATS[0].query)}
           >
             Try a life search
           </button>
