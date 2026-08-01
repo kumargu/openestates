@@ -649,6 +649,28 @@ mod tests {
     }
 
     #[test]
+    fn place_specific_social_infra_keeps_umbrella_evidence_keys() {
+        let school = parse_intent("young family home near school");
+        assert!(has_positive_label(&school, "family friendly"));
+        assert!(has_expanded_positive_key(&school, "nearby_schools"));
+        assert!(has_expanded_positive_key(&school, "social_infra_score"));
+
+        let metro = parse_intent("2bhk near metro for office commute");
+        assert!(has_expanded_positive_key(
+            &metro,
+            "distance_to_nearest_metro_km"
+        ));
+    }
+
+    #[test]
+    fn noisy_main_road_language_maps_to_noise_risk() {
+        let intent = parse_intent("family friendly but avoid noisy main road");
+
+        assert!(has_positive_label(&intent, "family friendly"));
+        assert!(has_negative_label(&intent, "noise"));
+    }
+
+    #[test]
     fn negated_area_is_excluded_not_selected() {
         let intent = parse_intent("near tech parks but quiet not electronic city 3bhk");
 
@@ -1132,6 +1154,28 @@ mod tests {
             &intent,
             "rera_builder_revocations"
         ));
+    }
+
+    #[test]
+    fn approval_and_oc_language_maps_to_legal_safety() {
+        let intent = parse_intent("3bhk under 2cr but only if approvals and OC look clean");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::RiskAverse));
+        assert!(has_positive_label(&intent, "legal safety"));
+        assert!(has_expanded_positive_key(
+            &intent,
+            "occupancy_certificate_status"
+        ));
+        assert!(has_expanded_positive_key(&intent, "bbmp_approval_status"));
+    }
+
+    #[test]
+    fn shady_paperwork_language_maps_to_legal_and_seller_risk() {
+        let intent =
+            parse_intent("first home buyer, please avoid any shady paperwork or unverified seller");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::RiskAverse));
+        assert!(has_negative_label(&intent, "legal risk"));
     }
 
     #[test]

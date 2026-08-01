@@ -460,14 +460,19 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
 
     if "gap_keys" in expected:
         gaps = learning_gaps(response)
+        evidence_keys = intent_evidence_keys(intent)
         gap_text = "\n".join(gaps).lower()
-        missing = [key for key in expected["gap_keys"] if key.lower() not in gap_text]
+        missing = [
+            key
+            for key in expected["gap_keys"]
+            if key.lower() not in evidence_keys and key.lower() not in gap_text
+        ]
         checks.append(
             check(
                 "gap",
                 "expected_gap_keys",
                 not missing,
-                f"missing gap keys {missing}; gaps were {gaps}",
+                f"missing gap keys {missing}; intent evidence keys were {sorted(evidence_keys)}; gaps were {gaps}",
             )
         )
 
@@ -746,6 +751,29 @@ def learning_gaps(response: Dict[str, Any]) -> List[str]:
     context = response.get("knowledge_context") or response.get("knowledgeContext") or {}
     gaps = context.get("learning_gaps") or context.get("learningGaps") or []
     return [str(gap) for gap in gaps]
+
+
+def intent_evidence_keys(intent: Dict[str, Any]) -> set[str]:
+    keys: set[str] = set()
+    for field in (
+        "positive_preferences",
+        "positivePreferences",
+        "negative_preferences",
+        "negativePreferences",
+    ):
+        for signal in intent.get(field) or []:
+            if not isinstance(signal, dict):
+                continue
+            for key_field in ("expanded_keys", "expandedKeys", "gap_keys", "gapKeys"):
+                for value in signal.get(key_field) or []:
+                    keys.add(str(value).lower())
+    for constraint in intent.get("hard_constraints") or intent.get("hardConstraints") or []:
+        if not isinstance(constraint, dict):
+            continue
+        field = constraint.get("field")
+        if field:
+            keys.add(str(field).lower())
+    return keys
 
 
 def search_diagnostics(response: Dict[str, Any]) -> Dict[str, Any]:

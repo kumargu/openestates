@@ -91,6 +91,24 @@
           "traffic is fine",
           "bad traffic but"
         ]
+      },
+      {
+        "label": "flat_size",
+        "patterns": [
+          "ok with smaller flat",
+          "okay with smaller flat",
+          "can compromise on size",
+          "smaller flat if"
+        ]
+      },
+      {
+        "label": "amenity_quality",
+        "patterns": [
+          "can compromise on clubhouse",
+          "compromise on clubhouse",
+          "clubhouse is optional",
+          "amenities are optional"
+        ]
       }
     ],
     "unsupported_inventory_types": [
@@ -162,7 +180,26 @@
           "legal clear",
           "legal paperwork",
           "safe legal",
-          "reliable builder"
+          "legal clarity",
+          "legal papers",
+          "rera",
+          "rera registered",
+          "rera approved",
+          "rera receipts",
+          "approval",
+          "approvals",
+          "pending approvals",
+          "oc",
+          "occupancy certificate",
+          "clear title",
+          "unclear title",
+          "shady paperwork",
+          "legal grey area",
+          "unverified seller",
+          "prelaunch",
+          "pre-launch",
+          "reliable builder",
+          "builder delivery issues"
         ]
       },
       {
@@ -209,7 +246,8 @@
         ],
         "expanded_keys": [
           "hospital_access",
-          "nearby_hospitals"
+          "nearby_hospitals",
+          "social_infra_score"
         ]
       },
       {
@@ -217,12 +255,16 @@
         "patterns": [
           "school",
           "schools",
+          "school access",
+          "school bus",
           "kids",
+          "kid",
           "children"
         ],
         "expanded_keys": [
           "school_access",
-          "nearby_schools"
+          "nearby_schools",
+          "social_infra_score"
         ]
       },
       {
@@ -233,7 +275,9 @@
         ],
         "expanded_keys": [
           "nearby_metro_stations",
-          "metro_access"
+          "metro_access",
+          "metro_distance_mins",
+          "distance_to_nearest_metro_km"
         ]
       },
       {
@@ -256,7 +300,8 @@
           "open space"
         ],
         "expanded_keys": [
-          "nearby_public_parks"
+          "nearby_public_parks",
+          "open_space_score"
         ]
       },
       {
@@ -282,16 +327,24 @@
           "offices"
         ],
         "expanded_keys": [
-          "nearby_tech_parks"
+          "nearby_tech_parks",
+          "commute_reality",
+          "within_15_min_drive_to_whitefield_offices"
         ]
       },
       {
         "preference": "legal safety",
         "patterns": [
           "approval documents",
+          "approvals",
+          "approval",
           "bbmp approval",
           "bbmp approval issues",
           "occupancy certificate",
+          "oc",
+          "oc clean",
+          "clean oc",
+          "pending approvals",
           "oc-like",
           "oc like",
           "oc confidence"
@@ -2099,7 +2152,12 @@
           "family friendly",
           "good for family",
           "for family",
+          "family home",
+          "family project",
+          "family livability",
+          "young family",
           "parents",
+          "kid",
           "kids friendly",
           "kid friendly"
         ],
@@ -2117,10 +2175,23 @@
         "rank": 37,
         "patterns": [
           "legal paperwork",
+          "safe legal",
           "clean legal receipts",
           "legal receipts",
           "legal papers",
           "clear title",
+          "legal clarity",
+          "legal risk low",
+          "low legal risk",
+          "rera approved",
+          "rera registered",
+          "rera number",
+          "approval",
+          "approvals",
+          "documents",
+          "oc",
+          "oc clean",
+          "clean oc",
           "legal and listing receipts",
           "legal and listing proof",
           "rera clarity",
@@ -2294,7 +2365,11 @@
         "rank": 3,
         "patterns": [
           "noise",
-          "highway noise"
+          "highway noise",
+          "airport noise",
+          "main road noise",
+          "noisy main road",
+          "construction noise"
         ],
         "label": "noise",
         "expanded_keys": [
@@ -2308,7 +2383,16 @@
         "rank": 4,
         "patterns": [
           "legal issue",
-          "litigation"
+          "litigation",
+          "unclear title",
+          "shady paperwork",
+          "legal grey area",
+          "grey area",
+          "pending approvals",
+          "unverified seller",
+          "unverified",
+          "approval pending",
+          "approvals pending"
         ],
         "label": "legal risk",
         "expanded_keys": [
@@ -2322,7 +2406,14 @@
       {
         "rank": 5,
         "patterns": [
-          "possession delay"
+          "possession delay",
+          "delivery delay",
+          "delivery issues",
+          "builder delivery issues",
+          "prelaunch",
+          "pre-launch",
+          "prelaunch marketing",
+          "under construction delays"
         ],
         "label": "delay risk",
         "expanded_keys": [
