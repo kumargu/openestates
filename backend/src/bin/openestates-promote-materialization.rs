@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use backend::assets::{
-    AssetId, AssetMaterializationStore, AssetPathBuilder, CurrentAssetPointer, MaterializationId,
+    promote_search_serving_release, AssetId, AssetMaterializationStore, MaterializationId,
 };
 use backend::lake::{LakeStoreLocation, LAKE_URL_ENV};
-use chrono::Utc;
+use backend::serving::SEARCH_SERVING_BUNDLE_ASSET_ID;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,30 +21,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 cli.materialization_id, cli.asset_id
             )
         })?;
-    let promoted = if cli.force {
-        let pointer = CurrentAssetPointer {
-            asset_id: record.asset_id.clone(),
-            partition: record.partition.clone(),
-            materialization_id: record.materialization_id.clone(),
-            materialization_key: AssetPathBuilder::materialization_record_key(
-                &record.asset_id,
-                &record.partition,
-                &record.materialization_id,
-            )
-            .to_string(),
-            version: record.version.clone(),
-            run_id: Some(record.run_id.clone()),
-            run_created_at: Some(record.created_at),
-            updated_at: Utc::now(),
-        };
-        lake.put_json(
-            &AssetPathBuilder::current_pointer_key(&record.asset_id, &record.partition),
-            &pointer,
-        )
-        .await?;
-        true
+    let (promoted, release) = if record.asset_id.as_str() == SEARCH_SERVING_BUNDLE_ASSET_ID {
+        let release = promote_search_serving_release(&store, &record, cli.force).await?;
+        (true, Some(release))
+    } else if cli.force {
+        store.force_promote_current(&record).await?;
+        (true, None)
     } else {
-        store.promote_current(&record).await?
+        (store.promote_current(&record).await?, None)
     };
     println!(
         "{}",
@@ -55,6 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "version": record.version,
             "row_count": record.row_count,
             "promoted": promoted,
+            "release": release.map(|release| serde_json::json!({
+                "kg_society_view_materialization_id": release.kg_materialization_id,
+                "current_project_facts_materialization_id": release.current_project_facts_materialization_id,
+                "promoted_materialization_count": release.promoted_materializations.len(),
+            })),
         })
     );
     Ok(())
@@ -130,6 +119,7 @@ fn default_project_root() -> PathBuf {
 
 fn print_help() {
     println!("Promote an existing OpenEstates asset materialization to current.");
+    println!("Search serving bundles promote and validate their complete pinned lineage.");
     println!();
     println!("Usage:");
     println!(
