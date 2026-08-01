@@ -27,6 +27,7 @@ export type PropertyCard = {
   super_builtup_sqft?: number;
   society_name: string;
   builder_name: string;
+  images?: string[];
   hero_image: string | null;
   transparency_tags: string[];
   description_summary: string;

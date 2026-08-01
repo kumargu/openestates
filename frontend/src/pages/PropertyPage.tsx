@@ -210,6 +210,7 @@ function propertyToCard(data: PropertyDetailResponse): PropertyCard {
     super_builtup_sqft: p.super_builtup_sqft,
     society_name: society?.name ?? "",
     builder_name: p.builder_name,
+    images: p.images,
     hero_image: p.hero_image,
     transparency_tags: p.transparency_tags,
     description_summary: p.description_summary,
@@ -797,6 +798,7 @@ function NearbyHomeCard({
   const property = item.property;
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
+    images: property.images,
     societyId: property.kg_entity_refs?.society_entity_id,
   });
   const image = propertySceneImageAt(images, sceneIndex, property.hero_image);

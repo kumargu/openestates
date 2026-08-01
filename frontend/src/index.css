@@ -4374,7 +4374,7 @@ body {
 .property-clean-actions .property-action-note.notebook-comment-anchor {
   position: relative;
   inset: auto;
-  z-index: 10;
+  z-index: 30;
 }
 
 .property-clean-actions .property-action-note .notebook-comment-anchor__button {
@@ -4404,6 +4404,16 @@ body {
   box-shadow: none;
   color: var(--color-cool-deep);
   transform: none;
+}
+
+.property-clean-actions .property-action-note .notebook-comment-anchor__popover {
+  top: calc(100% + 0.65rem);
+  right: 0;
+  min-width: min(20rem, calc(100vw - 2rem));
+}
+
+.property-clean-actions .property-action-note .notebook-comment-anchor__popover textarea {
+  min-height: 6rem;
 }
 
 .property-photo-mosaic {
@@ -5335,6 +5345,11 @@ button.oe-label-pill:focus-visible {
     width: 100%;
     justify-content: flex-start;
     flex-wrap: wrap;
+  }
+
+  .property-clean-actions .property-action-note .notebook-comment-anchor__popover {
+    right: auto;
+    left: 0;
   }
 
   .property-clean-meta {
