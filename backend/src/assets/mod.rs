@@ -24,6 +24,7 @@ pub mod osm_power;
 pub mod paths;
 pub mod planner;
 pub mod project_enrichment;
+pub mod promotion;
 pub mod reddit;
 pub mod registry;
 pub mod rera;
@@ -97,6 +98,9 @@ pub use project_enrichment::{
     ExternalListingObservationRecord, ExternalListingsWeeklyInput, ObservationSnapshotManifest,
     ProjectEnrichmentAssetError, ProjectEnrichmentMaterializer, BUILDER_RERA_AGGREGATES_ASSET_ID,
     EXTERNAL_LISTINGS_WEEKLY_ASSET_ID, EXTERNAL_LISTING_FACTS_ASSET_ID,
+};
+pub use promotion::{
+    promote_search_serving_release, ServingReleasePromotion, ServingReleasePromotionError,
 };
 pub use reddit::{
     RedditThreadSnapshotManifest, RedditThreadSnapshotMaterialization,
