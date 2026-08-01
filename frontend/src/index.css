@@ -2647,6 +2647,8 @@ body {
   transform: translateY(8px) scale(0.96);
   transition: opacity 0.55s ease, transform 0.55s ease;
 }
+
+.landing-search-intent.is-in {
   opacity: 1;
   transform: none;
 }
