@@ -4,7 +4,7 @@ import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
 import { SoftNearbyIcon } from "./ui/SoftIcons.tsx";
 import { LabelPill } from "./ui/LabelPill.tsx";
 import { propertyDetailPath } from "../lib/api.ts";
-import { filterListableProperties } from "../lib/property-filters.ts";
+import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import {
   sentimentsForAreas,
   sentimentSourceLabel,
@@ -48,8 +48,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "kadugodi-metro",
     query: "Near Kadugodi metro",
     theme: "metro",
-    intents: ["Kadugodi", "Metro", "Whitefield"],
-    motif: "",
+    intents: ["Named place", "Metro access", "Whitefield corridor"],
+    motif: "Transit intent pulls the closest Purple Line homes",
     landsOn: "Prestige Waterford",
     societyHints: ["waterford"],
     fallbackHints: ["kadugodi", "whitefield", "itpl"],
@@ -67,8 +67,8 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "large-township",
     query: "100+ acre society with lake",
     theme: "acres",
-    intents: ["100+ acres", "Lake", "Township"],
-    motif: "",
+    intents: ["Land scale", "Lake township", "Open campus"],
+    motif: "Scale + water intent lifts the large lakeside township",
     landsOn: "Prestige Lakeside Habitat",
     societyHints: ["lakeside habitat", "lakeside"],
     fallbackHints: ["habitat", "township"],
@@ -90,9 +90,9 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "quiet-family",
     query: "Quiet 3BHK near schools under 2.5Cr",
     theme: "family",
-    intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Quiet"],
-    motif: "",
-    landsOn: "Best brief match",
+    intents: ["3 BHK", "Under 2.5 Cr", "Schools", "Calm"],
+    motif: "Family life maps BHK, budget, and calm context together",
+    landsOn: "A calm 3BHK fit",
     societyHints: [],
     fallbackHints: [],
     proof: (home) => {
@@ -112,9 +112,9 @@ const SEARCH_DEMO_BEATS: SearchDemoBeat[] = [
     id: "google-proof",
     query: "Whitefield homes with strong Google reviews",
     theme: "reviews",
-    intents: ["Whitefield", "Google", "Reviews"],
-    motif: "",
-    landsOn: "Highest Google score",
+    intents: ["Whitefield", "Google proof", "Resident signal"],
+    motif: "Review strength becomes the rank axis — not a silent filter",
+    landsOn: "Strongest Google-backed home",
     societyHints: [],
     fallbackHints: ["whitefield"],
     proof: (home) => {
@@ -222,7 +222,7 @@ function FeaturedSuggestions({
     return () => window.clearInterval(timer);
   }, []);
 
-  const suggestions = filterListableProperties(properties)
+  const suggestions = uniqueSocietiesForDiscovery(properties)
     .map((property) => ({ property, labels: semanticMatchLabels(property, beat) }))
     .sort((a, b) => {
       const preferred = pickDemoHome([a.property, b.property], beat);
@@ -312,12 +312,17 @@ function SemanticSearchCanvas() {
 
   return (
     <div className={`landing-showcase landing-showcase--search is-${beat.theme}`}>
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        {beat.theme === "metro" ? "Metro" : beat.theme === "acres" ? "Scale" : beat.theme === "reviews" ? "Reviews" : "Life"}
+      </p>
+
       <div className="landing-search-stage">
         <div className={`landing-search-query${phase >= 0 ? " is-in" : ""}`} key={`q-${beat.id}`}>
+          <span>Life query</span>
           <strong>{beat.query}</strong>
         </div>
 
-        <div className="landing-search-intents" aria-label="Parsed from your ask">
+        <div className="landing-search-intents" aria-label="Parsed context">
           {beat.intents.map((intent, index) => (
             <span
               key={`${beat.id}-${intent}`}
@@ -336,7 +341,9 @@ function SemanticSearchCanvas() {
           <div className="landing-search-intent-board__icon" aria-hidden="true">
             <SoftNearbyIcon kind={iconKind} size={26} />
           </div>
+          <p className="landing-search-intent-board__motif">{beat.motif}</p>
           <p className="landing-search-intent-board__lands">
+            <span>Ranks toward</span>
             <strong>{beat.landsOn}</strong>
           </p>
         </div>
@@ -804,21 +811,19 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <FeaturedSuggestions properties={listable} onSearch={onSearch} />
 
-      <header className="landing-journey">
-        <h2>From search to a clear decision</h2>
-      </header>
-
       <article className="landing-scene landing-scene--right">
         <div className="landing-scene__copy">
           <p className="landing-scene__step">01</p>
           <h2>Search by life</h2>
-          <p>Plain language in. Ranked homes out — each with a why.</p>
+          <p>
+            Metro, acres, schools, reviews — the ask shapes rank, and each home carries a why.
+          </p>
           <button
             type="button"
             className="landing-scene__cta"
             onClick={() => onSearch(SEARCH_DEMO_BEATS[0].query)}
           >
-            Try a search
+            Try a life search
           </button>
         </div>
         <div className="landing-canvas landing-canvas--product">

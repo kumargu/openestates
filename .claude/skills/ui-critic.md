@@ -50,7 +50,9 @@ Fail when you see:
 
 Prefer:
 - title → inline meta row (`₹… · 3 BHK · 1,200 sqft · Delivered · ★ 4.4`) → quiet secondary line → media
-- sticky only for true utility chrome (composer, primary actions) — never for restating the heading facts
+- sticky price/meta typography is fine when it matches page background and has no card fill, border, shadow, or radius
+- never restating heading facts inside a second sticky shell/card
+- sticky utility chrome (composer, primary actions) stays allowed
 
 ### 2. Cards are for interaction, not decoration
 Default: no cards. A card is allowed only when it contains a user action or a discrete interactive object.
@@ -117,14 +119,21 @@ Show the headline distinction; let users drill for proof. Detail pages are asset
 ### Landing / discovery
 - Homes and facts stay findable — do not bury discovery behind capability demos.
 - Featured / results cards may carry match chips; the hero should not become a trust-stat strip.
+- **One society, one Discover card.** Browse/discovery rails show unique societies/projects — never 1BHK + 2BHK + 3BHK of the same Godrej Air side by side. That burns slots and hides other homes.
+- **BHK configs belong to search intent.** When the ask is “3BHK…”, or the user opens a society/search result set, show the relevant configurations. Discover = which places; Search = which units fit the ask.
 
 ### Search mode
 - Compact composer + chips; body swaps to results; clear restores discovery.
 - Result cards keep “why matched”; avoid a second marketing essay above them.
+- Society/BHK expansion is allowed here when the query or drill-down calls for it.
+- **Named society first, then More homes.** A query like `3bhk in waterford` puts Waterford matches in the first rail; other societies belong under **More homes**.
+- **`+` means other configs, not a wrong search.** Asked BHK card, then a small quiet `+`, then sibling config cards inline (`3BHK` + `1BHK` + `4BHK`). Never a large expand pill or bullet box.
+- Soft area/preference searches keep ranked matches in the first rail; weaker alternatives can sit under More homes. Do not re-bucket by evidence score labels when the API already sent `focus`.
 
 ### Property detail
 - Location → title → inline facts → photos → evidence.
-- No sticky meta card that travels like a note.
+- No sticky meta **card** that travels like a note.
+- Sticky price/meta typography is fine when it matches page background and has no card chrome.
 - Status/rating are words in the meta line unless a pill removes real ambiguity.
 
 ### Workspace / notebook

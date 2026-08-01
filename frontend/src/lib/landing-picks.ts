@@ -1,4 +1,7 @@
-import { filterListableProperties } from "./property-filters.ts";
+import {
+  filterListableProperties,
+  uniqueSocietiesForDiscovery,
+} from "./property-filters.ts";
 import type { AreaTrackerResponse, PropertyCard } from "./types.ts";
 
 export type LandingPick = {
@@ -55,7 +58,7 @@ export function topGoogleRatedPerArea(
   properties: PropertyCard[],
   areaNames: string[],
 ): LandingPick[] {
-  const listable = filterListableProperties(properties);
+  const listable = uniqueSocietiesForDiscovery(properties);
   const picks: LandingPick[] = [];
 
   for (const area of areaNames) {
@@ -78,7 +81,8 @@ export function landingPickRails(
   areaTracker: AreaTrackerResponse | null,
   maxPerRail = 7,
 ): LandingPickRail[] {
-  const listable = filterListableProperties(properties);
+  // Discover rails: one card per society — BHK variants belong to search.
+  const listable = uniqueSocietiesForDiscovery(properties);
   const rails: LandingPickRail[] = [];
   const topRated = [...listable]
     .filter(hasGoogleRating)

@@ -3,9 +3,11 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "browse" | "home" | "notebook" | "rera" | "plan";
+  icon: "browse" | "listing" | "notebook" | "rera" | "plan";
   to: string;
   active: boolean;
+  /** False when the item needs a focused shortlist home and none is set. */
+  available: boolean;
 };
 
 export function activeWorkspaceView(pathname: string): WorkspaceView {
@@ -22,15 +24,31 @@ export function workspaceNavItems(
   activeView: WorkspaceView,
 ): WorkspaceNavItem[] {
   const encodedId = focusedId ? encodeURIComponent(focusedId) : "";
-  const detailHref = encodedId ? `/property/${encodedId}` : "/";
-  const reraHref = encodedId ? `/property/${encodedId}/rera` : "/";
-  const planHref = encodedId ? `/property/${encodedId}/plan` : "/";
+  const hasFocus = Boolean(encodedId);
+  const detailHref = hasFocus ? `/property/${encodedId}` : "/";
+  const reraHref = hasFocus ? `/property/${encodedId}/rera` : "/";
+  const planHref = hasFocus ? `/property/${encodedId}/plan` : "/";
+
+  // Journey: Search → This home → Workspace → RERA → Plan.
+  // "This home" is the focused shortlist listing — not the app home.
   return [
-    { view: "browse" as const, label: "Discover", icon: "browse" as const, to: "/" },
-    { view: "home" as const, label: "Property", icon: "home" as const, to: detailHref },
-    { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace" },
-    { view: "rera" as const, label: "RERA", icon: "rera" as const, to: reraHref },
-    { view: "plan" as const, label: "Financial plan", icon: "plan" as const, to: planHref },
+    { view: "browse" as const, label: "Search", icon: "browse" as const, to: "/", available: true },
+    {
+      view: "home" as const,
+      label: "This home",
+      icon: "listing" as const,
+      to: detailHref,
+      available: hasFocus,
+    },
+    { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "rera" as const, label: "RERA", icon: "rera" as const, to: reraHref, available: hasFocus },
+    {
+      view: "plan" as const,
+      label: "Plan",
+      icon: "plan" as const,
+      to: planHref,
+      available: hasFocus,
+    },
   ].map((item) => ({
     ...item,
     active: item.view === activeView,

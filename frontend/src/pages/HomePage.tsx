@@ -7,8 +7,38 @@ import { SearchExperience as InlineSearchExperience } from "./SearchExperience.t
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
 
-const HERO_TITLE = "Homes ranked by the life you want";
-const HERO_SUPPORT = "Search in plain language. See why each matched — with receipts.";
+const HERO_PROMISE = "Tell us the life you want. We'll show homes with receipts.";
+
+const ROTATING_WORDS = [
+  "proof you can trust",
+  "known risks",
+  "price context",
+  "clear tradeoffs",
+];
+
+function RotatingText() {
+  const [index, setIndex] = useState(0);
+  const [fading, setFading] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) return undefined;
+    const interval = setInterval(() => {
+      setFading(true);
+      setTimeout(() => {
+        setIndex((i) => (i + 1) % ROTATING_WORDS.length);
+        setFading(false);
+      }, 400);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <span className={`home-hero__rotating${fading ? " home-hero__rotating--fading" : ""}`}>
+      {ROTATING_WORDS[index]}
+    </span>
+  );
+}
 
 /* Rotating example queries — Tab accepts the suggestion like Google/Gmail. */
 const SEARCH_EXAMPLES = [
@@ -150,11 +180,14 @@ export function HomePage() {
         {!hasActiveSearch && (
           <>
             <div className="fade-up home-hero__copy">
-              <h1 className="home-hero__title">{HERO_TITLE}</h1>
+              <h1 className="home-hero__title">
+                Discover{" "}
+                <RotatingText />
+              </h1>
             </div>
 
             <p className="fade-up fade-up-delay-1 home-hero__promise">
-              {HERO_SUPPORT}
+              {HERO_PROMISE}
             </p>
           </>
         )}

@@ -15,19 +15,27 @@ test("workspace nav follows the focused home across property views", () => {
   const items = workspaceNavItems("home one/with slash", "rera");
   const byView = new Map(items.map((item) => [item.view, item]));
 
+  assert.equal(byView.get("browse")?.label, "Search");
+  assert.equal(byView.get("home")?.label, "This home");
+  assert.equal(byView.get("notebook")?.label, "Workspace");
   assert.equal(byView.get("home")?.to, "/property/home%20one%2Fwith%20slash");
   assert.equal(byView.get("rera")?.to, "/property/home%20one%2Fwith%20slash/rera");
   assert.equal(byView.get("plan")?.to, "/property/home%20one%2Fwith%20slash/plan");
   assert.equal(byView.get("rera")?.label, "RERA");
   assert.equal(byView.get("rera")?.active, true);
   assert.equal(byView.get("home")?.active, false);
+  assert.equal(byView.get("home")?.available, true);
+  assert.equal(byView.get("rera")?.available, true);
+  assert.equal(byView.get("plan")?.available, true);
 });
 
-test("property-specific workspace links fall back to discovery without focus", () => {
+test("home-scoped nav stays unavailable without a focused shortlist home", () => {
   const items = workspaceNavItems("", "browse");
   const byView = new Map(items.map((item) => [item.view, item]));
 
-  assert.equal(byView.get("home")?.to, "/");
-  assert.equal(byView.get("rera")?.to, "/");
-  assert.equal(byView.get("plan")?.to, "/");
+  assert.equal(byView.get("browse")?.available, true);
+  assert.equal(byView.get("notebook")?.available, true);
+  assert.equal(byView.get("home")?.available, false);
+  assert.equal(byView.get("rera")?.available, false);
+  assert.equal(byView.get("plan")?.available, false);
 });

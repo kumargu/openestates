@@ -424,6 +424,7 @@ fn empty_response(query: &str) -> SearchResponse {
         results: Vec::new(),
         area_context: None,
         total_results: 0,
+        focus: None,
         knowledge_context: Some(KnowledgeContext {
             claims: Vec::new(),
             nodes_consulted: 0,

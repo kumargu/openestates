@@ -57,6 +57,7 @@ pub async fn search_properties(
             results: Vec::new(),
             area_context: None,
             total_results: 0,
+            focus: None,
             knowledge_context: None,
             search_diagnostics: None,
             relaxations: Vec::new(),
@@ -84,6 +85,7 @@ pub async fn search_properties(
                 results: Vec::new(),
                 area_context: None,
                 total_results: 0,
+                focus: None,
                 knowledge_context: None,
                 search_diagnostics: None,
                 relaxations: Vec::new(),
@@ -105,10 +107,10 @@ pub async fn search_properties(
     }
 
     let serving_facts = Some(&snapshot.bundle.fact_index);
-    let engine_output = {
+    let (engine_output, focus) = {
         let graph = state.knowledge.read().await;
 
-        SearchEngine {
+        let engine_output = SearchEngine {
             properties: &snapshot.properties,
             search_index: &snapshot.search_index,
             serving_bundle: Some(snapshot.bundle.as_ref()),
@@ -119,7 +121,20 @@ pub async fn search_properties(
             societies: &snapshot.societies,
             graph: Some(&graph),
         }
-        .search(&query)
+        .search(&query);
+
+        let focus = crate::search::build_search_result_focus(crate::search::FocusBuildInputs {
+            query: &query,
+            intent: &engine_output.intent,
+            results: &engine_output.results,
+            properties: &snapshot.properties,
+            society_names: &snapshot.society_names,
+            societies: &snapshot.societies,
+            serving_facts,
+            graph: Some(&graph),
+        });
+
+        (engine_output, focus)
     };
     let parsed_intent = engine_output.intent;
     let mut search_diagnostics = engine_output.diagnostics;
@@ -216,6 +231,7 @@ pub async fn search_properties(
         results,
         area_context,
         total_results,
+        focus,
         knowledge_context: Some(buyer_knowledge_context),
         search_diagnostics: include_diagnostics.then_some(search_diagnostics),
         relaxations,
@@ -1045,6 +1061,7 @@ mod tests {
             results: Vec::new(),
             area_context: None,
             total_results: 2,
+            focus: None,
             knowledge_context: None,
             search_diagnostics: None,
             relaxations: Vec::new(),

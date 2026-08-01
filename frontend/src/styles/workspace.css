@@ -61,17 +61,10 @@
   text-decoration: none;
 }
 
-.workspace-sidebar__brand > span {
-  display: grid;
-  width: 1.65rem;
-  height: 1.65rem;
+.workspace-sidebar__mark {
   flex: 0 0 auto;
-  place-items: center;
+  color: var(--color-accent);
   border-radius: 0.5rem;
-  background: var(--color-accent);
-  color: #fff;
-  font-size: 0.72rem;
-  font-weight: 800;
 }
 
 .workspace-sidebar__brand strong {
@@ -150,6 +143,12 @@
   background: var(--color-cool-soft);
   color: var(--color-cool-deep);
   font-weight: 700;
+}
+
+.workspace-sidebar__nav-item.is-disabled {
+  opacity: 0.42;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 .workspace-sidebar__nav-item svg {

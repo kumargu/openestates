@@ -1050,24 +1050,6 @@ function PropertyPageBody({
         <div className="property-clean-head__copy">
           <p>{p.area}, {p.city}</p>
           <h1>{displayTitle}</h1>
-          <div className="property-clean-facts" aria-label="Home summary">
-            <div className="property-clean-meta">
-              <span>₹{formatPrice(p.price)}</span>
-              <span>{p.bhk} BHK</span>
-              {sizeLabel && <span>{sizeLabel}</span>}
-              {compactStatusRead && <span>{compactStatusRead}</span>}
-              {googleRating && (
-                <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
-                  <span aria-hidden="true">★</span> {googleRating} Google
-                </span>
-              )}
-            </div>
-            <InlinePriceRangeSignal
-              area={p.area}
-              pricePerSqft={p.price_per_sqft}
-              properties={marketProperties}
-            />
-          </div>
         </div>
         <div className="property-clean-actions" aria-label="Property actions">
           <SaveHeartButton propertyId={p.id} className="property-action-link property-action-save" label="Save" />
@@ -1080,6 +1062,25 @@ function PropertyPageBody({
           />
         </div>
       </section>
+
+      <div className="property-clean-facts" aria-label="Home summary">
+        <div className="property-clean-meta">
+          <span>₹{formatPrice(p.price)}</span>
+          <span>{p.bhk} BHK</span>
+          {sizeLabel && <span>{sizeLabel}</span>}
+          {compactStatusRead && <span>{compactStatusRead}</span>}
+          {googleRating && (
+            <span className={`property-rating-pill property-rating-pill--${googleRatingTone ?? "good"}`}>
+              <span aria-hidden="true">★</span> {googleRating} Google
+            </span>
+          )}
+        </div>
+        <InlinePriceRangeSignal
+          area={p.area}
+          pricePerSqft={p.price_per_sqft}
+          properties={marketProperties}
+        />
+      </div>
 
       <PropertyPhotoMosaic
         title={displayTitle}

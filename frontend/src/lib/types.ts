@@ -1034,12 +1034,22 @@ export type SearchGuidance = {
   suggestions: string[];
 };
 
+export type SearchResultFocus = {
+  mode: "named_society" | "ranked_matches" | string;
+  society_id?: string | null;
+  society_name?: string | null;
+  focus_results: SearchResultItem[];
+  sibling_configs?: SearchResultItem[];
+  more_homes?: SearchResultItem[];
+};
+
 export type SearchResponse = {
   query: string;
   intent: SearchIntent;
   results: SearchResultItem[];
   area_context: SearchAreaContext | null;
   total_results: number;
+  focus?: SearchResultFocus | null;
   knowledge_context: KnowledgeContext | null;
   search_guidance?: SearchGuidance | null;
 };
