@@ -9,6 +9,31 @@ deterministic computation over those facts.
 
 The implementation roadmap lives in `docs/search_engine_roadmap.md`.
 
+## Proof Loop Discipline
+
+Search quality work must be evidence-led. Before adding more code, run a short
+chain audit and decide whether the existing layers still line up with the
+roadmap:
+
+1. **Audit the chain:** list relevant local commits or touched files since the
+   last search-quality checkpoint, map each to the milestone it was meant to
+   serve, and flag duplicated or bypassed paths.
+2. **Pin the evidence:** record the serving bundle, benchmark spec, API command,
+   config mode, and baseline artifact used for the run. Do not compare results
+   across different bundles without saying so.
+3. **Classify failures first:** assign each bad case to one primary bucket:
+   `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, `embedding_gap`, or
+   `architecture_gap`.
+4. **Change one layer:** make the smallest generic/config-driven change that
+   addresses the dominant bucket. Avoid query-specific patches.
+5. **Rerun and decide:** keep the change only if it improves a stated metric,
+   preserves safety, and does not introduce a hardcoding regression. Otherwise
+   revert or leave it behind an explicitly experimental flag.
+
+Every benchmark markdown should include a short "proof-loop decision" section:
+`keep`, `revert`, `shadow_only`, or `needs_more_data`, with the reason. This is
+how we avoid piling code that is not improving search.
+
 ## Bar
 
 1. Intent parsing captures hard constraints and soft tradeoffs from natural
@@ -121,6 +146,10 @@ ranking weights:
 5. `embedding_gap`: the query and document are semantically related, the data
    exists, the intent/proof wiring is adequate, but semantic recall still misses
    the candidate. This is the real model-quality failure bucket.
+6. `architecture_gap`: the code path works for a case but is in the wrong layer,
+   duplicates another layer, bypasses DAG/config ownership, or cannot explain
+   itself through the shared proof contract. This bucket blocks more feature
+   work until the chain is simplified or documented as a temporary shim.
 
 This matters because embeddings cannot fix missing facts, and DAG collection
 cannot fix weak query parsing. The benchmark report should make that separation

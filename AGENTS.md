@@ -165,6 +165,13 @@ Every new discovery behavior should be testable with fuzzy/user-like queries and
 
 When fixing a search example, add regression coverage for the generic intent class, not only the named example. A query like "near Bagmane" may expose the issue, but the test should prove named-place intent, numeric constraints, source-backed preferences, and tie-break ordering continue to work for arbitrary configured dimensions.
 
+Search work must run as a proof loop, not as accumulated code:
+- Start each search-quality session with a chain audit: list the relevant local commits or touched files, map them to the current milestone, and call out anything that looks like duplicated, bypassed, or accidentally productized experimental behavior.
+- Run the current benchmark or a focused contract before changing behavior, unless the task is pure documentation. Keep the baseline artifact path in the notes.
+- Classify every miss as `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, `embedding_gap`, or `architecture_gap` before changing ranking, parser logic, config, or embeddings.
+- Make one small architectural change at a time, then rerun the same benchmark/contract. Keep the change only if it improves a stated metric or removes a verified hardcoding/architecture regression without search-quality loss.
+- If the benchmark does not improve, either revert the behavior change or document why it is purely structural and what follow-up proof will validate it. Do not pile follow-on code on an unproven layer.
+
 ### Search execution must stay ontology-driven
 Search cleanup has one non-negotiable rule: **the runtime may contain generic mechanics, but not product vocabulary branches**. If code in `backend/src/search/`, `backend/src/routes/search.rs`, or frontend search/result rendering starts to say "if hospital", "if metro", "if nearby_schools", "if water issue", or `match fact_key`, treat that as a hardcoding regression unless it is a temporary compatibility shim with a tracked removal plan.
 

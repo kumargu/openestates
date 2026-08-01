@@ -59,6 +59,45 @@ backend/src/search/
 The existing `text.rs` should be drained gradually. It remains the compatibility
 path until each layer is proven by tests.
 
+## Proof Loop
+
+Search improvements must move through a small proof loop instead of accumulating
+unverified code:
+
+```text
+chain audit
+  -> pinned baseline benchmark
+  -> failure bucket classification
+  -> one generic/config-driven change
+  -> same benchmark again
+  -> keep / revert / shadow-only decision
+```
+
+The chain audit is mandatory before each new milestone slice. It should answer:
+
+- Which local commits or touched files are part of the current search chain?
+- Which milestone does each change support?
+- Did any experimental path become default product behavior without a passing
+  parity or quality gate?
+- Are there two paths doing the same job, such as two resolvers, two fact
+  mappings, or two proof contracts?
+- Did any code add product vocabulary that belongs in `app/config/dag/` or DAG
+  facts?
+- Does the UI/search proof contract still point to the same evidence shape?
+
+Each loop must classify failures as `data_gap`, `intent_gap`, `proof_gap`,
+`ranking_gap`, `embedding_gap`, or `architecture_gap` before changing code.
+`architecture_gap` means the behavior may work locally, but the layer boundary
+is wrong, duplicated, unmeasurable, or not aligned with DAG/config ownership.
+
+The benchmark artifact should record the proof-loop decision:
+
+- `keep`: metric improved or architecture simplified with no quality loss.
+- `revert`: behavior failed or made quality worse.
+- `shadow_only`: useful signal, but not approved for product ranking/proof yet.
+- `needs_more_data`: the right next step is DAG/source enrichment, not runtime
+  code.
+
 ## Scoring Contract
 
 The ranker should score every candidate with explicit components:
@@ -138,8 +177,11 @@ Quality gates:
 - Query bank loads through `case_files`.
 - No duplicate query IDs.
 - Current scoreable benchmark remains reproducible.
+- Chain audit maps existing search commits/files to roadmap milestones and
+  identifies any duplicate or experimental paths before new code lands.
 - Every failed benchmark case is assignable to one primary bucket:
-  `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, or `embedding_gap`.
+  `data_gap`, `intent_gap`, `proof_gap`, `ranking_gap`, `embedding_gap`, or
+  `architecture_gap`.
 
 Measurement:
 
@@ -446,6 +488,61 @@ Latency gates:
 - 10k-property p95 `<200ms`.
 - 100k-property p95 target defined before expanding inventory that far.
 
+### M9: Search/UI Evidence Convergence
+
+Goal: search results and property detail pages should use the same proof
+contract for RERA, project milestones, pricing, nearby places, and other
+DAG-backed evidence.
+
+Deliverables:
+
+- Result reasons carry stable proof focus handles: `surface_id`, `layer_id`,
+  `fact_key`, source handle, matched label, value/distance, requested
+  constraint, and reason.
+- Property detail UI can open/focus the same evidence without re-parsing the
+  query or adding fact-key-specific UI branches.
+- RERA/project proof used in property pages is scoreable/searchable through the
+  same serving facts and config ownership.
+
+Quality gates:
+
+- Search-to-detail handoff works for at least RERA/legal, price/listing,
+  nearby-place, and review/community proof classes.
+- Direct property visits still show normal default evidence; search focus is
+  additive and never hides existing facts.
+- No one-off frontend or Rust branches such as "if hospital", "if RERA", or
+  "if Google review" for product semantics.
+
+### M10: Curated Review and External Evidence Design
+
+Goal: design how Google/community/RERA-derived evidence can support both search
+and UI without polluting either surface with noisy or weak claims.
+
+This milestone stays design-first until the proof contract and quality gates are
+reviewed. Google review curation is intentionally not a simple ingestion task:
+reviews must be scoped, deduplicated, confidence-rated, source-backed, and
+separated from stronger RERA/listing facts.
+
+Deliverables:
+
+- Evidence taxonomy for review-derived claims: maintenance, noise, water,
+  approach road, builder conduct, amenities, safety, and sentiment.
+- Confidence/source policy that prevents reviews from overriding stronger RERA,
+  listing, transaction, or verified project facts.
+- Storage contract for curated snippets/themes as DAG facts, including source
+  URL/place id, quote/snippet handle, freshness, confidence, and surface
+  eligibility.
+- Search usage policy: review evidence can support context and proof only when
+  scoped and confidence-qualified; it cannot become a hidden ranking shortcut.
+
+Quality gates:
+
+- Curated review facts remain distinguishable from authoritative project facts.
+- Search and UI consume the same structured evidence object.
+- No request-time Google calls or LLM calls in `/api/search`.
+- Benchmark cases prove review evidence helps supported review/community
+  queries without hurting legal/RERA/price proof precision.
+
 ## Test Strategy
 
 Use three complementary test layers:
@@ -464,10 +561,19 @@ Each milestone should improve at least one measured metric without regressing:
 - p50/p95 total latency
 - p95 latency by layer
 - number of data-gap cases that graduate to data-backed
+- number of architecture gaps removed from the chain audit
 
 ## Immediate Next Step
 
-Build M1 first. Add the `SearchEngine` facade, candidate score model, recall
-channel attribution, and layer timing while keeping the existing ranking output
-stable. This creates the measurement harness we need before changing ranking or
-geo behavior.
+Run the next proof-loop session before adding more search code:
+
+1. Audit the actual local chain on the active branch: ontology-scaling,
+   source-truth/lineage fixes, search facade/timing, intent parser changes,
+   semantic recall behavior, and proof/reason surfacing.
+2. Pin the current promoted bundle and run the benchmark once as the baseline.
+3. Classify remaining failures. If recall/name/place misses dominate, continue
+   with M3. If recall is healthy but reasons are missing, take a narrow M5 proof
+   surfacing slice before broad M3 work. If missing data dominates, stop runtime
+   work and feed M7/DAG enrichment.
+4. Make one generic/config-driven change, rerun the same benchmark, and record
+   `keep`, `revert`, `shadow_only`, or `needs_more_data`.
