@@ -54,7 +54,7 @@ pub struct MatchReason {
 /// How a user preference was handled during scoring.
 #[derive(Debug, Clone, Serialize)]
 pub struct PreferenceCoverage {
-    /// The user preference, e.g. "metro access"
+    /// The user preference label from config or parsed intent.
     pub preference: String,
     /// "matched" (score > 0.5), "partial" (score > 0), "no_data"
     pub status: String,

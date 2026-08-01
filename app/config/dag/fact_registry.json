@@ -255,6 +255,7 @@
         "patterns": [
           "school",
           "schools",
+          "academy",
           "school access",
           "school bus",
           "kids",
@@ -1208,6 +1209,7 @@
       "layer": "infrastructure",
       "intent_terms": [
         "school",
+        "academy",
         "metro",
         "hospital",
         "gym",
@@ -3238,6 +3240,7 @@
         "nearby",
         "near by",
         "school",
+        "academy",
         "hospital",
         "tech park",
         "office",

@@ -140,9 +140,9 @@
       "title": "Start with the home you are looking for.",
       "message": "Tell me a city, area, budget, BHK, or the kind of daily life you want.",
       "suggestions": [
-        "3BHK Whitefield under 2Cr",
+        "3BHK East Bengaluru under 2Cr",
         "Quiet home for parents near hospital",
-        "Avoid water issues near Sarjapur Road"
+        "Avoid water issues near tech parks"
       ]
     },
     "too_short": {
@@ -151,7 +151,7 @@
       "message": "Try adding an area, BHK, budget, commute need, school, hospital, or risk you want to avoid.",
       "suggestions": [
         "2BHK near metro under 1.2Cr",
-        "Safe legal paperwork in Whitefield",
+        "Safe legal paperwork in East Bengaluru",
         "Avoid tanker dependency"
       ]
     },
@@ -161,7 +161,7 @@
       "message": "I can help with property search, area tradeoffs, commute, schools, hospitals, legal safety, water risk, maintenance, and investment signals.",
       "suggestions": [
         "Help me find a family home",
-        "Compare Whitefield vs Sarjapur for family",
+        "Compare East Bengaluru vs South Bengaluru for family",
         "Show homes with low legal and water risk"
       ]
     },
@@ -170,7 +170,7 @@
       "title": "I can help, but this is a decision brief first.",
       "message": "Tell me your city, rough budget, monthly rent, and how long you expect to stay. Then I can turn it into a search plan.",
       "suggestions": [
-        "Buy or rent in Whitefield with 2Cr budget",
+        "Buy or rent in East Bengaluru with 2Cr budget",
         "3BHK for own stay for 7 years",
         "Investment flat vs renting near office"
       ]
@@ -180,7 +180,7 @@
       "title": "What kind of home should I optimize for?",
       "message": "Add one anchor: area, budget, BHK, commute, school, hospital, legal safety, water risk, maintenance, or investment goal.",
       "suggestions": [
-        "3BHK Whitefield under 2Cr for family",
+        "3BHK East Bengaluru under 2Cr for family",
         "Quiet home for parents near hospital",
         "Investment 2BHK near tech parks"
       ]
@@ -190,7 +190,7 @@
       "title": "Are you looking for a home?",
       "message": "I did not see a home-search anchor. Add an area, budget, BHK, place, or concern and I will search against proof-backed facts.",
       "suggestions": [
-        "Near metro in Whitefield",
+        "Near metro in East Bengaluru",
         "Legal-safe apartment under 1.5Cr",
         "Avoid waterlogging and tanker issues"
       ]
@@ -210,7 +210,7 @@
       "title": "No proof-backed matches for this search yet.",
       "message": "I understood the home search, but the current evidence set has no matching apartments. Remove one constraint or search by the strongest anchor first.",
       "suggestions": [
-        "3BHK Whitefield",
+        "3BHK East Bengaluru",
         "Family home near metro",
         "Legal-safe apartment under 1.5Cr"
       ]

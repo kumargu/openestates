@@ -4,9 +4,9 @@
   "categories": [
     {
       "fact_key": "nearby_schools",
-      "category_aliases": ["school", "schools"],
+      "category_aliases": ["school", "schools", "academy"],
       "display_label": "Nearby schools",
-      "answers_preferences": ["nearby", "school", "schools", "family friendly"],
+      "answers_preferences": ["nearby", "school", "schools", "academy", "family friendly"],
       "relation_class": "access",
       "chainable": true,
       "max_distance_km": 5.0,

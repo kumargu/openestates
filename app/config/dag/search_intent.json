@@ -83,7 +83,7 @@
       {
         "id": "school",
         "label": "school",
-        "aliases": ["school", "schools", "kid school", "children school"]
+        "aliases": ["school", "schools", "academy", "kid school", "children school"]
       },
       {
         "id": "hospital",

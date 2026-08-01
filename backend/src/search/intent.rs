@@ -654,6 +654,12 @@ mod tests {
         assert!(has_expanded_positive_key(&school, "nearby_schools"));
         assert!(has_expanded_positive_key(&school, "social_infra_score"));
 
+        let academy = parse_intent("home near northstar academy");
+        assert!(
+            has_expanded_positive_key(&academy, "nearby_schools"),
+            "academy should be handled as a generic school-family place type"
+        );
+
         let metro = parse_intent("2bhk near metro for office commute");
         assert!(has_expanded_positive_key(
             &metro,
@@ -1202,7 +1208,10 @@ mod tests {
             parse_intent("need legal clarity more than discount, no builder delivery issues");
         assert!(has_positive_label(&delivery, "legal safety"));
         assert!(has_negative_label(&delivery, "builder trust"));
-        assert!(has_expanded_negative_key(&delivery, "delivery_track_record"));
+        assert!(has_expanded_negative_key(
+            &delivery,
+            "delivery_track_record"
+        ));
     }
 
     #[test]
