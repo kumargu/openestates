@@ -64,9 +64,15 @@ pub struct Property {
 }
 
 impl Property {
-    /// Buyer-facing surfaces should only show homes with a real asking price.
+    /// Buyer-facing surfaces can show priced homes, or explicit project
+    /// configurations whose price is still unavailable.
     pub fn is_listable(&self) -> bool {
         self.price > 0
+            || (self.bhk > 0
+                && self
+                    .transparency_tags
+                    .iter()
+                    .any(|tag| tag.eq_ignore_ascii_case("Price unavailable")))
     }
 }
 

@@ -12,6 +12,7 @@ offer one-click navigation.
 import json
 import logging
 import os
+import re
 import time
 import urllib.parse
 import urllib.error
@@ -66,7 +67,7 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
 
     skill_id = "fetch_google_review_links"
     description = "Collect Google Maps review links and place metadata without LLMs."
-    version = "1.3"
+    version = "1.6"
     output_keys = [
         "google_reviews_url",
         "google_place_id",
@@ -87,10 +88,11 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
         return super()._cache_key(cache_input)
 
     def execute(self, input_data: dict) -> SkillResult:
-        query = build_place_query(input_data)
-        if not query:
+        queries = place_query_variants(input_data)
+        if not queries:
             logger.warning("fetch_google_review_links requires name/society_name/query")
             return SkillResult(confidence=0.0)
+        query = queries[0]["query"]
 
         place_id = clean_text(input_data.get("google_place_id"))
         if place_id:
@@ -111,29 +113,54 @@ class FetchGoogleReviewLinksSkill(BaseSkill):
 
         places_key = google_places_api_key()
         if places_key:
-            payload = fetch_google_places_text_search(query, places_key, max_result_count=5)
-            resolution = resolve_google_project_place(payload, input_data)
-            place = resolution.get("place") if resolution["status"] == "accepted" else None
-            if place:
-                place_payload = google_places_to_place_payload(query, place)
-                api_calls = 1
-                place_id = clean_text(place_payload.get("place_id"))
-                if place_id:
-                    details = fetch_google_place_details_if_available(place_id, places_key)
-                    if details:
-                        api_calls += 1
-                        place_payload.update(google_places_to_place_payload(query, details))
-                return place_to_skill_result(
-                    query,
-                    place_payload,
-                    api_calls=api_calls,
-                    fetch_source="google_places_text_search",
+            api_calls = 0
+            resolution_log = []
+            for query_plan in queries:
+                candidate_query = query_plan["query"]
+                payload = fetch_google_places_text_search(
+                    candidate_query,
+                    places_key,
+                    max_result_count=5,
+                )
+                api_calls += 1
+                resolution = resolve_google_project_place(
+                    payload,
+                    query_plan.get("resolution_input") or input_data,
+                )
+                place = (
+                    resolution.get("place")
+                    if resolution["status"] == "accepted"
+                    else None
+                )
+                if place:
+                    place_payload = google_places_to_place_payload(candidate_query, place)
+                    place_id = clean_text(place_payload.get("place_id"))
+                    if place_id:
+                        details = fetch_google_place_details_if_available(
+                            place_id, places_key
+                        )
+                        if details:
+                            api_calls += 1
+                            place_payload.update(
+                                google_places_to_place_payload(candidate_query, details)
+                            )
+                    return place_to_skill_result(
+                        candidate_query,
+                        place_payload,
+                        api_calls=api_calls,
+                        fetch_source="google_places_text_search",
+                    )
+                resolution_log.append(
+                    "{} -> {} ({})".format(
+                        candidate_query,
+                        resolution["status"],
+                        "; ".join(resolution["reasons"]),
+                    )
                 )
             logger.info(
-                "Google Places did not resolve an accepted place for %s: %s (%s)",
+                "Google Places did not resolve an accepted place for %s: %s",
                 query,
-                resolution["status"],
-                "; ".join(resolution["reasons"]),
+                " | ".join(resolution_log),
             )
 
         serpapi_key = serpapi_api_key()
@@ -172,6 +199,106 @@ def build_place_query(input_data: dict) -> str:
         if value and value.lower() not in name.lower():
             parts.append(value)
     return " ".join(parts)
+
+
+def strip_project_phase_suffix(value: str) -> str:
+    """Return the buyer-facing project name without trailing RERA phase suffixes."""
+    name = clean_text(value)
+    if not name:
+        return ""
+    stripped = re.sub(
+        r"\s+(?:phase|ph)\s*[-:]?\s*(?:[ivxlcdm]+|\d+[a-z]?)"
+        r"(?:\s*(?:,|/|&|and)\s*(?:[ivxlcdm]+|\d+[a-z]?))*\b.*$",
+        "",
+        name,
+        flags=re.IGNORECASE,
+    ).strip(" -:,.")
+    return stripped or name
+
+
+def place_query_variants(input_data: dict) -> List[Dict[str, Any]]:
+    """Ordered Google project resolution attempts.
+
+    Exact RERA/project name is always first. Broader phase/address evidence is
+    only tried after that pass fails.
+    """
+    primary = build_place_query(input_data)
+    if not primary:
+        return []
+
+    variants = []
+    seen = set()
+
+    def add_variant(query: str, resolution_input: dict, strategy: str) -> None:
+        normalized = clean_text(query)
+        if not normalized or normalized.lower() in seen:
+            return
+        variants.append(
+            {
+                "query": normalized,
+                "resolution_input": resolution_input,
+                "strategy": strategy,
+            }
+        )
+        seen.add(normalized.lower())
+
+    add_variant(primary, input_data, "exact_name")
+    raw_name = clean_text(
+        input_data.get("society_name")
+        or input_data.get("name")
+        or input_data.get("project_name")
+    )
+    base_name = strip_project_phase_suffix(raw_name)
+    has_phase_suffix = bool(
+        base_name and raw_name and base_name.lower() != raw_name.lower()
+    )
+    base_input = None
+    if has_phase_suffix:
+        base_input = dict(input_data)
+        for key in ("society_name", "name", "project_name"):
+            if clean_text(base_input.get(key)):
+                base_input[key] = base_name
+        base_query = build_place_query(base_input)
+        add_variant(base_query, base_input, "phase_stripped_name")
+
+    city = clean_text(input_data.get("city")) or "Bengaluru"
+    if raw_name and city:
+        add_variant(
+            "{} {}".format(raw_name, city),
+            input_data,
+            "city_only_name",
+        )
+    if has_phase_suffix and base_input and city:
+        add_variant(
+            "{} {}".format(base_name, city),
+            base_input,
+            "phase_stripped_city_only_name",
+        )
+
+    address = clean_text(
+        input_data.get("address") or input_data.get("rera_project_address")
+    )
+    if address:
+        pre_address_variants = list(variants)
+        if raw_name:
+            add_variant(
+                "{} {}".format(raw_name, address),
+                input_data,
+                "name_with_address",
+            )
+        if has_phase_suffix and base_input:
+            add_variant(
+                "{} {}".format(base_name, address),
+                base_input,
+                "phase_stripped_name_with_address",
+            )
+        for parent in pre_address_variants:
+            add_variant(
+                "{} {}".format(parent["query"], address),
+                parent["resolution_input"],
+                "{}_with_address".format(parent["strategy"]),
+            )
+    return variants
 
 
 def serpapi_api_key() -> str:
@@ -412,9 +539,17 @@ def evaluate_google_project_place(place: dict, input_data: dict) -> Dict[str, An
     place_types = google_place_types(place)
     rejected_types = normalized_config_values(policy.get("rejected_place_types"))
     accepted_types = normalized_config_values(policy.get("accepted_place_types"))
-    if place_types & rejected_types:
+    rejected_type_match = bool(place_types & rejected_types)
+    broad_place_types = {"establishment", "point_of_interest", "premise"}
+    specific_accepted_types = accepted_types - broad_place_types
+    if place_types & specific_accepted_types:
+        type_match = 1.0
+    elif place_types & accepted_types:
+        type_match = float(policy.get("broad_place_type_score") or 1.0)
+    else:
+        type_match = 0.0
+    if rejected_type_match and not (place_types & specific_accepted_types):
         reasons.append("rejected_place_type")
-    type_match = 1.0 if place_types & accepted_types else 0.0
     if not type_match:
         reasons.append("place_type_not_accepted")
 
@@ -436,6 +571,25 @@ def evaluate_google_project_place(place: dict, input_data: dict) -> Dict[str, An
         + locality_match * float(weights.get("locality") or 0.0)
         + type_match * float(weights.get("place_type") or 0.0)
     )
+    subplace_tokens = normalized_config_values(policy.get("demoted_name_tokens"))
+    if subplace_tokens:
+        expected_tokens = normalized_name_tokens(
+            expected_name,
+            policy.get("ignored_name_tokens") or [],
+        )
+        actual_tokens = normalized_name_tokens(
+            google_place_display_name(place),
+            policy.get("ignored_name_tokens") or [],
+        )
+        matched_subplace_tokens = sorted(
+            (actual_tokens - expected_tokens) & subplace_tokens
+        )
+        if matched_subplace_tokens:
+            penalty = float(policy.get("demoted_name_token_penalty") or 0.0)
+            score = max(0.0, score - penalty)
+            reasons.append(
+                "demoted_name_tokens:{}".format(",".join(matched_subplace_tokens))
+            )
     if score < float(policy.get("minimum_score") or 0.0):
         reasons.append("score_below_threshold")
     eligible = not any(
@@ -477,20 +631,25 @@ def google_place_resolution_policy() -> Dict[str, Any]:
 
 
 def token_recall(expected: str, actual: str, ignored_tokens: List[str]) -> float:
-    ignored = {normalize_match_token(token) for token in ignored_tokens}
-    expected_tokens = {
-        normalize_match_token(token)
-        for token in expected.split()
-        if normalize_match_token(token) and normalize_match_token(token) not in ignored
-    }
-    actual_tokens = {
-        normalize_match_token(token)
-        for token in actual.split()
-        if normalize_match_token(token) and normalize_match_token(token) not in ignored
-    }
+    expected_tokens = normalized_name_tokens(expected, ignored_tokens)
+    actual_tokens = normalized_name_tokens(actual, ignored_tokens)
     if not expected_tokens:
         return 0.0
     return len(expected_tokens & actual_tokens) / float(len(expected_tokens))
+
+
+def normalized_name_tokens(value: str, ignored_tokens: List[str]) -> set:
+    ignored = {normalize_match_token(token) for token in ignored_tokens}
+    tokens = set()
+    for token in value.split():
+        normalized = normalize_match_token(token)
+        if (
+            normalized
+            and normalized not in ignored
+            and any(character.isalpha() for character in normalized)
+        ):
+            tokens.add(normalized)
+    return tokens
 
 
 def normalize_match_token(value: str) -> str:

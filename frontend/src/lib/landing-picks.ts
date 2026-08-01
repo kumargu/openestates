@@ -18,17 +18,24 @@ export type LandingPickRail = {
 function hasGoogleRating(
   property: PropertyCard,
 ): property is PropertyCard & { google_rating: number } {
-  return typeof property.google_rating === "number" && property.google_rating > 0;
+  return (
+    typeof property.google_rating === "number" && property.google_rating > 0
+  );
 }
 
 function compareGoogleRank(a: PropertyCard, b: PropertyCard): number {
   const ratingDelta = (b.google_rating ?? 0) - (a.google_rating ?? 0);
   if (ratingDelta !== 0) return ratingDelta;
 
-  const reviewDelta = (b.google_review_count ?? 0) - (a.google_review_count ?? 0);
+  const reviewDelta =
+    (b.google_review_count ?? 0) - (a.google_review_count ?? 0);
   if (reviewDelta !== 0) return reviewDelta;
 
-  return a.price - b.price;
+  return comparablePrice(a.price) - comparablePrice(b.price);
+}
+
+function comparablePrice(price: number): number {
+  return price > 0 ? price : Number.MAX_SAFE_INTEGER;
 }
 
 export function areaNamesForLandingPicks(
@@ -98,7 +105,10 @@ export function landingPickRails(
     });
   }
 
-  const areaNames = areaNamesForLandingPicks(areaTracker, properties).slice(0, 4);
+  const areaNames = areaNamesForLandingPicks(areaTracker, properties).slice(
+    0,
+    4,
+  );
   for (const area of areaNames) {
     const picks = listable
       .filter((property) => property.area === area)

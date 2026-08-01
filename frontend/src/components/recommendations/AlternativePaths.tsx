@@ -16,13 +16,27 @@ import {
 } from "../evidence/EvidenceIcons.tsx";
 
 type RecommendationItem =
-  | { kind: "branch"; id: string; property: PropertyCard; branch: RecommendationBranch }
+  | {
+      kind: "branch";
+      id: string;
+      property: PropertyCard;
+      branch: RecommendationBranch;
+    }
   | { kind: "nearby"; id: string; property: PropertyCard };
 
 function formatPrice(price: number): string {
+  if (!hasKnownNumber(price)) return "Price unavailable";
   if (price >= 1_00_00_000) return `₹${(price / 1_00_00_000).toFixed(2)} Cr`;
   if (price >= 1_00_000) return `₹${(price / 1_00_000).toFixed(1)} L`;
   return `₹${price.toLocaleString("en-IN")}`;
+}
+
+function hasKnownNumber(value: number | null | undefined): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+function comparablePrice(price: number): number {
+  return hasKnownNumber(price) ? price : Number.MAX_SAFE_INTEGER;
 }
 
 const LENS_META: Record<
@@ -42,7 +56,10 @@ function reviewStrength(property: PropertyCard): number {
   return rating * 100 + Math.log10(reviewCount + 1) * 12;
 }
 
-function rankedItems(branches: RecommendationBranch[], nearby: PropertyCard[]): RecommendationItem[] {
+function rankedItems(
+  branches: RecommendationBranch[],
+  nearby: PropertyCard[],
+): RecommendationItem[] {
   const usedIds = new Set(branches.map((branch) => branch.property.id));
   const branchItems: RecommendationItem[] = branches.map((branch) => ({
     kind: "branch",
@@ -60,13 +77,17 @@ function rankedItems(branches: RecommendationBranch[], nearby: PropertyCard[]): 
 
   return [...branchItems, ...nearbyItems]
     .sort((left, right) => {
-      const reviewDelta = reviewStrength(right.property) - reviewStrength(left.property);
+      const reviewDelta =
+        reviewStrength(right.property) - reviewStrength(left.property);
       if (Math.abs(reviewDelta) > 0.001) return reviewDelta;
       const branchDelta =
-        (right.kind === "branch" ? right.branch.magnitude : 0)
-        - (left.kind === "branch" ? left.branch.magnitude : 0);
+        (right.kind === "branch" ? right.branch.magnitude : 0) -
+        (left.kind === "branch" ? left.branch.magnitude : 0);
       if (Math.abs(branchDelta) > 0.001) return branchDelta;
-      return left.property.price - right.property.price;
+      return (
+        comparablePrice(left.property.price) -
+        comparablePrice(right.property.price)
+      );
     })
     .slice(0, 6);
 }
@@ -88,18 +109,22 @@ function RecommendationCard({
     heroImage: property.hero_image,
     societyId: property.kg_entity_refs?.society_entity_id,
   });
-  const cardImage = propertySceneImageAt(images, sceneIndex, property.hero_image);
+  const cardImage = propertySceneImageAt(
+    images,
+    sceneIndex,
+    property.hero_image,
+  );
   const Icon = badge
     ? Object.values(LENS_META).find((meta) => meta.gainLabel === badge)?.icon
     : undefined;
-  const meta = [
-    property.society_name,
-    property.area,
-    `${property.bhk} BHK`,
-  ].filter(Boolean).join(" · ");
+  const meta = [property.society_name, property.area, `${property.bhk} BHK`]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <article className={`catalog-card alt-paths__card alt-paths__card--${spine}`}>
+    <article
+      className={`catalog-card alt-paths__card alt-paths__card--${spine}`}
+    >
       <Link to={`/property/${property.id}`} className="catalog-card__link">
         <div className="catalog-card__media alt-paths__media">
           <ImageWithFallback
@@ -121,7 +146,9 @@ function RecommendationCard({
           <h3 className="catalog-card__title">{property.title}</h3>
           <p className="catalog-card__meta">{meta}</p>
           <div className="catalog-card__foot alt-paths__foot">
-            <span className="catalog-card__price">{formatPrice(property.price)}</span>
+            <span className="catalog-card__price">
+              {formatPrice(property.price)}
+            </span>
             {note ? <span className="alt-paths__note">{note}</span> : null}
           </div>
         </div>
@@ -146,9 +173,10 @@ export function AlternativePaths({
   const societySceneCounts = new Map<string, number>();
   const sceneIndexes = new Map<string, number>();
   for (const item of items) {
-    const societyKey = item.property.kg_entity_refs?.society_entity_id
-      ?? item.property.society_name
-      ?? item.property.id;
+    const societyKey =
+      item.property.kg_entity_refs?.society_entity_id ??
+      item.property.society_name ??
+      item.property.id;
     const sceneIndex = societySceneCounts.get(societyKey) ?? 0;
     sceneIndexes.set(item.id, sceneIndex);
     societySceneCounts.set(societyKey, sceneIndex + 1);
@@ -157,7 +185,11 @@ export function AlternativePaths({
   if (total === 0 && status !== "pending") return null;
 
   return (
-    <section className="alt-paths" title={runtimeLabel} aria-label="Homes that may interest you">
+    <section
+      className="alt-paths"
+      title={runtimeLabel}
+      aria-label="Homes that may interest you"
+    >
       <div className="property-section-heading">
         <span>Continue exploring</span>
         <h2>May interest you</h2>
@@ -171,7 +203,7 @@ export function AlternativePaths({
             <div className="alt-paths__skeleton" aria-hidden="true" />
           </>
         )}
-        {items.map((item) => (
+        {items.map((item) =>
           item.kind === "branch" ? (
             <RecommendationCard
               key={item.id}
@@ -188,8 +220,8 @@ export function AlternativePaths({
               note={`Same area · ${item.property.bhk} BHK`}
               sceneIndex={sceneIndexes.get(item.id) ?? 0}
             />
-          )
-        ))}
+          ),
+        )}
       </div>
     </section>
   );

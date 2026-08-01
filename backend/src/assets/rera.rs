@@ -524,20 +524,35 @@ fn canonical_rows(projects: &[ReraProjectSnapshotRecord]) -> CanonicalSocietyRow
     let mut entities = BTreeMap::<String, KgViewEntityRecord>::new();
     let mut edges = BTreeMap::<(String, String, String), KgViewEdgeRecord>::new();
     let mut mappings = BTreeMap::<String, ReraCanonicalMappingRecord>::new();
+    let canonical_names = phase_canonical_names(projects);
+    let phase_group_slugs = canonical_names
+        .values()
+        .filter(|candidate| candidate.phase_stripped)
+        .map(|candidate| candidate.slug.clone())
+        .collect::<BTreeSet<_>>();
     let mut name_counts = BTreeMap::<String, usize>::new();
     for project in projects {
         *name_counts.entry(slug(&project.project_name)).or_default() += 1;
     }
     for project in projects {
-        let society_id = project.society_entity_id();
         let project_key = project.project_key();
+        let canonical_name = canonical_names
+            .get(&project_key)
+            .cloned()
+            .unwrap_or_else(|| CanonicalName::from_project(&project.project_name));
+        let should_group_phase = phase_group_slugs.contains(&canonical_name.slug);
+        let society_id = if should_group_phase {
+            format!("society:{}", canonical_name.slug)
+        } else {
+            project.society_entity_id()
+        };
         let name_slug = slug(&project.project_name);
         mappings.insert(
             project_key.clone(),
             ReraCanonicalMappingRecord {
                 project_key,
                 canonical_entity_id: society_id.clone(),
-                alias_entity_id: (name_counts.get(&name_slug) == Some(&1))
+                alias_entity_id: (!should_group_phase && name_counts.get(&name_slug) == Some(&1))
                     .then(|| format!("society:{name_slug}")),
                 project_name: project.project_name.clone(),
                 registration_number: project.registration_number.clone(),
@@ -548,7 +563,7 @@ fn canonical_rows(projects: &[ReraProjectSnapshotRecord]) -> CanonicalSocietyRow
             &mut entities,
             society_id.clone(),
             "society",
-            &project.project_name,
+            &canonical_name.name,
             project.fetched_at,
         );
         if let Some(area_name) = nonempty(project.area_name.as_deref()) {
@@ -591,6 +606,77 @@ fn canonical_rows(projects: &[ReraProjectSnapshotRecord]) -> CanonicalSocietyRow
         edges: edges.into_values().collect(),
         mappings: mappings.into_values().collect(),
     }
+}
+
+#[derive(Debug, Clone)]
+struct CanonicalName {
+    name: String,
+    slug: String,
+    phase_stripped: bool,
+}
+
+impl CanonicalName {
+    fn from_project(project_name: &str) -> Self {
+        let name = strip_project_phase_suffix(project_name);
+        Self {
+            slug: slug(&name),
+            phase_stripped: slug(&name) != slug(project_name),
+            name,
+        }
+    }
+}
+
+fn phase_canonical_names(
+    projects: &[ReraProjectSnapshotRecord],
+) -> BTreeMap<String, CanonicalName> {
+    projects
+        .iter()
+        .map(|project| {
+            (
+                project.project_key(),
+                CanonicalName::from_project(&project.project_name),
+            )
+        })
+        .collect()
+}
+
+fn strip_project_phase_suffix(value: &str) -> String {
+    let name = value.trim();
+    if name.is_empty() {
+        return String::new();
+    }
+    let parts = name.split_whitespace().collect::<Vec<_>>();
+    for (index, part) in parts.iter().enumerate() {
+        let token = slug(part);
+        let has_inline_designator = token.starts_with("phase-") || token.starts_with("ph-");
+        let has_next_designator = token == "phase"
+            && parts
+                .get(index + 1)
+                .map(|next| is_phase_designator(&slug(next)))
+                .unwrap_or(false);
+        if index > 0 && (has_inline_designator || has_next_designator) {
+            return parts[..index]
+                .join(" ")
+                .trim_matches(['-', ':', ',', '.'])
+                .to_string();
+        }
+    }
+    name.to_string()
+}
+
+fn is_phase_designator(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    value
+        .chars()
+        .next()
+        .map(|ch| ch.is_ascii_digit())
+        .unwrap_or(false)
+        || matches!(
+            value,
+            "i" | "ii" | "iii" | "iv" | "v" | "vi" | "vii" | "viii" | "ix" | "x"
+        )
 }
 
 fn insert_entity(
@@ -1337,6 +1423,60 @@ mod tests {
         assert_eq!(rows.fact_annotations[0].fact_key, "rera_project_address");
     }
 
+    #[test]
+    fn strips_rera_phase_suffixes_for_buyer_facing_society_names() {
+        let examples = [
+            ("SUMADHURA EDITION PHASE-I", "SUMADHURA EDITION"),
+            ("SUMADHURA SOLACE PHASE II", "SUMADHURA SOLACE"),
+            (
+                "FOLIUM BY SUMADHURA PHASE-I/II/III/IV",
+                "FOLIUM BY SUMADHURA",
+            ),
+            (
+                "PURSUIT OF A RADICAL RHAPSODY PHASE 2",
+                "PURSUIT OF A RADICAL RHAPSODY",
+            ),
+            ("Assetz Marq Phase 3B", "Assetz Marq"),
+            ("Sobha Windsor Phase 1 Wing 1 and 2", "Sobha Windsor"),
+        ];
+
+        for (value, expected) in examples {
+            assert_eq!(strip_project_phase_suffix(value), expected);
+        }
+    }
+
+    #[test]
+    fn canonical_rows_group_phase_registrations_under_one_society() {
+        let fetched_at = Utc.with_ymd_and_hms(2026, 8, 1, 10, 0, 0).unwrap();
+        let rows = canonical_rows(&[
+            test_project(
+                "ACK-1",
+                "PRM-EDITION-1",
+                "SUMADHURA EDITION PHASE-I",
+                fetched_at,
+            ),
+            test_project(
+                "ACK-2",
+                "PRM-EDITION-2",
+                "SUMADHURA EDITION PHASE-II",
+                fetched_at,
+            ),
+        ]);
+
+        assert_eq!(rows.entities.len(), 1);
+        assert_eq!(rows.entities[0].entity_id, "society:sumadhura-edition");
+        assert_eq!(rows.entities[0].name, "SUMADHURA EDITION");
+        assert_eq!(rows.mappings.len(), 2);
+        assert!(rows
+            .mappings
+            .iter()
+            .all(|mapping| mapping.canonical_entity_id == "society:sumadhura-edition"));
+        assert!(rows
+            .mappings
+            .iter()
+            .all(|mapping| mapping.alias_entity_id.is_none()));
+    }
+
     fn test_fact(entity_id: &str, fact_key: &str, learned_at: DateTime<Utc>) -> SkillFactRecord {
         SkillFactRecord {
             entity_id: entity_id.to_string(),
@@ -1364,6 +1504,30 @@ mod tests {
             scoring_direction: None,
             scoring_weight: None,
             scoring_thresholds_json: "[]".to_string(),
+        }
+    }
+
+    fn test_project(
+        ack_number: &str,
+        registration_number: &str,
+        project_name: &str,
+        fetched_at: DateTime<Utc>,
+    ) -> ReraProjectSnapshotRecord {
+        ReraProjectSnapshotRecord {
+            ack_number: Some(ack_number.to_string()),
+            registration_number: Some(registration_number.to_string()),
+            project_name: project_name.to_string(),
+            promoter_name: None,
+            status: None,
+            project_type: None,
+            project_address: None,
+            area_name: None,
+            district: None,
+            taluk: None,
+            total_land_area_sqm: None,
+            land_litigation: None,
+            source_url: "https://rera.example/project".to_string(),
+            fetched_at,
         }
     }
 }

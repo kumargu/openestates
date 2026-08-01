@@ -183,11 +183,8 @@ pub fn build_property_map_context(
     let (metro_lines, green_patches, lakes) = match (map_overlays, overlay_home) {
         (Some(overlays), Some(home)) => {
             let metro_stations = metro_corridor_anchors(&places, &dag_metro_stations, home);
-            let metro_lines = crate::routes::map_overlays::metro_network_near(
-                overlays,
-                home,
-                &metro_stations,
-            );
+            let metro_lines =
+                crate::routes::map_overlays::metro_network_near(overlays, home, &metro_stations);
             let (green_patches, lakes) =
                 crate::routes::map_overlays::clip_green_patches(overlays, home);
             (metro_lines, green_patches, lakes)

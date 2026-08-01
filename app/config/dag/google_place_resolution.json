@@ -4,6 +4,7 @@
   "project_place": {
     "required_fields": ["place_id", "location"],
     "accepted_place_types": [
+      "apartment_complex",
       "apartment_building",
       "condominium_complex",
       "establishment",
@@ -13,6 +14,7 @@
     ],
     "rejected_place_types": [
       "construction_company",
+      "corporate_office",
       "real_estate_agency"
     ],
     "ignored_name_tokens": [
@@ -25,6 +27,18 @@
       "residency",
       "the"
     ],
+    "demoted_name_tokens": [
+      "block",
+      "centre",
+      "center",
+      "entry",
+      "experience",
+      "office",
+      "sales",
+      "tower"
+    ],
+    "demoted_name_token_penalty": 0.18,
+    "broad_place_type_score": 0.25,
     "minimum_name_recall": 0.6,
     "minimum_score": 0.62,
     "ambiguity_margin": 0.1,

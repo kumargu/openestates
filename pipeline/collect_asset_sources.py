@@ -168,11 +168,17 @@ def collect_asset_sources(
             output[RERA_REGISTRY_MONTHLY] = collect_rera_registry(request, rera_fetch)
         except Exception as error:
             record_source_failure(source_failures, [RERA_REGISTRY_MONTHLY], error)
+    google_address_input = None
+    google_requested = (
+        GOOGLE_PLACES_WEEKLY in requested or GOOGLE_NEARBY_PLACES_WEEKLY in requested
+    )
+    if google_requested:
+        google_address_input = output.get(RERA_REGISTRY_MONTHLY)
+        if not google_address_input:
+            google_address_input = rera_address_input_for_request(request)
     if GOOGLE_PLACES_WEEKLY in requested:
         try:
-            google_inputs = google_society_inputs(
-                request, output.get(RERA_REGISTRY_MONTHLY)
-            )
+            google_inputs = google_society_inputs(request, google_address_input)
             if not google_inputs:
                 raise ValueError(
                     "Google collection requires scoped source_entities or RERA projects"
@@ -185,9 +191,7 @@ def collect_asset_sources(
             record_source_failure(source_failures, [GOOGLE_PLACES_WEEKLY], error)
     if GOOGLE_NEARBY_PLACES_WEEKLY in requested:
         try:
-            google_inputs = google_society_inputs(
-                request, output.get(RERA_REGISTRY_MONTHLY)
-            )
+            google_inputs = google_society_inputs(request, google_address_input)
             apply_google_origin_locations(
                 google_inputs, output.get(GOOGLE_PLACES_WEEKLY)
             )
@@ -1633,7 +1637,17 @@ def collect_google_nearby_places(
     for slug, input_data in sorted(inputs.items()):
         for category in categories:
             query = nearby_query(input_data, category)
-            for place in fetch(input_data, category):
+            try:
+                nearby_places = fetch(input_data, category)
+            except ValueError as exc:
+                if str(exc) == "Google nearby collection requires an accepted origin coordinate pair":
+                    logger.warning(
+                        "Skipping Google nearby collection for %s: missing accepted origin coordinates",
+                        slug,
+                    )
+                    break
+                raise
+            for place in nearby_places:
                 name = optional_string(place.get("place_name") or place.get("name"))
                 url = optional_string(place.get("place_url") or place.get("url"))
                 if not name or not url:
@@ -1742,7 +1756,32 @@ def nearby_category_configs() -> List[Dict[str, Any]]:
 def google_society_inputs(
     request: Dict[str, Any], rera_input: Dict[str, Any] = None
 ) -> Dict[str, Dict[str, Any]]:
-    return source_society_inputs(request, rera_input)
+    """Build Google resolver inputs with RERA addresses when available.
+
+    Google Places can return only a route for society-name queries such as
+    "Godrej Air". RERA project address is used only as resolver evidence; RERA
+    coordinates are intentionally not copied into Google inputs.
+    """
+    address_input = rera_input or rera_address_input_for_request(request)
+    return source_society_inputs(request, address_input)
+
+
+def rera_address_input_for_request(request: Dict[str, Any]) -> Dict[str, Any]:
+    """Hydrate RERA address facts for Google-only scoped source collection."""
+    if not needs_rera_address_hydration(request):
+        return {}
+    detail_facts, _annotations, _watermark = collect_rera_project_details(request)
+    if not detail_facts:
+        return {}
+    return {"detail_facts": detail_facts}
+
+
+def needs_rera_address_hydration(request: Dict[str, Any]) -> bool:
+    """Return true when scoped Google inputs lack address evidence."""
+    return any(
+        isinstance(seed, dict) and not optional_string(seed.get("address"))
+        for seed in request.get("source_entities", [])
+    )
 
 
 def reddit_society_inputs(
@@ -1760,11 +1799,15 @@ def source_society_inputs(
     request: Dict[str, Any], rera_input: Dict[str, Any] = None
 ) -> Dict[str, Dict[str, Any]]:
     inputs = {}  # type: Dict[str, Dict[str, Any]]
+    rera_addresses = rera_detail_facts_by_entity_for_keys(
+        rera_input or {}, {"rera_project_address"}
+    )
     for seed in request.get("source_entities", []):
         entity_id = str(seed.get("entity_id") or "").strip()
         name = str(seed.get("name") or "").strip()
         if not entity_id or not name:
             continue
+        address = source_entity_address(seed, rera_addresses)
         inputs[entity_id] = {
             "entity_id": entity_id,
             "alias_entity_id": optional_string(seed.get("alias_entity_id")),
@@ -1772,6 +1815,7 @@ def source_society_inputs(
             "society_name": name,
             "area": optional_string(seed.get("area")),
             "city": optional_string(seed.get("city")) or "Bengaluru",
+            "address": address,
             "latitude": optional_float(seed.get("latitude")),
             "longitude": optional_float(seed.get("longitude")),
         }
@@ -1800,6 +1844,25 @@ def source_society_inputs(
         }
         known_project_keys.add(project_key)
     return inputs
+
+
+def source_entity_address(
+    seed: Dict[str, Any], rera_addresses: Dict[str, Dict[str, Any]]
+) -> Optional[str]:
+    address = optional_string(seed.get("address"))
+    if address:
+        return address
+    for candidate_id in (
+        optional_string(seed.get("entity_id")),
+        optional_string(seed.get("alias_entity_id")),
+    ):
+        if not candidate_id:
+            continue
+        rera_facts = rera_addresses.get(candidate_id, {})
+        address = optional_string(rera_facts.get("rera_project_address"))
+        if address:
+            return address
+    return None
 
 
 def request_with_rera_detail_facts(

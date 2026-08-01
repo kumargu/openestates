@@ -1,14 +1,30 @@
 import type { PropertyCard, SearchResponse } from "./types.ts";
 
-export function isListableProperty(property: Pick<PropertyCard, "price">): boolean {
-  return property.price > 0;
+type ListabilityFields = Pick<PropertyCard, "price"> &
+  Partial<Pick<PropertyCard, "bhk" | "transparency_tags">>;
+
+export function isListableProperty(property: ListabilityFields): boolean {
+  return (
+    property.price > 0 ||
+    Boolean(
+      property.bhk &&
+      property.bhk > 0 &&
+      property.transparency_tags?.some(
+        (tag) => tag.toLowerCase() === "price unavailable",
+      ),
+    )
+  );
 }
 
-export function filterListableProperties<T extends Pick<PropertyCard, "price">>(properties: T[]): T[] {
+export function filterListableProperties<T extends ListabilityFields>(
+  properties: T[],
+): T[] {
   return properties.filter(isListableProperty);
 }
 
-export function filterListableSearchResponse(response: SearchResponse): SearchResponse {
+export function filterListableSearchResponse(
+  response: SearchResponse,
+): SearchResponse {
   const results = filterListableProperties(response.results);
   const focus = response.focus
     ? {

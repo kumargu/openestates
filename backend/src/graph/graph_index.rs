@@ -221,11 +221,7 @@ mod tests {
             "society:rera-falcon-city".to_string(),
         )]);
 
-        let steps = index.walk_out(
-            "society:prestige-falcon-city",
-            &["served_by_road"],
-            1,
-        );
+        let steps = index.walk_out("society:prestige-falcon-city", &["served_by_road"], 1);
 
         assert_eq!(steps.len(), 1);
         assert_eq!(

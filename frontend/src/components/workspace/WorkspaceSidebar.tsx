@@ -27,7 +27,13 @@ type WorkspaceSidebarProps = {
   onRemove: (propertyId: string) => void;
 };
 
-function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: number }) {
+function WorkspaceIcon({
+  name,
+  size = 17,
+}: {
+  name: WorkspaceIconName;
+  size?: number;
+}) {
   const common = {
     width: size,
     height: size,
@@ -41,7 +47,12 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
   };
 
   if (name === "browse") {
-    return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>;
+    return (
+      <svg {...common}>
+        <circle cx="11" cy="11" r="6" />
+        <path d="m16 16 4 4" />
+      </svg>
+    );
   }
   if (name === "listing") {
     // Door / entry — “this home”, not the app-home house glyph.
@@ -70,9 +81,17 @@ function WorkspaceIcon({ name, size = 17 }: { name: WorkspaceIconName; size?: nu
     );
   }
   if (name === "plan") {
-    return <svg {...common}><path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" /></svg>;
+    return (
+      <svg {...common}>
+        <path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" />
+      </svg>
+    );
   }
-  return <svg {...common}><path d="m9 18 6-6-6-6" /></svg>;
+  return (
+    <svg {...common}>
+      <path d="m9 18 6-6-6-6" />
+    </svg>
+  );
 }
 
 function societyLabel(home: PropertyCard): string {
@@ -80,15 +99,14 @@ function societyLabel(home: PropertyCard): string {
 }
 
 function formatCompactPrice(price: number): string {
+  if (price <= 0 || !Number.isFinite(price)) return "Price unavailable";
   if (price >= 10_000_000) return `₹${(price / 10_000_000).toFixed(2)} Cr`;
   if (price >= 100_000) return `₹${(price / 100_000).toFixed(1)} L`;
   return `₹${price.toLocaleString("en-IN")}`;
 }
 
 function homeStateHint(home: PropertyCard): string | null {
-  return home.home_state_display
-    || home.project_status_display
-    || null;
+  return home.home_state_display || home.project_status_display || null;
 }
 
 export function WorkspaceSidebar({
@@ -113,7 +131,9 @@ export function WorkspaceSidebar({
   const visibleHomes = showAllHomes ? homes : previewHomes;
 
   return (
-    <aside className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}>
+    <aside
+      className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}
+    >
       <div className="workspace-sidebar__brand-row">
         <Link to="/" className="workspace-sidebar__brand" aria-label="OpenEstates home">
           <OpenEstatesMark size={26} className="workspace-sidebar__mark" />
@@ -122,12 +142,22 @@ export function WorkspaceSidebar({
         <button
           type="button"
           className="workspace-sidebar__toggle"
-          aria-label={reduced ? "Shortlist opens after you save a home" : collapsed ? "Expand shortlist sidebar" : "Collapse shortlist sidebar"}
+          aria-label={
+            reduced
+              ? "Shortlist opens after you save a home"
+              : collapsed
+                ? "Expand shortlist sidebar"
+                : "Collapse shortlist sidebar"
+          }
           aria-expanded={!collapsed}
           disabled={reduced}
           onClick={onToggle}
         >
-          <span className={collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"}>
+          <span
+            className={
+              collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"
+            }
+          >
             <WorkspaceIcon name="chevron" size={15} />
           </span>
         </button>
@@ -175,7 +205,10 @@ export function WorkspaceSidebar({
       </nav>
 
       {!collapsed && (
-        <section className="workspace-sidebar__shortlist" aria-labelledby="workspace-shortlist-title">
+        <section
+          className="workspace-sidebar__shortlist"
+          aria-labelledby="workspace-shortlist-title"
+        >
           <div className="workspace-sidebar__shortlist-head">
             <h2 id="workspace-shortlist-title">Shortlist</h2>
             <span>{homes.length}</span>
@@ -203,7 +236,8 @@ export function WorkspaceSidebar({
                   >
                     <strong>{name}</strong>
                     <span>
-                      {home.area} · {home.bhk}BHK · {formatCompactPrice(home.price)}
+                      {home.area} · {home.bhk}BHK ·{" "}
+                      {formatCompactPrice(home.price)}
                     </span>
                     {state && <em>{state}</em>}
                   </button>
