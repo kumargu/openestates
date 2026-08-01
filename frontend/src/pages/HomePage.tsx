@@ -186,9 +186,9 @@ export function HomePage() {
         </p>
 
         <ol className="fade-up fade-up-delay-1 home-hero__beats" aria-label="How discovery works">
-          <li>Search by life</li>
-          <li>Check the neighborhood</li>
-          <li>Decide with tradeoffs</li>
+          <li>Search by meaning</li>
+          <li>See why each home matched</li>
+          <li>Decide with receipts</li>
         </ol>
 
         <form

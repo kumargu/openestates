@@ -27,6 +27,8 @@ function formatAdvantage(price: number): string {
 }
 
 const FEATURED_LIMIT = 12;
+const DEMO_LIFE_QUERY = "Quiet 3BHK near schools under 2.5Cr";
+const DEMO_BUDGET_INR = 25_000_000;
 
 type LandingStoryStageProps = {
   properties: PropertyCard[];
@@ -47,18 +49,136 @@ type DossierRow = {
   toneLabel: string;
 };
 
-function FeaturedSuggestions({ properties }: { properties: PropertyCard[] }) {
-  const suggestions = filterListableProperties(properties).slice(0, FEATURED_LIMIT);
+/** Real card fields framed as why a life-query matched — never invent context. */
+function semanticMatchLabels(property: PropertyCard): string[] {
+  const labels: string[] = [];
+  if (property.bhk === 3) labels.push("3 BHK fit");
+  if (property.price > 0 && property.price <= DEMO_BUDGET_INR) labels.push("Under 2.5 Cr");
+  if (property.metro_distance_mins > 0 && property.metro_distance_mins <= 20) {
+    labels.push(`${property.metro_distance_mins} min metro`);
+  }
+  if (typeof property.google_rating === "number" && property.google_rating >= 4) {
+    labels.push(`Google ${property.google_rating.toFixed(1)}`);
+  }
+  if (typeof property.open_space_pct === "number" && property.open_space_pct >= 25) {
+    labels.push(`${Math.round(property.open_space_pct)}% open`);
+  }
+  if (property.home_state_display || property.project_status_display) {
+    const state = (property.home_state_display || property.project_status_display || "")
+      .split("·")[0]
+      ?.trim();
+    if (state && labels.length < 2) labels.push(state);
+  }
+  return labels.slice(0, 2);
+}
+
+function FeaturedSuggestions({
+  properties,
+  onSearch,
+}: {
+  properties: PropertyCard[];
+  onSearch: (query: string) => void;
+}) {
+  const suggestions = filterListableProperties(properties)
+    .map((property) => ({ property, labels: semanticMatchLabels(property) }))
+    .sort((a, b) => b.labels.length - a.labels.length)
+    .slice(0, FEATURED_LIMIT);
   if (suggestions.length === 0) return null;
 
   return (
     <div className="landing-featured">
+      <header className="landing-featured__head">
+        <p className="landing-featured__kicker">Semantic match</p>
+        <h2>Homes ranked for a life query — with the why on each card.</h2>
+        <button type="button" className="landing-featured__query" onClick={() => onSearch(DEMO_LIFE_QUERY)}>
+          {DEMO_LIFE_QUERY}
+        </button>
+      </header>
       <div className="landing-stage__featured">
-        {suggestions.map((property) => (
+        {suggestions.map(({ property, labels }) => (
           <div key={property.id} className="landing-stage__feature-card">
-            <LivingEvidenceTile property={property} variant="browse" />
+            <LivingEvidenceTile
+              property={property}
+              variant="browse"
+              matchLabels={labels}
+            />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function SemanticSearchCanvas({ homes }: { homes: PropertyCard[] }) {
+  const samples = homes
+    .map((property) => ({ property, labels: semanticMatchLabels(property) }))
+    .filter((item) => item.labels.length > 0)
+    .slice(0, 3);
+  const [step, setStep] = useState(0);
+
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    if (media.matches) {
+      setStep(3);
+      return undefined;
+    }
+    let tick = 0;
+    const timer = window.setInterval(() => {
+      tick = (tick + 1) % 4;
+      setStep(tick);
+    }, 1700);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const intents = [
+    { id: "life", label: "Quiet family home" },
+    { id: "bhk", label: "3 BHK" },
+    { id: "budget", label: "Under 2.5 Cr" },
+    { id: "context", label: "Near schools" },
+  ];
+
+  return (
+    <div className="landing-showcase landing-showcase--search">
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        Context search
+      </p>
+      <div className="landing-search-stage">
+        <div className={`landing-search-query${step >= 0 ? " is-in" : ""}`}>
+          <span>Life query</span>
+          <strong>{DEMO_LIFE_QUERY}</strong>
+        </div>
+        <div className="landing-search-intents" aria-label="Parsed context">
+          {intents.map((intent, index) => (
+            <span
+              key={intent.id}
+              className={`landing-search-intent${step >= 1 && index <= step + 1 ? " is-in" : ""}`}
+              style={{ transitionDelay: `${index * 70}ms` }}
+            >
+              {intent.label}
+            </span>
+          ))}
+        </div>
+        <ul className={`landing-search-hits${step >= 2 ? " is-in" : ""}`}>
+          {(samples.length > 0 ? samples : homes.slice(0, 3).map((property) => ({
+            property,
+            labels: ["Context ranked"] as string[],
+          }))).map((item, index) => (
+            <li
+              key={item.property.id}
+              className={step >= 2 && index <= step ? "is-in" : ""}
+              style={{ transitionDelay: `${index * 90}ms` }}
+            >
+              <div>
+                <strong>{item.property.society_name || item.property.title}</strong>
+                <span>{item.property.area} · {formatPrice(item.property.price)}</span>
+              </div>
+              <em>{item.labels.join(" · ")}</em>
+            </li>
+          ))}
+        </ul>
+        <p className={`landing-search-aside${step >= 3 ? " is-in" : ""}`}>
+          Filters hide rows. Semantic ranking keeps the why beside each home.
+        </p>
       </div>
     </div>
   );
@@ -516,25 +636,49 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   const mapHome = listable[0];
   const sentimentHome = listable.find((item) => item.area !== mapHome.area) ?? listable[1] ?? listable[0];
   const planHome = listable[1] ?? listable[0];
+  const searchHomes = [...listable]
+    .sort((a, b) => semanticMatchLabels(b).length - semanticMatchLabels(a).length)
+    .slice(0, 4);
 
   return (
     <section className="landing-stage" aria-label="How OpenEstates works">
       <div className="landing-stage__wash" aria-hidden="true" />
 
-      <FeaturedSuggestions properties={listable} />
+      <FeaturedSuggestions properties={listable} onSearch={onSearch} />
 
       <header className="landing-journey">
-        <p className="landing-journey__step">How a decision takes shape</p>
-        <h2>From the neighborhood to the tradeoff.</h2>
+        <p className="landing-journey__step">Where we differ</p>
+        <h2>Context search first. Then the neighborhood proof.</h2>
       </header>
+
+      <article className="landing-scene landing-scene--right">
+        <div className="landing-scene__copy">
+          <p className="landing-scene__step">01</p>
+          <h2>Search by life, not checkboxes</h2>
+          <p>
+            Soft intent becomes structured context — BHK, budget, commute, schools, vibe —
+            and each result carries a semantic why, not a silent filter hit.
+          </p>
+          <button
+            type="button"
+            className="landing-scene__cta"
+            onClick={() => onSearch(DEMO_LIFE_QUERY)}
+          >
+            Try a life search
+          </button>
+        </div>
+        <div className="landing-canvas landing-canvas--product">
+          <SemanticSearchCanvas homes={searchHomes} />
+        </div>
+      </article>
 
       <article className="landing-scene landing-scene--left">
         <div className="landing-canvas landing-canvas--product">
           <MapEvidenceCanvas property={mapHome} />
         </div>
         <div className="landing-scene__copy">
-          <p className="landing-scene__step">01</p>
-          <h2>Start with what’s around the home</h2>
+          <p className="landing-scene__step">02</p>
+          <h2>Then read what’s around the home</h2>
           <p>
             Water, lake buffer, lines, traffic, schools — status tones beside each signal,
             before you fall for the brochure.
@@ -551,7 +695,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <article className="landing-scene landing-scene--right">
         <div className="landing-scene__copy">
-          <p className="landing-scene__step">02</p>
+          <p className="landing-scene__step">03</p>
           <h2>Then read what people keep saying</h2>
           <p>
             Google themes and Reddit lines, curated side by side — praise, caution, and
@@ -575,7 +719,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
           <NotebookCompareCanvas homes={notebookHomes} />
         </div>
         <div className="landing-scene__copy">
-          <p className="landing-scene__step">03</p>
+          <p className="landing-scene__step">04</p>
           <h2>Capture notes — then compare</h2>
           <p>
             Tag what you notice on visits. Those same labels open into a ready side-by-side
@@ -589,7 +733,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <article className="landing-scene landing-scene--right landing-scene--compare">
         <div className="landing-scene__copy">
-          <p className="landing-scene__step">04</p>
+          <p className="landing-scene__step">05</p>
           <h2>Finish on the money tradeoff</h2>
           <p>
             Buy and rent on one horizon — the year marker slides so the advantage feels

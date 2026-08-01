@@ -2506,9 +2506,200 @@ body {
   margin: 0 auto 0.35rem;
 }
 
+.landing-featured__head {
+  margin: 0 0 0.95rem;
+  max-width: 36rem;
+}
+
+.landing-featured__kicker {
+  margin: 0 0 0.4rem;
+  color: #b09a8e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.landing-featured__head h2 {
+  margin: 0 0 0.65rem;
+  color: #2a2421;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  font-size: clamp(1.2rem, 1.05rem + 0.55vw, 1.5rem);
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.landing-featured__query {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #6d625b;
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 0.16em;
+  cursor: pointer;
+}
+
+.landing-featured__query:hover {
+  color: var(--color-cool-deep);
+}
+
 .landing-featured .landing-stage__featured {
   width: 100%;
   margin-bottom: 0;
+}
+
+.landing-stage__featured .catalog-card__signals {
+  margin-top: 0.35rem;
+}
+
+.landing-stage__featured .catalog-card__signal {
+  font-size: 0.68rem;
+}
+
+.landing-showcase--search {
+  min-height: 100%;
+}
+
+.landing-search-stage {
+  display: grid;
+  gap: 0.85rem;
+  padding: 1rem 1.15rem 1.2rem;
+}
+
+.landing-search-query {
+  display: grid;
+  gap: 0.28rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid rgba(50, 38, 30, 0.08);
+  border-radius: 16px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.96), rgba(250, 247, 244, 0.9));
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.landing-search-query.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.landing-search-query span {
+  color: #b09a8e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.landing-search-query strong {
+  color: #2a2421;
+  font-size: 0.98rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.landing-search-intents {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.landing-search-intent {
+  display: inline-flex;
+  padding: 0.28rem 0.65rem;
+  border: 1px solid rgba(50, 38, 30, 0.08);
+  border-radius: 999px;
+  background: rgba(50, 38, 30, 0.03);
+  color: #6d625b;
+  font-size: 0.76rem;
+  font-weight: 600;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.35s ease, transform 0.35s ease;
+}
+
+.landing-search-intent.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.landing-search-hits {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.55rem;
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.landing-search-hits.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+.landing-search-hits li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
+  align-items: center;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid rgba(50, 38, 30, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.88);
+  opacity: 0.45;
+  transition: opacity 0.35s ease, border-color 0.35s ease;
+}
+
+.landing-search-hits li.is-in {
+  opacity: 1;
+  border-color: rgba(63, 92, 138, 0.22);
+}
+
+.landing-search-hits strong {
+  display: block;
+  color: #2a2421;
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.landing-search-hits span {
+  color: #8a7a70;
+  font-size: 0.76rem;
+}
+
+.landing-search-hits em {
+  color: #3f5c8a;
+  font-size: 0.74rem;
+  font-style: normal;
+  font-weight: 650;
+  text-align: right;
+}
+
+.landing-search-aside {
+  margin: 0.15rem 0 0;
+  color: #8a7a70;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.landing-search-aside.is-in {
+  opacity: 1;
+  transform: none;
 }
 
 .landing-stage__feature-card {
