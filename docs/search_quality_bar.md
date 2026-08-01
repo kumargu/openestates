@@ -166,16 +166,16 @@ source can prove them:
 - external places such as malls, schools, hospitals, tech parks, metro
   stations, approach-road points, and waterlogging spots with the same shape
 - deterministic derived facts such as `distance_to_nearest_metro_km`,
-  `distance_to_phoenix_marketcity_km`, `distance_to_nearest_hospital_km`, or
-  `within_15_min_drive_to_whitefield_offices`
+  `distance_to_named_landmark_km`, `distance_to_nearest_hospital_km`, or
+  `within_15_min_drive_to_office_hub`
 
-For a query like "near Shantiniketan mall" or "close to metro but not cut off
-from hospitals", search should parse the place mention, resolve it to a
-place/entity with coordinates, compute local distances over the serving bundle,
-and rank/explain with those derived distance facts. The embedding document can
-include compact geospatial text such as "1.2 km from Pattandur Agrahara metro"
-or "near Forum Shantiniketan", but the proof reason must come from the
-coordinate-backed derived fact, not from vector similarity.
+For a query like "near a named mall" or "close to metro but not cut off from
+hospitals", search should parse the place mention, resolve it to a place/entity
+with coordinates, compute local distances over the serving bundle, and
+rank/explain with those derived distance facts. The embedding document can
+include compact geospatial text such as "1.2 km from named metro station" or
+"near named mall", but the proof reason must come from the coordinate-backed
+derived fact, not from vector similarity.
 
 ## Next Data Work
 

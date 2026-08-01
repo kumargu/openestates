@@ -262,6 +262,8 @@
           "children"
         ],
         "expanded_keys": [
+          "social_infrastructure",
+          "family_friendly",
           "school_access",
           "nearby_schools",
           "social_infra_score"
@@ -284,8 +286,7 @@
         "preference": "social infrastructure",
         "patterns": [
           "gym",
-          "fitness",
-          "cult"
+          "fitness"
         ],
         "expanded_keys": [
           "nearby_fitness"
@@ -328,8 +329,7 @@
         ],
         "expanded_keys": [
           "nearby_tech_parks",
-          "commute_reality",
-          "within_15_min_drive_to_whitefield_offices"
+          "commute_reality"
         ]
       },
       {
@@ -1122,7 +1122,6 @@
       "intent_terms": [
         "traffic",
         "commute",
-        "orr",
         "road access",
         "congestion",
         "office"
@@ -1212,7 +1211,6 @@
         "metro",
         "hospital",
         "gym",
-        "cult",
         "fitness",
         "tech park",
         "office"
@@ -1661,7 +1659,6 @@
           "metro station",
           "hospital",
           "hospitals",
-          "cult",
           "gym",
           "fitness",
           "tech park",
@@ -1898,6 +1895,9 @@
           "reliable builder",
           "dependable builder",
           "safe builder",
+          "builder reliability",
+          "builder trust",
+          "builder track record",
           "builder reputation",
           "experienced builder",
           "rera track record",
@@ -2134,7 +2134,14 @@
           "good commute",
           "easy commute",
           "commute",
-          "commute friendly"
+          "commute friendly",
+          "quick commute",
+          "office commute",
+          "predictable commute",
+          "not too far",
+          "not too far from",
+          "traffic nightmare",
+          "daily traffic nightmare"
         ],
         "label": "commute",
         "expanded_keys": [
@@ -2142,7 +2149,8 @@
           "commute_reality",
           "traffic_reality",
           "metro_access",
-          "nearby_metro_stations"
+          "nearby_metro_stations",
+          "nearby_tech_parks"
         ],
         "weight": 1.0
       },
@@ -2152,12 +2160,10 @@
           "family friendly",
           "good for family",
           "for family",
-          "family home",
           "family project",
           "family livability",
           "young family",
           "parents",
-          "kid",
           "kids friendly",
           "kid friendly"
         ],
@@ -2398,8 +2404,10 @@
         "expanded_keys": [
           "litigation_risk",
           "legal_risk",
+          "legal.litigation",
           "rera_complaints",
-          "land_litigation"
+          "land_litigation",
+          "seller_trust"
         ],
         "weight": 1.5
       },
@@ -2419,9 +2427,11 @@
         "expanded_keys": [
           "home_timeline_state",
           "home_state",
+          "project_status",
           "rera_delay_months",
           "possession_delay",
-          "possession_status"
+          "possession_status",
+          "delivery_delay_risk"
         ],
         "weight": 1.4
       },
@@ -2616,7 +2626,11 @@
           "bad builder",
           "unreliable builder",
           "builder risk",
-          "builder issue"
+          "builder issue",
+          "builder complaints",
+          "builder complaint",
+          "builder delivery issues",
+          "delivery issues"
         ],
         "label": "builder trust",
         "expanded_keys": [
@@ -2625,11 +2639,14 @@
           "builder_quality_score",
           "lifecycle.builder_reputation_negative",
           "maintenance_sentiment",
-          "rera_builder_revocations"
+          "rera_builder_revocations",
+          "delivery_track_record"
         ],
         "gap_keys": [
           "lifecycle.builder_reputation_negative",
-          "maintenance_sentiment"
+          "maintenance_sentiment",
+          "rera_builder_revocations",
+          "delivery_track_record"
         ],
         "weight": 1.3
       },
@@ -3387,7 +3404,6 @@
       "positive_terms": [
         "near airport",
         "airport access",
-        "airport road",
         "airport is close"
       ],
       "negative_terms": [

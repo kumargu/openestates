@@ -1,5 +1,4 @@
 pub mod analyzer;
-pub mod area_alias;
 pub mod engine;
 pub mod focus;
 pub mod geo;

@@ -1,7 +1,7 @@
 {
-  "_comment": "Search intent config. Buyer archetypes and area alias migration target. Preference patterns largely live in fact_registry.json.",
+  "_comment": "Search intent config. Keep parser vocabulary generic: broad Bengaluru regions and place families only. Named localities, roads, societies, schools, hospitals, tech parks, malls, and landmarks belong in DAG/serving entities and facts.",
   "version": 1,
-  "description": "NL search parsing helpers. Area aliases loaded from this file via dag_config.",
+  "description": "NL search parsing helpers. Broad region aliases are loaded from this file via dag_config; named places resolve through DAG/serving facts.",
   "buyer_archetypes": [
     {
       "id": "family",
@@ -38,70 +38,36 @@
     "city": "bengaluru",
     "entries": [
       {
-        "canonical": "Whitefield",
+        "canonical": "East Bengaluru",
         "aliases": [
-          "whitefield",
-          "witefield",
-          "wf",
-          "kadugodi",
-          "varthur",
-          "itpl",
-          "hope farm",
-          "kundalahalli",
-          "pattandur agrahara",
-          "brookefield",
-          "nallurhalli",
-          "hagadur"
+          "east bangalore",
+          "east bengaluru",
+          "east blr"
         ]
       },
       {
-        "canonical": "Sarjapur Road",
-        "aliases": ["sarjapur", "sarjapur road", "sjr", "doddakannelli", "carmelaram"]
+        "canonical": "West Bengaluru",
+        "aliases": [
+          "west bangalore",
+          "west bengaluru",
+          "west blr"
+        ]
       },
       {
-        "canonical": "Bellandur",
-        "aliases": ["bellandur", "outer ring road", "orr bellandur"]
-      },
-      {
-        "canonical": "HSR Layout",
-        "aliases": ["hsr", "hsr layout", "agara", "sector 1 hsr", "sector 2 hsr"]
+        "canonical": "South Bengaluru",
+        "aliases": [
+          "south bangalore",
+          "south bengaluru",
+          "south blr"
+        ]
       },
       {
         "canonical": "North Bengaluru",
         "aliases": [
           "north bangalore",
           "north bengaluru",
-          "north blr",
-          "devanahalli",
-          "hebbal",
-          "yelahanka",
-          "thanisandra",
-          "jakkur"
+          "north blr"
         ]
-      },
-      {
-        "canonical": "Electronic City",
-        "aliases": ["electronic city", "ec", "ecity"]
-      },
-      {
-        "canonical": "Koramangala",
-        "aliases": ["koramangala", "koramangala 5th block"]
-      },
-      {
-        "canonical": "Marathahalli",
-        "aliases": ["marathahalli", "marathon halli"]
-      },
-      {
-        "canonical": "Indiranagar",
-        "aliases": ["indiranagar", "indira nagar"]
-      },
-      {
-        "canonical": "Jayanagar",
-        "aliases": ["jayanagar", "jaya nagar"]
-      },
-      {
-        "canonical": "Bannerghatta Road",
-        "aliases": ["bannerghatta", "bannerghatta road", "btm"]
       }
     ]
   },
@@ -112,7 +78,7 @@
       {
         "id": "metro",
         "label": "metro",
-        "aliases": ["metro", "metro station", "station", "purple line"]
+        "aliases": ["metro", "metro station", "station"]
       },
       {
         "id": "school",
@@ -132,12 +98,12 @@
       {
         "id": "mall",
         "label": "mall",
-        "aliases": ["mall", "shopping mall", "forum", "galleria"]
+        "aliases": ["mall", "shopping mall"]
       },
       {
         "id": "landmark",
         "label": "landmark",
-        "aliases": ["landmark", "nearby", "near by", "close to"]
+        "aliases": ["landmark"]
       }
     ]
   },

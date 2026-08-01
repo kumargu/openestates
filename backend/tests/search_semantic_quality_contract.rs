@@ -284,10 +284,10 @@ fn semantic_quality_cases() -> Vec<SemanticQualityCase> {
             target_fact: fact(
                 "target-metro",
                 "metro_access",
-                FactValueSpec::Text("Kadugodi Tree Park metro is nearby"),
+                FactValueSpec::Text("Named metro station is nearby"),
                 "metro access",
             ),
-            target_document: "transit commute connectivity for office workers",
+            target_document: "metro transit commute connectivity for office workers",
             expected_signals: vec![expected("metro access", Polarity::Positive, "metro_access")],
             distractor_documents: &[
                 (
@@ -521,7 +521,7 @@ fn semantic_quality_cases() -> Vec<SemanticQualityCase> {
                 FactValueSpec::Tags(&["resident feedback", "maintenance discussion"]),
                 "reddit discussions",
             ),
-            target_document: "reddit discussions resident feedback forum comments",
+            target_document: "reddit discussions resident feedback thread comments",
             expected_signals: vec![expected(
                 "reddit discussions",
                 Polarity::Positive,
@@ -639,7 +639,7 @@ fn semantic_quality_cases() -> Vec<SemanticQualityCase> {
                 FactValueSpec::Numeric(18.0),
                 "airport access",
             ),
-            target_document: "airport road access close to airport corridor",
+            target_document: "airport access close to airport corridor",
             expected_signals: vec![expected(
                 "airport access",
                 Polarity::Positive,

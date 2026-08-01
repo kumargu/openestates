@@ -6,7 +6,7 @@ use super::{analyzer, parser, schema};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchIntent {
     pub area: Option<String>,
-    /// Areas explicitly rejected by the buyer, e.g. "not Electronic City".
+    /// Broad regions explicitly rejected by the buyer, e.g. "not South Bengaluru".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded_areas: Vec<String>,
     pub bhk: Option<u32>,
@@ -77,8 +77,8 @@ pub enum BuyerArchetype {
     EndUser,
 }
 
-/// Known area names and their aliases.
-/// Includes landmark/station names that map to the canonical area.
+/// Broad region aliases from search intent config.
+/// Named localities and landmarks are resolved from DAG/serving entities, not parser config.
 ///
 use crate::dag_config::area_alias_entries;
 ///
@@ -145,7 +145,6 @@ fn detect_area(q: &str, excluded_areas: &[String]) -> Option<String> {
         }
     }
     best.map(|(name, _)| name.to_string())
-        .or_else(|| super::area_alias::resolve_area_with_tantivy(q, excluded_areas))
 }
 
 fn detect_excluded_areas(q: &str) -> Vec<String> {
@@ -550,9 +549,9 @@ mod tests {
 
     #[test]
     fn test_parse_bhk() {
-        let intent = parse_intent("3bhk in whitefield");
+        let intent = parse_intent("3bhk in east bangalore");
         assert_eq!(intent.bhk, Some(3));
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
     }
 
     #[test]
@@ -573,9 +572,9 @@ mod tests {
             ),
             ("2 bhk near manipal within 3 km", Some(2), None, None),
             (
-                "3bhk near bagmane tech park whitefield",
+                "3bhk near tech park east bangalore",
                 Some(3),
-                Some("Whitefield"),
+                Some("East Bengaluru"),
                 None,
             ),
             ("3bhk near tech park", Some(3), None, None),
@@ -607,11 +606,11 @@ mod tests {
     }
 
     #[test]
-    fn test_area_typo_resolves_through_tantivy_alias_index() {
-        let intent = parse_intent("3bhk kadudgi under 2cr");
+    fn named_localities_do_not_resolve_through_parser_config() {
+        let intent = parse_intent("3bhk kadugodi under 2cr");
 
         assert_eq!(intent.bhk, Some(3));
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert_eq!(intent.area, None);
     }
 
     #[test]
@@ -663,6 +662,16 @@ mod tests {
     }
 
     #[test]
+    fn commute_place_language_maps_to_commute_evidence() {
+        let commute = parse_intent("need quick office commute but avoid highway noise");
+        assert!(has_positive_label(&commute, "commute"));
+        assert!(has_negative_label(&commute, "noise"));
+
+        let traffic = parse_intent("south bangalore apartment but not a daily traffic nightmare");
+        assert!(has_negative_label(&traffic, "traffic"));
+    }
+
+    #[test]
     fn noisy_main_road_language_maps_to_noise_risk() {
         let intent = parse_intent("family friendly but avoid noisy main road");
 
@@ -672,10 +681,10 @@ mod tests {
 
     #[test]
     fn negated_area_is_excluded_not_selected() {
-        let intent = parse_intent("near tech parks but quiet not electronic city 3bhk");
+        let intent = parse_intent("near tech parks but quiet not south bangalore 3bhk");
 
         assert_eq!(intent.area, None);
-        assert_eq!(intent.excluded_areas, vec!["Electronic City".to_string()]);
+        assert_eq!(intent.excluded_areas, vec!["South Bengaluru".to_string()]);
         assert_eq!(intent.bhk, Some(3));
         assert!(intent
             .preferences
@@ -711,9 +720,9 @@ mod tests {
 
     #[test]
     fn test_parse_budget() {
-        let intent = parse_intent("under 1.5cr in bellandur");
+        let intent = parse_intent("under 1.5cr in south bangalore");
         assert_eq!(intent.budget_max, Some(15_000_000));
-        assert_eq!(intent.area.as_deref(), Some("Bellandur"));
+        assert_eq!(intent.area.as_deref(), Some("South Bengaluru"));
     }
 
     #[test]
@@ -735,9 +744,9 @@ mod tests {
 
     #[test]
     fn parses_punctuated_and_typo_budget_phrases() {
-        let intent = parse_intent("witefield 3bhk undr 2.5cr, gud reviews");
+        let intent = parse_intent("east blr 3bhk undr 2.5cr, gud reviews");
 
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.budget_max, Some(25_000_000));
         assert!(has_positive_label(&intent, "review quality"));
@@ -748,8 +757,8 @@ mod tests {
 
     #[test]
     fn test_parse_min_land_area_constraint() {
-        let intent = parse_intent("3bhk with greenery in whitefield above 10 acres");
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        let intent = parse_intent("3bhk with greenery in east bangalore above 10 acres");
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
         assert_eq!(intent.bhk, Some(3));
         assert_eq!(intent.hard_constraints.len(), 1);
         let constraint = &intent.hard_constraints[0];
@@ -761,20 +770,20 @@ mod tests {
 
     #[test]
     fn test_parse_plus_acres_as_min_land_area_constraint() {
-        let intent = parse_intent("3bhk whitefield 10+ acres");
+        let intent = parse_intent("3bhk east bangalore 10+ acres");
         assert_eq!(intent.hard_constraints.len(), 1);
         assert_eq!(intent.hard_constraints[0].value, 10.0);
     }
 
     #[test]
     fn test_plain_acres_without_min_operator_is_not_hard_constraint() {
-        let intent = parse_intent("3bhk whitefield 10 acres");
+        let intent = parse_intent("3bhk east bangalore 10 acres");
         assert!(intent.hard_constraints.is_empty());
     }
 
     #[test]
     fn test_avoid_waterlogging_and_traffic_extracts_both_risks() {
-        let intent = parse_intent("3bhk whitefield avoid waterlogging and traffic");
+        let intent = parse_intent("3bhk east bangalore avoid waterlogging and traffic");
         let risks: Vec<&str> = intent
             .negative_preferences
             .iter()
@@ -788,8 +797,8 @@ mod tests {
 
     #[test]
     fn test_ready_to_move_preference() {
-        let intent = parse_intent("ready to move in whitefield");
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        let intent = parse_intent("ready to move in east bangalore");
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
         assert!(
             intent.preferences.contains(&"ready to move".to_string()),
             "Expected 'ready to move' preference, got: {:?}",
@@ -804,8 +813,8 @@ mod tests {
 
     #[test]
     fn test_under_construction_preference() {
-        let intent = parse_intent("under construction sarjapur");
-        assert_eq!(intent.area.as_deref(), Some("Sarjapur Road"));
+        let intent = parse_intent("under construction south bangalore");
+        assert_eq!(intent.area.as_deref(), Some("South Bengaluru"));
         assert!(
             intent
                 .preferences
@@ -822,7 +831,7 @@ mod tests {
 
     #[test]
     fn test_new_launch_preference() {
-        let intent = parse_intent("new launch 3bhk whitefield");
+        let intent = parse_intent("new launch 3bhk east bangalore");
         assert!(
             intent.preferences.contains(&"new launch".to_string()),
             "Expected 'new launch' preference, got: {:?}",
@@ -832,14 +841,14 @@ mod tests {
 
     #[test]
     fn home_state_queries_use_schema_backed_preferences() {
-        let delivered = parse_intent("delivered society near metro whitefield");
+        let delivered = parse_intent("delivered society near metro east bangalore");
         assert!(delivered
             .positive_preferences
             .iter()
             .any(|preference| preference.raw_text == "delivered society"
                 && preference.expanded_keys.contains(&"home_state".to_string())));
 
-        let new_property = parse_intent("new property in sarjapur");
+        let new_property = parse_intent("new property in south bangalore");
         assert!(new_property
             .positive_preferences
             .iter()
@@ -848,7 +857,7 @@ mod tests {
                     .expanded_keys
                     .contains(&"home_age_bucket".to_string())));
 
-        let old_society = parse_intent("old society in whitefield");
+        let old_society = parse_intent("old society in east bangalore");
         assert!(old_society
             .positive_preferences
             .iter()
@@ -860,7 +869,7 @@ mod tests {
 
     #[test]
     fn test_delayed_preference() {
-        let intent = parse_intent("delayed projects in sarjapur");
+        let intent = parse_intent("delayed projects in south bangalore");
         assert!(
             intent.preferences.contains(&"delayed".to_string()),
             "Expected 'delayed' preference, got: {:?}",
@@ -870,7 +879,7 @@ mod tests {
 
     #[test]
     fn test_upcoming_preference() {
-        let intent = parse_intent("upcoming projects in whitefield");
+        let intent = parse_intent("upcoming projects in east bangalore");
         assert!(
             intent.preferences.contains(&"upcoming".to_string()),
             "Expected 'upcoming' preference, got: {:?}",
@@ -880,7 +889,7 @@ mod tests {
 
     #[test]
     fn test_immediate_possession_maps_to_ready_to_move() {
-        let intent = parse_intent("immediate possession bellandur");
+        let intent = parse_intent("immediate possession south bangalore");
         assert!(
             intent.preferences.contains(&"ready to move".to_string()),
             "Expected 'ready to move' from 'immediate possession', got: {:?}",
@@ -890,7 +899,7 @@ mod tests {
 
     #[test]
     fn test_completed_maps_to_ready_to_move() {
-        let intent = parse_intent("completed projects hsr layout");
+        let intent = parse_intent("completed projects south bangalore");
         assert!(
             intent.preferences.contains(&"ready to move".to_string()),
             "Expected 'ready to move' from 'completed', got: {:?}",
@@ -902,13 +911,13 @@ mod tests {
 
     #[test]
     fn test_reliable_builder_preference() {
-        let intent = parse_intent("reliable builder whitefield");
+        let intent = parse_intent("reliable builder east bangalore");
         assert!(
             intent.preferences.contains(&"reliable builder".to_string()),
             "Expected 'reliable builder' preference, got: {:?}",
             intent.preferences
         );
-        assert_eq!(intent.area.as_deref(), Some("Whitefield"));
+        assert_eq!(intent.area.as_deref(), Some("East Bengaluru"));
     }
 
     #[test]
@@ -929,7 +938,7 @@ mod tests {
 
     #[test]
     fn test_trusted_builder_preference() {
-        let intent = parse_intent("trusted builder sarjapur");
+        let intent = parse_intent("trusted builder south bangalore");
         assert!(
             intent.preferences.contains(&"trusted builder".to_string()),
             "Expected 'trusted builder' preference, got: {:?}",
@@ -939,7 +948,7 @@ mod tests {
 
     #[test]
     fn test_on_time_delivery_preference() {
-        let intent = parse_intent("on time delivery 3bhk whitefield");
+        let intent = parse_intent("on time delivery 3bhk east bangalore");
         assert!(
             intent.preferences.contains(&"on time delivery".to_string()),
             "Expected 'on time delivery' preference, got: {:?}",
@@ -950,7 +959,7 @@ mod tests {
 
     #[test]
     fn test_good_builder_maps_to_trusted_builder() {
-        let intent = parse_intent("good builder bellandur");
+        let intent = parse_intent("good builder south bangalore");
         assert!(
             intent.preferences.contains(&"trusted builder".to_string()),
             "Expected 'trusted builder' from 'good builder', got: {:?}",
@@ -960,7 +969,7 @@ mod tests {
 
     #[test]
     fn test_no_delays_maps_to_on_time_delivery() {
-        let intent = parse_intent("no delays whitefield");
+        let intent = parse_intent("no delays east bangalore");
         assert!(
             intent.preferences.contains(&"on time delivery".to_string()),
             "Expected 'on time delivery' from 'no delays', got: {:?}",
@@ -970,7 +979,7 @@ mod tests {
 
     #[test]
     fn test_avoid_waterlogging_is_negative_preference() {
-        let intent = parse_intent("3bhk whitefield avoid waterlogging");
+        let intent = parse_intent("3bhk east bangalore avoid waterlogging");
         assert!(
             intent
                 .positive_preferences
@@ -993,7 +1002,7 @@ mod tests {
 
     #[test]
     fn test_less_traffic_and_not_delayed_are_negative_preferences() {
-        let intent = parse_intent("family 3bhk sarjapur less traffic not delayed");
+        let intent = parse_intent("family 3bhk south bangalore less traffic not delayed");
         let negative: Vec<&str> = intent
             .negative_preferences
             .iter()
@@ -1176,6 +1185,24 @@ mod tests {
 
         assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::RiskAverse));
         assert!(has_negative_label(&intent, "legal risk"));
+        assert!(has_expanded_negative_key(&intent, "seller_trust"));
+    }
+
+    #[test]
+    fn builder_complaint_language_maps_to_builder_risk_and_delivery_keys() {
+        let complaint = parse_intent("avoid projects with unclear title or builder complaints");
+        assert!(has_negative_label(&complaint, "legal risk"));
+        assert!(has_negative_label(&complaint, "builder trust"));
+        assert!(has_expanded_negative_key(
+            &complaint,
+            "rera_builder_revocations"
+        ));
+
+        let delivery =
+            parse_intent("need legal clarity more than discount, no builder delivery issues");
+        assert!(has_positive_label(&delivery, "legal safety"));
+        assert!(has_negative_label(&delivery, "builder trust"));
+        assert!(has_expanded_negative_key(&delivery, "delivery_track_record"));
     }
 
     #[test]
@@ -1279,6 +1306,13 @@ mod tests {
     fn has_expanded_positive_key(intent: &SearchIntent, key: &str) -> bool {
         intent
             .positive_preferences
+            .iter()
+            .any(|preference| preference.expanded_keys.contains(&key.to_string()))
+    }
+
+    fn has_expanded_negative_key(intent: &SearchIntent, key: &str) -> bool {
+        intent
+            .negative_preferences
             .iter()
             .any(|preference| preference.expanded_keys.contains(&key.to_string()))
     }
