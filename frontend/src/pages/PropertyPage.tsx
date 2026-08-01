@@ -29,11 +29,10 @@ import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx"
 import { LabelPill, type LabelPillTone } from "../components/ui/LabelPill.tsx";
 import { ImageWithFallback } from "../components/ImageWithFallback.tsx";
 import {
-  AreaPriceBands,
   derivePriceBands,
   formatSqftCompact,
-  type AreaMarketContext,
 } from "../components/AreaPriceBands.tsx";
+import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { usePropertySceneImages } from "../hooks/usePropertySceneImages.ts";
 import { propertySceneImageAt, sceneLabelForIndex } from "../lib/propertyScene.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
@@ -278,22 +277,6 @@ function nearbyRailItems(
     }));
 
   return [...scopedPrimaryItems, ...fillers].slice(0, 8);
-}
-
-function marketContextsForAreas(properties: PropertyCard[], areas: string[]): AreaMarketContext[] {
-  return areas.map((area) => {
-    const areaProperties = properties.filter((property) => property.area === area);
-    const homePrices = areaProperties
-      .map((property) => property.price)
-      .filter((price) => price > 0);
-    return {
-      area,
-      homePriceMin: homePrices.length > 0 ? Math.min(...homePrices) : 0,
-      homePriceMax: homePrices.length > 0 ? Math.max(...homePrices) : 0,
-      bhks: [...new Set(areaProperties.map((property) => property.bhk))].sort(),
-      societies: new Set(areaProperties.map((property) => property.society_name)).size,
-    };
-  });
 }
 
 function InlinePriceRangeSignal({
@@ -801,18 +784,17 @@ function MicroMarketTracker({
   if (areas.length === 0) return null;
 
   return (
-    <section className="property-micro-market" aria-label={`Prices around ${currentArea}`}>
-      <AreaPriceBands
-        properties={properties}
-        preferredAreas={areas}
-        marketContexts={marketContextsForAreas(properties, areas)}
-        onSelectArea={onSelectArea}
-        heading="Nearby price ranges"
-        density="compact"
-        showCaption={false}
-        localChatterLimit={5}
-      />
-    </section>
+    <AreaTrackerSection
+      id="property-micro-markets"
+      className="property-micro-market"
+      properties={properties}
+      areaTracker={null}
+      preferredAreas={areas}
+      highlightArea={currentArea}
+      onSearch={onSelectArea}
+      heading="Nearby markets"
+      maxMarkets={areas.length}
+    />
   );
 }
 

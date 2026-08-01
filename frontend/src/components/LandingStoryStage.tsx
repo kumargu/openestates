@@ -158,13 +158,9 @@ function NotebookCompareCanvas({ homes }: { homes: PropertyCard[] }) {
 
   return (
     <div className={`landing-showcase landing-showcase--notebook is-${phase}`}>
-      <div className="landing-showcase__chrome">
-        <div className="landing-showcase__tabs" aria-hidden="true">
-          <span className={phase === "notes" ? "is-active" : ""}>Notes</span>
-          <span className={phase === "compare" ? "is-active" : ""}>Compare</span>
-        </div>
-        <span className="landing-showcase__live">{pair.map((p) => p.society_name || p.title).join(" · ")}</span>
-      </div>
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        {phase === "notes" ? "Notes" : "Compare"}
+      </p>
 
       <div className="landing-showcase__stage">
         <div className={`landing-notes-stage${phase === "notes" ? " is-visible" : ""}`}>
@@ -269,14 +265,9 @@ function MapEvidenceCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className="landing-showcase landing-showcase--map">
-      <div className="landing-showcase__chrome">
-        <div className="landing-showcase__tabs" aria-hidden="true">
-          <span className="is-active">Map</span>
-          <span>Risk</span>
-          <span>Proof</span>
-        </div>
-        <span className="landing-showcase__live">{property.society_name || property.title}</span>
-      </div>
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        {property.area}
+      </p>
 
       <div className="landing-map-stage">
         <div className="landing-map-art" aria-hidden="true">
@@ -375,14 +366,9 @@ function SentimentCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className={`landing-showcase landing-showcase--sentiment is-${focus}`}>
-      <div className="landing-showcase__chrome">
-        <div className="landing-showcase__tabs" aria-hidden="true">
-          <span className={focus === "google" ? "is-active" : ""}>Google</span>
-          <span className={focus === "reddit" ? "is-active" : ""}>Reddit</span>
-          <span>Themes</span>
-        </div>
-        <span className="landing-showcase__live">{property.area}</span>
-      </div>
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        {focus === "google" ? "Google" : "Reddit"}
+      </p>
 
       <div className="landing-sentiment-stage">
         <div className={`landing-sentiment-panel landing-sentiment-panel--google${focus === "google" ? " is-focus" : ""}`}>
@@ -478,14 +464,9 @@ function PlanCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className="landing-showcase landing-showcase--plan home-plan-shell">
-      <div className="landing-showcase__chrome">
-        <div className="landing-showcase__tabs" aria-hidden="true">
-          <span className="is-active">Plan</span>
-          <span>Buy</span>
-          <span>Rent</span>
-        </div>
-        <span className="landing-showcase__live">{property.area}</span>
-      </div>
+      <p className="landing-showcase__whisper" aria-hidden="true">
+        Year {year}
+      </p>
       <div className="landing-product__plan-inner">
         <header className="home-plan-verdict">
           <div className="home-plan-verdict__topline">
@@ -542,33 +523,21 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <FeaturedSuggestions properties={listable} />
 
-      <article className="landing-scene landing-scene--right">
-        <div className="landing-scene__copy">
-          <p className="landing-scene__kicker">Notebook</p>
-          <h2>Notes with tags — then compare</h2>
-          <p>
-            Write what you notice, pin labels with icons, then the same tags open into a
-            labeled diff.
-          </p>
-          <Link to="/workspace" className="landing-scene__cta">
-            Open notebook
-          </Link>
-        </div>
-        <div className="landing-canvas landing-canvas--product">
-          <NotebookCompareCanvas homes={notebookHomes} />
-        </div>
-      </article>
+      <header className="landing-journey">
+        <p className="landing-journey__step">How a decision takes shape</p>
+        <h2>From the neighborhood to the tradeoff.</h2>
+      </header>
 
       <article className="landing-scene landing-scene--left">
         <div className="landing-canvas landing-canvas--product">
           <MapEvidenceCanvas property={mapHome} />
         </div>
         <div className="landing-scene__copy">
-          <p className="landing-scene__kicker">Map</p>
-          <h2>Neighborhood, quieter</h2>
+          <p className="landing-scene__step">01</p>
+          <h2>Start with what’s around the home</h2>
           <p>
-            Lake, roads, and home pin on a calm stage — status tones beside each signal,
-            not a busy map dump.
+            Water, lake buffer, lines, traffic, schools — status tones beside each signal,
+            before you fall for the brochure.
           </p>
           <button
             type="button"
@@ -582,11 +551,11 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
       <article className="landing-scene landing-scene--right">
         <div className="landing-scene__copy">
-          <p className="landing-scene__kicker">Sentiment</p>
-          <h2>Google and Reddit, already sorted</h2>
+          <p className="landing-scene__step">02</p>
+          <h2>Then read what people keep saying</h2>
           <p>
-            Ratings become themes. Local threads become short lines you can scan —
-            praise, caution, and tradeoffs side by side.
+            Google themes and Reddit lines, curated side by side — praise, caution, and
+            tradeoffs without the tab chase.
           </p>
           <button
             type="button"
@@ -601,20 +570,37 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
         </div>
       </article>
 
-      <article className="landing-scene landing-scene--left landing-scene--compare">
+      <article className="landing-scene landing-scene--left">
         <div className="landing-canvas landing-canvas--product">
-          <PlanCanvas property={planHome} />
+          <NotebookCompareCanvas homes={notebookHomes} />
         </div>
         <div className="landing-scene__copy">
-          <p className="landing-scene__kicker">Plan</p>
-          <h2>Watch the tradeoff move</h2>
+          <p className="landing-scene__step">03</p>
+          <h2>Capture notes — then compare</h2>
           <p>
-            Buy and rent curves on the same horizon — the year marker slides so the advantage
-            feels concrete.
+            Tag what you notice on visits. Those same labels open into a ready side-by-side
+            when two homes are in play.
+          </p>
+          <Link to="/workspace" className="landing-scene__cta">
+            Open notebook
+          </Link>
+        </div>
+      </article>
+
+      <article className="landing-scene landing-scene--right landing-scene--compare">
+        <div className="landing-scene__copy">
+          <p className="landing-scene__step">04</p>
+          <h2>Finish on the money tradeoff</h2>
+          <p>
+            Buy and rent on one horizon — the year marker slides so the advantage feels
+            concrete, not abstract.
           </p>
           <Link to={`/property/${planHome.id}/plan`} className="landing-scene__cta">
             Open plan
           </Link>
+        </div>
+        <div className="landing-canvas landing-canvas--product">
+          <PlanCanvas property={planHome} />
         </div>
       </article>
     </section>

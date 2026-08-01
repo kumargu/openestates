@@ -6,12 +6,11 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
-import { LandingCloseBanner } from "../components/LandingCloseBanner.tsx";
 
 const HERO_PROMISE = "Tell us the life you want. We'll show homes with receipts.";
 
 const ROTATING_WORDS = [
-  "verified homes",
+  "proof you can trust",
   "known risks",
   "price context",
   "clear tradeoffs",
@@ -186,6 +185,12 @@ export function HomePage() {
           {HERO_PROMISE}
         </p>
 
+        <ol className="fade-up fade-up-delay-1 home-hero__beats" aria-label="How discovery works">
+          <li>Search by life</li>
+          <li>Check the neighborhood</li>
+          <li>Decide with tradeoffs</li>
+        </ol>
+
         <form
           onSubmit={handleSearch}
           className={`home-composer fade-up fade-up-delay-1${searchFocused ? " home-composer--focused" : ""}`}
@@ -310,14 +315,6 @@ export function HomePage() {
           areaTracker={areaTracker}
           onSearch={commitSearch}
           maxMarkets={6}
-        />
-      )}
-
-      {!hasInlinePane && (
-        <LandingCloseBanner
-          query={query}
-          onQueryChange={setQuery}
-          onSubmit={handleSearch}
         />
       )}
     </div>

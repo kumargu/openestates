@@ -21,6 +21,40 @@ type MicroMarket = {
   societies: number;
 };
 
+function toMicroMarket(area: string, areaProperties: PropertyCard[]): MicroMarket {
+  const prices = areaProperties
+    .map((property) => property.price_per_sqft)
+    .filter((price) => price > 0);
+  const projectPrices = areaProperties
+    .map((property) => property.price)
+    .filter((price) => price > 0);
+  const builderCount: Record<string, number> = {};
+  for (const property of areaProperties) {
+    builderCount[property.builder_name] = (builderCount[property.builder_name] ?? 0) + 1;
+  }
+  const topBuilder =
+    Object.entries(builderCount).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
+
+  return {
+    area,
+    avgPriceSqft: prices.length > 0
+      ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length)
+      : 0,
+    hasAvgPriceSqft: prices.length > 0,
+    priceMin: projectPrices.length > 0 ? Math.min(...projectPrices) : 0,
+    priceMax: projectPrices.length > 0 ? Math.max(...projectPrices) : 0,
+    count: areaProperties.length,
+    bhks: [...new Set(areaProperties.map((property) => property.bhk))].sort((a, b) => a - b),
+    readyToMove: areaProperties.filter((property) =>
+      property.possession_status === "ready"
+      || property.project_status === "ready_to_move"
+    ).length,
+    nearMetro: areaProperties.filter((property) => property.metro_distance_mins > 0 && property.metro_distance_mins <= 15).length,
+    topBuilder,
+    societies: new Set(areaProperties.map((property) => property.society_name)).size,
+  };
+}
+
 function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
   const byArea: Record<string, PropertyCard[]> = {};
   for (const property of properties) {
@@ -29,40 +63,26 @@ function deriveMicroMarkets(properties: PropertyCard[]): MicroMarket[] {
 
   return Object.entries(byArea)
     .filter(([, areaProperties]) => areaProperties.length >= 2)
-    .map(([area, areaProperties]) => {
-      const prices = areaProperties
-        .map((property) => property.price_per_sqft)
-        .filter((price) => price > 0);
-      const projectPrices = areaProperties
-        .map((property) => property.price)
-        .filter((price) => price > 0);
-      const builderCount: Record<string, number> = {};
-      for (const property of areaProperties) {
-        builderCount[property.builder_name] = (builderCount[property.builder_name] ?? 0) + 1;
-      }
-      const topBuilder =
-        Object.entries(builderCount).sort((left, right) => right[1] - left[1])[0]?.[0] ?? "";
-
-      return {
-        area,
-        avgPriceSqft: prices.length > 0
-          ? Math.round(prices.reduce((sum, price) => sum + price, 0) / prices.length)
-          : 0,
-        hasAvgPriceSqft: prices.length > 0,
-        priceMin: projectPrices.length > 0 ? Math.min(...projectPrices) : 0,
-        priceMax: projectPrices.length > 0 ? Math.max(...projectPrices) : 0,
-        count: areaProperties.length,
-        bhks: [...new Set(areaProperties.map((property) => property.bhk))].sort((a, b) => a - b),
-        readyToMove: areaProperties.filter((property) =>
-          property.possession_status === "ready"
-          || property.project_status === "ready_to_move"
-        ).length,
-        nearMetro: areaProperties.filter((property) => property.metro_distance_mins > 0 && property.metro_distance_mins <= 15).length,
-        topBuilder,
-        societies: new Set(areaProperties.map((property) => property.society_name)).size,
-      };
-    })
+    .map(([area, areaProperties]) => toMicroMarket(area, areaProperties))
     .sort((left, right) => right.count - left.count);
+}
+
+function derivePreferredMicroMarkets(
+  properties: PropertyCard[],
+  preferredAreas: string[],
+): MicroMarket[] {
+  const byArea: Record<string, PropertyCard[]> = {};
+  for (const property of properties) {
+    (byArea[property.area] ??= []).push(property);
+  }
+
+  return preferredAreas
+    .map((area) => {
+      const areaProperties = byArea[area];
+      if (!areaProperties || areaProperties.length === 0) return null;
+      return toMicroMarket(area, areaProperties);
+    })
+    .filter((market): market is MicroMarket => market !== null);
 }
 
 function deriveMicroMarketsFromTracker(tracker: AreaTrackerResponse): MicroMarket[] {
@@ -85,10 +105,12 @@ function MicroMarketCard({
   market,
   maxAvg,
   onSearch,
+  highlighted,
 }: {
   market: MicroMarket;
   maxAvg: number;
   onSearch: (query: string) => void;
+  highlighted?: boolean;
 }) {
   const hasPriceRange = market.priceMin > 0 && market.priceMax > 0;
   const pct = market.hasAvgPriceSqft ? (market.avgPriceSqft / maxAvg) * 100 : 0;
@@ -100,7 +122,7 @@ function MicroMarketCard({
   return (
     <button
       type="button"
-      className="home-micro-card"
+      className={`home-micro-card${highlighted ? " is-current" : ""}`}
       onClick={() => onSearch(market.area)}
     >
       <div className="home-micro-card__top">
@@ -161,9 +183,12 @@ export type AreaTrackerSectionProps = {
   areaTracker: AreaTrackerResponse | null;
   onSearch: (query: string) => void;
   maxMarkets?: number;
+  preferredAreas?: string[];
+  highlightArea?: string;
   footerLink?: { to: string; label: string };
   id?: string;
   heading?: string;
+  className?: string;
 };
 
 export function AreaTrackerSection({
@@ -171,13 +196,18 @@ export function AreaTrackerSection({
   areaTracker,
   onSearch,
   maxMarkets,
+  preferredAreas,
+  highlightArea,
   footerLink,
   id = "area-tracker",
   heading = "Area Tracker",
+  className = "",
 }: AreaTrackerSectionProps) {
-  const allMarkets = areaTracker
-    ? deriveMicroMarketsFromTracker(areaTracker)
-    : deriveMicroMarkets(properties);
+  const allMarkets = preferredAreas && preferredAreas.length > 0
+    ? derivePreferredMicroMarkets(properties, preferredAreas)
+    : areaTracker
+      ? deriveMicroMarketsFromTracker(areaTracker)
+      : deriveMicroMarkets(properties);
   if (allMarkets.length < 1) return null;
 
   const markets = maxMarkets ? allMarkets.slice(0, maxMarkets) : allMarkets;
@@ -185,9 +215,12 @@ export function AreaTrackerSection({
     1,
     ...markets.filter((market) => market.hasAvgPriceSqft).map((market) => market.avgPriceSqft),
   );
+  const sectionClass = ["home-micro-section", "area-tracker-section", className]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <section id={id} className="home-micro-section area-tracker-section">
+    <section id={id} className={sectionClass} aria-label={heading}>
       <div className="area-tracker-section__inner">
         <div className="area-tracker-section__head">
           <h2 className="home-micro-heading">{heading}</h2>
@@ -199,6 +232,7 @@ export function AreaTrackerSection({
               market={market}
               maxAvg={maxAvg}
               onSearch={onSearch}
+              highlighted={Boolean(highlightArea && market.area === highlightArea)}
             />
           ))}
         </div>
