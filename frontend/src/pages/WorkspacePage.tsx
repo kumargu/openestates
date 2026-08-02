@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
+import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
 import { getProperties, getProperty } from "../lib/api.ts";
 import {
@@ -20,6 +21,7 @@ import {
   type NotebookNote,
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
+import { workspaceBuyVsRentHref, workspaceCompareHref } from "../lib/workspaceNav.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
@@ -52,14 +54,6 @@ function noteIcon(note: NotebookNote) {
 
 function workspaceMode(pathname: string): WorkspaceMode {
   return pathname === "/workspace/compare" ? "compare" : "notes";
-}
-
-function workspaceCompareHref(ids: string[], focusId?: string): string {
-  if (ids.length < 2) return "/workspace/compare";
-  const params = new URLSearchParams();
-  params.set("ids", ids.slice(0, MAX_WORKSPACE_COMPARE_HOMES).join(","));
-  if (focusId) params.set("focus", focusId);
-  return `/workspace/compare?${params.toString()}`;
 }
 
 function propertyIdsWithNotesFirst(propertyIds: string[], notes: NotebookNote[]): string[] {
@@ -207,6 +201,9 @@ export function WorkspacePage() {
     () => propertyIdsWithNotesFirst(propertyIds, visible),
     [propertyIds, visible],
   );
+  const buyVsRentHref = workspaceBuyVsRentHref(
+    searchParams.get("focus") ?? activeCompareIds[0] ?? orderedPropertyIds[0],
+  );
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -265,35 +262,12 @@ export function WorkspacePage() {
         <meta name="robots" content="noindex" />
       </Helmet>
 
-      <div className="notion-cover" aria-hidden="true" />
-
-      <header className="notion-title-block">
-        <div className="notion-emoji" aria-hidden="true">▦</div>
-        <h1>Workspace</h1>
-        <p className="notion-subtitle">
-          {propertyIds.length} home{propertyIds.length === 1 ? "" : "s"}
-          {" · "}
-          {visible.length} note{visible.length === 1 ? "" : "s"}
-        </p>
-      </header>
-
-      <nav className="workspace-mode-tabs" aria-label="Workspace views">
-        <Link
-          to="/workspace"
-          className={mode === "notes" ? "is-active" : undefined}
-          aria-current={mode === "notes" ? "page" : undefined}
-        >
-          Notes
-        </Link>
-        <Link
-          to={compareHref}
-          className={mode === "compare" ? "is-active" : undefined}
-          aria-current={mode === "compare" ? "page" : undefined}
-        >
-          Compare
-          {activeCompareIds.length > 0 && <span>{activeCompareIds.length}</span>}
-        </Link>
-      </nav>
+      <WorkspaceHeader
+        mode={mode}
+        compareHref={compareHref}
+        buyVsRentHref={buyVsRentHref}
+        compareCount={activeCompareIds.length}
+      />
 
       {propertyIds.length === 0 ? (
         <div className="notion-empty">

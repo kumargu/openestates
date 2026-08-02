@@ -9,7 +9,13 @@ import {
   writeShortlistIds,
 } from "../../lib/compare.ts";
 import type { PropertyCard } from "../../lib/types.ts";
+import {
+  discoveryReturnHref,
+  navigationMode,
+  writeDiscoveryContext,
+} from "../../lib/navigationContext.ts";
 import { activeWorkspaceView } from "../../lib/workspaceNav.ts";
+import { SavedHomesDock } from "./SavedHomesDock.tsx";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import "../../styles/workspace.css";
 
@@ -20,7 +26,8 @@ type WorkspaceFrameProps = {
 };
 
 function routePropertyId(pathname: string): string | null {
-  const match = pathname.match(/^\/property\/([^/]+)/);
+  const match = pathname.match(/^\/property\/([^/]+)/)
+    ?? pathname.match(/^\/workspace\/buy-vs-rent\/([^/]+)/);
   return match?.[1] ? decodeURIComponent(match[1]) : null;
 }
 
@@ -43,6 +50,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const queryIds = useMemo(() => parseShortlistIds(query.get("ids")), [query]);
   const queryFocus = query.get("focus");
   const propertyId = routePropertyId(location.pathname);
+  const shellMode = navigationMode(location.pathname, location.search);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [collapsed, setCollapsed] = useState(() =>
@@ -54,12 +62,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     getProperties({ signal: controller.signal })
       .then((nextProperties) => {
         setProperties(nextProperties);
-        const availableIds = new Set(nextProperties.map((property) => property.id));
-        const hasSavedHomes = readShortlistIds().some((id) => availableIds.has(id));
-        if (hasSavedHomes) {
-          setCollapsed(false);
-          writeSidebarCollapsed(false);
-        }
       })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
@@ -71,10 +73,6 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   useEffect(() => {
     function refresh() {
       const next = readShortlistIds();
-      if (next.length > 0) {
-        setCollapsed(false);
-        writeSidebarCollapsed(false);
-      }
       setShortlistIds((current) => sameIds(current, next) ? current : next);
     }
     window.addEventListener(SHORTLIST_CHANGED_EVENT, refresh);
@@ -105,14 +103,23 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       .filter((property): property is PropertyCard => Boolean(property));
   }, [homeIds, properties]);
 
+  useEffect(() => {
+    if (shellMode !== "discovery") return;
+    const url = `${location.pathname}${location.search}`;
+    writeDiscoveryContext(url, window.scrollY);
+    return () => writeDiscoveryContext(url, window.scrollY);
+  }, [location.pathname, location.search, shellMode]);
+
   const storedFocus = window.localStorage.getItem(FOCUS_STORAGE_KEY);
-  const focusedId = (
-    propertyId
-    ?? (queryFocus && homes.some((home) => home.id === queryFocus) ? queryFocus : null)
+  const workspaceFocusedId = (
+    (queryFocus && homes.some((home) => home.id === queryFocus) ? queryFocus : null)
     ?? (storedFocus && homes.some((home) => home.id === storedFocus) ? storedFocus : null)
     ?? homes[0]?.id
     ?? ""
   );
+  const focusedId = shellMode === "property-context"
+    ? propertyId ?? ""
+    : propertyId ?? workspaceFocusedId;
 
   useEffect(() => {
     if (focusedId) window.localStorage.setItem(FOCUS_STORAGE_KEY, focusedId);
@@ -143,7 +150,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
       return;
     }
     if (activeView === "plan" && focus) {
-      navigate(propertyPath(focus, "/plan"));
+      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(focus)}`);
     }
   }
 
@@ -158,7 +165,7 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   function focusHome(nextId: string) {
     window.localStorage.setItem(FOCUS_STORAGE_KEY, nextId);
     if (activeView === "plan") {
-      navigate(propertyPath(nextId, "/plan"));
+      navigate(`/workspace/buy-vs-rent/${encodeURIComponent(nextId)}`);
       return;
     }
     if (activeView === "rera") {
@@ -183,21 +190,41 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
     writeSelection(nextIds);
   }
 
-  const reducedBeforeDecision = homes.length === 0 && queryIds.length === 0;
+  const reducedBeforeDecision = shellMode === "workspace" && homes.length === 0 && queryIds.length === 0;
   const sidebarCollapsed = collapsed || reducedBeforeDecision;
+  const showSidebar = shellMode === "property-context" || shellMode === "workspace";
+  const sidebarMode = shellMode === "property-context" ? "property-context" : "workspace";
+  const discoveryHref = discoveryReturnHref();
+  const currentProperty = propertyId
+    ? properties.find((property) => property.id === propertyId)
+    : undefined;
+  const sidebarHomes = shellMode === "property-context"
+    ? currentProperty ? [currentProperty] : []
+    : homes;
 
   return (
-    <div className={`workspace-shell${sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
-      <WorkspaceSidebar
-        homes={homes}
-        focusedId={focusedId}
-        activeView={activeView}
-        collapsed={sidebarCollapsed}
-        reduced={reducedBeforeDecision}
-        onToggle={toggleSidebar}
-        onFocus={focusHome}
-        onRemove={removeHome}
-      />
+    <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
+      {showSidebar ? (
+        <WorkspaceSidebar
+          homes={sidebarHomes}
+          focusedId={focusedId}
+          activeView={activeView}
+          collapsed={shellMode === "property-context" ? false : sidebarCollapsed}
+          reduced={reducedBeforeDecision}
+          mode={sidebarMode}
+          discoveryHref={discoveryHref}
+          onToggle={toggleSidebar}
+          onFocus={focusHome}
+          onRemove={removeHome}
+        />
+      ) : null}
+      {(shellMode === "landing" || shellMode === "discovery") && homes.length > 0 ? (
+        <SavedHomesDock
+          key={`${shellMode}:${location.search}`}
+          homes={homes}
+          discoveryHref={discoveryHref}
+        />
+      ) : null}
       <div className="workspace-view">{children}</div>
     </div>
   );

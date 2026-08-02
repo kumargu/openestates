@@ -199,7 +199,7 @@ export function HomePage() {
               className="home-hero__exit"
               onClick={clearSearch}
             >
-              Clear search
+              New search
             </button>
           </div>
         )}
