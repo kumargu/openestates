@@ -146,7 +146,7 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
           <ImageWithFallback
             src={card.hero_image}
             alt={card.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+            className="side-panel-hero__image"
           />
           {card.transparency_tags.length > 0 && (
             <div className="side-panel-hero-tags">

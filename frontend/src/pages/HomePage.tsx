@@ -153,20 +153,20 @@ export function HomePage() {
         <div className="home-hero__wash" aria-hidden="true" />
 
         {!hasActiveSearch && (
-          <>
-            <div className="fade-up home-hero__copy">
-              <h1 className="home-hero__title">
-                <span>Tell us the life you want.</span>
-                <span>We'll show homes with receipts.</span>
-              </h1>
-              <p className="home-hero__promise">Fewer homes. Better reasons.</p>
-            </div>
-          </>
+          <div className="fade-up home-hero__copy">
+            <h1 className="home-hero__title">
+              <span>Tell us the life you want.</span>
+              <span>We'll show homes with receipts.</span>
+            </h1>
+            <p className="home-hero__promise">Fewer homes. Better reasons.</p>
+          </div>
         )}
+      </section>
 
+      <div className="home-scroll-shell">
         <form
           onSubmit={handleSearch}
-          className={`home-composer${hasActiveSearch ? "" : " fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
+          className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing-sticky fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
           aria-label="Property search"
           role="search"
         >
@@ -264,43 +264,43 @@ export function HomePage() {
             </button>
           </div>
         )}
-      </section>
 
-      <div className="home-body">
-        {hasActiveSearch ? (
-          <section className="home-inline-results-anchor" aria-label="Search results">
-            <InlineSearchExperience
-              onSearchCommit={handleInlineSearchCommit}
-            />
-          </section>
-        ) : properties.length > 0 ? (
-          <>
-            <LandingStoryStage properties={properties} onSearch={commitSearch} />
-            <AreaTrackerSection
-              properties={properties}
-              areaTracker={areaTracker}
-              onSearch={commitSearch}
-              maxMarkets={6}
-            />
-            <section className="landing-final-prompt" aria-labelledby="landing-final-prompt-title">
-              <h2 id="landing-final-prompt-title">What should home make easier?</h2>
-              <form onSubmit={handleSearch} className="landing-final-prompt__form" role="search">
-                <input
-                  type="text"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  placeholder="Describe your next home"
-                  aria-label="Describe your next home"
-                />
-                <button type="submit" aria-label="Search for homes">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M5 12h14M13 6l6 6-6 6" />
-                  </svg>
-                </button>
-              </form>
+        <div className="home-body">
+          {hasActiveSearch ? (
+            <section className="home-inline-results-anchor" aria-label="Search results">
+              <InlineSearchExperience
+                onSearchCommit={handleInlineSearchCommit}
+              />
             </section>
-          </>
-        ) : propertiesLoading ? <LandingLoadingState /> : null}
+          ) : properties.length > 0 ? (
+            <>
+              <LandingStoryStage properties={properties} onSearch={commitSearch} />
+              <AreaTrackerSection
+                properties={properties}
+                areaTracker={areaTracker}
+                onSearch={commitSearch}
+                maxMarkets={6}
+              />
+              <section className="landing-final-prompt" aria-labelledby="landing-final-prompt-title">
+                <h2 id="landing-final-prompt-title">What should home make easier?</h2>
+                <form onSubmit={handleSearch} className="landing-final-prompt__form" role="search">
+                  <input
+                    type="text"
+                    value={query}
+                    onChange={(event) => setQuery(event.target.value)}
+                    placeholder="Describe your next home"
+                    aria-label="Describe your next home"
+                  />
+                  <button type="submit" aria-label="Search for homes">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M5 12h14M13 6l6 6-6 6" />
+                    </svg>
+                  </button>
+                </form>
+              </section>
+            </>
+          ) : propertiesLoading ? <LandingLoadingState /> : null}
+        </div>
       </div>
     </div>
   );

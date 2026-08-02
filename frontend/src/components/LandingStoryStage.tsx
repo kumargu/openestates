@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
@@ -6,6 +6,7 @@ import { propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import type { PropertyCard } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
+import { probeImageUrls } from "../lib/propertyScene.ts";
 
 const FEATURED_LIMIT = 6;
 const STORY_SCENE_IDS = ["resolve", "reveal", "converge"] as const;
@@ -257,6 +258,13 @@ function evidenceScore(property: PropertyCard): number {
   ].filter(Boolean).length;
 }
 
+function rankOverviewHomes(properties: PropertyCard[]): PropertyCard[] {
+  return [...properties].sort((left, right) => {
+    const imageDifference = Number(isKnownText(right.hero_image)) - Number(isKnownText(left.hero_image));
+    return imageDifference || evidenceScore(right) - evidenceScore(left);
+  });
+}
+
 function selectEvidenceHome(properties: PropertyCard[]): PropertyCard {
   return [...properties].sort((left, right) => evidenceScore(right) - evidenceScore(left))[0];
 }
@@ -280,6 +288,83 @@ function evidenceFacts(property: PropertyCard): EvidenceFact[] {
   }
 
   return facts.slice(0, 3);
+}
+
+function CinematicProjectOverview({ properties }: { properties: PropertyCard[] }) {
+  const candidates = useMemo(() => rankOverviewHomes(properties), [properties]);
+  const [selectedImage, setSelectedImage] = useState<{ propertyId: string; url: string } | null>(null);
+  const property = candidates.find((candidate) => candidate.id === selectedImage?.propertyId)
+    ?? candidates[0];
+  const image = selectedImage?.url ?? null;
+  const facts = evidenceFacts(property);
+
+  useEffect(() => {
+    let cancelled = false;
+    const imageCandidates = candidates
+      .filter((candidate) => isKnownText(candidate.hero_image))
+      .map((candidate) => ({ propertyId: candidate.id, url: candidate.hero_image as string }));
+
+    async function resolveFirstImage() {
+      for (const candidate of imageCandidates) {
+        const loaded = await probeImageUrls([candidate.url]);
+        if (cancelled) return;
+        if (loaded.length > 0) {
+          setSelectedImage(candidate);
+          return;
+        }
+      }
+      setSelectedImage(null);
+    }
+
+    void resolveFirstImage();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [candidates]);
+
+  return (
+    <section className="landing-overview" aria-labelledby="landing-overview-title">
+      <div className="landing-overview__sticky">
+        <div className={`landing-overview__media${image ? " has-image" : ""}`}>
+          {image ? (
+            <img src={image} alt="" className="landing-overview__image" />
+          ) : (
+            <div className="landing-overview__fallback" aria-hidden="true">
+              <span className="landing-overview__sun" />
+              <span className="landing-overview__horizon" />
+              <span className="landing-overview__tower landing-overview__tower--one" />
+              <span className="landing-overview__tower landing-overview__tower--two" />
+              <span className="landing-overview__tower landing-overview__tower--three" />
+              <span className="landing-overview__route" />
+            </div>
+          )}
+          <div className="landing-overview__veil" aria-hidden="true" />
+
+          <div className="landing-overview__identity">
+            <span>Project overview</span>
+            <h2 id="landing-overview-title">{homeName(property)}</h2>
+            <p>{property.area}</p>
+          </div>
+
+          {facts.length > 0 ? (
+            <div className="landing-overview__facts">
+              {facts.map((fact) => (
+                <div key={fact.id}>
+                  <span>{fact.label}</span>
+                  <strong>{fact.value}</strong>
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          <Link className="landing-overview__open" to={propertyDetailPath(property.id)}>
+            Open the full picture <span aria-hidden="true">↗</span>
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
 }
 
 function RevealCanvas({ property }: { property: PropertyCard }) {
@@ -503,6 +588,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       aria-label="How OpenEstates helps you decide"
       data-reduced-motion={controller.isReducedMotion ? "true" : "false"}
     >
+      <CinematicProjectOverview properties={uniqueHomes} />
       <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />
 
       <div className="landing-stage__story">
