@@ -16,10 +16,6 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
     () => prefersReducedMotion() ? new Set(sceneIds) : new Set(),
   );
   const [isReducedMotion, setIsReducedMotion] = useState(prefersReducedMotion);
-  const [pausedSceneId, setPausedSceneId] = useState<string | null>(null);
-  const [isDocumentHidden, setIsDocumentHidden] = useState(
-    () => typeof document !== "undefined" && document.visibilityState !== "visible",
-  );
 
   const sceneRef = useCallback((sceneId: string) => {
     const existing = sceneRefCallbacks.current.get(sceneId);
@@ -55,10 +51,13 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
     if (isReducedMotion) return undefined;
 
     const observer = new IntersectionObserver((entries) => {
+      const newlyEnteredIds: string[] = [];
       for (const entry of entries) {
         const sceneId = (entry.target as HTMLElement).dataset.sceneId;
         if (!sceneId) continue;
-        sceneRatios.current.set(sceneId, entry.isIntersecting ? entry.intersectionRatio : 0);
+        const ratio = entry.isIntersecting ? entry.intersectionRatio : 0;
+        sceneRatios.current.set(sceneId, ratio);
+        if (ratio >= 0.15) newlyEnteredIds.push(sceneId);
       }
 
       let nextSceneId: string | null = null;
@@ -72,11 +71,11 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
       }
 
       setActiveSceneId((current) => current === nextSceneId ? current : nextSceneId);
-      if (nextSceneId) {
+      if (newlyEnteredIds.length > 0) {
         setEnteredSceneIds((current) => {
-          if (current.has(nextSceneId)) return current;
+          if (newlyEnteredIds.every((sceneId) => current.has(sceneId))) return current;
           const next = new Set(current);
-          next.add(nextSceneId);
+          for (const sceneId of newlyEnteredIds) next.add(sceneId);
           return next;
         });
       }
@@ -93,30 +92,10 @@ export function useLandingSceneController(sceneIds: readonly string[]) {
     return () => observer.disconnect();
   }, [isReducedMotion, sceneIds]);
 
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      setIsDocumentHidden(document.visibilityState !== "visible");
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
-
-  const pauseScene = useCallback((sceneId: string) => {
-    setPausedSceneId(sceneId);
-  }, []);
-
-  const resumeScene = useCallback((sceneId: string) => {
-    setPausedSceneId((current) => current === sceneId ? null : current);
-  }, []);
-
   return {
     activeSceneId,
     hasEntered: (sceneId: string) => enteredSceneIds.has(sceneId),
-    isPaused: (sceneId: string) => isDocumentHidden || pausedSceneId === sceneId,
     isReducedMotion,
-    pauseScene,
-    resumeScene,
     sceneRef,
   };
 }
