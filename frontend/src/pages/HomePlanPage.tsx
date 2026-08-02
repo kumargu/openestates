@@ -1,12 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
-import { PageState } from "../components/PageState.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
-import { workspaceBuyVsRentHref, workspaceCompareHref } from "../lib/workspaceNav.ts";
+import {
+  workspaceBuyVsRentHref,
+  workspaceCompareHref,
+  workspacePlanReplacementId,
+} from "../lib/workspaceNav.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
@@ -81,36 +84,142 @@ function displayName(home: PropertyCard): string {
   return home.society_name?.trim() || home.title;
 }
 
+type PlanHomeOption = {
+  id: string;
+  label: string;
+  meta: string;
+};
+
+function planHomeMeta(bhk: number, sqft: number, price: number): string {
+  return `${bhk} BHK · ${sqft.toLocaleString("en-IN")} sqft · ${formatCurrency(price, true)}`;
+}
+
 function PlanPropertyContext({
   propertyId,
-  property,
   homes,
   onSelect,
 }: {
   propertyId?: string;
-  property?: PropertyDetailResponse["property"];
-  homes: Array<{ id: string; label: string }>;
+  homes: PlanHomeOption[];
   onSelect: (propertyId: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
+  const contextRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxId = useId();
+  const selectedHome = homes.find((home) => home.id === propertyId) ?? homes[0];
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!contextRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
+
+  if (!selectedHome) return null;
+
+  if (homes.length === 1) {
+    return (
+      <div className="workspace-plan-context workspace-plan-context--single">
+        <strong>{selectedHome.label}</strong>
+        <span>{selectedHome.meta}</span>
+      </div>
+    );
+  }
+
+  const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+    const options = [...(contextRef.current
+      ?.querySelectorAll<HTMLButtonElement>(".workspace-plan-context__option") ?? [])];
+    if (options.length === 0) return;
+    event.preventDefault();
+    const activeIndex = options.findIndex((option) => option === document.activeElement);
+    const nextIndex = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : event.key === "ArrowUp"
+          ? (activeIndex - 1 + options.length) % options.length
+          : (activeIndex + 1) % options.length;
+    options[nextIndex]?.focus();
+  };
+
   return (
-    <div className="workspace-plan-context">
-      <label>
-        <span className="sr-only">Home for Buy vs Rent</span>
-        <select
-          value={propertyId ?? ""}
-          onChange={(event) => onSelect(event.target.value)}
-          aria-label="Home for Buy vs Rent"
+    <div ref={contextRef} className="workspace-plan-context">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="workspace-plan-context__trigger"
+        aria-label={`Switch home, currently ${selectedHome.label}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-controls={open ? listboxId : undefined}
+        onClick={() => setOpen((current) => !current)}
+        onKeyDown={(event) => {
+          if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
+          event.preventDefault();
+          if (!open) setOpen(true);
+          requestAnimationFrame(() => {
+            contextRef.current
+              ?.querySelector<HTMLButtonElement>('[role="option"][aria-selected="true"]')
+              ?.focus();
+          });
+        }}
+      >
+        <span className="workspace-plan-context__identity">
+          <strong>{selectedHome.label}</strong>
+          <span>{selectedHome.meta}</span>
+        </span>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m4 6 4 4 4-4" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          id={listboxId}
+          className="workspace-plan-context__menu"
+          role="listbox"
+          aria-label="Homes for Buy vs Rent"
+          onKeyDown={handleListKeyDown}
         >
-          {!propertyId && <option value="">Choose a home</option>}
-          {homes.map((home) => (
-            <option key={home.id} value={home.id}>
-              {home.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {property && (
-        <span>{property.area} · {formatCurrency(property.price, true)}</span>
+          {homes.map((home) => {
+            const selected = home.id === selectedHome.id;
+            return (
+              <button
+                key={home.id}
+                type="button"
+                className="workspace-plan-context__option"
+                role="option"
+                aria-selected={selected}
+                tabIndex={selected ? 0 : -1}
+                onClick={() => {
+                  setOpen(false);
+                  onSelect(home.id);
+                }}
+              >
+                <span>
+                  <strong>{home.label}</strong>
+                  <small>{home.meta}</small>
+                </span>
+                <span className="workspace-plan-context__check" aria-hidden="true">
+                  {selected ? "✓" : ""}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -211,6 +320,7 @@ export function HomePlanPage() {
   const navigate = useNavigate();
   const { compareIds, propertyIds } = useNotebook();
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
@@ -222,13 +332,22 @@ export function HomePlanPage() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     getProperties({ signal: controller.signal })
-      .then(setCatalog)
+      .then((homes) => {
+        if (active) setCatalog(homes);
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setCatalog([]);
+        if (active) setCatalog([]);
+      })
+      .finally(() => {
+        if (active) setCatalogReady(true);
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -275,15 +394,38 @@ export function HomePlanPage() {
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
   const homeOptions = workspacePropertyIds.flatMap((propertyId) => {
+    if (status === "not_found" && propertyId === id) return [];
     const catalogHome = catalog.find((home) => home.id === propertyId);
-    if (catalogHome) return [{ id: propertyId, label: displayName(catalogHome) }];
+    if (catalogHome) {
+      return [{
+        id: propertyId,
+        label: displayName(catalogHome),
+        meta: planHomeMeta(catalogHome.bhk, catalogHome.sqft, catalogHome.price),
+      }];
+    }
     if (propertyData?.property.id === propertyId) {
-      return [{ id: propertyId, label: propertyData.property.title }];
+      return [{
+        id: propertyId,
+        label: propertyData.society?.name?.trim() || propertyData.property.title,
+        meta: planHomeMeta(
+          propertyData.property.bhk,
+          propertyData.property.super_builtup_sqft,
+          propertyData.property.price,
+        ),
+      }];
     }
     return [];
   });
   const compareHref = workspaceCompareHref(compareIds, id);
   const buyVsRentHref = workspaceBuyVsRentHref(id ?? propertyIds[0]);
+  const planReplacementId = catalogReady && (!id || status === "not_found")
+    ? workspacePlanReplacementId(id, homeOptions.map((home) => home.id))
+    : null;
+
+  useEffect(() => {
+    if (!planReplacementId) return;
+    navigate(workspaceBuyVsRentHref(planReplacementId), { replace: true });
+  }, [navigate, planReplacementId]);
 
   const selectProperty = (propertyId: string) => {
     if (propertyId) navigate(workspaceBuyVsRentHref(propertyId));
@@ -299,18 +441,28 @@ export function HomePlanPage() {
     const propertyIsChanging = Boolean(id)
       && status === "ready"
       && propertyData?.property.id !== id;
-    const content = !id ? (
+    const content = planReplacementId || (!catalogReady && !id) ? (
+      <LoadingPlan />
+    ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
         <p>Buy vs Rent uses the price and status of one home from your workspace.</p>
-        {homeOptions.length === 0 && <Link to="/">Discover homes</Link>}
+        <Link to="/">Discover homes</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
       <LoadingPlan />
     ) : status === "not_found" ? (
-      <PageState variant="not_found" context="property" message={BUY_VS_RENT.unavailable} />
+      <section className="home-plan-empty">
+        <h1>This home is no longer available.</h1>
+        <p>Add another home to your workspace and its Buy vs Rent plan will be ready here.</p>
+        <Link to="/">Explore homes</Link>
+      </section>
     ) : (
-      <PageState variant="error" context="property" message={BUY_VS_RENT.loadError} />
+      <section className="home-plan-empty">
+        <h1>We couldn’t open this plan.</h1>
+        <p>Try again in a moment, or continue with another home in your workspace.</p>
+        <Link to="/workspace">Back to workspace</Link>
+      </section>
     );
 
     return (
@@ -324,9 +476,13 @@ export function HomePlanPage() {
           compareHref={compareHref}
           buyVsRentHref={buyVsRentHref}
           compareCount={compareIds.length}
-          context={(
-            <PlanPropertyContext homes={homeOptions} onSelect={selectProperty} />
-          )}
+          context={homeOptions.length > 0 ? (
+            <PlanPropertyContext
+              propertyId={homeOptions.some((home) => home.id === id) ? id : undefined}
+              homes={homeOptions}
+              onSelect={selectProperty}
+            />
+          ) : undefined}
         />
         {content}
       </div>
@@ -383,7 +539,6 @@ export function HomePlanPage() {
         context={(
           <PlanPropertyContext
             propertyId={id}
-            property={property}
             homes={homeOptions}
             onSelect={selectProperty}
           />

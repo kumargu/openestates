@@ -5,6 +5,7 @@ import {
   workspaceBuyVsRentHref,
   workspaceCompareHref,
   workspaceNavItems,
+  workspacePlanReplacementId,
 } from "../src/lib/workspaceNav.ts";
 
 test("workspace view detection includes RERA property reports", () => {
@@ -86,4 +87,11 @@ test("compare links discard focus outside the compared homes", () => {
     workspaceCompareHref(["home-one", "home-two"], "home-three"),
     "/workspace/compare?ids=home-one%2Chome-two",
   );
+});
+
+test("Buy vs Rent repairs missing and stale home routes", () => {
+  assert.equal(workspacePlanReplacementId(undefined, ["home-one", "home-two"]), "home-one");
+  assert.equal(workspacePlanReplacementId("stale-home", ["home-one", "home-two"]), "home-one");
+  assert.equal(workspacePlanReplacementId("home-two", ["home-one", "home-two"]), null);
+  assert.equal(workspacePlanReplacementId("stale-home", []), null);
 });

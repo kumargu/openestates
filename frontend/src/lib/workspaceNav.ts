@@ -91,3 +91,12 @@ export function workspaceBuyVsRentHref(propertyId?: string | null): string {
     ? `/workspace/buy-vs-rent/${encodeURIComponent(propertyId)}`
     : "/workspace/buy-vs-rent";
 }
+
+export function workspacePlanReplacementId(
+  requestedId: string | undefined,
+  availableIds: string[],
+): string | null {
+  const validIds = [...new Set(availableIds.map((id) => id.trim()).filter(Boolean))];
+  if (requestedId && validIds.includes(requestedId)) return null;
+  return validIds[0] ?? null;
+}

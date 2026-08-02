@@ -281,30 +281,162 @@
 }
 
 .workspace-plan-context {
+  position: relative;
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 0.75rem;
+  color: #2c2824;
 }
 
-.workspace-plan-context select {
-  max-width: min(28rem, 50vw);
-  padding: 0.35rem 1.6rem 0.35rem 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #2c2824;
+.workspace-plan-context--single {
+  gap: 0.65rem;
+}
+
+.workspace-plan-context--single strong,
+.workspace-plan-context__identity strong {
+  overflow: hidden;
+  min-width: 0;
   font-size: 0.78rem;
   font-weight: 720;
-  cursor: pointer;
+  letter-spacing: -0.015em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.workspace-plan-context > span {
+.workspace-plan-context--single > span,
+.workspace-plan-context__identity > span {
+  overflow: hidden;
+  color: #81776f;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-plan-context__trigger {
+  display: flex;
+  max-width: min(36rem, 70vw);
+  min-height: 2rem;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.25rem 0.45rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #2c2824;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 150ms ease;
+}
+
+.workspace-plan-context__trigger:hover,
+.workspace-plan-context__trigger[aria-expanded="true"] {
+  background: rgba(38, 35, 32, 0.05);
+}
+
+.workspace-plan-context__trigger:focus-visible,
+.workspace-plan-context__option:focus-visible {
+  outline: 2px solid rgba(47, 79, 114, 0.48);
+  outline-offset: 2px;
+}
+
+.workspace-plan-context__identity {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  gap: 0.65rem;
+}
+
+.workspace-plan-context__trigger svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: #81776f;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.5;
+  transition: transform 150ms ease;
+}
+
+.workspace-plan-context__trigger[aria-expanded="true"] svg {
+  transform: rotate(180deg);
+}
+
+.workspace-plan-context__menu {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  z-index: 90;
+  width: min(31rem, calc(100vw - 2rem));
+  padding: 0.35rem;
+  border: 1px solid rgba(38, 35, 32, 0.09);
+  border-radius: 0.75rem;
+  background: #fffdfa;
+  box-shadow: 0 18px 44px rgba(45, 36, 29, 0.14);
+  animation: workspace-plan-menu-in 140ms ease-out;
+}
+
+@keyframes workspace-plan-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-0.2rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.workspace-plan-context__option {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) 1.25rem;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  border: 0;
+  border-radius: 0.55rem;
+  background: transparent;
+  color: #2c2824;
+  cursor: pointer;
+  text-align: left;
+}
+
+.workspace-plan-context__option:hover,
+.workspace-plan-context__option[aria-selected="true"] {
+  background: rgba(38, 35, 32, 0.045);
+}
+
+.workspace-plan-context__option > span:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 0.18rem;
+}
+
+.workspace-plan-context__option strong {
+  overflow: hidden;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-plan-context__option small {
   overflow: hidden;
   color: #81776f;
   font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.workspace-plan-context__check {
+  color: #2f4f72;
+  font-size: 0.75rem;
+  font-weight: 760;
+  text-align: center;
 }
 
 .workspace-sidebar {
@@ -2455,11 +2587,38 @@
 
   .workspace-plan-context {
     width: 100%;
+  }
+
+  .workspace-plan-context--single {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .workspace-plan-context__trigger {
+    width: 100%;
+    max-width: none;
     justify-content: space-between;
   }
 
-  .workspace-plan-context select {
-    max-width: 60vw;
+  .workspace-plan-context__identity {
+    display: grid;
+    gap: 0.12rem;
+  }
+
+  .workspace-plan-context__menu {
+    right: 0;
+    left: 0;
+    width: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-plan-context__menu {
+    animation: none;
+  }
+
+  .workspace-plan-context__trigger svg {
+    transition: none;
   }
 }
 
