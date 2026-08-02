@@ -249,6 +249,7 @@ function FeaturedSuggestions({
               property={property}
               variant="browse"
               matchLabels={labels}
+              allowSave
             />
           </div>
         ))}
@@ -894,7 +895,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
           <p>
             One horizon, a sliding year marker — so the money tradeoff stays concrete.
           </p>
-          <Link to={`/property/${planHome.id}/plan`} className="landing-scene__cta">
+          <Link to={`/workspace/buy-vs-rent/${encodeURIComponent(planHome.id)}`} className="landing-scene__cta">
             Open plan
           </Link>
         </div>

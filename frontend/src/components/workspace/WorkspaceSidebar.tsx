@@ -7,6 +7,7 @@ import {
   type WorkspaceView,
 } from "../../lib/workspaceNav.ts";
 import { OpenEstatesMark } from "../brand/OpenEstatesMark.tsx";
+import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 type WorkspaceIconName =
   | "browse"
@@ -22,6 +23,9 @@ type WorkspaceSidebarProps = {
   activeView: WorkspaceView;
   collapsed: boolean;
   reduced: boolean;
+  mode: "property-context" | "workspace";
+  discoveryHref: string;
+  propertyLabel?: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -83,7 +87,8 @@ function WorkspaceIcon({
   if (name === "plan") {
     return (
       <svg {...common}>
-        <path d="M5 3h14v18H5zM8 8h8M8 12h8M8 16h4" />
+        <path d="M4 19V5M4 19h16" />
+        <path d="m8 15 3-4 3 2 4-6" />
       </svg>
     );
   }
@@ -115,16 +120,23 @@ export function WorkspaceSidebar({
   activeView,
   collapsed,
   reduced,
+  mode,
+  discoveryHref,
+  propertyLabel,
   onToggle,
   onFocus,
   onRemove,
 }: WorkspaceSidebarProps) {
-  const navItems = workspaceNavItems(focusedId, activeView);
+  const focusedHome = homes.find((home) => home.id === focusedId);
+  const navItems = workspaceNavItems(focusedId, activeView, {
+    mode,
+    propertyLabel: propertyLabel || (focusedHome ? societyLabel(focusedHome) : undefined),
+    discoveryHref,
+  });
   const [showAllHomes, setShowAllHomes] = useState(false);
   const { notes } = useNotebook();
   const noteCount = notes.length;
   const previewHomes = homes.slice(0, 4);
-  const focusedHome = homes.find((home) => home.id === focusedId);
   if (focusedHome && !previewHomes.some((home) => home.id === focusedHome.id)) {
     previewHomes[previewHomes.length - 1] = focusedHome;
   }
@@ -132,38 +144,40 @@ export function WorkspaceSidebar({
 
   return (
     <aside
-      className={`workspace-sidebar${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}
+      className={`workspace-sidebar workspace-sidebar--${mode}${collapsed ? " workspace-sidebar--collapsed" : ""}${reduced ? " workspace-sidebar--reduced" : ""}`}
     >
       <div className="workspace-sidebar__brand-row">
         <Link to="/" className="workspace-sidebar__brand" aria-label="OpenEstates home">
           <OpenEstatesMark size={26} className="workspace-sidebar__mark" />
           {!collapsed && <strong>OpenEstates</strong>}
         </Link>
-        <button
-          type="button"
-          className="workspace-sidebar__toggle"
-          aria-label={
-            reduced
-              ? "Shortlist opens after you save a home"
-              : collapsed
-                ? "Expand shortlist sidebar"
-                : "Collapse shortlist sidebar"
-          }
-          aria-expanded={!collapsed}
-          disabled={reduced}
-          onClick={onToggle}
-        >
-          <span
-            className={
-              collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"
+        {mode === "workspace" ? (
+          <button
+            type="button"
+            className="workspace-sidebar__toggle"
+            aria-label={
+              reduced
+                ? "Shortlist opens after you save a home"
+                : collapsed
+                  ? "Expand shortlist sidebar"
+                  : "Collapse shortlist sidebar"
             }
+            aria-expanded={!collapsed}
+            disabled={reduced}
+            onClick={onToggle}
           >
-            <WorkspaceIcon name="chevron" size={15} />
-          </span>
-        </button>
+            <span
+              className={
+                collapsed ? "" : "workspace-sidebar__toggle-icon--reversed"
+              }
+            >
+              <WorkspaceIcon name="chevron" size={15} />
+            </span>
+          </button>
+        ) : null}
       </div>
 
-      <nav className="workspace-sidebar__nav" aria-label="Buyer workspace">
+      <nav className="workspace-sidebar__nav" aria-label={mode === "workspace" ? "Buyer workspace" : "Property navigation"}>
         {navItems.map((item) => {
           const title = !item.available
             ? `${item.label} — save a home first`
@@ -193,6 +207,9 @@ export function WorkspaceSidebar({
               aria-label={item.label}
               aria-current={item.active ? "page" : undefined}
               title={title}
+              onClick={() => {
+                if (item.view === "browse") requestDiscoveryReturn(item.to);
+              }}
             >
               <WorkspaceIcon name={item.icon} />
               {!collapsed && <span>{item.label}</span>}
@@ -204,7 +221,7 @@ export function WorkspaceSidebar({
         })}
       </nav>
 
-      {!collapsed && (
+      {!collapsed && mode === "workspace" && (
         <section
           className="workspace-sidebar__shortlist"
           aria-labelledby="workspace-shortlist-title"
@@ -269,7 +286,7 @@ export function WorkspaceSidebar({
 
       <div className="workspace-sidebar__footer" aria-hidden="true">
         <span>OE</span>
-        {!collapsed && <p>Your shortlist</p>}
+        {!collapsed && <p>{mode === "workspace" ? "Your shortlist" : "Property guide"}</p>}
       </div>
     </aside>
   );

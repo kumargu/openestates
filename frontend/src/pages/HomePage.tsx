@@ -6,6 +6,7 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
+import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
 
 const HERO_PROMISE = "Tell us the life you want. We'll show homes with receipts.";
 
@@ -164,6 +165,14 @@ export function HomePage() {
     setRecents(getRecentSearches());
   }, []);
 
+  const restoreDiscoveryPosition = useCallback(() => {
+    const scrollY = consumeDiscoveryReturn(`${window.location.pathname}${window.location.search}`);
+    if (scrollY == null) return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    });
+  }, []);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     commitSearch(query);
@@ -199,7 +208,7 @@ export function HomePage() {
               className="home-hero__exit"
               onClick={clearSearch}
             >
-              Clear search
+              New search
             </button>
           </div>
         )}
@@ -330,6 +339,7 @@ export function HomePage() {
           <section className="home-inline-results-anchor" aria-label="Search results">
             <InlineSearchExperience
               onSearchCommit={handleInlineSearchCommit}
+              onResultsReady={restoreDiscoveryPosition}
             />
           </section>
         ) : (

@@ -3,7 +3,7 @@ import "./styles/evidence.css";
 import "./styles/property-scene.css";
 import "./styles/notebook.css";
 import "./styles/rera-report.css";
-import { StrictMode, useEffect, lazy, Suspense } from "react";
+import { StrictMode, useEffect, useRef, lazy, Suspense } from "react";
 import { createRoot } from "react-dom/client";
 import {
   BrowserRouter,
@@ -11,6 +11,7 @@ import {
   Route,
   Navigate,
   useLocation,
+  useParams,
   useSearchParams,
 } from "react-router-dom";
 import { HelmetProvider, Helmet } from "react-helmet-async";
@@ -28,12 +29,17 @@ const NotFoundPage = lazy(() => import("./pages/NotFoundPage.tsx").then(m => ({ 
 
 /** Scroll to top and move focus to main content on route change */
 export function FocusOnNavigate() {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  const previousPathname = useRef<string | null>(null);
   useEffect(() => {
+    const routeChanged = previousPathname.current !== pathname;
+    previousPathname.current = pathname;
+    if (!routeChanged && pathname !== "/") return undefined;
     window.scrollTo(0, 0);
     const main = document.getElementById("main-content");
-    if (main) main.focus();
-  }, [pathname]);
+    if (main) main.focus({ preventScroll: true });
+    return undefined;
+  }, [pathname, search]);
   return null;
 }
 
@@ -47,6 +53,11 @@ function LegacyWorkspaceRedirect({ mode }: { mode: "notes" | "compare" }) {
   const { search } = useLocation();
   const target = mode === "compare" ? `/workspace/compare${search}` : `/workspace${search}`;
   return <Navigate to={target} replace />;
+}
+
+function LegacyPlanRedirect() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={id ? `/workspace/buy-vs-rent/${encodeURIComponent(id)}` : "/workspace/buy-vs-rent"} replace />;
 }
 
 export function App() {
@@ -83,10 +94,12 @@ export function App() {
                   <Route path="/" element={<HomePage />} />
                   <Route path="/results" element={<ResultsRedirect />} />
                   <Route path="/property/:id" element={<PropertyPage />} />
-                  <Route path="/property/:id/plan" element={<HomePlanPage />} />
+                  <Route path="/property/:id/plan" element={<LegacyPlanRedirect />} />
                   <Route path="/property/:id/rera" element={<ReraReportPage />} />
                   <Route path="/workspace" element={<WorkspacePage />} />
                   <Route path="/workspace/compare" element={<WorkspacePage />} />
+                  <Route path="/workspace/buy-vs-rent" element={<HomePlanPage />} />
+                  <Route path="/workspace/buy-vs-rent/:id" element={<HomePlanPage />} />
                   <Route path="/notebook" element={<LegacyWorkspaceRedirect mode="notes" />} />
                   <Route path="/compare" element={<LegacyWorkspaceRedirect mode="compare" />} />
                   <Route path="*" element={<NotFoundPage />} />
