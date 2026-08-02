@@ -28,6 +28,7 @@
    minimal caption, hover actions, generous grid breathing room. */
 
 .catalog-card {
+  position: relative;
   display: flex;
   flex-direction: column;
 }
@@ -38,6 +39,23 @@
   gap: 0.85rem;
   text-decoration: none;
   color: inherit;
+}
+
+.catalog-card__link::before {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 14px;
+  content: "";
+}
+
+.catalog-card__link:focus-visible {
+  outline: none;
+}
+
+.catalog-card__link:focus-visible::before {
+  outline: 2px solid var(--color-action);
+  outline-offset: 3px;
 }
 
 .catalog-card__media {

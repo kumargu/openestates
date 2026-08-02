@@ -83,49 +83,18 @@ export function LivingEvidenceTile({
     <article
       className={`catalog-card${variant === "browse" ? " catalog-card--browse" : ""}`}
     >
+      <div className="catalog-card__media">
+        <ImageWithFallback
+          src={cardImage}
+          alt=""
+          className="catalog-card__image"
+          loading="lazy"
+        />
+      </div>
       <Link
         to={propertyDetailPath(property.id, proofFocus)}
         className="catalog-card__link"
       >
-        <div className="catalog-card__media">
-          <ImageWithFallback
-            src={cardImage}
-            alt={property.title}
-            className="catalog-card__image"
-            loading="lazy"
-          />
-          <div className="catalog-card__actions" aria-label="Property actions">
-            <SaveHeartButton
-              propertyId={property.id}
-              className="catalog-card__action catalog-card__save"
-            />
-            {onQuickView && (
-              <button
-                type="button"
-                onClick={handleQuickView}
-                className="catalog-card__action"
-                aria-label="Quick view"
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-              </button>
-            )}
-          </div>
-        </div>
-
         <div className="catalog-card__caption">
           <h3 className="catalog-card__title">{property.title}</h3>
           <p className="catalog-card__meta">{metaParts.join(" · ")}</p>
@@ -157,6 +126,36 @@ export function LivingEvidenceTile({
           )}
         </div>
       </Link>
+      <div className="catalog-card__actions" role="group" aria-label="Property actions">
+        <SaveHeartButton
+          propertyId={property.id}
+          className="catalog-card__action catalog-card__save"
+        />
+        {onQuickView && (
+          <button
+            type="button"
+            onClick={handleQuickView}
+            className="catalog-card__action"
+            aria-label="Quick view"
+          >
+            <svg
+              width="15"
+              height="15"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+          </button>
+        )}
+      </div>
     </article>
   );
 }
