@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type { FocusEvent, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { LivingEvidenceTile } from "./evidence/LivingEvidenceTile.tsx";
@@ -6,7 +6,6 @@ import { propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import type { PropertyCard } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
-import { probeImageUrls } from "../lib/propertyScene.ts";
 
 const FEATURED_LIMIT = 6;
 const STORY_SCENE_IDS = ["resolve", "reveal", "converge"] as const;
@@ -258,138 +257,89 @@ function evidenceScore(property: PropertyCard): number {
   ].filter(Boolean).length;
 }
 
-function rankOverviewHomes(properties: PropertyCard[]): PropertyCard[] {
-  return [...properties].sort((left, right) => {
-    const imageDifference = Number(isKnownText(right.hero_image)) - Number(isKnownText(left.hero_image));
-    return imageDifference || evidenceScore(right) - evidenceScore(left);
-  });
+function rankEvidenceHomes(properties: PropertyCard[]): PropertyCard[] {
+  return [...properties].sort((left, right) => evidenceScore(right) - evidenceScore(left));
 }
 
 function selectEvidenceHome(properties: PropertyCard[]): PropertyCard {
-  return [...properties].sort((left, right) => evidenceScore(right) - evidenceScore(left))[0];
+  return rankEvidenceHomes(properties)[0];
 }
 
 function evidenceFacts(property: PropertyCard): EvidenceFact[] {
   const facts: EvidenceFact[] = [];
+  const checks = property.decision_check_summary;
+  const primaryCheck = checks?.primaryLabels?.[0]?.label;
+  const registration = checks?.registrationNumberCompact;
   const projectState = isKnownText(property.home_state_display)
     ? property.home_state_display
     : isKnownText(property.project_status_display)
       ? property.project_status_display
       : null;
 
-  if (projectState) facts.push({ id: "state", label: "Home", value: projectState });
-  if (hasKnownNumber(property.metro_distance_mins)) {
-    facts.push({ id: "metro", label: "Metro", value: `${property.metro_distance_mins} min` });
+  if (isKnownText(primaryCheck)) {
+    facts.push({ id: "attention", label: "Watch", value: primaryCheck });
   }
+  if (isKnownText(registration)) {
+    facts.push({ id: "registration", label: "Registration", value: registration });
+  }
+  if (projectState) facts.push({ id: "state", label: "Project", value: projectState });
   if (hasKnownNumber(property.open_space_pct)) {
     facts.push({ id: "open-space", label: "Open space", value: `${Math.round(property.open_space_pct)}%` });
   } else if (hasKnownNumber(property.society_land_acres)) {
-    facts.push({ id: "land", label: "Township", value: `${Math.round(property.society_land_acres)} acres` });
+    facts.push({ id: "land", label: "Project land", value: `${Math.round(property.society_land_acres)} acres` });
   }
 
-  return facts.slice(0, 3);
-}
-
-function CinematicProjectOverview({ properties }: { properties: PropertyCard[] }) {
-  const candidates = useMemo(() => rankOverviewHomes(properties), [properties]);
-  const [selectedImage, setSelectedImage] = useState<{ propertyId: string; url: string } | null>(null);
-  const property = candidates.find((candidate) => candidate.id === selectedImage?.propertyId)
-    ?? candidates[0];
-  const image = selectedImage?.url ?? null;
-  const facts = evidenceFacts(property);
-
-  useEffect(() => {
-    let cancelled = false;
-    const imageCandidates = candidates
-      .filter((candidate) => isKnownText(candidate.hero_image))
-      .map((candidate) => ({ propertyId: candidate.id, url: candidate.hero_image as string }));
-
-    async function resolveFirstImage() {
-      for (const candidate of imageCandidates) {
-        const loaded = await probeImageUrls([candidate.url]);
-        if (cancelled) return;
-        if (loaded.length > 0) {
-          setSelectedImage(candidate);
-          return;
-        }
-      }
-      setSelectedImage(null);
-    }
-
-    void resolveFirstImage();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [candidates]);
-
-  return (
-    <section className="landing-overview" aria-labelledby="landing-overview-title">
-      <div className="landing-overview__sticky">
-        <div className={`landing-overview__media${image ? " has-image" : ""}`}>
-          {image ? (
-            <img src={image} alt="" className="landing-overview__image" />
-          ) : (
-            <div className="landing-overview__fallback" aria-hidden="true">
-              <span className="landing-overview__sun" />
-              <span className="landing-overview__horizon" />
-              <span className="landing-overview__tower landing-overview__tower--one" />
-              <span className="landing-overview__tower landing-overview__tower--two" />
-              <span className="landing-overview__tower landing-overview__tower--three" />
-              <span className="landing-overview__route" />
-            </div>
-          )}
-          <div className="landing-overview__veil" aria-hidden="true" />
-
-          <div className="landing-overview__identity">
-            <span>Project overview</span>
-            <h2 id="landing-overview-title">{homeName(property)}</h2>
-            <p>{property.area}</p>
-          </div>
-
-          {facts.length > 0 ? (
-            <div className="landing-overview__facts">
-              {facts.map((fact) => (
-                <div key={fact.id}>
-                  <span>{fact.label}</span>
-                  <strong>{fact.value}</strong>
-                </div>
-              ))}
-            </div>
-          ) : null}
-
-          <Link className="landing-overview__open" to={propertyDetailPath(property.id)}>
-            Open the full picture <span aria-hidden="true">↗</span>
-          </Link>
-        </div>
-      </div>
-    </section>
-  );
+  return facts.slice(0, 4);
 }
 
 function RevealCanvas({ property }: { property: PropertyCard }) {
   const facts = evidenceFacts(property);
   const hasResidentSignal = hasKnownNumber(property.google_rating);
+  const checkLabel = property.decision_check_summary?.tileLabel;
+  const homeMeta = [
+    property.bhk > 0 ? `${property.bhk} BHK` : null,
+    formatPrice(property.price) || null,
+  ].filter((value): value is string => Boolean(value));
 
   return (
     <div className="landing-product landing-product--reveal">
       <header className="landing-reveal__home">
-        <strong>{homeName(property)}</strong>
-        <span>{property.area}</span>
+        <div>
+          <strong>{homeName(property)}</strong>
+          <span>{property.area}</span>
+        </div>
+        {homeMeta.length > 0 ? <p>{homeMeta.join(" · ")}</p> : null}
       </header>
 
       <div className="landing-reveal__layout">
-        <div className="landing-reveal__field" aria-hidden="true">
-          <span className="landing-reveal__route landing-reveal__route--one" />
-          <span className="landing-reveal__route landing-reveal__route--two" />
-          <span className="landing-reveal__radius" />
-          <span className="landing-reveal__pin" />
-          <span className="landing-reveal__marker landing-reveal__marker--one" />
-          <span className="landing-reveal__marker landing-reveal__marker--two" />
-          <span className="landing-reveal__marker landing-reveal__marker--three" />
-        </div>
+        <section className="landing-reveal__field">
+          <header>
+            <h3>Around this home</h3>
+            <div aria-hidden="true">
+              <span>Schools</span>
+              <span>Hospitals</span>
+              <span>Parks</span>
+            </div>
+          </header>
+          <div className="landing-reveal__map" aria-hidden="true">
+            <span className="landing-reveal__route landing-reveal__route--one" />
+            <span className="landing-reveal__route landing-reveal__route--two" />
+            <svg className="landing-reveal__metro-line" viewBox="0 0 320 220" preserveAspectRatio="none">
+              <path d="M-14 56 C50 80, 70 142, 136 130 S214 64, 336 92" />
+            </svg>
+            <span className="landing-reveal__pin" />
+            <span className="landing-reveal__marker landing-reveal__marker--one">1</span>
+            <span className="landing-reveal__marker landing-reveal__marker--two">2</span>
+            <span className="landing-reveal__marker landing-reveal__marker--three">3</span>
+            <span className="landing-reveal__transit">M</span>
+          </div>
+        </section>
 
-        <div className="landing-reveal__dossier">
+        <section className="landing-reveal__dossier">
+          <header>
+            <h3>Project checks</h3>
+            {isKnownText(checkLabel) ? <span>{checkLabel}</span> : null}
+          </header>
           <ul>
             {facts.map((fact) => (
               <li key={fact.id}>
@@ -400,7 +350,7 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
           </ul>
           {hasResidentSignal ? (
             <div className="landing-reveal__resident">
-              <span>Resident signal</span>
+              <span>Resident reviews</span>
               <strong>
                 Google {property.google_rating?.toFixed(1)}
                 {hasKnownNumber(property.google_review_count)
@@ -409,7 +359,7 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
               </strong>
             </div>
           ) : null}
-        </div>
+        </section>
       </div>
     </div>
   );
@@ -424,31 +374,31 @@ function pickWinner(left: number, right: number, direction: "lower" | "higher"):
 function comparisonRows(left: PropertyCard, right: PropertyCard): ComparisonRow[] {
   const rows: ComparisonRow[] = [];
 
-  if (hasKnownNumber(left.price) && hasKnownNumber(right.price)) {
+  if (isKnownText(left.home_state_display) && isKnownText(right.home_state_display)) {
     rows.push({
-      id: "price",
-      label: "Price",
-      left: formatPrice(left.price),
-      right: formatPrice(right.price),
-      winner: pickWinner(left.price, right.price, "lower"),
+      id: "state",
+      label: "Home state",
+      left: left.home_state_display,
+      right: right.home_state_display,
+      winner: "tie",
     });
   }
-  if (hasKnownNumber(left.sqft) && hasKnownNumber(right.sqft)) {
+  if (hasKnownNumber(left.society_land_acres) && hasKnownNumber(right.society_land_acres)) {
     rows.push({
-      id: "space",
-      label: "Space",
-      left: `${left.sqft.toLocaleString("en-IN")} sqft`,
-      right: `${right.sqft.toLocaleString("en-IN")} sqft`,
-      winner: pickWinner(left.sqft, right.sqft, "higher"),
+      id: "project-land",
+      label: "Project land",
+      left: `${left.society_land_acres.toFixed(1)} acres`,
+      right: `${right.society_land_acres.toFixed(1)} acres`,
+      winner: "tie",
     });
   }
-  if (hasKnownNumber(left.metro_distance_mins) && hasKnownNumber(right.metro_distance_mins)) {
+  if (hasKnownNumber(left.open_space_pct) && hasKnownNumber(right.open_space_pct)) {
     rows.push({
-      id: "metro",
-      label: "Metro",
-      left: `${left.metro_distance_mins} min`,
-      right: `${right.metro_distance_mins} min`,
-      winner: pickWinner(left.metro_distance_mins, right.metro_distance_mins, "lower"),
+      id: "open-space",
+      label: "Open space",
+      left: `${Math.round(left.open_space_pct)}%`,
+      right: `${Math.round(right.open_space_pct)}%`,
+      winner: pickWinner(left.open_space_pct, right.open_space_pct, "higher"),
     });
   }
   if (hasKnownNumber(left.google_rating) && hasKnownNumber(right.google_rating)) {
@@ -475,17 +425,24 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
 
   return (
     <div className="landing-product landing-product--converge">
-      <div className="landing-converge__notes" aria-hidden="true">
-        <span>Commute</span>
-        <span>Space</span>
-        <span>Reviews</span>
+      <div className="landing-converge__notebook">
+        <span>Notebook</span>
+        <strong>2 homes</strong>
+        <i aria-hidden="true" />
+        <i aria-hidden="true" />
       </div>
 
       <div className="landing-converge__table">
         <div className="landing-converge__homes">
           <span aria-hidden="true" />
-          <strong>{homeName(left)}</strong>
-          <strong>{homeName(right)}</strong>
+          <div>
+            <strong>{homeName(left)}</strong>
+            <small>{formatPrice(left.price)}</small>
+          </div>
+          <div>
+            <strong>{homeName(right)}</strong>
+            <small>{formatPrice(right.price)}</small>
+          </div>
         </div>
         {rows.map((row) => (
           <div key={row.id} className="landing-converge__row">
@@ -580,7 +537,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
 
   const resolveHomes = storyHomesForResolve(uniqueHomes);
   const revealHome = selectEvidenceHome(uniqueHomes);
-  const compareHomes = resolveHomes.length >= 2 ? resolveHomes.slice(0, 2) : uniqueHomes.slice(0, 2);
+  const compareHomes = rankEvidenceHomes(uniqueHomes).slice(0, 2);
 
   return (
     <section
@@ -588,7 +545,6 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
       aria-label="How OpenEstates helps you decide"
       data-reduced-motion={controller.isReducedMotion ? "true" : "false"}
     >
-      <CinematicProjectOverview properties={uniqueHomes} />
       <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />
 
       <div className="landing-stage__story">
@@ -625,7 +581,7 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
             id="converge"
             side="right"
             title="Compare and decide"
-            description="Saved homes, visit notes and the financial horizon come together in one calm workspace."
+            description="Project facts and the financial horizon come together in one calm workspace."
             action={(
               <Link to="/workspace/compare">
                 Open workspace <span aria-hidden="true">→</span>
