@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import type { PropertyCard, ProofFocus } from "../../lib/types.ts";
 import { propertyDetailPath } from "../../lib/api.ts";
 import { ImageWithFallback } from "../ImageWithFallback.tsx";
+import { SaveHeartButton } from "../SaveHeartButton.tsx";
 import { usePropertySceneImages } from "../../hooks/usePropertySceneImages.ts";
 
 function formatPrice(price: number): string {
@@ -43,6 +44,8 @@ type Props = {
   variant?: "default" | "browse";
   proofFocus?: ProofFocus;
   matchLabels?: string[];
+  /** Keep shortlist entry points explicit instead of enabling them on every card surface. */
+  allowSave?: boolean;
 };
 
 export function LivingEvidenceTile({
@@ -51,6 +54,7 @@ export function LivingEvidenceTile({
   variant = "default",
   proofFocus,
   matchLabels = [],
+  allowSave = false,
 }: Props) {
   const { images } = usePropertySceneImages({
     heroImage: property.hero_image,
@@ -93,30 +97,38 @@ export function LivingEvidenceTile({
             className="catalog-card__image"
             loading="lazy"
           />
-          {onQuickView ? (
+          {allowSave || onQuickView ? (
             <div className="catalog-card__actions" aria-label="Property actions">
-              <button
-                type="button"
-                onClick={handleQuickView}
-                className="catalog-card__action"
-                aria-label="Quick view"
-              >
-                <svg
-                  width="15"
-                  height="15"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
+              {allowSave ? (
+                <SaveHeartButton
+                  propertyId={property.id}
+                  className="catalog-card__action catalog-card__save"
+                />
+              ) : null}
+              {onQuickView ? (
+                <button
+                  type="button"
+                  onClick={handleQuickView}
+                  className="catalog-card__action"
+                  aria-label="Quick view"
                 >
-                  <circle cx="12" cy="12" r="10" />
-                  <line x1="12" y1="16" x2="12" y2="12" />
-                  <line x1="12" y1="8" x2="12.01" y2="8" />
-                </svg>
-              </button>
+                  <svg
+                    width="15"
+                    height="15"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <line x1="12" y1="16" x2="12" y2="12" />
+                    <line x1="12" y1="8" x2="12.01" y2="8" />
+                  </svg>
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>

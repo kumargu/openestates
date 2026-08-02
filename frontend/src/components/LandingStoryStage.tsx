@@ -249,6 +249,7 @@ function FeaturedSuggestions({
               property={property}
               variant="browse"
               matchLabels={labels}
+              allowSave
             />
           </div>
         ))}
