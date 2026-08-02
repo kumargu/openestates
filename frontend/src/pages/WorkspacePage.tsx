@@ -268,6 +268,7 @@ export function WorkspacePage() {
         buyVsRentHref={buyVsRentHref}
         compareCount={activeCompareIds.length}
       />
+      <h1 className="visually-hidden">Workspace</h1>
 
       {propertyIds.length === 0 ? (
         <div className="notion-empty">

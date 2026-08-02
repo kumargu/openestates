@@ -82,7 +82,7 @@ export function workspaceCompareHref(ids: string[], focusId?: string): string {
   if (uniqueIds.length < 2) return "/workspace/compare";
   const params = new URLSearchParams();
   params.set("ids", uniqueIds.join(","));
-  if (focusId) params.set("focus", focusId);
+  if (focusId && uniqueIds.includes(focusId)) params.set("focus", focusId);
   return `/workspace/compare?${params.toString()}`;
 }
 

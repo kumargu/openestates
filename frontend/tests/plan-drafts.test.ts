@@ -15,6 +15,7 @@ Object.defineProperty(globalThis, "window", {
 
 const {
   planDraftStorageKey,
+  canPersistPlanDraft,
   readPlanDraft,
   writePlanDraft,
 } = await import("../src/features/home-plan/planDrafts.ts");
@@ -37,6 +38,7 @@ test("Buy vs Rent drafts remain independent per property", () => {
 test("invalid stored drafts fail closed", () => {
   values.clear();
   values.set(planDraftStorageKey("home-1"), JSON.stringify({
+    version: 1,
     propertyId: "home-1",
     inputs: { monthlyEmiThousands: "not-a-number" },
     extraEmisPerYear: 2,
@@ -44,4 +46,11 @@ test("invalid stored drafts fail closed", () => {
   }));
 
   assert.equal(readPlanDraft("home-1"), null);
+});
+
+test("draft persistence requires the route and loaded property to match", () => {
+  assert.equal(canPersistPlanDraft("home-a", "home-a", "ready"), true);
+  assert.equal(canPersistPlanDraft("home-b", "home-a", "ready"), false);
+  assert.equal(canPersistPlanDraft("home-a", "home-a", "loading"), false);
+  assert.equal(canPersistPlanDraft(undefined, "home-a", "ready"), false);
 });

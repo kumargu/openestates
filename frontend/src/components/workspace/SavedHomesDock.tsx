@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { PropertyCard } from "../../lib/types.ts";
+import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 type SavedHomesDockProps = {
   homes: PropertyCard[];
@@ -54,7 +55,11 @@ export function SavedHomesDock({ homes, discoveryHref }: SavedHomesDockProps) {
           <footer>
             <Link to="/workspace">Open workspace</Link>
             <Link to="/">New search</Link>
-            {discoveryHref !== "/" ? <Link to={discoveryHref}>Back to results</Link> : null}
+            {discoveryHref !== "/" ? (
+              <Link to={discoveryHref} onClick={() => requestDiscoveryReturn(discoveryHref)}>
+                Back to results
+              </Link>
+            ) : null}
           </footer>
         </section>
       ) : null}

@@ -60,3 +60,13 @@ export function writePlanDraft(
   window.localStorage.setItem(planDraftStorageKey(propertyId), JSON.stringify(draft));
   return draft;
 }
+
+export function canPersistPlanDraft(
+  routePropertyId: string | undefined,
+  loadedPropertyId: string | undefined,
+  status: "loading" | "ready" | "not_found" | "error",
+): boolean {
+  return status === "ready"
+    && Boolean(routePropertyId)
+    && routePropertyId === loadedPropertyId;
+}

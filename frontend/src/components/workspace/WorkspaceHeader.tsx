@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
-import { discoveryReturnHref } from "../../lib/navigationContext.ts";
+import { discoveryReturnHref, requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 export type WorkspaceMode = "notes" | "compare" | "buy-vs-rent";
 
@@ -52,7 +52,13 @@ export function WorkspaceHeader({
         </nav>
         <div className="workspace-header__actions">
           {action}
-          <Link to={addHomesHref} className="workspace-header__add">Add homes</Link>
+          <Link
+            to={addHomesHref}
+            className="workspace-header__add"
+            onClick={() => requestDiscoveryReturn(addHomesHref)}
+          >
+            Add homes
+          </Link>
         </div>
       </div>
       {context && <div className="workspace-header__context">{context}</div>}

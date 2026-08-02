@@ -4,10 +4,8 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { PageState } from "../components/PageState.tsx";
-import { NotebookSaveIcon } from "../components/notebook/NotebookSaveIcon.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
-import { readShortlistIds, writeShortlistIds } from "../lib/compare.ts";
 import { workspaceBuyVsRentHref, workspaceCompareHref } from "../lib/workspaceNav.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
@@ -27,8 +25,11 @@ import {
   parsePlanDate,
 } from "../features/home-plan/financeEngine.ts";
 import { buildMonthlyPlanVerdict, defaultPlanFocusYear } from "../features/home-plan/monthlyPlanView.ts";
-import { readPlanDraft, writePlanDraft } from "../features/home-plan/planDrafts.ts";
-import { buildPlanSnapshotNote } from "../features/home-plan/planSnapshot.ts";
+import {
+  canPersistPlanDraft,
+  readPlanDraft,
+  writePlanDraft,
+} from "../features/home-plan/planDrafts.ts";
 
 function constructionProfileFor(data: PropertyDetailResponse): ConstructionProfile {
   const asOfDate = new Date().toISOString().slice(0, 10);
@@ -88,7 +89,7 @@ function PlanPropertyContext({
 }: {
   propertyId?: string;
   property?: PropertyDetailResponse["property"];
-  homes: PropertyCard[];
+  homes: Array<{ id: string; label: string }>;
   onSelect: (propertyId: string) => void;
 }) {
   return (
@@ -103,7 +104,7 @@ function PlanPropertyContext({
           {!propertyId && <option value="">Choose a home</option>}
           {homes.map((home) => (
             <option key={home.id} value={home.id}>
-              {displayName(home)}
+              {home.label}
             </option>
           ))}
         </select>
@@ -208,7 +209,7 @@ function PlanAssumptionsSheet({
 export function HomePlanPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { compareIds, isPinned, propertyIds, toggleFact } = useNotebook();
+  const { compareIds, propertyIds } = useNotebook();
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
@@ -252,8 +253,6 @@ export function HomePlanPage() {
         setPreviewYear(null);
         setPinnedYear(null);
         setExtraEmisPerYear(draft?.extraEmisPerYear ?? 0);
-        const savedIds = readShortlistIds();
-        if (!savedIds.includes(id)) writeShortlistIds([id, ...savedIds]);
         setStatus("ready");
       })
       .catch((error: unknown) => {
@@ -265,9 +264,9 @@ export function HomePlanPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!id || status !== "ready" || !inputs) return;
+    if (!id || !canPersistPlanDraft(id, propertyData?.property.id, status) || !inputs) return;
     writePlanDraft(id, inputs, extraEmisPerYear);
-  }, [extraEmisPerYear, id, inputs, status]);
+  }, [extraEmisPerYear, id, inputs, propertyData?.property.id, status]);
 
   const projection = useMemo(
     () => inputs ? calculateProjection(inputs, extraEmisPerYear) : null,
@@ -275,9 +274,14 @@ export function HomePlanPage() {
   );
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
-  const homes = workspacePropertyIds
-    .map((propertyId) => catalog.find((home) => home.id === propertyId))
-    .filter((home): home is PropertyCard => Boolean(home));
+  const homeOptions = workspacePropertyIds.flatMap((propertyId) => {
+    const catalogHome = catalog.find((home) => home.id === propertyId);
+    if (catalogHome) return [{ id: propertyId, label: displayName(catalogHome) }];
+    if (propertyData?.property.id === propertyId) {
+      return [{ id: propertyId, label: propertyData.property.title }];
+    }
+    return [];
+  });
   const compareHref = workspaceCompareHref(compareIds, id);
   const buyVsRentHref = workspaceBuyVsRentHref(id ?? propertyIds[0]);
 
@@ -285,14 +289,23 @@ export function HomePlanPage() {
     if (propertyId) navigate(workspaceBuyVsRentHref(propertyId));
   };
 
-  if (!id || status !== "ready" || !propertyData || !inputs || !projection) {
+  if (
+    !id
+    || status !== "ready"
+    || propertyData?.property.id !== id
+    || !inputs
+    || !projection
+  ) {
+    const propertyIsChanging = Boolean(id)
+      && status === "ready"
+      && propertyData?.property.id !== id;
     const content = !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
         <p>Buy vs Rent uses the price and status of one home from your workspace.</p>
-        {homes.length === 0 && <Link to="/">Discover homes</Link>}
+        {homeOptions.length === 0 && <Link to="/">Discover homes</Link>}
       </section>
-    ) : status === "loading" ? (
+    ) : status === "loading" || propertyIsChanging ? (
       <LoadingPlan />
     ) : status === "not_found" ? (
       <PageState variant="not_found" context="property" message={BUY_VS_RENT.unavailable} />
@@ -312,7 +325,7 @@ export function HomePlanPage() {
           buyVsRentHref={buyVsRentHref}
           compareCount={compareIds.length}
           context={(
-            <PlanPropertyContext homes={homes} onSelect={selectProperty} />
+            <PlanPropertyContext homes={homeOptions} onSelect={selectProperty} />
           )}
         />
         {content}
@@ -336,15 +349,6 @@ export function HomePlanPage() {
     projection.loanFreeYear ?? "open",
     Math.round(verdict.advantage),
   ].join(":");
-  const planSnapshot = buildPlanSnapshotNote({
-    propertyId: id,
-    propertyTitle: property.title,
-    inputs,
-    projection,
-    activeYear: verdict.activeYear,
-  });
-  const snapshotSaved = isPinned(planSnapshot.catalogKey);
-
   const updateInput = <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => {
     setPreviewYear(null);
     setPinnedYear(null);
@@ -364,18 +368,6 @@ export function HomePlanPage() {
     setExtraEmisPerYear(0);
   };
 
-  const toggleSnapshot = () => {
-    toggleFact({
-      propertyId: id,
-      catalogKey: planSnapshot.catalogKey,
-      title: planSnapshot.title,
-      detail: planSnapshot.detail,
-      source: planSnapshot.source,
-      labels: planSnapshot.labels,
-      kind: "plan",
-    });
-  };
-
   return (
     <div className="home-plan-shell home-plan-shell--workspace">
       <Helmet>
@@ -392,7 +384,7 @@ export function HomePlanPage() {
           <PlanPropertyContext
             propertyId={id}
             property={property}
-            homes={homes}
+            homes={homeOptions}
             onSelect={selectProperty}
           />
         )}
@@ -412,17 +404,6 @@ export function HomePlanPage() {
           <div className="home-plan-canvas">
             <VerdictBlock
               verdict={verdict}
-              action={(
-                <button
-                  type="button"
-                  className={`home-plan-snapshot-button${snapshotSaved ? " is-saved" : ""}`}
-                  onClick={toggleSnapshot}
-                  aria-label={snapshotSaved ? "Remove plan snapshot" : "Save plan snapshot"}
-                  title={snapshotSaved ? "Remove plan snapshot" : "Save plan snapshot"}
-                >
-                  <NotebookSaveIcon filled={snapshotSaved} size={17} />
-                </button>
-              )}
               aside={<PlanWhisper key={whisperSignature} theme={whisperTheme} />}
             />
 

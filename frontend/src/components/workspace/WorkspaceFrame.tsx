@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getProperties } from "../../lib/api.ts";
 import {
@@ -17,6 +23,10 @@ import {
 import { activeWorkspaceView } from "../../lib/workspaceNav.ts";
 import { SavedHomesDock } from "./SavedHomesDock.tsx";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
+import {
+  WorkspaceRoutePropertyContext,
+  type WorkspaceRouteProperty,
+} from "./workspaceRouteProperty.ts";
 import "../../styles/workspace.css";
 
 const SIDEBAR_STORAGE_KEY = "openestates:workspace-sidebar-collapsed";
@@ -52,10 +62,16 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const propertyId = routePropertyId(location.pathname);
   const shellMode = navigationMode(location.pathname, location.search);
   const [properties, setProperties] = useState<PropertyCard[]>([]);
+  const [routeProperty, setRouteProperty] = useState<WorkspaceRouteProperty | null>(null);
   const [shortlistIds, setShortlistIds] = useState<string[]>(() => readShortlistIds());
   const [collapsed, setCollapsed] = useState(() =>
     window.localStorage.getItem(SIDEBAR_STORAGE_KEY) === "true"
   );
+  const registerRouteProperty = useCallback((property: WorkspaceRouteProperty) => {
+    setRouteProperty((current) => (
+      current?.id === property.id && current.label === property.label ? current : property
+    ));
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -201,31 +217,37 @@ export function WorkspaceFrame({ children }: WorkspaceFrameProps) {
   const sidebarHomes = shellMode === "property-context"
     ? currentProperty ? [currentProperty] : []
     : homes;
+  const routePropertyLabel = routeProperty?.id === propertyId
+    ? routeProperty.label
+    : currentProperty?.society_name?.trim() || currentProperty?.title;
 
   return (
-    <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
-      {showSidebar ? (
-        <WorkspaceSidebar
-          homes={sidebarHomes}
-          focusedId={focusedId}
-          activeView={activeView}
-          collapsed={shellMode === "property-context" ? false : sidebarCollapsed}
-          reduced={reducedBeforeDecision}
-          mode={sidebarMode}
-          discoveryHref={discoveryHref}
-          onToggle={toggleSidebar}
-          onFocus={focusHome}
-          onRemove={removeHome}
-        />
-      ) : null}
-      {(shellMode === "landing" || shellMode === "discovery") && homes.length > 0 ? (
-        <SavedHomesDock
-          key={`${shellMode}:${location.search}`}
-          homes={homes}
-          discoveryHref={discoveryHref}
-        />
-      ) : null}
-      <div className="workspace-view">{children}</div>
-    </div>
+    <WorkspaceRoutePropertyContext.Provider value={registerRouteProperty}>
+      <div className={`workspace-shell${showSidebar ? "" : " workspace-shell--plain"}${showSidebar && sidebarCollapsed ? " workspace-shell--collapsed" : ""}`}>
+        {showSidebar ? (
+          <WorkspaceSidebar
+            homes={sidebarHomes}
+            focusedId={focusedId}
+            activeView={activeView}
+            collapsed={shellMode === "property-context" ? false : sidebarCollapsed}
+            reduced={reducedBeforeDecision}
+            mode={sidebarMode}
+            discoveryHref={discoveryHref}
+            propertyLabel={routePropertyLabel}
+            onToggle={toggleSidebar}
+            onFocus={focusHome}
+            onRemove={removeHome}
+          />
+        ) : null}
+        {(shellMode === "landing" || shellMode === "discovery") && homes.length > 0 ? (
+          <SavedHomesDock
+            key={`${shellMode}:${location.search}`}
+            homes={homes}
+            discoveryHref={discoveryHref}
+          />
+        ) : null}
+        <div className="workspace-view">{children}</div>
+      </div>
+    </WorkspaceRoutePropertyContext.Provider>
   );
 }

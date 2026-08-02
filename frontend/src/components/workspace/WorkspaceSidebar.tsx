@@ -7,6 +7,7 @@ import {
   type WorkspaceView,
 } from "../../lib/workspaceNav.ts";
 import { OpenEstatesMark } from "../brand/OpenEstatesMark.tsx";
+import { requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 type WorkspaceIconName =
   | "browse"
@@ -24,6 +25,7 @@ type WorkspaceSidebarProps = {
   reduced: boolean;
   mode: "property-context" | "workspace";
   discoveryHref: string;
+  propertyLabel?: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -120,6 +122,7 @@ export function WorkspaceSidebar({
   reduced,
   mode,
   discoveryHref,
+  propertyLabel,
   onToggle,
   onFocus,
   onRemove,
@@ -127,7 +130,7 @@ export function WorkspaceSidebar({
   const focusedHome = homes.find((home) => home.id === focusedId);
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
-    propertyLabel: focusedHome ? societyLabel(focusedHome) : undefined,
+    propertyLabel: propertyLabel || (focusedHome ? societyLabel(focusedHome) : undefined),
     discoveryHref,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
@@ -204,6 +207,9 @@ export function WorkspaceSidebar({
               aria-label={item.label}
               aria-current={item.active ? "page" : undefined}
               title={title}
+              onClick={() => {
+                if (item.view === "browse") requestDiscoveryReturn(item.to);
+              }}
             >
               <WorkspaceIcon name={item.icon} />
               {!collapsed && <span>{item.label}</span>}

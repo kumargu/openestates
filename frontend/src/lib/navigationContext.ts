@@ -7,6 +7,7 @@ export type DiscoveryContext = {
 };
 
 const DISCOVERY_STORAGE_KEY = "openestates:last-discovery:v1";
+const DISCOVERY_RETURN_INTENT_KEY = "openestates:discovery-return-intent:v1";
 
 export function navigationMode(pathname: string, search = ""): NavigationMode {
   if (pathname.startsWith("/workspace") || pathname === "/notebook" || pathname === "/compare") {
@@ -55,4 +56,31 @@ export function writeDiscoveryContext(url: string, scrollY = 0): void {
 
 export function discoveryReturnHref(): string {
   return readDiscoveryContext()?.url ?? "/";
+}
+
+export function requestDiscoveryReturn(url: string): void {
+  if (typeof window === "undefined") return;
+  const context = readDiscoveryContext();
+  if (!context || context.url !== url) return;
+  window.sessionStorage.setItem(DISCOVERY_RETURN_INTENT_KEY, JSON.stringify(context));
+}
+
+export function consumeDiscoveryReturn(url: string): number | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.sessionStorage.getItem(DISCOVERY_RETURN_INTENT_KEY);
+    window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
+    if (!raw) return null;
+    const candidate = JSON.parse(raw) as Partial<DiscoveryContext>;
+    if (
+      candidate.version !== 1
+      || candidate.url !== url
+      || typeof candidate.scrollY !== "number"
+      || candidate.scrollY < 0
+    ) return null;
+    return candidate.scrollY;
+  } catch {
+    window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
+    return null;
+  }
 }

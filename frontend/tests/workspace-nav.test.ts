@@ -80,3 +80,10 @@ test("workspace view links preserve explicit property context", () => {
   );
   assert.equal(workspaceBuyVsRentHref(), "/workspace/buy-vs-rent");
 });
+
+test("compare links discard focus outside the compared homes", () => {
+  assert.equal(
+    workspaceCompareHref(["home-one", "home-two"], "home-three"),
+    "/workspace/compare?ids=home-one%2Chome-two",
+  );
+});

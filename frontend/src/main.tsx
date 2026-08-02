@@ -19,7 +19,6 @@ import { ErrorBoundary } from "./components/ErrorBoundary.tsx";
 import { OfflineToast } from "./components/OfflineToast.tsx";
 import { NotebookToast } from "./components/notebook/NotebookToast.tsx";
 import { WorkspaceFrame } from "./components/workspace/WorkspaceFrame.tsx";
-import { readDiscoveryContext } from "./lib/navigationContext.ts";
 
 const HomePage = lazy(() => import("./pages/HomePage.tsx").then(m => ({ default: m.HomePage })));
 const PropertyPage = lazy(() => import("./pages/PropertyPage.tsx").then(m => ({ default: m.PropertyPage })));
@@ -36,18 +35,10 @@ export function FocusOnNavigate() {
     const routeChanged = previousPathname.current !== pathname;
     previousPathname.current = pathname;
     if (!routeChanged && pathname !== "/") return undefined;
-    const discovery = readDiscoveryContext();
-    const shouldRestoreDiscovery = discovery?.url === `${pathname}${search}` && discovery.scrollY > 0;
-    const targetScrollY = shouldRestoreDiscovery ? discovery.scrollY : 0;
-    window.scrollTo(0, targetScrollY);
-    const settleScroll = shouldRestoreDiscovery
-      ? window.setTimeout(() => window.scrollTo(0, targetScrollY), 350)
-      : undefined;
+    window.scrollTo(0, 0);
     const main = document.getElementById("main-content");
-    if (main) main.focus();
-    return () => {
-      if (settleScroll !== undefined) window.clearTimeout(settleScroll);
-    };
+    if (main) main.focus({ preventScroll: true });
+    return undefined;
   }, [pathname, search]);
   return null;
 }
