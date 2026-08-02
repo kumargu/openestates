@@ -264,7 +264,7 @@ export function PropertySidePanel({ propertyId, card, onClose }: Props) {
             </svg>
           </Link>
           <Link
-            to={`/property/${propertyId}/plan`}
+            to={`/workspace/buy-vs-rent/${encodeURIComponent(propertyId)}`}
             className="side-panel-plan-btn"
           >
             {BUY_VS_RENT.short}

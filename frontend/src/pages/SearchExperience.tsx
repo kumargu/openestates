@@ -226,9 +226,10 @@ function AreaContextBar({ ctx }: { ctx: SearchAreaContext }) {
 
 type SearchExperienceProps = {
   onSearchCommit?: (query: string) => void;
+  onResultsReady?: () => void;
 };
 
-export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
+export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExperienceProps) {
   const [properties, setProperties] = useState<PropertyCardType[]>([]);
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [searchResponse, setSearchResponse] = useState<SearchResponse | null>(null);
@@ -238,6 +239,11 @@ export function SearchExperience({ onSearchCommit }: SearchExperienceProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const query = searchParams.get("q") || "";
   const areaFilter = searchParams.get("area") || "";
+
+  useEffect(() => {
+    if (!query || status === "loading") return;
+    onResultsReady?.();
+  }, [onResultsReady, query, status]);
 
   useEffect(() => {
     if (searchParams.get("view") === "saved") {

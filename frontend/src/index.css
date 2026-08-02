@@ -3573,70 +3573,6 @@ body {
   white-space: nowrap;
 }
 
-.landing-final-prompt {
-  display: grid;
-  justify-items: center;
-  gap: 1.1rem;
-  padding: clamp(4.5rem, 9vw, 7.5rem) 1.25rem;
-  background: radial-gradient(circle at 50% 0%, rgba(210, 139, 111, 0.1), transparent 46%), #f7f5f1;
-  text-align: center;
-}
-
-.landing-final-prompt h2 {
-  margin: 0;
-  color: #2b2622;
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  font-size: clamp(1.7rem, 1.3rem + 1.1vw, 2.35rem);
-  font-weight: 600;
-  letter-spacing: -0.03em;
-}
-
-.landing-final-prompt__form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  width: min(100%, 580px);
-  padding: 0.5rem 0.55rem 0.5rem 1rem;
-  border: 1px solid rgba(128, 84, 66, 0.15);
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow: 0 16px 40px rgba(94, 66, 52, 0.07);
-}
-
-.landing-final-prompt__form:focus-within {
-  border-color: rgba(201, 107, 79, 0.32);
-  box-shadow: 0 0 0 4px rgba(201, 107, 79, 0.08), 0 18px 42px rgba(94, 66, 52, 0.09);
-}
-
-.landing-final-prompt__form input {
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: #332d29;
-  font: inherit;
-  font-size: 0.94rem;
-}
-
-.landing-final-prompt__form input::placeholder { color: #a29992; }
-
-.landing-final-prompt__form button {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border: 0;
-  border-radius: 50%;
-  background: var(--color-action);
-  color: #fff;
-  cursor: pointer;
-  transition: background-color 180ms ease, transform 180ms var(--ease-out);
-}
-
-.landing-final-prompt__form button:hover {
-  background: var(--color-action-hover);
-  transform: translateY(-1px);
-}
-
 @media (max-width: 900px) {
   .landing-featured {
     width: calc(100% - 2rem);
@@ -3768,7 +3704,6 @@ body {
     grid-row: 1;
   }
 
-  .landing-final-prompt { padding-block: 4.5rem; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -3799,8 +3734,7 @@ body {
   .landing-converge__table,
   .landing-converge__plan,
   .landing-converge__plan path,
-  .landing-scene__action span,
-  .landing-final-prompt__form button {
+  .landing-scene__action span {
     animation: none !important;
     transition: none !important;
   }

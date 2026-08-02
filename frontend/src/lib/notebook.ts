@@ -456,7 +456,7 @@ function blockFromNote(note: NotebookNote): NotebookBlock {
       catalogKey: note.catalogKey,
       labels: note.labels,
       createdAt: note.createdAt,
-      planHref: `/plan/${encodeURIComponent(note.propertyId)}`,
+      planHref: `/workspace/buy-vs-rent/${encodeURIComponent(note.propertyId)}`,
     };
   }
   if (note.kind === "fact" || note.kind === "selection") {
@@ -813,7 +813,7 @@ export function toggleCatalogNote(input: {
         catalogKey: input.catalogKey,
         labels: uniqueLabels(input.labels),
         createdAt,
-        planHref: `/plan/${encodeURIComponent(input.propertyId)}`,
+        planHref: `/workspace/buy-vs-rent/${encodeURIComponent(input.propertyId)}`,
       }
     : {
         id: noteId(),
@@ -850,7 +850,7 @@ export function upsertCatalogNote(input: {
         catalogKey: input.catalogKey,
         labels: uniqueLabels(input.labels),
         createdAt,
-        planHref: `/plan/${encodeURIComponent(input.propertyId)}`,
+        planHref: `/workspace/buy-vs-rent/${encodeURIComponent(input.propertyId)}`,
       }
     : {
         id: existing?.block.id ?? noteId(),

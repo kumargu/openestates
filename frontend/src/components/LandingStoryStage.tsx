@@ -168,6 +168,7 @@ function FeaturedSuggestions({
               property={property}
               variant="browse"
               matchLabels={matchLabels(property, activeLensId)}
+              allowSave
             />
           </div>
         ))}

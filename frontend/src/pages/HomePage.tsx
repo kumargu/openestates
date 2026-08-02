@@ -7,6 +7,7 @@ import { getRecentSearches, addRecentSearch, clearRecentSearches } from "../lib/
 import { SearchExperience as InlineSearchExperience } from "./SearchExperience.tsx";
 import { AreaTrackerSection } from "../components/AreaTrackerSection.tsx";
 import { LandingStoryStage } from "../components/LandingStoryStage.tsx";
+import { consumeDiscoveryReturn } from "../lib/navigationContext.ts";
 
 const SEARCH_SUGGESTIONS = [
   { label: "Under ₹2.5Cr", query: "3BHK under 2.5Cr with clear price context" },
@@ -139,6 +140,14 @@ export function HomePage() {
     setRecents(getRecentSearches());
   }, []);
 
+  const restoreDiscoveryPosition = useCallback(() => {
+    const scrollY = consumeDiscoveryReturn(`${window.location.pathname}${window.location.search}`);
+    if (scrollY == null) return;
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+    });
+  }, []);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     commitSearch(query);
@@ -265,11 +274,12 @@ export function HomePage() {
           </div>
         )}
 
-        <div className="home-body">
+        <div className="home-body" aria-live="polite">
           {hasActiveSearch ? (
             <section className="home-inline-results-anchor" aria-label="Search results">
               <InlineSearchExperience
                 onSearchCommit={handleInlineSearchCommit}
+                onResultsReady={restoreDiscoveryPosition}
               />
             </section>
           ) : properties.length > 0 ? (
@@ -281,23 +291,6 @@ export function HomePage() {
                 onSearch={commitSearch}
                 maxMarkets={6}
               />
-              <section className="landing-final-prompt" aria-labelledby="landing-final-prompt-title">
-                <h2 id="landing-final-prompt-title">What should home make easier?</h2>
-                <form onSubmit={handleSearch} className="landing-final-prompt__form" role="search">
-                  <input
-                    type="text"
-                    value={query}
-                    onChange={(event) => setQuery(event.target.value)}
-                    placeholder="Describe your next home"
-                    aria-label="Describe your next home"
-                  />
-                  <button type="submit" aria-label="Search for homes">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <path d="M5 12h14M13 6l6 6-6 6" />
-                    </svg>
-                  </button>
-                </form>
-              </section>
             </>
           ) : propertiesLoading ? <LandingLoadingState /> : null}
         </div>
