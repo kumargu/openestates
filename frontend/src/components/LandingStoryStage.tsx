@@ -6,10 +6,11 @@ import { propertyDetailPath } from "../lib/api.ts";
 import { filterListableProperties, uniqueSocietiesForDiscovery } from "../lib/property-filters.ts";
 import type { PropertyCard } from "../lib/types.ts";
 import { useLandingSceneController } from "../hooks/useLandingSceneController.ts";
+import { useLandingResolveSequence } from "../hooks/useLandingResolveSequence.ts";
 
 const FEATURED_LIMIT = 6;
-const STORY_SCENE_IDS = ["resolve", "reveal", "converge"] as const;
-const RESOLVE_QUERY = "3BHK under 2.5Cr, near metro, with strong reviews";
+const STORY_SCENE_IDS = ["resolve", "reveal", "remember", "converge", "record"] as const;
+const RESOLVE_QUERY = "3BHK under 2Cr near metro with strong reviews";
 
 type StorySceneId = typeof STORY_SCENE_IDS[number];
 type FeaturedLensId = "metro" | "family" | "township" | "feedback";
@@ -183,9 +184,10 @@ function storyHomesForResolve(properties: PropertyCard[]): PropertyCard[] {
       property,
       index,
       score: (property.bhk === 3 ? 4 : 0)
-        + (hasKnownNumber(property.price) && property.price <= 25_000_000 ? 3 : 0)
-        + (hasKnownNumber(property.metro_distance_mins) ? 2 : 0)
-        + (hasKnownNumber(property.google_rating) ? 1 : 0),
+        + (hasKnownNumber(property.price) && property.price <= 20_000_000 ? 3 : 0)
+        + (hasKnownNumber(property.open_space_pct) ? 2 : 0)
+        + (hasKnownNumber(property.google_rating) ? 1 : 0)
+        + (hasKnownNumber(property.google_review_count) && property.google_review_count >= 500 ? 2 : 0),
     }))
     .sort((left, right) => right.score - left.score || left.index - right.index)
     .map(({ property }) => property)
@@ -194,28 +196,58 @@ function storyHomesForResolve(properties: PropertyCard[]): PropertyCard[] {
 
 function resolveReasons(property: PropertyCard): string[] {
   const reasons: string[] = [];
-  if (hasKnownNumber(property.metro_distance_mins)) reasons.push(`${property.metro_distance_mins} min metro`);
   if (hasKnownNumber(property.google_rating)) reasons.push(`Google ${property.google_rating.toFixed(1)}`);
   if (hasKnownNumber(property.open_space_pct)) reasons.push(`${Math.round(property.open_space_pct)}% open space`);
   return reasons.slice(0, 2);
 }
 
-function ResolveCanvas({ homes }: { homes: PropertyCard[] }) {
+function JourneyRail({ step }: { step: number }) {
+  return (
+    <div className="landing-film__rail" aria-hidden="true">
+      {[0, 1, 2, 3, 4].map((index) => (
+        <i key={index} className={index <= step ? "is-complete" : ""} />
+      ))}
+    </div>
+  );
+}
+
+function ResolveCanvas({
+  active,
+  homes,
+  paused,
+  reducedMotion,
+}: {
+  active: boolean;
+  homes: PropertyCard[];
+  paused: boolean;
+  reducedMotion: boolean;
+}) {
   const focusHome = homes[0];
+  const sequence = useLandingResolveSequence({ active, paused, reducedMotion });
   if (!focusHome) return null;
   const reasons = resolveReasons(focusHome);
 
   return (
-    <div className="landing-product landing-product--resolve">
-      <p className="landing-resolve__query">
-        <span>3BHK under 2.5Cr,</span> <span>near metro,</span> <span>with strong reviews</span>
-      </p>
-      <div className="landing-resolve__intents" aria-label="Search preferences">
-        <span>3 BHK</span>
-        <span>Under ₹2.5 Cr</span>
-        <span>Metro</span>
-        <span>Reviews</span>
+    <div
+      className="landing-product landing-product--resolve"
+      data-phase={sequence.phase}
+      data-query-visible={sequence.queryVisible}
+      data-candidates-visible={sequence.candidatesVisible}
+      data-selection-visible={sequence.selectionVisible}
+      data-proof-visible={sequence.proofVisible}
+    >
+      <JourneyRail step={0} />
+      <div className="landing-resolve__composer">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10.8" cy="10.8" r="6.2" />
+          <path d="m15.4 15.4 4.1 4.1" />
+        </svg>
+        <p className="landing-resolve__query">
+          <span>3BHK under 2Cr,</span> <span>near metro,</span> <span>with strong reviews</span>
+        </p>
+        <i aria-hidden="true">→</i>
       </div>
+      <p className="landing-resolve__result-count">3 strongest homes</p>
       <div className="landing-resolve__homes">
         {homes.map((property, index) => {
           const meta = [
@@ -228,13 +260,16 @@ function ResolveCanvas({ homes }: { homes: PropertyCard[] }) {
               key={property.id}
               className={`landing-resolve__home${index === 0 ? " is-focus" : ""}`}
             >
-              <strong>{homeName(property)}</strong>
-              {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
-              {index === 0 && reasons.length > 0 ? (
-                <div className="landing-resolve__reasons">
-                  {reasons.map((reason) => <em key={reason}>{reason}</em>)}
-                </div>
-              ) : null}
+              <span className="landing-resolve__rank">0{index + 1}</span>
+              <div className="landing-resolve__home-copy">
+                <strong>{homeName(property)}</strong>
+                {meta.length > 0 ? <span>{meta.join(" · ")}</span> : null}
+                {index === 0 && reasons.length > 0 ? (
+                  <div className="landing-resolve__reasons">
+                    {reasons.map((reason) => <em key={reason}>{reason}</em>)}
+                  </div>
+                ) : null}
+              </div>
             </article>
           );
         })}
@@ -304,6 +339,7 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
 
   return (
     <div className="landing-product landing-product--reveal">
+      <JourneyRail step={1} />
       <header className="landing-reveal__home">
         <div>
           <strong>{homeName(property)}</strong>
@@ -361,6 +397,40 @@ function RevealCanvas({ property }: { property: PropertyCard }) {
             </div>
           ) : null}
         </section>
+      </div>
+    </div>
+  );
+}
+
+function NotebookCanvas({ property }: { property: PropertyCard }) {
+  return (
+    <div className="landing-product landing-product--remember">
+      <JourneyRail step={2} />
+      <header className="landing-remember__home">
+        <div>
+          <span>Saved home</span>
+          <strong>{homeName(property)}</strong>
+        </div>
+        <i aria-hidden="true">♥</i>
+      </header>
+
+      <div className="landing-remember__page">
+        <p className="landing-remember__note">
+          Peaceful campus and easy metro access. Check evening traffic before deciding.
+        </p>
+        <div className="landing-remember__command">
+          <span>/visit</span>
+          <strong>Visit checklist</strong>
+        </div>
+        <div className="landing-remember__checklist">
+          <header>
+            <strong>Visit</strong>
+            <span>0 / 3 done</span>
+          </header>
+          <p><i aria-hidden="true" /> Check water pressure</p>
+          <p><i aria-hidden="true" /> Listen for balcony traffic noise</p>
+          <p><i aria-hidden="true" /> Confirm parking slot</p>
+        </div>
       </div>
     </div>
   );
@@ -426,9 +496,10 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
 
   return (
     <div className="landing-product landing-product--converge">
+      <JourneyRail step={3} />
       <div className="landing-converge__notebook">
-        <span>Notebook</span>
-        <strong>2 homes</strong>
+        <span>Shortlist</span>
+        <strong>2 homes ready to compare</strong>
         <i aria-hidden="true" />
         <i aria-hidden="true" />
       </div>
@@ -456,14 +527,63 @@ function ConvergeCanvas({ homes }: { homes: PropertyCard[] }) {
 
       <div className="landing-converge__plan">
         <div>
-          <span>Buy or rent</span>
-          <strong>See the tradeoff over time</strong>
+          <span>Buy vs Rent</span>
+          <strong>Follow both paths to year 20</strong>
         </div>
         <svg viewBox="0 0 180 54" aria-hidden="true">
           <path className="is-buy" d="M4 46 C40 44, 64 36, 92 25 C120 14, 146 10, 176 6" />
           <path className="is-rent" d="M4 38 C42 36, 76 33, 108 26 C140 19, 158 16, 176 13" />
         </svg>
-        <Link to={`/property/${left.id}/plan`}>Open plan <span aria-hidden="true">→</span></Link>
+        <Link to={`/workspace/buy-vs-rent/${left.id}`}>Open plan <span aria-hidden="true">→</span></Link>
+      </div>
+    </div>
+  );
+}
+
+function ReraCanvas({ property }: { property: PropertyCard }) {
+  const summary = property.decision_check_summary;
+  const registeredLabel = summary?.groups
+    ?.flatMap((group) => group.labels)
+    .find((label) => label.key === "rera_registration_available")
+    ?.label;
+  const cautionLabels = summary?.groups
+    ?.find((group) => group.id === "attention")
+    ?.labels.slice(0, 2) ?? [];
+  const documentLabels = summary?.groups
+    ?.find((group) => group.id === "documents")
+    ?.labels.slice(0, 3) ?? [];
+
+  return (
+    <div className="landing-product landing-product--record">
+      <JourneyRail step={4} />
+      <header className="landing-record__head">
+        <div>
+          <span>RERA</span>
+          <strong>{homeName(property)}</strong>
+        </div>
+        <em>{registeredLabel ?? "Registration"}</em>
+      </header>
+
+      {isKnownText(summary?.registrationNumberCompact) ? (
+        <div className="landing-record__registration">
+          <span>Registration</span>
+          <strong>{summary?.registrationNumberCompact}</strong>
+        </div>
+      ) : null}
+
+      <div className="landing-record__body">
+        <section className="landing-record__documents">
+          <span>Documents</span>
+          {documentLabels.map((label) => (
+            <p key={label.key}><i aria-hidden="true" />{label.label}</p>
+          ))}
+        </section>
+        <section className="landing-record__checks">
+          <span>Decision checks</span>
+          {cautionLabels.map((label) => (
+            <p key={label.key}>{label.label}</p>
+          ))}
+        </section>
       </div>
     </div>
   );
@@ -537,13 +657,16 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
   if (uniqueHomes.length === 0) return null;
 
   const resolveHomes = storyHomesForResolve(uniqueHomes);
-  const revealHome = selectEvidenceHome(uniqueHomes);
-  const compareHomes = rankEvidenceHomes(uniqueHomes).slice(0, 2);
+  const revealHome = resolveHomes[0] ?? selectEvidenceHome(uniqueHomes);
+  const compareHomes = resolveHomes.length >= 2
+    ? resolveHomes.slice(0, 2)
+    : rankEvidenceHomes(uniqueHomes).slice(0, 2);
+  const resolveIsActive = controller.activeSceneId === "resolve";
 
   return (
     <section
       className="landing-stage"
-      aria-label="How OpenEstates helps you decide"
+      aria-label="A buyer journey through OpenEstates"
       data-reduced-motion={controller.isReducedMotion ? "true" : "false"}
     >
       <FeaturedSuggestions properties={uniqueHomes} onSearch={onSearch} />
@@ -552,22 +675,30 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
         <StoryScene
           id="resolve"
           side="right"
-          title="Ranked for your life"
-          description="Your request becomes a small set of homes, with the strongest reasons kept in view."
+          title="Start with the life you want"
+          description="A natural-language search becomes a small, ranked set of homes with reasons attached."
           action={(
             <button type="button" onClick={() => onSearch(RESOLVE_QUERY)}>
               Try this search <span aria-hidden="true">→</span>
             </button>
           )}
-          canvas={<ResolveCanvas homes={resolveHomes} />}
+          canvas={(
+            <ResolveCanvas
+              key={`${resolveIsActive ? "active" : "rest"}-${controller.isReducedMotion ? "reduced" : "motion"}`}
+              active={resolveIsActive}
+              homes={resolveHomes}
+              paused={controller.isPaused("resolve")}
+              reducedMotion={controller.isReducedMotion}
+            />
+          )}
           controller={controller}
         />
 
         <StoryScene
           id="reveal"
           side="left"
-          title="See what listings leave out"
-          description="Project context and resident signals settle around the home, so the tradeoff is visible before a visit."
+          title="Open a home, not a listing"
+          description="The result expands into map context, project checks and resident reviews without losing why it matched."
           action={(
             <Link to={propertyDetailPath(revealHome.id)}>
               See the full picture <span aria-hidden="true">→</span>
@@ -577,12 +708,26 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
           controller={controller}
         />
 
+        <StoryScene
+          id="remember"
+          side="right"
+          title="Keep your judgment with the home"
+          description="Save the home, write what you noticed, then turn a slash command into a visit checklist."
+          action={(
+            <Link to="/workspace">
+              Open notebook <span aria-hidden="true">→</span>
+            </Link>
+          )}
+          canvas={<NotebookCanvas property={revealHome} />}
+          controller={controller}
+        />
+
         {compareHomes.length >= 2 ? (
           <StoryScene
             id="converge"
-            side="right"
-            title="Compare and decide"
-            description="Project facts and the financial horizon come together in one calm workspace."
+            side="left"
+            title="Make the tradeoffs visible"
+            description="Put two saved homes side by side, then carry the stronger option into a Buy vs Rent horizon."
             action={(
               <Link to="/workspace/compare">
                 Open workspace <span aria-hidden="true">→</span>
@@ -592,6 +737,21 @@ export function LandingStoryStage({ properties, onSearch }: LandingStoryStagePro
             controller={controller}
           />
         ) : null}
+
+
+        <StoryScene
+          id="record"
+          side="right"
+          title="Read the official record"
+          description="Registration, documents, delays and complaint history stay connected to the same home."
+          action={(
+            <Link to={`${propertyDetailPath(revealHome.id)}/rera`}>
+              Inspect RERA evidence <span aria-hidden="true">→</span>
+            </Link>
+          )}
+          canvas={<ReraCanvas property={revealHome} />}
+          controller={controller}
+        />
       </div>
     </section>
   );
