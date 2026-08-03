@@ -218,7 +218,7 @@ export function HomePlanPage() {
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
         <p>Buy vs Rent uses the price and status of one home from your workspace.</p>
-        <Link to="/">Discover homes</Link>
+        <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
       <LoadingPlan />
@@ -226,7 +226,7 @@ export function HomePlanPage() {
       <section className="home-plan-empty">
         <h1>This home is no longer available.</h1>
         <p>Add another home to your workspace and its Buy vs Rent plan will be ready here.</p>
-        <Link to="/">Explore homes</Link>
+        <Link to="/">Explore</Link>
       </section>
     ) : (
       <section className="home-plan-empty">

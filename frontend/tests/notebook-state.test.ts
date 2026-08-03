@@ -33,6 +33,7 @@ const {
   NOTEBOOK_SCHEMA_VERSION,
   addNotebookCommandBlock,
   addNotebookParagraphAfter,
+  detachNotebookPropertyFromShortlist,
   hideNotebookCompareLabel,
   readNotebook,
   showNotebookCompareLabel,
@@ -110,6 +111,34 @@ test("compare selection is explicit and does not rewrite saved homes", () => {
   assert.deepEqual(state.propertyIds, ["saved-home", "noted-home"]);
   assert.deepEqual(state.compareIds, ["saved-home"]);
   assert.equal(storage.getItem(SHORTLIST_STORAGE_KEY), "saved-home,noted-home");
+});
+
+test("removing a shortlisted home clears compare state without deleting buyer notes", () => {
+  storage.clear();
+  storage.setItem(SHORTLIST_STORAGE_KEY, "noted-home");
+  storage.setItem(NOTEBOOK_STORAGE_KEY, JSON.stringify({
+    propertyIds: ["empty-home", "noted-home"],
+    notes: [{
+      id: "note-1",
+      propertyId: "noted-home",
+      title: "Visit on Saturday",
+      kind: "handwritten",
+      catalogKey: "hand:noted-home:1",
+      labels: [],
+      createdAt: 1,
+    }],
+    compareIds: ["empty-home", "noted-home"],
+  }));
+
+  const emptyRemoved = detachNotebookPropertyFromShortlist("empty-home");
+  assert.equal(emptyRemoved.propertyIds.includes("empty-home"), false);
+  assert.deepEqual(emptyRemoved.compareIds, ["noted-home"]);
+
+  storage.setItem(SHORTLIST_STORAGE_KEY, "");
+  const notedRemoved = detachNotebookPropertyFromShortlist("noted-home");
+  assert.equal(notedRemoved.propertyIds.includes("noted-home"), true);
+  assert.equal(notedRemoved.notes[0]?.title, "Visit on Saturday");
+  assert.deepEqual(notedRemoved.compareIds, []);
 });
 
 test("compare labels can be hidden and restored without changing notes", () => {

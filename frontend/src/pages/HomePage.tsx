@@ -54,7 +54,9 @@ export function HomePage() {
 
   useEffect(() => {
     if (searchParams.get("view") === "saved") {
-      setSearchParams({}, { replace: true });
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.delete("view");
+      setSearchParams(nextParams, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 
@@ -144,7 +146,13 @@ export function HomePage() {
     const scrollY = consumeDiscoveryReturn(`${window.location.pathname}${window.location.search}`);
     if (scrollY == null) return;
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => window.scrollTo(0, scrollY));
+      window.requestAnimationFrame(() => {
+        const root = document.documentElement;
+        const previousScrollBehavior = root.style.scrollBehavior;
+        root.style.scrollBehavior = "auto";
+        window.scrollTo(0, scrollY);
+        root.style.scrollBehavior = previousScrollBehavior;
+      });
     });
   }, []);
 
@@ -157,7 +165,7 @@ export function HomePage() {
     <div className={`home-page${hasActiveSearch ? " home-page--searching" : ""}`}>
       <section
         className={`home-hero${hasActiveSearch ? " home-hero--search-active" : ""}`}
-        aria-label={hasActiveSearch ? "Search" : "Home"}
+        aria-label="Explore"
       >
         <div className="home-hero__wash" aria-hidden="true" />
 
@@ -176,7 +184,7 @@ export function HomePage() {
         <form
           onSubmit={handleSearch}
           className={`home-composer${hasActiveSearch ? " home-composer--search-active" : " home-composer--landing-sticky fade-up fade-up-delay-1"}${searchFocused ? " home-composer--focused" : ""}`}
-          aria-label="Property search"
+          aria-label="Search homes"
           role="search"
         >
           <div className="home-composer__field">
@@ -215,21 +223,23 @@ export function HomePage() {
           </div>
         </form>
 
-        <div
-          className={`home-search-suggestions${hasActiveSearch ? "" : " fade-up fade-up-delay-2"}`}
-          aria-label="Suggested searches"
-        >
-          {SEARCH_SUGGESTIONS.map((suggestion) => (
-            <button
-              key={suggestion.label}
-              type="button"
-              className={`home-search-suggestion${activeSearchQuery === suggestion.query ? " is-active" : ""}`}
-              onClick={() => commitSearch(suggestion.query)}
-            >
-              {suggestion.label}
-            </button>
-          ))}
-        </div>
+        {!hasActiveSearch && (
+          <div
+            className="home-search-suggestions fade-up fade-up-delay-2"
+            aria-label="Suggested searches"
+          >
+            {SEARCH_SUGGESTIONS.map((suggestion) => (
+              <button
+                key={suggestion.label}
+                type="button"
+                className="home-search-suggestion"
+                onClick={() => commitSearch(suggestion.query)}
+              >
+                {suggestion.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {loadError && (
           <div className={`home-error-banner${hasActiveSearch ? "" : " fade-up fade-up-delay-2"}`}>
@@ -276,7 +286,7 @@ export function HomePage() {
 
         <div className="home-body" aria-live="polite">
           {hasActiveSearch ? (
-            <section className="home-inline-results-anchor" aria-label="Search results">
+            <section className="home-inline-results-anchor" aria-label="Homes matching your search">
               <InlineSearchExperience
                 onSearchCommit={handleInlineSearchCommit}
                 onResultsReady={restoreDiscoveryPosition}

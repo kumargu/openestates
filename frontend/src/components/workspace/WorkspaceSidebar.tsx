@@ -24,7 +24,6 @@ type WorkspaceSidebarProps = {
   reduced: boolean;
   mode: "property-context" | "workspace";
   discoveryHref: string;
-  propertyLabel?: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -113,7 +112,6 @@ export function WorkspaceSidebar({
   reduced,
   mode,
   discoveryHref,
-  propertyLabel,
   onToggle,
   onFocus,
   onRemove,
@@ -121,7 +119,6 @@ export function WorkspaceSidebar({
   const focusedHome = homes.find((home) => home.id === focusedId);
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
-    propertyLabel: propertyLabel || (focusedHome ? societyLabel(focusedHome) : undefined),
     discoveryHref,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
@@ -212,7 +209,7 @@ export function WorkspaceSidebar({
         })}
       </nav>
 
-      {!collapsed && mode === "workspace" && (
+      {!collapsed && (
         <section
           className="workspace-sidebar__shortlist"
           aria-labelledby="workspace-shortlist-title"

@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
 import { Helmet } from "react-helmet-async";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { useNotebook } from "../hooks/useNotebook.ts";
+import { FOCUS_STORAGE_KEY, readShortlistIds } from "../lib/compare.ts";
 import { SocietyComparisonMatrix } from "../components/compare/SocietyComparisonMatrix.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
 import { LabelPill } from "../components/ui/LabelPill.tsx";
@@ -21,7 +22,11 @@ import {
   type NotebookNote,
 } from "../lib/notebook.ts";
 import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
-import { workspaceBuyVsRentHref, workspaceCompareHref } from "../lib/workspaceNav.ts";
+import {
+  workspaceBuyVsRentHref,
+  workspaceCompareHref,
+  workspaceFocusedHomeId,
+} from "../lib/workspaceNav.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import "../styles/notebook.css";
 
@@ -186,10 +191,6 @@ export function WorkspacePage() {
     [activeCompareIds, byId],
   );
   const compareKey = selectedHomes.map((home) => home.id).join(",");
-  const compareHref = workspaceCompareHref(
-    activeCompareIds,
-    searchParams.get("focus") ?? selectedHomes[0]?.id,
-  );
 
   const visible = useMemo(
     () => [...notes]
@@ -201,9 +202,15 @@ export function WorkspacePage() {
     () => propertyIdsWithNotesFirst(propertyIds, visible),
     [propertyIds, visible],
   );
-  const buyVsRentHref = workspaceBuyVsRentHref(
-    searchParams.get("focus") ?? activeCompareIds[0] ?? orderedPropertyIds[0],
+  const shortlistedWorkspaceIds = readShortlistIds()
+    .filter((id) => orderedPropertyIds.includes(id));
+  const focusedWorkspaceId = workspaceFocusedHomeId(
+    searchParams.get("focus"),
+    window.localStorage.getItem(FOCUS_STORAGE_KEY),
+    shortlistedWorkspaceIds.length > 0 ? shortlistedWorkspaceIds : orderedPropertyIds,
   );
+  const compareHref = workspaceCompareHref(activeCompareIds, focusedWorkspaceId);
+  const buyVsRentHref = workspaceBuyVsRentHref(focusedWorkspaceId);
 
   function quickAdd(propertyId: string, text: string, labels: NotebookLabelId[] = []) {
     if (!propertyId || !text.trim()) return;
@@ -274,7 +281,7 @@ export function WorkspacePage() {
         <div className="notion-empty">
           <h2>Empty workspace</h2>
           <p>Save a home or add a note from a property page to start your decision workspace.</p>
-          <Link to="/">Discover homes</Link>
+          <Link to="/">Explore</Link>
         </div>
       ) : mode === "compare" ? (
         <CompareWorkspaceView

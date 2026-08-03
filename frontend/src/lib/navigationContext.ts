@@ -65,6 +65,17 @@ export function requestDiscoveryReturn(url: string): void {
   window.sessionStorage.setItem(DISCOVERY_RETURN_INTENT_KEY, JSON.stringify(context));
 }
 
+export function captureDiscoveryDeparture(url: string, scrollY: number): void {
+  writeDiscoveryContext(url, scrollY);
+  requestDiscoveryReturn(url);
+}
+
+export function clearDiscoveryContext(): void {
+  if (typeof window === "undefined") return;
+  window.sessionStorage.removeItem(DISCOVERY_STORAGE_KEY);
+  window.sessionStorage.removeItem(DISCOVERY_RETURN_INTENT_KEY);
+}
+
 export function consumeDiscoveryReturn(url: string): number | null {
   if (typeof window === "undefined") return null;
   try {

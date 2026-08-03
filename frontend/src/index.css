@@ -2246,19 +2246,8 @@ body {
   color: #2a2421;
 }
 
-.home-search-suggestion.is-active {
-  background: color-mix(in srgb, var(--color-cool-deep) 10%, #fff);
-  border-color: color-mix(in srgb, var(--color-cool-deep) 28%, transparent);
-  color: var(--color-cool-deep);
-}
-
 .home-body {
   min-height: 12rem;
-}
-
-.home-page--searching .home-search-suggestions {
-  margin-top: 0.7rem;
-  margin-bottom: 0;
 }
 
 .home-search-suggestions {
