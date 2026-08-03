@@ -32,6 +32,13 @@ export function FocusOnNavigate() {
   const { pathname, search } = useLocation();
   const previousPathname = useRef<string | null>(null);
   useEffect(() => {
+    const previous = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    return () => {
+      window.history.scrollRestoration = previous;
+    };
+  }, []);
+  useEffect(() => {
     const routeChanged = previousPathname.current !== pathname;
     previousPathname.current = pathname;
     if (!routeChanged && pathname !== "/") return undefined;

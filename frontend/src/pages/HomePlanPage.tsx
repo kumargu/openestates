@@ -1,12 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
-import { PageState } from "../components/PageState.tsx";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
+import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
-import { workspaceBuyVsRentHref, workspaceCompareHref } from "../lib/workspaceNav.ts";
+import {
+  workspaceBuyVsRentHref,
+  workspaceCompareHref,
+  workspacePlanReplacementId,
+} from "../lib/workspaceNav.ts";
 import { PlanAssumptionRail } from "../features/home-plan/PlanAssumptionRail.tsx";
 import { PlanGraph } from "../features/home-plan/PlanGraph.tsx";
 import { PlanWhisper } from "../features/home-plan/PlanWhisper.tsx";
@@ -77,133 +81,12 @@ function LoadingPlan() {
   );
 }
 
-function displayName(home: PropertyCard): string {
+function propertyLabel(home: PropertyCard): string {
   return home.society_name?.trim() || home.title;
 }
 
-function PlanPropertyContext({
-  propertyId,
-  property,
-  homes,
-  onSelect,
-}: {
-  propertyId?: string;
-  property?: PropertyDetailResponse["property"];
-  homes: Array<{ id: string; label: string }>;
-  onSelect: (propertyId: string) => void;
-}) {
-  return (
-    <div className="workspace-plan-context">
-      <label>
-        <span className="sr-only">Home for Buy vs Rent</span>
-        <select
-          value={propertyId ?? ""}
-          onChange={(event) => onSelect(event.target.value)}
-          aria-label="Home for Buy vs Rent"
-        >
-          {!propertyId && <option value="">Choose a home</option>}
-          {homes.map((home) => (
-            <option key={home.id} value={home.id}>
-              {home.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {property && (
-        <span>{property.area} · {formatCurrency(property.price, true)}</span>
-      )}
-    </div>
-  );
-}
-
-function PlanAssumptionsSheet({
-  open,
-  inputs,
-  extraEmisPerYear,
-  onInputChange,
-  onExtraEmisChange,
-  onReset,
-  onClose,
-}: {
-  open: boolean;
-  inputs: PlanInputs;
-  extraEmisPerYear: number;
-  onInputChange: <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => void;
-  onExtraEmisChange: (count: number) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    closeRef.current?.focus();
-    const handleDialogKeys = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const sheet = closeRef.current?.closest<HTMLElement>(".plan-assumptions-sheet");
-      const focusable = sheet
-        ? [...sheet.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])")]
-          .filter((element) => !element.hasAttribute("disabled"))
-        : [];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener("keydown", handleDialogKeys);
-    return () => {
-      document.removeEventListener("keydown", handleDialogKeys);
-      previousFocus?.focus();
-    };
-  }, [onClose, open]);
-
-  if (!open) return null;
-  return (
-    <div className="plan-assumptions-layer">
-      <button
-        type="button"
-        className="plan-assumptions-backdrop"
-        aria-label="Close assumptions"
-        onClick={onClose}
-      />
-      <aside
-        className="plan-assumptions-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="plan-assumptions-title"
-      >
-        <header>
-          <div>
-            <h2 id="plan-assumptions-title">Assumptions</h2>
-            <p>Changes update the outcome immediately.</p>
-          </div>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close assumptions">
-            ×
-          </button>
-        </header>
-        <PlanAssumptionRail
-          inputs={inputs}
-          extraEmisPerYear={extraEmisPerYear}
-          onInputChange={onInputChange}
-          onExtraEmisChange={onExtraEmisChange}
-          onReset={onReset}
-        />
-      </aside>
-    </div>
-  );
+function propertyMeta(bhk: number, sqft: number, price: number): string {
+  return `${bhk} BHK · ${sqft.toLocaleString("en-IN")} sqft · ${formatCurrency(price, true)}`;
 }
 
 export function HomePlanPage() {
@@ -211,24 +94,32 @@ export function HomePlanPage() {
   const navigate = useNavigate();
   const { compareIds, propertyIds } = useNotebook();
   const [catalog, setCatalog] = useState<PropertyCard[]>([]);
+  const [catalogReady, setCatalogReady] = useState(false);
   const [propertyData, setPropertyData] = useState<PropertyDetailResponse | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "not_found" | "error">("loading");
   const [inputs, setInputs] = useState<PlanInputs | null>(null);
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
-  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  const closeAssumptions = useCallback(() => setAssumptionsOpen(false), []);
 
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     getProperties({ signal: controller.signal })
-      .then(setCatalog)
+      .then((homes) => {
+        if (active) setCatalog(homes);
+      })
       .catch((error: unknown) => {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setCatalog([]);
+        if (active) setCatalog([]);
+      })
+      .finally(() => {
+        if (active) setCatalogReady(true);
       });
-    return () => controller.abort();
+    return () => {
+      active = false;
+      controller.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -237,7 +128,6 @@ export function HomePlanPage() {
     queueMicrotask(() => {
       if (!active) return;
       setStatus("loading");
-      setAssumptionsOpen(false);
     });
     getProperty(id)
       .then((data) => {
@@ -275,15 +165,38 @@ export function HomePlanPage() {
 
   const workspacePropertyIds = [...new Set([...(id ? [id] : []), ...propertyIds])];
   const homeOptions = workspacePropertyIds.flatMap((propertyId) => {
+    if (status === "not_found" && propertyId === id) return [];
     const catalogHome = catalog.find((home) => home.id === propertyId);
-    if (catalogHome) return [{ id: propertyId, label: displayName(catalogHome) }];
+    if (catalogHome) {
+      return [{
+        id: catalogHome.id,
+        label: propertyLabel(catalogHome),
+        meta: propertyMeta(catalogHome.bhk, catalogHome.sqft, catalogHome.price),
+      }];
+    }
     if (propertyData?.property.id === propertyId) {
-      return [{ id: propertyId, label: propertyData.property.title }];
+      return [{
+        id: propertyId,
+        label: propertyData.society?.name?.trim() || propertyData.property.title,
+        meta: propertyMeta(
+          propertyData.property.bhk,
+          propertyData.property.super_builtup_sqft,
+          propertyData.property.price,
+        ),
+      }];
     }
     return [];
   });
   const compareHref = workspaceCompareHref(compareIds, id);
   const buyVsRentHref = workspaceBuyVsRentHref(id ?? propertyIds[0]);
+  const planReplacementId = catalogReady && (!id || status === "not_found")
+    ? workspacePlanReplacementId(id, homeOptions.map((home) => home.id))
+    : null;
+
+  useEffect(() => {
+    if (!planReplacementId) return;
+    navigate(workspaceBuyVsRentHref(planReplacementId), { replace: true });
+  }, [navigate, planReplacementId]);
 
   const selectProperty = (propertyId: string) => {
     if (propertyId) navigate(workspaceBuyVsRentHref(propertyId));
@@ -299,18 +212,28 @@ export function HomePlanPage() {
     const propertyIsChanging = Boolean(id)
       && status === "ready"
       && propertyData?.property.id !== id;
-    const content = !id ? (
+    const content = planReplacementId || (!catalogReady && !id) ? (
+      <LoadingPlan />
+    ) : !id ? (
       <section className="home-plan-empty">
         <h1>Choose a home to plan.</h1>
         <p>Buy vs Rent uses the price and status of one home from your workspace.</p>
-        {homeOptions.length === 0 && <Link to="/">Discover homes</Link>}
+        <Link to="/">Explore</Link>
       </section>
     ) : status === "loading" || propertyIsChanging ? (
       <LoadingPlan />
     ) : status === "not_found" ? (
-      <PageState variant="not_found" context="property" message={BUY_VS_RENT.unavailable} />
+      <section className="home-plan-empty">
+        <h1>This home is no longer available.</h1>
+        <p>Add another home to your workspace and its Buy vs Rent plan will be ready here.</p>
+        <Link to="/">Explore</Link>
+      </section>
     ) : (
-      <PageState variant="error" context="property" message={BUY_VS_RENT.loadError} />
+      <section className="home-plan-empty">
+        <h1>We couldn’t open this plan.</h1>
+        <p>Try again in a moment, or continue with another home in your workspace.</p>
+        <Link to="/workspace">Back to workspace</Link>
+      </section>
     );
 
     return (
@@ -324,9 +247,13 @@ export function HomePlanPage() {
           compareHref={compareHref}
           buyVsRentHref={buyVsRentHref}
           compareCount={compareIds.length}
-          context={(
-            <PlanPropertyContext homes={homeOptions} onSelect={selectProperty} />
-          )}
+          context={homeOptions.length > 0 ? (
+            <WorkspacePropertySwitcher
+              selectedId={homeOptions.some((home) => home.id === id) ? id : undefined}
+              homes={homeOptions}
+              onSelect={selectProperty}
+            />
+          ) : undefined}
         />
         {content}
       </div>
@@ -381,21 +308,11 @@ export function HomePlanPage() {
         buyVsRentHref={workspaceBuyVsRentHref(id)}
         compareCount={compareIds.length}
         context={(
-          <PlanPropertyContext
-            propertyId={id}
-            property={property}
+          <WorkspacePropertySwitcher
+            selectedId={id}
             homes={homeOptions}
             onSelect={selectProperty}
           />
-        )}
-        action={(
-          <button
-            type="button"
-            className="workspace-header__edit"
-            onClick={() => setAssumptionsOpen(true)}
-          >
-            Edit assumptions
-          </button>
         )}
       />
 
@@ -407,12 +324,13 @@ export function HomePlanPage() {
               aside={<PlanWhisper key={whisperSignature} theme={whisperTheme} />}
             />
 
-            <div className="home-plan-assumption-summary" aria-label="Current assumptions">
-              <span>₹{inputs.monthlyEmiThousands.toLocaleString("en-IN")}K EMI</span>
-              <span>₹{inputs.currentRentThousands.toLocaleString("en-IN")}K rent</span>
-              <span>₹{inputs.monthlySipThousands.toLocaleString("en-IN")}K SIP</span>
-              <span>{inputs.loanRate.toLocaleString("en-IN")}% loan</span>
-            </div>
+            <PlanAssumptionRail
+              inputs={inputs}
+              extraEmisPerYear={extraEmisPerYear}
+              onInputChange={updateInput}
+              onExtraEmisChange={updateExtraEmisPerYear}
+              onReset={resetInputs}
+            />
 
             <section className="home-plan-stage" aria-label="Projection over time">
               <PlanGraph
@@ -426,15 +344,6 @@ export function HomePlanPage() {
         </div>
       </div>
 
-      <PlanAssumptionsSheet
-        open={assumptionsOpen}
-        inputs={inputs}
-        extraEmisPerYear={extraEmisPerYear}
-        onInputChange={updateInput}
-        onExtraEmisChange={updateExtraEmisPerYear}
-        onReset={resetInputs}
-        onClose={closeAssumptions}
-      />
     </div>
   );
 }

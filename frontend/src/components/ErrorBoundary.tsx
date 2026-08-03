@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
                 transition: "all 0.2s ease",
               }}
             >
-              Return home
+              Explore
             </a>
           </div>
         </div>

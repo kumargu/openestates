@@ -50,7 +50,6 @@ import { LabelVisualIcon } from "../lib/LabelVisualIcon.tsx";
 import { isRedundantHomeState } from "../lib/property-signals.ts";
 import { hasAroundThisHomePlate } from "../lib/nearbyPlateProjection.ts";
 import { propertyMapContextFromSurfaceScene } from "../lib/surfaceSceneProjection.ts";
-import { useRegisterWorkspaceRouteProperty } from "../components/workspace/workspaceRouteProperty.ts";
 
 function formatPrice(price: number): string {
   if (!hasKnownNumber(price)) return "Price unavailable";
@@ -1017,7 +1016,6 @@ function PropertyPageBody({
   focusParam: string | null;
 }) {
   const navigate = useNavigate();
-  const registerWorkspaceProperty = useRegisterWorkspaceRouteProperty();
   const [data, setData] = useState<PropertyDetailResponse | null>(null);
   const [recommendations, setRecommendations] =
     useState<RecommendationResponse | null>(null);
@@ -1037,7 +1035,6 @@ function PropertyPageBody({
     getProperty(id)
       .then((d) => {
         if (cancelled) return;
-        registerWorkspaceProperty({ id: d.property.id, label: d.property.title });
         setData(d);
         setStatus("ok");
       })
@@ -1049,7 +1046,7 @@ function PropertyPageBody({
     return () => {
       cancelled = true;
     };
-  }, [id, registerWorkspaceProperty]);
+  }, [id]);
 
   useEffect(() => {
     const propertyId = data?.property?.id;

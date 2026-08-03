@@ -1,5 +1,5 @@
 /**
- * Results page with backend search integration.
+ * Inline discovery results with backend search integration.
  * In local development, the API layer can serve checked-in fixtures when the
  * Rust backend is unavailable so product review does not render a blank shell.
  */
@@ -245,14 +245,6 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
     onResultsReady?.();
   }, [onResultsReady, query, status]);
 
-  useEffect(() => {
-    if (searchParams.get("view") === "saved") {
-      const nextParams = new URLSearchParams(searchParams);
-      nextParams.delete("view");
-      setSearchParams(nextParams, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-
   const setQueryPreservingView = (nextQuery: string) => {
     const nextParams = new URLSearchParams();
     if (nextQuery) nextParams.set("q", nextQuery);
@@ -406,8 +398,8 @@ export function SearchExperience({ onSearchCommit, onResultsReady }: SearchExper
   const hardConstraintLabels = hardConstraints.map((constraint) => constraint.raw_text);
 
   const helmetTitle = query
-    ? `${query} — Property Search | OpenEstates`
-    : "All Properties — OpenEstates";
+    ? `${query} — Explore | OpenEstates`
+    : "Explore | OpenEstates";
   const helmetDescription = query
     ? `${totalCount} ${totalCount === 1 ? "property" : "properties"} matching "${query}"${intent?.area ? ` in ${intent.area}` : ""}${hardConstraintLabels.length ? `. Constraints: ${hardConstraintLabels.join(", ")}` : ""}${intent?.preferences?.length ? `. Preferences: ${intent.preferences.join(", ")}` : ""}.`
     : `Browse ${totalCount} proof-backed homes on OpenEstates.`;

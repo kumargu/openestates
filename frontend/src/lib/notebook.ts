@@ -1115,6 +1115,21 @@ export function removeNotebookProperty(propertyId: string): NotebookState {
   });
 }
 
+export function detachNotebookPropertyFromShortlist(propertyId: string): NotebookState {
+  const state = readNotebook();
+  const documents = { ...state.documents };
+  const hasBuyerNotes = (documents[propertyId]?.blocks.length ?? 0) > 0;
+  if (!hasBuyerNotes) delete documents[propertyId];
+  return writeNotebook({
+    ...state,
+    propertyIds: hasBuyerNotes
+      ? state.propertyIds
+      : state.propertyIds.filter((id) => id !== propertyId),
+    documents,
+    compareIds: state.compareIds.filter((id) => id !== propertyId),
+  });
+}
+
 export function anchorNotebookProperty(propertyId: string): NotebookState {
   return writeNotebook(ensureProperty(readNotebook(), propertyId));
 }

@@ -11,7 +11,6 @@ import type {
 import { PageState } from "../components/PageState.tsx";
 import { NotebookPinButton } from "../components/notebook/NotebookPinButton.tsx";
 import { LinkIcon } from "../components/evidence/EvidenceIcons.tsx";
-import { useRegisterWorkspaceRouteProperty } from "../components/workspace/workspaceRouteProperty.ts";
 import {
   displayName,
   httpUrl,
@@ -179,7 +178,6 @@ function DocumentSectionList({
 
 export function ReraReportPage() {
   const { id } = useParams<{ id: string }>();
-  const registerWorkspaceProperty = useRegisterWorkspaceRouteProperty();
   const [state, setState] = useState<LoadState | null>(null);
 
   useEffect(() => {
@@ -192,7 +190,6 @@ export function ReraReportPage() {
       getPropertyRera(propertyId),
     ])
       .then(([detail, dossier]) => {
-        registerWorkspaceProperty({ id: detail.property.id, label: detail.property.title });
         setState({ status: "ready", id: propertyId, detail, dossier });
       })
       .catch((error: unknown) => {
@@ -205,7 +202,7 @@ export function ReraReportPage() {
       });
 
     return () => controller.abort();
-  }, [id, registerWorkspaceProperty]);
+  }, [id]);
 
   const currentState = state?.id === id ? state : null;
   const sections = useMemo(() => (

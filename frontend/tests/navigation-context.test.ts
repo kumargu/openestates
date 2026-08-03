@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  captureDiscoveryDeparture,
+  clearDiscoveryContext,
   consumeDiscoveryReturn,
   navigationMode,
   requestDiscoveryReturn,
@@ -53,4 +55,24 @@ test("a mismatched return target is discarded", () => {
 
   assert.equal(consumeDiscoveryReturn("/?q=sarjapur"), null);
   assert.equal(consumeDiscoveryReturn("/?q=whitefield"), null);
+});
+
+test("leaving Explore prepares browser Back to restore the exact position", () => {
+  sessionValues.clear();
+  const url = "/?q=quiet+3bhk";
+
+  captureDiscoveryDeparture(url, 912);
+
+  assert.equal(consumeDiscoveryReturn(url), 912);
+  assert.equal(consumeDiscoveryReturn(url), null);
+});
+
+test("starting Explore fresh forgets an old query and return position", () => {
+  sessionValues.clear();
+  const url = "/?q=whitefield";
+  captureDiscoveryDeparture(url, 480);
+
+  clearDiscoveryContext();
+
+  assert.equal(consumeDiscoveryReturn(url), null);
 });

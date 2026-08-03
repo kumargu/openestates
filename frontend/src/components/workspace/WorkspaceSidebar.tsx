@@ -14,7 +14,6 @@ type WorkspaceIconName =
   | "listing"
   | "notebook"
   | "rera"
-  | "plan"
   | "chevron";
 
 type WorkspaceSidebarProps = {
@@ -25,7 +24,6 @@ type WorkspaceSidebarProps = {
   reduced: boolean;
   mode: "property-context" | "workspace";
   discoveryHref: string;
-  propertyLabel?: string;
   onToggle: () => void;
   onFocus: (propertyId: string) => void;
   onRemove: (propertyId: string) => void;
@@ -84,14 +82,6 @@ function WorkspaceIcon({
       </svg>
     );
   }
-  if (name === "plan") {
-    return (
-      <svg {...common}>
-        <path d="M4 19V5M4 19h16" />
-        <path d="m8 15 3-4 3 2 4-6" />
-      </svg>
-    );
-  }
   return (
     <svg {...common}>
       <path d="m9 18 6-6-6-6" />
@@ -122,7 +112,6 @@ export function WorkspaceSidebar({
   reduced,
   mode,
   discoveryHref,
-  propertyLabel,
   onToggle,
   onFocus,
   onRemove,
@@ -130,7 +119,6 @@ export function WorkspaceSidebar({
   const focusedHome = homes.find((home) => home.id === focusedId);
   const navItems = workspaceNavItems(focusedId, activeView, {
     mode,
-    propertyLabel: propertyLabel || (focusedHome ? societyLabel(focusedHome) : undefined),
     discoveryHref,
   });
   const [showAllHomes, setShowAllHomes] = useState(false);
@@ -221,7 +209,7 @@ export function WorkspaceSidebar({
         })}
       </nav>
 
-      {!collapsed && mode === "workspace" && (
+      {!collapsed && (
         <section
           className="workspace-sidebar__shortlist"
           aria-labelledby="workspace-shortlist-title"

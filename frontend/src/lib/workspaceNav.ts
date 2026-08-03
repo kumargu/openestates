@@ -3,7 +3,7 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "browse" | "listing" | "notebook" | "rera" | "plan";
+  icon: "browse" | "listing" | "notebook" | "rera";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -25,7 +25,6 @@ export function workspaceNavItems(
   activeView: WorkspaceView,
   options: {
     mode?: "property-context" | "workspace";
-    propertyLabel?: string;
     discoveryHref?: string;
   } = {},
 ): WorkspaceNavItem[] {
@@ -39,7 +38,7 @@ export function workspaceNavItems(
     return [
       {
         view: "browse",
-        label: options.discoveryHref && options.discoveryHref !== "/" ? "Back to results" : "Explore homes",
+        label: "Explore",
         icon: "browse",
         to: options.discoveryHref ?? "/",
         active: false,
@@ -47,28 +46,21 @@ export function workspaceNavItems(
       },
       {
         view: "home",
-        label: options.propertyLabel?.trim() || "Property overview",
+        label: "Property overview",
         icon: "listing",
         to: detailHref,
         active: activeView === "home",
         available: hasFocus,
       },
       { view: "rera", label: "RERA evidence", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
-      {
-        view: "plan",
-        label: "Buy vs Rent",
-        icon: "plan",
-        to: hasFocus ? workspaceBuyVsRentHref(focusedId) : "/workspace/buy-vs-rent",
-        active: false,
-        available: hasFocus,
-      },
       { view: "notebook", label: "Workspace", icon: "notebook", to: "/workspace", active: false, available: true },
     ];
   }
 
   return [
-    { view: "browse" as const, label: "Add homes", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
+    { view: "browse" as const, label: "Explore", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
     { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "rera" as const, label: "RERA evidence", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({
     ...item,
     active: item.view === "notebook"
@@ -90,4 +82,24 @@ export function workspaceBuyVsRentHref(propertyId?: string | null): string {
   return propertyId
     ? `/workspace/buy-vs-rent/${encodeURIComponent(propertyId)}`
     : "/workspace/buy-vs-rent";
+}
+
+export function workspaceFocusedHomeId(
+  requestedId: string | null | undefined,
+  storedId: string | null | undefined,
+  availableIds: string[],
+): string {
+  const validIds = [...new Set(availableIds.map((id) => id.trim()).filter(Boolean))];
+  if (requestedId && validIds.includes(requestedId)) return requestedId;
+  if (storedId && validIds.includes(storedId)) return storedId;
+  return validIds[0] ?? "";
+}
+
+export function workspacePlanReplacementId(
+  requestedId: string | undefined,
+  availableIds: string[],
+): string | null {
+  const validIds = [...new Set(availableIds.map((id) => id.trim()).filter(Boolean))];
+  if (requestedId && validIds.includes(requestedId)) return null;
+  return validIds[0] ?? null;
 }

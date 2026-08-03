@@ -12,50 +12,35 @@ const contextMessages: Record<string, Record<Variant, { title: string; subtitle:
   results: {
     loading: { title: "Finding properties...", subtitle: "Searching across Bengaluru micro-markets." },
     error: {
-      title: "Results temporarily unavailable",
-      subtitle: "We couldn't load live property data right now, but you can still continue exploring Bengaluru areas.",
-      actions: [
-        { label: "Browse areas", path: "/" },
-        { label: "Return home", path: "/" },
-      ],
+      title: "Explore is temporarily unavailable",
+      subtitle: "We couldn't load homes right now. Please try again shortly.",
+      actions: [{ label: "Explore", path: "/" }],
     },
     backend_unavailable: {
-      title: "Results temporarily unavailable",
-      subtitle: "We couldn't load live property data right now, but you can still continue exploring Bengaluru areas.",
-      actions: [
-        { label: "Browse areas", path: "/" },
-        { label: "Return home", path: "/" },
-      ],
+      title: "Explore is temporarily unavailable",
+      subtitle: "We couldn't load homes right now. Please try again shortly.",
+      actions: [{ label: "Explore", path: "/" }],
     },
-    empty: { title: "No properties match", subtitle: "Try adjusting your search criteria or browse all areas.", actions: [{ label: "Browse homes", path: "/" }] },
+    empty: { title: "No properties match", subtitle: "Try adjusting your search.", actions: [{ label: "Explore", path: "/" }] },
     not_found: { title: "Not found", subtitle: "This page doesn't exist.", actions: [{ label: "Return to homepage", path: "/" }] },
   },
   property: {
     loading: { title: "Loading property details...", subtitle: "Gathering proof-backed facts and market context." },
     error: {
       title: "Property details unavailable",
-      subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
-      actions: [
-        { label: "Back to search", path: "/" },
-        { label: "Browse areas", path: "/" },
-      ],
+      subtitle: "This property could not be loaded right now.",
+      actions: [{ label: "Explore", path: "/" }],
     },
     backend_unavailable: {
       title: "Property details unavailable",
-      subtitle: "This property page could not be loaded right now. You can go back to results or continue browsing other areas.",
-      actions: [
-        { label: "Back to search", path: "/" },
-        { label: "Browse areas", path: "/" },
-      ],
+      subtitle: "This property could not be loaded right now.",
+      actions: [{ label: "Explore", path: "/" }],
     },
     empty: { title: "No details available", subtitle: "This property doesn't have detailed information yet." },
     not_found: {
       title: "Property not found",
       subtitle: "This listing may no longer be available or the link may be incorrect.",
-      actions: [
-        { label: "Browse homes", path: "/" },
-        { label: "Return home", path: "/" },
-      ],
+      actions: [{ label: "Explore", path: "/" }],
     },
   },
   generic: {
