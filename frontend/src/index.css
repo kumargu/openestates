@@ -2766,17 +2766,18 @@ body {
 .landing-scene {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  grid-template-columns: minmax(17.5rem, 21.25rem) minmax(0, 50rem);
   grid-template-areas: "copy canvas";
   gap: clamp(2rem, 5vw, 5.5rem);
   align-items: center;
-  width: min(1200px, calc(100% - 2.5rem));
-  min-height: 116vh;
+  justify-content: space-between;
+  width: min(1280px, calc(100% - 2.5rem));
+  min-height: 100vh;
   margin: 0 auto;
 }
 
 .landing-scene--canvas-left {
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
+  grid-template-columns: minmax(0, 50rem) minmax(17.5rem, 21.25rem);
   grid-template-areas: "canvas copy";
 }
 
@@ -2799,7 +2800,7 @@ body {
 
 .landing-scene__copy {
   grid-area: copy;
-  max-width: 27rem;
+  max-width: 21.25rem;
 }
 
 .landing-scene__copy h2 {
@@ -2864,7 +2865,8 @@ body {
 
 .landing-canvas {
   position: relative;
-  min-height: 450px;
+  height: 540px;
+  min-height: 540px;
   overflow: hidden;
   border: 1px solid rgba(52, 44, 38, 0.07);
   border-radius: 32px;
@@ -2899,7 +2901,8 @@ body {
 
 .landing-product {
   box-sizing: border-box;
-  min-height: 450px;
+  height: 100%;
+  min-height: 540px;
   padding: clamp(1.4rem, 3vw, 2.2rem);
 }
 
@@ -4089,7 +4092,10 @@ body {
   }
 
   .landing-canvas,
-  .landing-product { min-height: 420px; }
+  .landing-product {
+    height: auto;
+    min-height: 420px;
+  }
 
   .landing-reveal__field { min-height: 270px; }
 }
