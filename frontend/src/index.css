@@ -2766,17 +2766,17 @@ body {
 .landing-scene {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 0.84fr) minmax(0, 1.16fr);
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
   grid-template-areas: "copy canvas";
   gap: clamp(2rem, 5vw, 5.5rem);
   align-items: center;
-  width: min(1120px, calc(100% - 2.5rem));
+  width: min(1200px, calc(100% - 2.5rem));
   min-height: 116vh;
   margin: 0 auto;
 }
 
 .landing-scene--canvas-left {
-  grid-template-columns: minmax(0, 1.16fr) minmax(0, 0.84fr);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.8fr);
   grid-template-areas: "canvas copy";
 }
 
