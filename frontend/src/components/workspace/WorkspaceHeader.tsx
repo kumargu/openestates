@@ -1,6 +1,5 @@
 import { Link } from "react-router-dom";
 import type { ReactNode } from "react";
-import { discoveryReturnHref, requestDiscoveryReturn } from "../../lib/navigationContext.ts";
 
 export type WorkspaceMode = "notes" | "compare" | "buy-vs-rent";
 
@@ -10,7 +9,6 @@ type WorkspaceHeaderProps = {
   buyVsRentHref: string;
   compareCount?: number;
   context?: ReactNode;
-  action?: ReactNode;
 };
 
 export function WorkspaceHeader({
@@ -19,9 +17,7 @@ export function WorkspaceHeader({
   buyVsRentHref,
   compareCount = 0,
   context,
-  action,
 }: WorkspaceHeaderProps) {
-  const addHomesHref = discoveryReturnHref();
   return (
     <header className="workspace-header">
       <div className="workspace-header__main">
@@ -40,7 +36,7 @@ export function WorkspaceHeader({
             aria-current={mode === "compare" ? "page" : undefined}
           >
             Compare
-            {compareCount > 0 && <span>{compareCount}</span>}
+            {compareCount > 0 && <span className="workspace-header__count">{compareCount}</span>}
           </Link>
           <Link
             to={buyVsRentHref}
@@ -50,16 +46,6 @@ export function WorkspaceHeader({
             Buy vs Rent
           </Link>
         </nav>
-        <div className="workspace-header__actions">
-          {action}
-          <Link
-            to={addHomesHref}
-            className="workspace-header__add"
-            onClick={() => requestDiscoveryReturn(addHomesHref)}
-          >
-            Add homes
-          </Link>
-        </div>
       </div>
       {context && <div className="workspace-header__context">{context}</div>}
     </header>

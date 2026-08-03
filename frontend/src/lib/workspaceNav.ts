@@ -3,7 +3,7 @@ export type WorkspaceView = "browse" | "home" | "notebook" | "compare" | "rera" 
 export type WorkspaceNavItem = {
   view: WorkspaceView;
   label: string;
-  icon: "browse" | "listing" | "notebook" | "rera" | "plan";
+  icon: "browse" | "listing" | "notebook" | "rera";
   to: string;
   active: boolean;
   /** False when the item needs a focused shortlist home and none is set. */
@@ -54,14 +54,6 @@ export function workspaceNavItems(
         available: hasFocus,
       },
       { view: "rera", label: "RERA evidence", icon: "rera", to: reraHref, active: activeView === "rera", available: hasFocus },
-      {
-        view: "plan",
-        label: "Buy vs Rent",
-        icon: "plan",
-        to: hasFocus ? workspaceBuyVsRentHref(focusedId) : "/workspace/buy-vs-rent",
-        active: false,
-        available: hasFocus,
-      },
       { view: "notebook", label: "Workspace", icon: "notebook", to: "/workspace", active: false, available: true },
     ];
   }
@@ -69,6 +61,7 @@ export function workspaceNavItems(
   return [
     { view: "browse" as const, label: "Add homes", icon: "browse" as const, to: options.discoveryHref ?? "/", available: true },
     { view: "notebook" as const, label: "Workspace", icon: "notebook" as const, to: "/workspace", available: true },
+    { view: "rera" as const, label: "RERA evidence", icon: "rera" as const, to: reraHref, available: hasFocus },
   ].map((item) => ({
     ...item,
     active: item.view === "notebook"

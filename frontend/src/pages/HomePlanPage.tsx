@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Helmet } from "react-helmet-async";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { getProperties, getProperty } from "../lib/api.ts";
 import type { PropertyCard, PropertyDetailResponse } from "../lib/types.ts";
 import { WorkspaceHeader } from "../components/workspace/WorkspaceHeader.tsx";
+import { WorkspacePropertySwitcher } from "../components/workspace/WorkspacePropertySwitcher.tsx";
 import { useNotebook } from "../hooks/useNotebook.ts";
 import {
   workspaceBuyVsRentHref,
@@ -80,239 +81,12 @@ function LoadingPlan() {
   );
 }
 
-function displayName(home: PropertyCard): string {
+function propertyLabel(home: PropertyCard): string {
   return home.society_name?.trim() || home.title;
 }
 
-type PlanHomeOption = {
-  id: string;
-  label: string;
-  meta: string;
-};
-
-function planHomeMeta(bhk: number, sqft: number, price: number): string {
+function propertyMeta(bhk: number, sqft: number, price: number): string {
   return `${bhk} BHK · ${sqft.toLocaleString("en-IN")} sqft · ${formatCurrency(price, true)}`;
-}
-
-function PlanPropertyContext({
-  propertyId,
-  homes,
-  onSelect,
-}: {
-  propertyId?: string;
-  homes: PlanHomeOption[];
-  onSelect: (propertyId: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const contextRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const listboxId = useId();
-  const selectedHome = homes.find((home) => home.id === propertyId) ?? homes[0];
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!contextRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpen(false);
-      triggerRef.current?.focus();
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [open]);
-
-  if (!selectedHome) return null;
-
-  if (homes.length === 1) {
-    return (
-      <div className="workspace-plan-context workspace-plan-context--single">
-        <strong>{selectedHome.label}</strong>
-        <span>{selectedHome.meta}</span>
-      </div>
-    );
-  }
-
-  const handleListKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
-    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    const options = [...(contextRef.current
-      ?.querySelectorAll<HTMLButtonElement>(".workspace-plan-context__option") ?? [])];
-    if (options.length === 0) return;
-    event.preventDefault();
-    const activeIndex = options.findIndex((option) => option === document.activeElement);
-    const nextIndex = event.key === "Home"
-      ? 0
-      : event.key === "End"
-        ? options.length - 1
-        : event.key === "ArrowUp"
-          ? (activeIndex - 1 + options.length) % options.length
-          : (activeIndex + 1) % options.length;
-    options[nextIndex]?.focus();
-  };
-
-  return (
-    <div ref={contextRef} className="workspace-plan-context">
-      <button
-        ref={triggerRef}
-        type="button"
-        className="workspace-plan-context__trigger"
-        aria-label={`Switch home, currently ${selectedHome.label}`}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (!["ArrowDown", "ArrowUp"].includes(event.key)) return;
-          event.preventDefault();
-          if (!open) setOpen(true);
-          requestAnimationFrame(() => {
-            contextRef.current
-              ?.querySelector<HTMLButtonElement>('[role="option"][aria-selected="true"]')
-              ?.focus();
-          });
-        }}
-      >
-        <span className="workspace-plan-context__identity">
-          <strong>{selectedHome.label}</strong>
-          <span>{selectedHome.meta}</span>
-        </span>
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="m4 6 4 4 4-4" />
-        </svg>
-      </button>
-      {open && (
-        <div
-          id={listboxId}
-          className="workspace-plan-context__menu"
-          role="listbox"
-          aria-label="Homes for Buy vs Rent"
-          onKeyDown={handleListKeyDown}
-        >
-          {homes.map((home) => {
-            const selected = home.id === selectedHome.id;
-            return (
-              <button
-                key={home.id}
-                type="button"
-                className="workspace-plan-context__option"
-                role="option"
-                aria-selected={selected}
-                tabIndex={selected ? 0 : -1}
-                onClick={() => {
-                  setOpen(false);
-                  onSelect(home.id);
-                }}
-              >
-                <span>
-                  <strong>{home.label}</strong>
-                  <small>{home.meta}</small>
-                </span>
-                <span className="workspace-plan-context__check" aria-hidden="true">
-                  {selected ? "✓" : ""}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PlanAssumptionsSheet({
-  open,
-  inputs,
-  extraEmisPerYear,
-  onInputChange,
-  onExtraEmisChange,
-  onReset,
-  onClose,
-}: {
-  open: boolean;
-  inputs: PlanInputs;
-  extraEmisPerYear: number;
-  onInputChange: <K extends keyof PlanInputs>(key: K, value: PlanInputs[K]) => void;
-  onExtraEmisChange: (count: number) => void;
-  onReset: () => void;
-  onClose: () => void;
-}) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    if (!open) return undefined;
-    const previousFocus = document.activeElement instanceof HTMLElement
-      ? document.activeElement
-      : null;
-    closeRef.current?.focus();
-    const handleDialogKeys = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const sheet = closeRef.current?.closest<HTMLElement>(".plan-assumptions-sheet");
-      const focusable = sheet
-        ? [...sheet.querySelectorAll<HTMLElement>("button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])")]
-          .filter((element) => !element.hasAttribute("disabled"))
-        : [];
-      if (focusable.length === 0) return;
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
-    };
-    document.addEventListener("keydown", handleDialogKeys);
-    return () => {
-      document.removeEventListener("keydown", handleDialogKeys);
-      previousFocus?.focus();
-    };
-  }, [onClose, open]);
-
-  if (!open) return null;
-  return (
-    <div className="plan-assumptions-layer">
-      <button
-        type="button"
-        className="plan-assumptions-backdrop"
-        aria-label="Close assumptions"
-        onClick={onClose}
-      />
-      <aside
-        className="plan-assumptions-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="plan-assumptions-title"
-      >
-        <header>
-          <div>
-            <h2 id="plan-assumptions-title">Assumptions</h2>
-            <p>Changes update the outcome immediately.</p>
-          </div>
-          <button ref={closeRef} type="button" onClick={onClose} aria-label="Close assumptions">
-            ×
-          </button>
-        </header>
-        <PlanAssumptionRail
-          inputs={inputs}
-          extraEmisPerYear={extraEmisPerYear}
-          onInputChange={onInputChange}
-          onExtraEmisChange={onExtraEmisChange}
-          onReset={onReset}
-        />
-      </aside>
-    </div>
-  );
 }
 
 export function HomePlanPage() {
@@ -327,8 +101,6 @@ export function HomePlanPage() {
   const [previewYear, setPreviewYear] = useState<number | null>(null);
   const [pinnedYear, setPinnedYear] = useState<number | null>(null);
   const [extraEmisPerYear, setExtraEmisPerYear] = useState(0);
-  const [assumptionsOpen, setAssumptionsOpen] = useState(false);
-  const closeAssumptions = useCallback(() => setAssumptionsOpen(false), []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -356,7 +128,6 @@ export function HomePlanPage() {
     queueMicrotask(() => {
       if (!active) return;
       setStatus("loading");
-      setAssumptionsOpen(false);
     });
     getProperty(id)
       .then((data) => {
@@ -398,16 +169,16 @@ export function HomePlanPage() {
     const catalogHome = catalog.find((home) => home.id === propertyId);
     if (catalogHome) {
       return [{
-        id: propertyId,
-        label: displayName(catalogHome),
-        meta: planHomeMeta(catalogHome.bhk, catalogHome.sqft, catalogHome.price),
+        id: catalogHome.id,
+        label: propertyLabel(catalogHome),
+        meta: propertyMeta(catalogHome.bhk, catalogHome.sqft, catalogHome.price),
       }];
     }
     if (propertyData?.property.id === propertyId) {
       return [{
         id: propertyId,
         label: propertyData.society?.name?.trim() || propertyData.property.title,
-        meta: planHomeMeta(
+        meta: propertyMeta(
           propertyData.property.bhk,
           propertyData.property.super_builtup_sqft,
           propertyData.property.price,
@@ -477,8 +248,8 @@ export function HomePlanPage() {
           buyVsRentHref={buyVsRentHref}
           compareCount={compareIds.length}
           context={homeOptions.length > 0 ? (
-            <PlanPropertyContext
-              propertyId={homeOptions.some((home) => home.id === id) ? id : undefined}
+            <WorkspacePropertySwitcher
+              selectedId={homeOptions.some((home) => home.id === id) ? id : undefined}
               homes={homeOptions}
               onSelect={selectProperty}
             />
@@ -537,20 +308,11 @@ export function HomePlanPage() {
         buyVsRentHref={workspaceBuyVsRentHref(id)}
         compareCount={compareIds.length}
         context={(
-          <PlanPropertyContext
-            propertyId={id}
+          <WorkspacePropertySwitcher
+            selectedId={id}
             homes={homeOptions}
             onSelect={selectProperty}
           />
-        )}
-        action={(
-          <button
-            type="button"
-            className="workspace-header__edit"
-            onClick={() => setAssumptionsOpen(true)}
-          >
-            Edit assumptions
-          </button>
         )}
       />
 
@@ -562,12 +324,13 @@ export function HomePlanPage() {
               aside={<PlanWhisper key={whisperSignature} theme={whisperTheme} />}
             />
 
-            <div className="home-plan-assumption-summary" aria-label="Current assumptions">
-              <span>₹{inputs.monthlyEmiThousands.toLocaleString("en-IN")}K EMI</span>
-              <span>₹{inputs.currentRentThousands.toLocaleString("en-IN")}K rent</span>
-              <span>₹{inputs.monthlySipThousands.toLocaleString("en-IN")}K SIP</span>
-              <span>{inputs.loanRate.toLocaleString("en-IN")}% loan</span>
-            </div>
+            <PlanAssumptionRail
+              inputs={inputs}
+              extraEmisPerYear={extraEmisPerYear}
+              onInputChange={updateInput}
+              onExtraEmisChange={updateExtraEmisPerYear}
+              onReset={resetInputs}
+            />
 
             <section className="home-plan-stage" aria-label="Projection over time">
               <PlanGraph
@@ -581,15 +344,6 @@ export function HomePlanPage() {
         </div>
       </div>
 
-      <PlanAssumptionsSheet
-        open={assumptionsOpen}
-        inputs={inputs}
-        extraEmisPerYear={extraEmisPerYear}
-        onInputChange={updateInput}
-        onExtraEmisChange={updateExtraEmisPerYear}
-        onReset={resetInputs}
-        onClose={closeAssumptions}
-      />
     </div>
   );
 }

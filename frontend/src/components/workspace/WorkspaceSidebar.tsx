@@ -14,7 +14,6 @@ type WorkspaceIconName =
   | "listing"
   | "notebook"
   | "rera"
-  | "plan"
   | "chevron";
 
 type WorkspaceSidebarProps = {
@@ -81,14 +80,6 @@ function WorkspaceIcon({
         <path d="M7 3.5h10v17H7z" />
         <path d="M10 8h4M10 12h4" />
         <path d="m10 16 1.4 1.4L15 14" />
-      </svg>
-    );
-  }
-  if (name === "plan") {
-    return (
-      <svg {...common}>
-        <path d="M4 19V5M4 19h16" />
-        <path d="m8 15 3-4 3 2 4-6" />
       </svg>
     );
   }

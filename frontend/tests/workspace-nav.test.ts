@@ -38,7 +38,7 @@ test("workspace nav follows the focused home across property views", () => {
   assert.equal(byView.get("home")?.active, false);
   assert.equal(byView.get("home")?.available, true);
   assert.equal(byView.get("rera")?.available, true);
-  assert.equal(byView.get("plan")?.to, "/workspace/buy-vs-rent/home%20one%2Fwith%20slash");
+  assert.equal(byView.has("plan"), false);
 });
 
 test("property context never invents a current home", () => {
@@ -49,7 +49,6 @@ test("property context never invents a current home", () => {
   assert.equal(byView.get("notebook")?.available, true);
   assert.equal(byView.get("home")?.available, false);
   assert.equal(byView.get("rera")?.available, false);
-  assert.equal(byView.get("plan")?.available, false);
 });
 
 test("workspace stays active for compare and Buy vs Rent views", () => {
@@ -60,14 +59,23 @@ test("workspace stays active for compare and Buy vs Rent views", () => {
   }
 });
 
-test("workspace nav contains only global workspace actions", () => {
+test("workspace sidebar keeps RERA attached to the focused home", () => {
   const items = workspaceNavItems("home-1", "notebook", {
     mode: "workspace",
     discoveryHref: "/?q=near+metro",
   });
-  assert.deepEqual(items.map((item) => item.label), ["Add homes", "Workspace"]);
+  assert.deepEqual(items.map((item) => item.label), ["Add homes", "Workspace", "RERA evidence"]);
   assert.equal(items[0]?.to, "/?q=near+metro");
+  assert.equal(items[2]?.to, "/property/home-1/rera");
+  assert.equal(items[2]?.available, true);
   assert.equal(items.some((item) => item.label === "This home"), false);
+  assert.equal(items.some((item) => item.label === "Buy vs Rent"), false);
+});
+
+test("workspace RERA is disabled until a home is selected", () => {
+  const rera = workspaceNavItems("", "notebook", { mode: "workspace" })
+    .find((item) => item.view === "rera");
+  assert.equal(rera?.available, false);
 });
 
 test("workspace view links preserve explicit property context", () => {

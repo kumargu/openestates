@@ -171,10 +171,10 @@
 
 .workspace-header__main {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-height: 3.75rem;
+  grid-template-columns: auto minmax(0, 1fr);
+  min-height: 4rem;
   align-items: center;
-  gap: clamp(1rem, 3vw, 2rem);
+  gap: clamp(0.8rem, 2.5vw, 1.6rem);
   padding: 0 clamp(1rem, 3vw, 2.5rem);
 }
 
@@ -187,11 +187,16 @@
 
 .workspace-header__tabs {
   display: flex;
+  width: fit-content;
   min-width: 0;
-  height: 3.75rem;
-  align-items: stretch;
-  gap: clamp(0.8rem, 2.4vw, 1.65rem);
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.2rem;
   overflow-x: auto;
+  border: 1px solid rgba(38, 35, 32, 0.075);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.48);
+  box-shadow: 0 1px 2px rgba(40, 30, 20, 0.025);
   scrollbar-width: none;
 }
 
@@ -200,37 +205,33 @@
 }
 
 .workspace-header__tabs a {
-  position: relative;
   display: inline-flex;
   flex: 0 0 auto;
+  min-height: 2.2rem;
   align-items: center;
+  justify-content: center;
   gap: 0.38rem;
+  padding: 0 0.72rem;
+  border-radius: 0.56rem;
   color: #81776f;
-  font-size: 0.76rem;
-  font-weight: 650;
+  font-size: 0.74rem;
+  font-weight: 680;
   text-decoration: none;
+  transition: color 140ms ease, background-color 140ms ease, box-shadow 140ms ease;
 }
 
-.workspace-header__tabs a::after {
-  position: absolute;
-  right: 0;
-  bottom: -1px;
-  left: 0;
-  height: 2px;
-  background: transparent;
-  content: "";
-}
-
-.workspace-header__tabs a:hover,
-.workspace-header__tabs a.is-active {
+.workspace-header__tabs a:hover {
+  background: rgba(38, 35, 32, 0.035);
   color: #2c2824;
 }
 
-.workspace-header__tabs a.is-active::after {
-  background: var(--color-accent);
+.workspace-header__tabs a.is-active {
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 1px 5px rgba(40, 30, 20, 0.08);
+  color: #2c2824;
 }
 
-.workspace-header__tabs span {
+.workspace-header__count {
   min-width: 1.05rem;
   padding: 0.06rem 0.28rem;
   border-radius: 999px;
@@ -238,38 +239,6 @@
   color: #2f4f72;
   font-size: 0.6rem;
   text-align: center;
-}
-
-.workspace-header__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-}
-
-.workspace-header__add,
-.workspace-header__edit {
-  min-height: 2rem;
-  padding: 0 0.7rem;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: #625b55;
-  font: inherit;
-  font-size: 0.7rem;
-  font-weight: 680;
-  text-decoration: none;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.workspace-header__add:hover,
-.workspace-header__edit:hover {
-  background: rgba(38, 35, 32, 0.05);
-  color: #2c2824;
-}
-
-.workspace-header__edit {
-  color: #2f4f72;
 }
 
 .workspace-header__context {
@@ -280,7 +249,7 @@
   border-top: 1px solid rgba(38, 35, 32, 0.055);
 }
 
-.workspace-plan-context {
+.workspace-home-switcher {
   position: relative;
   display: flex;
   min-width: 0;
@@ -288,12 +257,12 @@
   color: #2c2824;
 }
 
-.workspace-plan-context--single {
+.workspace-home-switcher--single {
   gap: 0.65rem;
 }
 
-.workspace-plan-context--single strong,
-.workspace-plan-context__identity strong {
+.workspace-home-switcher--single strong,
+.workspace-home-switcher__identity strong {
   overflow: hidden;
   min-width: 0;
   font-size: 0.78rem;
@@ -303,8 +272,8 @@
   white-space: nowrap;
 }
 
-.workspace-plan-context--single > span,
-.workspace-plan-context__identity > span {
+.workspace-home-switcher--single > span,
+.workspace-home-switcher__identity > span {
   overflow: hidden;
   color: #81776f;
   font-size: 0.68rem;
@@ -313,7 +282,7 @@
   white-space: nowrap;
 }
 
-.workspace-plan-context__trigger {
+.workspace-home-switcher__trigger {
   display: flex;
   max-width: min(36rem, 70vw);
   min-height: 2rem;
@@ -329,25 +298,25 @@
   transition: background-color 150ms ease;
 }
 
-.workspace-plan-context__trigger:hover,
-.workspace-plan-context__trigger[aria-expanded="true"] {
+.workspace-home-switcher__trigger:hover,
+.workspace-home-switcher__trigger[aria-expanded="true"] {
   background: rgba(38, 35, 32, 0.05);
 }
 
-.workspace-plan-context__trigger:focus-visible,
-.workspace-plan-context__option:focus-visible {
+.workspace-home-switcher__trigger:focus-visible,
+.workspace-home-switcher__option:focus-visible {
   outline: 2px solid rgba(47, 79, 114, 0.48);
   outline-offset: 2px;
 }
 
-.workspace-plan-context__identity {
+.workspace-home-switcher__identity {
   display: flex;
   min-width: 0;
   align-items: baseline;
   gap: 0.65rem;
 }
 
-.workspace-plan-context__trigger svg {
+.workspace-home-switcher__trigger svg {
   width: 0.85rem;
   height: 0.85rem;
   flex: 0 0 auto;
@@ -359,11 +328,11 @@
   transition: transform 150ms ease;
 }
 
-.workspace-plan-context__trigger[aria-expanded="true"] svg {
+.workspace-home-switcher__trigger[aria-expanded="true"] svg {
   transform: rotate(180deg);
 }
 
-.workspace-plan-context__menu {
+.workspace-home-switcher__menu {
   position: absolute;
   top: calc(100% + 0.45rem);
   left: 0;
@@ -374,10 +343,10 @@
   border-radius: 0.75rem;
   background: #fffdfa;
   box-shadow: 0 18px 44px rgba(45, 36, 29, 0.14);
-  animation: workspace-plan-menu-in 140ms ease-out;
+  animation: workspace-home-menu-in 140ms ease-out;
 }
 
-@keyframes workspace-plan-menu-in {
+@keyframes workspace-home-menu-in {
   from {
     opacity: 0;
     transform: translateY(-0.2rem);
@@ -388,7 +357,7 @@
   }
 }
 
-.workspace-plan-context__option {
+.workspace-home-switcher__option {
   display: grid;
   width: 100%;
   grid-template-columns: minmax(0, 1fr) 1.25rem;
@@ -403,18 +372,18 @@
   text-align: left;
 }
 
-.workspace-plan-context__option:hover,
-.workspace-plan-context__option[aria-selected="true"] {
+.workspace-home-switcher__option:hover,
+.workspace-home-switcher__option[aria-selected="true"] {
   background: rgba(38, 35, 32, 0.045);
 }
 
-.workspace-plan-context__option > span:first-child {
+.workspace-home-switcher__option > span:first-child {
   display: grid;
   min-width: 0;
   gap: 0.18rem;
 }
 
-.workspace-plan-context__option strong {
+.workspace-home-switcher__option strong {
   overflow: hidden;
   font-size: 0.76rem;
   font-weight: 700;
@@ -423,7 +392,7 @@
   white-space: nowrap;
 }
 
-.workspace-plan-context__option small {
+.workspace-home-switcher__option small {
   overflow: hidden;
   color: #81776f;
   font-size: 0.7rem;
@@ -432,7 +401,7 @@
   white-space: nowrap;
 }
 
-.workspace-plan-context__check {
+.workspace-home-switcher__check {
   color: #2f4f72;
   font-size: 0.75rem;
   font-weight: 760;
@@ -2512,11 +2481,11 @@
   }
 
   .workspace-sidebar--workspace .workspace-sidebar__nav {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .workspace-sidebar--property-context .workspace-sidebar__nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .workspace-sidebar__nav-item,
@@ -2556,7 +2525,7 @@
 
 @media (max-width: 650px) {
   .workspace-header__main {
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr);
     gap: 0.5rem;
     padding-inline: 0.8rem;
   }
@@ -2566,46 +2535,42 @@
   }
 
   .workspace-header__tabs {
-    gap: 1rem;
+    width: 100%;
+    gap: 0.1rem;
+    padding: 0.16rem;
   }
 
-  .workspace-header__add {
-    display: none;
-  }
-
-  .workspace-header__actions {
-    min-width: 0;
-  }
-
-  .workspace-header__edit {
-    padding-inline: 0.35rem;
+  .workspace-header__tabs a {
+    min-height: 2.1rem;
+    padding-inline: 0.58rem;
+    font-size: 0.7rem;
   }
 
   .workspace-header__context {
     padding-inline: 0.8rem;
   }
 
-  .workspace-plan-context {
+  .workspace-home-switcher {
     width: 100%;
   }
 
-  .workspace-plan-context--single {
+  .workspace-home-switcher--single {
     display: grid;
     gap: 0.12rem;
   }
 
-  .workspace-plan-context__trigger {
+  .workspace-home-switcher__trigger {
     width: 100%;
     max-width: none;
     justify-content: space-between;
   }
 
-  .workspace-plan-context__identity {
+  .workspace-home-switcher__identity {
     display: grid;
     gap: 0.12rem;
   }
 
-  .workspace-plan-context__menu {
+  .workspace-home-switcher__menu {
     right: 0;
     left: 0;
     width: auto;
@@ -2613,11 +2578,11 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .workspace-plan-context__menu {
+  .workspace-home-switcher__menu {
     animation: none;
   }
 
-  .workspace-plan-context__trigger svg {
+  .workspace-home-switcher__trigger svg {
     transition: none;
   }
 }
