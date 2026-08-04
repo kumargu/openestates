@@ -2316,6 +2316,7 @@ class CollectAssetSourcesTest(unittest.TestCase):
         self.assertEqual(record["fetch_source"], "google_places_text_search")
 
     def test_google_nearby_collection_emits_raw_category_rows(self):
+        self.assertNotIn("stormwater_drain", google_nearby_collection_categories())
         output = collect_google_nearby_places(
             {
                 "partition": {"parts": [["dt", "2026-07-14"]]},

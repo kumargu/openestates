@@ -1,0 +1,706 @@
+{
+  "description": "bangalore catalog 60 + central/west 25 + whitefield 30 union seed",
+  "generated_at": "2026-08-01T17:25:26Z",
+  "base_serving_materialization_id": "1688bf4b-e467-4e2c-9f35-2a5f93788dc6",
+  "source_entities": [
+    {
+      "entity_id": "society:rera-e2ee595f80454783",
+      "alias_entity_id": "society:prestige-west-woods",
+      "name": "Woods",
+      "project_key": "PR/KN/170831/001341",
+      "city": "Bengaluru",
+      "ack_number": "PR/KN/170831/001341"
+    },
+    {
+      "entity_id": "society:rera-2eab7f326e051f6f",
+      "alias_entity_id": "society:karle-zenith",
+      "name": "Zenith",
+      "project_key": "PRM/KA/RERA/1249/447/PR/171125/000482",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1249/447/PR/171125/000482",
+      "ack_number": "PR/KN/170730/000482"
+    },
+    {
+      "entity_id": "society:rera-53c641b59346cde4",
+      "alias_entity_id": "society:provident-capella-1",
+      "name": "Provident Capella 1",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1250/304/PR/190606/002596"
+    },
+    {
+      "entity_id": "society:rera-c8f22b29d534c796",
+      "alias_entity_id": "society:prestige-jindal-city-phase-ii",
+      "name": "Prestige Jindal City-Phase II",
+      "project_key": "PRM/KA/RERA/1250/307/PR/180621/001906",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1250/307/PR/180621/001906",
+      "ack_number": "ACK/KA/RERA/1250/307/PR/180511/002243"
+    },
+    {
+      "entity_id": "society:rera-1e1636dd27562e02",
+      "alias_entity_id": "society:embassy-habitat",
+      "name": "HABITAT",
+      "project_key": "PRM/KA/RERA/1251/308/PR/171102/001798",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/308/PR/171102/001798",
+      "ack_number": "PR/KN/170831/001798",
+      "latitude": 12.745168,
+      "longitude": 77.7864328
+    },
+    {
+      "entity_id": "society:rera-c2394a00f5ad2909",
+      "alias_entity_id": "society:lodha-mirabelle",
+      "name": "Mirabelle",
+      "project_key": "PRM/KA/RERA/1251/309/PR/131023/006321",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/131023/006321",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/111023/007510",
+      "latitude": 13.0268034,
+      "longitude": 77.60865919999999
+    },
+    {
+      "entity_id": "society:rera-e120e2f085c2819f",
+      "alias_entity_id": "society:brigade-laguna",
+      "name": "Brigade Laguna",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170322/004775",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/170322/004775",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/080222/005659",
+      "latitude": 13.0653527,
+      "longitude": 77.6089618
+    },
+    {
+      "entity_id": "society:rera-a3a28abd38e71003",
+      "alias_entity_id": "society:sobha-indraprastha",
+      "name": "Sobha Indraprastha",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170915/000234",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/170915/000234",
+      "ack_number": "PR/KN/170729/000234",
+      "latitude": 12.9797353,
+      "longitude": 77.5638829
+    },
+    {
+      "entity_id": "society:rera-1bb852b438567a14",
+      "alias_entity_id": "society:snn-clermont",
+      "name": "SNN CLERMONT",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170918/000666",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/170918/000666",
+      "ack_number": "PR/KN/170731/000666",
+      "latitude": 13.0424099,
+      "longitude": 77.6096669
+    },
+    {
+      "entity_id": "society:rera-e5c0c55f44d23f3d",
+      "alias_entity_id": "society:shriram-hebbal-one",
+      "name": "SHRIRAM HEBBAL ONE",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171013/001159",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/171013/001159",
+      "ack_number": "PR/KN/170805/001159"
+    },
+    {
+      "entity_id": "society:rera-46bf4705cef5e279",
+      "alias_entity_id": "society:century-ethos",
+      "name": "Century Ethos ",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000283",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/171014/000283",
+      "ack_number": "PR/KN/170729/000283",
+      "latitude": 13.0619424,
+      "longitude": 77.5949995
+    },
+    {
+      "entity_id": "society:rera-9eea80e64c4f261b",
+      "alias_entity_id": "society:the-presidential-tower",
+      "name": "The Presidential Tower ",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000565",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/171014/000565",
+      "ack_number": "PR/KN/170731/000565",
+      "latitude": 13.0278729,
+      "longitude": 77.5460889
+    },
+    {
+      "entity_id": "society:rera-043838fee4e525c5",
+      "alias_entity_id": "society:mantri-centrium",
+      "name": "Mantri Centrium",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171016/000485",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/171016/000485",
+      "ack_number": "PR/KN/170731/000485",
+      "latitude": 12.9901429,
+      "longitude": 77.5706287
+    },
+    {
+      "entity_id": "society:rera-b5d58f14709ce32f",
+      "alias_entity_id": "society:one-bangalore-west-tower-6",
+      "name": "Tower 6 One Bangalore West",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171117/000365",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/171117/000365",
+      "ack_number": "PR/KN/170729/000365"
+    },
+    {
+      "entity_id": "society:rera-32378302f5ca6d09",
+      "alias_entity_id": "society:prestige-jindal-city-phase-i",
+      "name": "Prestige Jindal City Phase-I",
+      "project_key": "PRM/KA/RERA/1251/309/PR/180406/001495",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/180406/001495",
+      "ack_number": "PR/KN/180305/002823",
+      "latitude": 13.0535623,
+      "longitude": 77.48811859999999
+    },
+    {
+      "entity_id": "society:rera-b26d1b258b181639",
+      "alias_entity_id": "society:one-bangalore-west-tower-7",
+      "name": "Tower 7  One Bangalore West",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190412/002524",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/190412/002524",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/190318/003133",
+      "latitude": 13.0087941,
+      "longitude": 77.5535661
+    },
+    {
+      "entity_id": "society:rera-817a906317d2c7bd",
+      "alias_entity_id": "society:renaissance-reserva",
+      "name": "Renaissance Reserva",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190614/002602",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/190614/002602",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/190212/003041",
+      "latitude": 13.0415411,
+      "longitude": 77.5479639
+    },
+    {
+      "entity_id": "society:rera-f215cca20b469118",
+      "alias_entity_id": "society:tata-new-haven-bengaluru-phase-iv",
+      "name": "New  Haven Bengaluru Phase IV",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200103/003103",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/200103/003103",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/190820/003505",
+      "latitude": 12.9127875,
+      "longitude": 77.70654689999999
+    },
+    {
+      "entity_id": "society:rera-3befa7927348d2f3",
+      "alias_entity_id": "society:prestige-fairfield",
+      "name": "PRESTIGE FAIRFIELD",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200211/003273",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/200211/003273",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/191230/003785",
+      "latitude": 13.045623,
+      "longitude": 77.5720589
+    },
+    {
+      "entity_id": "society:rera-1c5ed25d455f2628",
+      "alias_entity_id": "society:renaissance-bellevue",
+      "name": "Renaissance Bellevue",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200304/003327",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/200304/003327",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/200125/003858",
+      "latitude": 13.0069898,
+      "longitude": 77.56804699999999
+    },
+    {
+      "entity_id": "society:rera-7b9bb252368eec94",
+      "alias_entity_id": "society:birla-tisya",
+      "name": "BIRLA TISYA",
+      "project_key": "PRM/KA/RERA/1251/309/PR/211022/004371",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/211022/004371",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/210903/005211",
+      "latitude": 12.9802168,
+      "longitude": 77.53831389999999
+    },
+    {
+      "entity_id": "society:rera-a395bc3facd4d5ee",
+      "alias_entity_id": "society:tata-new-haven-bengaluru-phase-v",
+      "name": "NEW HAVEN BENGALURU PHASE V",
+      "project_key": "PRM/KA/RERA/1251/309/PR/290822/005198",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/309/PR/290822/005198",
+      "ack_number": "ACK/KA/RERA/1251/309/PR/200822/006265",
+      "latitude": 12.9127875,
+      "longitude": 77.70654689999999
+    },
+    {
+      "entity_id": "society:rera-53117ea502ea0cd0",
+      "alias_entity_id": "society:snn-raj-serenity",
+      "name": "SNN RAJ SERENITY",
+      "project_key": "PRM/KA/RERA/1251/310/PR/150622/004987",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/150622/004987",
+      "ack_number": "ACK/KA/RERA/1251/310/PR/190422/005864",
+      "latitude": 12.8594753,
+      "longitude": 77.6140353
+    },
+    {
+      "entity_id": "society:rera-de36720f386e8a3f",
+      "alias_entity_id": "society:prestige-falcon-city",
+      "name": "PRESTIGE FALCON CITY",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170913/000114",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170913/000114",
+      "ack_number": "PR/KN/170728/000114",
+      "latitude": 12.886722,
+      "longitude": 77.56387219999999
+    },
+    {
+      "entity_id": "society:rera-55b9f3b5370894cd",
+      "alias_entity_id": "society:purva-westend",
+      "name": "Purva Westend",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000236",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170915/000236",
+      "ack_number": "PR/KN/170729/000236",
+      "latitude": 12.8897346,
+      "longitude": 77.63764429999999
+    },
+    {
+      "entity_id": "society:rera-9e36c8a04a40e472",
+      "alias_entity_id": "society:prestige-song-of-the-south-phase-i",
+      "name": "PRESTIGE SONG OF THE SOUTH PHASE I",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000243",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170915/000243",
+      "ack_number": "PR/KN/170729/000243",
+      "latitude": 12.8629791,
+      "longitude": 77.61037859999999
+    },
+    {
+      "entity_id": "society:rera-8ccb1e0250853039",
+      "alias_entity_id": "society:prestige-bagamane-temple-bells",
+      "name": "PRESTIGE BAGAMANE TEMPLE BELLS",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000281",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170915/000281",
+      "ack_number": "PR/KN/170729/000281",
+      "latitude": 12.9303838,
+      "longitude": 77.5216756
+    },
+    {
+      "entity_id": "society:rera-fe982c6d2c40d9d2",
+      "alias_entity_id": "society:skylark-richmond",
+      "name": "Skylark Richmond",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000765",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170915/000765",
+      "ack_number": "PR/KN/170731/000765",
+      "latitude": 12.9626187,
+      "longitude": 77.6052772
+    },
+    {
+      "entity_id": "society:rera-d774ef30eda76527",
+      "alias_entity_id": "society:prestige-lake-ridge-phase-1",
+      "name": "PRESTIGE LAKE RIDGE PHASE 1",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170916/000334",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170916/000334",
+      "ack_number": "PR/KN/170729/000334",
+      "latitude": 12.8955038,
+      "longitude": 77.5395271
+    },
+    {
+      "entity_id": "society:rera-dcee93ea77d09eb0",
+      "alias_entity_id": "society:snn-raj-grandeur",
+      "name": "SNN Raj Grandeur",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170918/000681",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170918/000681",
+      "ack_number": "PR/KN/170731/000681",
+      "latitude": 12.9017708,
+      "longitude": 77.6245005
+    },
+    {
+      "entity_id": "society:rera-b719e74c670a7d43",
+      "alias_entity_id": "society:snn-raj-greenbay",
+      "name": "SNN Raj Greenbay",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170920/000621",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/170920/000621",
+      "ack_number": "PR/KN/170731/000621",
+      "latitude": 12.8531378,
+      "longitude": 77.67884180000001
+    },
+    {
+      "entity_id": "society:rera-7aebcaf51f604095",
+      "alias_entity_id": "society:sobha-clovelly",
+      "name": "Sobha Clovelly",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000201",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171014/000201",
+      "ack_number": "PR/KN/170730/000201",
+      "latitude": 12.9112544,
+      "longitude": 77.5568665
+    },
+    {
+      "entity_id": "society:rera-699d44c234988565",
+      "alias_entity_id": "society:snn-raj-spiritua",
+      "name": "SNN Raj Spiritua",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000342",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171014/000342",
+      "ack_number": "PR/KN/170730/000342",
+      "latitude": 12.9111043,
+      "longitude": 77.5726269
+    },
+    {
+      "entity_id": "society:rera-f5582864641239f3",
+      "alias_entity_id": "society:shriram-southern-crest",
+      "name": "SHRIRAM SOUTHERN CREST",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171014/000364",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171014/000364",
+      "ack_number": "PR/KN/170801/000364",
+      "latitude": 12.9057137,
+      "longitude": 77.5724724
+    },
+    {
+      "entity_id": "society:rera-af36618d49c94b92",
+      "alias_entity_id": "society:century-central",
+      "name": "Century Central",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000351",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171015/000351",
+      "ack_number": "PR/KN/170729/000351",
+      "latitude": 12.8920299,
+      "longitude": 77.5648227
+    },
+    {
+      "entity_id": "society:rera-a746aa687e84264d",
+      "alias_entity_id": "society:mantri-serenity1",
+      "name": "Mantri Serenity1",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171019/000494",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171019/000494",
+      "ack_number": "PR/KN/170731/000494",
+      "latitude": 12.8869818,
+      "longitude": 77.5514522
+    },
+    {
+      "entity_id": "society:rera-e68d15500e147ecd",
+      "alias_entity_id": "society:brigade-7-gardens",
+      "name": "Brigade 7 Gardens",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171021/000508",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/171021/000508",
+      "ack_number": "PR/KN/170731/000508",
+      "latitude": 12.896276,
+      "longitude": 77.5308391
+    },
+    {
+      "entity_id": "society:rera-2a8457298f16cc42",
+      "alias_entity_id": "society:sobha-forest-edge",
+      "name": "Sobha Forest Edge",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180227/002592",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/180227/002592",
+      "ack_number": "PR/KN/180108/002592",
+      "latitude": 12.876866,
+      "longitude": 77.5286991
+    },
+    {
+      "entity_id": "society:rera-3cf3565aa4739401",
+      "alias_entity_id": "society:prestige-park-square",
+      "name": "Prestige Park Square",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180313/002634",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/180313/002634",
+      "ack_number": "PR/KN/180117/002634",
+      "latitude": 12.8455968,
+      "longitude": 77.5873147
+    },
+    {
+      "entity_id": "society:rera-f62a2a3e69fbe1de",
+      "alias_entity_id": "society:salarpuria-sattva-misty-charm",
+      "name": "SALARPURIA SATTVA MISTY CHARM",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180507/001635",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/180507/001635",
+      "ack_number": "PR/KN/180206/002684",
+      "latitude": 12.8638785,
+      "longitude": 77.5440265
+    },
+    {
+      "entity_id": "society:rera-9d85c7b323824afe",
+      "alias_entity_id": "society:nitesh-hyde-park-phase-ii",
+      "name": "Nitesh Hyde Park Phase II",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180627/001912",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/180627/001912",
+      "ack_number": "PR/KN/170801/000969",
+      "latitude": 12.8716113,
+      "longitude": 77.59735669999999
+    },
+    {
+      "entity_id": "society:rera-d3090a201815d30f",
+      "alias_entity_id": "society:prestige-botanique",
+      "name": "Prestige Botanique",
+      "project_key": "PRM/KA/RERA/1251/310/PR/180627/001936",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/180627/001936",
+      "ack_number": "ACK/KA/RERA/1251/310/PR/180615/002349",
+      "latitude": 12.9543324,
+      "longitude": 77.5802291
+    },
+    {
+      "entity_id": "society:rera-697fbbfce88898f2",
+      "alias_entity_id": "society:mantri-tranquil",
+      "name": "Mantri Tranquil",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190711/002659",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/190711/002659",
+      "ack_number": "ACK/KA/RERA/1251/310/PR/181026/002758",
+      "latitude": 12.8880493,
+      "longitude": 77.5451437
+    },
+    {
+      "entity_id": "society:rera-78131c93a2d222cd",
+      "alias_entity_id": "society:prestige-elysian",
+      "name": "Prestige Elysian",
+      "project_key": "PRM/KA/RERA/1251/310/PR/190722/002709",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/190722/002709",
+      "ack_number": "ACK/KA/RERA/1251/310/PR/190508/003274",
+      "latitude": 12.873221100000002,
+      "longitude": 77.5940272
+    },
+    {
+      "entity_id": "society:rera-ca22a221f0b66506",
+      "alias_entity_id": "society:prestige-southern-star",
+      "name": "Prestige Southern Star",
+      "project_key": "PRM/KA/RERA/1251/310/PR/210325/007603",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/310/PR/210325/007603",
+      "ack_number": "ACK/KA/RERA/1251/310/PR/070225/008938",
+      "latitude": 12.873175,
+      "longitude": 77.622547
+    },
+    {
+      "entity_id": "society:rera-7a0ed3a7df1c8adc",
+      "alias_entity_id": "society:elysium-at-brigade-cornerstone-utopia",
+      "name": "Elysium at Brigade Cornerstone Utopia",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/040924/006987"
+    },
+    {
+      "entity_id": "society:rera-4cfcffec734e8b13",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-iv",
+      "name": "FOLIUM BY SUMADHURA PHASE-IV",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/050126/008382"
+    },
+    {
+      "entity_id": "society:rera-20f63624d25038cb",
+      "alias_entity_id": "society:sumadhura-capitol-residences",
+      "name": "SUMADHURA CAPITOL RESIDENCES",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/051024/007125"
+    },
+    {
+      "entity_id": "society:rera-14be0f542bf67d4e",
+      "alias_entity_id": "society:assetz-marq-phase-3b",
+      "name": "Assetz Marq Phase 3B",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/091122/005433"
+    },
+    {
+      "entity_id": "society:rera-3472c5bda0c92786",
+      "alias_entity_id": "society:sumadhura-solea",
+      "name": "SUMADHURA SOLEA",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/100326/008517"
+    },
+    {
+      "entity_id": "society:rera-32e07c8e3cb44025",
+      "alias_entity_id": "society:sumadhura-edition-phase-i",
+      "name": "SUMADHURA EDITION PHASE-I",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008328"
+    },
+    {
+      "entity_id": "society:rera-4aa05c9485b5ded9",
+      "alias_entity_id": "society:sumadhura-solace-phase-i",
+      "name": "SUMADHURA SOLACE PHASE-I",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008330"
+    },
+    {
+      "entity_id": "society:rera-54aad766dceb955f",
+      "alias_entity_id": "society:sumadhura-edition-phase-ii",
+      "name": "SUMADHURA EDITION PHASE-II",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008332"
+    },
+    {
+      "entity_id": "society:rera-d47927ccfba652f9",
+      "alias_entity_id": "society:sumadhura-solace-phase-ii",
+      "name": "SUMADHURA SOLACE PHASE-II",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008333"
+    },
+    {
+      "entity_id": "society:rera-d2af7a227be5b9a2",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-iii",
+      "name": "FOLIUM BY SUMADHURA PHASE-III",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/141223/006468"
+    },
+    {
+      "entity_id": "society:rera-e33c7fdcc0d15688",
+      "alias_entity_id": "society:godrej-splendour",
+      "name": "Godrej Splendour",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/160622/005000"
+    },
+    {
+      "entity_id": "society:rera-c1af3dd6c1581e3e",
+      "alias_entity_id": "society:godrej-air",
+      "name": "Godrej Air",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170819/000006"
+    },
+    {
+      "entity_id": "society:rera-22f4c48f354aeb23",
+      "alias_entity_id": "society:sobha-25-richmond",
+      "name": "Sobha 25 Richmond ",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170916/000257",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170916/000257",
+      "ack_number": "PR/KN/170730/000257"
+    },
+    {
+      "entity_id": "society:rera-67ba4bfb38da8a8c",
+      "alias_entity_id": "society:vaswani-exquisite",
+      "name": "Vaswani Exquisite",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171015/000784"
+    },
+    {
+      "entity_id": "society:rera-ccfa353d22484c7b",
+      "alias_entity_id": "society:brigade-lakefront-crimson",
+      "name": "Brigade Lakefront - Crimson",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171016/000503"
+    },
+    {
+      "entity_id": "society:rera-1b36754eb0613fe6",
+      "alias_entity_id": "society:32-richmond",
+      "name": "32 RICHMOND",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171214/001550",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171214/001550",
+      "ack_number": "PR/KN/170829/001550",
+      "latitude": 12.9665322,
+      "longitude": 77.607416
+    },
+    {
+      "entity_id": "society:rera-612b8984826874f8",
+      "alias_entity_id": "society:vaswani-starlight",
+      "name": "Vaswani Starlight",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/180424/006808"
+    },
+    {
+      "entity_id": "society:rera-d871b9e8d8bb5c00",
+      "alias_entity_id": "society:pursuit-of-a-radical-rhapsody-phase-2",
+      "name": "PURSUIT OF A RADICAL RHAPSODY PHASE 2",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/190102/002271"
+    },
+    {
+      "entity_id": "society:rera-53c0b81882e6acc6",
+      "alias_entity_id": "society:prestige-waterford",
+      "name": "PRESTIGE WATERFORD",
+      "project_key": "PRM/KA/RERA/1251/446/PR/200811/003528",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/200811/003528",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/200619/004081",
+      "latitude": 12.9819914,
+      "longitude": 77.7421819
+    },
+    {
+      "entity_id": "society:rera-b679df8827c617e3",
+      "alias_entity_id": "society:sobha-windsor-phase-1-wing-1-and-2",
+      "name": "Sobha Windsor Phase 1 Wing 1 and 2",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/210219/003939"
+    },
+    {
+      "entity_id": "society:rera-925eb94baa5a20bc",
+      "alias_entity_id": "society:sumadhura-elysium-phase-i",
+      "name": "Sumadhura Elysium Phase-I",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/220526/008677"
+    },
+    {
+      "entity_id": "society:rera-8f293b9e12537763",
+      "alias_entity_id": "society:brigade-belvedere",
+      "name": "Brigade Belvedere",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/240326/008549"
+    },
+    {
+      "entity_id": "society:rera-0f6e2dd5ef0a2582",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-ii",
+      "name": "FOLIUM BY SUMADHURA PHASE-II",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/250423/005893"
+    },
+    {
+      "entity_id": "society:rera-b6fa0b04603cbcfa",
+      "alias_entity_id": "society:cloud-forest",
+      "name": "Cloud Forest",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/250625/007869"
+    },
+    {
+      "entity_id": "society:rera-6f1049070060d911",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-i",
+      "name": "FOLIUM BY SUMADHURA PHASE-I",
+      "area": "Whitefield",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/446/PR/280222/004738"
+    },
+    {
+      "entity_id": "society:rera-04ca128e3eff8243",
+      "alias_entity_id": "society:arvind-bel-air",
+      "name": "Arvind Bel Air",
+      "project_key": "PRM/KA/RERA/1251/472/PR/200515/003406",
+      "city": "Bengaluru",
+      "registration_number": "PRM/KA/RERA/1251/472/PR/200515/003406",
+      "ack_number": "ACK/KA/RERA/1251/472/PR/200307/003956",
+      "latitude": 13.0938536,
+      "longitude": 77.56007129999999
+    }
+  ]
+}

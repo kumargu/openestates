@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "LEAF SEARCH SEMANTICS \u2014 answers_preferences, scoring_hint, display_template per fact_key. Merged from concern_taxonomy + fact_schema_registry.",
+  "_comment": "LEAF SEARCH SEMANTICS — answers_preferences, scoring_hint, display_template per fact_key. Merged from concern_taxonomy + fact_schema_registry.",
   "description": "Canonical leaf registry: search semantics + enrichment metadata per fact_key.",
   "merged_from": [
     "app/config/dag/concern_taxonomy.json"
@@ -73,10 +73,6 @@
       "house",
       "lakh",
       "property"
-    ],
-    "semantic_stopwords": [
-      "near",
-      "want"
     ],
     "accepted_tradeoffs": [
       {
@@ -152,9 +148,16 @@
           "family friendly",
           "good for family",
           "kids",
+          "kid",
+          "planning kid",
+          "couple planning kid",
           "children",
           "parents",
-          "school"
+          "school",
+          "elderly",
+          "elderly parents",
+          "senior friendly",
+          "safe for elderly"
         ]
       },
       {
@@ -165,7 +168,12 @@
           "good investment",
           "investor",
           "rental",
+          "rental demand",
+          "rental yield",
           "resale",
+          "resale liquidity",
+          "resale are strong",
+          "strong resale",
           "appreciation"
         ]
       },
@@ -177,6 +185,7 @@
           "low risk",
           "no risk",
           "verified",
+          "low legal risk",
           "legal clear",
           "legal paperwork",
           "safe legal",
@@ -227,6 +236,7 @@
       {
         "archetype": "end_user",
         "patterns": [
+          "self use home",
           "end use",
           "end-user",
           "self use",
@@ -360,321 +370,6 @@
         ]
       }
     ],
-    "semantic_expansions": [
-      {
-        "patterns": [
-          "parents",
-          "senior",
-          "seniors"
-        ],
-        "expanded_tokens": [
-          "family",
-          "hospital",
-          "quiet",
-          "safe"
-        ]
-      },
-      {
-        "patterns": [
-          "kids",
-          "children"
-        ],
-        "expanded_tokens": [
-          "family",
-          "school",
-          "play",
-          "park"
-        ]
-      },
-      {
-        "patterns": [
-          "peaceful",
-          "calm"
-        ],
-        "expanded_tokens": [
-          "quiet",
-          "low_noise",
-          "livability"
-        ]
-      },
-      {
-        "patterns": [
-          "cramped"
-        ],
-        "expanded_tokens": [
-          "density",
-          "open_space",
-          "large_campus"
-        ]
-      },
-      {
-        "patterns": [
-          "spacious"
-        ],
-        "expanded_tokens": [
-          "open_space",
-          "large_campus"
-        ]
-      },
-      {
-        "patterns": [
-          "green",
-          "greenery",
-          "trees",
-          "landscaped"
-        ],
-        "expanded_tokens": [
-          "open_space",
-          "park",
-          "nature"
-        ]
-      },
-      {
-        "patterns": [
-          "resident",
-          "residents"
-        ],
-        "expanded_tokens": [
-          "community",
-          "review",
-          "lived_experience"
-        ]
-      },
-      {
-        "patterns": [
-          "marketing",
-          "hype"
-        ],
-        "expanded_tokens": [
-          "builder_claim",
-          "low_trust"
-        ]
-      },
-      {
-        "patterns": [
-          "enduse",
-          "enduser"
-        ],
-        "expanded_tokens": [
-          "liveability",
-          "occupancy",
-          "maintenance"
-        ]
-      },
-      {
-        "patterns": [
-          "resale"
-        ],
-        "expanded_tokens": [
-          "liquidity",
-          "market",
-          "investment"
-        ]
-      },
-      {
-        "patterns": [
-          "overpriced"
-        ],
-        "expanded_tokens": [
-          "value",
-          "price_per_sqft",
-          "premium"
-        ]
-      },
-      {
-        "patterns": [
-          "traffic",
-          "congestion"
-        ],
-        "expanded_tokens": [
-          "commute",
-          "road",
-          "risk"
-        ]
-      },
-      {
-        "patterns": [
-          "approach"
-        ],
-        "expanded_tokens": [
-          "road",
-          "access",
-          "connectivity"
-        ]
-      },
-      {
-        "patterns": [
-          "hospital"
-        ],
-        "expanded_tokens": [
-          "healthcare",
-          "parents"
-        ]
-      },
-      {
-        "patterns": [
-          "school",
-          "schools"
-        ],
-        "expanded_tokens": [
-          "family",
-          "kids"
-        ]
-      },
-      {
-        "patterns": [
-          "office",
-          "offices"
-        ],
-        "expanded_tokens": [
-          "tech_park",
-          "commute"
-        ]
-      },
-      {
-        "patterns": [
-          "metro"
-        ],
-        "expanded_tokens": [
-          "transit",
-          "commute",
-          "connectivity"
-        ]
-      },
-      {
-        "patterns": [
-          "clubhouse",
-          "pool",
-          "amenities",
-          "amenity"
-        ],
-        "expanded_tokens": [
-          "amenity_quality",
-          "society"
-        ]
-      },
-      {
-        "patterns": [
-          "safe",
-          "trusted",
-          "reliable"
-        ],
-        "expanded_tokens": [
-          "risk",
-          "builder",
-          "verified"
-        ]
-      },
-      {
-        "patterns": [
-          "not cramped"
-        ],
-        "expanded_tokens": [
-          "open_space",
-          "large_campus",
-          "low_density"
-        ]
-      },
-      {
-        "patterns": [
-          "actual residents"
-        ],
-        "expanded_tokens": [
-          "resident",
-          "community",
-          "review",
-          "lived_experience"
-        ]
-      },
-      {
-        "patterns": [
-          "investor hype"
-        ],
-        "expanded_tokens": [
-          "marketing",
-          "speculation",
-          "low_trust"
-        ]
-      },
-      {
-        "patterns": [
-          "tech park",
-          "tech parks",
-          "it park",
-          "it parks"
-        ],
-        "expanded_tokens": [
-          "office",
-          "commute",
-          "employment_hub"
-        ]
-      },
-      {
-        "patterns": [
-          "approach road",
-          "approach roads"
-        ],
-        "expanded_tokens": [
-          "road",
-          "access",
-          "connectivity"
-        ]
-      },
-      {
-        "patterns": [
-          "good reviews"
-        ],
-        "expanded_tokens": [
-          "review_quality",
-          "google_rating",
-          "resident"
-        ]
-      },
-      {
-        "patterns": [
-          "family friendly"
-        ],
-        "expanded_tokens": [
-          "family",
-          "school",
-          "kids",
-          "hospital"
-        ]
-      }
-    ],
-    "ranking": {
-      "min_support_evidence_confidence": 0.6,
-      "min_llm_evidence_confidence": 0.75,
-      "negative_no_data_penalty_multiplier": 1.2,
-      "min_semantic_recall_score": 0.08,
-      "semantic_candidate_fit_weight": 1.0,
-      "semantic_candidate_fit_cap": 0.25,
-      "broad_local_recall_multiplier": 4,
-      "broad_local_recall_min_extra": 64,
-      "positive_evidence_floor_ratio": 0.6,
-      "no_positive_evidence_score_multiplier": 0.4,
-      "nearby_area_score_penalty": -0.35,
-      "graph_area_score_penalty": -0.25,
-      "geo_distance_fact_keys": [
-        "nearby_schools",
-        "nearby_metro_stations",
-        "nearby_hospitals",
-        "nearby_fitness",
-        "nearby_tech_parks",
-        "nearby_public_parks"
-      ],
-      "nearby_distance_full_score_km": 0.75,
-      "nearby_distance_zero_score_km": 3.0,
-      "nearby_distance_bonus_cap": 0.8,
-      "named_place_full_score_km": 0.75,
-      "named_place_zero_score_km": 5.0,
-      "named_place_score_weight": 2.0,
-      "min_score_with_positive_evidence": 0.2,
-      "max_score_with_positive_evidence": 0.45,
-      "min_score_with_risk_only_evidence": 0.1,
-      "min_score_with_constraint_only": 0.01,
-      "fact_coverage_threshold": 25.0
-    },
     "placeholder_display_values": [
       "",
       "unknown",
@@ -1494,6 +1189,9 @@
           "open space",
           "breathing room",
           "less crowded",
+          "kids can play",
+          "kid can play",
+          "playground",
           "garden",
           "landscaped",
           "park view",
@@ -1557,7 +1255,13 @@
           "well-maintained",
           "maintained",
           "maintenance",
-          "layout maintained"
+          "layout maintained",
+          "good maintenance",
+          "upkeep",
+          "upkeep is good",
+          "daily upkeep",
+          "clean common areas",
+          "low maintenance"
         ],
         "label": "maintenance",
         "expanded_keys": [
@@ -1584,7 +1288,11 @@
           "livability",
           "easier to live",
           "easier to live in",
-          "daily life"
+          "daily life",
+          "own stay",
+          "self use",
+          "actually good",
+          "daily upkeep"
         ],
         "label": "liveability",
         "expanded_keys": [
@@ -1620,7 +1328,14 @@
           "investment opportunity",
           "good investment",
           "resale",
+          "resale potential",
+          "strong resale",
+          "resale are strong",
+          "resale liquidity",
           "hold",
+          "rental demand",
+          "rental yield",
+          "growth corridor",
           "valuation",
           "worth",
           "price discovery"
@@ -1628,6 +1343,8 @@
         "label": "resale potential",
         "expanded_keys": [
           "resale_strength_score",
+          "resale_potential",
+          "rental_and_resale_demand",
           "pricing_insight",
           "price_per_sqft",
           "market_status"
@@ -1639,6 +1356,9 @@
         "patterns": [
           "water",
           "water supply",
+          "dependable water supply",
+          "reliable water",
+          "water reliability",
           "borewell",
           "cauvery"
         ],
@@ -1661,6 +1381,9 @@
           "metro station",
           "hospital",
           "hospitals",
+          "pharmacy",
+          "shops",
+          "walkable",
           "gym",
           "fitness",
           "tech park",
@@ -1711,6 +1434,9 @@
           "highly rated",
           "review receipts",
           "review strength",
+          "resident reviews",
+          "strong resident reviews",
+          "residents say",
           "resident snippets",
           "community proof",
           "resident themes",
@@ -1756,7 +1482,9 @@
           "ready possession",
           "immediate possession",
           "ready resale",
-          "ready to move"
+          "ready to move",
+          "move in ready",
+          "move-in-ready"
         ],
         "label": "delivered society",
         "expanded_keys": [
@@ -1974,6 +1702,8 @@
           "budget",
           "cheap",
           "cheaper",
+          "fair price",
+          "value buy",
           "value for money"
         ],
         "label": "value for money",
@@ -2083,6 +1813,8 @@
         "rank": 32,
         "patterns": [
           "ready to move",
+          "move in ready",
+          "move-in-ready",
           "ready possession",
           "immediate possession",
           "possession proof",
@@ -2139,6 +1871,12 @@
           "commute friendly",
           "quick commute",
           "office commute",
+          "daily commute",
+          "airport road",
+          "emergency access",
+          "medical emergency access",
+          "school bus route",
+          "traffic reality",
           "predictable commute",
           "not too far",
           "not too far from",
@@ -2164,8 +1902,14 @@
           "for family",
           "family project",
           "family livability",
+          "sensible family home",
           "young family",
           "parents",
+          "elderly",
+          "elderly parents",
+          "senior friendly",
+          "safe for elderly",
+          "planning kid",
           "kids friendly",
           "kid friendly"
         ],
@@ -2210,7 +1954,10 @@
           "rera receipts",
           "paperwork",
           "legal status",
-          "legal safety"
+          "legal safety",
+          "safe society",
+          "safe community",
+          "weak proof"
         ],
         "label": "legal safety",
         "expanded_keys": [
@@ -2230,6 +1977,12 @@
           "listing receipts",
           "listing proof",
           "listing price proof",
+          "listing price evidence",
+          "listing-backed",
+          "listing backed",
+          "asking price",
+          "asking-price",
+          "current listing price",
           "price proof",
           "market listing data",
           "listing source",
@@ -2274,7 +2027,9 @@
         "patterns": [
           "1bhk",
           "1 bhk",
-          "one bhk"
+          "one bhk",
+          "one bedroom",
+          "one-bedroom"
         ],
         "label": "1bhk configuration",
         "expanded_keys": [
@@ -2289,7 +2044,9 @@
         "patterns": [
           "2bhk",
           "2 bhk",
-          "two bhk"
+          "two bhk",
+          "two bedroom",
+          "two-bedroom"
         ],
         "label": "2bhk configuration",
         "expanded_keys": [
@@ -2304,7 +2061,9 @@
         "patterns": [
           "3bhk",
           "3 bhk",
-          "three bhk"
+          "three bhk",
+          "three bedroom",
+          "three-bedroom"
         ],
         "label": "3bhk configuration",
         "expanded_keys": [
@@ -2319,7 +2078,9 @@
         "patterns": [
           "4bhk",
           "4 bhk",
-          "four bhk"
+          "four bhk",
+          "four bedroom",
+          "four-bedroom"
         ],
         "label": "4bhk configuration",
         "expanded_keys": [
@@ -2328,6 +2089,146 @@
           "floor_plan_asset_count"
         ],
         "weight": 1.1
+      },
+      {
+        "rank": 44,
+        "patterns": [
+          "sunlight",
+          "good sunlight",
+          "ventilation",
+          "good ventilation",
+          "facing"
+        ],
+        "label": "facing",
+        "expanded_keys": [
+          "facing",
+          "vastu_signal"
+        ],
+        "gap_keys": [
+          "facing"
+        ],
+        "weight": 0.6
+      },
+      {
+        "rank": 101,
+        "patterns": [
+          "well maintained",
+          "well-maintained",
+          "good maintenance"
+        ],
+        "label": "maintenance",
+        "expanded_keys": [
+          "review_observation.maintenance_quality.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 102,
+        "patterns": [
+          "reliable water",
+          "dependable water supply",
+          "good water supply"
+        ],
+        "label": "water supply",
+        "expanded_keys": [
+          "review_observation.water_reliability.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.2,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 103,
+        "patterns": [
+          "good construction quality",
+          "quality construction",
+          "well built homes"
+        ],
+        "label": "construction quality",
+        "expanded_keys": [
+          "review_observation.construction_quality.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.2,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 105,
+        "patterns": [
+          "approach road",
+          "good approach road",
+          "good access road"
+        ],
+        "label": "approach road",
+        "expanded_keys": [
+          "review_observation.approach_road_condition.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.0,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 107,
+        "patterns": [
+          "quiet society",
+          "peaceful society",
+          "calm society",
+          "low noise"
+        ],
+        "label": "quiet neighborhood",
+        "expanded_keys": [
+          "review_observation.noise_exposure.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 108,
+        "patterns": [
+          "good open space",
+          "spacious common areas",
+          "uncrowded society"
+        ],
+        "label": "open space",
+        "expanded_keys": [
+          "review_observation.open_space.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 109,
+        "patterns": [
+          "well planned layout",
+          "thoughtful design",
+          "practical floor plan"
+        ],
+        "label": "layout quality",
+        "expanded_keys": [
+          "review_observation.layout_quality.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.0,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 110,
+        "patterns": [
+          "airy homes",
+          "good ventilation",
+          "natural airflow"
+        ],
+        "label": "ventilation",
+        "expanded_keys": [
+          "review_observation.ventilation.positive"
+        ],
+        "gap_keys": [],
+        "weight": 1.0,
+        "missing_evidence_neutral": true
       }
     ],
     "negative": [
@@ -2337,9 +2238,12 @@
           "waterlogging",
           "flood prone",
           "monsoon flooding",
+          "basement flooding",
           "bad drainage",
           "stagnant rainwater",
           "flooding",
+          "roads flood",
+          "roads flood during rain",
           "rainwater",
           "dry access"
         ],
@@ -2358,7 +2262,10 @@
       {
         "rank": 2,
         "patterns": [
-          "traffic"
+          "traffic",
+          "road chaos",
+          "outer ring road chaos",
+          "traffic reality"
         ],
         "label": "traffic",
         "expanded_keys": [
@@ -2373,6 +2280,7 @@
         "rank": 3,
         "patterns": [
           "noise",
+          "party crowd",
           "highway noise",
           "airport noise",
           "main road noise",
@@ -2391,6 +2299,7 @@
         "rank": 4,
         "patterns": [
           "legal issue",
+          "legal risk",
           "litigation",
           "unclear title",
           "shady paperwork",
@@ -2445,6 +2354,10 @@
           "bad approach road",
           "narrow approach road",
           "poor access road",
+          "isolated project",
+          "isolated gated project",
+          "roads flood",
+          "roads flood during rain",
           "stagnant rainwater near approach roads",
           "approach road waterlogging"
         ],
@@ -2466,7 +2379,10 @@
       {
         "rank": 7,
         "patterns": [
-          "airport noise"
+          "airport noise",
+          "construction dust",
+          "lake smell",
+          "sewage problems"
         ],
         "label": "environment sensitivity",
         "expanded_keys": [
@@ -2582,8 +2498,15 @@
           "water issues",
           "water issue",
           "water problem",
+          "water risk",
+          "water shortage",
+          "water reliability",
+          "tanker based",
           "tanker dependency",
-          "tanker dependence"
+          "tanker dependence",
+          "tanker issues",
+          "tanker issue",
+          "tanker headache"
         ],
         "label": "water issues",
         "expanded_keys": [
@@ -2592,11 +2515,15 @@
           "operating.tanker_dependence",
           "tanker_dependency",
           "operating.summer_water_shortage",
-          "water_supply"
+          "water_supply",
+          "project.water_supply_mode"
         ],
         "gap_keys": [
           "operating.tanker_dependence",
-          "water_supply_risk"
+          "water_supply_risk",
+          "operating.summer_water_shortage",
+          "project.water_supply_mode",
+          "resident_sentiment"
         ],
         "weight": 1.4
       },
@@ -2604,25 +2531,61 @@
         "rank": 12,
         "patterns": [
           "maintenance headache",
+          "maintenance headaches",
           "maintenance issue",
+          "maintenance surprises",
           "poor maintenance",
-          "bad maintenance"
+          "bad maintenance",
+          "poor association management",
+          "leaking walls",
+          "lift problems",
+          "lift reliability is bad",
+          "poor facility management",
+          "facility management",
+          "badly maintained",
+          "cleaning",
+          "maintenance hassle"
         ],
         "label": "maintenance",
         "expanded_keys": [
           "maintenance_quality",
           "maintenance_sentiment",
           "positive.maintenance_quality",
-          "resident_sentiment"
+          "resident_sentiment",
+          "association_issues",
+          "facility_management_issues",
+          "lift_reliability"
         ],
         "gap_keys": [
           "maintenance_sentiment",
-          "positive.maintenance_quality"
+          "positive.maintenance_quality",
+          "association_issues",
+          "facility_management_issues",
+          "lift_reliability"
         ],
         "weight": 1.2
       },
       {
         "rank": 13,
+        "patterns": [
+          "high maintenance charges",
+          "maintenance charges",
+          "maintenance cost",
+          "maintenance costs"
+        ],
+        "label": "maintenance cost",
+        "expanded_keys": [
+          "maintenance_cost",
+          "maintenance_sentiment"
+        ],
+        "gap_keys": [
+          "maintenance_cost",
+          "maintenance_sentiment"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 14,
         "patterns": [
           "shady builder",
           "bad builder",
@@ -2653,11 +2616,13 @@
         "weight": 1.3
       },
       {
-        "rank": 14,
+        "rank": 15,
         "patterns": [
           "too dense",
           "too packed",
-          "crowding"
+          "crowding",
+          "too crowded",
+          "cramped layouts"
         ],
         "label": "density risk",
         "expanded_keys": [
@@ -2670,12 +2635,18 @@
         "weight": 1.1
       },
       {
-        "rank": 15,
+        "rank": 16,
         "patterns": [
           "fake luxury",
           "brochure luxury",
           "overpriced premium",
-          "premium pricing"
+          "premium pricing",
+          "fancy clubhouse",
+          "huge clubhouse",
+          "purely luxury",
+          "inflated price",
+          "inflated price per sqft",
+          "overpriced launches"
         ],
         "label": "premium",
         "expanded_keys": [
@@ -2684,10 +2655,15 @@
           "premium_pricing",
           "pricing_insight"
         ],
+        "gap_keys": [
+          "premium_pricing",
+          "price_per_sqft",
+          "pricing_insight"
+        ],
         "weight": 1.0
       },
       {
-        "rank": 16,
+        "rank": 17,
         "patterns": [
           "construction dust",
           "dust",
@@ -2701,6 +2677,285 @@
           "google_review_snippets"
         ],
         "weight": 1.0
+      },
+      {
+        "rank": 18,
+        "patterns": [
+          "security complaints",
+          "complaints about security",
+          "security or cleaning"
+        ],
+        "label": "security",
+        "expanded_keys": [
+          "security_complaints",
+          "security_quality",
+          "resident_sentiment"
+        ],
+        "gap_keys": [
+          "security_complaints"
+        ],
+        "weight": 1.1
+      },
+      {
+        "rank": 19,
+        "patterns": [
+          "dead inventory",
+          "resale upside"
+        ],
+        "label": "investment",
+        "expanded_keys": [
+          "resale_strength_score",
+          "resale_potential",
+          "market_status"
+        ],
+        "gap_keys": [
+          "resale_strength_score",
+          "market_status"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 20,
+        "patterns": [
+          "livability cannot be bad",
+          "livability bad",
+          "bad livability",
+          "resident complaints"
+        ],
+        "label": "livability",
+        "expanded_keys": [
+          "livability_sentiment",
+          "resident_sentiment"
+        ],
+        "gap_keys": [
+          "livability_sentiment",
+          "resident_sentiment"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 21,
+        "patterns": [
+          "poor google reviews",
+          "weak reviews",
+          "bad reviews"
+        ],
+        "label": "review quality",
+        "expanded_keys": [
+          "google_review_snippets",
+          "google_rating",
+          "google_review_count"
+        ],
+        "gap_keys": [
+          "google_review_snippets"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 22,
+        "patterns": [
+          "poor ventilation",
+          "cramped layouts"
+        ],
+        "label": "layout quality",
+        "expanded_keys": [
+          "layout_quality",
+          "open_space_score"
+        ],
+        "gap_keys": [
+          "layout_quality"
+        ],
+        "weight": 1.0
+      },
+      {
+        "rank": 23,
+        "patterns": [
+          "west facing heat",
+          "bad facing"
+        ],
+        "label": "facing",
+        "expanded_keys": [
+          "facing"
+        ],
+        "gap_keys": [
+          "facing"
+        ],
+        "weight": 0.8
+      },
+      {
+        "rank": 24,
+        "patterns": [
+          "weak proof",
+          "weak evidence"
+        ],
+        "label": "proof gap",
+        "expanded_keys": [
+          "source_confidence",
+          "evidence_strength"
+        ],
+        "gap_keys": [
+          "rera_status",
+          "google_review_snippets",
+          "resident_sentiment"
+        ],
+        "weight": 1.2
+      },
+      {
+        "rank": 101,
+        "patterns": [
+          "poor maintenance",
+          "bad maintenance",
+          "badly maintained",
+          "maintenance problems"
+        ],
+        "label": "maintenance",
+        "expanded_keys": [
+          "review_observation.maintenance_quality.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 102,
+        "patterns": [
+          "water shortage",
+          "water issues",
+          "unreliable water",
+          "water outages"
+        ],
+        "label": "water issues",
+        "expanded_keys": [
+          "review_observation.water_reliability.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.2,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 103,
+        "patterns": [
+          "poor construction quality",
+          "bad construction quality",
+          "construction defects",
+          "poor workmanship"
+        ],
+        "label": "construction quality",
+        "expanded_keys": [
+          "review_observation.construction_quality.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.2,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 104,
+        "patterns": [
+          "seepage",
+          "damp walls",
+          "dampness",
+          "water leakage"
+        ],
+        "label": "seepage and dampness",
+        "expanded_keys": [
+          "review_observation.seepage_dampness.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.3,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 105,
+        "patterns": [
+          "bad approach road",
+          "poor approach road",
+          "broken approach road",
+          "difficult access road"
+        ],
+        "label": "approach road",
+        "expanded_keys": [
+          "review_observation.approach_road_condition.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.0,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 106,
+        "patterns": [
+          "approach road traffic",
+          "traffic near society",
+          "congested approach",
+          "entrance traffic"
+        ],
+        "label": "approach road traffic",
+        "expanded_keys": [
+          "review_observation.approach_traffic.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 107,
+        "patterns": [
+          "noisy society",
+          "noise problem",
+          "traffic noise",
+          "construction noise"
+        ],
+        "label": "noise",
+        "expanded_keys": [
+          "review_observation.noise_exposure.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 108,
+        "patterns": [
+          "limited open space",
+          "crowded common areas",
+          "little ground space"
+        ],
+        "label": "open space",
+        "expanded_keys": [
+          "review_observation.open_space.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.1,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 109,
+        "patterns": [
+          "poor layout",
+          "awkward floor plan",
+          "impractical design"
+        ],
+        "label": "layout quality",
+        "expanded_keys": [
+          "review_observation.layout_quality.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.0,
+        "missing_evidence_neutral": true
+      },
+      {
+        "rank": 111,
+        "patterns": [
+          "limited security",
+          "weak gate security",
+          "insufficient security staff"
+        ],
+        "label": "security staffing",
+        "expanded_keys": [
+          "review_observation.security_staffing.concern"
+        ],
+        "gap_keys": [],
+        "weight": 1.2,
+        "missing_evidence_neutral": true
       }
     ]
   },
@@ -2821,6 +3076,103 @@
         "Computed"
       ],
       "scoring_method": "rera-derived"
+    },
+    {
+      "dimension": "google_rating",
+      "label": "Google rating",
+      "fact_keys": [
+        "google_rating"
+      ],
+      "query_units": [
+        {
+          "unit": "rating",
+          "aliases": [
+            "google rating",
+            "rating",
+            "rated"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
+        "Google"
+      ],
+      "scoring_method": "google-proof"
+    },
+    {
+      "dimension": "google_review_count",
+      "label": "Google review count",
+      "fact_keys": [
+        "google_review_count"
+      ],
+      "query_units": [
+        {
+          "unit": "reviews",
+          "aliases": [
+            "google reviews",
+            "review count",
+            "reviews",
+            "review"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "proof_sources": [
+        "Google"
+      ],
+      "scoring_method": "google-proof"
+    },
+    {
+      "dimension": "rera_complaints_count",
+      "label": "RERA complaint count",
+      "fact_keys": [
+        "rera_complaints_count",
+        "rera_project_complaints_count",
+        "rera_project_complaints_open_count"
+      ],
+      "query_units": [
+        {
+          "unit": "complaints",
+          "aliases": [
+            "rera complaint count",
+            "rera complaints",
+            "complaint count",
+            "complaints"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "zero_is_max": true,
+      "proof_sources": [
+        "Rera",
+        "Computed"
+      ],
+      "scoring_method": "rera-proof"
+    },
+    {
+      "dimension": "rera_builder_revocations",
+      "label": "RERA builder revocations",
+      "fact_keys": [
+        "rera_builder_revocations"
+      ],
+      "query_units": [
+        {
+          "unit": "revocations",
+          "aliases": [
+            "builder revocations",
+            "rera revocations",
+            "revocation count",
+            "revocations"
+          ],
+          "to_canonical": 1.0
+        }
+      ],
+      "zero_is_max": true,
+      "proof_sources": [
+        "Rera",
+        "Computed"
+      ],
+      "scoring_method": "rera-proof"
     }
   ],
   "text_evidence": [
@@ -6727,6 +7079,167 @@
       }
     },
     {
+      "fact_key": "brochure_asset_count",
+      "bucket": "project_proof",
+      "label": "official project brochure",
+      "lens": "proof",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "project brochure",
+        "official brochure",
+        "project prospectus"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera",
+        "BuilderOfficial"
+      ],
+      "display_template": "Official project brochure available",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.5
+      }
+    },
+    {
+      "fact_key": "image_gallery",
+      "bucket": "project_proof",
+      "label": "sourced image gallery",
+      "lens": "proof",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "property photos",
+        "source-traceable images",
+        "project image gallery"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera",
+        "BuilderOfficial",
+        "Google"
+      ],
+      "display_template": "Sourced project images available",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 0.5
+      }
+    },
+    {
+      "fact_key": "site_plan_asset_count",
+      "bucket": "project_proof",
+      "label": "inspectable site plan",
+      "lens": "proof",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "site plan",
+        "project plan",
+        "layout drawing"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera",
+        "BuilderOfficial"
+      ],
+      "display_template": "Site plan available",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.5
+      }
+    },
+    {
+      "fact_key": "rera_legal_land_document_count",
+      "bucket": "project_proof",
+      "label": "RERA land and title documents",
+      "lens": "proof",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "land documents",
+        "title deed",
+        "legal land records"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera"
+      ],
+      "display_template": "RERA land documents available",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.5
+      }
+    },
+    {
+      "fact_key": "project_tower_count",
+      "bucket": "project_scale",
+      "label": "declared project tower count",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "tower count",
+        "number of towers",
+        "project towers"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera",
+        "BuilderOfficial"
+      ],
+      "display_template": "{value} towers declared",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.4
+      }
+    },
+    {
+      "fact_key": "project_unit_count",
+      "bucket": "project_scale",
+      "label": "declared project home count",
+      "lens": "proof",
+      "polarity": "neutral",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "unit count",
+        "number of homes",
+        "project units"
+      ],
+      "answers_preferences": [],
+      "never_default": true,
+      "source_types": [
+        "Rera",
+        "BuilderOfficial"
+      ],
+      "display_template": "{value} homes declared",
+      "scoring_hint": {
+        "direction": "numeric",
+        "numeric_direction": "HigherIsBetter",
+        "weight": 0.4
+      }
+    },
+    {
       "fact_key": "media.project_plan_frames",
       "bucket": "layout_space",
       "label": "project plans",
@@ -6755,7 +7268,567 @@
         "direction": "text_match",
         "weight": 0.4
       }
+    },
+    {
+      "fact_key": "review_observation.maintenance_quality.positive",
+      "bucket": "maintenance_quality",
+      "label": "Good maintenance",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "good society maintenance quality and upkeep",
+        "well maintained",
+        "well-maintained",
+        "good maintenance"
+      ],
+      "answers_preferences": [
+        "well maintained",
+        "well-maintained",
+        "good maintenance"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.maintenance_quality.concern",
+      "bucket": "maintenance_quality",
+      "label": "Poor maintenance",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "poor society maintenance quality and upkeep",
+        "poor maintenance",
+        "bad maintenance",
+        "badly maintained",
+        "maintenance problems"
+      ],
+      "answers_preferences": [
+        "poor maintenance",
+        "bad maintenance",
+        "badly maintained",
+        "maintenance problems"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.water_reliability.positive",
+      "bucket": "water_reliability",
+      "label": "Reliable water",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "reliable daily water supply without outages",
+        "reliable water",
+        "dependable water supply",
+        "good water supply"
+      ],
+      "answers_preferences": [
+        "reliable water",
+        "dependable water supply",
+        "good water supply"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "review_observation.water_reliability.concern",
+      "bucket": "water_reliability",
+      "label": "Water reliability concern",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "water shortages outages or unreliable water supply",
+        "water shortage",
+        "water issues",
+        "unreliable water",
+        "water outages"
+      ],
+      "answers_preferences": [
+        "water shortage",
+        "water issues",
+        "unreliable water",
+        "water outages"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "review_observation.construction_quality.positive",
+      "bucket": "construction_quality",
+      "label": "Good construction quality",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "good apartment construction quality and workmanship",
+        "good construction quality",
+        "quality construction",
+        "well built homes"
+      ],
+      "answers_preferences": [
+        "good construction quality",
+        "quality construction",
+        "well built homes"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "review_observation.construction_quality.concern",
+      "bucket": "construction_quality",
+      "label": "Construction quality concern",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "poor apartment construction quality and workmanship defects",
+        "poor construction quality",
+        "bad construction quality",
+        "construction defects",
+        "poor workmanship"
+      ],
+      "answers_preferences": [
+        "poor construction quality",
+        "bad construction quality",
+        "construction defects",
+        "poor workmanship"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
+    },
+    {
+      "fact_key": "review_observation.seepage_dampness.concern",
+      "bucket": "seepage_dampness",
+      "label": "Seepage or dampness",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "water seepage leakage damp walls or moisture inside apartments",
+        "seepage",
+        "damp walls",
+        "dampness",
+        "water leakage"
+      ],
+      "answers_preferences": [
+        "seepage",
+        "damp walls",
+        "dampness",
+        "water leakage"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.3
+      }
+    },
+    {
+      "fact_key": "review_observation.approach_road_condition.positive",
+      "bucket": "approach_road_condition",
+      "label": "Good approach road",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "good usable approach road condition to the society",
+        "approach road",
+        "good approach road",
+        "good access road"
+      ],
+      "answers_preferences": [
+        "approach road",
+        "good approach road",
+        "good access road"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
+      "fact_key": "review_observation.approach_road_condition.concern",
+      "bucket": "approach_road_condition",
+      "label": "Poor approach road",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "poor damaged narrow or difficult approach road to the society",
+        "bad approach road",
+        "poor approach road",
+        "broken approach road",
+        "difficult access road"
+      ],
+      "answers_preferences": [
+        "bad approach road",
+        "poor approach road",
+        "broken approach road",
+        "difficult access road"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
+      "fact_key": "review_observation.approach_traffic.concern",
+      "bucket": "approach_traffic",
+      "label": "Approach traffic",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "heavy traffic congestion or long delays on the approach road",
+        "approach road traffic",
+        "traffic near society",
+        "congested approach",
+        "entrance traffic"
+      ],
+      "answers_preferences": [
+        "approach road traffic",
+        "traffic near society",
+        "congested approach",
+        "entrance traffic"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.noise_exposure.positive",
+      "bucket": "noise_exposure",
+      "label": "Quiet environment",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "quiet peaceful living environment without disturbing noise",
+        "quiet society",
+        "peaceful society",
+        "calm society",
+        "low noise"
+      ],
+      "answers_preferences": [
+        "quiet society",
+        "peaceful society",
+        "calm society",
+        "low noise"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.noise_exposure.concern",
+      "bucket": "noise_exposure",
+      "label": "Noise concern",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "disturbing traffic construction aircraft or neighbourhood noise",
+        "noisy society",
+        "noise problem",
+        "traffic noise",
+        "construction noise"
+      ],
+      "answers_preferences": [
+        "noisy society",
+        "noise problem",
+        "traffic noise",
+        "construction noise"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.open_space.positive",
+      "bucket": "open_space",
+      "label": "Useful open space",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "generous usable open space and uncrowded common areas",
+        "good open space",
+        "spacious common areas",
+        "uncrowded society"
+      ],
+      "answers_preferences": [
+        "good open space",
+        "spacious common areas",
+        "uncrowded society"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.open_space.concern",
+      "bucket": "open_space",
+      "label": "Crowded common space",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "cramped crowded common areas with little usable ground space",
+        "limited open space",
+        "crowded common areas",
+        "little ground space"
+      ],
+      "answers_preferences": [
+        "limited open space",
+        "crowded common areas",
+        "little ground space"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.1
+      }
+    },
+    {
+      "fact_key": "review_observation.layout_quality.positive",
+      "bucket": "layout_quality",
+      "label": "Thoughtful layout",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "thoughtful practical apartment or project layout and design",
+        "well planned layout",
+        "thoughtful design",
+        "practical floor plan"
+      ],
+      "answers_preferences": [
+        "well planned layout",
+        "thoughtful design",
+        "practical floor plan"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
+      "fact_key": "review_observation.layout_quality.concern",
+      "bucket": "layout_quality",
+      "label": "Poor layout",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "awkward impractical apartment or project layout and design",
+        "poor layout",
+        "awkward floor plan",
+        "impractical design"
+      ],
+      "answers_preferences": [
+        "poor layout",
+        "awkward floor plan",
+        "impractical design"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
+      "fact_key": "review_observation.ventilation.positive",
+      "bucket": "ventilation",
+      "label": "Airy homes",
+      "lens": "livability",
+      "polarity": "positive",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "airy well ventilated homes with good natural airflow",
+        "airy homes",
+        "good ventilation",
+        "natural airflow"
+      ],
+      "answers_preferences": [
+        "airy homes",
+        "good ventilation",
+        "natural airflow"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.0
+      }
+    },
+    {
+      "fact_key": "review_observation.security_staffing.concern",
+      "bucket": "security_staffing",
+      "label": "Security staffing concern",
+      "lens": "livability",
+      "polarity": "negative",
+      "scopes": [
+        "society"
+      ],
+      "enrichment_terms": [
+        "insufficient security staff or weak gate access control",
+        "limited security",
+        "weak gate security",
+        "insufficient security staff"
+      ],
+      "answers_preferences": [
+        "limited security",
+        "weak gate security",
+        "insufficient security staff"
+      ],
+      "never_default": true,
+      "source_types": [
+        "Google"
+      ],
+      "display_template": "Residents mention: {value}",
+      "scoring_hint": {
+        "direction": "text_match",
+        "weight": 1.2
+      }
     }
   ],
-  "fact_count": 104
+  "fact_count": 128,
+  "excluded_search_fact_keys": [
+    "google_review_cards",
+    "google_review_snippets"
+  ]
 }

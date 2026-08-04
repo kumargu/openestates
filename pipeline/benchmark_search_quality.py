@@ -2,7 +2,7 @@
 
 The benchmark is intentionally layered. A case can fail intent parsing while
 recall still works, or recall can work while proof is missing. Keeping those
-signals separate prevents us from treating embeddings as a magic quality score.
+signals separate prevents us from collapsing search quality into one magic score.
 
 Usage:
     python3.10 -m pipeline.benchmark_search_quality \
@@ -121,7 +121,21 @@ def main() -> None:
         results.append(case_result(case, response, checks))
 
     scoreable_modes = spec.get("scoreable_modes") or inferred_scoreable_modes(cases)
-    serving_materialization = current_search_bundle_materialization(Path.cwd())
+    search_runtime = search_runtime_summary(results)
+    health = call_health(args.base_url, args.timeout_seconds)
+    if not runtime_serving_bundle_version(search_runtime) and health:
+        search_runtime = {
+            "serving_bundle_version": health.get("serving_bundle_version")
+            or health.get("servingBundleVersion")
+        }
+    runtime_bundle_version = runtime_serving_bundle_version(search_runtime)
+    required_bundle_version = spec.get("required_serving_bundle_version")
+    bundle_requirement_error = serving_bundle_requirement_error(
+        required_bundle_version, runtime_bundle_version
+    )
+    runtime_materialization = materialization_for_bundle_version(Path.cwd(), runtime_bundle_version)
+    local_current_materialization = current_search_bundle_materialization(Path.cwd())
+    serving_materialization = runtime_materialization or local_current_materialization
     output = {
         "benchmark": spec.get("benchmark"),
         "version": spec.get("version"),
@@ -129,12 +143,23 @@ def main() -> None:
         "base_url": args.base_url,
         "scoreable_modes": scoreable_modes,
         "query_sources": query_sources,
-        "search_runtime": search_runtime_summary(results),
+        "search_runtime": search_runtime,
+        "required_serving_bundle_version": required_bundle_version,
+        "serving_bundle_requirement_satisfied": bundle_requirement_error is None,
         "serving_bundle_materialization": serving_materialization,
+        "runtime_serving_bundle_materialization": runtime_materialization,
+        "local_current_serving_bundle_materialization": local_current_materialization,
+        "runtime_serving_bundle_manifest": search_bundle_manifest_summary(
+            Path.cwd(), runtime_bundle_version
+        ),
+        "provenance_warnings": provenance_warnings(
+            runtime_bundle_version,
+            runtime_materialization,
+            local_current_materialization,
+        ),
         "summary": summarize(results, scoreable_modes),
         "results": results,
     }
-
     write_json(Path(args.output), output)
     print(f"\nWrote JSON: {args.output}")
     if args.markdown_output:
@@ -153,6 +178,8 @@ def main() -> None:
             raise SystemExit(
                 f"endpoint p95 latency gate failed: {endpoint_p95}ms > {args.max_endpoint_p95_ms}ms"
             )
+    if bundle_requirement_error:
+        raise SystemExit(bundle_requirement_error)
 
 
 def parse_args() -> argparse.Namespace:
@@ -167,7 +194,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def call_search(base_url: str, query: str, timeout_seconds: int) -> Optional[Dict[str, Any]]:
-    url = f"{base_url}/api/search?q={urllib.parse.quote(query)}&debug=true"
+    url = f"{base_url}/api/search?q={urllib.parse.quote(query)}"
     try:
         started_at = time.perf_counter()
         with urllib.request.urlopen(url, timeout=timeout_seconds) as response:
@@ -176,6 +203,16 @@ def call_search(base_url: str, query: str, timeout_seconds: int) -> Optional[Dic
             return payload
     except (urllib.error.URLError, json.JSONDecodeError) as err:
         print(f"  ERROR: {err}", file=sys.stderr)
+        return None
+
+
+def call_health(base_url: str, timeout_seconds: int) -> Optional[Dict[str, Any]]:
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/health", timeout=timeout_seconds) as response:
+            payload = json.loads(response.read())
+            return payload if isinstance(payload, dict) else None
+    except (urllib.error.URLError, json.JSONDecodeError) as err:
+        print(f"  ERROR: health check failed: {err}", file=sys.stderr)
         return None
 
 
@@ -222,20 +259,44 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
         "intent_parse",
         "structured_recall",
         "tantivy_recall",
-        "semantic_recall",
         "ranking",
         "total",
     }
-    missing_timing_layers = sorted(required_timing_layers - timing_layers)
-    checks.append(
-        check(
-            "latency",
-            "search_diagnostics",
-            not missing_timing_layers,
-            f"missing timing layers {missing_timing_layers}; got {sorted(timing_layers)}",
+    if timing_layers:
+        missing_timing_layers = sorted(required_timing_layers - timing_layers)
+        checks.append(
+            check(
+                "latency",
+                "search_diagnostics",
+                not missing_timing_layers,
+                f"missing timing layers {missing_timing_layers}; got {sorted(timing_layers)}",
+            )
         )
-    )
+    else:
+        endpoint_duration = response.get("_request_duration_ms")
+        checks.append(
+            check(
+                "latency",
+                "endpoint_timing",
+                isinstance(endpoint_duration, (int, float)) and endpoint_duration >= 0,
+                f"endpoint request duration was {endpoint_duration!r}",
+            )
+        )
 
+    recall = diagnostics.get("recall") or {}
+    structured_ids = set(recall.get("structuredSample") or recall.get("structured_sample") or [])
+    tantivy_ids = set(recall.get("tantivySample") or recall.get("tantivy_sample") or [])
+    if "candidate_ids_any" in expected:
+        wanted = {str(value) for value in expected["candidate_ids_any"]}
+        candidates = structured_ids | tantivy_ids
+        checks.append(
+            check(
+                "recall",
+                "candidate_ids_any",
+                bool(candidates.intersection(wanted)),
+                f"expected one candidate from {sorted(wanted)}, got {sorted(candidates)}",
+            )
+        )
     if "area" in expected:
         got = intent.get("area")
         checks.append(
@@ -358,6 +419,44 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 f"expected one of {expected['result_title_any']} in top 10, got {titles}",
             )
         )
+    if "top_result_ids_any" in expected:
+        top_ids = {str(result.get("id", "")) for result in results[:3]}
+        wanted_ids = {str(value) for value in expected["top_result_ids_any"]}
+        checks.append(
+            check(
+                "ranking",
+                "top_result_ids_any",
+                bool(top_ids.intersection(wanted_ids)),
+                f"expected one of {sorted(wanted_ids)} in top 3, got {sorted(top_ids)}",
+            )
+        )
+    if "result_ids_any" in expected:
+        result_ids = {str(result.get("id", "")) for result in results[:10]}
+        wanted_ids = {str(value) for value in expected["result_ids_any"]}
+        checks.append(
+            check(
+                "recall",
+                "result_ids_any",
+                bool(result_ids.intersection(wanted_ids)),
+                f"expected one of {sorted(wanted_ids)} in top 10, got {sorted(result_ids)}",
+            )
+        )
+    if "result_areas_all" in expected:
+        allowed_areas = {normalize_token(value) for value in expected["result_areas_all"]}
+        actual_areas = {
+            normalize_token(result.get("area"))
+            for result in results
+            if normalize_token(result.get("area"))
+        }
+        unexpected_areas = sorted(actual_areas - allowed_areas)
+        checks.append(
+            check(
+                "ranking",
+                "result_areas_all",
+                not unexpected_areas,
+                f"expected only areas {sorted(allowed_areas)}, got unexpected {unexpected_areas}",
+            )
+        )
 
     reasons = top_reasons(results, limit=3)
     reason_keys = {normalize_fact_key(reason.get("fact_key")) for reason in reasons}
@@ -369,6 +468,21 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 "reason_fact_keys_any",
                 bool(reason_keys.intersection(wanted)),
                 f"expected one proof key from {sorted(wanted)}, got {sorted(reason_keys)}",
+            )
+        )
+    if "reason_fact_keys_all" in expected:
+        top_reason_keys = {
+            normalize_fact_key(reason.get("fact_key"))
+            for reason in top_reasons(results, limit=1)
+        }
+        wanted = {normalize_fact_key(key) for key in expected["reason_fact_keys_all"]}
+        missing = sorted(wanted - top_reason_keys)
+        checks.append(
+            check(
+                "proof",
+                "reason_fact_keys_all",
+                not missing,
+                f"missing proof keys {missing}; top result got {sorted(top_reason_keys)}",
             )
         )
     if "reason_scoring_methods_any" in expected:
@@ -400,6 +514,92 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 "resolved_place_any",
                 bool(resolved_names.intersection(wanted_places)),
                 f"expected one resolved place from {sorted(wanted_places)}, got {sorted(resolved_names)}",
+            )
+        )
+    if "resolved_entity_matches_all" in expected:
+        resolved_entities = [
+            entity
+            for entity in (diagnostics.get("resolved") or {}).get("entities", [])
+            if isinstance(entity, dict)
+        ]
+        missing_matches = [
+            requirement
+            for requirement in expected["resolved_entity_matches_all"]
+            if not any(record_matches(entity, requirement) for entity in resolved_entities)
+        ]
+        checks.append(
+            check(
+                "resolution",
+                "resolved_entity_matches_all",
+                not missing_matches,
+                f"missing resolved entity matches {missing_matches}; got {resolved_entities}",
+            )
+        )
+    if "forbidden_resolved_entity_matches" in expected:
+        resolved_entities = [
+            entity
+            for entity in (diagnostics.get("resolved") or {}).get("entities", [])
+            if isinstance(entity, dict)
+        ]
+        leaked_matches = [
+            requirement
+            for requirement in expected["forbidden_resolved_entity_matches"]
+            if any(record_matches(entity, requirement) for entity in resolved_entities)
+        ]
+        checks.append(
+            check(
+                "resolution",
+                "forbidden_resolved_entity_matches",
+                not leaked_matches,
+                f"forbidden resolved entity matches leaked {leaked_matches}; got {resolved_entities}",
+            )
+        )
+
+    proof_focuses = top_proof_focuses(results, limit=3)
+    if "proof_focus_any" in expected:
+        wanted_focuses = expected["proof_focus_any"]
+        checks.append(
+            check(
+                "proof",
+                "proof_focus_any",
+                any(
+                    record_matches(focus, requirement)
+                    for focus in proof_focuses
+                    for requirement in wanted_focuses
+                ),
+                f"expected one proof focus matching {wanted_focuses}, got {proof_focuses}",
+            )
+        )
+    if "proof_focus_matches_all" in expected:
+        top_result_focuses = top_proof_focuses(results, limit=1)
+        missing_focuses = [
+            requirement
+            for requirement in expected["proof_focus_matches_all"]
+            if not any(record_matches(focus, requirement) for focus in top_result_focuses)
+        ]
+        checks.append(
+            check(
+                "proof",
+                "proof_focus_matches_all",
+                not missing_focuses,
+                f"missing proof focus matches {missing_focuses}; top result got {top_result_focuses}",
+            )
+        )
+    if "forbidden_proof_focus_fact_keys" in expected:
+        forbidden_focus_keys = {
+            normalize_fact_key(key) for key in expected["forbidden_proof_focus_fact_keys"]
+        }
+        leaked_focus_keys = sorted(
+            normalize_fact_key(field_value(focus, "fact_key"))
+            for focus in proof_focuses
+            if normalize_fact_key(field_value(focus, "fact_key")) in forbidden_focus_keys
+        )
+        checks.append(
+            check(
+                "safety",
+                "forbidden_proof_focus_fact_keys",
+                not leaked_focus_keys,
+                f"forbidden proof focus keys leaked: {leaked_focus_keys}",
             )
         )
     if "relaxation_kinds_any" in expected:
@@ -446,20 +646,6 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
             )
         )
 
-    semantic_reason_methods = [
-        reason.get("scoring_method")
-        for reason in reasons
-        if "semantic" in str(reason.get("scoring_method", "")).lower()
-    ]
-    checks.append(
-        check(
-            "safety",
-            "no_semantic_proof_reason",
-            not semantic_reason_methods,
-            f"semantic scoring methods in proof reasons: {semantic_reason_methods}",
-        )
-    )
-
     if "gap_keys" in expected:
         gaps = learning_gaps(response)
         evidence_keys = intent_evidence_keys(intent)
@@ -475,6 +661,18 @@ def evaluate_case(case: Dict[str, Any], response: Dict[str, Any]) -> List[Dict[s
                 "expected_gap_keys",
                 not missing,
                 f"missing gap keys {missing}; intent evidence keys were {sorted(evidence_keys)}; gaps were {gaps}",
+            )
+        )
+    if "learning_gap_keys" in expected:
+        gaps = learning_gaps(response)
+        gap_text = "\n".join(gaps).lower()
+        missing = [key for key in expected["learning_gap_keys"] if key.lower() not in gap_text]
+        checks.append(
+            check(
+                "gap",
+                "learning_gap_keys",
+                not missing,
+                f"missing recorded learning gap keys {missing}; gaps were {gaps}",
             )
         )
 
@@ -493,6 +691,7 @@ def case_result(
         "query": case["query"],
         "expected": case.get("expected") or {},
         "oracle": case.get("oracle") or {},
+        "declared_failure_bucket": case.get("failure_bucket"),
         "known_missing_fact_keys": (case.get("expected") or {}).get("gap_keys", []),
         "checks": checks,
         "status": "PASS" if all(item["passed"] for item in checks) else "FAIL",
@@ -526,12 +725,14 @@ def result_summaries(results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "title": result.get("title"),
                 "area": result.get("area"),
                 "match_score": result.get("match_score") or result.get("matchScore"),
-                "semantic_score": result.get("semantic_score") or result.get("semanticScore"),
                 "reason_keys": [
                     reason.get("fact_key") for reason in (explanation.get("reasons") or [])
                 ],
                 "coverage": explanation.get("preference_coverage")
                 or explanation.get("preferenceCoverage")
+                or [],
+                "proof_focuses": result.get("proof_focuses")
+                or result.get("proofFocuses")
                 or [],
             }
         )
@@ -626,20 +827,32 @@ def markdown_report(output: Dict[str, Any]) -> str:
                 "### Runtime",
                 "",
                 f"- Serving bundle: `{runtime.get('servingBundleVersion') or runtime.get('serving_bundle_version')}`",
-                f"- Semantic embedder: `{runtime.get('semanticEmbedderModelId') or runtime.get('semantic_embedder_model_id')}`",
-                f"- Semantic index model: `{runtime.get('semanticIndexModelId') or runtime.get('semantic_index_model_id')}`",
-                f"- Semantic index documents: {runtime.get('semanticIndexDocumentCount') or runtime.get('semantic_index_document_count')}",
-                f"- Semantic index empty: {runtime.get('semanticIndexEmpty', runtime.get('semantic_index_empty'))}",
             ]
         )
     materialization = output.get("serving_bundle_materialization") or {}
     if materialization:
         lines.extend(
             [
-                f"- Materialization id: `{materialization.get('materialization_id')}`",
-                f"- Materialization version: `{materialization.get('version')}`",
+                f"- Runtime materialization id: `{materialization.get('materialization_id')}`",
+                f"- Runtime materialization version: `{materialization.get('version')}`",
             ]
         )
+    manifest = output.get("runtime_serving_bundle_manifest") or {}
+    if manifest:
+        lines.extend(
+            [
+                f"- Runtime entities/facts/search rows: {manifest.get('entity_count')} / "
+                f"{manifest.get('fact_count')} / {manifest.get('search_metadata_count')}",
+            ]
+        )
+    local_current = output.get("local_current_serving_bundle_materialization") or {}
+    if local_current and local_current.get("version") != materialization.get("version"):
+        lines.append(
+            f"- Local current pointer: `{local_current.get('version')}` "
+            f"(`{local_current.get('materialization_id')}`)"
+        )
+    for warning in output.get("provenance_warnings") or []:
+        lines.append(f"- Provenance warning: {warning}")
 
     lines.extend(["", "### By Mode", "", "| Mode | Passed | Failed |", "|---|---:|---:|"])
     for mode, counts in sorted(summary["by_mode"].items()):
@@ -681,8 +894,7 @@ def markdown_report(output: Dict[str, Any]) -> str:
         if result.get("top_results"):
             top = result["top_results"][0]
             lines.append(
-                f"- Top result: {top.get('title')} "
-                f"(score={top.get('match_score')}, semantic={top.get('semantic_score')})"
+                f"- Top result: {top.get('title')} (score={top.get('match_score')})"
             )
         if result.get("learning_gaps"):
             lines.append(f"- Gaps: {result['learning_gaps']}")
@@ -766,6 +978,32 @@ def top_reasons(results: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any
     return reasons
 
 
+def top_proof_focuses(results: List[Dict[str, Any]], limit: int) -> List[Dict[str, Any]]:
+    focuses: List[Dict[str, Any]] = []
+    for result in results[:limit]:
+        for focus in result.get("proof_focuses") or result.get("proofFocuses") or []:
+            if isinstance(focus, dict):
+                focuses.append(focus)
+    return focuses
+
+
+def record_matches(record: Dict[str, Any], requirement: Dict[str, Any]) -> bool:
+    for key, expected in requirement.items():
+        actual = field_value(record, key)
+        if isinstance(expected, str):
+            if normalize_token(actual) != normalize_token(expected):
+                return False
+        elif actual != expected:
+            return False
+    return True
+
+
+def field_value(record: Dict[str, Any], field: str) -> Any:
+    if field in record:
+        return record[field]
+    return record.get(camelize(field))
+
+
 def get_explanation(result: Dict[str, Any]) -> Dict[str, Any]:
     explanation = result.get("match_explanation") or result.get("matchExplanation") or {}
     return explanation if isinstance(explanation, dict) else {}
@@ -827,11 +1065,44 @@ def search_runtime_summary(results: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {}
 
 
+def runtime_serving_bundle_version(runtime: Dict[str, Any]) -> Optional[str]:
+    value = runtime.get("servingBundleVersion") or runtime.get("serving_bundle_version")
+    return str(value) if isinstance(value, str) and value.strip() else None
+
+
+def serving_bundle_requirement_error(
+    required_bundle_version: Any, runtime_bundle_version: Optional[str]
+) -> Optional[str]:
+    if not isinstance(required_bundle_version, str) or not required_bundle_version.strip():
+        return None
+    if runtime_bundle_version == required_bundle_version:
+        return None
+    return (
+        "serving bundle requirement failed: expected "
+        f"{required_bundle_version!r}, got {runtime_bundle_version!r}"
+    )
+
+
 def inferred_scoreable_modes(cases: List[Dict[str, Any]]) -> List[str]:
     modes = sorted({str(case.get("mode", "data_backed")) for case in cases})
     non_scoreable = {"data_gap", "search_guardrail"}
     scoreable = [mode for mode in modes if mode not in non_scoreable]
     return scoreable or ["data_backed"]
+
+
+def materialization_summary(data: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "asset_id": data.get("asset_id"),
+        "materialization_id": data.get("materialization_id"),
+        "materialization_key": data.get("materialization_key"),
+        "version": data.get("version"),
+        "run_id": data.get("run_id"),
+        "updated_at": data.get("updated_at"),
+        "created_at": data.get("created_at"),
+        "status": data.get("status"),
+        "row_count": data.get("row_count"),
+        "parent_materializations": data.get("parent_materializations") or [],
+    }
 
 
 def current_search_bundle_materialization(root: Path) -> Dict[str, Any]:
@@ -851,21 +1122,83 @@ def current_search_bundle_materialization(root: Path) -> Dict[str, Any]:
         data = load_json(current)
     except (OSError, json.JSONDecodeError):
         return {}
+    return materialization_summary(data)
+
+
+def materialization_for_bundle_version(root: Path, bundle_version: Optional[str]) -> Dict[str, Any]:
+    if not bundle_version:
+        return {}
+    materialization_dir = (
+        root
+        / "data"
+        / "lake"
+        / "manifests"
+        / "assets"
+        / "search_serving_bundle"
+        / "partition=global"
+        / "materializations"
+    )
+    if not materialization_dir.exists():
+        return {}
+    for path in sorted(materialization_dir.glob("*.json")):
+        try:
+            data = load_json(path)
+        except (OSError, json.JSONDecodeError):
+            continue
+        if data.get("version") == bundle_version:
+            summary = materialization_summary(data)
+            summary["materialization_key"] = str(path.relative_to(root / "data" / "lake"))
+            return summary
+    return {}
+
+
+def search_bundle_manifest_summary(root: Path, bundle_version: Optional[str]) -> Dict[str, Any]:
+    if not bundle_version:
+        return {}
+    manifest = root / "data" / "lake" / "serving" / "search_bundle" / f"version={bundle_version}" / "manifest.json"
+    if not manifest.exists():
+        return {}
+    try:
+        data = load_json(manifest)
+    except (OSError, json.JSONDecodeError):
+        return {}
     return {
-        "asset_id": data.get("asset_id"),
-        "materialization_id": data.get("materialization_id"),
-        "materialization_key": data.get("materialization_key"),
-        "version": data.get("version"),
-        "run_id": data.get("run_id"),
-        "updated_at": data.get("updated_at"),
+        "bundle_version": data.get("bundle_version"),
+        "path": str(manifest.parent),
+        "entity_count": data.get("entity_count"),
+        "fact_count": data.get("fact_count"),
+        "search_metadata_count": data.get("search_metadata_count"),
+        "edge_count": data.get("edge_count"),
     }
+
+
+def provenance_warnings(
+    runtime_bundle_version: Optional[str],
+    runtime_materialization: Dict[str, Any],
+    local_current_materialization: Dict[str, Any],
+) -> List[str]:
+    warnings: List[str] = []
+    if runtime_bundle_version and not runtime_materialization:
+        warnings.append(
+            f"live runtime bundle {runtime_bundle_version!r} has no matching local materialization record"
+        )
+    current_version = local_current_materialization.get("version")
+    if runtime_bundle_version and current_version and runtime_bundle_version != current_version:
+        warnings.append(
+            "live runtime bundle differs from data/lake current pointer; "
+            "compare benchmark runs by runtime bundle, not by the repo pointer"
+        )
+    return warnings
 
 
 def primary_failure_bucket(result: Dict[str, Any]) -> Optional[str]:
     failed = [item for item in result["checks"] if not item["passed"]]
     if not failed:
         return None
-    if result.get("known_missing_fact_keys"):
+    if result.get("declared_failure_bucket"):
+        return str(result["declared_failure_bucket"])
+    failed_layers = {str(item.get("layer")) for item in failed}
+    if result.get("mode") == "data_gap":
         return "data_gap"
 
     layer_to_bucket = {
@@ -894,7 +1227,6 @@ def primary_failure_bucket(result: Dict[str, Any]) -> Optional[str]:
         "latency",
         "safety",
     ]
-    failed_layers = {str(item.get("layer")) for item in failed}
     for layer in priority:
         if layer in failed_layers:
             return layer_to_bucket[layer]
@@ -902,26 +1234,12 @@ def primary_failure_bucket(result: Dict[str, Any]) -> Optional[str]:
 
 
 def proof_loop_decision(summary: Dict[str, Any], results: List[Dict[str, Any]]) -> str:
-    if has_semantic_proof_regression(results):
-        return "revert"
     score = summary["scoreable_pass_rate_pct"] or summary["pass_rate_pct"]
     if score >= 80.0:
         return "keep"
     if summary.get("failure_buckets", {}).get("data_gap", 0) > 0:
         return "needs_more_data"
-    return "shadow_only"
-
-
-def has_semantic_proof_regression(results: List[Dict[str, Any]]) -> bool:
-    for result in results:
-        for item in result["checks"]:
-            if (
-                item.get("layer") == "safety"
-                and item.get("check") == "no_semantic_proof_reason"
-                and not item.get("passed")
-            ):
-                return True
-    return False
+    return "needs_search_work"
 
 
 def timing_value_ms(diagnostics: Dict[str, Any], layer: str) -> Optional[float]:

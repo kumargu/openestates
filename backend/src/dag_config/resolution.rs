@@ -35,6 +35,7 @@ pub struct CoordinateSourcePolicy {
 pub enum CoordinateEntityScope {
     Society,
     Place,
+    Area,
 }
 
 impl CoordinateEntityScope {
@@ -42,6 +43,7 @@ impl CoordinateEntityScope {
         match self {
             Self::Society => "society",
             Self::Place => "place",
+            Self::Area => "area",
         }
     }
 }

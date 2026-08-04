@@ -18,7 +18,7 @@ use crate::knowledge::SearchEvent;
 use crate::models::{AreaProfile, Property, Society};
 use crate::recommendations::RecommendationResponse;
 use crate::scoring::scoring_policy;
-use crate::search::{SearchIndex, SearchResponse, SemanticEmbedder, SemanticSearchIndex};
+use crate::search::{SearchIndex, SearchResponse};
 use crate::serving::LoadedServingBundle;
 
 pub const SEARCH_ENGINE_VERSION: &str = "openestates-search-runtime-v2";
@@ -30,8 +30,6 @@ pub struct SearchRuntimeSnapshot {
     pub properties: Arc<[Property]>,
     pub property_by_id: HashMap<String, usize>,
     pub search_index: SearchIndex,
-    pub semantic_index: SemanticSearchIndex,
-    pub semantic_embedder: Arc<dyn SemanticEmbedder>,
     pub societies: Arc<[Society]>,
     pub society_names: HashMap<String, String>,
     pub areas: Arc<[AreaProfile]>,
@@ -45,8 +43,6 @@ impl SearchRuntimeSnapshot {
         societies: Vec<Society>,
         areas: Vec<AreaProfile>,
         search_index: SearchIndex,
-        semantic_index: SemanticSearchIndex,
-        semantic_embedder: Arc<dyn SemanticEmbedder>,
     ) -> Self {
         let property_by_id = properties
             .iter()
@@ -61,8 +57,6 @@ impl SearchRuntimeSnapshot {
             serving_bundle_version: bundle.manifest.bundle_version.clone(),
             scoring_policy_version: scoring_policy().version,
             search_engine_version: SEARCH_ENGINE_VERSION.to_string(),
-            semantic_embedder_model_id: semantic_embedder.model_id().to_string(),
-            semantic_index_model_id: semantic_index.model_id().to_string(),
         };
 
         Self {
@@ -70,8 +64,6 @@ impl SearchRuntimeSnapshot {
             properties: Arc::from(properties),
             property_by_id,
             search_index,
-            semantic_index,
-            semantic_embedder,
             societies: Arc::from(societies),
             society_names,
             areas: Arc::from(areas),
@@ -85,8 +77,6 @@ pub struct RuntimeVersionKey {
     pub serving_bundle_version: String,
     pub scoring_policy_version: u32,
     pub search_engine_version: String,
-    pub semantic_embedder_model_id: String,
-    pub semantic_index_model_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -299,10 +289,6 @@ pub struct AppState {
     pub properties: RwLock<Vec<Property>>,
     /// Local recall index rebuilt from app-owned property data.
     pub search_index: RwLock<SearchIndex>,
-    /// Local semantic recall index over serving search documents.
-    pub semantic_index: RwLock<SemanticSearchIndex>,
-    /// Query/document embedder used by the semantic recall index.
-    pub semantic_embedder: Arc<dyn SemanticEmbedder>,
     /// Optional compiled KG serving bundle loaded from the local/S3-shaped lake.
     pub serving_bundle: RwLock<Option<Arc<LoadedServingBundle>>>,
     /// In-process cache keyed by property + bundle + scoring policy + engine version.

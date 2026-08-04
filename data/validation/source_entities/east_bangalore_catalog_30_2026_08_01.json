@@ -1,0 +1,274 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-766dcf1debadb0a9",
+      "alias_entity_id": "society:mahaveer-crest",
+      "name": "MAHAVEER CREST",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170726/008823",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170726/008823",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/290626/010361",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-2e18630d4a738210",
+      "alias_entity_id": "society:arvind-sylva",
+      "name": "ARVIND SYLVA",
+      "project_key": "PRM/KA/RERA/1251/446/PR/090726/008800",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/090726/008800",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/030726/010381",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-925eb94baa5a20bc",
+      "alias_entity_id": "society:sumadhura-elysium-phase-i",
+      "name": "Sumadhura Elysium Phase-I",
+      "project_key": "PRM/KA/RERA/1251/446/PR/220526/008677",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/220526/008677",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/220426/010182",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-e805cf7e5a13e5f5",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph6-w12-13-14",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph6 W12,13,14",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008639",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008639",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010202",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-e3884ad1be356eb1",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph5-w9-10-11",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph5 W9,10,11",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008638",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008638",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010201",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-e79bb24fdd83c314",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph4-w7-and-8",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph4 W7 and 8",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008636",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008636",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010200",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-05f4b95d00ed8126",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph3-w5-and-6",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph3 W5 and 6",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008635",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008635",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010199",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-834ba012b9722ff8",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph2-w3-and-4",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph2 W3 and 4",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008637",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008637",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010198",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-7bacac37da716361",
+      "alias_entity_id": "society:one-residences-at-sobha-one-world-ph1-w1-and-2",
+      "name": "ONE RESIDENCES AT SOBHA ONE WORLD Ph1 W1 and 2",
+      "project_key": "PRM/KA/RERA/1250/304/PR/080526/008634",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/080526/008634",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/280426/010197",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-8f293b9e12537763",
+      "alias_entity_id": "society:brigade-belvedere",
+      "name": "Brigade Belvedere",
+      "project_key": "PRM/KA/RERA/1251/446/PR/240326/008549",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/240326/008549",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/210326/010112",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-3472c5bda0c92786",
+      "alias_entity_id": "society:sumadhura-solea",
+      "name": "SUMADHURA SOLEA",
+      "project_key": "PRM/KA/RERA/1251/446/PR/100326/008517",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/100326/008517",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/050226/009985",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-edfa5c900b27ad42",
+      "alias_entity_id": "society:godrej-parkshire",
+      "name": "GODREJ PARKSHIRE",
+      "project_key": "PRM/KA/RERA/1250/304/PR/090126/008393",
+      "registration_number": "PRM/KA/RERA/1250/304/PR/090126/008393",
+      "ack_number": "ACK/KA/RERA/1250/304/PR/060126/009914",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-b1b4baef102a2e65",
+      "alias_entity_id": "society:sobha-altair",
+      "name": "SOBHA ALTAIR",
+      "project_key": "PRM/KA/RERA/1251/446/PR/070126/008388",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/070126/008388",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/191225/009876",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-4cfcffec734e8b13",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-iv",
+      "name": "FOLIUM BY SUMADHURA PHASE-IV",
+      "project_key": "PRM/KA/RERA/1251/446/PR/050126/008382",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/050126/008382",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/161225/009858",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-b4732993497bec79",
+      "alias_entity_id": "society:evergreen-prestige-raintree-park",
+      "name": "Evergreen @ Prestige Raintree Park",
+      "project_key": "PRM/KA/RERA/1251/446/PR/010126/008374",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/010126/008374",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/241225/009885",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-4aa05c9485b5ded9",
+      "alias_entity_id": "society:sumadhura-solace-phase-i",
+      "name": "SUMADHURA SOLACE PHASE-I",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008330",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/111225/008330",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/091125/009763",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-54aad766dceb955f",
+      "alias_entity_id": "society:sumadhura-edition-phase-ii",
+      "name": "SUMADHURA EDITION PHASE-II",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008332",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/111225/008332",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/021125/009744",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-32e07c8e3cb44025",
+      "alias_entity_id": "society:sumadhura-edition-phase-i",
+      "name": "SUMADHURA EDITION PHASE-I",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008328",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/111225/008328",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/021125/009743",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-d47927ccfba652f9",
+      "alias_entity_id": "society:sumadhura-solace-phase-ii",
+      "name": "SUMADHURA  SOLACE PHASE-II",
+      "project_key": "PRM/KA/RERA/1251/446/PR/111225/008333",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/111225/008333",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/091125/009762",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-845711ea144d9e4f",
+      "alias_entity_id": "society:century-mirai-ph1",
+      "name": "Century Mirai Ph1",
+      "project_key": "PRM/KA/RERA/1251/446/PR/181025/008182",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/181025/008182",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/090925/009594",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-b6fa0b04603cbcfa",
+      "alias_entity_id": "society:cloud-forest",
+      "name": "Cloud Forest",
+      "project_key": "PRM/KA/RERA/1251/446/PR/250625/007869",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/250625/007869",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/220525/009251",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-20f63624d25038cb",
+      "alias_entity_id": "society:sumadhura-capitol-residences",
+      "name": "SUMADHURA CAPITOL RESIDENCES",
+      "project_key": "PRM/KA/RERA/1251/446/PR/051024/007125",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/051024/007125",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/120924/008508",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-7a0ed3a7df1c8adc",
+      "alias_entity_id": "society:elysium-at-brigade-cornerstone-utopia",
+      "name": "Elysium at Brigade Cornerstone Utopia",
+      "project_key": "PRM/KA/RERA/1251/446/PR/040924/006987",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/040924/006987",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/080724/008317",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-d2af7a227be5b9a2",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-iii",
+      "name": "FOLIUM BY SUMADHURA PHASE-III",
+      "project_key": "PRM/KA/RERA/1251/446/PR/141223/006468",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/141223/006468",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/070823/007348",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-0f6e2dd5ef0a2582",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-ii",
+      "name": "FOLIUM BY SUMADHURA PHASE-II",
+      "project_key": "PRM/KA/RERA/1251/446/PR/250423/005893",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/250423/005893",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/310323/007006",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-14be0f542bf67d4e",
+      "alias_entity_id": "society:assetz-marq-phase-3b",
+      "name": "Assetz Marq Phase 3B",
+      "project_key": "PRM/KA/RERA/1251/446/PR/091122/005433",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/091122/005433",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/021122/006479",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-6f1049070060d911",
+      "alias_entity_id": "society:folium-by-sumadhura-phase-i",
+      "name": "FOLIUM BY SUMADHURA PHASE-I",
+      "project_key": "PRM/KA/RERA/1251/446/PR/280222/004738",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/280222/004738",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/090222/005664",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-c1af3dd6c1581e3e",
+      "alias_entity_id": "society:godrej-air",
+      "name": "Godrej Air",
+      "project_key": "PRM/KA/RERA/1251/446/PR/170819/000006",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/170819/000006",
+      "ack_number": "PR/KN/170725/000006",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-b679df8827c617e3",
+      "alias_entity_id": "society:sobha-windsor-phase-1-wing-1-and-2",
+      "name": "Sobha Windsor Phase 1 Wing 1 and 2",
+      "project_key": "PRM/KA/RERA/1251/446/PR/210219/003939",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/210219/003939",
+      "ack_number": "ACK/KA/RERA/1251/446/PR/201112/004353",
+      "city": "Bengaluru"
+    },
+    {
+      "entity_id": "society:rera-67ba4bfb38da8a8c",
+      "alias_entity_id": "society:vaswani-exquisite",
+      "name": "Vaswani Exquisite",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171015/000784",
+      "registration_number": "PRM/KA/RERA/1251/446/PR/171015/000784",
+      "ack_number": "PR/KN/170731/000784",
+      "city": "Bengaluru"
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 {
   "version": 1,
-  "description": "Google nearby place category normalization and evidence policy. Collectors may use any alias; DAG derivation maps aliases to canonical fact keys here.",
+  "description": "Serving place category normalization and evidence policy. Collection sources own ingestion; DAG derivation and search map aliases to canonical fact keys here.",
   "categories": [
     {
       "fact_key": "nearby_schools",
       "category_aliases": ["school", "schools", "academy"],
+      "collection_sources": ["google"],
       "display_label": "Nearby schools",
       "answers_preferences": ["nearby", "school", "schools", "academy", "family friendly"],
       "relation_class": "access",
@@ -15,7 +16,8 @@
     },
     {
       "fact_key": "nearby_metro_stations",
-      "category_aliases": ["metro", "metro_station", "metro_stations", "station", "purple line", "subway", "subway_station"],
+      "category_aliases": ["metro", "metro_station", "metro_stations", "purple line", "subway", "subway_station"],
+      "collection_sources": ["google"],
       "display_label": "Nearby metro",
       "answers_preferences": ["nearby", "metro", "metro station", "commute"],
       "relation_class": "access",
@@ -27,6 +29,7 @@
     {
       "fact_key": "nearby_hospitals",
       "category_aliases": ["hospital", "hospitals", "clinic", "medical"],
+      "collection_sources": ["google"],
       "display_label": "Nearby hospitals",
       "answers_preferences": ["nearby", "hospital", "hospitals"],
       "relation_class": "access",
@@ -38,6 +41,7 @@
     {
       "fact_key": "nearby_fitness",
       "category_aliases": ["fitness", "gym", "gyms", "cult", "sports"],
+      "collection_sources": ["google"],
       "display_label": "Nearby fitness",
       "answers_preferences": ["nearby", "gym", "fitness", "cult"],
       "relation_class": "access",
@@ -51,6 +55,7 @@
     {
       "fact_key": "nearby_tech_parks",
       "category_aliases": ["tech_park", "tech_parks", "office", "offices"],
+      "collection_sources": ["google"],
       "display_label": "Nearby tech parks and offices",
       "answers_preferences": ["nearby", "tech park", "office", "offices", "commute"],
       "relation_class": "access",
@@ -63,6 +68,7 @@
     {
       "fact_key": "nearby_public_parks",
       "category_aliases": ["park", "parks", "public_park", "public_parks"],
+      "collection_sources": ["google"],
       "display_label": "Nearby public parks",
       "answers_preferences": ["nearby", "park", "parks", "public park", "open space"],
       "relation_class": "access",
@@ -75,6 +81,7 @@
     {
       "fact_key": "nearby_graveyards",
       "category_aliases": ["graveyard", "graveyards", "cemetery", "cemeteries", "burial_ground", "burial_grounds"],
+      "collection_sources": ["google"],
       "display_label": "Nearby burial grounds",
       "answers_preferences": ["nearby", "graveyard", "cemetery", "burial ground", "resale concern"],
       "relation_class": "risk_externality",
@@ -87,6 +94,7 @@
     {
       "fact_key": "nearby_lakes",
       "category_aliases": ["lake", "lakes", "water_body", "water_bodies"],
+      "collection_sources": ["google"],
       "display_label": "Nearby lakes",
       "answers_preferences": ["nearby", "lake", "lakes", "water body"],
       "relation_class": "context",
@@ -107,8 +115,22 @@
       ]
     },
     {
+      "fact_key": "stormwater_drain_nearby",
+      "category_aliases": ["stormwater_drain", "stormwater_drains", "storm_drain", "storm_drains", "swd", "rajakaluve"],
+      "collection_sources": ["openstreetmap"],
+      "display_label": "Nearby stormwater drains",
+      "answers_preferences": ["stormwater drain", "rajakaluve", "swd", "flooding risk", "red flag"],
+      "relation_class": "risk_externality",
+      "chainable": false,
+      "max_distance_km": 0.25,
+      "allow_missing_place_types": false,
+      "accepted_place_types": ["stormwater_drain", "rajakaluve", "primary_swd", "secondary_swd", "tertiary_swd"],
+      "name_markers": ["stormwater drain", "storm water drain", "storm drain", "rajakaluve", "swd"]
+    },
+    {
       "fact_key": "nearby_breweries",
       "category_aliases": ["brewery", "breweries", "brewpub", "biergarten", "beer_garden"],
+      "collection_sources": ["google"],
       "display_label": "Nearby breweries",
       "answers_preferences": ["nearby", "brewery", "breweries", "beer"],
       "relation_class": "access",

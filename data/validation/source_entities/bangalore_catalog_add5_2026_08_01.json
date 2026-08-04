@@ -1,0 +1,44 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-8dae7e2ebcb812f1",
+      "alias_entity_id": "society:godrej-eternity",
+      "name": "Godrej Eternity",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171013/000233"
+    },
+    {
+      "entity_id": "society:rera-bec42c8141cb0b15",
+      "alias_entity_id": "society:brigade-komarla-heights",
+      "name": "BRIGADE KOMARLA HEIGHTS",
+      "area": "Padmanabhanagar",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/140322/004754"
+    },
+    {
+      "entity_id": "society:rera-ced12e7e66ce875d",
+      "alias_entity_id": "society:prestige-primrose-hills-phase-1",
+      "name": "PRESTIGE PRIMROSE HILLS-PH-I",
+      "area": "Kanakapura Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/200618/003453"
+    },
+    {
+      "entity_id": "society:rera-1b14372176e70906",
+      "alias_entity_id": "society:snn-raj-etternia",
+      "name": "SNN Raj Etternia",
+      "area": "Haralur Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170920/000655"
+    },
+    {
+      "entity_id": "society:rera-9464b33ae7909dd6",
+      "alias_entity_id": "society:mahaveer-ranches-phase-i",
+      "name": "MAHAVEER RANCHES PHASE I",
+      "area": "Hosa Road",
+      "city": "Bengaluru",
+      "project_key": "PRM/KA/RERA/1251/310/PR/171015/000421"
+    }
+  ]
+}

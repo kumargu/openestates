@@ -64,6 +64,8 @@ pub struct PreferenceSignal {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub gap_keys: Vec<String>,
     pub weight: f32,
+    #[serde(default)]
+    pub missing_evidence_neutral: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -310,6 +312,7 @@ fn merge_or_push_preference(prefs: &mut Vec<PreferenceSignal>, signal: Preferenc
         merge_expanded_keys(existing, &signal.expanded_keys);
         merge_gap_keys(existing, &signal.gap_keys);
         existing.weight = existing.weight.max(signal.weight);
+        existing.missing_evidence_neutral |= signal.missing_evidence_neutral;
     } else {
         prefs.push(signal);
     }
@@ -384,6 +387,8 @@ fn is_specific_conflict_key(key: &str) -> bool {
             | "resident_sentiment"
             | "google_review_snippets"
             | "sentiment_summary"
+            | "water_supply"
+            | "water_supply_risk"
     )
 }
 
@@ -423,22 +428,19 @@ fn display_preferences(
 }
 
 fn detect_buyer_archetype(q: &str) -> Option<BuyerArchetype> {
-    schema::buyer_archetype_patterns()
-        .iter()
-        .find(|pattern| query_contains_any_unnegated_pattern(q, &pattern.patterns))
-        .map(|pattern| pattern.archetype.clone())
-}
-
-fn query_contains_any_pattern(q: &str, patterns: &[String]) -> bool {
-    patterns
-        .iter()
-        .any(|pattern| query_contains_pattern(q, pattern))
-}
-
-fn query_contains_any_unnegated_pattern(q: &str, patterns: &[String]) -> bool {
-    patterns
-        .iter()
-        .any(|pattern| query_contains_unnegated_pattern(q, pattern))
+    let mut best: Option<(BuyerArchetype, usize)> = None;
+    for pattern in schema::buyer_archetype_patterns() {
+        for term in &pattern.patterns {
+            if !query_contains_unnegated_pattern(q, term) {
+                continue;
+            }
+            let len = term.len();
+            if best.as_ref().is_none_or(|(_, best_len)| len > *best_len) {
+                best = Some((pattern.archetype.clone(), len));
+            }
+        }
+    }
+    best.map(|(archetype, _)| archetype)
 }
 
 fn push_unique(values: &mut Vec<String>, value: &str) {
@@ -461,6 +463,12 @@ fn query_contains_negated_pattern(q: &str, pattern: &str) -> bool {
     query_pattern_match_ranges(q, pattern)
         .into_iter()
         .any(|(start, _)| match_has_negated_prefix(q, start))
+}
+
+fn query_contains_any_pattern(q: &str, patterns: &[String]) -> bool {
+    patterns
+        .iter()
+        .any(|pattern| query_contains_pattern(q, pattern))
 }
 
 fn query_pattern_match_ranges(q: &str, pattern: &str) -> Vec<(usize, usize)> {
@@ -1254,7 +1262,7 @@ mod tests {
         let intent = parse_intent("good water supply with cauvery and no tanker issue");
 
         assert!(has_positive_label(&intent, "water supply"));
-        assert!(!has_negative_label(&intent, "water issues"));
+        assert!(has_negative_label(&intent, "water issues"));
     }
 
     #[test]
@@ -1296,6 +1304,76 @@ mod tests {
         assert_eq!(intent.bhk, Some(2));
         assert!(has_positive_label(&intent, "commute"));
         assert!(has_positive_label(&intent, "value for money"));
+    }
+
+    #[test]
+    fn broad_buyer_language_maps_to_family_safety_and_premium_tradeoff() {
+        let intent =
+            parse_intent("2bhk for couple planning kid, prefer safe society over fancy clubhouse");
+
+        assert_eq!(intent.buyer_archetype, Some(BuyerArchetype::Family));
+        assert!(has_positive_label(&intent, "family friendly"));
+        assert!(has_positive_label(&intent, "legal safety"));
+        assert!(has_negative_label(&intent, "premium"));
+    }
+
+    #[test]
+    fn water_reliability_and_tanker_language_maps_to_water_risk() {
+        let tanker = parse_intent("dependable water supply, not tanker based");
+        assert!(has_negative_label(&tanker, "water issues"));
+        assert!(has_expanded_negative_key(
+            &tanker,
+            "operating.tanker_dependence"
+        ));
+
+        let reliability = parse_intent("check borewell or water reliability before shortlist");
+        assert!(has_negative_label(&reliability, "water issues"));
+        assert!(has_expanded_negative_key(
+            &reliability,
+            "project.water_supply_mode"
+        ));
+    }
+
+    #[test]
+    fn maintenance_review_and_security_language_maps_to_configured_dimensions() {
+        let positive = parse_intent("residents say upkeep is good and clean common areas");
+        assert!(has_positive_label(&positive, "maintenance"));
+        assert!(has_positive_label(&positive, "review quality"));
+
+        let negative = parse_intent(
+            "avoid leaking walls, lift problems, poor facility management and complaints about security",
+        );
+        assert!(has_negative_label(&negative, "maintenance"));
+        assert!(has_negative_label(&negative, "security"));
+        assert!(has_expanded_negative_key(
+            &negative,
+            "facility_management_issues"
+        ));
+        assert!(has_expanded_negative_key(&negative, "security_complaints"));
+    }
+
+    #[test]
+    fn archetype_uses_strongest_configured_phrase_not_first_group() {
+        let risk = parse_intent("ready to move, low legal risk, hospital nearby for parents");
+        assert_eq!(risk.buyer_archetype, Some(BuyerArchetype::RiskAverse));
+
+        let end_user = parse_intent("self use home, daily upkeep more than resale upside");
+        assert_eq!(end_user.buyer_archetype, Some(BuyerArchetype::EndUser));
+        assert!(has_positive_label(&end_user, "maintenance"));
+        assert!(has_positive_label(&end_user, "liveability"));
+        assert!(has_negative_label(&end_user, "investment"));
+    }
+
+    #[test]
+    fn proof_and_layout_avoidance_language_maps_to_negative_dimensions() {
+        let proof = parse_intent("hide anything with weak proof");
+        assert!(has_positive_label(&proof, "legal safety"));
+        assert!(has_negative_label(&proof, "proof gap"));
+
+        let layout = parse_intent("avoid cramped layouts, poor ventilation and west facing heat");
+        assert!(has_negative_label(&layout, "density risk"));
+        assert!(has_negative_label(&layout, "layout quality"));
+        assert!(has_negative_label(&layout, "facing"));
     }
 
     fn has_positive_label(intent: &SearchIntent, label: &str) -> bool {

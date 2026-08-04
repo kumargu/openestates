@@ -24,7 +24,7 @@ use super::{
     ServingSearchMetadataRecord, ServingTableSchema, TrustPolicy,
 };
 
-pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 3;
+pub const SERVING_BUNDLE_FORMAT_VERSION: u32 = 5;
 
 #[derive(Clone)]
 pub struct ServingBundleBuilder {
@@ -58,8 +58,35 @@ impl ServingBundleBuilder {
         let search_metadata =
             serving_search_metadata_records(&current_facts, &current_annotations)?;
         let edges = serving_edge_records(&records.edges);
-        self.build_from_serving_records(entities, facts, search_metadata, edges, bundle_version)
-            .await
+        self.build_from_serving_records(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            bundle_version,
+            true,
+        )
+        .await
+    }
+
+    pub async fn build_child_from_serving_records(
+        &self,
+        mut entities: Vec<ServingEntityRecord>,
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+        edges: Vec<ServingEdgeRecord>,
+        bundle_version: impl Into<String>,
+    ) -> Result<ServingBundleManifest, ServingBundleError> {
+        rebuild_serving_entity_searchable_text(&mut entities, &facts);
+        self.build_from_serving_records(
+            entities,
+            facts,
+            search_metadata,
+            edges,
+            bundle_version,
+            false,
+        )
+        .await
     }
 
     async fn build_from_serving_records(
@@ -69,15 +96,18 @@ impl ServingBundleBuilder {
         mut search_metadata: Vec<ServingSearchMetadataRecord>,
         mut edges: Vec<ServingEdgeRecord>,
         bundle_version: impl Into<String>,
+        derive_proximity: bool,
     ) -> Result<ServingBundleManifest, ServingBundleError> {
         let bundle_version = bundle_version.into();
         let mut artifacts = Vec::new();
-        let base_index =
-            super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
-        let derived = derive_proximity_records(&entities, &base_index, &edges)?;
-        facts.extend(derived.facts);
-        search_metadata.extend(derived.search_metadata);
-        edges.extend(derived.edges);
+        if derive_proximity {
+            let base_index =
+                super::ServingFactIndex::from_records(facts.clone(), search_metadata.clone());
+            let derived = derive_proximity_records(&entities, &base_index, &edges)?;
+            facts.extend(derived.facts);
+            search_metadata.extend(derived.search_metadata);
+            edges.extend(derived.edges);
+        }
         if let Err(err) = write_preference_coverage_report(&entities, &facts, &search_metadata) {
             eprintln!("preference coverage report skipped: {err}");
         }
@@ -174,7 +204,6 @@ impl ServingBundleBuilder {
             fact_parquet_key: fact_key.to_string(),
             search_metadata_parquet_key: search_metadata_key.to_string(),
             edge_parquet_key: Some(edge_key.to_string()),
-            semantic_embedding_parquet_key: None,
             schema_key: schema_key.to_string(),
             trust_policy_key: trust_policy_key.to_string(),
             tantivy_index_prefix: tantivy_prefix,
@@ -185,6 +214,54 @@ impl ServingBundleBuilder {
             AssetPathBuilder::serving_bundle_key(&manifest.bundle_version, "manifest.json");
         self.lake.put_json(&manifest_key, &manifest).await?;
         Ok(manifest)
+    }
+}
+
+fn rebuild_serving_entity_searchable_text(
+    entities: &mut [ServingEntityRecord],
+    facts: &[ServingFactRecord],
+) {
+    let mut fact_text_by_entity = HashMap::<&str, String>::new();
+    for fact in facts {
+        let text = fact_text_by_entity
+            .entry(fact.entity_id.as_str())
+            .or_default();
+        text.push(' ');
+        text.push_str(&fact.fact_key);
+        match &fact.value {
+            FactValue::Text(value) => {
+                text.push(' ');
+                text.push_str(value);
+            }
+            FactValue::Tags(values) => {
+                for value in values {
+                    text.push(' ');
+                    text.push_str(value);
+                }
+            }
+            FactValue::Score { explanation, .. } => {
+                text.push(' ');
+                text.push_str(explanation);
+            }
+            FactValue::Numeric(_) | FactValue::Bool(_) => {
+                if let Some(value) = &fact.value_text {
+                    text.push(' ');
+                    text.push_str(value);
+                }
+            }
+        }
+    }
+    for entity in entities {
+        entity.searchable_text = format!(
+            "{} {} {} {}",
+            entity.entity_id,
+            entity.entity_type,
+            entity.name,
+            fact_text_by_entity
+                .get(entity.entity_id.as_str())
+                .map(String::as_str)
+                .unwrap_or("")
+        );
     }
 }
 
@@ -248,18 +325,6 @@ pub fn serving_bundle_schema_descriptor(format_version: u32) -> ServingBundleSch
                     optional_column("scoring_direction", "utf8"),
                     optional_column("scoring_weight", "float32"),
                     required_column("scoring_thresholds", "list<float64>"),
-                ],
-            },
-            ServingTableSchema {
-                name: "semantic_embeddings".to_string(),
-                path: "semantic_embeddings/part-00000.parquet".to_string(),
-                columns: vec![
-                    required_column("entity_id", "utf8"),
-                    required_column("entity_type", "utf8"),
-                    required_column("model_id", "utf8"),
-                    required_column("dimensions", "uint32"),
-                    required_column("document_text_hash", "utf8"),
-                    required_column("embedding", "list<float32>"),
                 ],
             },
         ],

@@ -60,7 +60,7 @@ pub fn build_search_result_focus(inputs: FocusBuildInputs<'_>) -> Option<SearchR
     // Named-society focus only from ranked hits — never invent a focus society
     // from the full catalog (that demotes real ranked matches under More homes).
     if let Some((society_id, society_name)) =
-        resolve_named_society_focus(&query_lower, inputs.results)
+        resolve_named_society_focus(&query_lower, inputs.intent.area.as_deref(), inputs.results)
     {
         return Some(build_named_society_focus(
             &society_id,
@@ -80,9 +80,13 @@ pub fn build_search_result_focus(inputs: FocusBuildInputs<'_>) -> Option<SearchR
 
 fn resolve_named_society_focus(
     query_lower: &str,
+    resolved_area: Option<&str>,
     results: &[SearchResultCard],
 ) -> Option<(String, String)> {
-    let corpus_names: Vec<&str> = results.iter().map(|r| r.card.society_name.as_str()).collect();
+    let corpus_names: Vec<&str> = results
+        .iter()
+        .map(|r| r.card.society_name.as_str())
+        .collect();
     let mut best: Option<(String, String, usize)> = None;
 
     for result in results {
@@ -90,10 +94,10 @@ fn resolve_named_society_focus(
         if name.is_empty() {
             continue;
         }
-        if !query_focuses_society(query_lower, name, &corpus_names) {
+        if !query_focuses_society(query_lower, resolved_area, name, &corpus_names) {
             continue;
         }
-        let score = society_focus_score(query_lower, name, &corpus_names);
+        let score = society_focus_score(query_lower, resolved_area, name, &corpus_names);
         if best
             .as_ref()
             .is_none_or(|(_, _, best_score)| score > *best_score)
@@ -109,7 +113,12 @@ fn resolve_named_society_focus(
     best.map(|(id, name, _)| (id, name))
 }
 
-fn query_focuses_society(query_lower: &str, society_name: &str, corpus_names: &[&str]) -> bool {
+fn query_focuses_society(
+    query_lower: &str,
+    resolved_area: Option<&str>,
+    society_name: &str,
+    corpus_names: &[&str],
+) -> bool {
     let resolution_config = search_resolution_config();
     if !is_resolvable_entity_name(society_name, resolution_config) {
         return false;
@@ -118,19 +127,26 @@ fn query_focuses_society(query_lower: &str, society_name: &str, corpus_names: &[
         return true;
     }
     // "3bhk in waterford" focuses Prestige Waterford via a distinctive project token.
-    // Never treat locality/area language (whitefield, sarjapur, …) as a society focus.
+    // Never treat resolved locality/area language as a society focus.
     distinctive_society_tokens(society_name, corpus_names).any(|token| {
-        !is_area_language_token(&token) && query_contains_lower_text(query_lower, &token)
+        !is_area_language_token(&token, resolved_area)
+            && query_contains_lower_text(query_lower, &token)
     })
 }
 
-fn society_focus_score(query_lower: &str, society_name: &str, corpus_names: &[&str]) -> usize {
+fn society_focus_score(
+    query_lower: &str,
+    resolved_area: Option<&str>,
+    society_name: &str,
+    corpus_names: &[&str],
+) -> usize {
     if query_contains_lower_text(query_lower, society_name) {
         return society_name.len() * 10;
     }
     distinctive_society_tokens(society_name, corpus_names)
         .filter(|token| {
-            !is_area_language_token(token) && query_contains_lower_text(query_lower, token)
+            !is_area_language_token(token, resolved_area)
+                && query_contains_lower_text(query_lower, token)
         })
         .map(|token| token.len())
         .max()
@@ -160,8 +176,12 @@ fn distinctive_society_tokens<'a>(
         })
 }
 
-fn is_area_language_token(token: &str) -> bool {
+fn is_area_language_token(token: &str, resolved_area: Option<&str>) -> bool {
     area_language_tokens().contains(token)
+        || resolved_area.is_some_and(|area| {
+            area.split(|character: char| !character.is_alphanumeric())
+                .any(|part| part.eq_ignore_ascii_case(token))
+        })
 }
 
 fn area_language_tokens() -> &'static HashSet<String> {
@@ -264,17 +284,15 @@ fn build_ranked_matches_focus(results: &[SearchResultCard]) -> SearchResultFocus
 }
 
 fn is_primary_ranked_match(result: &SearchResultCard) -> bool {
-    let label = result.match_label.to_lowercase();
-    label.contains("strong") || label.contains("good") || result.match_score >= 0.35
+    result.match_score >= super::schema::ranking_policy().ranked_focus_min_match_score
 }
 
 fn society_ids_match(society_entity_id: &str, card: &PropertyCard) -> bool {
     let card_id = card.kg_entity_refs.society_entity_id.trim();
     if !card_id.is_empty()
         && (card_id.eq_ignore_ascii_case(society_entity_id)
-            || strip_society_prefix(card_id).eq_ignore_ascii_case(strip_society_prefix(
-                society_entity_id,
-            )))
+            || strip_society_prefix(card_id)
+                .eq_ignore_ascii_case(strip_society_prefix(society_entity_id)))
     {
         return true;
     }
@@ -314,16 +332,15 @@ fn sibling_config_cards(
             property.is_listable()
                 && !exclude_ids.contains(&property.id)
                 && property.bhk != asked_bhk
-                && property_belongs_to_society(property, raw_society_id, society_names, society_name)
+                && property_belongs_to_society(
+                    property,
+                    raw_society_id,
+                    society_names,
+                    society_name,
+                )
         })
         .map(|property| {
-            sibling_result_card(
-                property,
-                society_name,
-                societies,
-                serving_facts,
-                graph,
-            )
+            sibling_result_card(property, society_name, societies, serving_facts, graph)
         })
         .collect();
 
@@ -344,7 +361,8 @@ fn property_belongs_to_society(
     society_name: &str,
 ) -> bool {
     if property.society_id.eq_ignore_ascii_case(raw_society_id)
-        || society_node_id(&property.society_id).eq_ignore_ascii_case(&society_node_id(raw_society_id))
+        || society_node_id(&property.society_id)
+            .eq_ignore_ascii_case(&society_node_id(raw_society_id))
     {
         return true;
     }
@@ -430,7 +448,6 @@ fn sibling_result_card(
         ),
         match_explanation: None,
         proof_focuses: Vec::new(),
-        semantic_score: None,
         confidence_score: None,
     }
 }
@@ -440,7 +457,14 @@ mod tests {
     use super::*;
     use crate::models::KgEntityRefs;
 
-    fn card(id: &str, society: &str, society_entity_id: &str, bhk: u32, score: f64, label: &str) -> SearchResultCard {
+    fn card(
+        id: &str,
+        society: &str,
+        society_entity_id: &str,
+        bhk: u32,
+        score: f64,
+        label: &str,
+    ) -> SearchResultCard {
         SearchResultCard {
             card: PropertyCard {
                 id: id.to_string(),
@@ -494,7 +518,6 @@ mod tests {
             match_reason: "matches".to_string(),
             match_explanation: None,
             proof_focuses: Vec::new(),
-            semantic_score: None,
             confidence_score: None,
         }
     }
@@ -577,7 +600,10 @@ mod tests {
             "prestige-waterford".to_string(),
             "Prestige Waterford".to_string(),
         );
-        society_names.insert("godrej-splendour".to_string(), "Godrej Splendour".to_string());
+        society_names.insert(
+            "godrej-splendour".to_string(),
+            "Godrej Splendour".to_string(),
+        );
 
         let intent = SearchIntent {
             area: None,

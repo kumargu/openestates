@@ -19,6 +19,7 @@
 //! See `app/config/coverage.json` for full audit.
 
 mod community_themes;
+mod concern_taxonomy;
 mod evidence_sections;
 mod fact_registry;
 mod loader;
@@ -35,6 +36,10 @@ pub use community_themes::{
     load_community_themes_from_path, CommunityEmbeddingExpansion,
     CommunityEmbeddingExpansionConfig, CommunityThemeDefinition, CommunityThemesFile,
 };
+pub use concern_taxonomy::{
+    concern_taxonomy_path, load_concern_taxonomy, load_concern_taxonomy_from_path,
+    ConcernTaxonomyBucket, ConcernTaxonomyFile, ConcernTaxonomyLeaf,
+};
 pub use evidence_sections::{
     evidence_sections_config, evidence_sections_path, load_evidence_sections,
     load_evidence_sections_from_path, ContextFactDefinition, EvidenceSectionDefinition,
@@ -43,8 +48,9 @@ pub use evidence_sections::{
 pub use fact_registry::{
     fact_registry_index_config, fact_registry_path, load_fact_registry,
     load_fact_registry_from_path, load_fact_registry_index, scoring_direction_from_hint,
-    FactRegistryEntry, FactRegistryFile, FactRegistryIndex, FactRegistryRuntime,
-    FactRegistryScoringHint,
+    FactRegistryEntry, FactRegistryEvidenceDimension, FactRegistryFile, FactRegistryIndex,
+    FactRegistryQueryUnit, FactRegistryRuntime, FactRegistryScoringHint,
+    FactRegistrySearchDimension,
 };
 pub use loader::{
     asset_registry_path, crawl_policy_path, dag_root, load_asset_registry, load_crawl_policy,
@@ -54,8 +60,9 @@ pub use loader::{
 pub use nearby_place_categories::{
     load_nearby_place_categories, load_nearby_place_categories_from_path,
     nearby_place_categories_config, nearby_place_categories_path,
-    nearby_place_category_for_fact_key, requested_nearby_place_categories, DerivedDistanceRisk,
-    NearbyPlaceCategoriesFile, NearbyPlaceCategory,
+    nearby_place_category_for_fact_key, nearby_place_fact_key_matches_category,
+    requested_nearby_place_categories, DerivedDistanceRisk, NearbyPlaceCategoriesFile,
+    NearbyPlaceCategory,
 };
 pub use rera_decision_labels::{
     load_rera_decision_labels, load_rera_decision_labels_from_path, rera_decision_labels_config,

@@ -13,7 +13,7 @@ pub(crate) struct ParsedQuerySlots {
     pub bhk: Option<BhkConstraint>,
     pub budget_max: Option<MoneyConstraint>,
     pub distance_limit: Option<DistanceConstraint>,
-    pub relation: Option<RelationIntent>,
+    pub relations: Vec<RelationIntent>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -42,6 +42,8 @@ pub(crate) struct RelationIntent {
     pub raw_text: String,
     pub start_token: usize,
     pub end_token: usize,
+    pub target_start_token: usize,
+    pub target_end_token: usize,
 }
 
 pub(crate) fn parse_query_slots(query: &str) -> ParsedQuerySlots {
@@ -51,9 +53,22 @@ pub(crate) fn parse_query_slots(query: &str) -> ParsedQuerySlots {
     ParsedQuerySlots {
         bhk: parse_bhk(&tokens, &config.bhk),
         budget_max: parse_unit_value(&tokens, &config.budget, UnitValueKind::Money),
-        relation: parse_relation(&tokens, &config.relations, distance_limit.is_some()),
+        relations: parse_relations(&tokens, &config.relations, distance_limit.as_ref()),
         distance_limit,
     }
+}
+
+pub(crate) fn distance_unit_multiplier(alias: &str) -> Option<f64> {
+    search_parser_config()
+        .distance
+        .units
+        .iter()
+        .find(|unit| {
+            unit.aliases
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(alias.trim()))
+        })
+        .map(|unit| unit.multiplier)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -64,7 +79,7 @@ enum UnitValueKind {
 
 fn parse_bhk(tokens: &[String], config: &BhkParserConfig) -> Option<BhkConstraint> {
     for (index, token) in tokens.iter().enumerate() {
-        if let Some((value, unit)) = parse_compound_u32_unit(token, &config.unit_aliases) {
+        if let Some((value, unit)) = parse_compound_bhk_unit(token, config) {
             if bhk_in_range(value, config) {
                 return Some(BhkConstraint {
                     value,
@@ -106,14 +121,14 @@ fn parse_u32_or_word(token: &str, config: &BhkParserConfig) -> Option<u32> {
     })
 }
 
-fn parse_compound_u32_unit(token: &str, aliases: &[String]) -> Option<(u32, String)> {
+fn parse_compound_bhk_unit(token: &str, config: &BhkParserConfig) -> Option<(u32, String)> {
     let normalized = token.trim().to_ascii_lowercase();
-    for alias in aliases_by_length_desc(aliases) {
+    for alias in aliases_by_length_desc(&config.unit_aliases) {
         let Some(number_text) = normalized.strip_suffix(alias.as_str()) else {
             continue;
         };
         let number_text = number_text.trim_end_matches('-');
-        let value = parse_unsigned_integer(number_text)?;
+        let value = parse_u32_or_word(number_text, config)?;
         return Some((value, alias));
     }
     None
@@ -150,29 +165,114 @@ where
     None
 }
 
-fn parse_relation(
+fn parse_relations(
     tokens: &[String],
     config: &RelationParserConfig,
-    has_distance_limit: bool,
-) -> Option<RelationIntent> {
-    for index in 0..tokens.len() {
-        let tail = &tokens[..=index];
-        for relation_alias in &config.aliases {
-            if relation_alias.requires_distance_limit && !has_distance_limit {
-                continue;
-            }
-            if phrase_matches_suffix(tail, &relation_alias.alias) {
-                let token_count = query_tokens(&relation_alias.alias).len();
-                return Some(RelationIntent {
-                    alias: relation_alias.alias.to_string(),
-                    raw_text: relation_alias.alias.to_string(),
-                    start_token: index + 1 - token_count,
-                    end_token: index + 1,
-                });
-            }
-        }
+    distance_limit: Option<&DistanceConstraint>,
+) -> Vec<RelationIntent> {
+    let mut relations = Vec::new();
+    let mut index = 0;
+    while index < tokens.len() && relations.len() < config.max_clauses {
+        let mut matches = config
+            .aliases
+            .iter()
+            .filter_map(|relation_alias| {
+                if relation_alias.requires_distance_limit && distance_limit.is_none() {
+                    return None;
+                }
+                let alias_tokens = query_tokens(&relation_alias.alias);
+                if alias_tokens.is_empty() || index + alias_tokens.len() > tokens.len() {
+                    return None;
+                }
+                tokens[index..index + alias_tokens.len()]
+                    .iter()
+                    .zip(alias_tokens.iter())
+                    .all(|(token, alias)| token.eq_ignore_ascii_case(alias))
+                    .then_some((relation_alias, alias_tokens.len()))
+            })
+            .collect::<Vec<_>>();
+        matches.sort_by(|left, right| right.1.cmp(&left.1));
+        let Some((relation_alias, token_count)) = matches.into_iter().next() else {
+            index += 1;
+            continue;
+        };
+        relations.push(RelationIntent {
+            alias: relation_alias.alias.clone(),
+            raw_text: relation_alias.alias.clone(),
+            start_token: index,
+            end_token: index + token_count,
+            target_start_token: index + token_count,
+            target_end_token: tokens.len(),
+        });
+        index += token_count;
     }
-    None
+    for relation_index in 0..relations.len() {
+        relations[relation_index].target_end_token = relations
+            .get(relation_index + 1)
+            .map_or(tokens.len(), |next| next.start_token);
+    }
+    if let Some(distance_limit) = distance_limit {
+        let distance_tokens = query_tokens(&distance_limit.raw_text);
+        relations.retain(|relation| {
+            let requires_distance = config.aliases.iter().any(|alias| {
+                alias.requires_distance_limit && alias.alias.eq_ignore_ascii_case(&relation.alias)
+            });
+            !requires_distance
+                || trimmed_relation_target_tokens(tokens, relation, &config.clause_joiners)
+                    != distance_tokens.as_slice()
+        });
+    }
+    relations
+}
+
+fn trimmed_relation_target_tokens<'a>(
+    tokens: &'a [String],
+    relation: &RelationIntent,
+    joiners: &[String],
+) -> &'a [String] {
+    let mut start = relation.target_start_token.min(tokens.len());
+    let mut end = relation.target_end_token.min(tokens.len());
+    while start < end
+        && joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(&tokens[start]))
+    {
+        start += 1;
+    }
+    while end > start
+        && joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(&tokens[end - 1]))
+    {
+        end -= 1;
+    }
+    &tokens[start..end]
+}
+
+pub(crate) fn relation_target_text(tokens: &[String], relation: &RelationIntent) -> Option<String> {
+    if relation.target_start_token >= relation.target_end_token
+        || relation.target_end_token > tokens.len()
+    {
+        return None;
+    }
+    let joiners = &search_parser_config().relations.clause_joiners;
+    let mut start = relation.target_start_token;
+    let mut end = relation.target_end_token;
+    while start < end
+        && joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(&tokens[start]))
+    {
+        start += 1;
+    }
+    while end > start
+        && joiners
+            .iter()
+            .any(|joiner| joiner.eq_ignore_ascii_case(&tokens[end - 1]))
+    {
+        end -= 1;
+    }
+    (start < end).then(|| tokens[start..end].join(" "))
 }
 
 trait FromParsedUnitValue: Sized {
@@ -332,6 +432,20 @@ mod tests {
                 .value,
             3
         );
+        assert_eq!(
+            parse_query_slots("three-bedroom inventory")
+                .bhk
+                .unwrap()
+                .value,
+            3
+        );
+        assert_eq!(
+            parse_query_slots("move-in-ready three bedroom home")
+                .bhk
+                .unwrap()
+                .value,
+            3
+        );
     }
 
     #[test]
@@ -377,23 +491,61 @@ mod tests {
     fn parses_relation_aliases_from_configured_vocab() {
         assert_eq!(
             parse_query_slots("3bhk close to deens academy")
-                .relation
+                .relations
+                .first()
                 .unwrap()
                 .alias,
             "close to"
         );
         assert!(parse_query_slots("reviews for deens academy")
-            .relation
-            .is_none());
+            .relations
+            .is_empty());
         assert!(parse_query_slots("budget within 2cr for deens academy")
-            .relation
-            .is_none());
+            .relations
+            .is_empty());
         assert_eq!(
             parse_query_slots("school within 500m of deens academy")
-                .relation
+                .relations
+                .first()
                 .unwrap()
                 .alias,
             "within"
+        );
+    }
+
+    #[test]
+    fn parses_independent_proximity_clause_targets() {
+        let slots = parse_query_slots(
+            "3bhk near Whitefield close to kids school and near office in Marathahalli",
+        );
+        let tokens = query_tokens(
+            "3bhk near Whitefield close to kids school and near office in Marathahalli",
+        );
+        let targets = slots
+            .relations
+            .iter()
+            .filter_map(|relation| relation_target_text(&tokens, relation))
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            targets,
+            vec!["whitefield", "kids school", "office in marathahalli"]
+        );
+    }
+
+    #[test]
+    fn terminal_distance_modifier_stays_attached_to_the_previous_anchor() {
+        let slots = parse_query_slots("3bhk near Deens Academy within 500m");
+        let tokens = query_tokens("3bhk near Deens Academy within 500m");
+
+        assert_eq!(slots.relations.len(), 1);
+        assert_eq!(
+            relation_target_text(&tokens, &slots.relations[0]).as_deref(),
+            Some("deens academy")
+        );
+        assert_eq!(
+            slots.distance_limit.map(|distance| distance.value_km),
+            Some(0.5)
         );
     }
 

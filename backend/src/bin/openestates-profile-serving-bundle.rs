@@ -3,8 +3,10 @@ use std::path::PathBuf;
 
 use backend::assets::MaterializationId;
 use backend::data_loader::properties_from_serving_bundle;
+use backend::knowledge::FactValue;
 use backend::lake::LakeStoreLocation;
 use backend::serving::{ServingBundleLoader, ServingFactRecord, ServingSearchMetadataRecord};
+use chrono::{DateTime, Utc};
 use serde::Serialize;
 
 #[tokio::main]
@@ -69,14 +71,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let properties = properties_from_serving_bundle(&bundle);
+    let selected_facts = selected_fact_rows(&bundle, &options);
     let profile = ServingBundleProfile {
         bundle_version: bundle.manifest.bundle_version.clone(),
         entity_count: bundle.entities.len(),
         property_count: properties.len(),
         fact_count: bundle.manifest.fact_count,
         search_metadata_count: bundle.manifest.search_metadata_count,
-        semantic_embedding_rows: bundle.semantic_embeddings.len(),
         fact_keys,
+        selected_facts,
     };
 
     if options.markdown {
@@ -94,8 +97,82 @@ struct ServingBundleProfile {
     property_count: usize,
     fact_count: u64,
     search_metadata_count: u64,
-    semantic_embedding_rows: usize,
     fact_keys: Vec<FactKeyStats>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    selected_facts: Vec<SelectedFactRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct SelectedFactRow {
+    entity_id: String,
+    entity_type: String,
+    entity_name: String,
+    fact_key: String,
+    value: FactValue,
+    value_text: Option<String>,
+    confidence: f32,
+    source_type: String,
+    learned_at: DateTime<Utc>,
+    answers_preferences: Vec<String>,
+}
+
+fn selected_fact_rows(
+    bundle: &backend::serving::LoadedServingBundle,
+    options: &CliOptions,
+) -> Vec<SelectedFactRow> {
+    if options.fact_keys.is_empty() && options.entity_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let entities = bundle
+        .entities
+        .iter()
+        .map(|entity| {
+            (
+                entity.entity_id.as_str(),
+                (entity.entity_type.as_str(), entity.name.as_str()),
+            )
+        })
+        .collect::<BTreeMap<_, _>>();
+    let mut rows = Vec::new();
+    for (entity_id, entity_rows) in bundle.fact_index.rows() {
+        if !options.entity_ids.is_empty() && !options.entity_ids.contains(entity_id) {
+            continue;
+        }
+        for fact in &entity_rows.facts {
+            if !options.fact_keys.is_empty() && !options.fact_keys.contains(&fact.fact_key) {
+                continue;
+            }
+            let (entity_type, entity_name) =
+                entities.get(entity_id).copied().unwrap_or(("unknown", ""));
+            let answers_preferences = entity_rows
+                .search_metadata_for_fact_key(&fact.fact_key)
+                .flat_map(|metadata| metadata.answers_preferences.iter().cloned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            rows.push(SelectedFactRow {
+                entity_id: entity_id.to_string(),
+                entity_type: entity_type.to_string(),
+                entity_name: entity_name.to_string(),
+                fact_key: fact.fact_key.clone(),
+                value: fact.value.clone(),
+                value_text: fact.value_text.clone(),
+                confidence: fact.confidence,
+                source_type: fact.source_type.clone(),
+                learned_at: fact.learned_at,
+                answers_preferences,
+            });
+        }
+    }
+    rows.sort_by(|left, right| {
+        left.fact_key
+            .cmp(&right.fact_key)
+            .then_with(|| left.entity_id.cmp(&right.entity_id))
+            .then_with(|| right.confidence.total_cmp(&left.confidence))
+            .then_with(|| right.learned_at.cmp(&left.learned_at))
+    });
+    rows
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -220,6 +297,8 @@ struct CliOptions {
     serving_materialization_id: Option<MaterializationId>,
     limit: Option<usize>,
     markdown: bool,
+    fact_keys: BTreeSet<String>,
+    entity_ids: BTreeSet<String>,
 }
 
 impl CliOptions {
@@ -255,6 +334,18 @@ impl CliOptions {
                 "--markdown" => {
                     options.markdown = true;
                 }
+                "--fact-key" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--fact-key requires a value".to_string())?;
+                    options.fact_keys.insert(value);
+                }
+                "--entity" => {
+                    let value = args
+                        .next()
+                        .ok_or_else(|| "--entity requires a value".to_string())?;
+                    options.entity_ids.insert(value);
+                }
                 "--help" | "-h" => {
                     print_help();
                     std::process::exit(0);
@@ -278,7 +369,7 @@ fn print_help() {
     println!();
     println!("Usage:");
     println!(
-        "  cargo run --bin openestates-profile-serving-bundle -- [--serving <materialization-uuid>] [--limit N] [--markdown]"
+        "  cargo run --bin openestates-profile-serving-bundle -- [--serving <materialization-uuid>] [--limit N] [--fact-key KEY] [--entity ID] [--markdown]"
     );
 }
 
@@ -290,10 +381,6 @@ fn print_markdown(profile: &ServingBundleProfile) {
     println!("- Properties: {}", profile.property_count);
     println!("- Facts: {}", profile.fact_count);
     println!("- Search metadata rows: {}", profile.search_metadata_count);
-    println!(
-        "- Semantic embedding rows: {}",
-        profile.semantic_embedding_rows
-    );
     println!();
     println!(
         "| Fact key | Rows | Confident | Avg conf | Sources | Answers preferences | Examples |"

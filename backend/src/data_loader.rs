@@ -5,39 +5,38 @@ use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
 use arc_swap::ArcSwap;
-use tokio::sync::RwLock;
 use tokio::sync::mpsc;
+use tokio::sync::RwLock;
 
 use crate::dag_config::{
-    ResolutionPoliciesFile, better_source_type_for_fact, buyer_visible_fact,
-    load_resolution_policies,
+    better_source_type_for_fact, buyer_visible_fact, load_resolution_policies,
+    ResolutionPoliciesFile,
 };
 use crate::discovery::load_discovery_config;
 use crate::knowledge;
-use crate::knowledge::fact::{FactValue, google_reviews_url_from_facts};
+use crate::knowledge::fact::{google_reviews_url_from_facts, FactValue};
 use crate::knowledge::graph::KnowledgeGraph;
 use crate::knowledge::node::NodeType;
 use crate::models::area_profile::{PriceRange, RedditSignals};
 use crate::models::{AreaProfile, Property, Society};
-#[cfg(feature = "fastembed")]
-use crate::search::FastEmbedSemanticEmbedder;
-use crate::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
+use crate::search::SearchIndex;
 use crate::serving::{
     LoadedServingBundle, ServingBundleLoader, ServingEntityFactRows, ServingEntityRecord,
     ServingFactIndex,
 };
 use crate::state::{
-    AppState, SearchResponseCache, SearchRuntimeSnapshot, search_log_queue_capacity_from_env,
-    spawn_search_log_worker,
+    search_log_queue_capacity_from_env, spawn_search_log_worker, AppState, SearchResponseCache,
+    SearchRuntimeSnapshot,
 };
 use crate::{
-    assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore},
-    lake::{LAKE_URL_ENV, LakeStoreLocation},
+    assets::{CatalogEnvironment, CatalogReleaseId, CatalogReleaseStore, MaterializationId},
+    lake::{LakeStoreLocation, LAKE_URL_ENV},
     serving::ServingBundleLoadError,
 };
 
 pub const SERVING_ENV_ENV: &str = "OPENESTATES_SERVING_ENV";
 pub const SERVING_RELEASE_ID_ENV: &str = "OPENESTATES_SERVING_RELEASE_ID";
+pub const SERVING_MATERIALIZATION_ID_ENV: &str = "OPENESTATES_SERVING_MATERIALIZATION_ID";
 
 pub type RuntimeServingSnapshot = SearchRuntimeSnapshot;
 
@@ -56,14 +55,11 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     let graph = KnowledgeGraph::new();
     println!("Runtime knowledge graph starts empty; serving bundle is the only startup corpus");
 
-    let semantic_embedder = semantic_embedder_from_env();
-    let search_runtime =
-        runtime_snapshot_from_serving_bundle(bundle.clone(), semantic_embedder.clone());
+    let search_runtime = runtime_snapshot_from_serving_bundle(bundle.clone());
     let properties = search_runtime.properties.to_vec();
     let societies = search_runtime.societies.to_vec();
     let areas = search_runtime.areas.to_vec();
     let search_index = search_runtime.search_index.clone();
-    let semantic_index = search_runtime.semantic_index.clone();
     if properties.is_empty() {
         panic!(
             "Serving bundle {} has no property entities; refusing to fall back to legacy data",
@@ -81,12 +77,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
     println!(
         "Built local search index for {} properties",
         properties.len()
-    );
-
-    println!(
-        "Built semantic search index with {} documents using {}",
-        semantic_index.len(),
-        semantic_index.model_id()
     );
 
     println!(
@@ -110,8 +100,6 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
-        semantic_index: RwLock::new(semantic_index),
-        semantic_embedder,
         serving_bundle: RwLock::new(serving_bundle),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(areas),
@@ -128,129 +116,12 @@ pub async fn load_app_state(project_root: &Path) -> AppState {
 
 pub fn runtime_snapshot_from_serving_bundle(
     bundle: Arc<LoadedServingBundle>,
-    embedder: Arc<dyn SemanticEmbedder>,
 ) -> RuntimeServingSnapshot {
     let properties = properties_from_serving_bundle(&bundle);
     let societies = societies_from_serving_bundle(&bundle);
     let areas = areas_from_serving_properties(&properties);
-    let search_index = SearchIndex::build(&properties);
-    let semantic_index = semantic_index_from_bundle(&bundle, embedder.as_ref(), &properties);
-
-    SearchRuntimeSnapshot::new(
-        bundle,
-        properties,
-        societies,
-        areas,
-        search_index,
-        semantic_index,
-        embedder,
-    )
-}
-
-fn semantic_embedder_from_env() -> Arc<dyn SemanticEmbedder> {
-    match std::env::var("OPENESTATES_SEMANTIC_EMBEDDER") {
-        Ok(value) if value.eq_ignore_ascii_case("fastembed") => fastembed_semantic_embedder(),
-        _ => Arc::new(HashSemanticEmbedder::default()),
-    }
-}
-
-#[cfg(feature = "fastembed")]
-fn fastembed_semantic_embedder() -> Arc<dyn SemanticEmbedder> {
-    match FastEmbedSemanticEmbedder::try_new_all_minilm_l6_v2() {
-        Ok(embedder) => Arc::new(embedder),
-        Err(err) => {
-            eprintln!("WARN: fastembed semantic embedder unavailable; falling back to hash: {err}");
-            Arc::new(HashSemanticEmbedder::default())
-        }
-    }
-}
-
-fn semantic_index_from_bundle(
-    bundle: &LoadedServingBundle,
-    embedder: &dyn SemanticEmbedder,
-    properties: &[Property],
-) -> SemanticSearchIndex {
-    if !bundle.semantic_embeddings.is_empty() {
-        let index =
-            SemanticSearchIndex::from_embedding_records(&bundle.semantic_embeddings, embedder);
-        if !index.is_empty() {
-            return index;
-        }
-        eprintln!(
-            "WARN: semantic embeddings exist but none match {}; semantic recall disabled for this model",
-            embedder.model_id()
-        );
-        return SemanticSearchIndex::default();
-    }
-
-    if embedder.model_id().starts_with("fastembed-") {
-        eprintln!(
-            "WARN: no precomputed semantic embeddings found for {}; semantic recall disabled instead of embedding corpus at API startup",
-            embedder.model_id()
-        );
-        return SemanticSearchIndex::default();
-    }
-
-    let semantic_entities = semantic_serving_entities_for_bundle(bundle, properties);
-    SemanticSearchIndex::from_serving_entities(&semantic_entities, embedder)
-}
-
-#[cfg(not(feature = "fastembed"))]
-fn fastembed_semantic_embedder() -> Arc<dyn SemanticEmbedder> {
-    eprintln!(
-        "WARN: OPENESTATES_SEMANTIC_EMBEDDER=fastembed ignored because the backend was built without the `fastembed` feature"
-    );
-    Arc::new(HashSemanticEmbedder::default())
-}
-
-pub fn semantic_serving_entities_for_bundle(
-    bundle: &LoadedServingBundle,
-    properties: &[Property],
-) -> Vec<ServingEntityRecord> {
-    semantic_serving_entities(&bundle.entities, &bundle.fact_index, properties)
-}
-
-fn semantic_serving_entities(
-    entities: &[ServingEntityRecord],
-    fact_index: &ServingFactIndex,
-    properties: &[Property],
-) -> Vec<ServingEntityRecord> {
-    let mut semantic_entities = entities.to_vec();
-    let existing = entities
-        .iter()
-        .map(|entity| entity.entity_id.as_str())
-        .collect::<BTreeSet<_>>();
-    let property_societies = properties
-        .iter()
-        .map(|property| society_entity_id(&property.society_id))
-        .collect::<BTreeSet<_>>();
-
-    for (entity_id, rows) in fact_index.rows() {
-        if !entity_id.starts_with("society:")
-            || existing.contains(entity_id)
-            || !property_societies.contains(entity_id)
-        {
-            continue;
-        }
-        let name = latest_text(Some(rows), "title").unwrap_or_else(|| {
-            title_case_slug(strip_entity_prefix(entity_id, "society:").as_str())
-        });
-        let fact_text = rows
-            .facts
-            .iter()
-            .map(|fact| format!("{} {}", fact.fact_key, fact_to_text(&fact.value)))
-            .collect::<Vec<_>>()
-            .join(" ");
-        semantic_entities.push(ServingEntityRecord {
-            entity_id: entity_id.to_string(),
-            entity_type: "society".to_string(),
-            name: name.clone(),
-            root_source: None,
-            searchable_text: format!("{entity_id} society {name} {fact_text}"),
-        });
-    }
-
-    semantic_entities
+    let search_index = SearchIndex::build_with_serving_entities(&properties, &bundle.entities);
+    SearchRuntimeSnapshot::new(bundle, properties, societies, areas, search_index)
 }
 
 pub async fn load_serving_bundle(
@@ -309,6 +180,16 @@ async fn load_serving_bundle_from_location(
 async fn load_selected_search_bundle(
     loader: &ServingBundleLoader,
 ) -> Result<Option<LoadedServingBundle>, ServingBundleLoadError> {
+    if let Ok(value) = std::env::var(SERVING_MATERIALIZATION_ID_ENV) {
+        let materialization_id = value.parse::<MaterializationId>().map_err(|err| {
+            ServingBundleLoadError::Configuration(format!(
+                "{SERVING_MATERIALIZATION_ID_ENV} must be a materialization UUID: {err}"
+            ))
+        })?;
+        return loader
+            .load_search_bundle_by_materialization(&materialization_id)
+            .await;
+    }
     let explicit_release = std::env::var(SERVING_RELEASE_ID_ENV).ok();
     let explicit_environment = std::env::var(SERVING_ENV_ENV).ok();
     if explicit_release.is_none() && explicit_environment.is_none() {
@@ -1030,16 +911,6 @@ fn bhks_from_text(value: &str) -> BTreeSet<u32> {
         }
     }
     bhks
-}
-
-fn fact_to_text(value: &FactValue) -> String {
-    match value {
-        FactValue::Text(value) => value.clone(),
-        FactValue::Tags(values) => values.join(" "),
-        FactValue::Numeric(value) => value.to_string(),
-        FactValue::Bool(value) => value.to_string(),
-        FactValue::Score { explanation, .. } => explanation.clone(),
-    }
 }
 
 fn serving_society_text(
@@ -2112,12 +1983,10 @@ mod tests {
         assert_eq!(property.id, "discovered-prestige-elm-park-3bhk");
         assert_eq!(property.price, 12_500_000);
         assert_eq!(property.possession_status, "New Launch");
-        assert!(
-            property
-                .transparency_tags
-                .iter()
-                .any(|tag| tag == "RERA verified")
-        );
+        assert!(property
+            .transparency_tags
+            .iter()
+            .any(|tag| tag == "RERA verified"));
     }
 
     #[test]
@@ -2280,11 +2149,9 @@ mod tests {
 
         assert_eq!(bhks, vec![2, 3, 4, 5]);
         assert!(properties.iter().all(|property| property.price == 0));
-        assert!(
-            properties
-                .iter()
-                .all(|property| property.price_per_sqft == 0)
-        );
+        assert!(properties
+            .iter()
+            .all(|property| property.price_per_sqft == 0));
         assert!(properties.iter().all(|property| {
             property
                 .transparency_tags
@@ -2495,10 +2362,9 @@ mod tests {
         // Missing quality/risk scores stay absent — no bootstrap defaults.
         assert!(p.society_quality_score.is_none());
         assert!(p.litigation_risk.is_none());
-        assert!(
-            p.transparency_tags
-                .contains(&"Discovered via Search".to_string())
-        );
+        assert!(p
+            .transparency_tags
+            .contains(&"Discovered via Search".to_string()));
         assert!(p.greenery_score.is_none());
     }
 
@@ -2739,62 +2605,6 @@ mod tests {
         assert!(
             properties.is_empty(),
             "zero-price homes must not enter the catalog"
-        );
-    }
-
-    #[test]
-    fn semantic_entities_include_fact_only_societies_for_recall() {
-        let entities = vec![ServingEntityRecord {
-            entity_id: "property:discovered-prestige-waterford-3bhk".to_string(),
-            entity_type: "property".to_string(),
-            name: "3 BHK in Prestige Waterford".to_string(),
-            root_source: Some("generated".to_string()),
-            searchable_text: "3 BHK in Prestige Waterford".to_string(),
-        }];
-        let fact_index = ServingFactIndex::from_records(
-            vec![
-                serving_fact(
-                    "property:discovered-prestige-waterford-3bhk",
-                    "price",
-                    FactValue::Numeric(24_000_000.0),
-                    0.9,
-                ),
-                serving_fact(
-                    "society:prestige-waterford",
-                    "title",
-                    FactValue::Text("Prestige Waterford".to_string()),
-                    0.9,
-                ),
-                serving_fact(
-                    "society:prestige-waterford",
-                    "nearby_hospitals",
-                    FactValue::Text(
-                        "Manipal Hospital Whitefield (2.0 km, strong parent healthcare access)"
-                            .to_string(),
-                    ),
-                    0.82,
-                ),
-            ],
-            vec![],
-        );
-        let properties = properties_from_serving_records(&entities, &fact_index, "test");
-        let semantic_entities = semantic_serving_entities(&entities, &fact_index, &properties);
-        let embedder = HashSemanticEmbedder::default();
-        let semantic_index =
-            SemanticSearchIndex::from_serving_entities(&semantic_entities, &embedder);
-        let search_index = SearchIndex::build(&properties);
-        let hits = semantic_index.search("peaceful home for parents near hospital", &embedder, 16);
-        let scores = search_index.property_scores_for_semantic_hits(&hits);
-
-        assert!(
-            semantic_entities
-                .iter()
-                .any(|entity| entity.entity_id == "society:prestige-waterford"),
-            "fact-only society should be added to semantic documents"
-        );
-        assert!(
-            scores.contains_key("discovered-prestige-waterford-3bhk"),
-            "semantic society hit should map back to the Waterford property: {scores:?}"
         );
     }
 }

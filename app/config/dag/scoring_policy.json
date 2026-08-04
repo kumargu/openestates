@@ -6,17 +6,33 @@
     "log_gap": true,
     "never_zero_fill": true
   },
+  "area_tracker": {
+    "min_listing_count": 2,
+    "ready_possession_statuses": ["ready"],
+    "near_metro_max_minutes": 15,
+    "demand": {
+      "search_count_normalizer": 10.0,
+      "search_count_cap": 0.7,
+      "evidence_gap_normalizer": 20.0,
+      "evidence_gap_cap": 0.2,
+      "listing_count_normalizer": 50.0,
+      "listing_count_cap": 0.1
+    }
+  },
   "search_ranking": {
     "min_support_evidence_confidence": 0.6,
     "min_llm_evidence_confidence": 0.75,
     "negative_no_data_penalty_multiplier": 1.2,
-    "min_semantic_recall_score": 0.08,
-    "semantic_candidate_fit_weight": 1.0,
-    "semantic_candidate_fit_cap": 0.25,
     "broad_local_recall_multiplier": 4,
     "broad_local_recall_min_extra": 64,
     "positive_evidence_floor_ratio": 0.6,
     "no_positive_evidence_score_multiplier": 0.4,
+    "constraint_relaxation": {
+      "target_result_count": 3,
+      "order": ["budget_tolerance", "budget_cap", "area_radius"],
+      "budget_multipliers": [1.1, 1.25, 1.5],
+      "area_radii_km": [2.0, 5.0, 10.0]
+    },
     "nearby_area_score_penalty": -0.35,
     "graph_area_score_penalty": -0.25,
     "geo_distance_fact_keys": [
@@ -81,6 +97,7 @@
     "review_rating_weight": 0.75,
     "review_count_weight": 0.25,
     "review_count_log_divisor": 8.0,
+    "ranked_focus_min_match_score": 0.35,
     "min_score_with_positive_evidence": 0.2,
     "max_score_with_positive_evidence": 0.45,
     "min_score_with_risk_only_evidence": 0.1,

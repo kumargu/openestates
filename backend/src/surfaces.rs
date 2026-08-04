@@ -2444,7 +2444,6 @@ mod tests {
                 fact_parquet_key: "facts.parquet".to_string(),
                 search_metadata_parquet_key: "search.parquet".to_string(),
                 edge_parquet_key: None,
-                semantic_embedding_parquet_key: None,
                 schema_key: "schema.json".to_string(),
                 trust_policy_key: "trust.json".to_string(),
                 tantivy_index_prefix: "tantivy".to_string(),
@@ -2457,7 +2456,6 @@ mod tests {
             fact_index,
             geo_index,
             spatial_index,
-            semantic_embeddings: Vec::new(),
             cache_dir: temp_dir.keep(),
         }
     }

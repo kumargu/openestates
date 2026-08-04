@@ -101,6 +101,7 @@ pub struct ScoringPolicyFile {
     pub engine_version: String,
     #[serde(default)]
     pub missing_data: MissingDataPolicy,
+    pub area_tracker: AreaTrackerPolicy,
     #[serde(default)]
     pub search_ranking: SearchRankingPolicy,
     #[serde(default)]
@@ -116,6 +117,47 @@ pub struct ScoringPolicyFile {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConstraintRelaxationPolicy {
+    #[serde(default = "default_constraint_relaxation_target_result_count")]
+    pub target_result_count: usize,
+    #[serde(default = "default_constraint_relaxation_order")]
+    pub order: Vec<String>,
+    #[serde(default = "default_budget_relaxation_multipliers")]
+    pub budget_multipliers: Vec<f64>,
+    #[serde(default = "default_area_relaxation_radii_km")]
+    pub area_radii_km: Vec<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AreaTrackerPolicy {
+    pub min_listing_count: usize,
+    pub ready_possession_statuses: Vec<String>,
+    pub near_metro_max_minutes: u32,
+    pub demand: AreaTrackerDemandPolicy,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AreaTrackerDemandPolicy {
+    pub search_count_normalizer: f32,
+    pub search_count_cap: f32,
+    pub evidence_gap_normalizer: f32,
+    pub evidence_gap_cap: f32,
+    pub listing_count_normalizer: f32,
+    pub listing_count_cap: f32,
+}
+
+impl Default for ConstraintRelaxationPolicy {
+    fn default() -> Self {
+        Self {
+            target_result_count: default_constraint_relaxation_target_result_count(),
+            order: default_constraint_relaxation_order(),
+            budget_multipliers: default_budget_relaxation_multipliers(),
+            area_radii_km: default_area_relaxation_radii_km(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SearchRankingPolicy {
     #[serde(default = "default_min_support_evidence_confidence")]
     pub min_support_evidence_confidence: f32,
@@ -123,12 +165,6 @@ pub struct SearchRankingPolicy {
     pub min_llm_evidence_confidence: f32,
     #[serde(default = "default_negative_no_data_penalty_multiplier")]
     pub negative_no_data_penalty_multiplier: f64,
-    #[serde(default = "default_min_semantic_recall_score")]
-    pub min_semantic_recall_score: f64,
-    #[serde(default = "default_semantic_candidate_fit_weight")]
-    pub semantic_candidate_fit_weight: f64,
-    #[serde(default = "default_semantic_candidate_fit_cap")]
-    pub semantic_candidate_fit_cap: f64,
     #[serde(default = "default_broad_local_recall_multiplier")]
     pub broad_local_recall_multiplier: usize,
     #[serde(default = "default_broad_local_recall_min_extra")]
@@ -137,6 +173,8 @@ pub struct SearchRankingPolicy {
     pub positive_evidence_floor_ratio: f64,
     #[serde(default = "default_no_positive_evidence_score_multiplier")]
     pub no_positive_evidence_score_multiplier: f64,
+    #[serde(default)]
+    pub constraint_relaxation: ConstraintRelaxationPolicy,
     #[serde(default = "default_nearby_area_score_penalty")]
     pub nearby_area_score_penalty: f64,
     #[serde(default = "default_graph_area_score_penalty")]
@@ -159,9 +197,9 @@ pub struct SearchRankingPolicy {
     pub named_place_distinctive_token_max_place_count: usize,
     #[serde(default = "default_named_place_distinctive_token_max_place_ratio")]
     pub named_place_distinctive_token_max_place_ratio: f64,
-    #[serde(default = "default_named_place_generic_tokens")]
+    #[serde(default)]
     pub named_place_generic_tokens: Vec<String>,
-    #[serde(default = "default_named_place_query_stopwords")]
+    #[serde(default)]
     pub named_place_query_stopwords: Vec<String>,
     #[serde(default = "default_review_rating_weight")]
     pub review_rating_weight: f64,
@@ -169,6 +207,8 @@ pub struct SearchRankingPolicy {
     pub review_count_weight: f64,
     #[serde(default = "default_review_count_log_divisor")]
     pub review_count_log_divisor: f64,
+    #[serde(default = "default_ranked_focus_min_match_score")]
+    pub ranked_focus_min_match_score: f64,
     #[serde(default = "default_min_score_with_positive_evidence")]
     pub min_score_with_positive_evidence: f64,
     #[serde(default = "default_max_score_with_positive_evidence")]
@@ -187,13 +227,11 @@ impl Default for SearchRankingPolicy {
             min_support_evidence_confidence: default_min_support_evidence_confidence(),
             min_llm_evidence_confidence: default_min_llm_evidence_confidence(),
             negative_no_data_penalty_multiplier: default_negative_no_data_penalty_multiplier(),
-            min_semantic_recall_score: default_min_semantic_recall_score(),
-            semantic_candidate_fit_weight: default_semantic_candidate_fit_weight(),
-            semantic_candidate_fit_cap: default_semantic_candidate_fit_cap(),
             broad_local_recall_multiplier: default_broad_local_recall_multiplier(),
             broad_local_recall_min_extra: default_broad_local_recall_min_extra(),
             positive_evidence_floor_ratio: default_positive_evidence_floor_ratio(),
             no_positive_evidence_score_multiplier: default_no_positive_evidence_score_multiplier(),
+            constraint_relaxation: ConstraintRelaxationPolicy::default(),
             nearby_area_score_penalty: default_nearby_area_score_penalty(),
             graph_area_score_penalty: default_graph_area_score_penalty(),
             geo_distance_fact_keys: Vec::new(),
@@ -207,11 +245,12 @@ impl Default for SearchRankingPolicy {
                 default_named_place_distinctive_token_max_place_count(),
             named_place_distinctive_token_max_place_ratio:
                 default_named_place_distinctive_token_max_place_ratio(),
-            named_place_generic_tokens: default_named_place_generic_tokens(),
-            named_place_query_stopwords: default_named_place_query_stopwords(),
+            named_place_generic_tokens: Vec::new(),
+            named_place_query_stopwords: Vec::new(),
             review_rating_weight: default_review_rating_weight(),
             review_count_weight: default_review_count_weight(),
             review_count_log_divisor: default_review_count_log_divisor(),
+            ranked_focus_min_match_score: default_ranked_focus_min_match_score(),
             min_score_with_positive_evidence: default_min_score_with_positive_evidence(),
             max_score_with_positive_evidence: default_max_score_with_positive_evidence(),
             min_score_with_risk_only_evidence: default_min_score_with_risk_only_evidence(),
@@ -260,6 +299,10 @@ pub fn scoring_policy() -> &'static ScoringPolicyFile {
 
 pub fn search_ranking_policy() -> &'static SearchRankingPolicy {
     &scoring_policy().search_ranking
+}
+
+pub fn area_tracker_policy() -> &'static AreaTrackerPolicy {
+    &scoring_policy().area_tracker
 }
 
 pub fn score_property_for_surface(
@@ -540,6 +583,25 @@ fn text_safety_score(text: &str) -> f64 {
 }
 
 fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
+    validate_area_tracker(&policy.area_tracker)?;
+    validate_constraint_relaxation(&policy.search_ranking.constraint_relaxation)?;
+    if !policy
+        .search_ranking
+        .ranked_focus_min_match_score
+        .is_finite()
+        || !(0.0..=1.0).contains(&policy.search_ranking.ranked_focus_min_match_score)
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "ranked focus minimum match score must be finite and within 0..1".to_string(),
+        ));
+    }
+    if policy.search_ranking.named_place_generic_tokens.is_empty()
+        || policy.search_ranking.named_place_query_stopwords.is_empty()
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "named-place token policies must be configured".to_string(),
+        ));
+    }
     let signal_ids = policy
         .signals
         .iter()
@@ -580,6 +642,84 @@ fn validate_policy(policy: &ScoringPolicyFile) -> Result<(), DagConfigError> {
     Ok(())
 }
 
+fn validate_area_tracker(policy: &AreaTrackerPolicy) -> Result<(), DagConfigError> {
+    if policy.min_listing_count == 0
+        || policy.ready_possession_statuses.is_empty()
+        || policy.near_metro_max_minutes == 0
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "area tracker requires listings, ready statuses, and a metro threshold".to_string(),
+        ));
+    }
+    let demand_values = [
+        policy.demand.search_count_normalizer,
+        policy.demand.search_count_cap,
+        policy.demand.evidence_gap_normalizer,
+        policy.demand.evidence_gap_cap,
+        policy.demand.listing_count_normalizer,
+        policy.demand.listing_count_cap,
+    ];
+    if demand_values
+        .iter()
+        .any(|value| !value.is_finite() || *value <= 0.0)
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "area tracker demand normalizers and caps must be finite and positive".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_constraint_relaxation(
+    policy: &ConstraintRelaxationPolicy,
+) -> Result<(), DagConfigError> {
+    if policy.target_result_count == 0 {
+        return Err(DagConfigError::InvalidConfig(
+            "constraint relaxation target result count must be greater than zero".to_string(),
+        ));
+    }
+    let supported_steps = ["budget_tolerance", "budget_cap", "bhk", "area_radius"];
+    let mut seen = BTreeSet::new();
+    for step in &policy.order {
+        if !supported_steps.contains(&step.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "unsupported constraint relaxation step {step}"
+            )));
+        }
+        if !seen.insert(step.as_str()) {
+            return Err(DagConfigError::InvalidConfig(format!(
+                "duplicate constraint relaxation step {step}"
+            )));
+        }
+    }
+    if policy
+        .budget_multipliers
+        .iter()
+        .any(|multiplier| !multiplier.is_finite() || *multiplier <= 1.0)
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "constraint relaxation budget multipliers must be finite and greater than 1"
+                .to_string(),
+        ));
+    }
+    if policy.area_radii_km.is_empty()
+        || policy
+            .area_radii_km
+            .iter()
+            .any(|radius| !radius.is_finite() || *radius <= 0.0)
+        || policy
+            .area_radii_km
+            .windows(2)
+            .any(|window| window[0] >= window[1])
+    {
+        return Err(DagConfigError::InvalidConfig(
+            "constraint relaxation area radii must be finite, positive, and strictly increasing"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 fn default_true() -> bool {
     true
 }
@@ -601,15 +741,6 @@ fn default_min_llm_evidence_confidence() -> f32 {
 fn default_negative_no_data_penalty_multiplier() -> f64 {
     1.2
 }
-fn default_min_semantic_recall_score() -> f64 {
-    0.08
-}
-fn default_semantic_candidate_fit_weight() -> f64 {
-    1.0
-}
-fn default_semantic_candidate_fit_cap() -> f64 {
-    0.25
-}
 fn default_broad_local_recall_multiplier() -> usize {
     4
 }
@@ -621,6 +752,21 @@ fn default_positive_evidence_floor_ratio() -> f64 {
 }
 fn default_no_positive_evidence_score_multiplier() -> f64 {
     0.40
+}
+fn default_constraint_relaxation_order() -> Vec<String> {
+    ["budget_tolerance", "budget_cap", "area_radius"]
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+fn default_constraint_relaxation_target_result_count() -> usize {
+    3
+}
+fn default_budget_relaxation_multipliers() -> Vec<f64> {
+    vec![1.10, 1.25, 1.50]
+}
+fn default_area_relaxation_radii_km() -> Vec<f64> {
+    vec![2.0, 5.0, 10.0]
 }
 fn default_nearby_area_score_penalty() -> f64 {
     -0.35
@@ -652,61 +798,6 @@ fn default_named_place_distinctive_token_max_place_count() -> usize {
 fn default_named_place_distinctive_token_max_place_ratio() -> f64 {
     0.15
 }
-fn default_named_place_generic_tokens() -> Vec<String> {
-    [
-        "the",
-        "and",
-        "school",
-        "academy",
-        "hospital",
-        "metro",
-        "station",
-        "park",
-        "road",
-        "tech",
-        "technology",
-        "business",
-        "office",
-        "bengaluru",
-        "bangalore",
-        "whitefield",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect()
-}
-fn default_named_place_query_stopwords() -> Vec<String> {
-    [
-        "near",
-        "a",
-        "an",
-        "in",
-        "at",
-        "from",
-        "to",
-        "with",
-        "within",
-        "km",
-        "kms",
-        "kilometer",
-        "kilometers",
-        "m",
-        "meter",
-        "meters",
-        "metre",
-        "metres",
-        "bhk",
-        "flat",
-        "apartment",
-        "home",
-        "homes",
-        "property",
-        "properties",
-    ]
-    .into_iter()
-    .map(str::to_string)
-    .collect()
-}
 fn default_review_rating_weight() -> f64 {
     0.75
 }
@@ -715,6 +806,9 @@ fn default_review_count_weight() -> f64 {
 }
 fn default_review_count_log_divisor() -> f64 {
     8.0
+}
+fn default_ranked_focus_min_match_score() -> f64 {
+    0.35
 }
 fn default_min_score_with_positive_evidence() -> f64 {
     0.2
@@ -742,6 +836,23 @@ mod tests {
         assert!(!policy.signals.is_empty());
         assert!(!policy.recommendation_branches.is_empty());
         assert!(policy.missing_data.never_zero_fill);
+        assert_eq!(policy.area_tracker.min_listing_count, 2);
+        assert_eq!(policy.search_ranking.ranked_focus_min_match_score, 0.35);
+        assert_eq!(
+            policy.search_ranking.constraint_relaxation.order,
+            ["budget_tolerance", "budget_cap", "area_radius"]
+        );
+        assert_eq!(
+            policy.search_ranking.constraint_relaxation.area_radii_km,
+            [2.0, 5.0, 10.0]
+        );
+        assert_eq!(
+            policy
+                .search_ranking
+                .constraint_relaxation
+                .target_result_count,
+            3
+        );
     }
 
     #[test]

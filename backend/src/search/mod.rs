@@ -8,23 +8,16 @@ pub mod intent;
 pub(crate) mod parser;
 pub mod resolver;
 pub mod schema;
-pub mod semantic;
 pub mod text;
 
 pub use engine::{
-    CandidateScore, SearchDiagnostics, SearchEngine, SearchLayerTiming, SearchRecallDiagnostics,
-    SearchRelaxation,
+    CandidateScore, SearchDiagnostics, SearchEngine, SearchEvidenceGap, SearchLayerTiming,
+    SearchRecallDiagnostics, SearchRelaxation,
 };
 pub use focus::{build_search_result_focus, FocusBuildInputs, SearchResultFocus};
 pub use guard::{guard_search_query, no_results_guidance, SearchGuidance};
 pub use index::SearchIndex;
 pub use intent::SearchIntent;
-#[cfg(feature = "fastembed")]
-pub use semantic::FastEmbedSemanticEmbedder;
-pub use semantic::{
-    semantic_embedding_documents_from_serving_entities, HashSemanticEmbedder, SemanticEmbedder,
-    SemanticEmbeddingDocument, SemanticSearchIndex,
-};
 pub use text::TextSearch;
 
 use serde::Serialize;
@@ -115,9 +108,6 @@ pub struct SearchResultCard {
     /// Generic detail-surface focus handles backed by the same proof reasons.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub proof_focuses: Vec<ProofFocus>,
-    /// Reserved for precomputed local similarity scores.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub semantic_score: Option<f64>,
     /// Data confidence score — how trustworthy is this result's data?
     #[serde(skip_serializing_if = "Option::is_none")]
     pub confidence_score: Option<ConfidenceScore>,

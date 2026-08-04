@@ -28,9 +28,21 @@ pub async fn validate_search_serving_lineage(
         )));
     }
     let ordered = resolve_lineage(store, serving_record).await?;
-    let kg_record = direct_parent(&ordered, serving_record, KG_SOCIETY_VIEW_ASSET_ID)?;
+    let kg_record =
+        direct_parent(store, &ordered, serving_record, KG_SOCIETY_VIEW_ASSET_ID).await?;
     let current_project_facts_record =
-        direct_parent(&ordered, kg_record, CURRENT_PROJECT_FACTS_ASSET_ID)?;
+        direct_parent(store, &ordered, &kg_record, CURRENT_PROJECT_FACTS_ASSET_ID).await?;
+    if is_current_record(store, &kg_record).await?
+        && !is_current_record(store, &current_project_facts_record).await?
+    {
+        return Err(ServingReleasePromotionError::InvalidLineage(format!(
+            "current {} materialization {} references non-current {} materialization {}",
+            kg_record.asset_id,
+            kg_record.materialization_id,
+            current_project_facts_record.asset_id,
+            current_project_facts_record.materialization_id
+        )));
+    }
     Ok(ServingReleasePromotion {
         serving_materialization_id: serving_record.materialization_id.clone(),
         kg_materialization_id: kg_record.materialization_id.clone(),
@@ -211,22 +223,37 @@ async fn is_current_record(
     }
 }
 
-fn direct_parent<'a>(
-    lineage: &'a [MaterializationRecord],
+async fn direct_parent(
+    store: &AssetMaterializationStore,
+    lineage: &[MaterializationRecord],
     child: &MaterializationRecord,
     expected_asset_id: &str,
-) -> Result<&'a MaterializationRecord, ServingReleasePromotionError> {
-    let matches = lineage
-        .iter()
-        .filter(|candidate| {
-            child
-                .parent_materializations
-                .contains(&candidate.materialization_id)
-                && candidate.asset_id.as_str() == expected_asset_id
-        })
-        .collect::<Vec<_>>();
+) -> Result<MaterializationRecord, ServingReleasePromotionError> {
+    let mut matches = Vec::new();
+    for parent_id in &child.parent_materializations {
+        let parent = if let Some(record) = lineage
+            .iter()
+            .find(|record| record.materialization_id == *parent_id)
+        {
+            record.clone()
+        } else {
+            store
+                .record_by_id(parent_id)
+                .await?
+                .ok_or_else(|| ServingReleasePromotionError::MissingParent(parent_id.clone()))?
+        };
+        if parent.asset_id.as_str() == expected_asset_id {
+            if parent.status != MaterializationStatus::Succeeded {
+                return Err(ServingReleasePromotionError::InvalidLineage(format!(
+                    "{} materialization {} did not succeed",
+                    parent.asset_id, parent.materialization_id
+                )));
+            }
+            matches.push(parent);
+        }
+    }
     match matches.as_slice() {
-        [record] => Ok(*record),
+        [record] => Ok(record.clone()),
         _ => Err(ServingReleasePromotionError::InvalidLineage(format!(
             "{} materialization {} must have exactly one direct {expected_asset_id} parent",
             child.asset_id, child.materialization_id
@@ -422,6 +449,79 @@ mod tests {
         assert!(ids.contains(&reused_support.materialization_id));
         assert!(ids.contains(&new_canonical.materialization_id));
         assert!(!ids.contains(&old_canonical.materialization_id));
+    }
+
+    #[tokio::test]
+    async fn validates_and_promotes_serving_with_reused_current_kg_parent() {
+        let root = tempdir().unwrap();
+        let store = AssetMaterializationStore::new(LakeStore::local(root.path()).unwrap());
+        let reused = release_records("reused");
+        write_records(&store, &reused[..2]).await;
+        for record in &reused[..2] {
+            store.force_promote_current(record).await.unwrap();
+        }
+
+        let serving = record(
+            SEARCH_SERVING_BUNDLE_ASSET_ID,
+            "new",
+            vec![reused[1].materialization_id.clone()],
+        );
+        write_records(&store, std::slice::from_ref(&serving)).await;
+
+        let promotion = promote_search_serving_release(&store, &serving, false)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            promotion.kg_materialization_id,
+            reused[1].materialization_id
+        );
+        assert_eq!(
+            promotion.current_project_facts_materialization_id,
+            reused[0].materialization_id
+        );
+        assert_eq!(
+            promotion
+                .promoted_materializations
+                .iter()
+                .map(|record| record.materialization_id.clone())
+                .collect::<Vec<_>>(),
+            vec![
+                reused[1].materialization_id.clone(),
+                serving.materialization_id
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn rejects_reused_current_kg_with_non_current_project_facts_parent() {
+        let root = tempdir().unwrap();
+        let store = AssetMaterializationStore::new(LakeStore::local(root.path()).unwrap());
+        let reused = release_records("reused");
+        write_records(&store, &reused[..2]).await;
+        for record in &reused[..2] {
+            store.force_promote_current(record).await.unwrap();
+        }
+
+        let replacement_project = record(CURRENT_PROJECT_FACTS_ASSET_ID, "replacement", Vec::new());
+        let serving = record(
+            SEARCH_SERVING_BUNDLE_ASSET_ID,
+            "new",
+            vec![reused[1].materialization_id.clone()],
+        );
+        write_records(&store, &[replacement_project.clone(), serving.clone()]).await;
+        store
+            .force_promote_current(&replacement_project)
+            .await
+            .unwrap();
+
+        let error = validate_search_serving_lineage(&store, &serving)
+            .await
+            .unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("references non-current current_project_facts"));
     }
 
     fn release_records(version: &str) -> Vec<MaterializationRecord> {

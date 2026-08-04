@@ -38,6 +38,14 @@ pub struct SearchResolutionConfig {
     #[serde(default)]
     pub ignored_entity_names: Vec<String>,
     #[serde(default)]
+    pub resolvable_entity_types: Vec<String>,
+    #[serde(default)]
+    pub named_entity_scope_prefixes: Vec<String>,
+    #[serde(default)]
+    pub generic_scope_nouns: Vec<String>,
+    #[serde(default)]
+    pub exclusion_prefixes: Vec<String>,
+    #[serde(default)]
     pub place_families: Vec<SearchPlaceFamilyAlias>,
 }
 
@@ -88,6 +96,10 @@ pub struct UnitAliasConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct RelationParserConfig {
     pub aliases: Vec<RelationAliasConfig>,
+    #[serde(default = "default_relation_max_clauses")]
+    pub max_clauses: usize,
+    #[serde(default)]
+    pub clause_joiners: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -140,6 +152,14 @@ pub fn search_parser_config() -> &'static SearchParserConfig {
 }
 
 fn validate_search_intent_file(file: &SearchIntentFile) -> Result<(), DagConfigError> {
+    validate_aliases(
+        "resolution.named_entity_scope_prefixes",
+        file.resolution
+            .named_entity_scope_prefixes
+            .iter()
+            .map(String::as_str),
+    )
+    .map_err(DagConfigError::InvalidConfig)?;
     validate_parser_config(&file.parser).map_err(DagConfigError::InvalidConfig)
 }
 
@@ -185,7 +205,18 @@ fn validate_parser_config(config: &SearchParserConfig) -> Result<(), String> {
             .iter()
             .map(|entry| entry.alias.as_str()),
     )?;
+    if config.relations.max_clauses == 0 || config.relations.max_clauses > 16 {
+        return Err("parser.relations.max_clauses must be between 1 and 16".to_string());
+    }
+    validate_aliases(
+        "parser.relations.clause_joiners",
+        config.relations.clause_joiners.iter().map(String::as_str),
+    )?;
     Ok(())
+}
+
+fn default_relation_max_clauses() -> usize {
+    4
 }
 
 fn validate_unit_value_config(
@@ -345,7 +376,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn loads_area_aliases_from_search_intent_config() {
+    fn loads_broad_region_aliases_from_search_intent_config() {
         let path = search_intent_path();
         if !path.exists() {
             return;
@@ -353,6 +384,11 @@ mod tests {
         let file = load_search_intent().expect("search_intent.json should parse");
         assert!(!file.area_aliases.entries.is_empty());
         assert!(file
+            .area_aliases
+            .entries
+            .iter()
+            .any(|entry| entry.canonical == "East Bengaluru"));
+        assert!(!file
             .area_aliases
             .entries
             .iter()

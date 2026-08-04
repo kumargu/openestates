@@ -1507,6 +1507,8 @@ struct NearbyPlaceCategory {
     fact_key: String,
     #[serde(default)]
     category_aliases: Vec<String>,
+    #[serde(default)]
+    collection_sources: Vec<String>,
     display_label: String,
     #[serde(default)]
     answers_preferences: Vec<String>,
@@ -1548,10 +1550,11 @@ impl NearbyPlaceCategoryFile {
     fn category_for_alias(&self, category: &str) -> Option<&NearbyPlaceCategory> {
         let normalized = normalize_category_key(category);
         self.categories.iter().find(|config| {
-            config
-                .category_aliases
-                .iter()
-                .any(|alias| normalize_category_key(alias) == normalized)
+            config.supports_collection_source("google")
+                && config
+                    .category_aliases
+                    .iter()
+                    .any(|alias| normalize_category_key(alias) == normalized)
         })
     }
 
@@ -1559,6 +1562,16 @@ impl NearbyPlaceCategoryFile {
         self.categories
             .iter()
             .find(|config| config.fact_key == fact_key)
+    }
+}
+
+impl NearbyPlaceCategory {
+    fn supports_collection_source(&self, source: &str) -> bool {
+        self.collection_sources.is_empty()
+            || self
+                .collection_sources
+                .iter()
+                .any(|candidate| candidate.eq_ignore_ascii_case(source))
     }
 }
 

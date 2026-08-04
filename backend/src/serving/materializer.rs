@@ -9,7 +9,9 @@ use crate::knowledge::KnowledgeGraph;
 use crate::lake::{LakeError, LakeStore};
 
 use super::{
-    ServingBundleBuilder, ServingBundleError, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
+    ServingBundleBuilder, ServingBundleError, ServingBundleManifest, ServingEdgeRecord,
+    ServingEntityRecord, ServingFactRecord, ServingSearchMetadataRecord,
+    SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
 
 #[derive(Clone)]
@@ -168,6 +170,37 @@ impl SearchServingBundleMaterializer {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn materialize_child_from_serving_records_for_run(
+        &self,
+        entities: Vec<ServingEntityRecord>,
+        facts: Vec<ServingFactRecord>,
+        search_metadata: Vec<ServingSearchMetadataRecord>,
+        edges: Vec<ServingEdgeRecord>,
+        bundle_version: impl Into<String>,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
+        let manifest = ServingBundleBuilder::new(self.lake.clone())
+            .build_child_from_serving_records(
+                entities,
+                facts,
+                search_metadata,
+                edges,
+                bundle_version,
+            )
+            .await?;
+        self.write_unpromoted_record(
+            manifest,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            AssetPartition::global(),
+        )
+        .await
+    }
+
     async fn materialize_with_parents_for_run_inner(
         &self,
         records: &KgViewRecords,
@@ -180,6 +213,24 @@ impl SearchServingBundleMaterializer {
         let manifest = ServingBundleBuilder::new(self.lake.clone())
             .build_from_kg_view_records(records, bundle_version)
             .await?;
+        self.write_unpromoted_record(
+            manifest,
+            source_watermarks,
+            parent_materializations,
+            run_id,
+            partition,
+        )
+        .await
+    }
+
+    async fn write_unpromoted_record(
+        &self,
+        manifest: ServingBundleManifest,
+        source_watermarks: Vec<SourceWatermark>,
+        parent_materializations: Vec<MaterializationId>,
+        run_id: MaterializationId,
+        partition: AssetPartition,
+    ) -> Result<SearchServingBundleMaterialization, SearchServingBundleMaterializeError> {
         let manifest_key = crate::assets::AssetPathBuilder::serving_bundle_key(
             &manifest.bundle_version,
             "manifest.json",

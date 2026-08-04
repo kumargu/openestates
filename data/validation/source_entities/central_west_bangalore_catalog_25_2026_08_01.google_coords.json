@@ -1,0 +1,156 @@
+{
+  "source_entities": [
+    {
+      "entity_id": "society:rera-043838fee4e525c5",
+      "name": "Mantri Centrium",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171016/000485",
+      "city": "Bengaluru",
+      "latitude": 12.9901429,
+      "longitude": 77.5706287
+    },
+    {
+      "entity_id": "society:rera-04ca128e3eff8243",
+      "name": "Arvind Bel Air",
+      "project_key": "PRM/KA/RERA/1251/472/PR/200515/003406",
+      "city": "Bengaluru",
+      "latitude": 13.0938536,
+      "longitude": 77.56007129999999
+    },
+    {
+      "entity_id": "society:rera-1b36754eb0613fe6",
+      "name": "32 RICHMOND",
+      "project_key": "PRM/KA/RERA/1251/446/PR/171214/001550",
+      "city": "Bengaluru",
+      "latitude": 12.9665322,
+      "longitude": 77.607416
+    },
+    {
+      "entity_id": "society:rera-1bb852b438567a14",
+      "name": "SNN CLERMONT",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170918/000666",
+      "city": "Bengaluru",
+      "latitude": 13.0424099,
+      "longitude": 77.6096669
+    },
+    {
+      "entity_id": "society:rera-1c5ed25d455f2628",
+      "name": "Renaissance Bellevue",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200304/003327",
+      "city": "Bengaluru",
+      "latitude": 13.0069898,
+      "longitude": 77.56804699999999
+    },
+    {
+      "entity_id": "society:rera-1e1636dd27562e02",
+      "name": "HABITAT",
+      "project_key": "PRM/KA/RERA/1251/308/PR/171102/001798",
+      "city": "Bengaluru",
+      "latitude": 12.745168,
+      "longitude": 77.7864328
+    },
+    {
+      "entity_id": "society:rera-32378302f5ca6d09",
+      "name": "Prestige Jindal City Phase-I",
+      "project_key": "PRM/KA/RERA/1251/309/PR/180406/001495",
+      "city": "Bengaluru",
+      "latitude": 13.0535623,
+      "longitude": 77.48811859999999
+    },
+    {
+      "entity_id": "society:rera-3befa7927348d2f3",
+      "name": "PRESTIGE FAIRFIELD",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200211/003273",
+      "city": "Bengaluru",
+      "latitude": 13.045623,
+      "longitude": 77.5720589
+    },
+    {
+      "entity_id": "society:rera-46bf4705cef5e279",
+      "name": "Century Ethos ",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000283",
+      "city": "Bengaluru",
+      "latitude": 13.0619424,
+      "longitude": 77.5949995
+    },
+    {
+      "entity_id": "society:rera-7b9bb252368eec94",
+      "name": "BIRLA TISYA",
+      "project_key": "PRM/KA/RERA/1251/309/PR/211022/004371",
+      "city": "Bengaluru",
+      "latitude": 12.9802168,
+      "longitude": 77.53831389999999
+    },
+    {
+      "entity_id": "society:rera-817a906317d2c7bd",
+      "name": "Renaissance Reserva",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190614/002602",
+      "city": "Bengaluru",
+      "latitude": 13.0415411,
+      "longitude": 77.5479639
+    },
+    {
+      "entity_id": "society:rera-9eea80e64c4f261b",
+      "name": "The Presidential Tower ",
+      "project_key": "PRM/KA/RERA/1251/309/PR/171014/000565",
+      "city": "Bengaluru",
+      "latitude": 13.0278729,
+      "longitude": 77.5460889
+    },
+    {
+      "entity_id": "society:rera-a395bc3facd4d5ee",
+      "name": "NEW HAVEN BENGALURU PHASE V",
+      "project_key": "PRM/KA/RERA/1251/309/PR/290822/005198",
+      "city": "Bengaluru",
+      "latitude": 12.9127875,
+      "longitude": 77.70654689999999
+    },
+    {
+      "entity_id": "society:rera-a3a28abd38e71003",
+      "name": "Sobha Indraprastha",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170915/000234",
+      "city": "Bengaluru",
+      "latitude": 12.9797353,
+      "longitude": 77.5638829
+    },
+    {
+      "entity_id": "society:rera-b26d1b258b181639",
+      "name": "Tower 7  One Bangalore West",
+      "project_key": "PRM/KA/RERA/1251/309/PR/190412/002524",
+      "city": "Bengaluru",
+      "latitude": 13.0087941,
+      "longitude": 77.5535661
+    },
+    {
+      "entity_id": "society:rera-c2394a00f5ad2909",
+      "name": "Mirabelle",
+      "project_key": "PRM/KA/RERA/1251/309/PR/131023/006321",
+      "city": "Bengaluru",
+      "latitude": 13.0268034,
+      "longitude": 77.60865919999999
+    },
+    {
+      "entity_id": "society:rera-e120e2f085c2819f",
+      "name": "Brigade Laguna",
+      "project_key": "PRM/KA/RERA/1251/309/PR/170322/004775",
+      "city": "Bengaluru",
+      "latitude": 13.0653527,
+      "longitude": 77.6089618
+    },
+    {
+      "entity_id": "society:rera-f215cca20b469118",
+      "name": "New  Haven Bengaluru Phase IV",
+      "project_key": "PRM/KA/RERA/1251/309/PR/200103/003103",
+      "city": "Bengaluru",
+      "latitude": 12.9127875,
+      "longitude": 77.70654689999999
+    },
+    {
+      "entity_id": "society:rera-fe982c6d2c40d9d2",
+      "name": "Skylark Richmond",
+      "project_key": "PRM/KA/RERA/1251/310/PR/170915/000765",
+      "city": "Bengaluru",
+      "latitude": 12.9626187,
+      "longitude": 77.6052772
+    }
+  ]
+}

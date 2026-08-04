@@ -1158,9 +1158,21 @@ def nearby_category_configs() -> List[Dict[str, Any]]:
         _NEARBY_CATEGORY_CONFIG_CACHE = [
             config
             for config in payload.get("categories", [])
-            if isinstance(config, dict) and config.get("category_aliases")
+            if isinstance(config, dict)
+            and config.get("category_aliases")
+            and nearby_category_supports_collection_source(config, "google")
         ]
     return _NEARBY_CATEGORY_CONFIG_CACHE
+
+
+def nearby_category_supports_collection_source(
+    category: Dict[str, Any], source: str
+) -> bool:
+    sources = category.get("collection_sources") or []
+    normalized_source = source.replace("-", "_").strip().lower()
+    return not sources or normalized_source in {
+        str(value).replace("-", "_").strip().lower() for value in sources
+    }
 
 
 def google_place_types(place: dict) -> set:

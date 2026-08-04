@@ -37,7 +37,7 @@ use backend::knowledge::node::{Node, NodeType, RootSource};
 use backend::lake::{LakeKey, LakeStore};
 use backend::models::{Property, Society};
 use backend::routes::search::{search_properties, SearchQuery};
-use backend::search::{HashSemanticEmbedder, SearchIndex, SemanticEmbedder, SemanticSearchIndex};
+use backend::search::SearchIndex;
 use backend::serving::{
     ServingBundleLoader, ServingBundleManifest, SEARCH_SERVING_BUNDLE_ASSET_ID,
 };
@@ -648,9 +648,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         search_society("unproven-whitefield", "Unproven Whitefield"),
     ];
     let search_index = SearchIndex::build(&properties);
-    let semantic_embedder: Arc<dyn SemanticEmbedder> = Arc::new(HashSemanticEmbedder::default());
-    let semantic_index =
-        SemanticSearchIndex::from_serving_entities(&loaded.entities, semantic_embedder.as_ref());
     let loaded = Arc::new(loaded);
     let search_runtime = SearchRuntimeSnapshot::new(
         loaded.clone(),
@@ -658,8 +655,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         societies.clone(),
         Vec::new(),
         search_index.clone(),
-        semantic_index.clone(),
-        semantic_embedder.clone(),
     );
     let (search_event_tx, _search_event_rx) = tokio::sync::mpsc::channel(8);
     let state = Arc::new(AppState {
@@ -669,8 +664,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         search_log_dropped_count: AtomicU64::new(0),
         properties: RwLock::new(properties),
         search_index: RwLock::new(search_index),
-        semantic_index: RwLock::new(semantic_index),
-        semantic_embedder,
         serving_bundle: RwLock::new(Some(loaded)),
         recommendation_cache: RwLock::new(std::collections::HashMap::new()),
         areas: RwLock::new(Vec::new()),
@@ -687,7 +680,6 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         State(state),
         Query(SearchQuery {
             q: Some(query.to_string()),
-            debug: Some("true".to_string()),
         }),
     )
     .await
@@ -700,7 +692,7 @@ async fn executor_builds_rera_proof_chain_and_serves_search_endpoint() {
         .knowledge_context
         .as_ref()
         .expect("search endpoint should return knowledge context");
-    assert!(!knowledge_context.learning_gaps.is_empty());
+    assert!(knowledge_context.learning_gaps.is_empty());
     assert_eq!(knowledge_context.claims.len(), 1);
     assert!(knowledge_context
         .claims

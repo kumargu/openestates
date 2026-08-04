@@ -10,7 +10,7 @@ use crate::knowledge::search_event::EnrichmentGap;
 use crate::knowledge::{KnowledgeGraph, SearchEvent};
 use crate::search::{
     guard_search_query, intent, no_results_guidance, schema, KnowledgeContext, SearchEngine,
-    SearchResponse, SearchResultCard, SourcedClaim,
+    SearchEvidenceGap, SearchResponse, SearchResultCard, SourcedClaim,
 };
 use crate::state::{
     AppState, CachedSearchOutput, EnrichmentGapPersistence, SearchCacheKey, SearchLogMessage,
@@ -24,7 +24,6 @@ const MAX_LEARNING_GAPS_PER_SEARCH: usize = 20;
 #[derive(Deserialize)]
 pub struct SearchQuery {
     pub q: Option<String>,
-    pub debug: Option<String>,
 }
 
 /// GET /api/search?q=... — local intent-based search over the knowledge graph.
@@ -33,10 +32,6 @@ pub async fn search_properties(
     Query(params): Query<SearchQuery>,
 ) -> Json<SearchResponse> {
     let query = params.q.unwrap_or_default();
-    let include_diagnostics = params
-        .debug
-        .as_deref()
-        .is_some_and(|value| matches!(value, "1" | "true" | "yes"));
 
     if query.trim().is_empty() {
         return Json(SearchResponse {
@@ -95,15 +90,12 @@ pub async fn search_properties(
     }
 
     let snapshot = state.search_runtime.load_full();
-    let cache_key =
-        (!include_diagnostics).then(|| SearchCacheKey::new(&query, &snapshot.version_key));
-    if let Some(cache_key) = cache_key.as_ref() {
-        if let Some(cached) = state.search_cache.get(cache_key).await {
-            for message in rebase_cached_log_messages(cached.log_messages, &query) {
-                enqueue_search_log(&state, message);
-            }
-            return Json(rebase_cached_response(cached.response.as_ref(), &query));
+    let cache_key = SearchCacheKey::new(&query, &snapshot.version_key);
+    if let Some(cached) = state.search_cache.get(&cache_key).await {
+        for message in rebase_cached_log_messages(cached.log_messages, &query) {
+            enqueue_search_log(&state, message);
         }
+        return Json(rebase_cached_response(cached.response.as_ref(), &query));
     }
 
     let serving_facts = Some(&snapshot.bundle.fact_index);
@@ -114,8 +106,6 @@ pub async fn search_properties(
             properties: &snapshot.properties,
             search_index: &snapshot.search_index,
             serving_bundle: Some(snapshot.bundle.as_ref()),
-            semantic_index: &snapshot.semantic_index,
-            semantic_embedder: snapshot.semantic_embedder.as_ref(),
             society_names: &snapshot.society_names,
             property_by_id: Some(&snapshot.property_by_id),
             societies: &snapshot.societies,
@@ -137,9 +127,9 @@ pub async fn search_properties(
         (engine_output, focus)
     };
     let parsed_intent = engine_output.intent;
-    let mut search_diagnostics = engine_output.diagnostics;
     let results = engine_output.results;
     let relaxations = engine_output.relaxations;
+    let search_evidence_gaps = engine_output.evidence_gaps;
 
     // Look up area context if the intent identified an area.
     let area_context = parsed_intent.area.as_ref().and_then(|area_name| {
@@ -171,12 +161,17 @@ pub async fn search_properties(
             }
         }
 
-        let (knowledge_context, graph_nodes_hit, enrichment_gaps) = build_knowledge_context(
+        let (mut knowledge_context, graph_nodes_hit, mut enrichment_gaps) = build_knowledge_context(
             &graph,
             serving_facts,
             &matched_society_ids,
             &parsed_intent,
             evidence_claims,
+        );
+        merge_search_evidence_gaps(
+            &mut knowledge_context,
+            &mut enrichment_gaps,
+            &search_evidence_gaps,
         );
         (
             knowledge_context,
@@ -207,23 +202,11 @@ pub async fn search_properties(
         enqueue_search_log(&state, message);
     }
 
-    let buyer_knowledge_context = if include_diagnostics {
-        knowledge_context
-    } else {
-        KnowledgeContext {
-            claims: knowledge_context.claims,
-            nodes_consulted: knowledge_context.nodes_consulted,
-            learning_gaps: Vec::new(),
-        }
+    let buyer_knowledge_context = KnowledgeContext {
+        claims: knowledge_context.claims,
+        nodes_consulted: knowledge_context.nodes_consulted,
+        learning_gaps: Vec::new(),
     };
-    if include_diagnostics {
-        let dropped = state.search_log_dropped_count();
-        if dropped > 0 {
-            search_diagnostics
-                .warnings
-                .push(format!("search log side effects dropped: {dropped}"));
-        }
-    }
 
     let response = SearchResponse {
         query,
@@ -233,26 +216,52 @@ pub async fn search_properties(
         total_results,
         focus,
         knowledge_context: Some(buyer_knowledge_context),
-        search_diagnostics: include_diagnostics.then_some(search_diagnostics),
+        search_diagnostics: None,
         relaxations,
         search_guidance: (total_results == 0).then(no_results_guidance),
     };
-    if let Some(cache_key) = cache_key {
-        if response.total_results > 0 {
-            state
-                .search_cache
-                .put(
-                    cache_key,
-                    CachedSearchOutput {
-                        response: Arc::new(response.clone()),
-                        log_messages,
-                    },
-                )
-                .await;
-        }
+    if response.total_results > 0 {
+        state
+            .search_cache
+            .put(
+                cache_key,
+                CachedSearchOutput {
+                    response: Arc::new(response.clone()),
+                    log_messages,
+                },
+            )
+            .await;
     }
 
     Json(response)
+}
+
+fn merge_search_evidence_gaps(
+    knowledge_context: &mut KnowledgeContext,
+    enrichment_gaps: &mut Vec<EnrichmentGap>,
+    search_gaps: &[SearchEvidenceGap],
+) {
+    for gap in search_gaps {
+        if enrichment_gaps.iter().any(|existing| {
+            existing.entity_id == gap.entity_id
+                && existing
+                    .missing_fact
+                    .eq_ignore_ascii_case(&gap.missing_fact)
+        }) {
+            continue;
+        }
+        if knowledge_context.learning_gaps.len() < MAX_LEARNING_GAPS_PER_SEARCH {
+            knowledge_context.learning_gaps.push(format!(
+                "{}: missing {} data",
+                gap.entity_id, gap.missing_fact
+            ));
+        }
+        enrichment_gaps.push(EnrichmentGap {
+            entity_id: gap.entity_id.clone(),
+            missing_fact: gap.missing_fact.clone(),
+            reason: gap.reason.clone(),
+        });
+    }
 }
 
 fn enqueue_search_log(state: &AppState, message: SearchLogMessage) {
@@ -1044,6 +1053,42 @@ mod tests {
     use crate::knowledge::fact::{ScoringDirection, ScoringHint};
     use crate::knowledge::FactValue;
     use std::sync::atomic::{AtomicU64, Ordering};
+
+    #[test]
+    fn search_evidence_gaps_are_persisted_and_available_only_for_debug_context() {
+        let mut context = KnowledgeContext {
+            claims: Vec::new(),
+            nodes_consulted: 0,
+            learning_gaps: Vec::new(),
+        };
+        let mut enrichment_gaps = Vec::new();
+        let search_gaps = vec![
+            SearchEvidenceGap {
+                entity_id: "area:whitefield".to_string(),
+                missing_fact: "geo.latitude".to_string(),
+                reason: "area radius requires an anchor".to_string(),
+            },
+            SearchEvidenceGap {
+                entity_id: "area:whitefield".to_string(),
+                missing_fact: "geo.longitude".to_string(),
+                reason: "area radius requires an anchor".to_string(),
+            },
+        ];
+
+        merge_search_evidence_gaps(&mut context, &mut enrichment_gaps, &search_gaps);
+
+        assert_eq!(context.learning_gaps.len(), 2);
+        assert_eq!(enrichment_gaps.len(), 2);
+        assert_eq!(enrichment_gaps[0].missing_fact, "geo.latitude");
+
+        merge_search_evidence_gaps(&mut context, &mut enrichment_gaps, &search_gaps);
+        assert_eq!(
+            context.learning_gaps.len(),
+            2,
+            "gaps should be deduplicated"
+        );
+        assert_eq!(enrichment_gaps.len(), 2, "gaps should be deduplicated");
+    }
 
     #[test]
     fn cached_response_and_log_messages_are_rebased_to_current_query() {

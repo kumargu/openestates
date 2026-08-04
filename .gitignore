@@ -46,7 +46,6 @@ data/reddit_cache/
 # Generated/cached data
 .tmp/
 tmp/
-.fastembed_cache/
 data/cache/
 data/lake/
 data/knowledge/search_log/
