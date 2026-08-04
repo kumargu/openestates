@@ -2904,6 +2904,9 @@ body {
   height: 100%;
   min-height: 540px;
   padding: clamp(1.4rem, 3vw, 2.2rem);
+  background:
+    radial-gradient(circle at 88% 10%, rgba(181, 157, 137, 0.12), transparent 38%),
+    linear-gradient(145deg, rgba(255, 254, 251, 0.98), rgba(241, 237, 230, 0.92));
 }
 
 .landing-film__rail {
@@ -2923,18 +2926,12 @@ body {
 }
 
 .landing-film__rail i.is-complete {
-  background: #bd674d;
+  background: #a86c58;
 }
-
-.landing-product--reveal .landing-film__rail i.is-complete { background: #5e82ad; }
-.landing-product--remember .landing-film__rail i.is-complete { background: #c77759; }
-.landing-product--converge .landing-film__rail i.is-complete { background: #5f906e; }
-.landing-product--record .landing-film__rail i.is-complete { background: #b9823f; }
 
 .landing-product--resolve {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 88% 8%, rgba(218, 119, 86, 0.21), transparent 36%), radial-gradient(circle at 10% 92%, rgba(239, 181, 126, 0.12), transparent 34%), linear-gradient(145deg, rgba(255, 253, 251, 0.94), rgba(250, 239, 233, 0.8));
 }
 
 .landing-resolve__composer {
@@ -3208,10 +3205,6 @@ body {
 .landing-product--resolve[data-proof-visible="true"] .landing-resolve__why {
   opacity: 1;
   transform: none;
-}
-
-.landing-product--reveal {
-  background: radial-gradient(circle at 12% 82%, rgba(80, 137, 190, 0.23), transparent 40%), radial-gradient(circle at 86% 10%, rgba(111, 174, 166, 0.13), transparent 34%), linear-gradient(145deg, rgba(248, 252, 255, 0.97), rgba(226, 239, 248, 0.82));
 }
 
 .landing-reveal__home {
@@ -3531,7 +3524,6 @@ body {
 .landing-product--remember {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 86% 14%, rgba(205, 130, 86, 0.2), transparent 36%), radial-gradient(circle at 12% 88%, rgba(228, 177, 103, 0.12), transparent 36%), linear-gradient(145deg, rgba(255, 253, 248, 0.97), rgba(249, 235, 221, 0.82));
 }
 
 .landing-remember__home {
@@ -3708,7 +3700,6 @@ body {
   position: relative;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  background: radial-gradient(circle at 90% 88%, rgba(75, 150, 96, 0.23), transparent 40%), radial-gradient(circle at 8% 12%, rgba(112, 164, 147, 0.12), transparent 34%), linear-gradient(145deg, rgba(251, 254, 250, 0.97), rgba(225, 243, 229, 0.82));
 }
 
 .landing-converge__notebook {
@@ -3932,7 +3923,6 @@ body {
 .landing-product--record {
   position: relative;
   overflow: hidden;
-  background: radial-gradient(circle at 12% 86%, rgba(204, 147, 68, 0.22), transparent 39%), radial-gradient(circle at 88% 10%, rgba(190, 112, 68, 0.11), transparent 34%), linear-gradient(145deg, rgba(255, 254, 249, 0.97), rgba(247, 232, 205, 0.82));
 }
 
 .landing-record__head {
